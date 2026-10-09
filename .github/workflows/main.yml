@@ -107,6 +107,36 @@ jobs:
           python -m pip install --upgrade pip build
           python -m build --wheel
 
+      # Installing dist/*.whl directly would hide the original bug, which was
+      # pip choosing an older release by name. Resolve by name with PyPI in
+      # view: if this launcher didn't install here, an old release that allows
+      # this Python (1.3.0 did) would win and the version check would fail.
+      - name: Resolve openadapt by name and confirm pip picks this launcher
+        run: |
+          for spec in openadapt 'openadapt[browser]' 'openadapt[capture]'; do
+            python -m pip install --dry-run --quiet --find-links dist \
+              --report resolution.json "$spec"
+            python - "$spec" <<'PY'
+          import json
+          import pathlib
+          import sys
+          import tomllib
+
+          spec = sys.argv[1]
+          project = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
+          expected = project["project"]["version"]
+          report = json.loads(pathlib.Path("resolution.json").read_text())
+          chosen = {
+              item["metadata"]["name"]: item["metadata"]["version"]
+              for item in report["install"]
+          }
+          assert chosen.get("openadapt") == expected, (spec, chosen.get("openadapt"))
+          for name in ("openadapt-flow", "openadapt-agent"):
+              assert name not in chosen, (spec, name, chosen[name])
+          print(f"{spec}: pip chose openadapt {expected} with no engine")
+          PY
+          done
+
       - name: Install the wheel and confirm it brings no engine
         run: |
           python -m pip install dist/*.whl

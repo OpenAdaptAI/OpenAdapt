@@ -137,6 +137,16 @@ def test_ci_guard_runs_on_the_first_unsupported_pythons():
         assert f"'{python}'" in guard
 
 
+def test_ci_guard_resolves_the_launcher_by_name():
+    """Installing the wheel file alone can't catch pip choosing an old release."""
+    workflow = (ROOT / ".github" / "workflows" / "main.yml").read_text()
+    guard = workflow[workflow.index("unsupported-python-guard:") :]
+    resolve = guard.index("--find-links dist")
+    assert resolve < guard.index("pip install dist/*.whl")
+    for spec in ("openadapt", "'openadapt[browser]'", "'openadapt[capture]'"):
+        assert spec in guard[guard.index("for spec in") : resolve]
+
+
 # ---------------------------------------------------------------------------
 # Runtime: every engine command explains the fix on an unsupported Python.
 # ---------------------------------------------------------------------------
