@@ -126,3 +126,24 @@ Flow's printed `openadapt-flow <verb>` commands to `openadapt flow <verb>`
 during the tutorial. A real `openadapt quickstart --break-it` run with Flow
 1.35.1 on Python 3.12 printed `openadapt flow record --backend web --url <your
 app>` and no `openadapt-flow` command.
+
+## Recheck on 2026-10-09
+
+Run again after the quickstart summary started reading the halted rerun's
+`report.json`, on macOS 15.7.3 arm64 with pip 26.2.1:
+
+- `pip install --dry-run --find-links <dir>` with the wheel built from this
+  branch (version 1.16.0, so PyPI's 1.16.0 is the only competitor) resolved
+  `openadapt`, `openadapt[browser]`, and `openadapt[capture]` to the local
+  launcher on Homebrew Python 3.13.7 and 3.14.6. No openadapt-flow or
+  openadapt-agent was selected. `openadapt[capture]` also selected
+  openadapt-capture 1.2.2.
+- With that wheel installed on 3.13.7, `openadapt quickstart --break-it`,
+  `openadapt flow tutorial`, and `openadapt doctor` printed the Python 3.12
+  fix and exited with status 1. `openadapt version` still worked.
+- A real `openadapt quickstart --break-it` on Python 3.12.13 with Flow 1.35.1
+  and openadapt-agent 2.0.1 reached `VERIFIED`, then halted the rerun. The
+  rerun's `report.json` held transaction outcome `RECONCILIATION_REQUIRED`,
+  and the summary printed "Result: check the record (transaction outcome
+  RECONCILIATION_REQUIRED)". The output held no `openadapt-flow` command and
+  didn't offer `openadapt-agent serve --allow-run`, which agent 2.0.1 rejects.
