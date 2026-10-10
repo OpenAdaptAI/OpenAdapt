@@ -2,15 +2,13 @@
 """Fail CI when deployment-specific or private-boundary content enters a
 public core repository.
 
-Motivating case: the PowerChart incident. Application-specific workflow
-content tied to a real customer deployment of an EHR (Cerner PowerChart)
-reached a public core surface and had to be excised by hand after review
-caught it. Application-specific recipes, customer fixtures, and proprietary
-system identifiers derived from real deployments are exactly the class of
-content the open-core boundary keeps private (grown corpora, tuned adversary
-parameters, deployment-derived thresholds, oracle/connector recipes, and
-real-EMR-tied datasets are crown jewels). This check makes that class of leak
-a CI failure instead of a code-review coin flip.
+Application-specific recipes, customer fixtures, and proprietary system
+identifiers are the class of content the open-core boundary keeps private
+(grown corpora, tuned adversary parameters, deployment-derived thresholds,
+oracle/connector recipes, and real-EMR-tied datasets are crown jewels).
+Content of this kind has reached a public core surface before and had to be
+removed by hand after review caught it. This check makes that class of leak a
+CI failure instead of a code-review coin flip.
 
 Where the rules come from
 -------------------------
@@ -559,8 +557,7 @@ def main() -> int:
         print(
             "Source-availability boundary violations found. Deployment-"
             "specific recipes, customer fixtures, and proprietary system "
-            "identifiers must not enter public core repos (see docstring; "
-            "motivating case: the PowerChart incident).",
+            "identifiers must not enter public core repos (see docstring).",
             file=sys.stderr,
         )
         for violation in violations:
