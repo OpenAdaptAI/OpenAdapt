@@ -241,6 +241,8 @@ def test_deploy_preflight_fails_on_unsupported_python(unsupported_python):
     assert "[UNSUPPORTED] Python" in result.output
     assert "uv tool install --python 3.12 openadapt" in result.output
     assert "Preflight passed" not in result.output
+    assert "[MISSING]" not in result.output
+    assert "pip install --upgrade openadapt" not in result.output
 
 
 def test_version_still_works_on_unsupported_python(unsupported_python):

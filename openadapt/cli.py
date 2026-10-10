@@ -562,15 +562,20 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
         )
 
     click.echo("\nHealth checks:")
-    failures = []
     if not _python_supported():
-        failures.append("python")
         click.echo(
             f"  [UNSUPPORTED] Python {platform.python_version()}; the OpenAdapt "
             "engine supports Python 3.10\u20133.12"
         )
         for line in _PYTHON_FIX.splitlines():
             click.echo(f"     {line}")
+        # The engine and Playwright can't install on this interpreter, so the
+        # later checks would only suggest a reinstall that can't help here.
+        raise click.ClickException(
+            "Preflight failed. Reinstall OpenAdapt with Python 3.10\u20133.12 "
+            "as shown above, and then run this command again."
+        )
+    failures = []
     flow_importable = find_spec("openadapt_flow") is not None
     flow_version_ready = flow_version != "not installed" and _supported_flow_version(
         flow_version
