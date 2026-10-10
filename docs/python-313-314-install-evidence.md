@@ -147,3 +147,15 @@ Run again after the quickstart summary started reading the halted rerun's
   and the summary printed "Result: check the record (transaction outcome
   RECONCILIATION_REQUIRED)". The output held no `openadapt-flow` command and
   didn't offer `openadapt-agent serve --allow-run`, which agent 2.0.1 rejects.
+
+## Linux resolution for the CI guard
+
+The `unsupported-python-guard` job runs on `ubuntu-latest`, and the checks
+above ran on macOS. pip's `--platform` option doesn't change how
+`sys_platform` markers evaluate, so a macOS pip run can't stand in for Linux.
+On 2026-10-09, `uv pip compile` with `--python-platform x86_64-manylinux_2_28`
+and the branch wheel in `--find-links` resolved `openadapt[capture]` on
+Python 3.13 and 3.14 to this launcher and openadapt-capture 1.2.2, with no
+openadapt-flow or openadapt-agent. Each of the other 36 resolved packages has
+a wheel on PyPI for Linux x86_64 under both Python versions, so the job
+shouldn't need to build anything from source.
