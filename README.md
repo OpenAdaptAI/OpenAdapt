@@ -45,7 +45,7 @@ Sources for the "Today" times:
 [UCSF Pediatric Access Center, JAMIA Open 2020](https://pmc.ncbi.nlm.nih.gov/articles/PMC7660949/)
 (mean 719 seconds per faxed referral, including a call to the patient), and
 [Calderdale and Huddersfield NHS Foundation Trust, HFMA case study 2024](https://www.hfma.org.uk/system/files/2024-04/Using%20digital%20technologies%20to%20process%20admin%20tasks%20Case%20Study%20v7.pdf)
-(10 minutes per referral). No OpenAdapt customer has measured an "after" time
+(10 minutes per referral). Nobody has measured an "after" time with OpenAdapt
 yet, so the table doesn't claim a time saving.
 
 ## What you see and control
@@ -402,14 +402,12 @@ paywalled.
 |---|---|
 | Public OpenEMR field test, measured 2026-07-08 on a Flow 0.1.0 development checkout | Compiled replay passed the saved-row OCR check on 19 of 20 runs at a 39.2 s median with 0 model API calls, and run 20 halted safely. A computer-use agent finished 10 of 10 at about $0.55 a run at July 2026 list prices. This was a shared public demo and a small sample. |
 | Fault test on a local test record system, measured 2026-07-21 | 72 of 90 runs left the record wrong: missing, partial, duplicated, or on the wrong record. A check that trusted the success banner passed 54 of those 72. One separate read of the record passed 9 of the 72, all of one kind: a write to a billing table that the read didn't cover. Every check also stopped 9 of the 18 runs that had saved correctly, because the client never got the reply. We chose these faults and injected them on our own test server, so this is a coverage test over a fixed fault list, not a real-world error rate. |
-| Founding-team heart-care RVU audit (preliminary) | About $75,000/year in estimated recovered billables, and several hours of monthly audit work. These figures are preliminary and under review pending final customer confirmation. |
 
 Each result belongs to its named task and environment. Qualifying a new
 workflow is what decides what can be claimed about it. Sources:
 [OpenEMR results](https://github.com/OpenAdaptAI/openadapt-flow/blob/aee094193b232f472f991be6fa9b33c3c4b3f9be/benchmark/openemr/results.json),
 [fault test method and caveats](https://github.com/OpenAdaptAI/openadapt-flow/blob/aee094193b232f472f991be6fa9b33c3c4b3f9be/benchmark/effect_e2e/EFFECT_E2E.md),
-[comparison](https://openadapt.ai/compare), and the
-[RVU audit case study](https://openadapt.ai/customers/rvu-audit-heart-care).
+and the [comparison](https://openadapt.ai/compare).
 OpenAdapt isn't affiliated with the OpenEMR project.
 
 ## OpenAdapt Execute
