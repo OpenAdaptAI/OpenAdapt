@@ -516,6 +516,58 @@ def _supported_flow_version(value: str) -> bool:
     return parsed is not None and (1, 29, 0) <= parsed < (2, 0, 0)
 
 
+# The Python modules each native or remote Flow backend imports when its
+# surface opens, by host platform, and the extra that installs them. "*" means
+# any host. A host that isn't listed can't open that surface: the macOS and
+# Linux bindings install only on their own OS, and Flow's Citrix window client
+# exists for macOS (Quartz) and Windows (Win32, through ctypes) hosts only.
+_MAC_MODULES = ("AppKit", "Quartz", "ApplicationServices")
+_NATIVE_BACKENDS: dict[str, tuple[dict[str, tuple[str, ...]], str]] = {
+    "macos": ({"darwin": _MAC_MODULES}, "macos"),
+    "linux": ({"linux": ("gi",)}, "linux"),
+    "windows": ({"*": ("requests",)}, "windows"),
+    "citrix": ({"darwin": _MAC_MODULES, "win32": ()}, "macos"),
+}
+_HOST_NAMES = {"darwin": "macOS", "linux": "Linux", "win32": "Windows"}
+
+
+def _host_platform() -> str:
+    return sys.platform
+
+
+def _native_backend_status(backend: str) -> tuple[str, str]:
+    """Check one native or remote backend's Python dependencies on this host.
+
+    Returns ``(status, message)`` with status ``OK``, ``MISSING``, or
+    ``UNSUPPORTED``. Modules are located without being imported. Permissions,
+    windows, and the target are still checked by Flow when the surface opens.
+    """
+    from importlib.util import find_spec
+
+    hosts, extra = _NATIVE_BACKENDS[backend]
+    host = _host_platform()
+    modules = hosts.get(host, hosts.get("*"))
+    if modules is None:
+        supported = " or ".join(_HOST_NAMES[name] for name in hosts)
+        return (
+            "UNSUPPORTED",
+            f"{backend}: Flow opens this surface from {supported} hosts only, "
+            f"and this host is {_HOST_NAMES.get(host, host)}.",
+        )
+    missing = [name for name in modules if find_spec(name) is None]
+    if missing:
+        return (
+            "MISSING",
+            f"{backend}: {', '.join(missing)} not installed. "
+            f"Run: python -m pip install 'openadapt[{extra}]'",
+        )
+    return (
+        "OK",
+        f"{backend}: its Python dependencies are installed. Flow checks "
+        "permissions and the target when that surface opens.",
+    )
+
+
 @main.command("deploy")
 @click.option(
     "--backend",
@@ -622,8 +674,12 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
                 + _RDP_INSTALL_COMMAND
             )
     else:
+        status, message = _native_backend_status(backend)
+        if status != "OK":
+            failures.append(backend)
+        click.echo(f"  [{status}] {message}")
         click.echo(
-            f"  [SETUP] {backend} readiness is checked by Flow when the "
+            f"  [SETUP] {backend} target readiness is checked by Flow when the "
             "configured target opens; this guide does not claim it is ready."
         )
 
@@ -638,8 +694,8 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
 
     if failures:
         raise click.ClickException(
-            "Preflight failed. Resolve every [MISSING], [UNSUPPORTED], and "
-            "[SETUP] item above before service setup."
+            "Preflight failed. Resolve every [MISSING] and [UNSUPPORTED] item "
+            "above before service setup."
         )
 
     click.echo(
@@ -1282,10 +1338,13 @@ def doctor(backend: str | None):
                 "Run: " + _RDP_INSTALL_COMMAND
             )
     elif backend and backend != "web":
+        status, message = _native_backend_status(backend)
+        if status != "OK":
+            failures.append(backend)
+        click.echo(f"  [{status}] {message}")
         click.echo(
-            f"  [OK] {backend}: browser support is not required; "
-            "no Playwright or Chromium setup will run. The selected "
-            "native or remote driver is checked when that surface opens."
+            f"  [--] {backend}: browser support is not required; "
+            "no Playwright or Chromium setup will run."
         )
     else:
         playwright = find_spec("playwright") is not None
@@ -1424,7 +1483,8 @@ def doctor(backend: str | None):
     if failures:
         raise click.ClickException(
             "System check failed. Install each required dependency shown as "
-            "[MISSING], and then run this command again."
+            "[MISSING], or use a host that supports each [UNSUPPORTED] surface, "
+            "and then run this command again."
         )
 
 

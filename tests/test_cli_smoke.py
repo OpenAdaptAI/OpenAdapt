@@ -440,10 +440,114 @@ def test_doctor_does_not_require_browser_for_citrix(monkeypatch):
         "importlib.util.find_spec",
         lambda name: object() if name in core else None,
     )
+    # On Windows the Citrix window client needs no extra Python package.
+    monkeypatch.setattr("openadapt.cli._host_platform", lambda: "win32", raising=False)
     result = CliRunner().invoke(cli_main, ["doctor", "--backend", "citrix"])
     assert result.exit_code == 0, result.output
     assert "browser support is not required" in result.output
     assert "no Playwright or Chromium setup will run" in result.output
+
+
+CORE_PACKAGES = {"openadapt_flow", "openadapt_agent", "playwright"}
+MAC_MODULES = {"AppKit", "Quartz", "ApplicationServices"}
+
+# backend, host, modules its surface imports there, install command
+NATIVE_BACKEND_CASES = [
+    ("macos", "darwin", MAC_MODULES, "python -m pip install 'openadapt[macos]'"),
+    ("linux", "linux", {"gi"}, "python -m pip install 'openadapt[linux]'"),
+    ("windows", "darwin", {"requests"}, "python -m pip install 'openadapt[windows]'"),
+    ("windows", "linux", {"requests"}, "python -m pip install 'openadapt[windows]'"),
+    ("citrix", "darwin", MAC_MODULES, "python -m pip install 'openadapt[macos]'"),
+]
+
+
+def _host(monkeypatch, host: str, installed: set[str]) -> None:
+    monkeypatch.setattr("openadapt.cli._host_platform", lambda: host, raising=False)
+    monkeypatch.setattr(
+        "importlib.util.find_spec",
+        lambda name: object() if name in installed else None,
+    )
+
+
+@pytest.mark.parametrize(
+    ("backend", "host", "modules", "install"), NATIVE_BACKEND_CASES
+)
+def test_doctor_native_backend_fails_without_its_platform_extra(
+    monkeypatch, backend, host, modules, install
+):
+    """A base install can't open these surfaces, so doctor must not say [OK]."""
+    _host(monkeypatch, host, CORE_PACKAGES)
+
+    result = CliRunner().invoke(cli_main, ["doctor", "--backend", backend])
+
+    assert result.exit_code != 0, result.output
+    assert f"[MISSING] {backend}" in result.output
+    assert install in result.output
+    assert f"[OK] {backend}" not in result.output
+    assert "System check failed" in result.output
+
+
+@pytest.mark.parametrize(
+    ("backend", "host", "modules", "install"), NATIVE_BACKEND_CASES
+)
+def test_doctor_native_backend_ok_when_its_platform_extra_is_installed(
+    monkeypatch, backend, host, modules, install
+):
+    _host(monkeypatch, host, CORE_PACKAGES | modules)
+
+    result = CliRunner().invoke(cli_main, ["doctor", "--backend", backend])
+
+    assert result.exit_code == 0, result.output
+    assert f"[OK] {backend}" in result.output
+    assert "[MISSING]" not in result.output
+
+
+@pytest.mark.parametrize(
+    ("backend", "host"),
+    [("macos", "linux"), ("macos", "win32"), ("linux", "darwin"), ("citrix", "linux")],
+)
+def test_doctor_native_backend_refuses_the_wrong_host(monkeypatch, backend, host):
+    everything = CORE_PACKAGES | MAC_MODULES | {"gi", "requests"}
+    _host(monkeypatch, host, everything)
+
+    result = CliRunner().invoke(cli_main, ["doctor", "--backend", backend])
+
+    assert result.exit_code != 0, result.output
+    assert f"[UNSUPPORTED] {backend}" in result.output
+    assert f"[OK] {backend}" not in result.output
+
+
+@pytest.mark.parametrize(
+    ("backend", "host", "modules", "install"), NATIVE_BACKEND_CASES
+)
+def test_deploy_native_backend_fails_without_its_platform_extra(
+    monkeypatch, backend, host, modules, install
+):
+    _host(monkeypatch, host, {"openadapt_flow"})
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.35.0")
+
+    result = CliRunner().invoke(cli_main, ["deploy", "--backend", backend])
+
+    assert result.exit_code != 0, result.output
+    assert f"[MISSING] {backend}" in result.output
+    assert install in result.output
+    assert "Preflight passed" not in result.output
+
+
+@pytest.mark.parametrize(
+    ("backend", "host", "modules", "install"), NATIVE_BACKEND_CASES
+)
+def test_deploy_native_backend_passes_with_its_platform_extra(
+    monkeypatch, backend, host, modules, install
+):
+    _host(monkeypatch, host, {"openadapt_flow"} | modules)
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.35.0")
+
+    result = CliRunner().invoke(cli_main, ["deploy", "--backend", backend])
+
+    assert result.exit_code == 0, result.output
+    assert f"[OK] {backend}" in result.output
+    assert "Preflight passed" in result.output
 
 
 def test_doctor_rdp_fails_without_transport_dependency(monkeypatch):
