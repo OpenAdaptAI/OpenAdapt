@@ -247,6 +247,10 @@ python -m pip install --upgrade openadapt-agent
 openadapt-agent serve --bundles <bundle or directory of bundles> --allow-run
 ```
 
+`uv tool install` and pipx put only `openadapt` on your PATH. With a launcher
+release after 1.16.0, run `openadapt agent serve ...` there instead. It passes
+every argument to `openadapt-agent`.
+
 Leave out `--allow-run` when the client should inspect workflows but not start
 them. A halted or refused run comes back as a halt or a refusal, never as a
 success. Local unsigned success isn't a Seal; treat unsigned production success

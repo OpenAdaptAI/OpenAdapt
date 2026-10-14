@@ -804,9 +804,9 @@ def test_top_level_help_leads_with_flow():
     assert "openadapt flow tutorial" in result.output
     assert "openadapt quickstart --break-it" in result.output
     # openadapt-agent 2.0.1 requires --bundles; the help names a command that
-    # works with every released agent.
-    assert "openadapt-agent serve --bundles DIR --allow-run" in result.output
-    assert "openadapt-agent serve --allow-run" not in result.output
+    # works with every released agent and every install method.
+    assert "openadapt agent serve --bundles DIR --allow-run" in result.output
+    assert "openadapt agent serve --allow-run" not in result.output
     assert "effect-verified first run" in result.output
     assert "Standalone local human GUI capture" in result.output
     assert "Research: evaluate" in result.output

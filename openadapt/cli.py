@@ -90,7 +90,7 @@ def main():
 
     \b
     Give an MCP client your compiled workflows:
-        openadapt-agent serve --bundles DIR --allow-run
+        openadapt agent serve --bundles DIR --allow-run
     """
     pass
 
@@ -491,7 +491,7 @@ def quickstart(
     )
     if _agent_serves_tutorial():
         click.echo("Give a local agent the run tool (synthetic MockMed, no frames):")
-        click.echo("  openadapt-agent serve --allow-run")
+        click.echo("  openadapt agent serve --allow-run")
         click.echo(
             "A client sends authorized work and gets a receipt. Frames stay here."
         )
@@ -770,6 +770,35 @@ def flow(command_ctx: click.Context) -> None:
     installed engine version.
     """
     _run_flow(list(command_ctx.args))
+
+
+@main.command(
+    "agent",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        # The agent bridge owns its argparse help.
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def agent(command_ctx: click.Context) -> None:
+    """Serve compiled workflows to an MCP client (openadapt-agent).
+
+    Every argument passes to openadapt-agent unchanged. Use this form where
+    only `openadapt` is on PATH, as after `uv tool install openadapt` or
+    pipx, which keep the `openadapt-agent` executable inside the tool's own
+    environment. Nothing is written to stdout before the bridge starts, so an
+    MCP client can launch this command directly.
+    """
+    _require_supported_python()
+    try:
+        from openadapt_agent.cli import main as agent_main
+    except ImportError:
+        click.echo("Error: openadapt-agent is not installed.", err=True)
+        click.echo("Reinstall with: pip install --upgrade openadapt", err=True)
+        sys.exit(1)
+    sys.exit(int(agent_main(list(command_ctx.args)) or 0))
 
 
 @main.command("connect")
