@@ -319,3 +319,32 @@ def test_this_repository_is_classified_public(policy: guard.SourcePolicy) -> Non
     assert "OpenAdapt" in policy.public_repositories
     assert policy.public_repositories["OpenAdapt"]["classification"] == "public"
     assert policy.public_repositories["OpenAdapt"]["must_not_contain"]
+
+
+# --------------------------------------------------------------------------
+# Monorepo preview: package copies of the rendered policy.
+# --------------------------------------------------------------------------
+
+
+def test_identical_package_policy_copy_is_skipped(
+    tmp_path: Path, policy: guard.SourcePolicy
+) -> None:
+    copy = guard.POLICY_PATH.read_text(encoding="utf-8")
+    repo = _repo(tmp_path, "packages/types/source-policy.public.json", copy)
+    assert guard.scan(repo, policy) == []
+
+
+def test_edited_package_policy_copy_is_still_scanned(
+    tmp_path: Path, policy: guard.SourcePolicy
+) -> None:
+    copy = guard.POLICY_PATH.read_text(encoding="utf-8") + "\npowerchart\n"
+    repo = _repo(tmp_path, "packages/types/source-policy.public.json", copy)
+    assert guard.scan(repo, policy)
+
+
+def test_policy_named_file_outside_packages_is_still_scanned(
+    tmp_path: Path, policy: guard.SourcePolicy
+) -> None:
+    copy = guard.POLICY_PATH.read_text(encoding="utf-8")
+    repo = _repo(tmp_path, "docs/source-policy.public.json", copy)
+    assert guard.scan(repo, policy)

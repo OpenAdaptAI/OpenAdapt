@@ -255,11 +255,32 @@ def _is_allowlisted(path: str) -> bool:
     )
 
 
+def _is_package_policy_copy(root: Path, path: str) -> bool:
+    """True for packages/<name>/source-policy.public.json when it is byte-identical
+    to the policy this check reads.
+
+    Each workspace package still carries the rendered policy its own release
+    scripts read. A copy is skipped only while it is the same generated file, so
+    a package cannot hide other content under that name.
+    """
+    parts = path.split("/")
+    if (
+        len(parts) != 3
+        or parts[0] != "packages"
+        or parts[2] != "source-policy.public.json"
+    ):
+        return False
+    try:
+        return (root / path).read_bytes() == POLICY_PATH.read_bytes()
+    except OSError:
+        return False
+
+
 def scan(root: Path, policy: SourcePolicy) -> list[str]:
     """Return every boundary violation among the tracked files under `root`."""
     violations: list[str] = []
     for rel_path in _tracked_files(root):
-        if _is_allowlisted(rel_path):
+        if _is_allowlisted(rel_path) or _is_package_policy_copy(root, rel_path):
             continue
         lower = rel_path.lower()
         matched_token = next(
