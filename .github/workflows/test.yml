@@ -53,7 +53,7 @@ jobs:
       - name: Install dependencies with Presidio
         run: |
           uv sync --extra dev --extra presidio
-          uv pip install pip
+          uv pip install "pip>=25.3"
           uv run python -m spacy download en_core_web_sm
 
       - name: Run all tests
