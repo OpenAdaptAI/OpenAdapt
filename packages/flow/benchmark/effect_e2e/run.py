@@ -672,19 +672,22 @@ estimate (see "How to read these numbers" below).
   occurred] -- the apples-to-apples oracle comparison.
 - **false-abort rate** = P[the arm halted | the effect was actually correct].
 
-**The realistic headline is the ladder, and the middle rung is the number a
-real deployment ships.** A production deployment typically stands up ONE
-out-of-band record oracle over the surface the workflow touches -- the
-`effect-verify (REST record oracle)` arm -- and that arm's residual silent-wrong
-rate is {m["effect_rest"]["silent_wrong_action_rate"]:.1%}
-({m["effect_rest"]["silent_wrong_count"]}/{m["effect_rest"]["n_runs"]}), driven
-entirely by the collateral-write class. The
+**Read the ladder by oracle configuration.** The middle rung, the
+`effect-verify (REST record oracle)` arm, is the most realistic oracle
+configuration measured here: ONE out-of-band record oracle over the surface the
+workflow touches. Its residual silent-wrong rate is
+{m["effect_rest"]["silent_wrong_action_rate"]:.1%}
+({m["effect_rest"]["silent_wrong_count"]}/{m["effect_rest"]["n_runs"]}), all of it
+from the collateral-write class: a write to a surface outside that oracle's read
+path. The rate is the share of authored scenarios that fall outside the read
+path ({len(slips)} of {len(results["scenarios"])}), so it is fault coverage under
+this taxonomy, not an expected field or production rate. The
 `effect-verify (complete SQL read path)` arm reaches
 {m["effect_full"]["silent_wrong_action_rate"]:.1%}
 ({m["effect_full"]["silent_wrong_count"]}/{m["effect_full"]["n_runs"]}) ONLY
 because its read path is widened to cover every mutable surface -- the
-least-realistic, most-instrumented deployment. Do not read the `0%` as the
-expected field result; the honest field number is the middle rung.
+least-realistic, most-instrumented configuration. Do not read the `0%` as what a
+single-oracle deployment would catch.
 
 ## Per-fault, per-arm outcome
 
@@ -736,10 +739,11 @@ both:
    paths. Independence of code and read path is not independence of
    specification.
 
-The realistic, foregrounded result is therefore the middle rung
-({m["effect_rest"]["silent_wrong_count"]}/{m["effect_rest"]["n_runs"]} residual
-under one out-of-band oracle); the `0` is the best case under a complete
-in-database read path, in a closed world.
+The foregrounded result is therefore the middle rung, the most realistic oracle
+configuration ({m["effect_rest"]["silent_wrong_count"]}/{m["effect_rest"]["n_runs"]}
+residual under one out-of-band oracle), read as fault coverage under this
+taxonomy; the `0` is the best case under a complete in-database read path, in a
+closed world.
 
 ## How to read these numbers (deterministic, not sampled)
 

@@ -2965,8 +2965,16 @@ def test_live_cdp_attach_records_compiles_and_leaves_browser_running_three_trial
         assert meta["viewport_history"][-1]["viewport"] == [900, 600]
         assert len(meta["viewport_history"]) >= 2
         assert events
+        # The size before the resize is whatever the attached tab shows when
+        # this recording starts. The 1000x650 override set by the refused
+        # recording above belonged to that recording's DevTools session, and
+        # whether Chromium keeps it after that session detaches varies by
+        # platform and timing. Read the starting size from this recording.
+        start = meta["viewport_history"][0]
+        assert start["before_event"] == 0
+        assert tuple(start["viewport"]) != (900, 600)
         assert {tuple(event["viewport_before"]) for event in events} == {
-            (1000, 650),
+            tuple(start["viewport"]),
             (900, 600),
         }
         assert all(

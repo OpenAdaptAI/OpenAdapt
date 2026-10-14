@@ -73,6 +73,12 @@ whole collection, so a required effect must select the subject with a
 `{param: ...}` reference, and `RewardBundle.load` refuses a bundle where none
 does (`docs/EFFECT_KIT.md`).
 
+The evidence keeps only the records the bound required and forbidden effects
+select. `evidence.json` and the receipt's `evidence_digest` cover those records
+plus `records_outside_scope`, the number of records the read returned and the
+evidence left out. The baseline under `<data-dir>/baselines/` still holds the
+whole read, because the change and collateral-loss checks compare against it.
+
 ## The policy update only moves forward
 
 A certificate expires after a stated number of policy updates, and

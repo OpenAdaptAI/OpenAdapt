@@ -217,3 +217,120 @@ def test_replayer_missing_secret_errors_clearly(tmp_path, monkeypatch) -> None:
     assert "OPENADAPT_FLOW_SECRET_PASSWORD" in (result.error or "")
     # Nothing was typed: the secret never reached the backend.
     assert not any(a[0] == "type" for a in backend.actions)
+
+
+# -- a value typed into a password field is a secret once it's a parameter ----
+
+
+def _password_recording(tmp_path: Path, label: str = "Password") -> Path:
+    """A recording whose TYPE step typed SECRET into a field labeled ``label``."""
+    recording = tmp_path / "recording"
+    (recording / "frames").mkdir(parents=True)
+    for suffix in ("before", "after"):
+        (recording / "frames" / f"0000_{suffix}.png").write_bytes(_png())
+    (recording / "events.jsonl").write_text(
+        json.dumps({"i": 0, "kind": "type", "text": SECRET, "field_label": label})
+        + "\n"
+    )
+    (recording / "meta.json").write_text(
+        json.dumps(
+            {
+                "id": "rec-password-001",
+                "created_at": "2026-10-10T00:00:00+00:00",
+                "viewport": [1280, 800],
+                "app_url": "http://localhost:0/",
+                "params": {},
+            }
+        )
+    )
+    return recording
+
+
+def _assert_no_literal(bundle: Path) -> None:
+    for path in bundle.rglob("*"):
+        if path.is_file() and path.suffix in (".json", ".py", ".txt", ".md"):
+            assert SECRET not in path.read_text(), path
+
+
+@pytest.mark.parametrize(
+    "label", ["Password", "New password", "PIN", "Passcode", "Client secret"]
+)
+def test_credential_proposal_is_flagged_secret_without_example(
+    tmp_path: Path, label: str
+) -> None:
+    from openadapt_flow.compiler import param_confirm as pc
+
+    bundle = tmp_path / "bundle"
+    compile_recording(_password_recording(tmp_path, label), bundle, name="login")
+    [proposal] = pc.load_proposals(bundle)
+    assert proposal.secret is True
+    assert proposal.masked_example is None
+    sidecar = json.loads((bundle / pc.PROPOSALS_FILENAME).read_text())
+    assert sidecar["proposals"][0]["secret"] is True
+
+
+def test_non_credential_proposal_is_not_secret(tmp_path: Path) -> None:
+    from openadapt_flow.compiler import param_confirm as pc
+
+    bundle = tmp_path / "bundle"
+    compile_recording(_password_recording(tmp_path, "Spinal level"), bundle, name="x")
+    [proposal] = pc.load_proposals(bundle)
+    assert proposal.secret is False
+    assert proposal.masked_example is not None
+
+
+@pytest.mark.parametrize("how", ["accept", "confirm", "rename", "interactive"])
+def test_confirming_a_password_proposal_makes_a_secret_parameter(
+    tmp_path: Path, how: str
+) -> None:
+    from openadapt_flow.compiler import param_confirm as pc
+
+    recording = _password_recording(tmp_path)
+    bundle = tmp_path / "bundle"
+    compile_recording(recording, bundle, name="login")
+    proposals = pc.load_proposals(bundle)
+    if how == "accept":
+        decisions = pc.decisions_from_accept_list(proposals, ["password"])
+    elif how == "confirm":
+        decisions = pc.decisions_from_file(
+            proposals, {"password": {"action": "confirm"}}
+        )
+    elif how == "rename":
+        decisions = pc.decisions_from_file(
+            proposals, {"password": {"action": "rename", "name": "login_password"}}
+        )
+    else:
+        decisions = pc.decisions_interactive(
+            proposals, input_fn=lambda _: "c", output_fn=lambda _: None
+        )
+    assert [d.secret for d in decisions] == [True]
+
+    wf = pc.apply_decisions(recording, bundle, name="login", decisions=decisions)
+    name = decisions[0].name
+    assert wf.secret_params == [name]
+    assert name not in wf.params
+    assert name not in wf.param_specs
+    assert wf.steps[0].secret is True and wf.steps[0].text is None
+    _assert_no_literal(bundle)
+
+
+def test_cli_accept_params_password_writes_no_literal(tmp_path: Path) -> None:
+    from openadapt_flow.__main__ import main
+
+    recording = _password_recording(tmp_path)
+    bundle = tmp_path / "bundle"
+    rc = main(
+        [
+            "compile",
+            str(recording),
+            "--out",
+            str(bundle),
+            "--name",
+            "login",
+            "--accept-params",
+            "password",
+        ]
+    )
+    assert rc == 0
+    assert Workflow.load(bundle).secret_params == ["password"]
+    _assert_no_literal(bundle)

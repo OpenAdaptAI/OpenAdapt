@@ -58,6 +58,7 @@ from openadapt_flow.backends.remote_display import (
     RemoteDisplayError,
     WindowClient,
     WindowInfo,
+    require_pyobjc,
 )
 from openadapt_flow.ir import (
     StructuralHandle,
@@ -574,6 +575,11 @@ class MacOSBackend(RemoteDisplayBackend):
     ) -> None:
         if not app.strip():
             raise ValueError("native macOS backend requires a non-empty app name")
+        if client is None:
+            # Name a missing [macos] extra before any replay starts, rather
+            # than letting the first trust check misreport it as a denied
+            # Screen Recording permission.
+            require_pyobjc()
         native_client = client if client is not None else MacWindowClient()
         self._mac_client: MacOSClient = native_client
         self._ax_client: MacAXClient = (

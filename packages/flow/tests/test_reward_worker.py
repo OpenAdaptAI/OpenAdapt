@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import base64
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -451,6 +452,68 @@ def test_receipt_carries_no_screenshot_or_rollout_bytes(
         assert_no_forbidden_keys({**receipt, "screenshots": []})
     for name in ("execution_id", "workflow_digest", "qualification_id", "contracts"):
         assert name not in receipt
+
+
+def test_reward_evidence_excludes_other_subjects(seeded: dict[str, Any]) -> None:
+    """The stored evidence holds only the graded subject's records.
+
+    The oracle reads the whole table, which already holds two rows for
+    another patient. Those rows play no part in judging this patient, so they
+    must not be written to evidence.json or hashed into the receipt that
+    names this patient.
+    """
+
+    from openadapt_types.process_capability import canonical_json_bytes
+
+    worker = _worker(seeded)
+    envelope = _run(worker, seeded, MOCKMED_HONEST_PATIENT, "episode_scope_01")
+    receipt = _receipt(envelope)
+    assert receipt.reward_outcome is RewardOutcomeV1.VERIFIED
+
+    path = seeded["data_dir"] / "rewards" / receipt.receipt_id / "evidence.json"
+    text = path.read_text(encoding="utf-8")
+    evidence = json.loads(text)
+    records = evidence["observed"]["records"]
+    assert records, "the graded subject's own row stays in the evidence"
+    assert {r["patient_id"] for r in records} == {MOCKMED_HONEST_PATIENT}
+    assert MOCKMED_DUPLICATE_PATIENT not in text
+    assert evidence["observed"]["records_outside_scope"] == 2
+    assert receipt.evidence_digest == (
+        "sha256:" + hashlib.sha256(canonical_json_bytes(evidence)).hexdigest()
+    )
+
+
+def test_evidence_scope_applies_the_idempotency_key() -> None:
+    """A selector that binds the subject only by idempotency key still scopes."""
+
+    from openadapt_flow.reward.worker import _scoped_observation
+
+    effect = Effect.model_validate(
+        {
+            "kind": "record_written",
+            "match": {"type": "Triage"},
+            "idempotency_key": "patient-a",
+            "expected_count": 1,
+        }
+    )
+    value = {
+        "reachable": True,
+        "records": [
+            {"id": 1, "type": "Triage", "key": "patient-a"},
+            {"id": 2, "type": "Triage", "key": "patient-b"},
+        ],
+    }
+    scoped = _scoped_observation(value, [effect])
+    assert scoped["records"] == [{"id": 1, "type": "Triage", "key": "patient-a"}]
+    assert scoped["records_outside_scope"] == 1
+    assert scoped["reachable"] is True
+
+    unreachable = _scoped_observation({"reachable": False, "records": []}, [effect])
+    assert unreachable == {
+        "reachable": False,
+        "records": [],
+        "records_outside_scope": 0,
+    }
 
 
 def test_bundle_refuses_tampered_effects(seeded: dict[str, Any]) -> None:

@@ -134,21 +134,42 @@ def _has_unresolved_uncertainty(report: RunReport) -> bool:
     :func:`_lacks_effect_absence_proof`.
     """
 
-    for result in report.results:
-        uncertainty = result.delivery_uncertainty
-        if uncertainty is not None and not uncertainty.resolved_by_contract:
+    return any(_result_has_unresolved_uncertainty(result) for result in report.results)
+
+
+def _result_has_unresolved_uncertainty(result: StepResult) -> bool:
+    """Per-step form of :func:`_has_unresolved_uncertainty`."""
+
+    uncertainty = result.delivery_uncertainty
+    if uncertainty is not None and not uncertainty.resolved_by_contract:
+        return True
+    for evidence in result.effect_evidence:
+        if evidence.final_verdict == "confirmed":
+            # A confirmed (or reconciled-to-confirmed) effect is settled.
+            continue
+        if evidence.final_verdict == "indeterminate":
             return True
-        for evidence in result.effect_evidence:
-            if evidence.final_verdict == "confirmed":
-                # A confirmed (or reconciled-to-confirmed) effect is settled.
-                continue
-            if evidence.final_verdict == "indeterminate":
-                return True
-            # final_verdict == "refuted": only a verifier-established ABSENCE is
-            # safe to treat as "no effect"; anything else may have written.
-            if evidence.observed_effect != "absent":
-                return True
+        # final_verdict == "refuted": only a verifier-established ABSENCE is
+        # safe to treat as "no effect"; anything else may have written.
+        if evidence.observed_effect != "absent":
+            return True
     return False
+
+
+def steps_requiring_reconciliation(report: RunReport) -> list[str]:
+    """Step ids whose business effect is not settled: a write may exist.
+
+    Read-only. It applies the classifier's own per-step predicates (an
+    unresolved delivery uncertainty or conflicting evidence, or a
+    consequential step without absence proof) and never reclassifies the run.
+    """
+
+    return [
+        result.step_id
+        for result in report.results
+        if _result_has_unresolved_uncertainty(result)
+        or (_is_consequential_result(result) and not _effect_absence_proven(result))
+    ]
 
 
 def _is_consequential_result(result: StepResult) -> bool:

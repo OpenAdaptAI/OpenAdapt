@@ -881,12 +881,27 @@ def render_receipt_markdown(receipt: RunReceipt) -> str:
         f"| receipt builder version | {receipt.receipt_builder_version} |",
         f"| external network calls | `{receipt.external_network_calls}` |",
     ]
+    if receipt.provenance == "synthetic-tutorial":
+        # The tutorial records a new demonstration and compiles a new bundle
+        # on every run, and it publishes no bundle, so a digest comparison
+        # across runs can never match.
+        digest_check = (
+            "The bundle digest identifies the bundle this tutorial compiled on "
+            "this computer. Each tutorial run records and compiles a new "
+            "bundle, so a new run has a different digest. To check this "
+            "receipt, open this run's `workflow.json`: its manifest "
+            "`content_digest` equals the bundle digest above."
+        )
+    else:
+        digest_check = (
+            "Run the same public bundle yourself and compare the bundle digest."
+        )
     lines += [
         f"| bundle digest | `{receipt.bundle_digest}` |",
         f"| receipt digest | `{receipt.receipt_digest}` |",
         f"| generated | {receipt.generated_at} |",
         "",
-        "Run the same public bundle yourself and compare the bundle digest.",
+        digest_check,
         "",
         "This receipt is generated from a closed allow-list. It contains no "
         "screenshot, no OCR text, no typed value, no parameter, no URL, no "

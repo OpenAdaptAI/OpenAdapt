@@ -1518,6 +1518,8 @@ def _apply_param_overrides(
         Demonstrated values of compile-time SECRET steps (excluded from
         postconditions by the caller; never placed in ``params``).
     """
+    from openadapt_flow.compiler.annotate import is_credential_label
+
     unknown_secret = secret_param_steps - set(param_overrides)
     if unknown_secret:
         raise ValueError(
@@ -1555,10 +1557,15 @@ def _apply_param_overrides(
                 "declared by the recording"
             )
         event["param"] = pname
-        if step_id in secret_param_steps:
+        if step_id in secret_param_steps or is_credential_label(
+            event.get("field_label")
+        ):
             # Compile-time secret: the BUNDLE carries no literal. (The
             # recording still does -- see the compile_recording docstring
-            # caveat -- so the value is still postcondition-excluded.)
+            # caveat -- so the value is still postcondition-excluded.) A
+            # value typed into a credential field (password, PIN, ...) is
+            # always a secret once it becomes a parameter: a plain parameter
+            # would store it as the default and example in workflow.json.
             event["secret"] = True
             event.pop("text", None)
             secret_params.append(pname)
@@ -2686,7 +2693,7 @@ def compile_recording(
     )
 
     label_result = apply_annotations(workflow, FieldLabelAnnotator())
-    label_proposals: list[dict[str, Optional[str]]] = []
+    label_proposals: list[dict[str, Optional[str] | bool]] = []
     for sa in label_result.proposals.steps:
         for prop in sa.params:
             label_proposals.append(
@@ -2695,8 +2702,11 @@ def compile_recording(
                     "name": prop.name,
                     "field_label": prop.source_label,
                     "masked_example": (
-                        mask_value(prop.example) if prop.example else None
+                        mask_value(prop.example)
+                        if prop.example and not prop.secret
+                        else None
                     ),
+                    "secret": prop.secret,
                 }
             )
     if label_proposals:

@@ -25,7 +25,17 @@ Runner = Callable[["AdmittedBundle", "ExecuteRequestV1", Path], "DispatchResult"
 
 
 class DispatchError(RuntimeError):
-    """Local replay could not run or could not be classified."""
+    """Local replay could not run or could not be classified.
+
+    ``pre_effect`` is True only for an error raised before any browser or
+    replay started, when no business effect is possible. Every other dispatch
+    error may follow a write, so the service maps it to
+    ``reconciliation_required`` instead of ``failed_platform``.
+    """
+
+    def __init__(self, message: str, *, pre_effect: bool = False) -> None:
+        super().__init__(message)
+        self.pre_effect = pre_effect
 
 
 @dataclass(frozen=True)
@@ -108,7 +118,9 @@ def live_replay(
 
     bundle = Path(admission.bundle_dir or "")
     if not bundle.is_dir():
-        raise DispatchError(f"admitted bundle_dir is missing: {bundle}")
+        raise DispatchError(
+            f"admitted bundle_dir is missing: {bundle}", pre_effect=True
+        )
 
     from openadapt_flow.ir import Workflow
     from openadapt_flow.mockmed.fault_server import serve as serve_mockmed
@@ -118,8 +130,14 @@ def live_replay(
         run_tutorial_workflow,
     )
 
-    workflow = Workflow.load(bundle)
-    run_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        workflow = Workflow.load(bundle)
+        run_dir.mkdir(parents=True, exist_ok=True)
+    except Exception as exc:
+        raise DispatchError(
+            f"admitted bundle could not be loaded: {type(exc).__name__}",
+            pre_effect=True,
+        ) from exc
     stop: Optional[Callable[[], None]] = None
     try:
         if admission.target_url:
@@ -153,7 +171,8 @@ def live_replay(
                 entry_query=entry_query,
             )
     except Exception as exc:
-        raise DispatchError(f"local replay failed: {exc}") from exc
+        # The replay may have dispatched a write before it failed.
+        raise DispatchError(f"local replay failed: {exc}", pre_effect=False) from exc
     finally:
         if stop is not None:
             stop()
@@ -183,9 +202,12 @@ def project_run_report(report: Any, *, workflow_digest: str) -> DispatchResult:
     if outcome is ExecuteTerminalOutcomeV1.VERIFIED and not (
         auth_ok and ident_ok and post_ok and effect_ok and observed is not None
     ):
-        raise DispatchError(
-            "local run claimed VERIFIED without complete Execute contracts"
-        )
+        # The run reports that the effect landed but cannot prove it with
+        # complete contracts. A write may exist, so never claim "no effect".
+        outcome = ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED
+        effect_ok = False
+        observed = None
+        delivery_uncertain = True
     return _result(
         outcome=outcome,
         authorization_passed=auth_ok,
@@ -213,25 +235,48 @@ def _request_break_it(request: ExecuteRequestV1) -> bool:
 
 
 def _map_outcome(coarse: str, txn: Any) -> ExecuteTerminalOutcomeV1:
+    """Map a run onto the Execute taxonomy from its transaction outcome only.
+
+    Fail closed. ``halted_before_effect``, ``rejected_policy`` and
+    ``failed_platform`` each assert that no business effect happened, so they
+    come only from a transaction outcome that the classifier stamped with
+    proof of absence. A missing, unknown or contradictory value can't prove
+    that, so it maps to ``reconciliation_required``. The coarse outcome never
+    stands in for a missing transaction outcome; it can only block VERIFIED.
+    """
     from openadapt_flow.transaction import TransactionOutcome
 
-    if txn is TransactionOutcome.VERIFIED or coarse == "VERIFIED":
-        return ExecuteTerminalOutcomeV1.VERIFIED
-    if txn is TransactionOutcome.RECONCILIATION_REQUIRED:
+    if not isinstance(txn, TransactionOutcome):
         return ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED
-    if txn is TransactionOutcome.HALTED_BEFORE_EFFECT:
-        return ExecuteTerminalOutcomeV1.HALTED_BEFORE_EFFECT
-    if txn is TransactionOutcome.REJECTED_POLICY:
-        return ExecuteTerminalOutcomeV1.REJECTED_POLICY
-    if txn is TransactionOutcome.FAILED_PLATFORM or coarse == "FAILED":
-        return ExecuteTerminalOutcomeV1.FAILED_PLATFORM
-    if txn is TransactionOutcome.ROLLED_BACK:
-        return ExecuteTerminalOutcomeV1.ROLLED_BACK_VERIFIED
-    if coarse == "HALTED":
-        return ExecuteTerminalOutcomeV1.HALTED_BEFORE_EFFECT
-    if coarse == "COMPLETED_UNVERIFIED":
-        return ExecuteTerminalOutcomeV1.REJECTED_POLICY
-    return ExecuteTerminalOutcomeV1.FAILED_PLATFORM
+    if txn is TransactionOutcome.VERIFIED:
+        return (
+            ExecuteTerminalOutcomeV1.VERIFIED
+            if coarse == "VERIFIED"
+            else ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED
+        )
+    mapping = {
+        TransactionOutcome.HALTED_BEFORE_EFFECT: (
+            ExecuteTerminalOutcomeV1.HALTED_BEFORE_EFFECT
+        ),
+        # The classifier returns CANCELED only with proof that no effect
+        # happened, the same proof HALTED_BEFORE_EFFECT carries.
+        TransactionOutcome.CANCELED: ExecuteTerminalOutcomeV1.HALTED_BEFORE_EFFECT,
+        TransactionOutcome.REJECTED_POLICY: ExecuteTerminalOutcomeV1.REJECTED_POLICY,
+        TransactionOutcome.FAILED_PLATFORM: ExecuteTerminalOutcomeV1.FAILED_PLATFORM,
+        TransactionOutcome.ROLLED_BACK: ExecuteTerminalOutcomeV1.ROLLED_BACK_VERIFIED,
+        TransactionOutcome.RECONCILIATION_REQUIRED: (
+            ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED
+        ),
+        # The run executed but did not prove its effect. Execute has no
+        # "completed, not verified" outcome, and rejected_policy would misstate
+        # why the run stopped.
+        TransactionOutcome.COMPLETED_UNVERIFIED: (
+            ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED
+        ),
+    }
+    if txn not in mapping:
+        raise DispatchError(f"unmapped transaction outcome: {txn.value}")
+    return mapping[txn]
 
 
 def _contract_booleans(envelope: Any) -> tuple[bool, bool, bool, bool]:

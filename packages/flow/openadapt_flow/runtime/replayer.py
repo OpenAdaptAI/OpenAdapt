@@ -97,6 +97,7 @@ from openadapt_flow.ir import (
     IdentitySignalEvidence,
     Interstitial,
     InterstitialActionResult,
+    LoopIterationBinding,
     LoopSpec,
     PixelIdentityEvidence,
     Point,
@@ -122,6 +123,7 @@ from openadapt_flow.ir import (
     Workflow,
     predicate_contract_sha256,
 )
+from openadapt_flow.network_scope import EndpointScope, endpoint_scope
 from openadapt_flow.privacy import scrub_image_bytes as _scrub_png
 from openadapt_flow.privacy import scrub_text as _scrub_phi
 from openadapt_flow.qualification_environment import (
@@ -349,6 +351,72 @@ class _ProgramHalt(Exception):
         self.program_frames: list[GraphFrame] = []
         self.program_params: dict[str, RuntimeParamScalar] = {}
         self.program_history_hash: str = ""
+
+
+def effect_endpoint_scope(verifier: Any) -> EndpointScope:
+    """Where an effect verifier reads its system of record.
+
+    A verifier that names a ``base_url`` (REST, FHIR) is ``loopback`` when that
+    URL is on this computer and ``external`` otherwise. A verifier without one
+    is ``unknown``, which keeps a network substrate counted as egress.
+    """
+    base_url = getattr(verifier, "base_url", None)
+    return endpoint_scope(base_url) if isinstance(base_url, str) else "unknown"
+
+
+def _record_loop_iteration(
+    report: RunReport,
+    loop_state_id: str,
+    row_index: int,
+    row: Mapping[str, RuntimeParamScalar],
+) -> None:
+    """Record the row values one loop iteration binds, before it runs.
+
+    ``report.params`` is the run's base scope. A row field overrides it for
+    that iteration, so the audit report needs each row's own values to state
+    what the run typed.
+    """
+    report.loop_iterations.append(
+        LoopIterationBinding(
+            loop_state_id=loop_state_id,
+            row_index=row_index,
+            params=dict(row),
+        )
+    )
+
+
+def _loop_iterations_from_checkpoints(
+    checkpoints: list[ProgramCheckpoint],
+) -> list[LoopIterationBinding]:
+    """Rebuild the loop rows that earlier legs of a resumed run bound.
+
+    A resumed report carries the earlier legs' results, so it also needs the
+    row values those results typed. Each checkpoint's frame stack names the
+    loop row it ran in. A row is listed once, at its first checkpoint, keyed by
+    its position in the frame stack so a nested loop's rows under different
+    outer rows stay distinct.
+    """
+    seen: set[tuple[tuple[str, str, int], ...]] = set()
+    bindings: list[LoopIterationBinding] = []
+    for checkpoint in checkpoints:
+        path: tuple[tuple[str, str, int], ...] = ()
+        for frame in checkpoint.frames:
+            cursor = frame.loop
+            if cursor is None:
+                path = (*path, (frame.graph_id, "", -1))
+                continue
+            path = (*path, (frame.graph_id, cursor.loop_state_id, cursor.row_index))
+            if path in seen or not 0 <= cursor.row_index < len(cursor.rows):
+                continue
+            seen.add(path)
+            bindings.append(
+                LoopIterationBinding(
+                    loop_state_id=cursor.loop_state_id,
+                    row_index=cursor.row_index,
+                    params=dict(cursor.rows[cursor.row_index]),
+                )
+            )
+    return bindings
 
 
 def _all_workflow_steps(workflow: Workflow):
@@ -1167,6 +1235,9 @@ class Replayer:
         # with caller-supplied values overriding both. A v0 bundle (empty
         # ``param_specs``) collapses to exactly the old ``{**workflow.params,
         # **caller}`` merge.
+        prior_external_network_calls = self._initial_external_network_calls(
+            prior_external_network_calls
+        )
         merged: dict[str, RuntimeParamScalar] = {**workflow.params}
         for pname, spec in workflow.param_specs.items():
             if spec.example is not None:
@@ -2304,6 +2375,20 @@ class Replayer:
             )
         )
 
+    def _initial_external_network_calls(
+        self, prior: Literal["none", "observed", "unknown"]
+    ) -> Literal["none", "observed", "unknown"]:
+        """Seed the run's network observation before any step runs.
+
+        A Cloud-dispatched run exchanges its dispatch binding and delivery
+        permits with Cloud, so it made external network calls whatever its
+        target's origin is. Without this, a Cloud run against a loopback app
+        could be reported as having made none.
+        """
+        if self.delivery_authority_kind == "cloud_runner":
+            return "observed"
+        return prior
+
     @staticmethod
     def _sync_durable_audit(durable_run: Any, report: RunReport) -> None:
         """Persist whole-run counters before a leg can durably pause."""
@@ -2448,6 +2533,9 @@ class Replayer:
                         report.attended_program_transition_evidence.append(
                             checkpoint.attended_transition_evidence
                         )
+                report.loop_iterations.extend(
+                    _loop_iterations_from_checkpoints(checkpoints)
+                )
                 self._program_history_boundary_index = len(successful_history)
                 self._program_durable_history = durable_base_history
                 self._program_history_parent_hash = _history_hash(durable_base_history)
@@ -3003,6 +3091,7 @@ class Replayer:
             )
         for i, row in enumerate(rows):
             iter_params = {**params, **row}
+            _record_loop_iteration(report, state.id, i, row)
             self._walk_graph(
                 body,
                 graph_id=loop.body,
@@ -4807,6 +4896,7 @@ class Replayer:
                         initial_verdict=verdict.verdict.value,
                         final_verdict=verdict.verdict.value,
                         observed_effect=verdict.observed_effect,
+                        endpoint_scope=effect_endpoint_scope(current_verifier),
                     )
                 )
             else:
@@ -5177,6 +5267,7 @@ class Replayer:
                 start_i = (cursor.row_index + 1) if cursor is not None else 0
                 for i in range(start_i, len(rows)):
                     iter_params = {**params, **rows[i]}
+                    _record_loop_iteration(report, state.id, i, rows[i])
                     self._walk_graph(
                         body,
                         graph_id=loop.body,
@@ -7704,6 +7795,7 @@ class Replayer:
                 )
             try:
                 verdict = verify_effect_without_mutation(verifier, effect, before)
+                scope = effect_endpoint_scope(verifier)
                 selected_pre_state = getattr(before, "for_effect", None)
                 if callable(selected_pre_state):
                     # Candidate selection and its evidence strength are pinned
@@ -7712,6 +7804,7 @@ class Replayer:
                     binding = selected_pre_state(effect)
                     tier = binding.tier
                     identity = binding.verifier_identity
+                    scope = effect_endpoint_scope(binding.verifier)
                     if (
                         verifier_effect_tier(binding.verifier, effect) != tier
                         or effect_verifier_identity(binding.verifier) != identity
@@ -7753,6 +7846,7 @@ class Replayer:
                         initial_verdict=verdict.verdict.value,
                         final_verdict=verdict.verdict.value,
                         observed_effect=verdict.observed_effect,
+                        endpoint_scope=scope,
                     )
                 )
                 result.effect_results.append(
@@ -7786,6 +7880,7 @@ class Replayer:
                             initial_verdict=verdict.verdict.value,
                             final_verdict=final_verdict.verdict.value,
                             observed_effect=final_verdict.observed_effect,
+                            endpoint_scope=scope,
                             reconciliation_completed=True,
                             reconciliation_actions=comp.actions_taken,
                         )
@@ -7807,6 +7902,7 @@ class Replayer:
                         initial_verdict=verdict.verdict.value,
                         final_verdict=final_verdict.verdict.value,
                         observed_effect=final_verdict.observed_effect,
+                        endpoint_scope=scope,
                         reconciliation_actions=comp.actions_taken,
                     )
                 )
@@ -7834,6 +7930,7 @@ class Replayer:
                     initial_verdict=verdict.verdict.value,
                     final_verdict=verdict.verdict.value,
                     observed_effect=verdict.observed_effect,
+                    endpoint_scope=scope,
                 )
             )
             result.effect_results.append(

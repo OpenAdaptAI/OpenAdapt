@@ -43,6 +43,7 @@ pulls it onto the replay hot path.
 from __future__ import annotations
 
 import functools
+import importlib.util
 import json
 import shlex
 import subprocess
@@ -80,6 +81,39 @@ RecorderFactory = Callable[[str, str], ContextManager[_CaptureRecorder]]
 ConvertFn = Callable[..., Path]
 
 
+#: Modules the default recorder imports. The ``[capture]`` extra installs
+#: openadapt-capture, which brings loguru with it.
+CAPTURE_MODULES = ("openadapt_capture", "loguru")
+
+_CAPTURE_INSTALL_HINT = (
+    "Install it, then run record again:\n\n"
+    "    python -m pip install 'openadapt[capture]'       "
+    "(if you use the OpenAdapt launcher)\n"
+    "    python -m pip install 'openadapt-flow[capture]'  "
+    "(if you use openadapt-flow on its own)\n\n"
+    "Recording a browser workflow with --url needs no extra."
+)
+
+
+def _module_available(name: str) -> bool:
+    if name in sys.modules:
+        return sys.modules[name] is not None
+    try:
+        return importlib.util.find_spec(name) is not None
+    except (ImportError, ValueError):
+        return False
+
+
+def _require_capture_extra() -> None:
+    """Refuse before any prompt or file when the capture extra is missing."""
+    missing = [name for name in CAPTURE_MODULES if not _module_available(name)]
+    if missing:
+        raise SystemExit(
+            "record: desktop recording needs the capture extra, and Python "
+            f"can't import {', '.join(missing)}. " + _CAPTURE_INSTALL_HINT
+        )
+
+
 def _default_recorder_factory(
     task_description: str,
     capture_dir: str,
@@ -101,8 +135,7 @@ def _default_recorder_factory(
     except ImportError as exc:  # pragma: no cover - exercised via install state
         raise ImportError(
             "openadapt-capture is required to record a desktop workflow but is "
-            "not installed. Install the optional extra:\n\n"
-            "    pip install 'openadapt-flow[capture]'\n"
+            "not installed. " + _CAPTURE_INSTALL_HINT
         ) from exc
     import inspect
 
@@ -289,6 +322,12 @@ def record_desktop_capture(
         raise ValueError(
             "backend_kind execution hints are supported only for rdp or citrix"
         )
+    if recorder_factory is None:
+        # The default recorder needs the [capture] extra. Check for it before
+        # the output directories exist and before the operator is told to
+        # start demonstrating; the lazy import in the factory stays as a
+        # backstop.
+        _require_capture_extra()
 
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)

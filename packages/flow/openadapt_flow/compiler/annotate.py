@@ -123,6 +123,14 @@ class ParamProposal(BaseModel):
             " proposals."
         ),
     )
+    secret: bool = Field(
+        default=False,
+        description=(
+            "True when the field label names a credential (password, PIN,"
+            " passcode, secret). Confirming such a proposal makes a SECRET"
+            " parameter, and the proposal carries no example value."
+        ),
+    )
     rationale: str = ""
 
 
@@ -217,6 +225,28 @@ def slugify_label(label: str, *, max_len: int = 64) -> Optional[str]:
     return slug
 
 
+#: Slug tokens that mark a field label as a credential. Matched per token of
+#: :func:`slugify_label`'s output, so ``"New password"`` and ``"Client secret"``
+#: match while ``"Spinal level"`` does not.
+CREDENTIAL_LABEL_TOKENS = frozenset(
+    {"password", "passwd", "pwd", "passcode", "passphrase", "pin", "secret"}
+)
+
+
+def is_credential_label(label: Optional[str]) -> bool:
+    """True when a recorded field label names a credential such as a password.
+
+    A value typed into such a field must never be kept in a bundle as a plain
+    parameter default or example, so a confirmed parameter for it is a secret.
+    """
+    if not label:
+        return False
+    slug = slugify_label(label)
+    if slug is None:
+        return False
+    return any(token in CREDENTIAL_LABEL_TOKENS for token in slug.split("_"))
+
+
 def mask_value(value: str) -> str:
     """Mask the middle of a demonstrated value for operator display.
 
@@ -285,6 +315,7 @@ class FieldLabelAnnotator:
                 name = f"{slug}_{suffix}"
                 suffix += 1
             proposed.add(name)
+            credential = is_credential_label(step.field_label)
             steps.append(
                 StepAnnotation(
                     step_id=step.id,
@@ -292,9 +323,12 @@ class FieldLabelAnnotator:
                         ParamProposal(
                             name=name,
                             type=ParamKind.STRING,
-                            example=step.text,
+                            # A credential's value is never carried, not even
+                            # as a masked example for the confirm pass.
+                            example=None if credential else step.text,
                             consequential=True,
                             source_label=step.field_label,
+                            secret=credential,
                             rationale=(
                                 f"typed into the field labeled {step.field_label!r}"
                             ),

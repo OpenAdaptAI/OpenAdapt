@@ -856,6 +856,30 @@ def test_program_resume_restores_interpreter_and_completes(tmp_path):
     assert CheckpointStore(run_dir).read_pending() is None
 
 
+def test_program_resume_report_lists_every_loop_row_binding(tmp_path):
+    """The resumed report carries the paused leg's results, so it also lists
+    the rows that leg bound, then the rows the resumed leg ran."""
+    report, run_dir, bundle, verifier = _run_branch_loop_to_pause(tmp_path)
+    assert [(b.row_index, b.params["patient"]) for b in report.loop_iterations] == [
+        (0, "Alice"),
+        (1, "Bob"),
+    ]
+
+    verifier.refute.clear()
+    resume_replayer = Replayer(
+        FakeBackend(),
+        vision=FakeVision(),
+        effect_verifier=verifier,
+        poll_interval_s=0.01,
+    )
+    resumed = resume(run_dir, resume_replayer, approval=_approval(bundle))
+    assert resumed.success is True
+    assert [
+        (b.loop_state_id, b.row_index, b.params["patient"])
+        for b in resumed.loop_iterations
+    ] == [("loop", 0, "Alice"), ("loop", 1, "Bob"), ("loop", 2, "Cara")]
+
+
 # -- 2. idempotency: a confirmed effect is not re-executed on resume ---------
 
 

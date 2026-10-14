@@ -451,7 +451,14 @@ class TestCliSmoke:
         skill_files = list(skills.rglob("SKILL.md"))
         assert len(skill_files) == 1
         content = skill_files[0].read_text()
-        assert "openadapt-flow replay" in content
+        # The skill routes agents to the governed `run` path with a
+        # placeholder per parameter, and carries no value from the recording:
+        # not the typed note, and not the demo password typed at sign-in.
+        assert "openadapt-flow run bundle" in content
+        assert "openadapt-flow replay" not in content
+        assert "--param note=<note>" in content
+        assert NOTE_TEXT not in content
+        assert "mockmed-demo-pass" not in content
 
         # README quickstart contract: `replay` with no --url self-serves
         # MockMed, and --drift demonstrates healing in one command.

@@ -239,6 +239,52 @@ def test_teach_refuses_underdetermined_fix(tmp_path: Path) -> None:
     assert report.terminal_outcome == "halt"
 
 
+def test_teach_refuses_a_fix_without_a_real_on_screen_target(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """A fix that names only an intent gives the dismiss step no real anchor.
+
+    The inducer then splices a placeholder anchor whose template crop does not
+    exist in the bundle. Promoting that would print LEARNED for a bundle that
+    halts exactly as before, so teach must refuse and write nothing.
+    """
+    # A real bundle has no crop for the inducer's placeholder target.
+    base_bundle = tmp_path / "base_bundle"
+    (base_bundle / "templates").mkdir(parents=True)
+    (base_bundle / "templates" / "verify.png").write_bytes(make_png((50, 20)))
+    _base_workflow().save(base_bundle)
+    run_dir = tmp_path / "run"
+    _halt_run(base_bundle, run_dir)
+
+    fix = tmp_path / "fix.json"
+    fix.write_text(
+        json.dumps(
+            {"resolution_steps": [{"intent": INTENT_DISMISS, "action": "click"}]}
+        )
+    )
+    out = tmp_path / "out_bundle"
+
+    rc = main(
+        [
+            "teach",
+            str(run_dir),
+            "--fix",
+            str(fix),
+            "--bundle",
+            str(base_bundle),
+            "--out",
+            str(out),
+        ]
+    )
+
+    printed = capsys.readouterr().out
+    assert rc != 0
+    assert not out.exists()
+    assert "REFUSED" in printed
+    assert "no longer halts" not in printed
+    assert "on-screen target" in printed
+
+
 # -- input guards ------------------------------------------------------------
 
 
@@ -285,3 +331,155 @@ def test_teach_errors_on_missing_report(tmp_path: Path) -> None:
         ]
     )
     assert rc == 2
+
+
+# -- provenance: the run and the bundle must belong together ----------------
+
+
+def _unrelated_bundle(root: Path) -> Path:
+    from openadapt_flow.ir import ActionKind, Step
+
+    bundle = root / "bundle_b"
+    Workflow(
+        name="unrelated-B",
+        steps=[
+            Step(id="b1", intent="open billing tab", action=ActionKind.KEY, key="b")
+        ],
+    ).save(bundle)
+    return bundle
+
+
+def _dismiss_fix(root: Path) -> Path:
+    fix = root / "fix.json"
+    fix.write_text(
+        json.dumps(
+            {"resolution_steps": [{"intent": INTENT_DISMISS, "action": "click"}]}
+        )
+    )
+    return fix
+
+
+def _teach_argv(run_dir: Path, fix: Path, bundle: Path, out: Path) -> list[str]:
+    return [
+        "teach",
+        str(run_dir),
+        "--fix",
+        str(fix),
+        "--bundle",
+        str(bundle),
+        "--out",
+        str(out),
+    ]
+
+
+def test_teach_rejects_run_bundle_mismatch_without_writes(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    base_bundle = _base_bundle(tmp_path)
+    run_dir = tmp_path / "run"
+    _halt_run(base_bundle, run_dir)
+    bundle_b = _unrelated_bundle(tmp_path)
+    out = tmp_path / "t9"
+
+    rc = main(_teach_argv(run_dir, _dismiss_fix(tmp_path), bundle_b, out))
+
+    printed = capsys.readouterr().out
+    assert rc == 2
+    assert "mockmed-save-encounter" in printed
+    assert "unrelated-B" in printed
+    assert "REFUSED" not in printed
+    assert not out.exists()
+    assert not (tmp_path / "t9.skills").exists()
+
+
+def test_teach_rejects_a_halt_the_bundle_does_not_contain(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    base_bundle = _base_bundle(tmp_path)
+    run_dir = tmp_path / "run"
+    _halt_run(base_bundle, run_dir)
+    # Same workflow name, but none of the run's steps.
+    other = tmp_path / "renamed"
+    from openadapt_flow.ir import ActionKind, Step
+
+    Workflow(
+        name=SKILL_ID,
+        steps=[
+            Step(id="b1", intent="open billing tab", action=ActionKind.KEY, key="b")
+        ],
+    ).save(other)
+    out = tmp_path / "t9"
+
+    rc = main(_teach_argv(run_dir, _dismiss_fix(tmp_path), other, out))
+
+    printed = capsys.readouterr().out
+    assert rc == 2
+    assert INTENT_VERIFY in printed
+    assert not out.exists()
+    assert not (tmp_path / "t9.skills").exists()
+
+
+def test_teach_rejects_stale_library_for_different_bundle(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from openadapt_flow.ir import lift_to_program
+    from openadapt_flow.learning.library import SkillLibrary
+
+    base_bundle = _base_bundle(tmp_path)
+    run_dir = tmp_path / "run"
+    _halt_run(base_bundle, run_dir)
+    # A library left by an earlier teach against an unrelated bundle.
+    stale = SkillLibrary(tmp_path / "t9.skills")
+    stale.create_skill(
+        SKILL_ID, lift_to_program(Workflow.load(_unrelated_bundle(tmp_path)))
+    )
+    out = tmp_path / "t9"
+
+    rc = main(_teach_argv(run_dir, _dismiss_fix(tmp_path), base_bundle, out))
+
+    printed = capsys.readouterr().out
+    assert rc == 2
+    assert "t9.skills" in printed
+    assert "REFUSED" not in printed
+    assert not out.exists()
+
+
+def test_teach_reuses_a_library_seeded_from_the_same_bundle(tmp_path: Path) -> None:
+    """A library this bundle seeded, for example by a refused teach, stays
+    usable: a retry with the right inputs still learns."""
+    from openadapt_flow.ir import lift_to_program
+    from openadapt_flow.learning.library import SkillLibrary
+
+    base_bundle = _base_bundle(tmp_path)
+    run_dir = tmp_path / "run"
+    _halt_run(base_bundle, run_dir)
+    base = Workflow.load(base_bundle)
+    SkillLibrary(tmp_path / "t9.skills").create_skill(
+        SKILL_ID, base.program or lift_to_program(base)
+    )
+    out = tmp_path / "t9"
+
+    rc = main(_teach_argv(run_dir, _dismiss_fix(tmp_path), base_bundle, out))
+
+    assert rc == 0
+    assert (out / "workflow.json").is_file()
+
+
+def test_teach_keeps_using_a_library_that_descends_from_the_bundle(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """After a promotion the library's active version is the taught program.
+    It still descends from the base bundle, so a later teach of that bundle to
+    the same --out reuses it instead of calling it stale."""
+    base_bundle = _base_bundle(tmp_path)
+    run_dir = tmp_path / "run"
+    _halt_run(base_bundle, run_dir)
+    out = tmp_path / "t9"
+    argv = _teach_argv(run_dir, _dismiss_fix(tmp_path), base_bundle, out)
+    assert main(argv) == 0
+    capsys.readouterr()
+
+    rc = main(argv)
+
+    assert rc != 2
+    assert "skill library" not in capsys.readouterr().out

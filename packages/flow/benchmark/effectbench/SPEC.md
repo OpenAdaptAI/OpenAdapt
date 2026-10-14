@@ -266,8 +266,10 @@ system of record, ground truth read directly from storage over every table
 discovered from `sqlite_master`. Its measured ladder over 90 runs per arm is
 screen-verify **60.0% (54/90)** → effect-verify with one out-of-band REST record
 oracle **10.0% (9/90)** → effect-verify with the complete SQL read path **0.0%
-(0/90)**. The middle rung is what a real deployment ships; all nine residual
-misses are the single `collateral_unaudited` class.
+(0/90)**. The middle rung is the most realistic oracle configuration measured;
+all nine residual misses are the single `collateral_unaudited` class. These
+rates are fault coverage under a hand-authored fault taxonomy, not expected
+field or production rates.
 
 **Honest scope of this fixture.** The two baselines are **OpenAdapt's own arms**,
 run on **OpenAdapt's own synthetic fixture** (MockMed). This is a REFERENCE

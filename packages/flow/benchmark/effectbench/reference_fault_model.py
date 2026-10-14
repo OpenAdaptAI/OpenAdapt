@@ -22,9 +22,11 @@ ground truth is a direct read-only SQLite connection that bypasses the service
 and audits every table it discovers from ``sqlite_master``. Its measured ladder,
 90 runs per arm, is screen-verify ``54/90 = 60.0%`` -> effect-verify with one
 out-of-band REST record oracle ``9/90 = 10.0%`` -> effect-verify with the
-complete SQL read path ``0/90 = 0.0%``. The middle rung is the number a real
-deployment ships; all nine residual misses are the single
-``collateral_unaudited`` class. See ``benchmark/effect_e2e/EFFECT_E2E.md``.
+complete SQL read path ``0/90 = 0.0%``. The middle rung is the most realistic
+oracle configuration measured; all nine residual misses are the single
+``collateral_unaudited`` class. These rates are fault coverage under a
+hand-authored fault taxonomy, not expected field or production rates. See
+``benchmark/effect_e2e/EFFECT_E2E.md``.
 
 How it re-expresses the study, faithfully and without hardcoding verdicts:
 

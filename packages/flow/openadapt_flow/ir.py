@@ -2838,6 +2838,26 @@ class EffectVerificationEvidence(BaseModel):
     #: or reconciled effect). Additive; defaults to the fail-safe "unknown" so an
     #: evidence record that predates this field never asserts "no effect".
     observed_effect: Literal["present", "absent", "conflicting", "unknown"] = "unknown"
+    #: Where the verifier read the system of record: ``loopback`` (this
+    #: computer), ``external``, or ``unknown`` when the verifier names no
+    #: endpoint. Only a loopback read keeps a network substrate such as REST or
+    #: FHIR from counting as an external network call. The default is left out
+    #: of the serialized record, so evidence written before this field existed
+    #: keeps its exact bytes.
+    endpoint_scope: Literal["loopback", "external", "unknown"] = "unknown"
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Omit the additive ``endpoint_scope`` default from serialized evidence.
+
+        ``Field(exclude_if=...)`` would express this directly, but it is newer
+        than the package's declared Pydantic >=2.5 floor. A wrap serializer
+        works throughout Pydantic v2.
+        """
+        data: dict[str, Any] = handler(self)
+        if self.endpoint_scope == "unknown":
+            data.pop("endpoint_scope", None)
+        return data
 
 
 class QualifiedEffectRequirement(BaseModel):
@@ -3511,6 +3531,21 @@ class ManagedResultLossEvidence(BaseModel):
         )
 
 
+class LoopIterationBinding(BaseModel):
+    """The row values one loop iteration bound, for the run's audit trail.
+
+    ``params`` holds only the row's own fields, which override the run's base
+    parameters for that iteration. A loop that types a row field writes the
+    row value, never the recorded default in :attr:`RunReport.params`.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    loop_state_id: str
+    row_index: int = Field(ge=0)
+    params: dict[str, Union[str, bool, int, float]] = Field(default_factory=dict)
+
+
 class RunReport(BaseModel):
     workflow_name: str
     started_at: str
@@ -3794,6 +3829,10 @@ class RunReport(BaseModel):
     # additive and empty/None on a linear run.
     terminal_outcome: Optional[str] = None
     visited_states: list[str] = Field(default_factory=list)
+    # Per-iteration row bindings of program loops, in execution order. A
+    # parameter a row binds is written with the row's value, so ``params``
+    # alone would misstate what a loop run typed. Empty on a run with no loop.
+    loop_iterations: list[LoopIterationBinding] = Field(default_factory=list)
     program_transition_evidence: list[ProgramTransitionEvidence] = Field(
         default_factory=list,
         description=(

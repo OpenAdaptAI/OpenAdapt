@@ -54,6 +54,7 @@ client automatically when none is injected.
 from __future__ import annotations
 
 import hashlib
+import importlib
 import io
 import struct
 import sys
@@ -1727,6 +1728,48 @@ class RemoteDisplayBackend:
 # any platform / in CI without pyobjc.
 # =============================================================================
 
+#: The pyobjc framework modules the native macOS client imports. The
+#: ``[macos]`` extra installs all three.
+MACOS_PYOBJC_MODULES: tuple[str, ...] = ("Quartz", "ApplicationServices", "AppKit")
+
+
+class MacOSDependencyMissing(RemoteDisplayError):
+    """pyobjc, which the native macOS client needs, can't be imported.
+
+    This is a setup problem, kept apart from a denied Screen Recording or
+    Accessibility permission so the message points at the install command
+    instead of System Settings.
+    """
+
+
+def _pyobjc_missing_message(missing: list[str]) -> str:
+    return (
+        "The native macOS backend needs pyobjc, but Python can't import "
+        f"{', '.join(missing)}. Install it with: python -m pip install "
+        "'openadapt-flow[macos]' (if you use the OpenAdapt launcher: "
+        "python -m pip install 'openadapt[macos]'), then run the command again."
+    )
+
+
+def _pyobjc_module(name: str) -> Any:
+    """Import one pyobjc framework module, naming the extra when it's absent."""
+    try:
+        return importlib.import_module(name)
+    except ImportError as exc:
+        raise MacOSDependencyMissing(_pyobjc_missing_message([name])) from exc
+
+
+def require_pyobjc() -> None:
+    """Refuse up front when any pyobjc framework module can't be imported."""
+    missing: list[str] = []
+    for name in MACOS_PYOBJC_MODULES:
+        try:
+            importlib.import_module(name)
+        except ImportError:
+            missing.append(name)
+    if missing:
+        raise MacOSDependencyMissing(_pyobjc_missing_message(missing))
+
 
 class MacWindowClient:
     """Live :class:`WindowClient` over Quartz (capture/input) + AppKit (activate).
@@ -1736,12 +1779,15 @@ class MacWindowClient:
     :class:`RemoteDisplayBackend` against a fake client.
     """
 
-    def input_trusted(self) -> bool:
-        try:
-            from ApplicationServices import AXIsProcessTrusted
+    # A missing pyobjc raises MacOSDependencyMissing from the trust checks
+    # below. Only a failure of the permission API itself reads as untrusted,
+    # so a missing install never sends the user to System Settings.
 
-            return bool(AXIsProcessTrusted())
-        except Exception:  # noqa: BLE001 - absence == untrusted
+    def input_trusted(self) -> bool:
+        services = _pyobjc_module("ApplicationServices")
+        try:
+            return bool(services.AXIsProcessTrusted())
+        except Exception:  # noqa: BLE001 - an API failure == untrusted
             return False
 
     def resolve_key(self, token: str) -> Optional[tuple[int, bool]]:
@@ -1750,9 +1796,8 @@ class MacWindowClient:
 
     def capture_trusted(self) -> bool:
         """Whether this process may capture other applications' windows."""
+        Quartz = _pyobjc_module("Quartz")
         try:
-            import Quartz
-
             preflight = getattr(Quartz, "CGPreflightScreenCaptureAccess", None)
             # Screen Recording consent did not exist before macOS 10.15. When
             # the preflight API is absent, window capture itself remains the
@@ -1763,9 +1808,8 @@ class MacWindowClient:
 
     def request_capture_access(self) -> bool:
         """Ask macOS to show its Screen Recording consent prompt."""
+        Quartz = _pyobjc_module("Quartz")
         try:
-            import Quartz
-
             request = getattr(Quartz, "CGRequestScreenCaptureAccess", None)
             return True if request is None else bool(request())
         except Exception:  # noqa: BLE001
@@ -1773,14 +1817,12 @@ class MacWindowClient:
 
     def request_input_access(self) -> bool:
         """Ask macOS to show its Accessibility consent prompt."""
+        services = _pyobjc_module("ApplicationServices")
         try:
-            from ApplicationServices import (
-                AXIsProcessTrustedWithOptions,
-                kAXTrustedCheckOptionPrompt,
-            )
-
             return bool(
-                AXIsProcessTrustedWithOptions({kAXTrustedCheckOptionPrompt: True})
+                services.AXIsProcessTrustedWithOptions(
+                    {services.kAXTrustedCheckOptionPrompt: True}
+                )
             )
         except Exception:  # noqa: BLE001
             return False

@@ -293,11 +293,20 @@ def _judge_record_written(
                 f"{effect.expected_count} was expected (duplicate / "
                 f"double-delivered write -- not at-most-once)"
             )
-        else:
+        elif observed == 0:
             reasons.append(
                 f"{observed} records match the target selector, expected "
                 f"{effect.expected_count} (missing / phantom / rejected "
                 f"write -- the screen may show success but nothing landed)"
+            )
+        else:
+            # Some of the expected records DID land. Saying "nothing landed"
+            # here would invite a re-run that duplicates the ones that exist.
+            reasons.append(
+                f"partial write: {observed} of {effect.expected_count} "
+                f"expected records landed (some writes are missing or were "
+                f"rejected; {observed} already exist, so do not retry "
+                f"without checking the record)"
             )
     if collateral_lost:
         reasons.append(

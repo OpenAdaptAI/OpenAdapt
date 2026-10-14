@@ -180,10 +180,16 @@ def _start_signed_in_chromium(executable: Path, app: str, profile: Path):
 
 
 def _match_recorded_viewport(endpoint: str) -> None:
-    """Size the signed-in tab like the demonstration (a person resizing it)."""
+    """Size the signed-in tab like the demonstration (a person resizing it).
+
+    This resizes the browser window itself, as a person would. An emulation
+    override belongs to the DevTools session that set it, and current Chromium
+    drops it when that session disconnects, before the run attaches.
+    """
 
     from playwright.sync_api import sync_playwright
 
+    recorded = [1280, 800]
     with sync_playwright() as playwright:
         browser = playwright.chromium.connect_over_cdp(endpoint)
         page = next(
@@ -194,11 +200,23 @@ def _match_recorded_viewport(endpoint: str) -> None:
         )
         page.get_by_text("Signed in as the test clerk").wait_for(timeout=10_000)
         session = page.context.new_cdp_session(page)
+        window = session.send("Browser.getWindowForTarget")
+        live = page.evaluate("() => [window.innerWidth, window.innerHeight]")
         session.send(
-            "Emulation.setDeviceMetricsOverride",
-            {"width": 1280, "height": 800, "deviceScaleFactor": 1, "mobile": False},
+            "Browser.setWindowBounds",
+            {
+                "windowId": window["windowId"],
+                "bounds": {
+                    "width": window["bounds"]["width"] + recorded[0] - live[0],
+                    "height": window["bounds"]["height"] + recorded[1] - live[1],
+                },
+            },
         )
-        # Keep the override after this helper disconnects.
+        page.wait_for_function(
+            "([w, h]) => window.innerWidth === w && window.innerHeight === h",
+            arg=recorded,
+            timeout=10_000,
+        )
         session.detach()
 
 

@@ -148,7 +148,10 @@ class VerifierOracle:
         # selector (``worker._bind`` resolves ``{"param": ...}`` references
         # against this identity). ``RewardBundle.load`` compensates: it refuses
         # a bundle whose required effects select no record by a declared
-        # identity key. Scoping the read itself is the broader fix, tracked in
+        # identity key. The worker stores and hashes only the records the
+        # bound selectors pick (``worker._scoped_observation``), so other
+        # subjects' records stay out of the evidence and the receipt. Scoping
+        # the read itself is the broader fix, tracked in
         # OpenAdaptAI/openadapt-flow#455.
         try:
             state = self.verifier.capture_post_state(None)

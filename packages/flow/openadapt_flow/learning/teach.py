@@ -62,7 +62,12 @@ from openadapt_flow.learning.halt_loop import (
     resolution_demonstration,
 )
 from openadapt_flow.learning.library import SkillLibrary
-from openadapt_flow.learning.loop import Inducer, LearnOutcome
+from openadapt_flow.learning.loop import (
+    CanaryContext,
+    Inducer,
+    LearnOutcome,
+    ProgramCanaryFn,
+)
 from openadapt_flow.learning.synth_stream import StructuralDiffInducer
 from openadapt_flow.learning.trace import ExecutionTrace, TraceStep
 from openadapt_flow.runtime.authorization import runtime_params_for_gui
@@ -146,6 +151,91 @@ def load_base_program(bundle_dir: Path | str) -> tuple[Workflow, ProgramGraph]:
     workflow = Workflow.load(bundle)
     program = workflow.program or lift_to_program(workflow)
     return workflow, program
+
+
+def check_provenance(
+    report: RunReport,
+    base_workflow: Workflow,
+    program: ProgramGraph,
+    *,
+    run_dir: Path | str,
+    bundle_dir: Path | str,
+) -> None:
+    """Require that the halted run came from the bundle passed as ``--bundle``.
+
+    A mismatched pair can't be taught: the correction would be spliced into a
+    program that never ran, and the learn loop would only report a generic
+    refusal. Raises :class:`TeachError` before anything is written.
+    """
+    if report.workflow_name != base_workflow.name:
+        raise TeachError(
+            f"the run at {run_dir} came from the workflow "
+            f"{report.workflow_name!r}, but --bundle {bundle_dir} is the "
+            f"workflow {base_workflow.name!r}. Pass the bundle whose replay "
+            "stopped."
+        )
+    halt = report.halt
+    assert halt is not None  # guaranteed by load_halt_report
+    graphs = [program, *base_workflow.subflows.values()]
+    if any(halt.state_id in graph.states for graph in graphs):
+        return
+    if halt.intent and any(
+        state.kind is StateKind.ACTION
+        and state.step is not None
+        and state.step.intent == halt.intent
+        for graph in graphs
+        for state in graph.states.values()
+    ):
+        return
+    raise TeachError(
+        f"the step where the run at {run_dir} stopped ({halt.intent!r}) is not "
+        f"in --bundle {bundle_dir}. Pass the bundle whose replay stopped."
+    )
+
+
+def _seed_or_check_library(
+    library: SkillLibrary,
+    skill_id: str,
+    program: ProgramGraph,
+    subflows: dict[str, ProgramGraph],
+    *,
+    bundle_dir: Path | str,
+) -> None:
+    """Seed the skill from the bundle, or check an existing skill came from it.
+
+    The library lives beside ``--out`` and outlives a refused teach. A skill
+    seeded from a different bundle would make every later teach to that
+    ``--out`` learn against the wrong program and refuse, so it is reported
+    instead of reused. A skill with any version equal to this bundle's program
+    descends from it and is reused, which keeps the promotion lineage.
+    """
+    if not library.has(skill_id):
+        library.create_skill(skill_id, program, subflows=subflows)
+        return
+    if any(
+        _same_program(version.graph, version.subflows, program, subflows)
+        for version in library.get(skill_id).versions
+    ):
+        return
+    raise TeachError(
+        f"the skill library at {library.root} holds a different program for "
+        f"{skill_id!r} than --bundle {bundle_dir}, probably from an earlier "
+        "teach with another bundle. Pass a new --out, or --library with a new "
+        "directory, or remove that library directory."
+    )
+
+
+def _same_program(
+    graph: ProgramGraph,
+    subflows: dict[str, ProgramGraph],
+    other_graph: ProgramGraph,
+    other_subflows: dict[str, ProgramGraph],
+) -> bool:
+    if graph.model_dump(mode="json") != other_graph.model_dump(mode="json"):
+        return False
+    return {k: g.model_dump(mode="json") for k, g in subflows.items()} == {
+        k: g.model_dump(mode="json") for k, g in other_subflows.items()
+    }
 
 
 # -- deriving the correction from the base program + halt --------------------
@@ -344,9 +434,75 @@ class TeachResult(BaseModel):
                 lines.append(f"    - {failure}")
         if self.promoted and self.out_bundle is not None:
             lines.append(f"  updated bundle written to {self.out_bundle}")
+            lines.append(
+                "  the updated bundle is an unverified repair candidate. "
+                "Replay it on the screen where the run stopped before you "
+                "rely on it"
+            )
         else:
             lines.append("  bundle UNCHANGED -- the workflow stays halting here")
         return "\n".join(lines)
+
+
+_TARGETED_ACTIONS = frozenset(
+    {
+        ActionKind.CLICK,
+        ActionKind.DOUBLE_CLICK,
+        ActionKind.RIGHT_CLICK,
+        ActionKind.DRAG,
+    }
+)
+
+
+def _anchor_keys(graphs: list[ProgramGraph]) -> set[tuple[object, ...]]:
+    keys: set[tuple[object, ...]] = set()
+    for graph in graphs:
+        for state in graph.states.values():
+            step = state.step
+            if step is None:
+                continue
+            for anchor in (step.anchor, step.drag_end_anchor):
+                if anchor is not None:
+                    keys.add((anchor.template, anchor.region, anchor.click_point))
+    return keys
+
+
+def _real_target_canary(bundle_dir: Path) -> ProgramCanaryFn:
+    """Veto a candidate whose NEW on-screen target has no crop in the bundle.
+
+    A fix given only as intents carries no on-screen target, so the reference
+    inducer fills the spliced step with a placeholder anchor. Its template does
+    not exist in a real bundle, the step can never resolve, and the taught
+    bundle would halt exactly as before. Promoting it would report LEARNED for
+    a repair that cannot work, so it is refused instead.
+    """
+
+    def canary(ctx: CanaryContext) -> tuple[bool, str]:
+        known = _anchor_keys([ctx.active, *ctx.subflows.values()])
+        for graph in [ctx.candidate, *ctx.subflows.values()]:
+            for state in graph.states.values():
+                step = state.step
+                if step is None or step.action not in _TARGETED_ACTIONS:
+                    continue
+                anchors = [step.anchor]
+                if step.action is ActionKind.DRAG:
+                    anchors.append(step.drag_end_anchor)
+                for anchor in anchors:
+                    if anchor is not None and (
+                        (anchor.template, anchor.region, anchor.click_point) in known
+                    ):
+                        continue
+                    if anchor is None or not (bundle_dir / anchor.template).is_file():
+                        return False, (
+                            f"the fix step {step.intent!r} has no real on-screen "
+                            "target in this bundle, so a re-run would stop at "
+                            "the same place. teach can't add a new target yet; "
+                            "record the workflow again with this step included "
+                            "and compile it instead"
+                        )
+        return True, ""
+
+    return canary
 
 
 def _copy_templates(src_bundle: Path, out_bundle: Path) -> None:
@@ -394,10 +550,13 @@ def teach(
         and exit nonzero.
 
     Raises:
-        TeachError: The inputs are unusable (no halt, no bundle, a malformed fix).
+        TeachError: The inputs are unusable (no halt, no bundle, a malformed
+            fix, a run that did not come from ``bundle``, or a library at
+            ``library_dir`` seeded from a different bundle).
     """
     report = load_halt_report(run_dir)
     base_workflow, program = load_base_program(bundle)
+    check_provenance(report, base_workflow, program, run_dir=run_dir, bundle_dir=bundle)
     sid = skill_id or report.workflow_name
 
     spec = _load_fix(fix)
@@ -412,8 +571,9 @@ def teach(
         else Path(out).parent / f"{Path(out).name}.skills"
     )
     library = SkillLibrary(lib_root)
-    if not library.has(sid):
-        library.create_skill(sid, program, subflows=dict(base_workflow.subflows))
+    _seed_or_check_library(
+        library, sid, program, dict(base_workflow.subflows), bundle_dir=bundle
+    )
 
     outcome, _ = learn_from_halt(
         library,
@@ -422,6 +582,7 @@ def teach(
         correction=correction,
         inducer=inducer or StructuralDiffInducer(),
         baseline=[baseline],
+        canary=_real_target_canary(Path(bundle)),
     )
 
     if not outcome.promoted:

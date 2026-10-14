@@ -47,12 +47,18 @@ _ACTIONS = ("confirm", "rename", "secret", "constant")
 
 @dataclass(frozen=True)
 class ParamProposal:
-    """One flagged proposal from the bundle sidecar (nothing applied yet)."""
+    """One flagged proposal from the bundle sidecar (nothing applied yet).
+
+    ``secret`` marks a value typed into a credential field (password, PIN,
+    ...). Confirming or renaming it makes a secret parameter, never a plain
+    one whose default would store the credential in ``workflow.json``.
+    """
 
     step_id: str
     name: str
     field_label: Optional[str]
     masked_example: Optional[str]
+    secret: bool = False
 
 
 @dataclass(frozen=True)
@@ -80,6 +86,7 @@ def load_proposals(bundle_dir: Path | str) -> list[ParamProposal]:
                 name=str(entry["name"]),
                 field_label=entry.get("field_label"),
                 masked_example=entry.get("masked_example"),
+                secret=bool(entry.get("secret", False)),
             )
         )
     return proposals
@@ -105,7 +112,9 @@ def decisions_from_accept_list(
                 f"--accept-params: no flagged proposal named {name!r} "
                 f"(available: {sorted(known) or 'none'})"
             )
-        decisions.append(ParamDecision(step_id=proposal.step_id, name=name))
+        decisions.append(
+            ParamDecision(step_id=proposal.step_id, name=name, secret=proposal.secret)
+        )
     return decisions
 
 
@@ -153,7 +162,7 @@ def decisions_from_file(
             ParamDecision(
                 step_id=proposal.step_id,
                 name=final_name,
-                secret=(action == "secret"),
+                secret=(action == "secret" or proposal.secret),
             )
         )
     return decisions
@@ -186,6 +195,12 @@ def decisions_interactive(
         label = f" (field label: {p.field_label!r})" if p.field_label else ""
         value = f" value: {p.masked_example}" if p.masked_example else ""
         output_fn(f"\n[{p.step_id}] proposed parameter {p.name!r}{label}{value}")
+        if p.secret:
+            output_fn(
+                "  This looks like a password, so confirming or renaming it "
+                "makes a secret parameter. You supply its value when you "
+                "replay."
+            )
         while True:
             choice = (
                 input_fn("  [c]onfirm / [r]ename / [s]ecret / [k]eep constant (k): ")
@@ -195,12 +210,16 @@ def decisions_interactive(
             if choice in ("", "k", "keep", "constant"):
                 break
             if choice in ("c", "confirm", "y", "yes"):
-                decisions.append(ParamDecision(step_id=p.step_id, name=p.name))
+                decisions.append(
+                    ParamDecision(step_id=p.step_id, name=p.name, secret=p.secret)
+                )
                 break
             if choice in ("r", "rename"):
                 new_name = input_fn(f"  new name for {p.name!r}: ").strip()
                 if new_name:
-                    decisions.append(ParamDecision(step_id=p.step_id, name=new_name))
+                    decisions.append(
+                        ParamDecision(step_id=p.step_id, name=new_name, secret=p.secret)
+                    )
                     break
                 output_fn("  empty name; try again")
                 continue

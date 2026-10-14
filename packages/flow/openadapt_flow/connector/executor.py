@@ -440,26 +440,37 @@ def execute_job(
             outcome_error = None
 
         # 4. The PHI-bearing report body goes to the CUSTOMER'S store, never ours.
-        report_ref = job.report_ref()
+        report_ref: Optional[str] = job.report_ref()
+        halt = halt_object(report)
+        outcome_envelope = precise_outcome_from_report(report)
         try:
             storage.write_report(report_ref, report)
-        except Exception as exc:  # no durable report means the run is not complete
-            return ExecutionResult(
-                "failed",
-                metrics_from_report(report),
-                halt_object(report),
-                report_ref,
-                f"customer-storage report write failed: {type(exc).__name__}",
-                verified_bundle_sha256=observed_sha256,
+        except Exception as exc:
+            # A storage fault says nothing about what the child did, so it
+            # never becomes a runner failure: a run that actuated would show
+            # as Failed and a re-run would repeat the write. Without a durable
+            # report the run can't claim success either, so a completed run
+            # stops for a person to check the record. A child failure stays a
+            # failure. Never send a path to an object that wasn't written.
+            storage_error = (
+                f"customer-storage report write failed: {type(exc).__name__}"
             )
+            outcome_error = (
+                f"{outcome_error}; {storage_error}" if outcome_error else storage_error
+            )
+            report_ref = None
+            if status == "success":
+                status = "halt"
+                outcome_envelope = None
+                halt = halt or {"outcome": "halt"}
 
         return ExecutionResult(
             status=status,
             metrics=metrics_from_report(report),
-            halt=halt_object(report),
+            halt=halt,
             report_ref=report_ref,
             error=outcome_error,
             verified_bundle_sha256=observed_sha256,
             failure_signal=automation_failure_signal(report, status, job.target_kind),
-            outcome=precise_outcome_from_report(report),
+            outcome=outcome_envelope,
         )

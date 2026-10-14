@@ -35,10 +35,17 @@ class PlaintextPHIWarning(UserWarning):
 def _report_has_identity_like_text(report: RunReport) -> bool:
     """True if the report carries free text that typically embeds PHI.
 
-    Params values and step intents are the identifier-bearing free-text fields
-    rendered into REPORT.md (patient name / DOB / MRN flow through here).
+    Params values, loop row values and step intents are the
+    identifier-bearing free-text fields rendered into REPORT.md (patient
+    name / DOB / MRN flow through here).
     """
     if any((v or "").strip() for v in report.params.values()):
+        return True
+    if any(
+        str(v).strip()
+        for binding in report.loop_iterations
+        for v in binding.params.values()
+    ):
         return True
     return any((r.intent or "").strip() for r in report.results)
 
@@ -240,10 +247,47 @@ def render_run_report(run_dir: Path | str) -> Path:
         else "❌"
     )
 
+    # The coarse outcome reads the same for "stopped before saving" and "a
+    # save may have gone through". The transaction outcome, stamped by the
+    # runtime, says which; the renderer only reports it, never reclassifies.
+    transaction = report.transaction_outcome
+    headline = outcome
+    if transaction and transaction != outcome:
+        headline = f"{outcome} (transaction {transaction})"
+
     lines: list[str] = []
-    lines.append(f"# {icon} {_md_phi(report.workflow_name)} — {outcome}")
+    lines.append(f"# {icon} {_md_phi(report.workflow_name)} — {headline}")
     lines.append("")
+    if transaction == "RECONCILIATION_REQUIRED":
+        from openadapt_flow.transaction import steps_requiring_reconciliation
+
+        step_ids = steps_requiring_reconciliation(report)
+        where = (
+            "for step(s) "
+            + ", ".join(f"`{_md_escape(step_id)}`" for step_id in step_ids)
+            if step_ids
+            else "for every consequential step in this run"
+        )
+        lines.append(
+            "> ⚠️ **Reconciliation required.** A consequential write may have "
+            "landed. Don't re-run or retry this workflow. Check the system of "
+            f"record {where} and reconcile it before you resume."
+        )
+        lines.append("")
     lines.append(f"- **Started:** {report.started_at}")
+    if transaction:
+        note = {
+            "HALTED_BEFORE_EFFECT": (
+                " (stopped before any business effect; nothing was written)"
+            ),
+            "RECONCILIATION_REQUIRED": (
+                " (a write may have landed; check the record before any retry)"
+            ),
+            "COMPLETED_UNVERIFIED": (
+                " (the steps ran, but the saved result was not checked)"
+            ),
+        }.get(transaction, "")
+        lines.append(f"- **Transaction outcome:** `{transaction}`{note}")
     if report.execution_profile:
         production = (
             "production-eligible"
@@ -321,16 +365,43 @@ def render_run_report(run_dir: Path | str) -> Path:
     lines.append("")
 
     # -- Parameters -----------------------------------------------------
+    # A loop row binds its own value for a parameter in each iteration, so the
+    # run-level value of that parameter is not what the run typed. Show the
+    # row values instead of a recorded default the run never wrote.
+    row_bound = {key for binding in report.loop_iterations for key in binding.params}
     lines.append("## Parameters")
     lines.append("")
     if report.params:
         lines.append("| Param | Value |")
         lines.append("| --- | --- |")
         for key, value in report.params.items():
-            lines.append(f"| `{_md_escape(key)}` | {_md_phi(value)} |")
+            shown = (
+                "_set per row, see Loop iterations_"
+                if key in row_bound
+                else _md_phi(str(value))
+            )
+            lines.append(f"| `{_md_escape(key)}` | {shown} |")
     else:
         lines.append("_No parameters._")
     lines.append("")
+
+    if report.loop_iterations:
+        lines.append("## Loop iterations")
+        lines.append("")
+        lines.append(
+            "Each row's values replace the run's parameters for that iteration."
+        )
+        lines.append("")
+        lines.append("| Loop | Row | Param | Value |")
+        lines.append("| --- | --- | --- | --- |")
+        for binding in report.loop_iterations:
+            for key, value in binding.params.items():
+                lines.append(
+                    f"| `{_md_escape(binding.loop_state_id)}` "
+                    f"| {binding.row_index + 1} "
+                    f"| `{_md_escape(key)}` | {_md_phi(str(value))} |"
+                )
+        lines.append("")
 
     # -- Identity-protection coverage ------------------------------------
     # Stated on every report: identity verification covers ONLY armed

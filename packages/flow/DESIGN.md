@@ -389,12 +389,18 @@ with the same action methods plus `type_text(text, param=None)` and
   replay N times; success rate, p50/p95 total ms, rung histogram, model calls
   (0 in v0), cost 0; serialize bench.json.
 - `emit/skill.py`: workflow bundle → `SKILL.md` folder (Agent Skills format:
-  name, description, when-to-use, `openadapt-flow replay bundle --param k=v`
-  invocation). The bundle is copied into the skill folder (`bundle/`) so the
-  artifact is self-contained and portable. `emit/mcp_tool.py`: generate a
-  standalone `server.py` exposing the workflow as an MCP tool (string
-  template; must `ast.parse`; do not import mcp at generation time); the
-  bundle is copied next to `server.py` and referenced relative to
+  name, description, when-to-use, and an
+  `openadapt-flow run bundle --url <APP_URL> --param k=<k>` invocation). Steps
+  are described by action kind, parameter name and on-screen label, never by
+  a recorded value: no typed text, no parameter example, and secrets only by
+  their `OPENADAPT_FLOW_SECRET_*` variable. The bundle is copied into the
+  skill folder (`bundle/`) so the artifact is self-contained and portable.
+  `emit/mcp_tool.py`: generate a standalone `server.py` exposing the workflow
+  as an MCP tool (string template; must `ast.parse`; do not import mcp at
+  generation time). Every non-secret parameter is a required argument with no
+  recorded default, and the tool reports `success` only for a VERIFIED run.
+  The bundle is copied next to the server file (`bundle/` for `server.py`,
+  `<stem>_bundle/` for any other name) and referenced relative to
   `__file__`, never by an emitting-machine absolute path.
 - `__main__.py` CLI: `demo-record`, `compile`, `replay`, `bench`, `emit-skill`,
   `emit-mcp` (thin wrappers over the module APIs above). `replay --run-dir`

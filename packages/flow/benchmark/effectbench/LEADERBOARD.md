@@ -142,11 +142,13 @@ finds in `sqlite_master`. Its measured ladder, 90 runs per arm:
 | effect-verify, one out-of-band REST record oracle | **10.0%** (9/90) |
 | effect-verify, complete SQL read path | **0.0%** (0/90) |
 
-The middle rung is the number a real deployment ships — one out-of-band record
-oracle cuts undetected wrong effects from 75.0% to 12.5%. All nine residual
-misses are the single `collateral_unaudited` class: a collateral write to a
-surface the oracle's read path does not cover. The `0/90` arm reaches zero only
-by widening the read path to every mutable surface.
+The middle rung is the most realistic oracle configuration measured: one
+out-of-band record oracle, which cuts undetected wrong effects from 75.0% to
+12.5%. All nine residual misses are the single `collateral_unaudited` class: a
+collateral write to a surface the oracle's read path does not cover. Read these
+rates as fault coverage under a small, hand-authored fault taxonomy, not as
+expected field or production rates. The `0/90` arm reaches zero only by
+widening the read path to every mutable surface.
 
 ### The OpenAdapt reference (sibling-agent artifact)
 

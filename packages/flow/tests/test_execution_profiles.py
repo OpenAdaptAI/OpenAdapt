@@ -3460,3 +3460,118 @@ def test_replayer_rechecks_checkpoint_encryption_before_backend_access(
     assert report.results[0].step_id == "<profile>"
     assert "encrypted durable checkpoints" in (report.results[0].error or "")
     assert backend.actions == []
+
+
+# -- loopback-only runs are not external egress -------------------------------
+
+
+def _loopback_web_report(**updates: object) -> RunReport:
+    fields: dict[str, object] = {
+        "workflow_name": "loopback-tutorial",
+        "started_at": "2026-10-10T00:00:00Z",
+        "success": True,
+        "execution_target_kind": "web",
+        "execution_origin": "http://127.0.0.1:55970",
+        "execution_entry_url": "http://127.0.0.1:55970/?fault=ok#tasks",
+        "results": [
+            StepResult(
+                step_id="save",
+                intent="save",
+                ok=True,
+                actuation="dom",
+                effect_evidence=[
+                    EffectVerificationEvidence(
+                        effect_contract_hash="sha256:" + "a" * 64,
+                        substrate="rest",
+                        endpoint_scope="loopback",
+                        initial_verdict="confirmed",
+                        final_verdict="confirmed",
+                    )
+                ],
+            )
+        ],
+    }
+    fields.update(updates)
+    return RunReport.model_validate(fields)
+
+
+def test_loopback_web_run_is_not_external_egress(tmp_path):
+    workflow = Workflow(name="loopback-tutorial", steps=[])
+    report = _loopback_web_report()
+
+    stamp_execution_outcome(report, workflow, ExecutionProfile.DEMO)
+    report.save(tmp_path)
+
+    # The origin, the entry URL and the system-of-record read all stayed on
+    # this computer.
+    assert report.external_network_calls == "none"
+    assert report.outcome_envelope is not None
+    assert report.outcome_envelope.external_network_calls == "none"
+    markdown = render_run_report(tmp_path).read_text(encoding="utf-8")
+    assert "- **External network calls:** `observed`" not in markdown
+    assert "- **External network calls:** `none`" in markdown
+
+
+def test_loopback_web_run_with_an_unclassified_read_is_not_none():
+    report = _loopback_web_report()
+    report.results[0].effect_evidence[0].substrate = "custom-plugin"
+    stamp_execution_outcome(
+        report, Workflow(name="loopback-tutorial", steps=[]), ExecutionProfile.DEMO
+    )
+    assert report.external_network_calls == "unknown"
+
+
+@pytest.mark.parametrize(
+    "updates",
+    [
+        {"execution_origin": "https://emr.example.com"},
+        {"execution_entry_url": "https://emr.example.com/#tasks"},
+        {
+            "execution_origin": "http://localhost.evil.com:8080",
+            "execution_entry_url": None,
+        },
+        {"execution_origin": "http://127.0.0.1.nip.io", "execution_entry_url": None},
+        {"execution_origin": None, "execution_entry_url": None},
+        {"execution_target_kind": "rdp"},
+        {"model_calls": 1},
+    ],
+    ids=[
+        "remote-origin",
+        "remote-entry",
+        "localhost-lookalike",
+        "loopback-lookalike",
+        "web-without-origin",
+        "rdp",
+        "model-call",
+    ],
+)
+def test_non_loopback_signals_stay_observed(updates):
+    report = _loopback_web_report(**updates)
+    stamp_execution_outcome(
+        report, Workflow(name="loopback-tutorial", steps=[]), ExecutionProfile.DEMO
+    )
+    assert report.external_network_calls == "observed"
+
+
+@pytest.mark.parametrize("scope", ["external", "unknown"])
+def test_rest_evidence_off_loopback_or_unscoped_stays_observed(scope):
+    report = _loopback_web_report()
+    report.results[0].effect_evidence[0].endpoint_scope = scope
+    stamp_execution_outcome(
+        report, Workflow(name="loopback-tutorial", steps=[]), ExecutionProfile.DEMO
+    )
+    assert report.external_network_calls == "observed"
+
+
+def test_evidence_scope_is_omitted_when_unknown():
+    """Older evidence records had no scope. Leaving the default out of the
+    serialized record keeps their bytes, and anything digested over them,
+    unchanged."""
+    evidence = EffectVerificationEvidence(
+        effect_contract_hash="sha256:" + "a" * 64,
+        substrate="rest",
+        initial_verdict="confirmed",
+        final_verdict="confirmed",
+    )
+    assert evidence.endpoint_scope == "unknown"
+    assert "endpoint_scope" not in evidence.model_dump(mode="json")

@@ -147,6 +147,39 @@ def test_judge_parity_with_engine_over_the_fault_states():
         assert sa_v.observed_count == eng_v.observed_count
 
 
+def test_judge_reason_parity_for_missing_and_partial_writes():
+    """Both judges word a missing write and a partial batch write the same way."""
+    import effectbench.effect as sa_e
+    import effectbench.judge as sa_j
+
+    from openadapt_flow.runtime.effects import _common as eng_j
+    from openadapt_flow.runtime.effects import effect as eng_e
+
+    match = {"note": "x"}
+    for post in ([], [{"id": 1, "note": "x"}]):
+        sa_v = sa_j.judge_records(
+            sa_e.Effect(
+                kind=sa_e.EffectKind.RECORD_WRITTEN, match=match, expected_count=2
+            ),
+            sa_e.EffectState(substrate="s", reachable=True, records=[]),
+            post,
+            substrate="s",
+        )
+        eng_v = eng_j.judge_records(
+            eng_e.Effect(
+                kind=eng_e.EffectKind.RECORD_WRITTEN, match=match, expected_count=2
+            ),
+            eng_e.EffectState(substrate="s", reachable=True, records=[]),
+            post,
+            substrate="s",
+        )
+        assert sa_v.verdict.value == eng_v.verdict.value == "refuted"
+        assert sa_v.reason == eng_v.reason
+        if post:
+            assert "1 of 2" in eng_v.reason
+            assert "nothing landed" not in eng_v.reason
+
+
 def test_contract_hash_parity_with_engine():
     """A standalone effect's contract hash equals the engine's (submission
     hashes cross-check against the reference implementation)."""

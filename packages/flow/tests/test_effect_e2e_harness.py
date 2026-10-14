@@ -20,6 +20,8 @@ faults, and each arm's decision is the replayer's real halt/pass.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from benchmark.effect_e2e.run import (
@@ -158,6 +160,56 @@ def test_markdown_foregrounds_realistic_residual_and_closed_world(results):
     assert "deterministic" in md
     assert "coverage matrix" in md
     assert "confidence interval" in md
+
+
+# Phrases that present the REST-oracle rung (9/90) as a field or production
+# rate. The same report says its rates are fault coverage over a hand-authored
+# taxonomy, never an expected production frequency, so these phrases contradict
+# it. Matched case-insensitively after collapsing whitespace.
+FIELD_RATE_PHRASES = (
+    "honest field number",
+    "number a real deployment ships",
+    "what a real deployment ships",
+    "expected field result",
+    "<- ships",
+)
+
+_BENCHMARK = Path(__file__).resolve().parents[1] / "benchmark"
+_EFFECTBENCH = _BENCHMARK / "effectbench"
+# The committed report plus the copies of its ladder elsewhere in the repo.
+LADDER_COPIES = (
+    _BENCHMARK / "effect_e2e" / "EFFECT_E2E.md",
+    _EFFECTBENCH / "README.md",
+    _EFFECTBENCH / "LEADERBOARD.md",
+    _EFFECTBENCH / "SPEC.md",
+    _EFFECTBENCH / "effectbench" / "reference.py",
+    _EFFECTBENCH / "reference_fault_model.py",
+)
+
+
+def _flat(text: str) -> str:
+    return " ".join(text.lower().split())
+
+
+def _field_rate_phrases(text: str) -> list[str]:
+    flat = _flat(text)
+    return [p for p in FIELD_RATE_PHRASES if p in flat]
+
+
+def test_markdown_reads_middle_rung_as_coverage_not_field_rate(results):
+    md = render_markdown(results)
+    assert _field_rate_phrases(md) == []
+    # Every paragraph that discusses the middle rung says what its rate is:
+    # fault coverage under this taxonomy.
+    rung_paragraphs = [p for p in md.split("\n\n") if "middle rung" in _flat(p)]
+    assert rung_paragraphs
+    for paragraph in rung_paragraphs:
+        assert "coverage" in _flat(paragraph), paragraph
+
+
+@pytest.mark.parametrize("path", LADDER_COPIES, ids=lambda p: p.name)
+def test_ladder_copies_do_not_call_the_middle_rung_a_field_rate(path):
+    assert _field_rate_phrases(path.read_text(encoding="utf-8")) == []
 
 
 # -- ground-truth open-world + primitive-independence unit tests ------------

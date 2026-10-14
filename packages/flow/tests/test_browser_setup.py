@@ -120,9 +120,33 @@ def test_missing_browser_extra_refuses_before_network_or_subprocess(monkeypatch)
     with pytest.raises(bs.BrowserSupportMissing) as exc:
         bs.ensure_chromium_installed()
 
-    assert "openadapt[browser]" in str(exc.value)
-    assert "RDP" in str(exc.value)
+    message = str(exc.value)
+    install_lines = [line for line in message.splitlines() if "pip install" in line]
+    # The command names the extra on the engine package that raised this, so
+    # an openadapt-flow or openadapt-agent install isn't sent to the launcher.
+    assert "openadapt-flow[browser]" in install_lines[0]
+    assert "openadapt[browser]" in message  # the launcher equivalent
+    assert "RDP" in message
     assert calls == []
+
+
+def test_demo_record_without_browser_extra_names_the_engine_extra(
+    monkeypatch, tmp_path, capsys
+):
+    """The CLI refusal an agent-only install sees names openadapt-flow[browser]."""
+    from openadapt_flow.__main__ import main
+
+    monkeypatch.setattr(bs, "browser_support_installed", lambda: False)
+    monkeypatch.setattr(
+        subprocess, "run", lambda *a, **k: pytest.fail("no subprocess expected")
+    )
+
+    rc = main(["demo-record", "--out", str(tmp_path / "rec")])
+
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "Browser setup required" in err
+    assert "openadapt-flow[browser]" in err
 
 
 def test_installs_once_when_missing(monkeypatch):

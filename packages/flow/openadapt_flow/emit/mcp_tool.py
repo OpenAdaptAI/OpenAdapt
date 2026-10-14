@@ -4,9 +4,11 @@ The generated source exposes the workflow as a single FastMCP tool with
 typed parameters. Generation is pure string templating: this module never
 imports ``mcp`` — the generated file does, at *its* runtime.
 
-The workflow bundle is COPIED next to the generated file (as ``bundle/``)
-and referenced relative to ``__file__``, so the emitted directory is
-self-contained and portable across machines.
+The workflow bundle is COPIED next to the generated file and referenced
+relative to ``__file__``, so the emitted directory is self-contained and
+portable across machines. Each server gets its own copy: ``server.py`` uses
+``bundle/`` and any other file name ``<stem>.py`` uses ``<stem>_bundle/``, so
+two servers emitted into one directory never share or merge a bundle.
 """
 
 from __future__ import annotations
@@ -16,9 +18,11 @@ import re
 import shutil
 from pathlib import Path
 
+from openadapt_flow.emit.skill import declared_params
 from openadapt_flow.ir import Workflow
 
 _BUNDLE_SUBDIR = "bundle"
+_DEFAULT_SERVER_NAME = "server.py"
 
 _SERVER_TEMPLATE = '''\
 """MCP server exposing the {name!r} workflow as a tool.
@@ -48,7 +52,12 @@ def {func_name}(url: str{param_sig}) -> dict:
         url: URL of the running target application.
 {param_docs}
     Returns:
-        Dict with success flag, run directory, heal count, and total ms.
+        Dict with the run's evidence-qualified outcome. ``success`` is true
+        only when ``outcome`` and ``transaction_outcome`` are both VERIFIED:
+        the change was saved and read back from the system of record. COMPLETED_UNVERIFIED means the steps ran
+        but the saved result was not confirmed. When ``transaction_outcome``
+        is RECONCILIATION_REQUIRED a write may have landed, so check the
+        record before you call this tool again.
     """
     from openadapt_flow._browser_setup import ensure_chromium_installed
     ensure_chromium_installed()
@@ -76,7 +85,13 @@ def {func_name}(url: str{param_sig}) -> dict:
         finally:
             browser.close()
     return {{
-        "success": report.success,
+        "success": (
+            report.execution_outcome == "VERIFIED"
+            and report.transaction_outcome == "VERIFIED"
+        ),
+        "outcome": report.execution_outcome,
+        "transaction_outcome": report.transaction_outcome,
+        "production_eligible": report.production_eligible,
         "run_dir": str(run_dir),
         "heal_count": report.heal_count,
         "model_calls": report.model_calls,
@@ -108,11 +123,17 @@ def emit_mcp_server(bundle_dir: Path | str, out_path: Path | str) -> Path:
     """Generate a standalone, portable FastMCP ``server.py`` for the bundle.
 
     The generated module defines one tool named after the workflow, with a
-    required ``url`` argument plus one typed ``str`` argument per workflow
-    parameter (defaulting to the recorded example value). The source is
+    required ``url`` argument plus one required ``str`` argument per
+    non-secret workflow parameter. A recorded example value is never a
+    default: it would leak the recorded value into the generated source and
+    write it to the wrong record when a caller omits the argument. The source is
     validated with :func:`ast.parse` before being written. The workflow
-    bundle is copied to ``<out_path's directory>/bundle/`` and referenced
-    relative to the generated file, so the directory can be shipped as-is.
+    bundle is copied next to the generated file, to ``bundle/`` for
+    ``server.py`` and to ``<stem>_bundle/`` for any other file name, and is
+    referenced relative to that file, so the directory can be shipped as-is.
+    An earlier copy of the same workflow there is replaced, not merged, so no
+    stale template survives. A copy of a different workflow, or any other
+    content, is never overwritten: emission raises :class:`FileExistsError`.
 
     Args:
         bundle_dir: Workflow bundle directory (contains ``workflow.json``).
@@ -120,18 +141,20 @@ def emit_mcp_server(bundle_dir: Path | str, out_path: Path | str) -> Path:
 
     Returns:
         Path to the written server source file.
+
+    Raises:
+        FileExistsError: The bundle directory for ``out_path`` already holds
+            something other than a copy of this workflow.
     """
     bundle = Path(bundle_dir).resolve()
     workflow = Workflow.load(bundle)
     out = Path(out_path)
+    bundle_subdir = _bundle_subdir_for(out)
 
     func_name = f"run_{_identifier(workflow.name)}"
-    param_names = {name: _identifier(name) for name in workflow.params}
+    param_names = {name: _identifier(name) for name in declared_params(workflow)}
 
-    param_sig = "".join(
-        f", {ident}: str = {workflow.params[name]!r}"
-        for name, ident in param_names.items()
-    )
+    param_sig = "".join(f", {ident}: str" for ident in param_names.values())
     if param_names:
         params_dict = (
             "{"
@@ -155,7 +178,7 @@ def emit_mcp_server(bundle_dir: Path | str, out_path: Path | str) -> Path:
     source = _SERVER_TEMPLATE.format(
         name=workflow.name,
         out_name=out.name,
-        bundle_subdir=_BUNDLE_SUBDIR,
+        bundle_subdir=bundle_subdir,
         func_name=func_name,
         param_sig=param_sig,
         param_docs=param_docs,
@@ -167,8 +190,58 @@ def emit_mcp_server(bundle_dir: Path | str, out_path: Path | str) -> Path:
     ast.parse(source)
 
     out.parent.mkdir(parents=True, exist_ok=True)
-    bundle_copy = out.parent / _BUNDLE_SUBDIR
+    bundle_copy = out.parent / bundle_subdir
     if bundle_copy.resolve() != bundle:
-        shutil.copytree(bundle, bundle_copy, dirs_exist_ok=True)
+        _replace_bundle_copy(bundle, bundle_copy, workflow.name)
     out.write_text(source, encoding="utf-8")
     return out
+
+
+def _bundle_subdir_for(out: Path) -> str:
+    """Name the bundle directory that belongs to one emitted server file."""
+    if out.name == _DEFAULT_SERVER_NAME:
+        return _BUNDLE_SUBDIR
+    return f"{out.stem}_{_BUNDLE_SUBDIR}"
+
+
+def _replace_bundle_copy(source: Path, target: Path, workflow_name: str) -> None:
+    """Copy ``source`` to ``target``, replacing an earlier copy of this workflow.
+
+    Copying over an existing directory would merge the two bundles: the
+    server would load whichever ``workflow.json`` was written last and keep
+    templates from both. Only an earlier copy of the same workflow, or an
+    empty directory, is replaced. Anything else raises, because deleting it
+    could destroy someone's bundle and keeping it would run the wrong
+    workflow.
+    """
+    if target.is_symlink() or (target.exists() and not target.is_dir()):
+        raise FileExistsError(
+            f"{target} exists and is not a bundle directory; choose another "
+            "--out file name or move it away"
+        )
+    if target.is_dir():
+        existing = _copied_workflow_name(target)
+        if existing != workflow_name and any(target.iterdir()):
+            held = f"the {existing!r} workflow" if existing else "other files"
+            raise FileExistsError(
+                f"{target} already holds {held}; emitting {workflow_name!r} "
+                "there would replace it. Choose another --out file name or "
+                "remove that directory"
+            )
+        if source.is_relative_to(target.resolve()):
+            raise FileExistsError(
+                f"{target} contains the source bundle {source}; choose "
+                "another --out location"
+            )
+        shutil.rmtree(target)
+    shutil.copytree(source, target)
+
+
+def _copied_workflow_name(directory: Path) -> str | None:
+    """Return the workflow name stored in ``directory``, if it holds one."""
+    if not (directory / "workflow.json").is_file():
+        return None
+    try:
+        return Workflow.load(directory).name
+    except Exception:  # noqa: BLE001 - an unreadable bundle is not ours to replace
+        return None

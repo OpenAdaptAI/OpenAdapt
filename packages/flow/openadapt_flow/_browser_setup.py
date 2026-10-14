@@ -83,12 +83,23 @@ def browser_support_installed() -> bool:
 
 
 def require_browser_support() -> None:
-    """Refuse a web operation with the canonical one-command install path."""
+    """Refuse a web operation with the one-command install path.
+
+    The command names this engine package's own extra, for the Python that is
+    running, because the refusal reaches people who installed openadapt-flow
+    or openadapt-agent without the OpenAdapt launcher. The launcher's base
+    install already includes browser support.
+    """
     if not browser_support_installed():
+        command = shlex.join(
+            [sys.executable, "-m", "pip", "install", "openadapt-flow[browser]"]
+        )
         raise BrowserSupportMissing(
             "Browser recording and replay are an optional capability. Install "
             "them once with:\n\n"
-            "    python -m pip install 'openadapt[browser]'\n\n"
+            f"    {command}\n\n"
+            "If you installed the OpenAdapt launcher, "
+            "python -m pip install 'openadapt[browser]' does the same.\n"
             "Native desktop, RDP, and Citrix workflows do not need this extra."
         )
 

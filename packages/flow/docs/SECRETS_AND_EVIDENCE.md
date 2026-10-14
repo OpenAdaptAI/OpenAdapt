@@ -19,6 +19,15 @@ export OPENADAPT_FLOW_SECRET_PASSWORD='…'                 # supplied at replay
 openadapt-flow replay bundle --backend web --url https://your.app
 ```
 
+Only the web recorder masks the field at the source. A scripted recording,
+such as `demo-record` or the Python `Recorder` API, and a desktop recording
+keep the typed value. When `compile` proposes a parameter for a field labeled
+as a password, PIN, passcode or secret, the proposal is marked secret and shows
+no example value. Confirming or renaming it makes a secret parameter, so the
+bundle carries no literal. An unconfirmed proposal stays in the bundle as the
+demonstrated constant, so confirm it before you share the bundle. The
+recording still holds the value either way.
+
 ## Identity evidence and reflected evidence
 
 Evidence splits in two. **Identity evidence** is the DOM selector, the control

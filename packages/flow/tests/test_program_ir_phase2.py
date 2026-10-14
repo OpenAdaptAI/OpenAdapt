@@ -648,3 +648,90 @@ def test_program_round_trips_through_bundle_save_load(bundle):
     assert loaded.program.states["loop"].loop.body == "body"
     assert loaded.subflows["body"].states["b_type"].step.param == "patient"
     assert loaded.data_sources["queue"].rows == [{"patient": "Alice"}]
+
+
+# ===========================================================================
+# LOOP audit: the report states the values each iteration bound
+# ===========================================================================
+
+
+def _loop_report_md(run_dir) -> str:
+    from openadapt_flow.report import render_run_report
+
+    return render_run_report(run_dir).read_text(encoding="utf-8")
+
+
+def test_loop_report_shows_per_row_bound_values_not_recorded_default(
+    bundle, run_dir, monkeypatch
+):
+    """REPORT.md must state the values each iteration typed. Before, it showed
+    only the recorded default, a value the run never wrote."""
+    monkeypatch.setenv("OPENADAPT_FLOW_SCRUB", "off")
+    wf = _loop_over_queue_workflow()
+    wf.params = {"patient": "demo note"}
+    wf.data_sources = {
+        "queue": Relation(
+            name="queue",
+            rows=[{"patient": "first note"}, {"patient": "second note"}],
+        )
+    }
+    backend = FakeBackend()
+    report = Replayer(backend, vision=FakeVision(), poll_interval_s=0.01).run(
+        wf, bundle_dir=bundle, run_dir=run_dir
+    )
+    assert backend.actions == [("type", "first note"), ("type", "second note")]
+
+    # What a reader sees first: the rendered report, not the new field.
+    md = _loop_report_md(run_dir)
+    params_section = md.split("## Parameters", 1)[1].split("\n## ", 1)[0]
+    assert "demo note" not in params_section
+    assert "first note" in md
+    assert "second note" in md
+    assert "per row" in params_section
+    loops_section = md.split("## Loop iterations", 1)[1].split("\n## ", 1)[0]
+    assert "first note" in loops_section
+    assert "second note" in loops_section
+
+    assert [
+        (b.loop_state_id, b.row_index, b.params["patient"])
+        for b in report.loop_iterations
+    ] == [("loop", 0, "first note"), ("loop", 1, "second note")]
+
+
+def test_loop_report_shows_rows_supplied_at_run_time(bundle, run_dir, monkeypatch):
+    monkeypatch.setenv("OPENADAPT_FLOW_SCRUB", "off")
+    wf = _loop_over_queue_workflow()
+    backend = FakeBackend()
+    report = Replayer(backend, vision=FakeVision(), poll_interval_s=0.01).run(
+        wf,
+        worklists={"queue": [{"patient": "X note"}, {"patient": "Y note"}]},
+        bundle_dir=bundle,
+        run_dir=run_dir,
+    )
+    md = _loop_report_md(run_dir)
+    assert "X note" in md
+    assert "Y note" in md
+    loops_section = md.split("## Loop iterations", 1)[1]
+    assert "X note" in loops_section
+    assert "Y note" in loops_section
+    assert [(b.row_index, b.params) for b in report.loop_iterations] == [
+        (0, {"patient": "X note"}),
+        (1, {"patient": "Y note"}),
+    ]
+
+
+def test_loop_row_values_count_as_identity_like_text() -> None:
+    """Row values reach REPORT.md, so the plaintext-PHI check must see them."""
+    from openadapt_flow.ir import LoopIterationBinding, RunReport
+    from openadapt_flow.report import _report_has_identity_like_text
+
+    report = RunReport(
+        workflow_name="clear-queue",
+        started_at="2026-10-10T00:00:00Z",
+        loop_iterations=[
+            LoopIterationBinding(
+                loop_state_id="loop", row_index=0, params={"patient": "Alice"}
+            )
+        ],
+    )
+    assert _report_has_identity_like_text(report) is True

@@ -259,6 +259,58 @@ def test_default_recorder_factory_requires_capture_extra() -> None:
     importlib.import_module  # keep import used (no-op)
 
 
+@pytest.mark.parametrize("missing", ["openadapt_capture", "loguru"])
+def test_missing_capture_extra_refuses_before_prompt_or_files(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    missing: str,
+) -> None:
+    """A base install stops before it asks the operator to start demonstrating.
+
+    The capture extra used to be imported only after the "Perform your
+    workflow" prompt and after the output directories existed, so the user
+    started demonstrating, then got a traceback and an empty ``rec/.capture``.
+    """
+    import sys
+    import types
+
+    present = types.ModuleType("present")
+    for name in ("openadapt_capture", "loguru"):
+        monkeypatch.setitem(sys.modules, name, None if name == missing else present)
+    out = tmp_path / "rec"
+
+    with pytest.raises(SystemExit) as excinfo:
+        record_desktop_capture(out_dir=out, task_description="t")
+
+    message = str(excinfo.value.code)
+    assert "openadapt[capture]" in message
+    assert "openadapt-flow[capture]" in message
+    assert missing in message
+    assert "Recording desktop workflow" not in capsys.readouterr().out
+    assert not out.exists()
+
+
+def test_injected_recorder_factory_skips_capture_preflight(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Tests and programmatic callers that bring a recorder need no extra."""
+    import sys
+
+    monkeypatch.setitem(sys.modules, "openadapt_capture", None)
+    monkeypatch.setitem(sys.modules, "loguru", None)
+    log: list = []
+
+    record_desktop_capture(
+        tmp_path / "rec",
+        recorder_factory=_make(log),
+        convert=lambda cap_dir, out_dir, params: Path(out_dir),
+        stop=lambda: True,
+        announce=False,
+    )
+    assert [k for k, _ in log] == ["enter", "exit"]
+
+
 # -- CLI wiring --------------------------------------------------------------
 
 
@@ -912,6 +964,9 @@ def test_record_desktop_window_forwarded_to_factory(
     # The platform guard only permits window capture on darwin/win32; force a
     # supported platform so this forwarding test runs on the Linux CI host.
     monkeypatch.setattr(desktop_record.sys, "platform", "darwin")
+    # The spy below stands in for the real recorder, so the capture-extra
+    # preflight has nothing to protect here.
+    monkeypatch.setattr(desktop_record, "_require_capture_extra", lambda: None)
 
     seen: dict = {}
     log: list = []

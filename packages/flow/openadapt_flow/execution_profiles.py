@@ -26,6 +26,7 @@ from openadapt_flow.action_evidence import (
     action_evidence_error,
 )
 from openadapt_flow.decision_delivery import DecisionDeliveryTier
+from openadapt_flow.network_scope import is_loopback_url
 from openadapt_flow.runtime.authorization import (
     RuntimeParamScalar,
     runtime_param_text,
@@ -2419,9 +2420,21 @@ def _external_network_call_state(
 
     if report.external_network_calls == "observed" or report.model_calls > 0:
         return "observed"
-    if report.execution_origin or report.execution_entry_url:
+    # A browser run whose origin and entry URL are both on this computer (the
+    # bundled tutorial serves MockMed on 127.0.0.1) sent its own traffic only
+    # to this machine. Any non-loopback URL, a web run with no recorded origin,
+    # and every remote-display target still count as observed egress.
+    target_urls = [
+        url for url in (report.execution_origin, report.execution_entry_url) if url
+    ]
+    loopback_web = (
+        bool(target_urls)
+        and all(is_loopback_url(url) for url in target_urls)
+        and report.execution_target_kind in {None, "web"}
+    )
+    if target_urls and not loopback_web:
         return "observed"
-    if report.execution_target_kind in {"web", "rdp", "citrix"}:
+    if report.execution_target_kind in {"web", "rdp", "citrix"} and not loopback_web:
         return "observed"
 
     local_substrates = {
@@ -2438,9 +2451,20 @@ def _external_network_call_state(
         for evidence in result.effect_evidence:
             substrate = evidence.substrate.strip().lower()
             if substrate in {"rest", "fhir", "sftp", "http", "https"}:
-                return "observed"
+                # A system-of-record read on this computer is not egress. A
+                # read whose endpoint is external or wasn't recorded is.
+                if evidence.endpoint_scope != "loopback":
+                    return "observed"
+                continue
             if substrate not in local_substrates:
                 return "unknown"
+    if loopback_web:
+        # Every signal points at this computer: a recorded loopback origin and
+        # entry URL (a positive signal, never a missing one) and only local or
+        # loopback system-of-record reads. The scope is what Flow drove and
+        # read. A page that loads its own assets from another host isn't
+        # observed here.
+        return "none"
     # A native target says where input was delivered, not whether this process
     # or one of its integrations opened a socket. Until an explicit network
     # observer proves the negative, absence of an observed call remains unknown.

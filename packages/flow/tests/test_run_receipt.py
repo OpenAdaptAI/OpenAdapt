@@ -1322,6 +1322,32 @@ def test_generic_receipt_cannot_claim_synthetic_provenance() -> None:
     assert receipt.provenance == "production"
 
 
+def test_tutorial_receipt_does_not_promise_cross_run_digest_match() -> None:
+    """Each tutorial run records and compiles a new bundle.
+
+    There is no published tutorial bundle to run again, and a second run gets
+    a different bundle digest, so the tutorial receipt must not tell the
+    reader to compare digests across runs.
+    """
+
+    from openadapt_flow.receipt import _build_tutorial_receipt
+
+    receipt = _build_tutorial_receipt(_report())
+    assert receipt.provenance == "synthetic-tutorial"
+    text = render_receipt_markdown(receipt)
+    assert "compare the bundle digest" not in text
+    assert "same public bundle" not in text
+    assert "a new run has a different digest" in text
+    assert "content_digest" in text
+
+
+def test_production_receipt_keeps_the_compare_instruction() -> None:
+    receipt = build_receipt(_report())
+    assert receipt.provenance == "production"
+    text = render_receipt_markdown(receipt)
+    assert "Run the same public bundle yourself and compare the bundle digest." in text
+
+
 def test_receipt_digest_is_revalidated_on_parse() -> None:
     receipt = build_receipt(_report())
     payload = json.loads(receipt.canonical_json())

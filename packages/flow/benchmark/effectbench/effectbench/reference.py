@@ -22,9 +22,10 @@ write to an on-disk SQLite system of record, ground truth read directly from
 storage over every table discovered from ``sqlite_master``). Its measured ladder,
 90 runs per arm, is screen-verify ``54/90 = 60.0%`` -> effect-verify with one
 out-of-band REST record oracle ``9/90 = 10.0%`` -> effect-verify with the
-complete SQL read path ``0/90 = 0.0%``. The middle rung is the number a real
-deployment ships; all nine residual misses are the single ``collateral_unaudited``
-class. See
+complete SQL read path ``0/90 = 0.0%``. The middle rung is the most realistic
+oracle configuration measured; all nine residual misses are the single
+``collateral_unaudited`` class. These rates are fault coverage under a
+hand-authored fault taxonomy, not expected field or production rates. See
 https://github.com/OpenAdaptAI/openadapt-flow/blob/main/benchmark/effect_e2e/EFFECT_E2E.md
 """
 
@@ -134,7 +135,7 @@ def main() -> None:
         "\nMeasured end-to-end result (real replayer, on-disk SQLite system of "
         "record):\n"
         "  screen-verify                          54/90 = 60.0%\n"
-        "  effect-verify, one out-of-band oracle    9/90 = 10.0%  <- ships\n"
+        "  effect-verify, one out-of-band oracle    9/90 = 10.0%  <- most realistic\n"
         "  effect-verify, complete SQL read path    0/90 =  0.0%\n"
         "  https://github.com/OpenAdaptAI/openadapt-flow/blob/main/"
         "benchmark/effect_e2e/EFFECT_E2E.md"

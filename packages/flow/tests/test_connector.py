@@ -384,6 +384,111 @@ def test_halt_maps_to_halt_status_and_present_flag():
     assert "ambiguous" not in json.dumps(body)
 
 
+class _FailingReportStorage(InMemoryCustomerStorage):
+    """Customer storage that serves the bundle but cannot persist a report."""
+
+    def write_report(self, ref, report):  # noqa: ANN001, ANN201
+        raise OSError("customer bucket unavailable")
+
+
+VERIFIED_REPORT = {
+    **SUCCESS_REPORT,
+    "started_at": "2026-10-10T00:00:00Z",
+    "execution_profile": "standard",
+    "execution_outcome": "VERIFIED",
+    "execution_completed": True,
+    "production_eligible": True,
+    "outcome_envelope": {
+        "version": "openadapt.execution-outcome/v1",
+        "outcome": "VERIFIED",
+        "profile": "standard",
+        "production_eligible": True,
+        "execution_completed": True,
+        "required_contracts": {
+            "authorization": 1,
+            "identity": 1,
+            "postcondition": 0,
+            "effect": 1,
+        },
+        "passed_contracts": {
+            "authorization": 1,
+            "identity": 1,
+            "postcondition": 0,
+            "effect": 1,
+        },
+        "evidence_classes": ["authorization", "identity", "effect_tier_1"],
+        "model_calls": 0,
+        "external_network_calls": "none",
+        "compensation_actions": 0,
+    },
+}
+
+
+@pytest.mark.parametrize("report", [SUCCESS_REPORT, VERIFIED_REPORT])
+def test_report_write_failure_does_not_report_completed_run_as_runner_failure(
+    report,
+):
+    """A run that completed (even VERIFIED) is never reported as a runner
+    failure because the customer store could not keep its report: Cloud
+    would show Failed and an operator re-run would repeat the write."""
+    assert precise_outcome_from_report(VERIFIED_REPORT) is not None
+    job = parse_job(_payload(), lease_job_id="bjob_1")
+    storage = _FailingReportStorage(bundle_bytes=_BUNDLE_BYTES)
+
+    result = execute_job(
+        job, ConnectorSettings(), storage, runner=_fake_success_runner(report)
+    )
+    body = phi_free_callback_body(job, result)
+
+    assert body["status"] == "halt"
+    assert body["error_code"] is None
+    # Never a path to an object that was not written.
+    assert body["report_path"] is None
+    # No VERIFIED claim without a durable report; the halt is present.
+    assert "outcome" not in body
+    assert body["halt"] == {"present": True}
+    assert result.error == "customer-storage report write failed: OSError"
+
+
+def test_report_write_failure_keeps_child_failure_as_failed():
+    failed_report = {**SUCCESS_REPORT, "success": False, "terminal_outcome": "failed"}
+    job = parse_job(_payload(), lease_job_id="bjob_1")
+    storage = _FailingReportStorage(bundle_bytes=_BUNDLE_BYTES)
+
+    def runner(argv, run_dir: Path, _env) -> RunOutcome:
+        return RunOutcome(returncode=1, report=failed_report)
+
+    result = execute_job(job, ConnectorSettings(), storage, runner=runner)
+    body = phi_free_callback_body(job, result)
+    assert body["status"] == "failed"
+    assert body["report_path"] is None
+
+
+def test_report_write_failure_lease_is_not_acked_failed():
+    cp = StubControlPlane()
+    cp.enqueue("org_demo", _payload())
+    transport = httpx.MockTransport(cp.handler)
+    client = ConnectorClient("https://app.test", token=None, transport=transport)
+    client.enroll(enrollment_secret="s", org_id="org_demo", name="n")
+    settings = ConnectorSettings(
+        control_plane_url="https://app.test",
+        org_id="org_demo",
+        token=client.token,
+        poll_wait_s=0,
+    )
+
+    result = run_once(
+        client,
+        settings,
+        runner=_fake_success_runner(VERIFIED_REPORT),
+        storage_factory=lambda job: _FailingReportStorage(bundle_bytes=_BUNDLE_BYTES),
+    )
+
+    assert result["status"] == "halt"
+    assert cp.callbacks[0]["body"]["error_code"] is None
+    assert cp.acks[0]["status"] == "done"
+
+
 # --------------------------------------------------------------------------
 # Fail-closed governance.
 # --------------------------------------------------------------------------

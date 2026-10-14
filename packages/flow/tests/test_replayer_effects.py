@@ -464,3 +464,63 @@ def test_current_state_readback_still_judges_pre_existing_kinds():
     )
     verdict = Replayer._verify_current_effect(object(), effect, current)
     assert verdict.verdict is Verdict.CONFIRMED
+
+
+# -- the verifier's endpoint scope travels with its evidence -----------------
+
+
+def test_effect_evidence_records_a_loopback_verifier_endpoint(tmp_path):
+    url, _db, stop = _fault_server()
+    try:
+        assert url.startswith("http://127.0.0.1")
+        workflow = _save_workflow(
+            effects=[
+                Effect(
+                    kind=EffectKind.RECORD_WRITTEN,
+                    match=TARGET,
+                    expected_count=1,
+                    timeout_s=2.0,
+                )
+            ]
+        )
+        bundle, run_dir = _dirs(tmp_path)
+        report = Replayer(
+            WritingBackend(url),
+            vision=_vision_that_confirms_saved(),
+            effect_verifier=RestRecordVerifier(url),
+            poll_interval_s=0.01,
+        ).run(workflow, bundle_dir=bundle, run_dir=run_dir)
+
+        assert report.success is True
+        [evidence] = report.results[0].effect_evidence
+        assert evidence.substrate == "rest"
+        assert evidence.endpoint_scope == "loopback"
+        assert report.external_network_calls != "observed"
+    finally:
+        stop()
+
+
+def test_effect_evidence_marks_a_remote_verifier_endpoint_external():
+    from openadapt_flow.runtime.replayer import effect_endpoint_scope
+
+    assert effect_endpoint_scope(RestRecordVerifier("https://emr.example.com")) == (
+        "external"
+    )
+    assert effect_endpoint_scope(RestRecordVerifier("http://[::1]:8080")) == (
+        "loopback"
+    )
+    assert effect_endpoint_scope(RestRecordVerifier("http://localhost:8080")) == (
+        "loopback"
+    )
+    assert effect_endpoint_scope(object()) == "unknown"
+
+
+def test_cloud_dispatched_run_is_never_reported_as_making_no_network_calls():
+    from tests.test_replayer import FakeBackend as _Backend
+
+    replayer = Replayer(_Backend())
+    assert replayer._initial_external_network_calls("none") == "none"
+    assert replayer._initial_external_network_calls("unknown") == "unknown"
+    replayer.delivery_authority_kind = "cloud_runner"
+    assert replayer._initial_external_network_calls("none") == "observed"
+    assert replayer._initial_external_network_calls("unknown") == "observed"

@@ -68,6 +68,7 @@ from openadapt_flow.runtime.effects.effect import (
     EffectState,
     EffectVerdict,
     Verdict,
+    record_matches,
 )
 
 
@@ -227,6 +228,48 @@ def _bind(effect: Effect, identity: dict[str, str]) -> Effect:
     return effect.resolve(identity)
 
 
+def _in_scope(record: dict[str, Any], effect: Effect) -> bool:
+    """Whether the judge looks at ``record`` when it judges ``effect``.
+
+    Mirrors the selection in ``judge_records``: the effect's ``match``
+    selector, then its idempotency key when it declares one.
+    """
+
+    selector = {key: str(want) for key, want in effect.match.items()}
+    if not record_matches(record, selector):
+        return False
+    if effect.idempotency_key is None:
+        return True
+    return str(record.get(effect.key_field, None)) == str(effect.idempotency_key)
+
+
+def _scoped_observation(
+    value: dict[str, Any], bound_effects: list[Effect]
+) -> dict[str, Any]:
+    """Keep only the observed records the bound effects select.
+
+    The oracle reads the whole collection, so its raw value can hold other
+    subjects' records. They take no part in judging this subject and must
+    not be written to the evidence file or hashed into a receipt that names
+    this subject. The count of dropped records stays, so the evidence still
+    shows that the read covered more than it kept.
+    """
+
+    raw = value.get("records")
+    records = raw if isinstance(raw, list) else []
+    kept = [
+        record
+        for record in records
+        if isinstance(record, dict)
+        and any(_in_scope(record, effect) for effect in bound_effects)
+    ]
+    return {
+        **value,
+        "records": kept,
+        "records_outside_scope": len(records) - len(kept),
+    }
+
+
 def _required_present(verdict: EffectVerdict) -> bool:
     if verdict.verdict is Verdict.CONFIRMED:
         return True
@@ -370,7 +413,7 @@ class RewardWorker:
             self._check_policy_update(episode)
             observed = self.oracle.read(identity)
             judged = judge_episode(self.bundle, identity, signal, before, observed)
-            envelope = self._issue(episode, observed, before, judged)
+            envelope = self._issue(episode, identity, observed, before, judged)
             self._advance_policy_update(episode)
         return envelope
 
@@ -461,6 +504,7 @@ class RewardWorker:
     def _issue(
         self,
         episode: EpisodeDescriptorV1,
+        identity: dict[str, str],
         observed: OracleObservation,
         before: EffectState,
         judged: Judgement,
@@ -475,12 +519,21 @@ class RewardWorker:
         )
         state = certificate_state(self.certificate, episode.policy_update)
         receipt_id = _new_id("reward_receipt")
+        # Bind the same identity the judge used, not whatever the adapter
+        # stamped on the observation.
+        bound = [
+            _bind(effect, identity)
+            for effect in (
+                *self.bundle.required_effects,
+                *self.bundle.forbidden_effects,
+            )
+        ]
         evidence = {
             "episode_id": episode.episode_id,
             "oracle_channel": observed.channel.value,
             "oracle_identity": dict(observed.identity),
             "baseline_reachable": before.reachable,
-            "observed": observed.value,
+            "observed": _scoped_observation(dict(observed.value), bound),
             "required_verdicts": [v.model_dump(mode="json") for v in judged.required],
             "forbidden_verdicts": [v.model_dump(mode="json") for v in judged.forbidden],
             "reason": judged.reason,

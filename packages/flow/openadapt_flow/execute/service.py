@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +24,7 @@ from openadapt_types.oracle import oracle_tier_from_effect_strength
 from pydantic import ValidationError
 
 from openadapt_flow.execute.dispatch import (
+    DispatchError,
     DispatchResult,
     Runner,
     default_runner,
@@ -42,6 +44,8 @@ from openadapt_flow.execute.registry import (
     lookup_admission,
     seed_mockmed_admissions,
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ExecuteServiceError(Exception):
@@ -178,6 +182,8 @@ class ExecuteService:
         thread.start()
 
     def _run(self, execution_id: str, request: ExecuteRequestV1) -> None:
+        # Before dispatch: no business effect is possible, so a fault here is
+        # failed_platform and the caller may safely resubmit.
         try:
             self._write_status(
                 ExecuteStatusV1(
@@ -194,20 +200,72 @@ class ExecuteService:
                 environment_id=request.environment_id,
                 minimum_effect_strength=request.minimum_effect_strength.value,
             )
-            run_dir = self._execution_path(execution_id) / "run"
+        except Exception as exc:
+            self._finalize_fault(
+                execution_id, request, _failed_platform_result(request, str(exc))
+            )
+            return
+        # After dispatch: a write may have landed. Only an error the runner
+        # marks as raised before any replay started keeps failed_platform.
+        run_dir = self._execution_path(execution_id) / "run"
+        try:
             result = self.runner(admission, request, run_dir)
+        except DispatchError as exc:
+            fault = (
+                _failed_platform_result(request, str(exc))
+                if exc.pre_effect
+                else _reconciliation_required_result(request, str(exc))
+            )
+            self._finalize_fault(execution_id, request, fault)
+            return
+        except Exception as exc:
+            self._finalize_fault(
+                execution_id,
+                request,
+                _reconciliation_required_result(request, str(exc)),
+            )
+            return
+        try:
             self._finalize(execution_id, request, result)
         except Exception as exc:
-            failed = _failed_platform_result(request, str(exc))
+            self._finalize_fault(
+                execution_id,
+                request,
+                _reconciliation_required_result(request, str(exc)),
+            )
+
+    def _finalize_fault(
+        self,
+        execution_id: str,
+        request: ExecuteRequestV1,
+        fault: DispatchResult,
+    ) -> None:
+        """Seal a fault receipt, or hand the run to a person if that fails.
+
+        Without a sealed receipt the run cannot be terminal. It must not stay
+        ``running`` either: nothing would ever move it on, and a client would
+        poll forever. ``waiting_for_reconciliation`` tells the caller that a
+        person has to check the record before anything is retried.
+        """
+        try:
+            self._finalize(execution_id, request, fault)
+        except Exception:
+            logger.exception(
+                "could not seal the fault receipt for %s; waiting for reconciliation",
+                execution_id,
+            )
             try:
-                self._finalize(execution_id, request, failed)
-            except Exception:
                 self._write_status(
                     ExecuteStatusV1(
                         execution_id=execution_id,
-                        state=ExecuteLifecycleStateV1.RUNNING,
+                        state=ExecuteLifecycleStateV1.WAITING_FOR_RECONCILIATION,
                         updated_at=_now(),
                     )
+                )
+            except Exception:
+                logger.exception(
+                    "could not record waiting_for_reconciliation for %s",
+                    execution_id,
                 )
 
     def _finalize(
@@ -371,6 +429,26 @@ def _failed_platform_result(request: ExecuteRequestV1, tag: str) -> DispatchResu
         observed_effect_strength=None,
         workflow_digest=request.workflow_digest,
         evidence_tag=f"platform-fault:{tag[:64]}",
+    )
+
+
+def _reconciliation_required_result(
+    request: ExecuteRequestV1, tag: str
+) -> DispatchResult:
+    """A fault after dispatch: the effect is unknown, so never claim none."""
+    from openadapt_flow.execute.dispatch import _result
+
+    return _result(
+        outcome=ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED,
+        authorization_passed=False,
+        identity_passed=False,
+        postcondition_passed=False,
+        effect_passed=False,
+        minimum_effect_strength=request.minimum_effect_strength,
+        observed_effect_strength=None,
+        workflow_digest=request.workflow_digest,
+        evidence_tag=f"post-dispatch-fault:{tag[:64]}",
+        delivery_uncertain=True,
     )
 
 
