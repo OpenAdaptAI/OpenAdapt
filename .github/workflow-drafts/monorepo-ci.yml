@@ -1,0 +1,169 @@
+name: Monorepo CI
+
+# DRAFT, NOT ENABLED. GitHub runs only files in .github/workflows/, and this
+# file is in .github/workflow-drafts/. README.md next to it lists what has to
+# happen before it moves.
+#
+# One workflow tests every workspace package. A pull request runs the lanes of
+# the packages it changes plus every package that depends on them, worked out
+# by scripts/monorepo/workspace_graph.py from the pyproject.toml files. A
+# change to uv.lock, the root pyproject.toml, or the planner itself runs every
+# lane. Each lane copies the sync and pytest command of the package's
+# standalone CI.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: monorepo-ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  UV_VERSION: "0.11.29"
+
+jobs:
+  plan:
+    name: Plan affected packages
+    runs-on: ubuntu-latest
+    outputs:
+      any: ${{ steps.plan.outputs.any }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      packages: ${{ steps.plan.outputs.packages }}
+    steps:
+      - name: Checkout with history for the diff
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: List changed paths
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          case "$EVENT_NAME" in
+            pull_request)
+              git diff --name-only "$PR_BASE"...HEAD > changed.txt
+              ;;
+            push)
+              if [ -z "$PUSH_BEFORE" ] || [ "$PUSH_BEFORE" = "0000000000000000000000000000000000000000" ]; then
+                echo uv.lock > changed.txt
+              else
+                git diff --name-only "$PUSH_BEFORE" HEAD > changed.txt
+              fi
+              ;;
+            *)
+              # A manual run tests everything.
+              echo uv.lock > changed.txt
+              ;;
+          esac
+          echo "$(wc -l < changed.txt) changed path(s)"
+
+      - name: Plan lanes for changed packages and their dependents
+        id: plan
+        run: python scripts/monorepo/workspace_graph.py plan --changed-files changed.txt --github-output "$GITHUB_OUTPUT"
+
+  workspace:
+    name: Workspace lock, internal ranges, source boundary
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install exact uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: The workspace lock matches every pyproject.toml
+        run: uv lock --check
+
+      # uv resolves a workspace source to the version in the tree and ignores
+      # the range the dependent package declares. Published wheels keep that
+      # range, so a package must never be tested against a sibling version its
+      # own metadata excludes.
+      - name: Every internal version range accepts the version in this tree
+        run: uv run --no-project --with "packaging>=24" python scripts/monorepo/workspace_graph.py check-pins
+
+      - name: Source boundary over the whole tree
+        run: python3 scripts/check_source_boundary.py
+
+  test:
+    name: ${{ matrix.package }} (${{ matrix.os }}, ${{ matrix.python }})
+    needs: plan
+    if: needs.plan.outputs.any == 'true'
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      DO_NOT_TRACK: "1"
+      OPENADAPT_TELEMETRY: "0"
+      UV_PYTHON: ${{ matrix.python }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Install exact uv
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: ${{ env.UV_VERSION }}
+
+      - name: Install Python ${{ matrix.python }}
+        run: uv python install "${{ matrix.python }}"
+
+      - name: Sync this package from the workspace lock
+        run: uv sync --locked --package "${{ matrix.package }}" ${{ matrix.sync }}
+
+      - name: Lint
+        if: matrix.lint != ''
+        working-directory: ${{ matrix.dir }}
+        run: uv run --no-sync ${{ matrix.lint }}
+
+      - name: Test
+        working-directory: ${{ matrix.dir }}
+        run: env ${{ matrix.env }} uv run --no-sync pytest ${{ matrix.pytest }}
+
+      - name: Build the wheel and sdist
+        run: uv build --package "${{ matrix.package }}" --out-dir "dist/${{ matrix.package }}"
+
+  result:
+    name: Monorepo CI result
+    needs: [plan, workspace, test]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Require the plan, the workspace checks, and every planned lane
+        env:
+          PLAN: ${{ needs.plan.result }}
+          WORKSPACE: ${{ needs.workspace.result }}
+          TEST: ${{ needs.test.result }}
+        run: |
+          set -euo pipefail
+          echo "plan=$PLAN workspace=$WORKSPACE test=$TEST"
+          test "$PLAN" = success
+          test "$WORKSPACE" = success
+          case "$TEST" in
+            success|skipped) ;;
+            *) exit 1 ;;
+          esac

@@ -348,3 +348,36 @@ def test_policy_named_file_outside_packages_is_still_scanned(
     copy = guard.POLICY_PATH.read_text(encoding="utf-8")
     repo = _repo(tmp_path, "docs/source-policy.public.json", copy)
     assert guard.scan(repo, policy)
+
+
+def _sdist_with(tmp_path: Path, member: str, payload: bytes) -> Path:
+    dist = tmp_path / "dist"
+    dist.mkdir()
+    archive = dist / "openadapt_types-0.0.0.tar.gz"
+    with tarfile.open(archive, "w:gz") as tar:
+        info = tarfile.TarInfo(member)
+        info.size = len(payload)
+        tar.addfile(info, io.BytesIO(payload))
+    return dist
+
+
+def test_identical_policy_copy_in_a_package_sdist_is_skipped(
+    tmp_path: Path, policy: guard.SourcePolicy
+) -> None:
+    dist = _sdist_with(
+        tmp_path,
+        "openadapt_types-0.0.0/source-policy.public.json",
+        guard.POLICY_PATH.read_bytes(),
+    )
+    assert guard.scan_built_artifacts(dist, policy) == []
+
+
+def test_edited_policy_copy_in_a_package_sdist_is_still_scanned(
+    tmp_path: Path, policy: guard.SourcePolicy
+) -> None:
+    dist = _sdist_with(
+        tmp_path,
+        "openadapt_types-0.0.0/source-policy.public.json",
+        guard.POLICY_PATH.read_bytes() + b"\npowerchart\n",
+    )
+    assert guard.scan_built_artifacts(dist, policy)

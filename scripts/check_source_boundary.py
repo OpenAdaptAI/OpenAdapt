@@ -383,6 +383,16 @@ def _artifact_path_violations(
 def _artifact_content_violations(
     artifact: str, member: str, raw: bytes, policy: SourcePolicy
 ) -> list[str]:
+    # A package sdist (<name>-<version>/source-policy.public.json) may ship the
+    # rendered policy, as the standalone package repositories always have. Only
+    # an exact copy of the policy this check reads is skipped.
+    parts = member.split("/")
+    if len(parts) == 2 and parts[1] == "source-policy.public.json":
+        try:
+            if raw == POLICY_PATH.read_bytes():
+                return []
+        except OSError:
+            pass
     for signature in policy.content_signatures:
         if signature.encode("utf-8") in raw:
             return [f"{artifact}:{member}: content carries the private-artifact banner"]
