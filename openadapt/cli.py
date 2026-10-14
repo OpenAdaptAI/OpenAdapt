@@ -57,6 +57,22 @@ class _FlowFirstGroup(click.Group):
             formatter.write(_python_remedy() + "\n\n")
         super().format_help(ctx, formatter)
 
+    def resolve_command(self, ctx, args):
+        # `openadapt run` or `openadapt replay` is a Flow verb typed without
+        # `flow`. Point at the launcher form instead of a bare "No such
+        # command" or Click's nearest launcher name (`replay` -> `deploy`).
+        name = args[0] if args else ""
+        if (
+            not ctx.resilient_parsing
+            and self.get_command(ctx, name) is None
+            and name in _flow_verbs()
+        ):
+            raise click.UsageError(
+                f"No such command '{name}'. Did you mean 'openadapt flow {name}'?",
+                ctx,
+            )
+        return super().resolve_command(ctx, args)
+
 
 @click.group(cls=_FlowFirstGroup)
 @click.version_option(version=__version__, prog_name="openadapt")
@@ -134,12 +150,23 @@ _FLOW_COMMAND = re.compile(
 # Verbs to rewrite when Flow's parser can't be read. Only real Flow verbs are
 # rewritten, so a package name or a sentence that mentions Flow stays as is.
 _FALLBACK_FLOW_VERBS = frozenset(
-    {"compile", "explain", "lint", "record", "replay", "tutorial", "visualize"}
+    {
+        "certify",
+        "compile",
+        "demo-record",
+        "explain",
+        "lint",
+        "record",
+        "replay",
+        "run",
+        "tutorial",
+        "visualize",
+    }
 )
 
 
-def _flow_verbs() -> frozenset[str]:
-    """Return the installed Flow's top-level subcommand names."""
+def _flow_subparsers() -> Optional[dict]:
+    """Return the installed Flow's subcommand parsers, or None if unreadable."""
     try:
         import argparse
 
@@ -148,10 +175,26 @@ def _flow_verbs() -> frozenset[str]:
         parser = build_parser()
         for action in parser._actions:
             if isinstance(action, argparse._SubParsersAction):
-                return frozenset(action.choices)
+                return dict(action.choices)
     except Exception:
         pass
-    return _FALLBACK_FLOW_VERBS
+    return None
+
+
+def _flow_verbs() -> frozenset[str]:
+    """Return the installed Flow's top-level subcommand names."""
+    subparsers = _flow_subparsers()
+    return _FALLBACK_FLOW_VERBS if subparsers is None else frozenset(subparsers)
+
+
+def _flow_tutorial_options() -> Optional[frozenset[str]]:
+    """Return the installed Flow tutorial's long options, or None if unreadable."""
+    tutorial = (_flow_subparsers() or {}).get("tutorial")
+    try:
+        names = tutorial._option_string_actions
+    except AttributeError:
+        return None
+    return frozenset(name for name in names if name.startswith("--"))
 
 
 def _launcher_spelling(text: str, verbs: frozenset[str]) -> str:
@@ -358,6 +401,38 @@ def _is_externally_managed_error(error: BaseException) -> bool:
     return "externally-managed-environment" in str(error)
 
 
+# Options quickstart parses itself. Click consumes them before passthrough,
+# so they only matter here as suggestions for a mistyped flag.
+_QUICKSTART_OPTIONS = frozenset({"--out", "--headed", "--break-it", "--help"})
+
+
+def _refuse_unknown_tutorial_options(args: list[str]) -> None:
+    """Stop on a long option that neither quickstart nor Flow's tutorial has.
+
+    Without this, a typo such as ``--brek-it`` reaches the engine, whose
+    parser prints its whole ``openadapt-flow`` command list. Names must match
+    exactly: an abbreviation that Flow would expand (``--brea``) could change
+    what runs without the launcher knowing. When Flow's options can't be read,
+    everything forwards unchanged and Flow reports its own error.
+    """
+    import difflib
+
+    options = _flow_tutorial_options()
+    if options is None:
+        return
+    for token in args:
+        name = token.split("=", 1)[0]
+        if not name.startswith("--") or name == "--" or name in options:
+            continue
+        message = f"No such option: {name}."
+        close = difflib.get_close_matches(
+            name, sorted(options | _QUICKSTART_OPTIONS), n=1
+        )
+        if close:
+            message += f" Did you mean {close[0]}?"
+        raise click.UsageError(message)
+
+
 @main.command(
     "quickstart",
     context_settings={
@@ -397,12 +472,13 @@ def quickstart(
     synthetic tutorial, verifies the write through an independent read-only
     system-of-record interface, keeps every artifact on this computer, and
     enables no model or Cloud call. The output directory is never overwritten.
-    Any other flags (for example --guided or --interactive-record) pass
-    through to the engine tutorial unchanged.
+    Other flags that the engine tutorial accepts (for example --guided or
+    --interactive-record) pass through to it unchanged.
     """
     import os
 
     _require_supported_python()
+    _refuse_unknown_tutorial_options(command_ctx.args)
 
     if out is None:
         root = Path(_DEFAULT_QUICKSTART_DIR).resolve()

@@ -111,7 +111,15 @@ def test_pep668_error_prints_the_same_remedy(monkeypatch):
         ["--profile", "strict"],
     ],
 )
-def test_unknown_flags_pass_through_to_engine_verbatim(engine_calls, extra):
+def test_unknown_flags_pass_through_to_engine_verbatim(
+    monkeypatch, engine_calls, extra
+):
+    # A newer Flow tutorial that adds `--profile` gets it without a launcher
+    # change: quickstart checks flags against the installed engine's parser.
+    monkeypatch.setattr(
+        "openadapt.cli._flow_tutorial_options",
+        lambda: frozenset({"--guided", "--interactive-record", "--profile"}),
+    )
     runner = CliRunner()
     with runner.isolated_filesystem():
         result = runner.invoke(cli_main, ["quickstart", *extra])
