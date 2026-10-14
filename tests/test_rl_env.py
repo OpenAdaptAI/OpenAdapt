@@ -331,6 +331,86 @@ class TestObserve:
 
 
 # ---------------------------------------------------------------------------
+# task instruction
+# ---------------------------------------------------------------------------
+
+
+class TestInstruction:
+    """A caller that resets with only a task_id must be able to read the task."""
+
+    @staticmethod
+    def _env(adapter_obs: BenchmarkObservation) -> tuple[RLEnvironment, MagicMock]:
+        adapter = MagicMock(spec=["load_task", "reset", "step", "evaluate", "observe"])
+        adapter.load_task.side_effect = lambda task_id: BenchmarkTask(
+            task_id=task_id, instruction="Open Notepad", domain="notepad"
+        )
+        adapter.reset.return_value = adapter_obs
+        adapter.step.return_value = (adapter_obs, False, {})
+        adapter.observe.return_value = adapter_obs
+        return RLEnvironment(adapter=adapter), adapter
+
+    def test_instruction_is_exposed_on_env_and_every_observation(self) -> None:
+        adapter_obs = BenchmarkObservation(
+            viewport=(640, 480), raw_observation={"source": "adapter"}
+        )
+        env, _ = self._env(adapter_obs)
+        assert env.instruction is None
+        assert env.current_task is None
+
+        reset_obs = env.reset(ResetConfig(task_id="notepad_1"))
+
+        assert env.instruction == "Open Notepad"
+        assert env.current_task is not None
+        assert env.current_task.task_id == "notepad_1"
+        assert reset_obs.raw_observation["instruction"] == "Open Notepad"
+        assert reset_obs.raw_observation["source"] == "adapter"
+        assert env.observe().raw_observation["instruction"] == "Open Notepad"
+        step = env.step(BenchmarkAction(type="wait"))
+        assert step.observation.raw_observation["instruction"] == "Open Notepad"
+        # The adapter's own observation object is left untouched.
+        assert adapter_obs.raw_observation == {"source": "adapter"}
+
+    def test_delegated_pixel_action_observation_carries_the_instruction(self) -> None:
+        adapter_obs = BenchmarkObservation(viewport=(640, 480))
+        adapter = MagicMock(spec=["load_task", "reset", "step", "evaluate", "pixel_action"])
+        adapter.load_task.side_effect = lambda task_id: BenchmarkTask(
+            task_id=task_id, instruction="Open Notepad", domain="notepad"
+        )
+        adapter.reset.return_value = adapter_obs
+        adapter.pixel_action.return_value = (adapter_obs, False, {})
+        env = RLEnvironment(adapter=adapter)
+        env.reset(ResetConfig(task_id="notepad_1"))
+
+        step = env.pixel_action(x=10, y=20)
+
+        assert adapter.pixel_action.called
+        assert step.observation.raw_observation["instruction"] == "Open Notepad"
+        assert env.trajectory[-1].observation.raw_observation["instruction"] == "Open Notepad"
+        assert adapter_obs.raw_observation is None
+
+    def test_mock_adapter_reset_carries_its_task_instruction(
+        self, mock_env: RLEnvironment
+    ) -> None:
+        task = mock_env.adapter.list_tasks()[0]
+
+        obs = mock_env.reset(ResetConfig(task_id=task.task_id))
+
+        assert mock_env.instruction == task.instruction
+        assert obs.raw_observation["instruction"] == task.instruction
+
+    def test_failed_reset_clears_the_instruction(self) -> None:
+        env, adapter = self._env(BenchmarkObservation(viewport=(640, 480)))
+        env.reset(ResetConfig(task_id="notepad_1"))
+        adapter.reset.side_effect = RuntimeError("reset failed")
+
+        with pytest.raises(RuntimeError, match="reset failed"):
+            env.reset(ResetConfig(task_id="notepad_2"))
+
+        assert env.instruction is None
+        assert env.current_task is None
+
+
+# ---------------------------------------------------------------------------
 # collect_rollout
 # ---------------------------------------------------------------------------
 

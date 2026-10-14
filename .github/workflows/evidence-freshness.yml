@@ -63,3 +63,48 @@ jobs:
           --trusted-admission-signers-json "$QUALIFICATION_ADMISSION_SIGNERS_JSON"
           --revoked-admission-ids-json "$REVOKED_QUALIFICATION_ADMISSION_IDS_JSON"
           --revoked-admission-signer-key-ids-json "$REVOKED_QUALIFICATION_SIGNER_KEY_IDS_JSON"
+
+  # GitHub turns off a public repository's scheduled workflows after 60 days
+  # without a commit, and a red schedule that stops running looks the same as
+  # one that was fixed. A failing scheduled run therefore leaves one open issue
+  # that outlives the schedule. One issue, rewritten in place: a new issue
+  # every day stops being read, and editing a body does not notify.
+  report-stale-evidence:
+    needs: [reject-lifecycle-app, freshness]
+    if: >-
+      failure() &&
+      needs.freshness.result == 'failure' &&
+      github.event_name == 'schedule' &&
+      github.actor != 'openadapt-lifecycle[bot]' &&
+      github.triggering_actor != 'openadapt-lifecycle[bot]'
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Open or update the published-evidence issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TITLE: Published evidence check failed
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          cat > body.md <<BODY
+          The scheduled published-evidence check failed: ${RUN_URL}
+
+          Usually this means a newer openadapt-flow release shipped and the
+          numbers in README.md and docs/eval_results were measured on an older
+          one. Re-run the comparison against the current release and publish a
+          new evidence set (see the current set's REPRODUCE.md). Until then the
+          public numbers describe a release nobody installs.
+
+          This issue stays open after the schedule stops. Close it when the
+          check is green again.
+          BODY
+          EXISTING=$(gh issue list --repo "${GITHUB_REPOSITORY}" --state open \
+            --search "in:title \"${TITLE}\"" --json number,title \
+            --jq '[.[] | select(.title == env.TITLE)][0].number // empty')
+          if [ -n "${EXISTING}" ]; then
+            gh issue edit "${EXISTING}" --repo "${GITHUB_REPOSITORY}" --body-file body.md
+          else
+            gh issue create --repo "${GITHUB_REPOSITORY}" --title "${TITLE}" --body-file body.md
+          fi

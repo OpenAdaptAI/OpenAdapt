@@ -177,15 +177,6 @@ Repository = "https://github.com/OpenAdaptAI/openadapt-evals"
 Documentation = "https://github.com/OpenAdaptAI/openadapt-evals#readme"
 "Bug Tracker" = "https://github.com/OpenAdaptAI/openadapt-evals/issues"
 
-
-
-
-
-
-[tool.uv.sources]
-openadapt-consilium = { git = "https://github.com/OpenAdaptAI/openadapt-consilium.git" }
-openadapt-ml = { path = "../openadapt-ml", editable = true }
-
 [tool.hatch.build.targets.wheel]
 packages = ["openadapt_evals", "scripts"]
 

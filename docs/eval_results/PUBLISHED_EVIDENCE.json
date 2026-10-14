@@ -9,7 +9,11 @@
     "The current label means release-fresh, not production-accepted. Every",
     "current entry and campaign states its production_acceptance value.",
     "Mark a set superseded (never delete it) when a newer set replaces it: the",
-    "old numbers stay reproducible against the wheel they were measured on."
+    "old numbers stay reproducible against the wheel they were measured on.",
+    "accepted_drift on the current set records a newer release that has not been",
+    "re-measured yet. It covers that one version, needs a reason, and expires at",
+    "most 31 days ahead; the README must say the newer release was not measured.",
+    "Remove it when the new set is published."
   ],
   "evidence": [
     {
@@ -113,7 +117,12 @@
       "sdist_sha256": "a941a70015fe91897e655bfc9bf83e6cf8fbcf8bd4e4c7206ffb133c505203f8",
       "evidence_manifest": "docs/eval_results/current_flow_v1_34_0_local_20260829/EVIDENCE_MANIFEST.json",
       "measured_on": "2026-08-29",
-      "production_acceptance": false
+      "production_acceptance": false,
+      "accepted_drift": {
+        "version": "1.35.1",
+        "reason": "Flow 1.35.0 and 1.35.1 shipped after this set was measured and the comparison has not been re-run, so these numbers describe Flow 1.34.0 only. The README says so.",
+        "expires": "2026-10-31"
+      }
     }
   ]
 }

@@ -27,6 +27,13 @@ What is checked, against ``docs/eval_results/PUBLISHED_EVIDENCE.json``:
    retained trials per qualification condition, verifies every normalized
    evidence receipt, and derives the failure taxonomy from those trial rows.
 
+A release that ships before the comparison can be re-run may be recorded on the
+current entry as ``accepted_drift`` (``version``, ``reason``, ``expires``).  It
+waives check 3 for that one release only, until its expiry date, and it may be
+set at most 31 days ahead.  A later release, an expired waiver, or a malformed
+one is drift again.  A waived run says so; it never reports the evidence as
+bound to the current release.
+
 Checks 1, 2 and 5-8 are offline and always run.  Checks 3 and 4 need PyPI: pass
 ``--current-version``/``--current-wheel-sha256`` to supply the release
 out-of-band, or ``--offline`` to skip them.  A network failure is reported and
@@ -44,6 +51,7 @@ import stat
 import sys
 import urllib.error
 import urllib.request
+from datetime import date, datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
@@ -62,6 +70,67 @@ PRODUCTION_SPEC.loader.exec_module(PRODUCTION)
 
 class DriftError(Exception):
     """Published evidence no longer matches the current published release."""
+
+
+# A waiver longer than this stops being a stopgap and becomes a false green.
+MAX_ACCEPTED_DRIFT_DAYS = 31
+ACCEPTED_DRIFT_KEYS = frozenset({"version", "reason", "expires"})
+
+
+def _today() -> date:
+    return datetime.now(timezone.utc).date()
+
+
+def check_accepted_drift(entry: dict[str, Any], today: date | None = None) -> list[str]:
+    """An accepted-drift waiver must be short, named, and complete."""
+
+    waiver = entry.get("accepted_drift")
+    if waiver is None:
+        return []
+    prefix = f"{entry.get('path')}: accepted_drift "
+    if not isinstance(waiver, dict):
+        return [prefix + "must be an object with version, reason and expires"]
+    problems: list[str] = []
+    extra = sorted(set(waiver) - ACCEPTED_DRIFT_KEYS)
+    if extra:
+        problems.append(prefix + f"has unexpected keys {extra}")
+    version = waiver.get("version")
+    if not isinstance(version, str) or not version:
+        problems.append(prefix + "must name the exact release version it accepts")
+    elif version == entry.get("flow_version"):
+        problems.append(prefix + f"names {version}, which the evidence already pins")
+    reason = waiver.get("reason")
+    if not isinstance(reason, str) or not reason.strip():
+        problems.append(prefix + "must give a reason")
+    try:
+        expires = date.fromisoformat(str(waiver.get("expires")))
+    except ValueError:
+        problems.append(prefix + "expires must be an ISO date (YYYY-MM-DD)")
+    else:
+        today = today or _today()
+        if (expires - today).days > MAX_ACCEPTED_DRIFT_DAYS:
+            problems.append(
+                prefix
+                + f"expires {expires.isoformat()}; a waiver may run at most "
+                + f"{MAX_ACCEPTED_DRIFT_DAYS} days ahead"
+            )
+    return problems
+
+
+def accepted_drift_in_force(
+    entry: dict[str, Any], release_version: str, today: date | None = None
+) -> dict[str, Any] | None:
+    """Return the waiver if it validly covers this exact release today."""
+
+    today = today or _today()
+    waiver = entry.get("accepted_drift")
+    if waiver is None or check_accepted_drift(entry, today):
+        return None
+    if waiver["version"] != release_version:
+        return None
+    if today > date.fromisoformat(waiver["expires"]):
+        return None
+    return waiver
 
 
 def load_manifest(path: Path) -> dict[str, Any]:
@@ -700,18 +769,31 @@ def check_against_release(
     entry: dict[str, Any],
     release_version: str,
     release_wheel_sha256: Optional[str],
+    today: date | None = None,
 ) -> list[str]:
     """The current evidence set must pin the current published release."""
 
     problems: list[str] = []
     if entry.get("flow_version") != release_version:
-        problems.append(
+        if accepted_drift_in_force(entry, release_version, today):
+            return []
+        problem = (
             f"{entry['path']}: published evidence is pinned to openadapt-flow "
             f"{entry.get('flow_version')} but the current published release is "
             f"{release_version}. Re-run the comparison against "
             f"{release_version} and publish a new evidence set, or the public "
             f"numbers describe an engine nobody is running."
         )
+        waiver = entry.get("accepted_drift")
+        if isinstance(waiver, dict) and waiver.get("version") == release_version:
+            if check_accepted_drift(entry, today):
+                problem += f" The accepted drift for {release_version} is malformed."
+            else:
+                problem += (
+                    f" The accepted drift for {release_version} expired on "
+                    f"{waiver['expires']}."
+                )
+        problems.append(problem)
     elif release_wheel_sha256 and entry.get("wheel_sha256") != release_wheel_sha256:
         problems.append(
             f"{entry['path']}: pinned wheel digest {entry.get('wheel_sha256')} "
@@ -825,6 +907,7 @@ def main(argv: list[str] | None = None) -> int:
         return 1
 
     problems.extend(check_superseded_links(manifest))
+    problems.extend(check_accepted_drift(entry))
     problems.extend(check_entry_matches_artifact(entry, args.repo_root))
     problems.extend(
         check_evidence_manifest(
@@ -867,6 +950,16 @@ def main(argv: list[str] | None = None) -> int:
             f"Published evidence {entry['path']} passed its OFFLINE checks. "
             f"The release-freshness comparison against the current {package} "
             f"release was SKIPPED" + (" (--offline)." if args.offline else " (PyPI unreachable).")
+        )
+        return 0
+
+    waiver = accepted_drift_in_force(entry, release_version)
+    if waiver is not None:
+        print(
+            f"Published evidence {entry['path']} is pinned to {package} "
+            f"{entry['flow_version']}. The current release {release_version} "
+            f"has NOT been re-measured; that drift is accepted until "
+            f"{waiver['expires']}: {waiver['reason']}"
         )
         return 0
 

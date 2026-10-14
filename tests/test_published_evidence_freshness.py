@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
+from datetime import date
 from pathlib import Path
 
 import pytest
@@ -524,3 +526,132 @@ def test_task_standard_requires_count_oracle_taxonomy_and_caveats() -> None:
     assert any("oracle/invariants" in problem for problem in problems)
     assert any("failure taxonomy" in problem for problem in problems)
     assert any("caveats" in problem for problem in problems)
+
+
+# --- Accepted drift: a short, named, expiring waiver --------------------------
+#
+# When a Flow release ships before the comparison can be re-run, the manifest
+# may record that drift as accepted for that one release, with a reason and an
+# expiry date. The waiver must never become a permanent false green.
+
+WAIVED_ON = date(2026, 10, 10)
+
+
+def _entry_with_accepted_drift(**overrides: object) -> dict[str, object]:
+    entry = dict(MODULE.current_entry(MODULE.load_manifest(MANIFEST)))
+    entry.pop("accepted_drift", None)
+    entry["flow_version"] = "1.34.0"
+    waiver: dict[str, object] = {
+        "version": "1.35.1",
+        "reason": "Flow 1.35.1 shipped before the comparison was re-run.",
+        "expires": "2026-10-31",
+    }
+    waiver.update(overrides)
+    entry["accepted_drift"] = waiver
+    return entry
+
+
+def test_accepted_drift_waives_only_the_named_release() -> None:
+    entry = _entry_with_accepted_drift()
+
+    assert MODULE.check_against_release(entry, "1.35.1", "f" * 64, today=WAIVED_ON) == []
+    assert MODULE.accepted_drift_in_force(entry, "1.35.1", today=WAIVED_ON) is not None
+
+    later = MODULE.check_against_release(entry, "1.35.2", None, today=WAIVED_ON)
+    assert later and "1.35.2" in later[0]
+    assert MODULE.accepted_drift_in_force(entry, "1.35.2", today=WAIVED_ON) is None
+
+
+def test_expired_accepted_drift_is_drift_again() -> None:
+    entry = _entry_with_accepted_drift(expires="2026-10-31")
+
+    assert MODULE.check_against_release(entry, "1.35.1", None, today=date(2026, 10, 31)) == []
+    problems = MODULE.check_against_release(entry, "1.35.1", None, today=date(2026, 11, 1))
+
+    assert problems
+    assert "1.35.1" in problems[0]
+    assert "expired on 2026-10-31" in problems[0]
+
+
+@pytest.mark.parametrize(
+    ("overrides", "fragment"),
+    [
+        ({"reason": ""}, "reason"),
+        ({"expires": "soon"}, "expires"),
+        ({"expires": "2026-12-31"}, "at most 31 days"),
+        ({"version": "1.34.0"}, "already pins"),
+        ({"version": ""}, "version"),
+        ({"approved_by": "someone"}, "unexpected keys"),
+    ],
+)
+def test_accepted_drift_must_be_short_named_and_complete(
+    overrides: dict[str, object], fragment: str
+) -> None:
+    entry = _entry_with_accepted_drift(**overrides)
+
+    problems = MODULE.check_accepted_drift(entry, today=WAIVED_ON)
+
+    assert problems and any(fragment in problem for problem in problems)
+    # A malformed waiver never silences the release comparison either.
+    assert MODULE.check_against_release(entry, "1.35.1", None, today=WAIVED_ON)
+
+
+def test_main_never_reports_waived_drift_as_fresh(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    manifest = MODULE.load_manifest(MANIFEST)
+    for item in manifest["evidence"]:
+        if item["status"] == "current":
+            item["accepted_drift"] = {
+                "version": "99.0.0",
+                "reason": "Test waiver.",
+                "expires": "2026-10-31",
+            }
+    path = tmp_path / "PUBLISHED_EVIDENCE.json"
+    path.write_text(json.dumps(manifest), encoding="utf-8")
+    argv = ["--manifest", str(path), "--repo-root", str(ROOT), "--current-version", "99.0.0"]
+
+    monkeypatch.setattr(MODULE, "_today", lambda: WAIVED_ON)
+    assert MODULE.main(argv) == 0
+    out = capsys.readouterr().out
+    assert "has NOT been re-measured" in out
+    assert "until 2026-10-31" in out
+    assert "is bound to the current" not in out
+
+    monkeypatch.setattr(MODULE, "_today", lambda: date(2026, 11, 1))
+    assert MODULE.main(argv) == 1
+
+
+def test_readme_states_which_release_the_current_numbers_were_measured_on() -> None:
+    entry = MODULE.current_entry(MODULE.load_manifest(MANIFEST))
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+
+    assert Path(entry["path"]).name in readme
+    assert f"against Flow {entry['flow_version']}" in readme
+    waiver = entry.get("accepted_drift")
+    if waiver:
+        # While drift is accepted, the public page must say the newer release
+        # was not measured, not imply the numbers describe it.
+        assert f"Flow {waiver['version']} has not been re-measured" in readme
+
+
+def test_a_failing_scheduled_check_leaves_an_open_issue() -> None:
+    """GitHub turns off a public repo's schedules after 60 days without a
+    commit. A red scheduled run must leave a durable signal that outlives the
+    schedule, so the alarm cannot vanish with nobody having acted on it."""
+
+    workflow = (ROOT / ".github" / "workflows" / "evidence-freshness.yml").read_text(
+        encoding="utf-8"
+    )
+    job = re.search(r"(?ms)^  report-stale-evidence:\n(.*?)(?=^  \S|\Z)", workflow)
+    assert job is not None
+    body = job.group(1)
+    assert re.search(r"needs: \[?[^\n]*freshness", body)
+    assert "failure()" in body
+    assert "github.event_name == 'schedule'" in body
+    assert "github.actor != 'openadapt-lifecycle[bot]'" in body
+    assert "issues: write" in body
+    assert "gh issue create" in body
+    assert "gh issue edit" in body
+    # Only this job may write issues; the check itself stays read-only.
+    assert workflow.count("issues: write") == 1

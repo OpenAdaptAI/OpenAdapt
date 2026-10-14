@@ -120,11 +120,15 @@ can invalidate a report without a single commit landing here.
 `docs/eval_results/PUBLISHED_EVIDENCE.json` records which set is current and
 which release it was measured against, and
 `scripts/check_published_evidence_freshness.py` fails when that pin drifts. It
-runs offline on every pull request and against PyPI on a daily schedule.
+runs offline on every pull request and against PyPI on a daily schedule, and a
+failed scheduled run opens an issue.
 
 The current set is `current_flow_v1_34_0_local_20260829`, measured 2026-08-29
-against Flow 1.34.0 on macOS with headless Chromium. One synthetic MockMed
-workflow, three arms, three runs each:
+against Flow 1.34.0 on macOS with headless Chromium. Flow 1.35.0 and 1.35.1
+shipped after it, and Flow 1.35.1 has not been re-measured, so these numbers
+describe 1.34.0 only. The manifest accepts that gap until 2026-10-31. After
+that date the daily check fails again until a new set is published. One
+synthetic MockMed workflow, three arms, three runs each:
 
 | Condition | Compiled replay | DOM positional | DOM name-scoped |
 |---|---|---|---|
@@ -210,6 +214,11 @@ cd openadapt-evals
 uv sync --extra dev
 uv run pytest tests/ -v
 ```
+
+Every dependency installs from PyPI, so you don't need other OpenAdapt
+repositories checked out next to this one. To work against a local copy of
+one, install it into the environment after syncing, for example
+`uv pip install -e ../openadapt-ml`, and don't commit a `path` source for it.
 
 This is research infrastructure and it moves fast. Branches and pull requests
 only, never a direct push to `main`. PR titles need

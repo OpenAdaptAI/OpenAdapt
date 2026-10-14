@@ -23,6 +23,12 @@ jobs:
         with:
           version: "0.11.29"
 
+      # Without --no-sources on purpose: this is what a fresh clone does with
+      # the README's `uv sync --extra dev`. A path source to a sibling checkout
+      # or a git source the lockfile was not resolved with fails here.
+      - name: Check the lockfile works in a fresh clone
+        run: uv lock --check
+
       - name: Install dependencies
         run: uv sync --locked --extra dev --no-sources
 

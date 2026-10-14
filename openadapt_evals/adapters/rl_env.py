@@ -58,7 +58,7 @@ from __future__ import annotations
 import hashlib
 import logging
 import math
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Callable
 
 from openadapt_evals.adapters.base import (
@@ -159,6 +159,11 @@ class RLEnvironment:
     For pixel-coordinate convenience methods, the underlying adapter should
     be a WAALiveAdapter (or any adapter with a ``pixel_action`` method).
 
+    The task being run is available as ``current_task`` and ``instruction``,
+    and every observation the wrapper returns after a successful reset carries
+    the instruction in ``raw_observation["instruction"]``, so a policy that
+    only sees observations still knows what it was asked to do.
+
     Args:
         adapter: An interactive BenchmarkAdapter instance.
         default_task_id: Task ID to use when reset() is called without a
@@ -194,6 +199,33 @@ class RLEnvironment:
     def adapter(self) -> BenchmarkAdapter:
         """The underlying benchmark adapter."""
         return self._adapter
+
+    @property
+    def current_task(self) -> BenchmarkTask | None:
+        """The task loaded by the last successful reset, or None."""
+        return self._current_task
+
+    @property
+    def instruction(self) -> str | None:
+        """The current task's instruction, or None before a successful reset."""
+        if self._current_task is None:
+            return None
+        return self._current_task.instruction
+
+    @staticmethod
+    def _with_instruction(
+        obs: BenchmarkObservation, task: BenchmarkTask | None
+    ) -> BenchmarkObservation:
+        """Return a copy of ``obs`` whose raw_observation names the task.
+
+        The adapter's own observation object is not modified.
+        """
+        if task is None or not isinstance(obs, BenchmarkObservation):
+            return obs
+        return replace(
+            obs,
+            raw_observation={**(obs.raw_observation or {}), "instruction": task.instruction},
+        )
 
     @property
     def step_count(self) -> int:
@@ -271,7 +303,8 @@ class RLEnvironment:
                 default_task_id.
 
         Returns:
-            Initial BenchmarkObservation.
+            Initial BenchmarkObservation, with the task instruction in
+            ``raw_observation["instruction"]``.
 
         Raises:
             ValueError: If no task_id is provided and no default was set.
@@ -306,7 +339,7 @@ class RLEnvironment:
             )
         else:
             candidate_task = self._adapter.load_task(task_id)
-        obs = self._adapter.reset(candidate_task)
+        obs = self._with_instruction(self._adapter.reset(candidate_task), candidate_task)
 
         # Publish the task and observation only after reset succeeds.
         self._current_task = candidate_task
@@ -341,6 +374,7 @@ class RLEnvironment:
             raise RuntimeError("Episode is done. Call reset() to start a new episode.")
 
         obs, done, info = self._adapter.step(action)
+        obs = self._with_instruction(obs, self._current_task)
         self._step_count += 1
         self._last_obs = obs
 
@@ -444,6 +478,7 @@ class RLEnvironment:
                 x_frac=None,
                 y_frac=None,
             )
+            obs = self._with_instruction(obs, self._current_task)
             self._step_count += 1
             self._last_obs = obs
             self._done = done
@@ -500,7 +535,7 @@ class RLEnvironment:
             RuntimeError: If no observation is available (call reset() first).
         """
         if hasattr(self._adapter, "observe"):
-            obs = self._adapter.observe()
+            obs = self._with_instruction(self._adapter.observe(), self._current_task)
             self._last_obs = obs
             return obs
         if self._last_obs is not None:
