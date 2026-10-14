@@ -71,6 +71,7 @@ from typing import (
     Any,
     Iterable,
     Literal,
+    Mapping,
     NamedTuple,
     Optional,
     Protocol,
@@ -1974,6 +1975,42 @@ def verify_pixel_identity(
             ),
         )
     return None  # drift, uncertain band, or verify-gated -> abstain to next tier
+
+
+def run_bound_identity_params(
+    embedded: Iterable[str],
+    params: Mapping[str, str],
+    param_examples: Mapping[str, str],
+) -> list[str]:
+    """Embedded identity parameters whose run value differs from the demo's.
+
+    A recorded identifier crop is a picture of the DEMONSTRATION's screen. When
+    the identity band embeds a workflow parameter (a first name typed two steps
+    earlier, say) and this run supplies a different value, the live crop must
+    render different pixels at that spot, whoever the record is. A pixel
+    comparison against the recorded crop then measures the parameter change,
+    not the record: it can report a localized glyph change for a correct run
+    (or abstain), depending only on how the two values happen to render.
+
+    Args:
+        embedded: Parameter names the identity band embeds (the template's
+            ``param_token_indices`` keys, or :func:`embedded_params` of a
+            plaintext band).
+        params: Effective run parameter values as GUI text.
+        param_examples: The workflow's demonstrated value per parameter.
+
+    Returns:
+        The embedded names whose run value is present and is not exactly the
+        demonstrated value, in ``embedded`` order. Empty means the recorded
+        crop is still a valid pixel reference for this run.
+    """
+    bound: list[str] = []
+    for name in embedded:
+        if name not in params or name not in param_examples:
+            continue
+        if str(params[name]) != str(param_examples[name]):
+            bound.append(name)
+    return bound
 
 
 @runtime_checkable

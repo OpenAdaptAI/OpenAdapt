@@ -525,6 +525,47 @@ def test_exact_arm_delta_contract_catches_duplicates_and_collateral() -> None:
     )
 
 
+def test_recording_is_audited_against_the_demonstration_save_contract() -> None:
+    # Regression: `record` audited the demonstration against the compiled
+    # contract, which includes the 12 REST reads governed replay makes (one
+    # pre-effect capture and one per declared effect). A demonstration makes
+    # none of them, so a correct recording saw api_log +1 and log +229 and the
+    # published harness refused to record.
+    source = inspect.getsource(record)
+    assert 'arm="recording"' in source
+    assert 'arm="compiled"' not in source
+
+    recording = EXPECTED_TABLE_DELTAS["recording"]
+    compiled = EXPECTED_TABLE_DELTAS["compiled"]
+    replay_reads = {
+        table: compiled[table] - recording.get(table, 0)
+        for table in compiled
+        if compiled[table] != recording.get(table, 0)
+    }
+    assert replay_reads == {"api_log": 12, "log": 82, "log_comment_encrypt": 82}
+
+    before = {table: 5 for table in compiled}
+    demonstration_after = {
+        table: before[table] + recording.get(table, 0) for table in before
+    }
+    assert audit_table_deltas(before, demonstration_after, arm="recording")[0] == []
+    # The same browser save fails the compiled contract, as it did in `record`.
+    assert "api_log:+1 (expected +13)" in unexpected_table_deltas(
+        before, demonstration_after, arm="compiled"
+    )
+    # The recording contract still fails closed on a duplicate or a stray write.
+    duplicate = dict(
+        demonstration_after, patient_data=demonstration_after["patient_data"] + 1
+    )
+    assert "patient_data:+2 (expected +1)" in unexpected_table_deltas(
+        before, duplicate, arm="recording"
+    )
+    stray = dict(demonstration_after, payments=1)
+    assert "payments:+1 (expected +0)" in unexpected_table_deltas(
+        dict(before, payments=0), stray, arm="recording"
+    )
+
+
 def test_pre_trial_counts_require_three_identical_complete_inventories(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -550,29 +591,57 @@ def test_pre_trial_counts_require_three_identical_complete_inventories(
 
 def test_iframe_confirm_locator_and_explicit_save_event_marker(tmp_path: Path) -> None:
     class Locator:
-        def __init__(self, visible: bool) -> None:
-            self.visible = visible
+        def __init__(self, frame: "Frame") -> None:
+            self.frame = frame
 
         def is_visible(self) -> bool:
-            return self.visible
+            return self.frame.visible
+
+        def evaluate(self, script: str) -> bool:
+            assert "dlgclose" in script and "readyState" in script
+            return self.frame.handler_ready
+
+        def bounding_box(self) -> dict[str, float]:
+            return self.frame.boxes.pop(0) if self.frame.boxes else self.frame.box
 
     class Frame:
-        def __init__(self, visible: bool) -> None:
+        def __init__(self, visible: bool, *, handler_ready: bool = True) -> None:
             self.visible = visible
+            self.handler_ready = handler_ready
+            self.box = {"x": 480.0, "y": 300.0, "width": 220.0, "height": 38.0}
+            self.boxes: list[dict[str, float]] = []
 
         def locator(self, selector: str) -> Locator:
             assert selector == "#confirmCreate"
-            return Locator(self.visible)
+            return Locator(self)
 
     class Page:
-        frames = [Frame(False), Frame(True)]
+        def __init__(self, frames: list[Frame]) -> None:
+            self.frames = frames
+            self.polls = 0
 
-        @staticmethod
-        def wait_for_timeout(_milliseconds: int) -> None:
-            raise AssertionError("visible locator should be found immediately")
+        def wait_for_timeout(self, _milliseconds: int) -> None:
+            self.polls += 1
 
-    locator = _confirm_create_locator(Page(), timeout_s=0.1)
+    # Regression: the button became visible while the dialog was still
+    # sliding in, the click did nothing, and `record` saw no saved patient.
+    # The locator is returned only after the button stops moving.
+    sliding = Frame(True)
+    sliding.boxes = [
+        {"x": 480.0, "y": 240.0, "width": 220.0, "height": 38.0},
+        {"x": 480.0, "y": 280.0, "width": 220.0, "height": 38.0},
+    ]
+    page = Page([Frame(False), sliding])
+    locator = _confirm_create_locator(page, timeout_s=5.0)
     assert locator.is_visible()
+    assert locator.bounding_box() == sliding.box
+    assert page.polls >= 3
+
+    # A visible button whose dialog script has not loaded is not clickable.
+    with pytest.raises(FixtureError, match="did not become ready"):
+        _confirm_create_locator(
+            Page([Frame(True, handler_ready=False)]), timeout_s=0.05
+        )
 
     recording = tmp_path / "recording"
     recording.mkdir()
@@ -644,133 +713,150 @@ def test_form_frame_requires_authentic_session_shell() -> None:
         _form_frame(DetachedPage())
 
 
-def test_openemr_adapter_binds_unique_control_to_exact_form_context() -> None:
-    class Control:
-        @staticmethod
-        def count() -> int:
-            return 1
+# A minimal stand-in for the pinned OpenEMR tab shell, served from a routed
+# origin (no server, no network): the patient form lives in the named iframe
+# at the real form path, and Save opens a duplicate-check iframe
+# (#modalframe) whose #confirmCreate performs the write. Only the DOM shape
+# matters here; no OpenEMR code or data is copied.
+_SHELL_HTML = """<!doctype html><html><head><script>
+window.restoreSession = () => true;
+window.actions = [];
+window.openDuplicateCheck = () => {
+  const frame = document.createElement('iframe');
+  frame.id = 'modalframe';
+  frame.src = '/interface/new/duplicate_check.html';
+  frame.style = 'position:absolute;left:320px;top:160px;width:420px;'
+    + 'height:180px;border:0;z-index:10;background:#fff';
+  document.body.appendChild(frame);
+};
+</script></head><body style="margin:0">
+<div style="height:40px">shell</div>
+<div><div><iframe name="openadapt-new-patient"
+  src="/interface/new/new_comprehensive.php"
+  style="position:absolute;left:20px;top:60px;width:900px;height:520px;border:0">
+</iframe></div></div>
+<iframe id="decoy" src="/decoy.html"
+  style="position:absolute;left:20px;top:600px;width:600px;height:80px;border:0">
+</iframe>
+</body></html>"""
+_FORM_HTML = """<!doctype html><html><body>
+<p>Name: <input id="form_fname" onclick="top.actions.push('fname')">
+<input id="form_lname" onclick="top.actions.push('lname')"></p>
+<button id="create"
+  onclick="top.actions.push('create'); top.openDuplicateCheck()">Create New Patient</button>
+</body></html>"""
+_DUPLICATE_HTML = """<!doctype html><html><body>
+<p>No matches were found.</p>
+<button id="confirmCreate" onclick="top.actions.push('confirm')">
+Confirm Create New Patient</button>
+</body></html>"""
+_DECOY_HTML = """<!doctype html><html><body>
+<input id="form_lname" onclick="top.actions.push('decoy')">
+</body></html>"""
 
-        @staticmethod
-        def bounding_box() -> dict[str, float]:
-            # Playwright reports frame-locator boxes in main-frame coordinates.
-            return {"x": 120, "y": 70, "width": 20, "height": 20}
 
-    class Frame:
-        url = "http://openemr/interface/new/new_comprehensive.php"
-
-        @staticmethod
-        def evaluate(script: str, _arg: object = None) -> object:
-            if "top.restoreSession" in script:
-                return True
-            assert "document.elementFromPoint" in script
-            return {
-                "selector": "#form_state",
-                "role": "combobox",
-                "fieldname": "state",
-                "target_kind": "field",
-                "target_id": "state",
-            }
-
-        @staticmethod
-        def locator(selector: str) -> Control:
-            assert selector == "#form_state"
-            return Control()
-
-    class Iframe:
-        @staticmethod
-        def count() -> int:
-            return 1
-
-        @staticmethod
-        def bounding_box() -> dict[str, float]:
-            return {"x": 100, "y": 50, "width": 500, "height": 700}
-
-        @staticmethod
-        def evaluate(script: str, point: list[int]) -> bool:
-            assert "document.elementFromPoint" in script
-            assert point == [130, 80]
-            return True
-
-    class Page:
-        viewport_size = {"width": 1280, "height": 800}
-
-        @staticmethod
-        def locator(selector: str) -> Iframe:
-            assert selector == 'iframe[name="openadapt-new-patient"]'
-            return Iframe()
-
-        @staticmethod
-        def frame(*, name: str) -> Frame:
-            assert name == "openadapt-new-patient"
-            return Frame()
-
-    backend = OpenEMRPlaywrightBackend(Page())  # type: ignore[arg-type]
-    locator = backend.structural_locator_at(130, 80)
-    assert locator == StructuralLocator(selector="#form_state", role="combobox")
-    handle = backend.locate_structural(locator)
-    assert handle is not None and handle.point == (130, 80)
-    assert json.loads(backend.structured_text_at(130, 80) or "") == {
-        "form_path": "/interface/new/new_comprehensive.php",
-        "target_kind": "field",
-        "target_id": "state",
+@pytest.fixture
+def openemr_shell():
+    sync = pytest.importorskip("playwright.sync_api")
+    pages = {
+        "/interface/main/tabs/main.php": _SHELL_HTML,
+        "/interface/new/new_comprehensive.php": _FORM_HTML,
+        "/interface/new/duplicate_check.html": _DUPLICATE_HTML,
+        "/decoy.html": _DECOY_HTML,
     }
 
+    def serve(route) -> None:
+        from urllib.parse import urlparse
 
-def test_openemr_adapter_resolves_confirmation_inside_unique_modal_frame() -> None:
-    class Confirm:
-        @staticmethod
-        def count() -> int:
-            return 1
+        body = pages.get(urlparse(route.request.url).path)
+        if body is None:
+            route.fulfill(status=404, body="")
+        else:
+            route.fulfill(status=200, body=body, content_type="text/html")
 
-        @staticmethod
-        def is_visible() -> bool:
-            return True
+    with sync.sync_playwright() as playwright:
+        browser = playwright.chromium.launch(headless=True)
+        page = browser.new_page(
+            viewport={"width": 1000, "height": 720}, device_scale_factor=1
+        )
+        page.route("http://openemr.invalid/**", serve)
+        page.goto("http://openemr.invalid/interface/main/tabs/main.php")
+        _form_frame(page, timeout_s=10.0).locator("#form_fname").wait_for()
+        yield OpenEMRPlaywrightBackend(page), page
+        browser.close()
 
-        @staticmethod
-        def bounding_box() -> dict[str, float]:
-            return {"x": 200, "y": 180, "width": 40, "height": 20}
 
-        @staticmethod
-        def evaluate(_script: str) -> bool:
-            return True
-
-    class Frame:
-        @staticmethod
-        def locator(selector: str) -> Confirm:
-            assert selector == "#confirmCreate"
-            return Confirm()
-
-    class Modal:
-        @staticmethod
-        def count() -> int:
-            return 1
-
-        @staticmethod
-        def evaluate(_script: str, point: list[int]) -> bool:
-            assert point == [220, 190]
-            return True
-
-    class Page:
-        frames = [Frame()]
-        viewport_size = {"width": 1280, "height": 800}
-
-        @staticmethod
-        def locator(selector: str) -> Modal:
-            assert selector == "#modalframe"
-            return Modal()
-
-    backend = OpenEMRPlaywrightBackend(Page())  # type: ignore[arg-type]
-    locator = backend.structural_locator_at(210, 185)
-    assert locator == StructuralLocator(
-        selector="openemr://confirm-create",
-        role="button",
-        name="Create New Patient",
+def _box_center(locator) -> tuple[int, int]:
+    locator.wait_for(state="visible", timeout=10_000)
+    box = locator.bounding_box()
+    assert box is not None
+    return (
+        int(round(box["x"] + box["width"] / 2)),
+        int(round(box["y"] + box["height"] / 2)),
     )
+
+
+def _act(backend: OpenEMRPlaywrightBackend, point: tuple[int, int]):
+    """Record-time locator, then replay-time guarded resolution and delivery."""
+    locator = backend.structural_locator_at(*point)
+    assert locator is not None
     handle = backend.locate_structural(locator)
-    assert handle is not None and handle.point == (220, 190)
-    assert json.loads(backend.structured_text_at(210, 185) or "")["target_id"] == (
+    assert handle is not None
+    receipt = backend.act_structural(locator, handle)
+    return locator, handle, receipt
+
+
+def test_openemr_adapter_delivers_guarded_dom_actions_in_the_form_frame(
+    openemr_shell,
+) -> None:
+    # Regression: the adapter returned handles without a target fingerprint,
+    # and guarded DOM actuation refused the first step of every compiled run.
+    backend, page = openemr_shell
+    form = _form_frame(page)
+    for selector in ("#form_fname", "#create"):
+        point = _box_center(form.locator(selector))
+        locator, handle, receipt = _act(backend, point)
+        assert locator.selector == selector
+        assert locator.frame_path  # bound to the exact hit-tested frame chain
+        assert handle.target_fingerprint
+        assert receipt.target_fingerprint == handle.target_fingerprint
+    assert json.loads(
+        backend.structured_text_at(*_box_center(form.locator("#form_fname"))) or ""
+    ) == {
+        "form_path": "/interface/new/new_comprehensive.php",
+        "target_kind": "field",
+        "target_id": "fname",
+    }
+
+    confirm = page.frame_locator("#modalframe").locator("#confirmCreate")
+    point = _box_center(confirm)
+    locator, handle, _receipt = _act(backend, point)
+    assert locator.selector == "#confirmCreate"
+    assert locator.frame_path == ["#modalframe"]
+    assert handle.target_fingerprint
+    assert json.loads(backend.structured_text_at(*point) or "")["target_id"] == (
         "confirm_create"
     )
+    assert page.evaluate("window.actions") == ["fname", "create", "confirm"]
+
+
+def test_openemr_adapter_refuses_form_control_outside_the_patient_form(
+    openemr_shell,
+) -> None:
+    # A same-id control in another frame is not the authenticated patient
+    # form's control: the adapter refuses it instead of clicking either one.
+    from openadapt_flow.backend import StructuralResolutionRefused
+
+    backend, page = openemr_shell
+    decoy_point = _box_center(page.frame_locator("#decoy").locator("#form_lname"))
+    locator = backend.structural_locator_at(*decoy_point)
+    assert locator is not None and locator.selector == "#form_lname"
+    with pytest.raises(StructuralResolutionRefused):
+        backend.locate_structural(locator)
+    # A locator from a bundle compiled before frame binding is refused too.
+    with pytest.raises(StructuralResolutionRefused):
+        backend.locate_structural(StructuralLocator(selector="#form_lname"))
+    assert page.evaluate("window.actions") == []
 
 
 def test_browser_setup_uses_authentic_shell_and_refuses_telemetry() -> None:

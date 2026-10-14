@@ -77,6 +77,23 @@ EXPECTED_TABLE_DELTAS: Mapping[str, Mapping[str, int]] = {
         "uuid_mapping": 12,
         "uuid_registry": 14,
     },
+    "recording": {
+        # The demonstration is the same browser save with no governed replay
+        # reads: only the recorder's one independent post-save REST capture.
+        # Auditing it against the compiled contract demanded the 12 engine
+        # reads a demonstration never makes, so `record` always refused.
+        "api_log": 1,
+        "clinical_rules_log": 1,
+        "contact": 1,
+        "history_data": 1,
+        "log": 229,
+        "log_comment_encrypt": 229,
+        "patient_data": 1,
+        "recent_patients": 1,
+        "user_settings": 2,
+        "uuid_mapping": 12,
+        "uuid_registry": 14,
+    },
 }
 MIN_FREE_BYTES = 15 * 1024**3
 ACTOR_SCOPE = "openid api:oemr user/patient.crus"

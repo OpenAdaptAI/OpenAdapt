@@ -11725,7 +11725,11 @@ class Replayer:
           pixels to the live crop re-cut at the resolved point. OCR collapses
           O/0 and l/1, the pixels do not. VERIFIES on a matching render,
           MISMATCHES on a localized glyph change, ABSTAINS under render drift
-          (see :func:`identity.verify_pixel_identity`).
+          (see :func:`identity.verify_pixel_identity`). It also abstains when
+          the identity band embeds a parameter whose run value differs from
+          the demonstrated value (the recorded crop shows the demo's value;
+          see :func:`identity.run_bound_identity_params`), unless identity
+          rests on a glyph-confusable identifier.
         - **tier 3 -- local-VLM veto (OPTIONAL, off by default).** Only when a
           verifier is injected (``self.identity_vlm``), identity rests on a
           glyph-confusable identifier, AND the cheaper tiers abstained: a
@@ -11798,7 +11802,46 @@ class Replayer:
                 )
             return _crops["rec"], _crops["live"]
 
+        def pixel_reference_is_run_bound() -> bool:
+            # The recorded crop pictures the DEMONSTRATION's screen. When the
+            # identity band embeds a parameter whose run value differs from the
+            # demonstrated one (a first name typed earlier in this run), the
+            # right record renders different pixels too, so a pixel compare
+            # measures the parameter change, not the record, and its verdict
+            # depends only on how the two values happen to render. The OCR
+            # tier's parameter check, which substitutes the run's value into
+            # the recorded band and requires the whole band, decides instead.
+            # A band resting on a glyph-confusable identifier keeps the pixel
+            # tier: OCR cannot separate O/0 there, so its verdict stands.
+            tmpl = anchor.identity_template
+            if tmpl is not None and tmpl.tokens:
+                embedded = list(tmpl.param_token_indices)
+                confusable = tmpl.rests_on_confusable_identifier
+            elif anchor.context_text:
+                embedded = identity_mod.embedded_params(
+                    anchor.context_text, workflow.params
+                )
+                confusable = identity_mod.identity_rests_on_confusable_identifier(
+                    anchor.context_text
+                )
+            else:
+                return False
+            run_values = runtime_params_for_gui(params)
+            bound = identity_mod.run_bound_identity_params(
+                embedded, run_values, workflow.params
+            )
+            if not bound or confusable:
+                return False
+            return not any(
+                identity_mod.identity_rests_on_confusable_identifier(
+                    run_values.get(name)
+                )
+                for name in bound
+            )
+
         def pixel_tier() -> Optional[IdentityCheck]:
+            if pixel_reference_is_run_bound():
+                return None  # defer to the OCR parameter check (see above)
             recorded_png, live_png = identifier_crops()
             return identity_mod.verify_pixel_identity(
                 recorded_png,

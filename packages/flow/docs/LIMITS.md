@@ -118,6 +118,13 @@ For an armed step:
   cross-render jitter of the same value no longer looks like a glyph change) and
   proven zero-false-accept on a synthetic cross-render battery, but its default
   is **off** (`runtime.identity.PIXEL_VERIFY_ENABLED`, see below).
+- the recorded identifier crop shows the demonstration's screen. When the
+  identity band contains a workflow parameter and the run's value differs from
+  the demonstrated one (for example, a first name typed earlier in the run),
+  the pixel tier doesn't compare the crops, because the right record renders
+  different pixels too. The OCR parameter check decides instead: it puts the
+  run's value into the recorded band and requires the whole band to match. A
+  band that rests on a glyph-confusable identifier keeps the pixel comparison.
 
 Permissive `replay` may proceed on an unreadable reversible target and reports
 that condition. Governed `run` requires an affirmative live verdict for every

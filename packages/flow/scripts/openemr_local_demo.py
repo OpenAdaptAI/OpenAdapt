@@ -36,6 +36,7 @@ from benchmark.openemr_local.fixture import (  # noqa: E402
     OpenEMRFixture,
     audit_table_deltas,
 )
+from openadapt_flow.backend import StructuralResolutionRefused  # noqa: E402
 from openadapt_flow.backends.playwright_backend import (  # noqa: E402
     PlaywrightBackend as _BasePlaywrightBackend,
 )
@@ -191,10 +192,16 @@ body { background: #f5f3ff !important; }
 class OpenEMRPlaywrightBackend(_BasePlaywrightBackend):
     """Structural adapter for the pinned patient form's exact iframe.
 
-    The general browser backend intentionally does not pierce iframes. This
-    benchmark adapter resolves unique ``#form_*`` controls only when the point
-    is topmost inside the authenticated new-patient frame. Identity binds the
-    control to that exact form path, never to an OCR-adjacent patient value.
+    The general browser backend resolves controls inside iframes and issues
+    the one-shot target fingerprint that guarded DOM actuation requires. This
+    benchmark adapter narrows what it may resolve: a ``#form_*`` or ``#create``
+    control only when it is unique and topmost inside the authenticated
+    new-patient frame, and ``#confirmCreate`` only when it is the unique
+    visible control inside the topmost duplicate-check ``#modalframe``. The
+    recorded frame path must equal the live hit-tested frame chain at that
+    control; the base backend then binds the guarded handle. Identity binds
+    the control to that exact form path, never to an OCR-adjacent patient
+    value.
     """
 
     _INNER_TARGET_JS = """([px, py]) => {
@@ -230,7 +237,10 @@ class OpenEMRPlaywrightBackend(_BasePlaywrightBackend):
             target_id: fieldname,
         };
     }"""
-    _CONFIRM_SELECTOR = "openemr://confirm-create"
+    _CONFIRM_SELECTOR = "#confirmCreate"
+    # Bundles compiled before frame binding recorded this virtual selector.
+    # It cannot be bound to a guarded DOM target, so it is refused.
+    _LEGACY_CONFIRM_SELECTOR = "openemr://confirm-create"
 
     def _confirm_target(self, x: int, y: int) -> dict[str, str] | None:
         """Return the unique visible duplicate-confirm button under a point."""
@@ -286,57 +296,65 @@ class OpenEMRPlaywrightBackend(_BasePlaywrightBackend):
 
     def structural_locator_at(self, x: int, y: int) -> StructuralLocator | None:
         target = self._confirm_target(x, y) or self._form_target(x, y)
+        located = super().structural_locator_at(x, y)
         if target is None:
-            return super().structural_locator_at(x, y)
+            return located
+        # The adapter's binding and the generic hit-tested frame chain must
+        # name the same control; otherwise no structural locator is recorded.
+        if (
+            located is None
+            or not located.frame_path
+            or located.selector != target.get("selector")
+        ):
+            return None
         return StructuralLocator(
             selector=target.get("selector"),
+            frame_path=located.frame_path,
             role=target.get("role"),
             name=target.get("name"),
         )
 
-    def locate_structural(
-        self, locator: StructuralLocator
-    ) -> StructuralHandle | None:
-        selector = locator.selector or ""
-        if selector == self._CONFIRM_SELECTOR:
-            try:
-                target = self._unique_visible_confirm_locator()
-                box = target.bounding_box()
-                if box is None or box["width"] <= 0 or box["height"] <= 0:
-                    return None
-                cx = int(round(box["x"] + box["width"] / 2))
-                cy = int(round(box["y"] + box["height"] / 2))
-                vw, vh = self.viewport
-                if not (0 <= cx < vw and 0 <= cy < vh):
-                    return None
-                topmost = target.evaluate(
-                    """el => {
-                        const box = el.getBoundingClientRect();
-                        const node = el.ownerDocument.elementFromPoint(
-                            box.x + box.width / 2, box.y + box.height / 2
-                        );
-                        return !!node && (node === el || el.contains(node));
-                    }"""
-                )
-                if not topmost:
-                    return None
-                modal = self.page.locator("#modalframe")
-                if modal.count() != 1:
-                    return None
-                modal_topmost = modal.evaluate(
-                    """(el, pt) => {
-                        const node = document.elementFromPoint(pt[0], pt[1]);
-                        return !!node && (node === el || el.contains(node));
-                    }""",
-                    [cx, cy],
-                )
-                if not modal_topmost:
-                    return None
-                return StructuralHandle(point=(cx, cy))
-            except Exception:
+    def _confirm_point(self) -> tuple[int, int] | None:
+        """Center of the unique visible confirmation inside the topmost modal."""
+        try:
+            target = self._unique_visible_confirm_locator()
+            box = target.bounding_box()
+            if box is None or box["width"] <= 0 or box["height"] <= 0:
                 return None
-        if not (selector.startswith("#form_") or selector == "#create"):
-            return super().locate_structural(locator)
+            cx = int(round(box["x"] + box["width"] / 2))
+            cy = int(round(box["y"] + box["height"] / 2))
+            vw, vh = self.viewport
+            if not (0 <= cx < vw and 0 <= cy < vh):
+                return None
+            topmost = target.evaluate(
+                """el => {
+                    const box = el.getBoundingClientRect();
+                    const node = el.ownerDocument.elementFromPoint(
+                        box.x + box.width / 2, box.y + box.height / 2
+                    );
+                    return !!node && (node === el || el.contains(node));
+                }"""
+            )
+            if not topmost:
+                return None
+            modal = self.page.locator("#modalframe")
+            if modal.count() != 1:
+                return None
+            modal_topmost = modal.evaluate(
+                """(el, pt) => {
+                    const node = document.elementFromPoint(pt[0], pt[1]);
+                    return !!node && (node === el || el.contains(node));
+                }""",
+                [cx, cy],
+            )
+            if not modal_topmost:
+                return None
+            return cx, cy
+        except Exception:
+            return None
+
+    def _form_control_point(self, selector: str) -> tuple[int, int] | None:
+        """Center of the unique, topmost control inside the patient form."""
         try:
             frame = _form_frame(self.page, timeout_s=1.0)
             loc = frame.locator(selector)
@@ -353,9 +371,39 @@ class OpenEMRPlaywrightBackend(_BasePlaywrightBackend):
             target = self._form_target(cx, cy)
             if target is None or target.get("selector") != selector:
                 return None
-            return StructuralHandle(point=(cx, cy))
+            return cx, cy
         except Exception:
             return None
+
+    def locate_structural(
+        self, locator: StructuralLocator
+    ) -> StructuralHandle | None:
+        selector = locator.selector or ""
+        if selector == self._LEGACY_CONFIRM_SELECTOR:
+            raise StructuralResolutionRefused(
+                "OpenEMR confirmation locator predates frame binding; "
+                "re-record and recompile the demonstration"
+            )
+        if selector == self._CONFIRM_SELECTOR:
+            point = self._confirm_point()
+        elif selector.startswith("#form_") or selector == "#create":
+            point = self._form_control_point(selector)
+        else:
+            return super().locate_structural(locator)
+        if point is None:
+            return None
+        live = self._frame_point(*point)
+        if live is None:
+            return None
+        if not live.frame_path or tuple(locator.frame_path or ()) != live.frame_path:
+            raise StructuralResolutionRefused(
+                f"OpenEMR control {selector} is not bound to the authenticated "
+                "patient-form frame chain"
+            )
+        # The base backend re-resolves the exact frame path and selector,
+        # proves the hit-tested chain again, and binds the one-shot token that
+        # guarded DOM actuation consumes.
+        return super().locate_structural(locator)
 
     def structured_text_at(self, x: int, y: int) -> str | None:
         target = self._confirm_target(x, y) or self._form_target(x, y)
@@ -478,17 +526,43 @@ def _apply_condition(backend: Any, condition: str) -> None:
         _form_frame(backend.page).add_style_tag(content=DRIFT_CSS)
 
 
+# The confirmation's onclick calls dlgclose(), defined by the dialog script
+# the popup loads. Clicking before that script ran, or while the modal is
+# still sliding in, does nothing: the dialog stays open and no patient is
+# saved. Readiness is the loaded document plus an unmoving button.
+_CONFIRM_READY_JS = """el => el.ownerDocument.readyState === 'complete'
+    && typeof el.ownerDocument.defaultView.dlgclose === 'function'"""
+CONFIRM_STABLE_POLLS = 3
+
+
 def _confirm_create_locator(page: Any, *, timeout_s: float = 30.0) -> Any:
-    """Find OpenEMR's duplicate-check confirmation inside its dialog iframe."""
+    """Find OpenEMR's duplicate-check confirmation once it can act."""
     deadline = time.monotonic() + timeout_s
+    last_box: Any = None
+    stable = 0
     while time.monotonic() < deadline:
+        ready = None
         for frame in page.frames:
             locator = frame.locator("#confirmCreate")
             try:
-                if locator.is_visible():
-                    return locator
+                if locator.is_visible() and locator.evaluate(_CONFIRM_READY_JS):
+                    ready = locator
+                    break
             except Exception:  # noqa: BLE001 - iframe may detach while polling
                 continue
+        box = None
+        if ready is not None:
+            try:
+                box = ready.bounding_box()
+            except Exception:  # noqa: BLE001 - iframe may detach while polling
+                box = None
+        if box is not None and box == last_box:
+            stable += 1
+            if stable >= CONFIRM_STABLE_POLLS - 1:
+                return ready
+        else:
+            stable = 0
+        last_box = box
         page.wait_for_timeout(200)
     # Preserve only bounded validation metadata, never entered values. This
     # turns a missing popup into a useful fail-closed form-contract error.
@@ -510,7 +584,7 @@ def _confirm_create_locator(page: Any, *, timeout_s: float = 30.0) -> Any:
         invalid_ids = []
         errors = []
     raise FixtureError(
-        "OpenEMR duplicate-check confirmation did not appear; "
+        "OpenEMR duplicate-check confirmation did not become ready; "
         f"invalid_controls={invalid_ids!r}; validation_errors={errors!r}"
     )
 
@@ -648,7 +722,9 @@ def record(fixture: OpenEMRFixture, out_dir: Path, *, headed: bool) -> Path:
             before_counts=before_counts,
             before_non_target_patient_sha256=before_patient_digest,
             before_history_data_sha256=before_history_digest,
-            arm="compiled",
+            # A demonstration makes no governed replay reads; it has its own
+            # exact delta contract (see fixture.EXPECTED_TABLE_DELTAS).
+            arm="recording",
         )
         verdict = classify_patient_trial(
             actor_reported_success=True,
