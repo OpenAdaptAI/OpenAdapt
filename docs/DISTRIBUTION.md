@@ -8,7 +8,7 @@ https://openadapt.ai/production-lifecycle.json (seven target admissions,
 https://openadapt.ai/production-workflow-admissions.json (seven synthetic
 admissions, `0.0.0-synthetic`). That isn't a customer job. Standard and
 Regulated need an active workflow admission for the exact bundle version.
-Demo and the synthetic tutorial may run without one.
+Demo and the synthetic sandbox may run without one.
 
 This document describes how the package is made installable and
 discoverable as an MCP server, the security-relevant distinction
@@ -27,7 +27,7 @@ server". Keep them separate.
 | **What it is** | the `openadapt-agent` package and its MCP server *program* | a user's compiled `openadapt-flow` workflow *bundle* |
 | **What it exposes** | PHI-safe workflow and Needs Attention projections plus opt-in governed run and attended-action tools | one customer's specific recorded workflow (its steps, parameters, recorded example values) |
 | **Where it lives** | PyPI + MCP registries (official, Smithery, mcp.so, Glama, PulseMCP) | the operator's own disk, passed at launch via `--bundles` |
-| **Ships in the package?** | yes — code only | **never** — no bundle is embedded in the wheel, `server.json`, or any registry listing. `serve --tutorial` generates the public synthetic MockMed bundle at serve time. |
+| **Ships in the package?** | yes — code only | **never** — no bundle is embedded in the wheel, `server.json`, or any registry listing. The zero-flag sandbox generates its synthetic MockMed workflow at serve time. |
 
 **Design consequence:** the published server takes the bundle directory
 as a launch-time argument (`--bundles <dir>`) and reads nothing about a
@@ -38,12 +38,13 @@ inside their trust boundary. The registry listing advertises the
 *capability*, not any workflow.
 
 **Read-only by default when registry-launched.** The official `server.json`
-omits `--allow-run`, and the MCPB `manifest.json` leaves both execution and
-attended actions off until the operator enables them in the install form. A
-default install yields PHI-safe inspection and Needs Attention tools only
-(`list_workflows`, `get_workflow`, `get_run_report`,
-`list_needs_attention`, and `get_attention_item`). Enabling workflow runs
-adds the dynamic `run_workflow_<opaque-id>` tools; enabling attended actions
+omits `--mode` and `--allow-run`, and the MCPB `manifest.json` leaves both
+execution and attended actions off until the operator enables them in the
+install form. A default install yields PHI-safe inspection and Needs
+Attention tools only (`list_workflows`, `get_run`, `get_workflow`,
+`get_run_report`, `list_needs_attention`, and `get_attention_item`).
+Enabling workflow runs adds `run_workflow` (the request-id contract) and the
+deprecated per-workflow `run_workflow_<opaque-id>` tools; enabling attended actions
 adds Reject, Teach, and Escalate, while a qualified deployment config also makes
 Continue and Skip available. Clients without MCP form elicitation use Flow's
 attended console/CLI, where all five capabilities remain available. This
@@ -70,21 +71,24 @@ truth; the machine-readable copies are [`../server.json`](../server.json)
 and [`../manifest.json`](../manifest.json).
 
 - **Name (reverse-DNS, official registry):** `io.github.OpenAdaptAI/openadapt-agent`
-- **Display name:** OpenAdapt Agent (openadapt-flow bridge)
+- **Display name:** OpenAdapt: your agent decides, OpenAdapt enters it and checks it saved
 - **PyPI package:** `openadapt-agent`
 - **Version:** `2.0.2` (staged in this repository; `2.0.1` is the newest version published to PyPI)
-- **Description:** OpenAdapt compiles demonstrated GUI workflows into programs. This package invokes them over MCP.
+- **Description:** Your AI agent decides what to enter. OpenAdapt enters it in the app and checks that it saved.
 - **Homepage / docs:** https://docs.openadapt.ai
 - **Repository:** https://github.com/OpenAdaptAI/openadapt-agent
 - **License:** MIT
 - **Transport:** stdio
-- **Run command (uvx):** `uvx --from 'openadapt-agent[tutorial]' openadapt-agent serve --allow-run`
-- **Config:** `--allow-run` with no `--bundles` (public synthetic bundle, generated at serve time), `--tutorial` (same path without implying run tools), `--authoring` (local Claude Code first demo; not the published registry recipe), `authoring connect` (outbound hosted mailbox; not the registry recipe), or `--bundles` (operator's private artifact), `--runs-dir`, `--allow-attended-actions`, qualified `--config` for Continue/Skip, and optional secret `OPENADAPT_BUNDLE_KEY`
+- **Run command (uvx):** `uvx --python 3.12 openadapt-agent serve` (the sandbox; from GitHub before 2.0.2 is on PyPI: `uvx --python 3.12 --from git+https://github.com/OpenAdaptAI/openadapt-agent openadapt-agent serve`)
+- **Config:** no flags (the synthetic sandbox; `--allow-run` and `--tutorial` without `--bundles` are older names for it), `--mode production --bundles <dir>` (run the operator's private workflows), `--mode attended` (also answer paused runs), `--bundles` alone (read-only), `--authoring` (local Claude Code first demo; not the published registry recipe), `authoring connect` (outbound hosted mailbox; not the registry recipe), `--runs-dir`, `--allow-attended-actions`, qualified `--config` for Continue/Skip, and optional secret `OPENADAPT_BUNDLE_KEY`
 - **Tools:**
-  - `list_workflows` / `get_workflow` — PHI-safe structural bundle projections with opaque IDs.
+  - `list_workflows` — one card per workflow: name, purpose, what done means, typed inputs.
+  - `run_workflow` — one request with the caller's `request_id`; returns `done` | `needs_review` | `not_sure_if_saved` | `did_not_run` (or `running` with a `run_id`), with `outputSchema` and `structuredContent`. The same `request_id` never writes twice.
+  - `get_run` — the result of a run by `run_id`.
+  - `get_workflow` — PHI-safe structural bundle projection by opaque id.
   - `get_run_report` — PHI-safe status and count summary; raw evidence stays local unless protected export was explicitly enabled.
   - `list_needs_attention` / `get_attention_item` — PHI-safe durable-pause cards and current signed-capability metadata.
-  - `run_workflow_<opaque-id>` — execute through the governed `openadapt-flow run` CLI when `--allow-run`; returns `success` | `halt` | `refused` | `timeout` | `error`.
+  - `run_workflow_<opaque-id>` — deprecated; executes through the governed `openadapt-flow run` CLI and returns `success` | `halt` | `refused` | `timeout` | `error` plus the contract fields. A verified run is `success` with `proof: "local"`.
   - `continue_attention` / `skip_attention` / `reject_attention` / `teach_attention` / `escalate_attention` — exact, elicited attended decisions under Flow's capability, idempotency, verification, and audit contract.
 - **Categories/tags:** mcp, agent-skills, automation, workflow, gui, governed, healthcare, rpa
 

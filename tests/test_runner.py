@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from pathlib import Path
 
 import pytest
 from conftest import FlowCliStub
@@ -35,7 +36,10 @@ def test_success_mapping(monkeypatch, runner_config, bundle_dir, success_report)
     public = outcome.to_dict()
     assert public["success"] is True
     assert public["sealed"] is False
-    assert public["requires_seal"] is True
+    assert public["requires_seal"] is False
+    assert public["outcome"] == "done"
+    assert public["proof"] == "local"
+    assert public["safe_to_retry"] is False
     assert public["frames_included"] is False
     blob = json.dumps(public)
     assert ".png" not in blob
@@ -63,19 +67,44 @@ def test_halt_maps_to_structured_halt_not_success(
     assert "report.json" in outcome.detail
 
 
-def test_halted_execution_outcome_tells_the_caller_the_record_did_not_change(
+def test_halt_before_effect_says_nothing_was_written(
     monkeypatch, runner_config, bundle_dir, halt_report
 ):
-    halt_report["execution_outcome"] = "HALTED"
-    halt_report["success"] = False
     stub = FlowCliStub(exit_code=1, report=halt_report)
     outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
     payload = outcome.to_dict()
     assert payload["status"] == "halt"
     assert payload["success"] is False
     assert payload["execution_outcome"] == "HALTED"
-    assert payload["message"].startswith("HALTED.")
-    assert "record did not change" in payload["message"]
+    assert payload["transaction_outcome"] == "HALTED_BEFORE_EFFECT"
+    assert payload["outcome"] == "needs_review"
+    assert "nothing was written" in payload["message"]
+
+
+def test_uncertain_delivery_never_says_the_record_did_not_change(
+    monkeypatch, runner_config, bundle_dir, halt_report
+):
+    halt_report["transaction_outcome"] = "RECONCILIATION_REQUIRED"
+    stub = FlowCliStub(exit_code=1, report=halt_report)
+    outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
+    payload = outcome.to_dict()
+    assert payload["status"] == "halt"
+    assert payload["outcome"] == "not_sure_if_saved"
+    assert payload["safe_to_retry"] is False
+    assert payload["record_changed"] == "unknown"
+    assert "did not change" not in payload["message"]
+    assert "nothing was written" not in payload["message"].lower()
+    assert "Don't retry" in payload["next_action"]
+
+
+def test_coarse_halt_without_transaction_outcome_makes_no_claim(
+    monkeypatch, runner_config, bundle_dir, halt_report
+):
+    del halt_report["transaction_outcome"]
+    stub = FlowCliStub(exit_code=1, report=halt_report)
+    payload = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir).to_dict()
+    assert payload["outcome"] == "not_sure_if_saved"
+    assert "may or may not be saved" in payload["message"]
 
 
 def test_exit_zero_with_failed_report_is_never_success(
@@ -95,6 +124,7 @@ def test_demo_completed_unverified_is_never_agent_success(
         {
             "execution_profile": "demo",
             "execution_outcome": "COMPLETED_UNVERIFIED",
+            "transaction_outcome": "COMPLETED_UNVERIFIED",
             "production_eligible": False,
         }
     )
@@ -106,12 +136,12 @@ def test_demo_completed_unverified_is_never_agent_success(
     assert outcome.execution_outcome == "COMPLETED_UNVERIFIED"
     assert outcome.to_dict()["success"] is False
     assert outcome.to_dict()["execution_outcome"] == "COMPLETED_UNVERIFIED"
-    assert "completed" in outcome.to_dict()["message"]
+    assert "finished the steps" in outcome.to_dict()["message"]
     assert "stopped safely" not in outcome.to_dict()["message"]
     assert "did not prove VERIFIED success" in outcome.detail
 
 
-def test_production_eligible_verified_without_a_seal_is_failure(
+def test_production_verified_without_a_seal_is_success_with_local_proof(
     monkeypatch, runner_config, bundle_dir, success_report
 ):
     success_report.update(
@@ -126,12 +156,14 @@ def test_production_eligible_verified_without_a_seal_is_failure(
     outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
     payload = outcome.to_dict()
 
-    assert payload["status"] == "error"
-    assert payload["success"] is False
+    assert payload["status"] == "success"
+    assert payload["success"] is True
     assert payload["sealed"] is False
-    assert payload["requires_seal"] is True
+    assert payload["proof"] == "local"
+    assert payload["outcome"] == "done"
     assert payload["execution_outcome"] == "VERIFIED"
-    assert "Unsigned production success is failure" in payload["message"]
+    assert "read the record back" in payload["message"]
+    assert "failure" not in payload["message"]
 
 
 def test_precise_verified_requires_consistent_legacy_success(
@@ -157,6 +189,7 @@ def test_precise_failed_report_maps_to_error_even_on_exit_zero(
     monkeypatch, runner_config, bundle_dir, halt_report
 ):
     halt_report["execution_outcome"] = "FAILED"
+    halt_report["transaction_outcome"] = "FAILED_PLATFORM"
     stub = FlowCliStub(exit_code=0, report=halt_report)
 
     outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
@@ -238,7 +271,8 @@ def test_inconsistent_precise_outcome_uses_the_public_error_message():
 
     public = outcome.to_dict()
     assert public["success"] is False
-    assert "trustworthy terminal result" in public["message"]
+    assert "can trust" in public["message"]
+    assert public["outcome"] == "not_sure_if_saved"
     assert "completed" not in public["message"]
 
 
@@ -259,7 +293,7 @@ def test_exit_two_is_governed_refusal(monkeypatch, runner_config, bundle_dir):
 
 
 def test_timeout_maps_to_timeout(monkeypatch, runner_config, bundle_dir):
-    def raise_timeout(cmd, capture_output=True, text=True, timeout=None):
+    def raise_timeout(cmd, capture_output=True, text=True, timeout=None, **kwargs):
         raise subprocess.TimeoutExpired(cmd, timeout, output=b"partial", stderr=b"")
 
     outcome = _run(monkeypatch, runner_config, raise_timeout, bundle_dir=bundle_dir)
@@ -269,7 +303,7 @@ def test_timeout_maps_to_timeout(monkeypatch, runner_config, bundle_dir):
 
 
 def test_missing_cli_maps_to_error(monkeypatch, runner_config, bundle_dir):
-    def raise_missing(cmd, capture_output=True, text=True, timeout=None):
+    def raise_missing(cmd, capture_output=True, text=True, timeout=None, **kwargs):
         raise FileNotFoundError(cmd[0])
 
     outcome = _run(monkeypatch, runner_config, raise_missing, bundle_dir=bundle_dir)
@@ -329,10 +363,80 @@ def test_operator_fixed_args_forwarded(monkeypatch, tmp_path, bundle_dir, succes
 
 
 @pytest.mark.parametrize("exit_code", [3, 130])
-def test_other_nonzero_exit_is_halt_with_evidence_pointer(exit_code):
+def test_other_nonzero_exit_without_report_is_uncertain(exit_code):
     outcome = classify_outcome("w", exit_code, None, stdout="boom", stderr="")
-    assert outcome.status == "halt"
-    assert outcome.to_dict()["success"] is False
+    assert outcome.status == "error"
+    public = outcome.to_dict()
+    assert public["success"] is False
+    assert public["outcome"] == "not_sure_if_saved"
+    assert public["safe_to_retry"] is False
+
+
+def test_legacy_success_flag_alone_is_finished_not_checked(legacy_success_report):
+    outcome = classify_outcome("w", 0, legacy_success_report)
+    public = outcome.to_dict()
+    assert public["success"] is False
+    assert public["outcome"] == "not_sure_if_saved"
+    assert public["label"] == "Finished, not checked"
+
+
+def test_refusal_carries_closed_failed_checks_not_flow_text():
+    stdout = "  [REFUSE] Certification passed: Jane Roe chart has 8 violations\n"
+    outcome = classify_outcome("w", 2, None, stdout=stdout)
+    public = outcome.to_dict()
+    assert public["status"] == "refused"
+    assert public["outcome"] == "did_not_run"
+    assert public["failed_checks"] == ["not_certified"]
+    assert "Jane Roe" not in str(public)
+
+
+def test_launch_failure_is_a_platform_error_that_may_retry(
+    monkeypatch, runner_config, bundle_dir
+):
+    def raise_missing(cmd, capture_output=True, text=True, timeout=None, **kwargs):
+        raise FileNotFoundError(cmd[0])
+
+    public = _run(monkeypatch, runner_config, raise_missing, bundle_dir=bundle_dir).to_dict()
+    assert public["outcome"] == "did_not_run"
+    assert public["reason"] == "platform_error"
+    assert public["safe_to_retry"] is True
+
+
+def test_failure_after_flow_made_its_run_dir_is_uncertain_not_retryable(
+    monkeypatch, runner_config, bundle_dir
+):
+    def fail_after_start(cmd, capture_output=True, text=True, timeout=None, **kwargs):
+        # Flow created its run directory (so it started), then reading its
+        # output failed in this process.
+        Path(cmd[cmd.index("--run-dir") + 1]).mkdir(parents=True)
+        raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+    public = _run(monkeypatch, runner_config, fail_after_start, bundle_dir=bundle_dir).to_dict()
+    assert public["outcome"] == "not_sure_if_saved"
+    assert public["safe_to_retry"] is False
+
+
+def test_flow_output_is_decoded_without_strict_errors(
+    monkeypatch, runner_config, bundle_dir, success_report
+):
+    stub = FlowCliStub(exit_code=0, report=success_report)
+    seen = {}
+
+    def capture(cmd, **kwargs):
+        seen.update(kwargs)
+        return stub(cmd)
+
+    _run(monkeypatch, runner_config, capture, bundle_dir=bundle_dir)
+    assert seen.get("errors") == "replace"
+
+
+def test_pre_allocated_run_id_is_used(monkeypatch, runner_config, bundle_dir, success_report):
+    stub = FlowCliStub(exit_code=0, report=success_report)
+    outcome = _run(
+        monkeypatch, runner_config, stub, bundle_dir=bundle_dir, run_id="run-" + "c" * 24
+    )
+    assert outcome.run_id == "run-" + "c" * 24
+    assert stub.calls[0][stub.calls[0].index("--run-dir") + 1].endswith("run-" + "c" * 24)
 
 
 @pytest.mark.parametrize(

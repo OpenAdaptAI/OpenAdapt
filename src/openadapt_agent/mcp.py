@@ -14,11 +14,16 @@ server. This package does not open an HTTP listener.
 
 from __future__ import annotations
 
+import io
 import json
 import logging
-from typing import Any
+import os
+import sys
+from contextlib import contextmanager
+from typing import Any, Iterator
 
 import anyio
+import mcp.server.stdio as _mcp_stdio
 import mcp.types as types
 from jsonschema import ValidationError, validate
 from mcp.server.lowlevel import Server
@@ -98,27 +103,43 @@ async def _confirm_attended_action(context: Any, name: str) -> None:
         )
 
 
-def _server_instructions(authoring: AuthoringBridge | None) -> str:
-    text = (
-        "Local bridge exposing compiled openadapt-flow workflow bundles "
-        "and PHI-safe Needs Attention items as tools. run_* tools execute via the governed "
-        "`openadapt-flow run` CLI and return a structured outcome: only "
-        "status 'success' means the workflow completed and verified. "
-        "'halt' means the run stopped and protected evidence remains in "
-        "the local operator experience; get_run_report returns only a "
-        "PHI-safe status/count summary by default. 'refused' means an "
-        "admission gate refused the bundle and nothing executed. "
-        "Continue/Skip require a human action "
-        "plus protocol-native operator elicitation, an exact signed "
-        "capability, live revalidation, and a stable idempotency key; they "
-        "never re-actuate the human-completed step. "
-        "Reject terminates the run and dispatches no new action, but earlier "
-        "run effects still require review of the protected local outcome. "
-        "Never report a halted, refused, timed-out, or error run as a success. "
-        "If execution_outcome is HALTED, tell the user the record did not change. "
-        "Write tools advertise requires_seal: true. If a write tool returns "
-        "unsigned success, treat it as failure."
-    )
+def _server_instructions(
+    authoring: AuthoringBridge | None, bridge: AgentBridge | None = None
+) -> str:
+    text = ""
+    if bridge is not None:
+        text = (
+            "OpenAdapt enters information into apps on this computer and checks "
+            "that it saved. Call list_workflows to see what it can do. Then call "
+            "run_workflow with a workflow name, its inputs, and your own "
+            "request_id for this piece of work. Act on the outcome: done means "
+            "saved and checked; needs_review means it stopped before saving and "
+            "a person decides, so don't start the same work again; "
+            "not_sure_if_saved means a person must check the record, so never "
+            "retry it; did_not_run means nothing was written, so fix the problem "
+            "and retry only when safe_to_retry is true. Reuse the same request_id "
+            "when you retry: the same id never writes twice. If the outcome is "
+            "running, call get_run with the run_id. Tell the user what_happened "
+            "in your own words and never call anything but done a success."
+        )
+        if bridge.mode == "sandbox":
+            text += (
+                " This server is a sandbox: it runs against a synthetic app, so "
+                "no real record changes. Use the sandbox_case input to see each "
+                "outcome."
+            )
+        if bridge.legacy_tools:
+            text += (
+                " Older tools stay available for existing clients: get_workflow, "
+                "get_run_report, list_needs_attention, get_attention_item, and "
+                "per-workflow run_<id> tools (deprecated; they take no "
+                "request_id). Attended Continue/Skip require a human action plus "
+                "protocol-native operator elicitation, an exact signed "
+                "capability, live revalidation, and a stable idempotency key; "
+                "they never re-actuate the human-completed step. Reject ends the "
+                "run and dispatches no new action, but earlier run effects still "
+                "require review of the protected local outcome."
+            )
     if authoring is not None:
         text += (
             " --authoring adds first-demo tools observe, start_record, click, "
@@ -130,7 +151,7 @@ def _server_instructions(authoring: AuthoringBridge | None) -> str:
             "enable run tools. This process must not be port-forwarded or "
             "served over HTTP."
         )
-    return text
+    return text.strip()
 
 
 def build_server(
@@ -158,6 +179,7 @@ def build_server(
                     if spec.annotations is not None
                     else None
                 ),
+                **({"outputSchema": spec.output_schema} if spec.output_schema else {}),
                 **({"_meta": spec.meta} if spec.meta is not None else {}),
             )
             for spec in _tool_specs()
@@ -176,7 +198,10 @@ def build_server(
             try:
                 validate(arguments or {}, spec.input_schema)
             except ValidationError:
-                raise BridgeError("tool arguments do not match the input schema") from None
+                raise BridgeError(
+                    getattr(spec, "usage", None)
+                    or "tool arguments do not match the input schema"
+                ) from None
             if name in ATTENDED_TOOLS:
                 await _confirm_attended_action(context, name)
 
@@ -222,12 +247,13 @@ def build_server(
             )
         # Both SDKs accept wire aliases in constructors. Always return the
         # explicit result type: MCP 2 no longer wraps a bare content list.
-        return types.CallToolResult(
-            content=[types.TextContent(type="text", text=json.dumps(result, indent=2))]
-        )
+        text = [types.TextContent(type="text", text=json.dumps(result, indent=2))]
+        if getattr(spec, "output_schema", None):
+            return types.CallToolResult(content=text, structuredContent=result)
+        return types.CallToolResult(content=text)
 
     if hasattr(Server, "list_tools"):
-        server = Server(SERVER_NAME, instructions=_server_instructions(authoring))
+        server = Server(SERVER_NAME, instructions=_server_instructions(authoring, bridge))
         server.list_tools()(_list_tools)
 
         async def _call_v1(name: str, arguments: dict[str, Any] | None):
@@ -245,11 +271,37 @@ def build_server(
 
         server = Server(
             SERVER_NAME,
-            instructions=_server_instructions(authoring),
+            instructions=_server_instructions(authoring, bridge),
             on_list_tools=_list_v2,
             on_call_tool=_call_v2,
         )
     return server
+
+
+@contextmanager
+def _protected_stdout() -> Iterator[Any]:
+    """Keep stray writes off the MCP wire on SDKs that don't divert fd 1.
+
+    Background runs call Flow and browser tooling, which may print. MCP 2's
+    stdio transport already points fd 1 at stderr while it serves; MCP 1's
+    does not, so this does it here and hands the transport a private copy.
+    """
+    if hasattr(_mcp_stdio, "_claim_fd"):
+        yield None
+        return
+    wire_fd = os.dup(1)
+    saved_fd = os.dup(1)
+    os.dup2(2, 1)
+    wire = os.fdopen(wire_fd, "wb")
+    try:
+        yield anyio.wrap_file(io.TextIOWrapper(wire, encoding="utf-8"))
+    finally:
+        try:
+            sys.stdout.flush()
+        except (OSError, ValueError):
+            pass
+        os.dup2(saved_fd, 1)
+        os.close(saved_fd)
 
 
 async def _run_stdio(
@@ -257,8 +309,12 @@ async def _run_stdio(
     authoring: AuthoringBridge | None = None,
 ) -> None:
     server = build_server(bridge, authoring=authoring)
-    async with stdio_server() as (read_stream, write_stream):
-        await server.run(read_stream, write_stream, server.create_initialization_options())
+    with _protected_stdout() as wire:
+        kwargs = {"stdout": wire} if wire is not None else {}
+        async with stdio_server(**kwargs) as (read_stream, write_stream):
+            await server.run(
+                read_stream, write_stream, server.create_initialization_options()
+            )
 
 
 def serve(

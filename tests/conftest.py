@@ -70,7 +70,7 @@ class FlowCliStub:
         self.stdout = "stub stdout"
         self.stderr = ""
 
-    def __call__(self, cmd, capture_output=True, text=True, timeout=None):
+    def __call__(self, cmd, capture_output=True, text=True, timeout=None, **kwargs):
         import subprocess
 
         self.calls.append(list(cmd))
@@ -84,11 +84,22 @@ class FlowCliStub:
         )
 
 
+def _precise(execution: str, transaction: str, *, success: bool, eligible: bool) -> dict:
+    """Outcome fields as openadapt-flow 1.35.1 writes them (standard profile)."""
+    return {
+        "success": success,
+        "execution_outcome": execution,
+        "transaction_outcome": transaction,
+        "execution_profile": "standard",
+        "production_eligible": eligible,
+    }
+
+
 @pytest.fixture()
 def success_report() -> dict:
     return {
         "workflow_name": "Demo Triage",
-        "success": True,
+        **_precise("VERIFIED", "VERIFIED", success=True, eligible=True),
         "results": [
             {"step_id": "s1", "intent": "Open the patient chart", "ok": True},
             {"step_id": "s2", "intent": "Type the triage note", "ok": True},
@@ -100,10 +111,21 @@ def success_report() -> dict:
 
 
 @pytest.fixture()
+def legacy_success_report() -> dict:
+    """A pre-precise-outcome report: only the legacy success flag."""
+    return {
+        "workflow_name": "Demo Triage",
+        "success": True,
+        "results": [{"step_id": "s1", "intent": "Open the patient chart", "ok": True}],
+        "model_calls": 0,
+    }
+
+
+@pytest.fixture()
 def halt_report() -> dict:
     return {
         "workflow_name": "Demo Triage",
-        "success": False,
+        **_precise("HALTED", "HALTED_BEFORE_EFFECT", success=False, eligible=False),
         "results": [
             {"step_id": "s1", "intent": "Open the patient chart", "ok": True},
             {

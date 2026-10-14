@@ -1,8 +1,8 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "io.github.OpenAdaptAI/openadapt-agent",
-  "title": "OpenAdapt Agent (openadapt-flow bridge)",
-  "description": "OpenAdapt compiles demonstrated GUI workflows into programs. This package invokes them over MCP.",
+  "title": "OpenAdapt: your agent decides, OpenAdapt enters it and checks it saved",
+  "description": "Your AI agent decides what to enter. OpenAdapt enters it in the app and checks that it saved.",
   "websiteUrl": "https://docs.openadapt.ai",
   "repository": {
     "url": "https://github.com/OpenAdaptAI/openadapt-agent",
@@ -47,7 +47,7 @@
   ],
   "_meta": {
     "io.modelcontextprotocol.registry/publisher-provided": {
-      "notes": "PHI-safe inspection and Needs Attention tools are available by default. Run tools require --allow-run. Reject, Teach, and Escalate require --allow-attended-actions; Continue and Skip also require --allow-attended-actions and a qualified deployment --config. Reject dispatches no new action, but earlier run actions may have effects and require review of the protected local outcome. See docs/DISTRIBUTION.md."
+      "notes": "Starts read-only with --bundles: list_workflows and get_run plus the older inspection tools. --mode production adds run_workflow, which takes the caller's request_id and returns done, needs_review, not_sure_if_saved, or did_not_run. --mode attended also adds Reject, Teach, and Escalate; Continue and Skip also need a qualified deployment --config. Without --bundles the server is a synthetic sandbox. See docs/DISTRIBUTION.md."
     }
   }
 }

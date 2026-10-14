@@ -20,7 +20,13 @@ except ModuleNotFoundError:  # pragma: no cover - Python 3.10 CI
     import tomli as tomllib
 
 from openadapt_agent import __version__
-from openadapt_agent.copy import IDENTITY_SENTENCE, SKILL_WHEN_TO_USE, THREE_LINE_INSTALL
+from openadapt_agent.copy import (
+    FIRST_COMMAND,
+    IDENTITY_SENTENCE,
+    OUTCOME_RULES,
+    PREVIEW_COMMAND,
+    SKILL_WHEN_TO_USE,
+)
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SERVER_JSON = REPO_ROOT / "server.json"
@@ -212,12 +218,18 @@ def test_llms_txt_lists_the_tool_surface() -> None:
     text = LLMS_TXT.read_text(encoding="utf-8")
     for token in (
         "list_workflows",
+        "run_workflow(workflow, inputs, request_id",
+        "get_run(run_id",
+        "not_sure_if_saved",
+        "safe_to_retry",
+        "add_triage_note",
+        "sandbox_case",
+        "--mode production",
         "get_workflow",
         "get_run_report",
         "list_needs_attention",
         "get_attention_item",
         "run_workflow_<opaque-id>",
-        "run_local_quickstart",
         "--tutorial",
         "--authoring",
         "observe",
@@ -227,9 +239,11 @@ def test_llms_txt_lists_the_tool_surface() -> None:
         "teach_attention",
         "escalate_attention",
         "docs.openadapt.ai",
+        PREVIEW_COMMAND.split(" -- ", 1)[1],
+        FIRST_COMMAND.split(" -- ", 1)[1],
         IDENTITY_SENTENCE,
     ):
-        assert token in text
+        assert token in text, token
 
 
 def _readme_first_paragraph() -> str:
@@ -256,37 +270,103 @@ def _readme_first_paragraph() -> str:
 def test_identity_sentence_is_shared() -> None:
     # Contracts, not marketing copy: MCP registry namespace via the PyPI
     # readme, the 100-char identity sentence shared with server.json / llms.txt
-    # / skill frontmatter, the findable install commands, Seal/unsigned honesty,
-    # and the ban on naming the skill "computer use".
-    # MCP registry server.json description maxLength is 100.
+    # / skill frontmatter, the findable commands, and the ban on naming the
+    # skill "computer use". MCP registry server.json description maxLength is 100.
     assert len(IDENTITY_SENTENCE) <= 100
     assert _readme_first_paragraph() == IDENTITY_SENTENCE
     assert IDENTITY_SENTENCE == _server_json()["description"]
-    assert IDENTITY_SENTENCE in LLMS_TXT.read_text(encoding="utf-8")
-    skill = REPO_ROOT / "skills" / "openadapt-gui-write" / "SKILL.md"
-    text = skill.read_text(encoding="utf-8")
-    assert f'description: "{IDENTITY_SENTENCE}"' in text
-    assert SKILL_WHEN_TO_USE in text
-    assert "name: computer-use" not in text.lower()
-    assert THREE_LINE_INSTALL in README.read_text(encoding="utf-8")
-    assert "serve --tutorial --allow-run" not in THREE_LINE_INSTALL
-    assert "openadapt-agent serve --allow-run" in README.read_text(encoding="utf-8")
-    assert "serve --authoring" in README.read_text(encoding="utf-8")
-    assert "serve --authoring" in LLMS_TXT.read_text(encoding="utf-8")
-    assert "authoring connect" in README.read_text(encoding="utf-8")
-    assert "authoring connect" in LLMS_TXT.read_text(encoding="utf-8")
-    assert "openadapt connect" in README.read_text(encoding="utf-8")
-    assert "https://openadapt.ai/start" in README.read_text(encoding="utf-8")
-    assert "https://openadapt.ai/start" in LLMS_TXT.read_text(encoding="utf-8")
-    assert "openadapt flow tutorial" in README.read_text(encoding="utf-8")
-    assert "openadapt quickstart --break-it" in README.read_text(encoding="utf-8")
-    assert "If the tool returns unsigned success, treat it as failure" in README.read_text(
+    llms = LLMS_TXT.read_text(encoding="utf-8")
+    readme = README.read_text(encoding="utf-8")
+    assert IDENTITY_SENTENCE in llms
+    skill = (REPO_ROOT / "skills" / "openadapt-gui-write" / "SKILL.md").read_text(
         encoding="utf-8"
     )
-    assert "Production success without a Seal is failure" in README.read_text(
-        encoding="utf-8"
-    )
-    assert "name: computer-use" not in README.read_text(encoding="utf-8").lower()
+    assert f'description: "{IDENTITY_SENTENCE}"' in skill
+    assert SKILL_WHEN_TO_USE in skill
+    assert OUTCOME_RULES in skill
+    assert "name: computer-use" not in skill.lower()
+    for command in (FIRST_COMMAND, PREVIEW_COMMAND):
+        assert command in readme
+        assert command in skill
+    assert "openadapt-agent serve --allow-run" in readme
+    assert "serve --authoring" in readme
+    assert "serve --authoring" in llms
+    assert "authoring connect" in readme
+    assert "authoring connect" in llms
+    assert "openadapt connect" in readme
+    assert "https://openadapt.ai/start" in readme
+    assert "https://openadapt.ai/start" in llms
+    assert "openadapt flow tutorial" in readme
+    assert "openadapt quickstart --break-it" in readme
+    assert "name: computer-use" not in readme.lower()
+
+
+def test_readme_leads_with_the_partner_contract() -> None:
+    readme = README.read_text(encoding="utf-8")
+    for token in (
+        "```mermaid",
+        "## What changes for your customer's team",
+        "## What your agent gets back",
+        "## Three tools",
+        "## Who builds what",
+        "list_workflows",
+        "run_workflow",
+        "get_run",
+        "request_id",
+        "done",
+        "needs_review",
+        "not_sure_if_saved",
+        "did_not_run",
+        "safe_to_retry",
+    ):
+        assert token in readme, token
+    assert readme.index("## What your agent gets back") < readme.index("## Developer setup")
+
+
+def test_retired_unsafe_claims_never_come_back() -> None:
+    surfaces = {
+        "README.md": README.read_text(encoding="utf-8"),
+        "llms.txt": LLMS_TXT.read_text(encoding="utf-8"),
+        "SKILL.md": (REPO_ROOT / "skills" / "openadapt-gui-write" / "SKILL.md").read_text(
+            encoding="utf-8"
+        ),
+        "server.json": SERVER_JSON.read_text(encoding="utf-8"),
+    }
+    for name, text in surfaces.items():
+        for retired in (
+            "treat it as failure",
+            "record did not change",
+            "Production success without a Seal is failure",
+            "Unsigned production success is failure",
+        ):
+            assert retired not in text, (name, retired)
+
+
+def _without_code(text: str) -> str:
+    return re.sub(r"```.*?```", "", text, flags=re.DOTALL)
+
+
+def test_business_section_of_readme_uses_plain_words() -> None:
+    """The partner-facing top avoids engine jargon; engineers get it below."""
+    readme = README.read_text(encoding="utf-8")
+    business = _without_code(readme.split("## Developer setup", 1)[0])
+    for jargon in (
+        "Seal",
+        "admission",
+        "admit",
+        "governed",
+        "oracle",
+        "effect contract",
+        "RECONCILIATION_REQUIRED",
+        "VERIFIED",
+        "HALTED",
+        "runner",
+        "MCP",
+        "substrate",
+        "fixture",
+        "\u2014",
+    ):
+        assert jargon not in business, jargon
 
 
 def test_mcpb_checker_allows_skill_markdown_not_bundles() -> None:

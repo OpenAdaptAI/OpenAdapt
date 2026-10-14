@@ -59,6 +59,12 @@ class WorkflowInfo:
     schema_version: int | None = None
     encrypted: bool = False
     load_error: str | None = None
+    #: Typed parameter facts from Flow's ``param_specs``: name -> ``{type,
+    #: choices}``. Recorded example values are deliberately not copied here.
+    param_types: dict[str, dict[str, Any]] = field(default_factory=dict)
+    #: Whether any step may change a record (Flow's fail-closed
+    #: ``is_consequential``). Unknown counts as True.
+    changes_records: bool = True
 
     @property
     def ok(self) -> bool:
@@ -96,7 +102,33 @@ def load_workflow_info(bundle_dir: Path, slug: str | None = None) -> WorkflowInf
         step_intents=[step.intent for step in wf.steps],
         schema_version=wf.schema_version,
         encrypted=encrypted,
+        param_types=_param_types(wf),
+        changes_records=_changes_records(wf),
     )
+
+
+def _param_types(workflow: Any) -> dict[str, dict[str, Any]]:
+    """Copy each declared parameter's type and choices, never its example."""
+    specs = getattr(workflow, "param_specs", None) or {}
+    types: dict[str, dict[str, Any]] = {}
+    for name, spec in specs.items():
+        kind = getattr(getattr(spec, "type", None), "value", getattr(spec, "type", None))
+        choices = [str(choice) for choice in (getattr(spec, "choices", None) or [])]
+        types[str(name)] = {
+            "type": str(kind) if kind else "string",
+            "choices": choices,
+        }
+    return types
+
+
+def _changes_records(workflow: Any) -> bool:
+    """Fail-closed: True unless Flow says no step is consequential."""
+    try:
+        from openadapt_flow.run_gate import is_consequential
+
+        return any(is_consequential(step, workflow) for step in workflow.steps)
+    except Exception:
+        return True
 
 
 def discover_bundles(root: Path) -> list[WorkflowInfo]:

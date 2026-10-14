@@ -42,6 +42,10 @@ def test_server_builds_and_lists_bridge_tools(bundles_root, runner_config, mcp_c
     names = [t["name"] for t in tools]
     assert {"list_workflows", "get_run_report", "list_needs_attention"} <= set(names)
     run_tools = [t for t in tools if t["name"].startswith("run_workflow_")]
+    contract = next(t for t in tools if t["name"] == "run_workflow")
+    assert contract["outputSchema"]["required"][0] == "outcome"
+    assert contract["inputSchema"]["required"] == ["workflow", "inputs", "request_id"]
+    assert contract["annotations"]["idempotentHint"] is True
     assert len(run_tools) == 1
     run_tool = run_tools[0]
     assert run_tool["inputSchema"]["properties"]["note"]["type"] == "string"
@@ -50,9 +54,8 @@ def test_server_builds_and_lists_bridge_tools(bundles_root, runner_config, mcp_c
     assert "governed" in run_tool["description"]
     assert run_tool["annotations"]["readOnlyHint"] is False
     assert run_tool["annotations"]["destructiveHint"] is True
-    assert run_tool["_meta"] == {"requires_seal": True}
-    assert "requires_seal: true" in run_tool["description"]
-    assert "unsigned success" in run_tool["description"]
+    assert run_tool["_meta"] == {"deprecated": True, "use_instead": "run_workflow"}
+    assert "Deprecated" in run_tool["description"]
     list_tool = next(t for t in tools if t["name"] == "list_needs_attention")
     assert list_tool["annotations"]["readOnlyHint"] is True
     assert list_tool.get("_meta") is None
@@ -71,6 +74,7 @@ def test_server_read_only_when_run_not_allowed(bundles_root, runner_config, mcp_
     names, payload, result = anyio.run(probe)
     assert names == [
         "list_workflows",
+        "get_run",
         "get_workflow",
         "get_run_report",
         "list_needs_attention",

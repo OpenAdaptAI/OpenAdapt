@@ -1,17 +1,18 @@
-"""``openadapt-agent`` CLI: serve bundles over MCP, emit Agent Skills.
+"""``openadapt-agent`` CLI: serve workflows over MCP, emit Agent Skills.
 
 Subcommands:
 
-- ``serve`` — expose compiled openadapt-flow bundles and the local Needs
-  Attention queue over MCP stdio. PHI-safe read-only tools are always on;
-  workflow runs and attended decisions require separate operator flags.
-  ``--authoring`` adds first-demo stdio tools and does not imply
-  ``--allow-run``.
+- ``serve`` — with no flags, a sandbox: one synthetic workflow that shows
+  every result your agent can get back. ``--mode production --bundles DIR``
+  serves an operator's compiled workflows; ``--mode attended`` also lets a
+  person at this computer answer paused runs. ``--bundles DIR`` alone stays
+  read-only. ``--authoring`` adds first-demo stdio tools and does not imply
+  runs.
 - ``authoring connect`` — outbound mailbox client for hosted ChatGPT.com /
   Claude.ai (claim ``oab_``, poll wait=0, Allow-per-sub). Not an HTTP
   listener. Overlay chrome stays Desktop-only.
-- ``emit-skill`` — emit a Claude Agent Skill folder for one bundle
-  (wraps ``openadapt-flow emit-skill`` and appends MCP + halt guidance).
+- ``emit-skill`` — write a PHI-safe Agent Skill for one workflow from its
+  card: purpose, inputs, and how to read the four outcomes.
 
 ``serve`` stays local stdio. Hosted ChatGPT.com reaches this computer through
 ``authoring connect`` (outbound HTTPS), not a port-forwarded MCP server.
@@ -35,9 +36,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="openadapt-agent",
         description=(
-            "Agent-facing bridge for openadapt-flow: expose compiled workflow "
-            "bundles, Needs Attention, and governed operator decisions as "
-            "local MCP tools and Agent Skills."
+            "Your AI agent decides what to enter. OpenAdapt enters it in the app "
+            "and checks that it saved. 'serve' with no flags starts a sandbox."
         ),
     )
     parser.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
@@ -45,17 +45,39 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser(
         "serve",
-        help="Serve a directory of workflow bundles as an MCP server (stdio)",
+        help=(
+            "Serve workflows to your AI agent over MCP (stdio). With no flags, "
+            "serve the sandbox."
+        ),
+    )
+    p.add_argument(
+        "--mode",
+        choices=("sandbox", "attended", "production"),
+        default=None,
+        help=(
+            "sandbox (default with no --bundles): one synthetic workflow that "
+            "shows every result. production: run the compiled workflows in "
+            "--bundles. attended: production plus decisions on paused runs by a "
+            "person at this computer. --bundles without --mode stays read-only."
+        ),
     )
     p.add_argument(
         "--bundles",
         default=None,
         help=(
             "Bundle directory: either one compiled bundle, or a directory "
-            "whose immediate subdirectories are bundles. Required unless "
-            "--authoring or --tutorial is set, or --allow-run is set with no "
-            "--bundles (synthetic tutorial). The published run recipe still "
-            "requires --bundles."
+            "whose immediate subdirectories are bundles. Needed for "
+            "--mode production and --mode attended."
+        ),
+    )
+    p.add_argument(
+        "--sandbox-engine",
+        choices=("auto", "flow", "simulated"),
+        default="auto",
+        help=(
+            "Advanced. flow drives the synthetic app in a hidden browser (needs "
+            "the tutorial extra); simulated returns the same results without "
+            "opening it. auto picks flow when it can."
         ),
     )
     p.add_argument(
@@ -77,19 +99,16 @@ def build_parser() -> argparse.ArgumentParser:
         "--tutorial",
         action="store_true",
         help=(
-            "Generate and serve the public synthetic tutorial (MockMed). "
-            "The bundle is created at serve time and is not vendored. "
-            "Implied by --allow-run when --bundles is omitted. "
-            "Synthetic only. Cannot be combined with --bundles, --url, "
-            "or --config."
+            "Older name for --mode sandbox. Synthetic only. Cannot be combined "
+            "with --bundles, --url, or --config."
         ),
     )
     p.add_argument(
         "--allow-run",
         action="store_true",
         help=(
-            "Register run_* tools (default: read-only tools only). Without "
-            "this flag no MCP client can execute anything."
+            "Older name for --mode production (with --bundles) or --mode sandbox "
+            "(without). Without a mode or this flag, --bundles stays read-only."
         ),
     )
     p.add_argument(
@@ -116,9 +135,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--allow-attended-actions",
         action="store_true",
         help=(
-            "Register governed Reject/Teach/Escalate tools for signed durable pauses. "
-            "With --config, also register Continue/Skip through Flow's "
-            "deployment-bound live verifier and deterministic resume path."
+            "Part of --mode attended. Register governed Reject/Teach/Escalate tools "
+            "for signed durable pauses. With --config, also register Continue/Skip "
+            "through Flow's deployment-bound live verifier and deterministic "
+            "resume path."
         ),
     )
     p.add_argument(
@@ -143,8 +163,11 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--runs-dir",
-        default="runs",
-        help="Directory for per-run output directories (default: ./runs)",
+        default=None,
+        help=(
+            "Directory for run records and evidence (default: ./runs; the "
+            "sandbox uses ~/.openadapt/agent-sandbox)"
+        ),
     )
     p.add_argument(
         "--timeout",
@@ -246,38 +269,59 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "emit-skill",
         help=(
-            "Emit a Claude Agent Skill folder for a bundle (wraps "
-            "`openadapt-flow emit-skill`, appends MCP + halt guidance)"
+            "Write an Agent Skill for one workflow: what it does, its inputs, and "
+            "how to read the result. No recorded values, step text, or secrets."
         ),
     )
     p.add_argument("bundle", help="Workflow bundle directory")
     p.add_argument("--out", required=True, help="Parent directory for the skill folder")
+    p.add_argument(
+        "--include-bundle",
+        action="store_true",
+        help=(
+            "Also copy the compiled bundle next to SKILL.md. The copy is protected "
+            "workflow data; install it only where that data may live."
+        ),
+    )
     p.set_defaults(func=_cmd_emit_skill)
 
     return parser
+
+
+def _resolve_mode(args: argparse.Namespace) -> Optional[str]:
+    """Pick the server mode from --mode and the older flags it replaces.
+
+    Returns None for an authoring-only server. Raises ValueError with the
+    message to print when the flags conflict.
+    """
+    if args.mode is not None:
+        if args.mode == "sandbox":
+            if args.bundles:
+                raise ValueError("--mode sandbox cannot be combined with --bundles")
+            return "sandbox"
+        if not args.bundles:
+            raise ValueError(f"--mode {args.mode} needs --bundles")
+        args.allow_run = True
+        if args.mode == "attended":
+            args.allow_attended_actions = True
+        return args.mode
+    if args.tutorial:
+        return "sandbox"
+    if args.bundles:
+        # Older flags: a person can answer paused runs with or without runs.
+        return "attended" if args.allow_attended_actions else "production"
+    if args.authoring:
+        return None
+    return "sandbox"
 
 
 def _cmd_serve(args: argparse.Namespace) -> int:
     from openadapt_agent.bridge import AgentBridge
     from openadapt_agent.flow_service import open_attended_service
     from openadapt_agent.mcp import serve
-    from openadapt_agent.tutorial import TutorialError, prepare_tutorial_session
-
     from openadapt_agent.runner import default_flow_cli
+    from openadapt_agent.tutorial import TutorialError
 
-    if args.allow_attended_actions and args.flow_cli:
-        print(
-            "serve: attended actions require the openadapt-flow installed in "
-            "this interpreter; --flow-cli cannot select a different runtime",
-            file=sys.stderr,
-        )
-        return 2
-    if args.allow_synthetic_recorded_defaults and not args.allow_run:
-        print(
-            "serve: --allow-synthetic-recorded-defaults requires --allow-run",
-            file=sys.stderr,
-        )
-        return 2
     if args.authoring and args.tutorial:
         print("serve: --authoring cannot be combined with --tutorial", file=sys.stderr)
         return 2
@@ -288,40 +332,55 @@ def _cmd_serve(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-    if not args.tutorial and not args.bundles and not args.authoring:
-        if args.allow_run:
-            # Day-1 partner kit: `openadapt-agent serve --allow-run` hosts
-            # the synthetic tutorial. Registry installs still pass --bundles
-            # and stay read-only until this flag is set.
-            args.tutorial = True
-        else:
-            print(
-                "serve: provide --bundles, --tutorial, or --authoring "
-                "(or --allow-run for the synthetic tutorial)",
-                file=sys.stderr,
-            )
-            return 2
     if args.tutorial and (args.bundles or args.url or args.config):
         print(
             "serve: --tutorial cannot be combined with --bundles, --url, or --config",
             file=sys.stderr,
         )
         return 2
+    try:
+        mode = _resolve_mode(args)
+    except ValueError as exc:
+        print(f"serve: {exc}", file=sys.stderr)
+        return 2
+    # After mode resolution, so --mode attended is covered too.
+    if args.allow_attended_actions and args.flow_cli:
+        print(
+            "serve: attended actions require the openadapt-flow installed in "
+            "this interpreter; --flow-cli cannot select a different runtime",
+            file=sys.stderr,
+        )
+        return 2
+    if mode == "sandbox" and (args.url or args.config):
+        print(
+            "serve: the sandbox runs a synthetic app; --url and --config need "
+            "--mode production --bundles DIR",
+            file=sys.stderr,
+        )
+        return 2
+    if args.allow_synthetic_recorded_defaults and not (args.allow_run and args.bundles):
+        print(
+            "serve: --allow-synthetic-recorded-defaults requires --allow-run",
+            file=sys.stderr,
+        )
+        return 2
 
-    extra_run_args = list(args.extra_run_arg)
-    tutorial_session = None
+    sandbox_engine = None
     authoring_bridge = None
-    bundles_dir = args.bundles
-    url = args.url
-    deployment_config = args.config
-    policy = args.policy
-    public_synthetic = False
     try:
         if args.authoring:
             from openadapt_agent.authoring import AuthoringBridge, AuthoringError
             from openadapt_agent.authoring import open_authoring_session
 
-            authoring_dir = Path(args.runs_dir).expanduser().resolve() / "authoring"
+            if args.runs_dir:
+                authoring_root = Path(args.runs_dir)
+            elif mode == "sandbox":
+                from openadapt_agent.sandbox import default_sandbox_dir
+
+                authoring_root = default_sandbox_dir()
+            else:
+                authoring_root = Path("runs")
+            authoring_dir = authoring_root.expanduser().resolve() / "authoring"
             try:
                 authoring_bridge = AuthoringBridge(
                     open_authoring_session(
@@ -334,23 +393,8 @@ def _cmd_serve(args: argparse.Namespace) -> int:
             except AuthoringError as exc:
                 print(f"serve: {exc}", file=sys.stderr)
                 return 2
-        if args.tutorial:
-            work_dir = Path(args.runs_dir).expanduser().resolve() / "synthetic-tutorial"
-            tutorial_session = prepare_tutorial_session(
-                work_dir,
-                headed=args.headed,
-            )
-            bundles_dir = str(tutorial_session.bundle_dir)
-            url = tutorial_session.url
-            deployment_config = str(tutorial_session.deployment_config)
-            policy = policy or "clinical-write"
-            public_synthetic = True
-            if "--profile" not in extra_run_args:
-                extra_run_args.extend(["--profile", "standard"])
-            if args.headed and "--headed" not in extra_run_args:
-                extra_run_args.append("--headed")
 
-        if bundles_dir is None and authoring_bridge is not None:
+        if mode is None:
             print(
                 f"openadapt-agent {__version__}: authoring tools enabled over "
                 "local stdio; run tools disabled; --authoring does not imply "
@@ -358,53 +402,82 @@ def _cmd_serve(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             _serve(serve, None, authoring_bridge)
-        else:
-            runner_config = RunnerConfig(
-                flow_cli=(
-                    tuple(shlex.split(args.flow_cli)) if args.flow_cli else default_flow_cli()
-                ),
-                runs_dir=Path(args.runs_dir),
-                url=url,
-                deployment_config=deployment_config,
-                policy=policy,
-                timeout_s=args.timeout,
-                allow_url_override=args.allow_url_override,
-                extra_run_args=tuple(extra_run_args),
+            return 0
+
+        if mode == "sandbox":
+            from openadapt_agent.sandbox import SandboxEngine, default_sandbox_dir
+
+            runs_dir = Path(args.runs_dir).expanduser() if args.runs_dir else default_sandbox_dir()
+            runs_dir.mkdir(parents=True, exist_ok=True)
+            sandbox_engine = SandboxEngine(
+                runs_dir, engine=args.sandbox_engine, headed=args.headed
             )
-            with open_attended_service(
-                enabled=args.allow_attended_actions,
-                deployment_config=deployment_config,
-                url=url,
-                headed=args.headed,
-                allow_model_grounding=args.allow_model_grounding,
-            ) as attended_service:
-                bridge = AgentBridge(
-                    Path(bundles_dir),
-                    runner_config,
-                    allow_run=args.allow_run,
-                    allow_attended_actions=args.allow_attended_actions,
-                    attended_service=attended_service,
-                    allow_protected_export=args.allow_protected_export,
-                    allow_recorded_defaults=args.allow_synthetic_recorded_defaults,
-                    public_synthetic=public_synthetic,
+            bridge = AgentBridge(
+                None,
+                RunnerConfig(runs_dir=runs_dir, timeout_s=args.timeout),
+                sandbox=sandbox_engine,
+                mode="sandbox",
+            )
+            note = ""
+            if sandbox_engine.unavailable_reason == "browser_extra_missing":
+                note = (
+                    " To drive the synthetic app in a hidden browser instead, "
+                    "install the tutorial extra."
                 )
-                n = len(bridge.workflows)
-                print(
-                    f"openadapt-agent {__version__}: serving {n} workflow(s) "
-                    "over local stdio; run tools "
-                    f"{'enabled' if args.allow_run else 'disabled'}; attended "
-                    f"decisions {'enabled' if args.allow_attended_actions else 'disabled'}; "
-                    "live Continue/Skip "
-                    f"{'ready' if bridge.attended.live_actions_ready else 'not configured'}; "
-                    "protected MCP export "
-                    f"{'ENABLED' if args.allow_protected_export else 'disabled'}; "
-                    "synthetic recorded defaults "
-                    f"{'ENABLED' if args.allow_synthetic_recorded_defaults else 'disabled'}; "
-                    f"tutorial {'enabled' if args.tutorial else 'disabled'}; "
-                    f"authoring {'enabled' if authoring_bridge is not None else 'disabled'}",
-                    file=sys.stderr,
-                )
-                _serve(serve, bridge, authoring_bridge)
+            print(
+                f"openadapt-agent {__version__}: sandbox mode. One workflow "
+                f"({next(iter(bridge.catalog))}) on a synthetic app; engine "
+                f"{sandbox_engine.engine}. Tools: list_workflows, run_workflow, "
+                f"get_run. Nothing real changes.{note}",
+                file=sys.stderr,
+            )
+            _serve(serve, bridge, authoring_bridge)
+            return 0
+
+        extra_run_args = list(args.extra_run_arg)
+        runner_config = RunnerConfig(
+            flow_cli=(tuple(shlex.split(args.flow_cli)) if args.flow_cli else default_flow_cli()),
+            runs_dir=Path(args.runs_dir or "runs"),
+            url=args.url,
+            deployment_config=args.config,
+            policy=args.policy,
+            timeout_s=args.timeout,
+            allow_url_override=args.allow_url_override,
+            extra_run_args=tuple(extra_run_args),
+        )
+        with open_attended_service(
+            enabled=args.allow_attended_actions,
+            deployment_config=args.config,
+            url=args.url,
+            headed=args.headed,
+            allow_model_grounding=args.allow_model_grounding,
+        ) as attended_service:
+            bridge = AgentBridge(
+                Path(args.bundles),
+                runner_config,
+                allow_run=args.allow_run,
+                allow_attended_actions=args.allow_attended_actions,
+                attended_service=attended_service,
+                allow_protected_export=args.allow_protected_export,
+                allow_recorded_defaults=args.allow_synthetic_recorded_defaults,
+                mode=mode,
+            )
+            n = len(bridge.workflows)
+            print(
+                f"openadapt-agent {__version__}: {mode} mode; serving {n} workflow(s) "
+                "over local stdio; run tools "
+                f"{'enabled' if args.allow_run else 'disabled (read-only)'}; attended "
+                f"decisions {'enabled' if args.allow_attended_actions else 'disabled'}; "
+                "live Continue/Skip "
+                f"{'ready' if bridge.attended.live_actions_ready else 'not configured'}; "
+                "protected MCP export "
+                f"{'ENABLED' if args.allow_protected_export else 'disabled'}; "
+                "synthetic recorded defaults "
+                f"{'ENABLED' if args.allow_synthetic_recorded_defaults else 'disabled'}; "
+                f"authoring {'enabled' if authoring_bridge is not None else 'disabled'}",
+                file=sys.stderr,
+            )
+            _serve(serve, bridge, authoring_bridge)
     except TutorialError as exc:
         print(f"serve: {exc}", file=sys.stderr)
         return 2
@@ -412,8 +485,8 @@ def _cmd_serve(args: argparse.Namespace) -> int:
         print(f"serve: {exc}", file=sys.stderr)
         return 2
     finally:
-        if tutorial_session is not None:
-            tutorial_session.close()
+        if sandbox_engine is not None:
+            sandbox_engine.close()
         if authoring_bridge is not None:
             closer = getattr(authoring_bridge.session, "close", None)
             if callable(closer):
@@ -446,7 +519,13 @@ def _cmd_authoring_connect(args: argparse.Namespace) -> int:
 def _cmd_emit_skill(args: argparse.Namespace) -> int:
     from openadapt_agent.skill import emit_agent_skill
 
-    skill_dir = emit_agent_skill(Path(args.bundle), Path(args.out))
+    try:
+        skill_dir = emit_agent_skill(
+            Path(args.bundle), Path(args.out), include_bundle=args.include_bundle
+        )
+    except ValueError as exc:
+        print(f"emit-skill: {exc}", file=sys.stderr)
+        return 2
     print(f"Wrote Agent Skill folder: {skill_dir}")
     return 0
 

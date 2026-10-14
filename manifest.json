@@ -3,8 +3,8 @@
   "name": "openadapt-agent",
   "display_name": "OpenAdapt",
   "version": "2.0.2",
-  "description": "Governed local MCP bridge for compiled OpenAdapt workflows and attended decisions.",
-  "long_description": "Inspect compiled workflows, run them through OpenAdapt's policy and verification gates, and resolve durable Needs Attention items. The server runs locally; workflow bundles and protected evidence stay on the operator's machine by default.",
+  "description": "Lets your AI agent enter information in an app with no API and get back whether it saved.",
+  "long_description": "Your agent sends a workflow name, its inputs, and its own request id. OpenAdapt enters the values in the app's own screens on this computer, reads the saved record back, and returns done, needs review, not sure if saved, or did not run. The same request id never writes twice. Workflow files and evidence stay on this computer.",
   "author": {
     "name": "OpenAdaptAI",
     "email": "contact@openadapt.ai",
@@ -44,23 +44,31 @@
   "tools": [
     {
       "name": "list_workflows",
-      "description": "List PHI-safe projections of locally compiled OpenAdapt workflows."
+      "description": "List each workflow's name, purpose, what done means, and typed inputs."
+    },
+    {
+      "name": "run_workflow",
+      "description": "Run one workflow with your request id and get done, needs_review, not_sure_if_saved, or did_not_run."
+    },
+    {
+      "name": "get_run",
+      "description": "Get the result of a run that was still going."
     },
     {
       "name": "get_workflow",
-      "description": "Inspect one workflow's governed, PHI-safe capability summary."
+      "description": "Older tool: one workflow's structural summary."
     },
     {
       "name": "get_run_report",
-      "description": "Read a PHI-safe status and count summary for a run created by this server."
+      "description": "Older tool: a status and count summary for a run on this server."
     },
     {
       "name": "list_needs_attention",
-      "description": "List durable workflow pauses that need an operator decision."
+      "description": "List paused runs that need a person's decision."
     },
     {
       "name": "get_attention_item",
-      "description": "Inspect one PHI-safe Needs Attention item and its allowed actions."
+      "description": "Inspect one paused run and its allowed decisions."
     }
   ],
   "tools_generated": true,
@@ -69,8 +77,10 @@
     "automation",
     "workflow",
     "gui",
-    "governed",
-    "attended"
+    "ai-agents",
+    "ehr",
+    "rpa",
+    "human-in-the-loop"
   ],
   "license": "MIT",
   "compatibility": {
@@ -99,8 +109,8 @@
     },
     "allow_run": {
       "type": "boolean",
-      "title": "Allow governed workflow runs",
-      "description": "Add run tools. Every run still passes OpenAdapt's admission, identity, policy, and effect-verification gates.",
+      "title": "Allow workflow runs",
+      "description": "Add run_workflow. Every run still passes OpenAdapt's admission, right-record, policy, and record-check gates, and the same request id never writes twice.",
       "required": false,
       "default": false
     },

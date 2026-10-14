@@ -1,47 +1,65 @@
 # openadapt-agent
 
-> OpenAdapt compiles demonstrated GUI workflows into programs. This package invokes them over MCP.
+> Your AI agent decides what to enter. OpenAdapt enters it in the app and checks that it saved.
 
-Default runtime interface for a calling agent. Computer-use agents are the user of OpenAdapt. They are not the executor inside it. Never summarize halt as success. Roles: operator (calling agent), authority (named human admits; a local agent may click while they watch), auditor (samples seals). Hosted ChatGPT.com and Claude.ai can't click the user's GUI; send them to https://openadapt.ai/start. Unsigned success is failure. Standard and Regulated need a workflow admission; Demo and the synthetic tutorial may run without one. Target admissions: https://openadapt.ai/production-lifecycle.json (seven, remote-safe-synthetic). Workflow admissions: https://openadapt.ai/production-workflow-admissions.json (seven, 0.0.0-synthetic, not a customer job).
+Use this when an AI agent has decided what to enter in an app with no usable API, such as an EMR, a payer portal, or a desktop or Citrix app. OpenAdapt enters the values in the same screens staff use, on a computer the customer controls, then reads the saved record back. When something doesn't match, it stops and a person decides. A normal run makes no AI model calls.
 
-## What it provides
+## The contract: three tools
 
-- `openadapt-agent serve --allow-run`: generate and serve the public synthetic tutorial at serve time. `openadapt-agent serve --tutorial` is the same path without run tools. `openadapt-agent serve --bundles <dir> [--allow-run]`: serve a private compiled bundle. `openadapt-agent serve --authoring`: local Claude Code first-demo tools `observe`, `start_record`, `click`, and `halt` over stdio. `--authoring` does not enable run tools and does not open an HTTP listener. `openadapt-agent authoring connect <openadapt://runner or pack URL>`: outbound mailbox client for hosted ChatGPT.com / Claude.ai (claim `oab_`, poll wait=0, Allow-per-sub, Continue via `record_observed`). Overlay chrome stays Desktop-only. Hosted MCP is `https://openadapt.ai/mcp`. `list_workflows`, `get_workflow`, `get_run_report`, `list_needs_attention`, and `get_attention_item` are always available as PHI-safe read-only projections. `run_workflow_<opaque-id>` tools require `--allow-run`. The synthetic tutorial registers `run_local_quickstart`. If a run returns HALTED, tell the user the record did not change. Never summarize halt, refused, timeout, or error as success.
-- `--allow-attended-actions` adds exact Reject, Teach, and Escalate tools for signed durable pauses. With a qualified Flow `--config`, the same server also exposes Continue and Skip through Flow's deployment-bound live verifier and deterministic resume path.
-- `openadapt-agent emit-skill <bundle> --out <dir>` wraps Flow's skill emitter and appends MCP, halt, and attended-action guidance.
+- `list_workflows`: each workflow's `name`, `purpose`, `done_means`, and typed `inputs` (types, enums, formats).
+- `run_workflow(workflow, inputs, request_id, wait_seconds?)`: one piece of work. `request_id` is the caller's own id and is required. The same `request_id` returns the first result and never writes twice.
+- `get_run(run_id, wait_seconds?)`: the result of a run that returned `outcome: running`.
 
-## Attended actions
+Every result has `outcome`, `safe_to_retry`, `what_happened` (one plain sentence), `next_action`, `proof`, `run_id`, and `request_id`. Tools publish an MCP `outputSchema` and return `structuredContent`.
 
-- `continue_attention`: after the local operator completes the paused task, Flow verifies the exact outcome and resumes without actuating that task again.
-- `skip_attention`: applies only a compiled, non-consequential skip that Flow revalidates at decision time.
-- `reject_attention`: terminates this run and dispatches no new action. Earlier run actions may have effects, so review the protected local report and transaction outcome. Use escalation when a qualified operator can still continue the run.
-- `teach_attention`: records an audited corrective-demonstration request; Flow's revision and regression gates still decide promotion.
-- `escalate_attention`: records escalation and preserves the exact durable pause.
+## Outcomes (the honesty rules)
 
-All mutations require an exact capability digest, a stable idempotency key, action-specific confirmation, and MCP form elicitation. Clients without form elicitation use Flow's attended console/CLI; the capabilities are not removed or converted to read-only.
+- `done`: saved and checked by reading the record back. `proof` is `local` (checked on the customer's computer), `sealed` (signed receipt), or `simulated` (sandbox, no app opened). A verified local run is done; it is never reported as an error.
+- `needs_review`: stopped before saving; nothing was written; a person decides. Don't start the same work again.
+- `not_sure_if_saved`: a save may have gone through. Never retry. A person checks the record. Never tell the user nothing changed.
+- `did_not_run`: nothing was written. Fix the cause and retry with the same `request_id` when `safe_to_retry` is true.
 
-## Run outcomes (honesty invariant)
+Only `done` is a success. Results come from openadapt-flow's `transaction_outcome`, never from the coarse halt label alone.
 
-- `success`: exit 0 AND the persisted `report.json` marks the run successful. Only then did the workflow complete.
-- `halt`: execution stopped instead of guessing. It is not a success; protected evidence remains in the local operator experience.
-- `refused`: a governed admission gate refused the bundle before execution; nothing ran.
-- `timeout` / `error`: killed at the deadline / infrastructure problem.
+## Try it
+
+`openadapt-agent serve` with no flags is a sandbox: one workflow, `add_triage_note`, on MockMed, a synthetic clinic app. The `sandbox_case` input picks the outcome: `normal` (done), `duplicate_record` (needs_review), `false_saved_banner` and `timeout_after_save` (not_sure_if_saved), `app_offline` (did_not_run). Install the `tutorial` extra to drive the synthetic app with the real engine; otherwise results are simulated and say so.
+
+- From GitHub (before 2.0.2 is on PyPI): `claude mcp add openadapt -- uvx --python 3.12 --from git+https://github.com/OpenAdaptAI/openadapt-agent openadapt-agent serve`
+- From PyPI 2.0.2 on: `claude mcp add openadapt -- uvx --python 3.12 openadapt-agent serve`
+
+## Modes and older surfaces
+
+- `openadapt-agent serve --mode production --bundles <dir>`: run an operator's compiled workflows through the governed `openadapt-flow run` CLI. `--bundles <dir>` alone stays read-only. `--mode attended` adds decisions on paused runs by a person at that computer. `--mode sandbox` is the default without `--bundles`.
+- Older flags still work: `--allow-run` (same as `--mode production` with `--bundles`, or the sandbox without), `--tutorial` (the sandbox), `--allow-attended-actions` (part of `--mode attended`).
+- Older tools stay registered with `--bundles`: `get_workflow`, `get_run_report`, `list_needs_attention`, `get_attention_item`, and deprecated per-workflow `run_workflow_<opaque-id>` tools (no request id; they now also return `outcome` and `safe_to_retry`).
+- Attended actions: `continue_attention` (after a person completes the paused task; Flow rechecks and resumes without repeating it), `skip_attention` (declared skip only), `reject_attention` (ends the run; earlier steps may still have effects), `teach_attention`, `escalate_attention`. Each needs an exact capability digest, a stable idempotency key, a confirmation, and MCP form elicitation; otherwise use Flow's attended console.
+- `openadapt-agent serve --authoring`: local first-demo tools `observe`, `start_record`, `click`, `halt`, and more over stdio. It doesn't enable runs and opens no HTTP listener. `openadapt-agent authoring connect <openadapt://runner or pack URL>`: outbound mailbox client for hosted ChatGPT.com and Claude.ai. Hosted chats can't click the user's GUI; send them to https://openadapt.ai/start. Hosted MCP is `https://openadapt.ai/mcp`.
+- `openadapt-agent emit-skill <bundle> --out <dir>`: a PHI-safe Agent Skill per workflow (no recorded values, step text, or secrets; one description per workflow).
+
+## Workflow cards
+
+An operator can add `openadapt-card.json` next to a bundle's `workflow.json` with `name`, `purpose`, `done_means`, and input descriptions. Card text reaches the calling agent; it must not contain patient details.
+
+## Product state
+
+Standard and Regulated runs need a workflow admission; Demo and the synthetic sandbox may run without one. Target admissions: https://openadapt.ai/production-lifecycle.json (seven, remote-safe-synthetic). Workflow admissions: https://openadapt.ai/production-workflow-admissions.json (seven, 0.0.0-synthetic, not a customer job). A missing or expired admission means not actively admitted.
 
 ## Public capability vs private artifact
 
-- The **package/MCP server is the public OpenAdapt capability**: inspect and, with explicit operator flags, run or attend a compiled workflow under governance. Install it from PyPI as `openadapt-agent`.
-- A user's **compiled workflow bundle is their private artifact**. It is supplied at server start via `--bundles` and is never embedded in the package, the `server.json`, or any registry listing. `--tutorial` generates the public synthetic tutorial on the fly.
+- The package and MCP server are the public OpenAdapt capability. Install from PyPI as `openadapt-agent`.
+- A customer's compiled workflow bundle is their private artifact, supplied at server start with `--bundles`. It is never embedded in the package, `server.json`, or any registry listing. The sandbox generates its synthetic workflow on the fly.
 
 ## Key documents
 
-- [README](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/README.md): install, quickstart, honest limits.
-- [docs/DESIGN.md](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/docs/DESIGN.md): architecture, security model, what v2 deliberately does not do.
-- [docs/DISTRIBUTION.md](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/docs/DISTRIBUTION.md): registry artifacts, the public-vs-private-server distinction, and the submission plan.
+- [README](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/README.md): what it does, the contract, the sandbox, developer setup.
+- [docs/DESIGN.md](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/docs/DESIGN.md): architecture, the result contract, security model.
+- [docs/DISTRIBUTION.md](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/docs/DISTRIBUTION.md): registry artifacts and the public-vs-private distinction.
 - [server.json](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/server.json): official MCP registry manifest.
-- [manifest.json](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/manifest.json): portable MCPB launch config for Smithery and desktop clients.
+- [manifest.json](https://github.com/OpenAdaptAI/openadapt-agent/blob/main/manifest.json): portable MCPB launch config.
 
 ## Related
 
-- [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow): the governed demonstration compiler and runtime this package bridges.
+- [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow): the demonstration compiler and runtime this package connects to.
 - [OpenAdapt](https://github.com/OpenAdaptAI/OpenAdapt): the umbrella project.
 - [docs.openadapt.ai](https://docs.openadapt.ai): OpenAdapt documentation.
