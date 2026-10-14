@@ -86,6 +86,40 @@ oracle then requires **exactly one** non-voided `tblClaim` row with that code,
 in status 2 ("Entered"), for the demonstrated insuree and health facility — a
 duplicate or missing row fails the run loudly.
 
+## The unlabeled Save
+
+openIMIS saves a claim through a floating floppy-disk button with no text,
+accessible name, or tooltip. Flow treats that click as consequential and
+clicks it only through a submit binding (see
+[docs/LIMITS.md](../../docs/LIMITS.md)): the compiler records how the button
+relates to the fields the demonstration typed into, and a run checks the same
+relation right before it clicks.
+
+`scripts/openimis_submit_binding_probe.py` checks the binding on the live
+claim form without saving anything. It types a synthetic claim, records the
+binding, then types different values in a fresh browser and runs the engine's
+pre-click check against the Save and against the controls a run must never
+click. It cancels every check and never clicks.
+
+On openIMIS 25.10 ([`submit_binding_probe.json`](submit_binding_probe.json)):
+
+- The Save binds. It's a fixed `<button>` in `div > div > span`, outside the
+  `<form>` that holds the fields, and it's the only unlabeled control after
+  them. Of the 5 inputs the demonstration typed into, 3 are still on the page
+  when it clicks; openIMIS re-renders the other 2, at record time and at run
+  time alike.
+- The check passes on the unchanged Save, and again after the probe removes
+  the icon it added.
+- The check refuses 17 of 17 controls a run must never click: the 14 other
+  icon buttons in view, the Save and a second unlabeled icon after the probe
+  adds that icon beside it, and the Save after the probe moves the floating
+  buttons to the left.
+
+```bash
+python scripts/openimis_submit_binding_probe.py \
+  --out benchmark/openimis_claims/submit_binding_probe.json
+```
+
 ## The eligibility-check workflow (effect-verified)
 
 `scripts/openimis_eligibility_demo.py` demonstrates the second reference

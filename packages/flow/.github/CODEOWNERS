@@ -41,6 +41,10 @@
 /openadapt_flow/runtime/replayer.py            @abrichr
 /openadapt_flow/runtime/resolver.py            @abrichr
 
+# Submit binding -- the record tie for a consequential click on an unlabeled
+# control (decides whether an icon-only Save may fire).
+/openadapt_flow/submit_binding.py              @abrichr
+
 # Offline safety validation harnesses (identity ROC, adversary corpus, ...).
 /openadapt_flow/validation/                    @abrichr
 

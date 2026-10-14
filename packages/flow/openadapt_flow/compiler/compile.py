@@ -44,6 +44,7 @@ from openadapt_flow.ir import (
     Step,
     StructuralLocator,
     Workflow,
+    structural_locator_is_locatable,
 )
 from openadapt_flow.risk import (
     PRESUMED_COMMIT_EXPLANATION,
@@ -2379,8 +2380,13 @@ def compile_recording(
     # changed region rendered a demonstrated parameter value. Reported (not
     # raised) below — the drop is the safe outcome, but it must not be silent.
     param_region_drops: list[tuple[str, Region, str]] = []
+    # Submit-binding observations recorded on click events (unlabeled
+    # controls only), attached once every risk decision is final.
+    binding_observations: dict[str, object] = {}
     for j, (step, step_before, step_after, event) in enumerate(pending):
         steps.append(step)
+        if event.get("submit_binding") is not None:
+            binding_observations[step.id] = event["submit_binding"]
         if step.action is ActionKind.SCROLL:
             continue  # see the scroll branch in pass 1
         step_region_drops: list[tuple[Region, str]] = []
@@ -2761,6 +2767,12 @@ def compile_recording(
         for applied in result.applied:
             logger.info("annotation applied %s: %s", applied.step_id, applied.detail)
 
+    # Bind each consequential click on an unlabeled control to the form whose
+    # fields the demonstration filled, or record why it cannot be bound (the
+    # replayer refuses that click). Runs after every risk decision, model
+    # annotation included, so the binding covers exactly the final writes.
+    _attach_submit_bindings(workflow.steps, binding_observations)
+
     # PHI-at-rest remediation (audit REM-2): replace the plaintext identity
     # band (``anchor.context_text``) and structured identity on every anchor
     # with a salted-hash, shape-preserving TEMPLATE, so no readable patient
@@ -2787,6 +2799,54 @@ def compile_recording(
     workflow.save(bundle)
     (bundle / "workflow.py").write_text(render_workflow_py(workflow))
     return workflow
+
+
+def _attach_submit_bindings(steps: list[Step], observations: dict[str, object]) -> None:
+    """Attach :class:`~openadapt_flow.ir.SubmitBinding` evidence in place.
+
+    A binding applies to a consequential CLICK/DOUBLE_CLICK whose target has
+    no usable structural locator (an unlabeled control) and whose recorded event
+    carried a submit-binding observation. Each such step gets either a
+    binding (every condition in :mod:`openadapt_flow.submit_binding` held in
+    the demonstration) or a plain-language reason it could not be bound.
+    Steps without an observation (pixel recordings, labelled controls,
+    recordings made before this capability) are left unchanged.
+    """
+
+    from openadapt_flow.submit_binding import (
+        decide_submit_binding,
+        observation_from_page,
+    )
+
+    typed_since_commit: list[str] = []
+    for step in steps:
+        if step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION):
+            typed_since_commit.append(step.id)
+            continue
+        raw = observations.get(step.id)
+        if (
+            raw is not None
+            and step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
+            and step.risk == "irreversible"
+            and step.anchor is not None
+            and not structural_locator_is_locatable(step.anchor.structural)
+        ):
+            try:
+                observation = observation_from_page(raw)
+            except ValueError:
+                step.submit_binding = None
+                step.submit_binding_unbound_reason = (
+                    "the recorded structural evidence for this control is malformed"
+                )
+            else:
+                binding, reason = decide_submit_binding(
+                    observation, field_step_ids=typed_since_commit
+                )
+                step.submit_binding = binding
+                step.submit_binding_unbound_reason = reason
+        if step.risk == "irreversible":
+            # A consequential step closes the entry it committed.
+            typed_since_commit = []
 
 
 def _phi_free_identity(workflow: Workflow) -> None:

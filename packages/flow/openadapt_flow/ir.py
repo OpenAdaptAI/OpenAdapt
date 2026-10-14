@@ -205,6 +205,21 @@ class StructuralLocator(BaseModel):
     )
 
 
+def structural_locator_is_locatable(locator: Optional[StructuralLocator]) -> bool:
+    """Whether any backend can re-find ``locator``'s element.
+
+    Browser backends need a selector or a role plus a name; native backends an
+    automation id or a role plus a name. A role alone (an unnamed button) can
+    never be located, so the step resolves on the visual rungs.
+    """
+
+    if locator is None:
+        return False
+    return bool(
+        locator.selector or locator.automation_id or (locator.role and locator.name)
+    )
+
+
 class TokenTemplate(BaseModel):
     """Salted-hash + shape descriptor for one recorded identity-band token.
 
@@ -912,6 +927,105 @@ class Interstitial(BaseModel):
         return self
 
 
+#: Lower-case DOM token: a tag name, a button/input ``type``, or an ARIA role.
+SUBMIT_BINDING_TOKEN_PATTERN = r"^[a-z][a-z0-9-]{0,31}$"
+#: Tag chain from the binding scope down to the control, e.g. ``div>button``.
+SUBMIT_BINDING_PATH_PATTERN = r"^[a-z][a-z0-9-]{0,31}(?:>[a-z][a-z0-9-]{0,31}){0,63}$"
+
+
+class SubmitBinding(BaseModel):
+    """Compile-time binding of an unlabeled submit control to its form.
+
+    An icon-only Save (no text, accessible name, or tooltip) that is not in a
+    table row has no record identity of its own, so a consequential click on
+    it cannot be tied to a record the usual way (by the row's identity). This
+    binding ties it to the record the program itself entered instead: the
+    fields the demonstration typed into before the click.
+
+    The recorder observes the DOM immediately before the demonstrated click,
+    and the compiler keeps the binding only when it is unambiguous:
+
+    - **Form ownership.** The control and every filled field share one HTML
+      form owner (``shared``); or the fields share a form and the control sits
+      outside every form (``fields_only``, a floating Save rendered next to
+      the form); or neither the fields nor the control have a form owner
+      (``none``). A control owned by another form, or fields spread over more
+      than one form, are never bound.
+    - **Submit role.** ``form_submit`` (a submit button of that form),
+      ``form_control`` (another button inside it), or ``detached`` (a button
+      outside any form), plus the control's own tag, type, and role, and a
+      SHA-256 of its icon geometry (SVG path data, image size, or glyph code
+      points; never text or URLs).
+    - **Position relative to those fields.** The control follows every filled
+      field in document order, its centre lies in the same quadrant of the
+      fields' bounding box, and the tag path from the binding scope (the
+      shared form, or the nearest element that contains the control and the
+      fields) down to the control is unchanged.
+    - **Uniqueness.** Exactly one rendered, unlabeled control follows the
+      filled fields inside that scope. Controls in table rows or list items,
+      which have row identity, and the adornments inside one field's own
+      widget are not counted.
+
+    Every field here is a closed-vocabulary token, a count, a boolean, or a
+    digest, so the binding carries no record content.
+
+    At run time the replayer recomputes the same observation for the element
+    at the freshly resolved point, against the fields that run typed into, and
+    clicks only when every recorded field matches and the control is still
+    the only unlabeled control after those fields. The browser re-checks the
+    same observation at delivery, after the actionability trial, so a change
+    in between refuses the click.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal[1] = 1
+    control_tag: str = Field(pattern=SUBMIT_BINDING_TOKEN_PATTERN)
+    control_type: Optional[str] = Field(
+        default=None, pattern=SUBMIT_BINDING_TOKEN_PATTERN
+    )
+    control_role: Optional[str] = Field(
+        default=None, pattern=SUBMIT_BINDING_TOKEN_PATTERN
+    )
+    icon_sha256: Optional[str] = Field(
+        default=None,
+        pattern=r"^[0-9a-f]{64}$",
+        description=(
+            "SHA-256 of the control's icon geometry (SVG path data and shape"
+            " attributes, image intrinsic size, glyph code points). None when"
+            " the control draws no vector, image, or glyph content."
+        ),
+    )
+    fixed_position: bool = Field(
+        description="The control or an ancestor is position: fixed or sticky."
+    )
+    form_owner: Literal["shared", "fields_only", "none"]
+    submit_role: Literal["form_submit", "form_control", "detached"]
+    scope_kind: Literal["form", "container"]
+    scope_path: str = Field(pattern=SUBMIT_BINDING_PATH_PATTERN)
+    filled_fields: int = Field(
+        ge=1,
+        le=512,
+        description=(
+            "Distinct fields the demonstration had typed into, still on the"
+            " page, when it clicked. A run must have typed into the same"
+            " number of fields, all inside the same scope."
+        ),
+    )
+    order: Literal["after"] = "after"
+    vertical: Literal["above", "level", "below"]
+    horizontal: Literal["left", "within", "right"]
+    unlabeled_controls_after_fields: Literal[1] = 1
+    field_step_ids: tuple[str, ...] = Field(
+        default=(),
+        max_length=512,
+        description=(
+            "The demonstration's typing steps before this click, for review."
+            " Run time verifies the field count and scope, not these ids."
+        ),
+    )
+
+
 class Step(BaseModel):
     id: str
     intent: str = Field(description="Human-readable purpose of the step")
@@ -1062,6 +1176,22 @@ class Step(BaseModel):
             raise ValueError(
                 "SELECT_OPTION requires selection_commit_key and selection_region"
             )
+        if self.submit_binding is not None:
+            # The binding stands in for a record identity on the visual path
+            # only; a structurally located control is re-found by its locator.
+            if (
+                self.action not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
+                or self.anchor is None
+                or structural_locator_is_locatable(self.anchor.structural)
+            ):
+                raise ValueError(
+                    "submit_binding is valid only on a CLICK or DOUBLE_CLICK "
+                    "whose anchor has no usable structural locator"
+                )
+            if self.submit_binding_unbound_reason is not None:
+                raise ValueError(
+                    "a step cannot carry both a submit_binding and an unbound reason"
+                )
         return self
 
     timeout_s: float = 10.0
@@ -1102,6 +1232,28 @@ class Step(BaseModel):
             " Without a crop the pixel-compare tier abstains on"
             " remote-display/pixel replays and identity falls to the OCR"
             " band tier (docs/LIMITS.md)."
+        ),
+    )
+    submit_binding: Optional[SubmitBinding] = Field(
+        default=None,
+        description=(
+            "Consequential CLICK/DOUBLE_CLICK on an unlabeled control only:"
+            " the recorded structural binding of that control to the form"
+            " whose fields the demonstration filled (see SubmitBinding). The"
+            " replayer verifies the same binding on the live page before it"
+            " clicks and refuses when it differs or is ambiguous. None on"
+            " other steps and on bundles compiled before this field existed."
+        ),
+    )
+    submit_binding_unbound_reason: Optional[str] = Field(
+        default=None,
+        max_length=512,
+        description=(
+            "Why a consequential click on an unlabeled control could not be"
+            " bound to the form it submits (for example, two unlabeled"
+            " controls follow the filled fields). The replayer refuses that"
+            " click. None when bound, not applicable, or the recording"
+            " carried no DOM evidence for the control."
         ),
     )
 
@@ -2915,6 +3067,11 @@ class StepResult(BaseModel):
     resolution: Optional[Resolution] = None
     drag_end_resolution: Optional[Resolution] = None
     identity: Optional[IdentityCheck] = None  # pre-click identity verdict
+    # The step's recorded submit binding (Step.submit_binding) matched the
+    # live page when the click was armed. None when the step has no binding
+    # or the run never reached that check. The browser re-checks the binding
+    # at delivery and refuses the click if it changed in between.
+    submit_binding_verified: Optional[bool] = None
     input_verified: Optional[bool] = None  # TYPE/SELECT_OPTION input contract
     input_retried: bool = False  # TYPE only: refocus-and-retype fired
     postconditions_ok: Optional[bool] = None

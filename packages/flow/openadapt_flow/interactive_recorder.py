@@ -86,8 +86,17 @@ from urllib.parse import urlsplit
 
 from PIL import Image
 
-from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+from openadapt_flow.backends.playwright_backend import (
+    GUARDED_ACTIONABLE_SELECTOR,
+    PlaywrightBackend,
+)
+from openadapt_flow.ir import StructuralLocator, structural_locator_is_locatable
 from openadapt_flow.recorder import Recorder
+from openadapt_flow.submit_binding import (
+    OBSERVE_SUBMIT_BINDING_JS,
+    SUBMIT_BINDING_FIELD_SELECTOR,
+    observation_from_page,
+)
 
 # Named keys worth recording as their own KEY step (navigation/submit intent).
 # Editing keys (Backspace/Delete) are intentionally omitted: their effect is
@@ -234,6 +243,24 @@ def _css_string_literal(value: str) -> str:
             escaped.append(character)
     escaped.append('"')
     return "".join(escaped)
+
+
+def _locatable_structural(raw: object) -> bool:
+    """Whether an in-page structural target can re-find its element."""
+
+    if not isinstance(raw, dict):
+        return False
+    try:
+        locator = StructuralLocator.model_validate(
+            {
+                key: raw[key]
+                for key in ("selector", "frame_path", "role", "name")
+                if key in raw
+            }
+        )
+    except Exception:
+        return False
+    return structural_locator_is_locatable(locator)
 
 
 def _http_origin(url: str, *, label: str) -> tuple[str, str, int]:
@@ -401,6 +428,13 @@ _INIT_JS = r"""
   const SECRET_MARKER = __SECRET_MARKER__;
   const IDENT_NAMES = __IDENT_NAMES__;
   const SPECIAL = __SPECIAL_KEYS__;
+  // Submit binding (openadapt_flow.submit_binding): the fields this document
+  // received typed input in, as element references only (never a value), and
+  // the structural observer that relates a clicked unlabeled control to them.
+  const SUBMIT_ACTIONABLE = __SUBMIT_ACTIONABLE__;
+  const SUBMIT_FIELD = __SUBMIT_FIELD__;
+  const observeSubmitBinding = __OBSERVE_SUBMIT_BINDING__;
+  const filledFields = [];
   // One identity for this DOCUMENT. The init script builds a fresh closure per
   // document, so this closure never saw a value an earlier document received.
   // Python compares this id against the document that received a secret and
@@ -1886,6 +1920,22 @@ _INIT_JS = r"""
     emitInFrameSpace(dragEvent);
   });
 
+  // How the clicked control relates to the fields typed into so far. Only an
+  // unlabeled control yields an observation; it is structure only (tags,
+  // roles, counts, relation words, icon geometry), captured before the page
+  // reacts to the click.
+  function submitBindingEvidence(target) {
+    try {
+      const control = target && target.closest
+        ? target.closest(SUBMIT_ACTIONABLE) : null;
+      if (!control || control.matches(
+          'canvas, input[type="range"], [role="slider"]')) return null;
+      const out = observeSubmitBinding(control, filledFields);
+      if (!out || !out.observation || out.observation.labelled) return null;
+      return out.observation;
+    } catch (e) { return null; }
+  }
+
   listen('click', (e) => {
     if (e.button !== 0) return;
     if (suppressClick) { suppressClick = false; return; }
@@ -1893,6 +1943,7 @@ _INIT_JS = r"""
     if (fs === null) { refuseFrame(); return; }
     const target = deepEventTarget(e);
     const rowIdentity = structuredIdentityEvidence(e.clientX, e.clientY, target);
+    const submitBinding = submitBindingEvidence(target);
     const pointerEvent = {
       // The second click of a double-click gesture (e.detail === 2) becomes
       // an explicit double_click event; Python absorbs the pending first
@@ -1907,6 +1958,7 @@ _INIT_JS = r"""
       idr: composeRect(fs, identifierRect()),
     };
     if (rowIdentity.withheld) pointerEvent.sid_withheld = rowIdentity.withheld;
+    if (submitBinding) pointerEvent.submit_binding = submitBinding;
     emitInFrameSpace(pointerEvent);
   });
 
@@ -2062,6 +2114,12 @@ _INIT_JS = r"""
     } else {
       o.value = currentSecretValue(el);
     }
+    try {
+      if (e.isTrusted && el.matches(SUBMIT_FIELD)
+          && filledFields.indexOf(el) < 0) {
+        filledFields.push(el);
+      }
+    } catch (err) {}
     emitInFrameSpace(o);
   });
 
@@ -2107,6 +2165,13 @@ _INIT_JS = r"""
   });
 })();
 """
+# Static, session-independent parts of the closure: the submit-binding
+# observer shared with the Playwright backend (openadapt_flow.submit_binding).
+_INIT_JS = (
+    _INIT_JS.replace("__SUBMIT_ACTIONABLE__", json.dumps(GUARDED_ACTIONABLE_SELECTOR))
+    .replace("__SUBMIT_FIELD__", json.dumps(SUBMIT_BINDING_FIELD_SELECTOR))
+    .replace("__OBSERVE_SUBMIT_BINDING__", OBSERVE_SUBMIT_BINDING_JS)
+)
 
 
 class InteractiveRecorder:
@@ -3578,6 +3643,21 @@ class InteractiveRecorder:
                 event["drag_end_structural"] = ev["end_structural"]
         if ev.get("structural"):
             event["structural"] = ev["structural"]
+        if (
+            kind in ("click", "double_click")
+            and ev.get("submit_binding")
+            and not _locatable_structural(ev.get("structural"))
+        ):
+            # An unlabeled control (no usable locator). Structure only: the
+            # icon geometry becomes its SHA-256 here, and a malformed
+            # observation is dropped (no binding, so a later consequential
+            # click on that control is refused).
+            try:
+                event["submit_binding"] = observation_from_page(
+                    ev["submit_binding"]
+                ).model_dump(mode="json", exclude_none=True)
+            except ValueError:
+                pass
         # Marked identifier field rect (--identifier FIELD), captured in-page
         # at click time: the compiler crops these pixels
         # (anchor.identifier_crop) to arm the pixel identity tier.

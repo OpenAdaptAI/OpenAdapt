@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import json
 import math
 import re
 import time
@@ -27,10 +28,17 @@ from openadapt_flow.ir import (
     ActionDeliveryReceipt,
     StructuralHandle,
     StructuralLocator,
+    SubmitBinding,
 )
 from openadapt_flow.runtime.resolver import (
     structural_resolution_fingerprint,
     visual_resolution_point_fingerprint,
+)
+from openadapt_flow.submit_binding import (
+    OBSERVE_SUBMIT_BINDING_JS,
+    SUBMIT_BINDING_FIELD_SELECTOR,
+    observation_from_page,
+    verify_submit_binding,
 )
 
 VIEWPORT: tuple[int, int] = (1280, 800)
@@ -234,9 +242,25 @@ _DESCRIBE_TARGET_JS = r"""(node) => {
     };
 }"""
 
-_INSTALL_GUARD_BODY_JS = r"""
+_INSTALL_GUARD_BODY_JS = (
+    r"""
+    const observeSubmitBinding = """
+    + OBSERVE_SUBMIT_BINDING_JS
+    + r""";
     const observed = describe(el);
-    if (args.requireRowIdentity && !observed.rowIdentity) return null;
+    let recordTie = observed.rowIdentity;
+    if (args.requireRowIdentity && !recordTie && args.submitBinding) {
+        // No row identity: an unlabeled control may still be tied to the
+        // record the program entered, by its recorded submit binding. Python
+        // verified this exact observation against the compiled binding; the
+        // guard proves the element still yields it, atomically with install.
+        const fills = window[args.submitBinding.fillKey];
+        const live = observeSubmitBinding(el, Array.isArray(fills) ? fills : []);
+        if (live.canon === args.submitBinding.expected) {
+            recordTie = 'submit-binding';
+        }
+    }
+    if (args.requireRowIdentity && !recordTie) return null;
     const rect = el.getBoundingClientRect();
     const style = window.getComputedStyle(el);
     if (!el.isConnected || rect.width <= 0 || rect.height <= 0 ||
@@ -266,6 +290,7 @@ _INSTALL_GUARD_BODY_JS = r"""
     const entry = {
         el: el,
         descriptor: observed.descriptor,
+        submitBinding: args.submitBinding || null,
         observer: null,
         contextObserver: null,
         context: {},
@@ -308,6 +333,7 @@ _INSTALL_GUARD_BODY_JS = r"""
         identity: observed.rowIdentity,
     };
 """
+)
 
 _BIND_STRUCTURAL_TARGET_JS = (
     "(el, args) => { const describe = "
@@ -317,17 +343,25 @@ _BIND_STRUCTURAL_TARGET_JS = (
     + "}"
 )
 
+# The element a guarded coordinate click binds: the nearest actionable
+# control containing the resolved point. The submit-binding probe binds the
+# same element, so the observation it verifies is the one the lease guards.
+GUARDED_ACTIONABLE_SELECTOR = (
+    'button, a[href], input[type="button"], input[type="submit"],'
+    ' input[type="reset"], input[type="checkbox"], input[type="radio"],'
+    " select,"
+    ' [role="button"], [role="link"], [role="menuitem"],'
+    ' [role="tab"], [role="option"], [role="checkbox"],'
+    ' [role="radio"], [role="switch"]'
+)
+
 _BIND_COORDINATE_TARGET_JS = (
     r"""(args) => {
     const hit = document.elementFromPoint(args.x, args.y);
     if (!hit) return null;
-    const actionable =
-        'button, a[href], input[type="button"], input[type="submit"],' +
-        ' input[type="reset"], input[type="checkbox"], input[type="radio"],' +
-        ' select,' +
-        ' [role="button"], [role="link"], [role="menuitem"],' +
-        ' [role="tab"], [role="option"], [role="checkbox"],' +
-        ' [role="radio"], [role="switch"]';
+    const actionable = """
+    + json.dumps(GUARDED_ACTIONABLE_SELECTOR)
+    + r""";
     const editable =
         ', input:not([type]), input[type="text"], input[type="search"],' +
         ' input[type="email"], input[type="url"], input[type="tel"],' +
@@ -362,6 +396,45 @@ _BIND_FOCUSED_TARGET_JS = (
     + ";"
     + _INSTALL_GUARD_BODY_JS
     + "}"
+)
+
+# Observe the submit binding of the control at a point: the same element a
+# guarded coordinate click would bind, against the fields typed into so far.
+_SUBMIT_BINDING_AT_JS = (
+    r"""(args) => {
+    const hit = document.elementFromPoint(args.x, args.y);
+    if (!hit) return null;
+    const control = hit.closest("""
+    + json.dumps(GUARDED_ACTIONABLE_SELECTOR)
+    + r""");
+    if (!control || control.matches(
+            'canvas, input[type="range"], [role="slider"]')) {
+        return null;
+    }
+    const observe = """
+    + OBSERVE_SUBMIT_BINDING_JS
+    + r""";
+    const fills = window[args.fillKey];
+    return observe(control, Array.isArray(fills) ? fills : []);
+}"""
+)
+
+# Remember the field that is about to receive typed text. The list lives in
+# the field's own document under a per-backend random key and holds element
+# references only: never a value.
+_REGISTER_FILLED_FIELD_JS = (
+    r"""(el, key) => {
+    if (!el.matches("""
+    + json.dumps(SUBMIT_BINDING_FIELD_SELECTOR)
+    + r""")) return false;
+    let fills = window[key];
+    if (!Array.isArray(fills)) {
+        fills = [];
+        Object.defineProperty(window, key, {value: fills, configurable: true});
+    }
+    if (fills.indexOf(el) < 0) fills.push(el);
+    return true;
+}"""
 )
 
 _STRUCTURED_TEXT_AT_JS = (
@@ -502,15 +575,27 @@ _GUARD_CURRENT_JS = (
     + _DESCRIBE_TARGET_JS
     + "; const contextCurrent = "
     + _CONTEXT_CURRENT_JS
+    + "; const observeSubmitBinding = "
+    + OBSERVE_SUBMIT_BINDING_JS
     + r""";
     const tokenMap = window[args.storeKey];
     const entry = tokenMap instanceof Map ? tokenMap.get(args.token) : null;
+    // A lease armed by a submit binding stays valid only while the element
+    // still yields the exact binding observation verified at arm time.
+    const bindingCurrent = () => {
+        if (!entry.submitBinding) return true;
+        const fills = window[entry.submitBinding.fillKey];
+        return observeSubmitBinding(
+            el, Array.isArray(fills) ? fills : []
+        ).canon === entry.submitBinding.expected;
+    };
     return Boolean(
         entry && entry.el === el &&
         el.getAttribute(args.tokenAttribute) === args.token &&
         (!args.requireFocused || document.activeElement === el) &&
         contextCurrent(entry) &&
-        entry.descriptor === describe(el).descriptor
+        entry.descriptor === describe(el).descriptor &&
+        bindingCurrent()
     );
 }"""
 )
@@ -761,6 +846,9 @@ class PlaywrightBackend:
         # code. Python retains only token material keyed by the public
         # SHA-256 fingerprint; target/row text stays page-local and ephemeral.
         self._structural_store_key = f"__oaflow_structural_{uuid.uuid4().hex}"
+        # Fields this backend typed into, kept page-side per document (element
+        # references only) for submit bindings. A new backend starts empty.
+        self._fill_store_key = f"__oaflow_filled_{uuid.uuid4().hex}"
         self._structural_tokens: dict[str, _StructuralGuard] = {}
         self._guarded_coordinate: Optional[_CoordinateGuard] = None
         self._guarded_keyboard: Optional[_KeyboardGuard] = None
@@ -1236,6 +1324,30 @@ class PlaywrightBackend:
         or None on any mismatch/failure (never raises).
         """
 
+        result = self._focused_element_call(js)
+        return result if isinstance(result, str) else None
+
+    def _register_focused_field(self) -> None:
+        """Remember the focused field as one this backend is typing into.
+
+        Submit bindings relate an unlabeled control to the fields the program
+        filled (:mod:`openadapt_flow.submit_binding`). A failure here is not
+        an error: a field that was not registered makes a later binding check
+        refuse, which is the safe direction.
+        """
+
+        self._focused_element_call(
+            _REGISTER_FILLED_FIELD_JS, arg=self._fill_store_key, with_arg=True
+        )
+
+    def _focused_element_call(
+        self, js: str, *, arg: Any = None, with_arg: bool = False
+    ) -> Any:
+        """Evaluate ``js`` on the exactly bound focused element (see above).
+
+        Returns the raw result, or None on any frame mismatch or failure.
+        """
+
         scope: Any = self.page
         frame_path: list[str] = []
         try:
@@ -1254,8 +1366,9 @@ class PlaywrightBackend:
                             scope, tuple(frame_path), box
                         ):
                             return None
-                        result = focused.evaluate(js)
-                        return result if isinstance(result, str) else None
+                        if with_arg:
+                            return focused.evaluate(js, arg)
+                        return focused.evaluate(js)
                     if len(frame_path) >= 8:
                         return None
                     selector = focused.evaluate(_FRAME_SELECTOR_JS)
@@ -1886,6 +1999,7 @@ class PlaywrightBackend:
         y: int,
         *,
         allow_editable: bool,
+        submit_binding: Optional[dict[str, str]] = None,
     ) -> None:
         self.cancel_guarded_coordinate()
         point = (int(x), int(y))
@@ -1908,11 +2022,16 @@ class PlaywrightBackend:
                     "y": frame_point.y,
                     "requireRowIdentity": True,
                     "allowEditable": allow_editable,
+                    "submitBinding": submit_binding,
                 },
             )
             if not isinstance(observed, dict):
                 raise StructuralResolutionRefused(
-                    "visual point is not an identity-bearing actionable DOM element"
+                    "the unlabeled control changed while its submit binding "
+                    "was being leased"
+                    if submit_binding is not None
+                    else "visual point is not an identity-bearing actionable "
+                    "DOM element"
                 )
             offset = observed.get("offset")
             bound_point = observed.get("point")
@@ -1951,6 +2070,90 @@ class PlaywrightBackend:
         """Bind an editable field for an identity-gated focusing click."""
 
         self._arm_guarded_coordinate(x, y, allow_editable=True)
+
+    # -- submit binding (openadapt_flow.backend.SubmitBindingBackend) --------
+
+    def _observe_submit_binding(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """Raw page observation (``{observation, canon}``) at a point."""
+
+        point = self._frame_point(int(x), int(y))
+        if point is None:
+            return None
+        raw = point.scope.evaluate(
+            _SUBMIT_BINDING_AT_JS,
+            {"x": point.x, "y": point.y, "fillKey": self._fill_store_key},
+        )
+        if not isinstance(raw, dict) or not isinstance(raw.get("canon"), str):
+            return None
+        return raw
+
+    def submit_binding_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """Observe how the control at ``(x, y)`` relates to the filled fields.
+
+        RECORD-TIME seam. Returns the PHI-free structural observation of
+        :mod:`openadapt_flow.submit_binding` (the icon geometry already
+        replaced by its SHA-256), or None when no actionable control is at the
+        point or the page cannot be read. Never raises.
+        """
+
+        try:
+            raw = self._observe_submit_binding(x, y)
+            if raw is None:
+                return None
+            observation = observation_from_page(raw.get("observation"))
+        except Exception:
+            return None
+        return observation.model_dump(mode="json", exclude_none=True)
+
+    def arm_guarded_submit_coordinate(
+        self, x: int, y: int, *, binding: SubmitBinding
+    ) -> None:
+        """Arm a guarded click whose record tie is a verified submit binding.
+
+        The control at the resolved point must yield an observation that
+        matches ``binding`` (form ownership, submit role, position relative to
+        the fields this backend typed into, icon, and uniqueness). The lease
+        then holds that exact observation: delivery refuses if the element,
+        the fields, or any other unlabeled control after them changes.
+
+        Raises:
+            StructuralResolutionRefused: when there is no control, the page
+                cannot be read, or the live binding differs from ``binding``.
+        """
+
+        self.cancel_guarded_coordinate()
+        try:
+            raw = self._observe_submit_binding(x, y)
+        except Exception as exc:
+            raise StructuralResolutionRefused(
+                "could not read the page structure to verify the submit binding"
+            ) from exc
+        if raw is None:
+            raise StructuralResolutionRefused(
+                "no actionable control at the resolved point to verify the "
+                "submit binding against"
+            )
+        try:
+            observation = observation_from_page(raw.get("observation"))
+        except ValueError as exc:
+            raise StructuralResolutionRefused(
+                "the page returned a malformed submit-binding observation"
+            ) from exc
+        reason = verify_submit_binding(binding, observation)
+        if reason is not None:
+            raise StructuralResolutionRefused(
+                "the unlabeled control at the resolved point is not bound to "
+                f"the form this run filled: {reason}"
+            )
+        self._arm_guarded_coordinate(
+            x,
+            y,
+            allow_editable=False,
+            submit_binding={
+                "fillKey": self._fill_store_key,
+                "expected": str(raw["canon"]),
+            },
+        )
 
     def cancel_guarded_coordinate(self) -> None:
         """Cancel and clean the current one-shot visual DOM binding."""
@@ -2266,6 +2469,7 @@ class PlaywrightBackend:
     ) -> ActionDeliveryReceipt:
         """Type through the pre-identity focused-element lease."""
 
+        self._register_focused_field()
         return self._act_guarded_keyboard(
             expected_frame_sha256=expected_frame_sha256,
             operation="guarded_dom_type",
@@ -2487,6 +2691,7 @@ class PlaywrightBackend:
     def type_text(self, text: str) -> None:
         """Type text into the currently focused element."""
         self._assert_qualification_environment_current()
+        self._register_focused_field()
         self.page.keyboard.type(text)
 
     def press(self, key: str) -> None:

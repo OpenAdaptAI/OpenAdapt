@@ -93,7 +93,7 @@
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "1ed88dc558cbe4526d4aac47f7c1413a34780873e7ffb163cf68d2bd715c19cb"
+      "sha256": "a39023ffcfd890fcf9a63f984e764d31ee8f61cc417c4604fecd11104790318c"
     },
     {
       "path": ".github/workflows/citrix-workspace-standin.yml",
@@ -378,6 +378,10 @@
     {
       "path": "benchmark/openimis_claims/environment.lock.json",
       "sha256": "98c8008eb7b34371379fb54b968299070c51f760152f36a4d13bdd2e25cdb4ab"
+    },
+    {
+      "path": "benchmark/openimis_claims/submit_binding_probe.json",
+      "sha256": "567633244857235c2e77071b1f039d098718b1e6d789a62609aca003c903879a"
     },
     {
       "path": "benchmark/pixel_identity/crop_O0_digit_1_sibling.png",

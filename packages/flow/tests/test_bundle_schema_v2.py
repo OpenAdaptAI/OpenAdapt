@@ -189,6 +189,9 @@ def _pre_frame_path_content(wf: Workflow, shape: str) -> dict:
         assert step.pop("drag_end_anchor") is None
         assert step.pop("selection_commit_key") is None
         assert step.pop("selection_region") is None
+        # Reviewed v2 omission: submit-binding evidence postdates these seals.
+        assert step.pop("submit_binding") is None
+        assert step.pop("submit_binding_unbound_reason") is None
     for effect in _effect_payloads(content, shape):
         # Reviewed v2 omission: the exact_new_set over-write guard postdates
         # these seals. Navigated to the exact owning Effect, never stripped by
@@ -241,6 +244,8 @@ def _write_synthetic_pre_field_bundle(
         assert step.pop("field_label") is None
         assert step.pop("selection_commit_key") is None
         assert step.pop("selection_region") is None
+        assert step.pop("submit_binding") is None
+        assert step.pop("submit_binding_unbound_reason") is None
     for effect in _effect_payloads(raw, shape):
         assert effect.pop("new_records") == []
         assert effect.pop("identity_field") == "id"
@@ -508,6 +513,79 @@ def test_a_declared_exact_new_set_is_sealed_content(tmp_path):
     # from the pre-field record_written seal: its kind is sealed content.
     empty_guard = _guard([])
     assert bv.compute_content_digest(empty_guard, file_hashes) != digest
+
+
+def test_a_recorded_submit_binding_is_sealed_content(tmp_path):
+    """The submit-binding omissions fire only at their empty default.
+
+    A step carrying a binding, a different binding, or an unbound reason is
+    sealed content: editing any of them changes the digest, so a bundle cannot
+    be loosened after it was sealed.
+    """
+
+    from openadapt_flow.ir import ActionKind, Anchor, Step, SubmitBinding
+
+    b = _write_bundle_dir(tmp_path)
+
+    def _bundle(**step_fields):
+        step = Step(
+            id="save",
+            intent="click recorded visual target",
+            action=ActionKind.CLICK,
+            risk="irreversible",
+            anchor=Anchor(
+                template="templates/btn.png",
+                region=(0, 0, 10, 10),
+                click_point=(5, 5),
+            ),
+            **step_fields,
+        )
+        return Workflow(name="sealed-binding", steps=[step])
+
+    def _binding(**changes):
+        fields = dict(
+            control_tag="button",
+            control_type="button",
+            fixed_position=True,
+            form_owner="fields_only",
+            submit_role="detached",
+            scope_kind="container",
+            scope_path="div>button",
+            filled_fields=3,
+            vertical="below",
+            horizontal="right",
+        )
+        fields.update(changes)
+        return SubmitBinding(**fields)
+
+    bare = _bundle()
+    file_hashes = bv.compute_file_hashes(bare, b)
+    bare_digest = bv.compute_content_digest(bare, file_hashes)
+    step = _step_payloads(bv._workflow_content(bare), "linear")[0]
+    assert "submit_binding" not in step
+    assert "submit_binding_unbound_reason" not in step
+
+    bound = _bundle(submit_binding=_binding())
+    bound_digest = bv.compute_content_digest(bound, file_hashes)
+    assert bound_digest != bare_digest
+    step = _step_payloads(bv._workflow_content(bound), "linear")[0]
+    assert step["submit_binding"]["filled_fields"] == 3
+
+    for loosened in (
+        _binding(filled_fields=2),
+        _binding(horizontal="within"),
+        _binding(form_owner="none", scope_kind="container"),
+    ):
+        assert (
+            bv.compute_content_digest(_bundle(submit_binding=loosened), file_hashes)
+            != bound_digest
+        )
+
+    unbound = _bundle(submit_binding_unbound_reason="ambiguous")
+    assert bv.compute_content_digest(unbound, file_hashes) not in (
+        bare_digest,
+        bound_digest,
+    )
 
 
 def test_sealed_empty_defaults_do_not_implicitly_cross_schema_versions():

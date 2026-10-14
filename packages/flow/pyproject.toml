@@ -330,6 +330,7 @@ exclude = [
     "/openadapt_flow/validation/identity_roc.py",
     "/scripts/openimis_claims_demo.py",
     "/scripts/openimis_eligibility_demo.py",
+    "/scripts/openimis_submit_binding_probe.py",
     "/scripts/reliability",
     "/tests/test_adversary_corpus.py",
     "/tests/test_adversary_corpus_v2.py",

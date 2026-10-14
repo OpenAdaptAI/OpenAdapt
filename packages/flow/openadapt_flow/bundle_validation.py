@@ -185,6 +185,24 @@ _SEALED_CANONICAL_OMISSIONS_BY_VERSION: dict[
             ),
         ),
         _SealedCanonicalOmission(
+            owner=Step,
+            field_name="submit_binding",
+            omitted_values=(None,),
+            reason=(
+                "absent submit-binding evidence predates the v2 field; a step "
+                "CARRYING a binding is new content and changes the digest"
+            ),
+        ),
+        _SealedCanonicalOmission(
+            owner=Step,
+            field_name="submit_binding_unbound_reason",
+            omitted_values=(None,),
+            reason=(
+                "an absent unbound reason predates the v2 field; a recorded "
+                "refusal reason remains sealed content"
+            ),
+        ),
+        _SealedCanonicalOmission(
             owner=Effect,
             field_name="new_records",
             omitted_values=([],),

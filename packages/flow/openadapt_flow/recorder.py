@@ -27,6 +27,11 @@ Recording format (DESIGN.md):
                          # when a recorder-only observer is configured.
                          # Every frame-backed event also carries
                          # viewport_before/viewport_after from the actual PNGs.
+                         # A click/double_click on a control with no
+                         # structural locator also carries "submit_binding":
+                         # how that control relates to the fields typed into
+                         # so far (structure only; openadapt_flow.
+                         # submit_binding), when the backend exposes it.
       frames/{i:04d}_before.png
       frames/{i:04d}_after.png   # captured after the action settled
 
@@ -48,7 +53,7 @@ from PIL import Image, ImageDraw
 
 from openadapt_flow.backend import Backend, RichPointerActionBackend
 from openadapt_flow.image_hash import perceptual_hash
-from openadapt_flow.ir import StructuralLocator
+from openadapt_flow.ir import StructuralLocator, structural_locator_is_locatable
 
 
 def _phash(png: bytes) -> str:
@@ -258,6 +263,17 @@ class Recorder:
             structured = self._structured_identity_at(int(event["x"]), int(event["y"]))
             if structured:
                 event = {**event, "structured_identity": structured}
+            # An unlabeled control has no structural locator. Observe how it
+            # relates to the fields typed into so far (form ownership, submit
+            # role, position, uniqueness) so the compiler can bind it to the
+            # form it submits. Before the action: the click may submit it.
+            if not structural_locator_is_locatable(locator) and event.get("kind") in (
+                "click",
+                "double_click",
+            ):
+                binding = self._submit_binding_at(int(event["x"]), int(event["y"]))
+                if binding:
+                    event = {**event, "submit_binding": binding}
         act()
         after = self._wait_settled()
         self._commit(event, before, after, structural_before)
@@ -402,6 +418,24 @@ class Recorder:
             return getter(int(x), int(y))
         except Exception:
             return None
+
+    def _submit_binding_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """Submit-binding observation for the control under (x, y), if any.
+
+        Backends MAY expose ``submit_binding_at``
+        (:class:`openadapt_flow.backend.SubmitBindingBackend`). Pixel-only
+        backends or a momentary failure yield None; the compiler then records
+        no binding and the runtime keeps refusing a consequential click on an
+        unlabeled control it cannot tie to a record.
+        """
+        getter = getattr(self._backend, "submit_binding_at", None)
+        if getter is None:
+            return None
+        try:
+            observation = getter(int(x), int(y))
+        except Exception:
+            return None
+        return observation if isinstance(observation, dict) else None
 
     @staticmethod
     def _redact(png: bytes, region: tuple[int, int, int, int]) -> bytes:

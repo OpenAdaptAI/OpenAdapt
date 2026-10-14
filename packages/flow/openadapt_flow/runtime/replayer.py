@@ -77,6 +77,7 @@ from openadapt_flow.backend import (
     RichPointerActionBackend,
     SelectOptionBackend,
     StructuralResolutionRefused,
+    SubmitBindingBackend,
 )
 from openadapt_flow.bundle_validation import compute_parameter_schema_digest
 from openadapt_flow.identity_signals import (
@@ -5969,6 +5970,14 @@ class Replayer:
                         code=code,
                         detector_input_sha256=sha256_bytes(before_png),
                     )
+                if error is None:
+                    error = self._unbound_submit_refusal(step, workflow, result)
+                    if error is not None:
+                        result.safety_refusal_evidence = SafetyRefusalEvidence(
+                            stage="target_resolution",
+                            code="target_ambiguous",
+                            detector_input_sha256=sha256_bytes(before_png),
+                        )
             # System-of-record effect verification -- SNAPSHOT the record just
             # before the (consequential) action, so the post-action verifier
             # can count only what THIS step wrote (delta / at-most-once /
@@ -8337,12 +8346,42 @@ class Replayer:
         qualification = workflow.qualification
         if qualification is not None and step.id in qualification.identity_policies:
             return True
+        # A submit binding ties an unlabeled control to the record the run
+        # entered; it must be verified on the guarded path like any identity.
+        if step.submit_binding is not None:
+            return True
         anchor = step.anchor
         return anchor is not None and bool(
             anchor.context_text
             or anchor.structured_identity
             or anchor.identity_template
             or anchor.identifier_crop
+        )
+
+    def _unbound_submit_refusal(
+        self, step: Step, workflow: Workflow, result: StepResult
+    ) -> Optional[str]:
+        """Refuse a consequential click the compiler could not bind.
+
+        The compiler records ``submit_binding_unbound_reason`` when the
+        demonstrated click on an unlabeled control could not be tied to the
+        form it submits (for example, two unlabeled controls follow the
+        filled fields). Such a click has no record tie at all, so it is
+        refused before input whatever identity evidence the step carries.
+        """
+
+        if (
+            step.submit_binding_unbound_reason is None
+            or step.action not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
+            or not self._step_is_consequential(step, workflow)
+        ):
+            return None
+        result.safety_halt = True
+        result.failure_category = "safety_halt"
+        return (
+            f"Step '{step.id}' ({step.intent}) clicks an unlabeled control that "
+            "could not be tied to the record this run entered: "
+            f"{step.submit_binding_unbound_reason} — refusing to act; run aborted"
         )
 
     def _step_needs_consequential_revalidation(
@@ -8490,6 +8529,18 @@ class Replayer:
         Structural focusing actions already carry a native target fingerprint;
         visual/coordinate focusing actions require the coordinate guard.
         """
+
+        if (
+            step.submit_binding is not None
+            and step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK)
+            and not isinstance(self.backend, SubmitBindingBackend)
+        ):
+            return (
+                f"Step '{step.id}' ({step.intent}) clicks an unlabeled control "
+                "whose only record tie is its recorded submit binding, but this "
+                "backend cannot read the page structure to verify it — refusing "
+                "input; run aborted"
+            )
 
         if isinstance(self.backend, RemoteActuationBackend):
             return None
@@ -8763,6 +8814,22 @@ class Replayer:
                 "but no exact target observation was available immediately "
                 "before actuation — refusing to act; run aborted"
             )
+        elif (
+            fresh_resolution is not None
+            and step.submit_binding is not None
+            and (
+                fresh_resolution.rung == "structural"
+                or isinstance(self.backend, RemoteActuationBackend)
+                or not isinstance(self.backend, GuardedCoordinateActionBackend)
+            )
+        ):
+            error = (
+                f"Step '{step.id}' ({step.intent}) carries a submit binding, which "
+                "is verified only on the guarded visual path of a DOM backend; "
+                "this observation would bypass it — refusing to act; run aborted"
+            )
+            result.safety_halt = True
+            result.failure_category = "safety_halt"
         elif fresh_resolution is not None:
             guarded_coordinate = (
                 self._requires_atomic_identity_pointer(step, workflow)
@@ -8803,6 +8870,21 @@ class Replayer:
                     ActionKind.SELECT_OPTION,
                 ) and callable(editable_arm):
                     editable_arm(*fresh_resolution.point)
+                elif step.submit_binding is not None:
+                    # No row identity exists for an unlabeled control outside
+                    # any row. Its record tie is the recorded binding to the
+                    # form this run filled; the backend verifies it live and
+                    # leases the exact observation until delivery, or raises.
+                    try:
+                        cast(
+                            SubmitBindingBackend, coordinate_backend
+                        ).arm_guarded_submit_coordinate(
+                            *fresh_resolution.point, binding=step.submit_binding
+                        )
+                    except StructuralResolutionRefused:
+                        result.submit_binding_verified = False
+                        raise
+                    result.submit_binding_verified = True
                 else:
                     coordinate_backend.arm_guarded_coordinate(*fresh_resolution.point)
             guarded_keyboard = guarded_keyboard_backend

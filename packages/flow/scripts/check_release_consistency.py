@@ -1061,6 +1061,7 @@ FORBIDDEN_SDIST_PATHS = frozenset(
         "THIRD_PARTY_NOTICES.md",
         "scripts/openimis_claims_demo.py",
         "scripts/openimis_eligibility_demo.py",
+        "scripts/openimis_submit_binding_probe.py",
         "tests/test_openimis_claims_fixture.py",
         "tests/test_openimis_eligibility.py",
     }

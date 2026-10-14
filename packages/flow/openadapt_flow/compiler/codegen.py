@@ -158,6 +158,17 @@ def render_workflow_py(workflow: Workflow) -> str:
                 f"{', structured' if has_struct else ''}); "
                 "no patient identifier stored"
             )
+        if step.submit_binding is not None:
+            from openadapt_flow.submit_binding import describe_submit_binding
+
+            lines.append(
+                f"    # submit binding: {describe_submit_binding(step.submit_binding)}"
+            )
+        elif step.submit_binding_unbound_reason is not None:
+            lines.append(
+                "    # submit binding: NONE, the run refuses this click "
+                f"({step.submit_binding_unbound_reason})"
+            )
         lines.append(_step_call(step))
         lines.extend(_expect_comment(step.expect))
         lines.extend(_effect_comment(step.effects))

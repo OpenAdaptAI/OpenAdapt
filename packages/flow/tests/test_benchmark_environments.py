@@ -121,6 +121,7 @@ def test_agpl_openimis_is_excluded_from_sdist() -> None:
     assert "/benchmark/openimis_claims" in exclude
     assert "/scripts/openimis_claims_demo.py" in exclude
     assert "/scripts/openimis_eligibility_demo.py" in exclude
+    assert "/scripts/openimis_submit_binding_probe.py" in exclude
     assert "/tests/test_openimis_claims_fixture.py" in exclude
     assert "/tests/test_openimis_eligibility.py" in exclude
     assert "/docs/showcase-openimis" in exclude

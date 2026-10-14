@@ -17,6 +17,7 @@ if TYPE_CHECKING:  # pragma: no cover
         Point,
         StructuralHandle,
         StructuralLocator,
+        SubmitBinding,
     )
 
 
@@ -400,6 +401,31 @@ class GuardedCoordinateActionBackend(Protocol):
         button: str = "left",
     ) -> "ActionDeliveryReceipt":
         """Verify the exact frame and deliver one coordinate action atomically."""
+        ...
+
+
+@runtime_checkable
+class SubmitBindingBackend(Protocol):
+    """Optional DOM seam binding an unlabeled control to the form it submits.
+
+    A consequential click on an icon-only control outside any record row has
+    no row identity to verify. A backend with this seam can relate the control
+    to the fields the program typed into (form ownership, submit role,
+    position, and uniqueness; see :mod:`openadapt_flow.submit_binding`): the
+    recorder stores that observation, the compiler turns it into a
+    :class:`~openadapt_flow.ir.SubmitBinding`, and the runtime arms a guarded
+    click only when the live observation matches it. A backend without the
+    seam cannot verify a binding, and the runtime refuses such a click.
+    """
+
+    def submit_binding_at(self, x: int, y: int) -> Optional[dict[str, Any]]:
+        """Record time: the PHI-free binding observation at a point, or None."""
+        ...
+
+    def arm_guarded_submit_coordinate(
+        self, x: int, y: int, *, binding: "SubmitBinding"
+    ) -> None:
+        """Verify ``binding`` live and arm the guarded click, or refuse."""
         ...
 
 

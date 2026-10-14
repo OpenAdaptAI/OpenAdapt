@@ -154,6 +154,46 @@ irreversible, and qualification requires its record check. An icon-only click
 that only navigates after data entry is therefore over-classified until an
 operator reclassifies it.
 
+A consequential click must be tied to a record before Flow delivers it. Inside
+a table row, the row is that record. An icon-only Save that floats beside a
+form (openIMIS's claim Save has no text, accessible name, or tooltip) has no
+row, so the browser refuses it. When the browser recording shows how that
+control relates to the fields the demonstration typed into, the compiler
+records a **submit binding** (`Step.submit_binding`,
+[`submit_binding.py`](../openadapt_flow/submit_binding.py)):
+
+- form ownership: the control and the fields share one HTML form, or the
+  fields share a form and the control sits outside every form, or nothing has
+  a form;
+- submit role: the form's submit button, another button of that form, or a
+  button outside any form, plus the control's tag, type, role, and a digest of
+  its icon geometry;
+- position: the control follows every filled field in page order, sits in the
+  same quadrant of their bounding box, and keeps the same tag path from the
+  form or shared container down to it;
+- uniqueness: it's the only rendered, unlabeled control after those fields.
+  Controls in table rows and the adornments inside one field's own widget
+  don't count.
+
+A run recomputes the same observation for the element at the resolved point,
+against the fields that run typed into, and clicks only when every recorded
+value matches. The browser leases that observation until delivery, so a
+second icon, a replaced field, or a moved control in between refuses the
+click. The binding never relaxes another check: the resolution floor, the
+identity band, and the delivery lease still apply.
+
+The compiler doesn't bind the click when the demonstration was ambiguous, for
+example when two unlabeled controls follow the filled fields, the control
+belongs to another form, or the fields span two forms. It records why in
+`Step.submit_binding_unbound_reason`, lint reports it as an error, and a run
+refuses that click before any input. A pixel-only recording (RDP, Citrix)
+carries no DOM structure, so it gets no binding, and a backend that can't read
+the page structure refuses a bound click.
+
+The binding ties the click to the entry the run made. It doesn't check that
+the entry is right: the values typed come from the run's parameters, and only
+a record check can confirm what the application saved.
+
 For consequential or entity-sensitive workflows, require a policy that refuses
 unarmed actions, review the inferred risk and tags, and test identity against
 real near-match and same-name records. Pure-pixel substrates should expect more

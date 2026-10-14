@@ -1162,6 +1162,12 @@ def lint_workflow(
       an independent API, SQL, second-session, or file read is clean. Always
       ``warn`` here. Runtime still refuses ``VERIFIED`` without an independent
       system-of-record read.
+    - ``submit_binding`` (``info``) — a consequential click on an unlabeled
+      control carries a recorded binding to the form it submits; the run
+      verifies it before clicking (see :mod:`openadapt_flow.submit_binding`).
+    - ``submit_binding_unbound`` — the compiler could not bind such a click
+      (for example, two unlabeled controls follow the filled fields). The
+      run refuses the click. ``error`` on a consequential step.
     - ``missing_identifier_crop`` — an IDENTITY-ARMED step with no pixel
       identifier crop (``anchor.identifier_crop``): on a remote-display/pixel
       replay (Citrix/RDP) the pixel-compare identity tier abstains and the
@@ -1276,6 +1282,37 @@ def lint_workflow(
                         f"{step.action.value} proceeds with NO identity check "
                         f"({reason})"
                         + (" — and it is an IRREVERSIBLE write" if irreversible else "")
+                    ),
+                )
+            )
+
+        if step.submit_binding is not None:
+            from openadapt_flow.submit_binding import describe_submit_binding
+
+            findings.append(
+                Finding(
+                    severity="info",
+                    code="submit_binding",
+                    step_id=step.id,
+                    message=(
+                        "unlabeled control bound to the form it submits: "
+                        f"{describe_submit_binding(step.submit_binding)}. A "
+                        "browser run checks the same binding before it clicks "
+                        "and refuses if it differs"
+                    ),
+                )
+            )
+        elif step.submit_binding_unbound_reason is not None:
+            findings.append(
+                Finding(
+                    severity="error" if irreversible else "warn",
+                    code="submit_binding_unbound",
+                    step_id=step.id,
+                    message=(
+                        f"{step.action.value} on an unlabeled control could not "
+                        "be bound to the form it submits "
+                        f"({step.submit_binding_unbound_reason}); a run refuses "
+                        "this click"
                     ),
                 )
             )
