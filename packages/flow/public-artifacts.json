@@ -1852,6 +1852,22 @@
       "sha256": "3bd24ce0bc0aa274c40d1aaf2b8fcfa7ab7c92296e0488e8bc41ab3344798c3a"
     },
     {
+      "path": "examples/claude-code-demo/demo.gif",
+      "sha256": "b4dcdf941ec450d54c287bd852993341e47bd9f99e485da69a5e4905df1f1e13"
+    },
+    {
+      "path": "examples/claude-code-demo/effect_contract.yaml",
+      "sha256": "d3272056e1d6bac6f78e57aa5c12e63c6eba055ab79196ad5da46dce88879d31"
+    },
+    {
+      "path": "examples/claude-code-demo/halt.gif",
+      "sha256": "91139d82dcff23a314b3097b9830223d2f01587bc2d8cc07cf24ab6ceed64276"
+    },
+    {
+      "path": "examples/claude-code-demo/policy.yaml",
+      "sha256": "831387f3481c7ea2d064b713361cc7650e46d30caf7ab54f72608e011676973b"
+    },
+    {
       "path": "openadapt_flow/console/static/console.css",
       "sha256": "24c23e7bc857eec761781388762e3d97d2506c88ea801b3f644f129064ad0f64"
     },

@@ -1,0 +1,19 @@
+# The rules a compiled bundle must pass before `openadapt-flow run` will
+# execute it. build.py certifies against this file, and every run checks it
+# again.
+name: expense-write
+description: Every click is checked against its recorded target, and the save
+  is checked against the database.
+prohibit_unarmed_clicks: true        # each click verifies it hit the recorded target
+prohibit_vacuous_postconditions: true  # each step must change something visible
+require_identity_for:
+  - write
+require_system_effects_for:
+  - write                            # the save needs a database check, not a banner
+prohibit_unconfirmed_effect_bindings: true
+require_screen_postconditions_for:
+  - write
+  - save
+  - submit
+  - create
+max_unverified_steps: 0

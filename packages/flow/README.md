@@ -246,6 +246,26 @@ browser.
 `openadapt-flow emit-mcp bundle --out server.py` writes a standalone MCP
 server for one bundle. It replays without the record check.
 
+### From Claude Code
+
+[`examples/claude-code-demo`](examples/claude-code-demo) records one form fill
+in a small expenses app backed by SQLite, compiles it, and serves it to Claude
+Code over MCP with
+[openadapt-agent](https://github.com/OpenAdaptAI/openadapt-agent). Claude Code
+passes a description and an amount. OpenAdapt fills in the form with no model
+calls, then reads the `expenses` table itself. The tool returns `success` only
+when exactly one new row with those values is there. If the app shows "Expense
+saved." without writing the row, the tool returns `halt`.
+
+![Claude Code adds an expense through the compiled workflow, then the new row is read from SQLite](examples/claude-code-demo/demo.gif)
+
+```bash
+examples/claude-code-demo/demo.sh   # install, start the app, record, compile
+cd examples/claude-code-demo
+claude --mcp-config mcp.json        # then ask: Add an 18.75 expense for parking
+```
+
+
 ## What runs where
 
 Recording, compiling, replaying, and production runs all happen on your

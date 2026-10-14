@@ -1,0 +1,4 @@
+.venv/
+work/
+mcp.json
+__pycache__/
