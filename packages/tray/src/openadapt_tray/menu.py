@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     from openadapt_tray.app import TrayApplication
 
 from openadapt_tray.platform.base import DialogUnavailableError
+from openadapt_tray.shortcuts import format_hotkey
 from openadapt_tray.state import CredentialState, TrayState
 
 
@@ -144,7 +145,9 @@ class MenuBuilder:
         elif state.state == TrayState.COMPILING:
             return Item("Compiling...", None, enabled=False)
         else:
-            hotkey = self.app.config.hotkeys.toggle_recording
+            # The raw pynput string stays in the config and in the hotkey
+            # registration; only the label is formatted for people.
+            hotkey = format_hotkey(self.app.config.hotkeys.toggle_recording)
             label = f"Start Recording ({hotkey})"
             return Item(
                 label,

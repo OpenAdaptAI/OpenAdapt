@@ -2,7 +2,60 @@
 
 from unittest.mock import MagicMock, patch
 
-from openadapt_tray.shortcuts import HotkeyConfig, HotkeyManager
+import pytest
+
+from openadapt_tray.shortcuts import HotkeyConfig, HotkeyManager, format_hotkey
+
+
+class TestFormatHotkey:
+    """The menu shows a hotkey in the platform's form, not pynput syntax."""
+
+    @pytest.mark.parametrize(
+        ("spec", "platform", "expected"),
+        [
+            ("<ctrl>+<shift>+r", "darwin", "⌃⇧R"),
+            ("<ctrl>+<shift>+r", "win32", "Ctrl+Shift+R"),
+            ("<ctrl>+<shift>+r", "linux", "Ctrl+Shift+R"),
+            ("<cmd>+r", "darwin", "⌘R"),
+            ("<cmd>+r", "win32", "Win+R"),
+            ("<cmd>+r", "linux", "Super+R"),
+            ("<alt>+<ctrl_l>+<shift_r>+x", "darwin", "⌥⌃⇧X"),
+            ("<alt>+<ctrl_l>+<shift_r>+x", "win32", "Alt+Ctrl+Shift+X"),
+            ("<ctrl>+<f5>", "darwin", "⌃F5"),
+            ("<ctrl>+<page_up>", "linux", "Ctrl+Page Up"),
+            ("<cmd>+<space>", "darwin", "⌘Space"),
+            ("<cmd_r>+<alt_gr>+e", "darwin", "⌘⌥E"),
+            ("<alt_gr>+e", "linux", "AltGr+E"),
+            ("<ctrl>++", "win32", "Ctrl++"),
+        ],
+    )
+    def test_formats_for_platform(self, spec, platform, expected):
+        assert format_hotkey(spec, platform) == expected
+
+    def test_defaults_to_running_platform(self):
+        with patch("sys.platform", "darwin"):
+            assert format_hotkey("<ctrl>+<shift>+r") == "⌃⇧R"
+        with patch("sys.platform", "win32"):
+            assert format_hotkey("<ctrl>+<shift>+r") == "Ctrl+Shift+R"
+
+    @pytest.mark.parametrize(
+        "spec", ["", "<ctrl>+", "+", "ctrl+shift+r", "<>+r", "<ctrl>+rr"]
+    )
+    @pytest.mark.parametrize("platform", ["darwin", "win32", "linux"])
+    def test_malformed_spec_is_shown_unchanged(self, spec, platform):
+        # A bad hotkey in tray.json must not stop the menu from rendering, and
+        # must not be dressed up as a shortcut pynput would never register.
+        assert format_hotkey(spec, platform) == spec
+
+    @pytest.mark.parametrize(("value", "shown"), [(None, "None"), (5, "5")])
+    def test_non_string_setting_is_shown_as_text(self, value, shown):
+        # tray.json can hold null or a number here; the menu must still build.
+        assert format_hotkey(value, "darwin") == shown
+
+    def test_virtual_key_code_is_left_as_written(self):
+        # pynput accepts "<65>" as a virtual key code; there is no honest
+        # display name for it, so show what the user configured.
+        assert format_hotkey("<ctrl>+<65>", "win32") == "Ctrl+<65>"
 
 
 class TestHotkeyManager:
