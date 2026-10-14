@@ -5,140 +5,293 @@
 
 Your AI agent decides what to enter. OpenAdapt enters it in the app and checks that it saved.
 
-Your agent already reads the referral, the intake form, or the authorization and works out what belongs in the record. Today a person still opens the EMR or the payer portal and types it in again. OpenAdapt takes that last step off your customer's team. It enters the approved values in the app they already use, on a computer they control, and then reads the saved record back. When something doesn't match, it stops and asks a person instead of guessing.
+Use it if your agent reads referrals, intake forms, or authorizations and works out what belongs in the record, but a person still types the result into an app with no usable API. Examples are an electronic medical record (EMR) and a payer portal. This package is the tool your agent calls to do that typing.
 
-## How it fits
+- A person records the task once in the real app. OpenAdapt replays those steps, and by default a run makes no AI model calls.
+- Before it types, OpenAdapt checks that the right record is open. After it saves, it reads the record back.
+- Your agent gets one of four outcomes: done and checked, stopped before saving, check the record, or didn't run. When OpenAdapt can't confirm a save, it says so, and a person checks the record.
+- It runs on your customer's computer, one that can already open the app. Your agent, or a small program acting for it, has to run on that computer too, since it starts OpenAdapt and talks to it directly. If your agent runs in your own cloud, ask us about a hosted route.
 
-```mermaid
-flowchart LR
-    A["Your agent decides<br/>what to enter"]
-    B["OpenAdapt enters it in the app<br/>on a computer the customer controls<br/>and reads the record back"]
-    C["A result returns to your queue<br/>done, needs review, or check the record"]
-    A -- "workflow, inputs, request id" --> B
-    B -- "one result per request" --> C
-```
-
-Your agent sends the name of a saved task, the values to enter, and its own id for the piece of work. OpenAdapt does the entry in the same screens staff use, reads the saved record back, and returns one result to your queue.
+Pick one task your agent hands to staff today and [talk to us about connecting it](https://openadapt.ai/qualify?why=embed). Engineers can [try the sandbox](#try-it-in-three-steps) first.
 
 ## What changes for your customer's team
 
 | Step | Today | With OpenAdapt |
 | --- | --- | --- |
 | Read the document and decide what to enter | Your agent | Your agent |
-| Open the app and find the right record | Staff | OpenAdapt, which confirms it has the right record before it types |
-| Type the values and save | Staff, re-keying your agent's output | OpenAdapt, in the same screens staff use |
-| Confirm the entry saved | Staff, if they look again after saving | OpenAdapt reads the saved record back before it reports done |
-| Something doesn't match | Staff notice it while typing, or it's found later | OpenAdapt stops and a person decides |
-| What staff handle | Every item | Only the items that stopped or need a record check |
+| Open the app and find the right record | Staff | OpenAdapt, which checks that it has the right record before it types |
+| Type the values and save | Staff, retyping your agent's output | OpenAdapt, in the same screens staff use |
+| Confirm the save | Staff, if they look again | OpenAdapt reads the record back before it reports done |
+| Something doesn't match | Staff notice while typing, or someone finds it later | OpenAdapt stops before saving, and the run waits for a person |
+| What staff handle | Every document | Runs that stopped and records to check. Nobody is notified, so someone checks the list of stopped runs. |
 
-For scale, two hospital time studies put keying one faxed referral into an EHR at about 10 to 12 minutes ([UCSF, JAMIA Open 2020](https://pmc.ncbi.nlm.nih.gov/articles/PMC7660949/); [Calderdale and Huddersfield NHS Foundation Trust, HFMA 2024](https://www.hfma.org.uk/system/files/2024-04/Using%20digital%20technologies%20to%20process%20admin%20tasks%20Case%20Study%20v7.pdf)). This page doesn't estimate time saved. Measure it on your own workflow.
+For scale, two hospital time studies put keying one faxed referral into an electronic record at about 10 to 12 minutes ([UCSF, JAMIA Open 2020](https://pmc.ncbi.nlm.nih.gov/articles/PMC7660949/); [Calderdale and Huddersfield NHS Foundation Trust, HFMA 2024](https://www.hfma.org.uk/system/files/2024-04/Using%20digital%20technologies%20to%20process%20admin%20tasks%20Case%20Study%20v7.pdf)). We don't publish a time-saved number until a deployment measures one.
 
-## What your agent gets back
+## Who builds what
 
-Every request ends in one of four outcomes. Each one tells your agent what to do next.
+```mermaid
+flowchart LR
+    A["Your agent reads the document<br/>and picks the values"]
+    B["OpenAdapt enters them in the app<br/>on your customer's computer<br/>and reads the record back"]
+    C["Your agent acts<br/>on the outcome"]
+    D["A person at that computer<br/>decides or checks the record"]
+    A -->|"workflow, inputs, request_id"| B
+    B -->|"one outcome per request"| C
+    B -.->|"needs_review or not_sure_if_saved"| D
+```
 
-| `outcome` | Plain label | What it means | What your agent does |
-| --- | --- | --- | --- |
-| `done` | Done and checked | OpenAdapt saved the entry and read the record back to confirm it. | Marks the item complete and keeps the `run_id`. |
-| `needs_review` | Stopped before saving | Something didn't match, so it stopped before changing anything. Nothing was written. A person decides. | Waits. It doesn't start the same work again. |
-| `not_sure_if_saved` | Check the record | A save may have gone through. A person checks the record before anything is retried. | Never retries. It routes the item to the person who checks. |
-| `did_not_run` | Didn't run | Nothing was written. It didn't start, or a person ended it before it saved anything. | Fixes the cause, such as a bad input, and retries with the same request id when `safe_to_retry` is true. |
+| You build | OpenAdapt provides |
+| --- | --- |
+| The agent that reads documents and decides what to enter | A workflow built from one recording of a person doing the task in the real app |
+| The call to `run_workflow`, with your own `request_id` | The run on your customer's computer, with a right-record check before it types and a record check after it saves |
+| What your product does with each outcome | One result per request, and no second entry when your agent repeats a `request_id` |
+| Your tests against the four outcomes | A sandbox that returns each outcome on demand |
 
-Each result also carries `safe_to_retry`, one plain sentence in `what_happened`, a `next_action`, and `proof`. `proof` is `local` when the record check ran on the customer's computer. It's never a reason to report a saved entry as a failure.
+Your customer provides the computer and a person for runs that stop. Someone who does the task today records it once. Your agent can guide that recording (see [Record a first workflow](#record-a-first-workflow)), or [talk to us](https://openadapt.ai/qualify?why=embed) about setting it up.
 
-## Three tools
+## Try it in three steps
 
-Your agent needs three calls.
+The sandbox is a practice server that needs no account. It has one workflow, `add_triage_note`, which adds a note to the first referral in MockMed, a test clinic app with made-up patients.
 
-1. `list_workflows` returns each saved task's `name`, `purpose`, what `done_means`, and its typed `inputs`.
-2. `run_workflow` takes `workflow`, `inputs`, `request_id`, and an optional `wait_seconds`.
-3. `get_run` takes a `run_id` and returns the result of a run that was still going.
+You need [Claude Code](https://claude.com/claude-code) (signed in), [uv](https://docs.astral.sh/uv/), and git. To use a different client or your own code, see [Connect your own agent](#connect-your-own-agent).
 
-`request_id` is your own id for the piece of work, such as the referral id. It's required. If your agent sends the same `request_id` again, it gets the first result back and nothing is entered a second time. A new attempt starts only when the first one proved nothing was written.
+1. Add the sandbox server. Claude Code saves it for the current folder only.
 
-Here is a real result from the sandbox, with some fields left out. The synthetic app saved the note and then showed an error, so OpenAdapt can't confirm the save and says so:
+   ```bash
+   claude mcp add openadapt -- uvx --python 3.12 --from git+https://github.com/OpenAdaptAI/openadapt-agent openadapt-agent serve
+   ```
+
+2. In the same folder, start Claude Code with `claude`. Claude Code starts the server.
+
+3. Ask: "Use OpenAdapt to add the triage note 'Synthetic: recheck blood pressure in 2 weeks' with request id demo-0001."
+
+Your agent should call `list_workflows`, then `run_workflow` with these arguments:
+
+```json
+{"workflow": "add_triage_note", "inputs": {"note": "Synthetic: recheck blood pressure in 2 weeks"}, "request_id": "demo-0001"}
+```
+
+The result looks like this (some fields left out):
 
 ```json
 {
-  "outcome": "not_sure_if_saved",
-  "label": "Check the record",
+  "outcome": "done",
+  "label": "Done and checked",
   "safe_to_retry": false,
-  "what_happened": "OpenAdapt can't confirm whether the change was saved. It may have gone through. This was a sandbox run on a synthetic app; no real record was touched.",
-  "next_action": "Have a person check the record in the app before anything runs again. Don't retry this request.",
-  "record_changed": "unknown",
-  "proof": "none",
-  "workflow": "add_triage_note",
-  "request_id": "demo-timeout-after-save",
-  "run_id": "run-cef0b138a5e1488abbd805f5",
+  "what_happened": "Simulated sandbox result (no app was opened): Saved the change and read the record back to confirm it.",
+  "next_step": "none",
+  "proof": "simulated",
+  "run_id": "run-31ecb9d66db84f1aba8cb5f6",
   "model_calls": 0
 }
 ```
 
-Measured on synthetic data. The full set, one result per case, is in [`docs/examples/sandbox-results.json`](docs/examples/sandbox-results.json).
+This install simulates each run without opening MockMed, and every result says so. To watch the real engine do the work, see [Drive MockMed with the real engine](#drive-mockmed-with-the-real-engine).
 
-## Who builds what
+PyPI has version 2.0.1, which came out before the sandbox. After 2.0.2 is on PyPI, step 1 can be `claude mcp add openadapt -- uvx --python 3.12 openadapt-agent serve`.
 
-| You build | OpenAdapt provides |
-| --- | --- |
-| The agent that reads documents and decides what to enter | An automation built from one recording of a person doing the task in the real app |
-| The call to `run_workflow`, with your own request id | The run on a computer the customer controls, with a right-record check before it types and a record check after it saves |
-| What your product does with each outcome | Stops that go to a person, a durable record of every run, and the first result back for a repeated request id |
-| Your tests against the four outcomes | A sandbox that returns each outcome on demand |
+### See every outcome
 
-Your customer provides a computer that can already open the app and a person who handles the items that stop. A normal run sends nothing to an AI model.
+Ask for each case by adding `sandbox_case` to the inputs, with a new `request_id` each time. For example: "Now try the false_saved_banner case with request id demo-0002."
 
-## Try it
-
-The sandbox needs no account and no flags. It serves one workflow, `add_triage_note`, on MockMed, a synthetic clinic app with made-up patients. Pick a `sandbox_case` to see each outcome.
-
-```bash
-claude mcp add openadapt -- uvx --python 3.12 --from git+https://github.com/OpenAdaptAI/openadapt-agent openadapt-agent serve
-```
-
-PyPI has openadapt-agent 2.0.1, which predates the sandbox. From version 2.0.2 on, this shorter line does the same:
-
-```bash
-claude mcp add openadapt -- uvx --python 3.12 openadapt-agent serve
-```
-
-Then ask your agent something like: "Use OpenAdapt to add the triage note 'Synthetic: recheck blood pressure in 2 weeks' with request id demo-0001. Then try the false_saved_banner case with request id demo-0002."
-
-| `sandbox_case` | `outcome` | What the synthetic app does |
+| `sandbox_case` | `outcome` | What MockMed does |
 | --- | --- | --- |
-| `normal` (default) | `done` | Saves the note. The record check finds it in the app's record store. |
-| `duplicate_record` | `needs_review` | Lists the same referral twice, so OpenAdapt can't be sure which record to open. It stops before saving. |
-| `false_saved_banner` | `not_sure_if_saved` | Shows a saved message, but its record store rejected the note. |
-| `timeout_after_save` | `not_sure_if_saved` | Saves the note, then times out and shows an error. Only a person checking the record can tell it saved. |
-| `app_offline` | `did_not_run` | Isn't reachable, so nothing starts. |
+| `normal` (default) | `done` | Saves the note, and the record check finds it. |
+| `duplicate_record` | `needs_review` | Lists the same referral twice, so OpenAdapt can't tell which record to open. It stops before saving. |
+| `false_saved_banner` | `not_sure_if_saved` | Shows a saved message, but the note wasn't stored. |
+| `timeout_after_save` | `not_sure_if_saved` | Saves the note, then times out with an error. |
+| `app_offline` | `did_not_run` | Doesn't answer, so nothing starts. |
 
-A plain install returns simulated results and says so in every result. Add the `tutorial` extra to drive the synthetic app in a hidden browser with the real OpenAdapt engine. The first run downloads a browser and records the workflow once:
+The sandbox remembers each `request_id` across sessions. Sending a used `request_id` with the same inputs returns the earlier result. Sending it with different inputs, such as a new `sandbox_case`, returns `did_not_run` with the reason `request_id_conflict`. To start over, delete `~/.openadapt/agent-sandbox`, or set `OPENADAPT_AGENT_SANDBOX_DIR` to an empty folder.
+
+### Drive MockMed with the real engine
+
+The `tutorial` extra makes openadapt-flow (Flow), the engine behind OpenAdapt, drive MockMed in a hidden browser. Replace the sandbox server with this one:
 
 ```bash
+claude mcp remove openadapt
 claude mcp add openadapt -- uvx --python 3.12 --from 'openadapt-agent[tutorial] @ git+https://github.com/OpenAdaptAI/openadapt-agent' openadapt-agent serve
 ```
 
-Pick one task your agent hands to staff today, and [talk to us about connecting it](https://openadapt.ai/qualify?why=embed). Public examples use synthetic apps and data. Each new environment gets a readiness test on its own system before it handles real records.
+When the server starts, Flow records the workflow once and, if needed, downloads a browser (about 300 MB). The first request waits for that. In our test on a Mac, the first request took about 80 seconds. The call returned `running` after 60 seconds, and the agent called `get_run` for the result. If setup takes more than 15 minutes, the request ends `did_not_run`. With Flow, a `done` result has `proof: "local"` instead of `"simulated"`.
+
+Until 2.0.2 is on PyPI, use the command above even if your agent suggests a shorter one. The shorter command installs 2.0.1, which has no sandbox.
+
+## What your agent gets back
+
+`outcome` is one of four final values. While a run is still going, it's `running`.
+
+| `outcome` (label) | What happened | What your agent does next |
+| --- | --- | --- |
+| `done` (Done and checked) | OpenAdapt saved the values and read the record back. | Mark the request complete and keep the `run_id`. Don't send it again. |
+| `needs_review` (Stopped before saving) | It stopped before saving. Nothing was written. The run waits until someone at your customer's computer finds it and decides. | Don't start the same work again. Call `get_run` later to see the decision. |
+| `not_sure_if_saved` (Check the record) | A save may have gone through, but OpenAdapt couldn't confirm it. | Never retry. Have a person check the record in the app. |
+| `did_not_run` (Didn't run) | This call wrote nothing. With `request_id_conflict`, an earlier request with the same `request_id` may have saved. | If `safe_to_retry` is true, fix the cause and resend the same request. Otherwise follow `next_action`. |
+| `running` (Running) | The run didn't finish within `wait_seconds` (default 60). | Call `get_run` with the `run_id` until `outcome` changes. |
+
+Branch on `outcome` and `safe_to_retry`. `next_step` names the next move as a fixed code, so your code doesn't have to parse `next_action`: `none`, `call_get_run`, `wait_for_person`, `check_record`, `fix_inputs`, `fix_setup`, or `retry`.
+
+### Resend a request
+
+`request_id` is your own id for the request, such as a referral id. Don't put patient details in it. A request is one `request_id` with one workflow and one set of inputs.
+
+- Resending the same request never enters the values twice. It returns the latest result, marked `replayed: true`.
+- If that result was `did_not_run` with `safe_to_retry: true`, resending starts a new attempt, up to 5 attempts per `request_id`.
+- After `invalid_input`, you can fix the inputs and resend with the same `request_id`. After any other retryable result, send the same inputs.
+- A different workflow or different inputs under a used `request_id` return `did_not_run` with `request_id_conflict`. Nothing new runs, and the earlier request may have saved. Call `get_run` with the result's `first_run_id` to see what happened to it.
+- No tool clears `not_sure_if_saved`. If the person who checks finds the work still needs doing, send it as a new request with a new `request_id`.
+
+The check that stops a second entry covers one runs folder. See `--runs-dir` under [Set server options](#set-server-options).
+
+### Read the other fields
+
+- `label`: a short status you can display, such as "Done and checked".
+- `reason`: a code from a fixed list that names the cause, such as `invalid_input` or `request_id_conflict`. Every code is in `REASONS` in [contract.py](src/openadapt_agent/contract.py), and [docs/DESIGN.md](docs/DESIGN.md#the-result-contract) explains how each one is chosen.
+- `what_happened` and `next_action`: fixed sentences you can show a person. They never contain input values or screen text.
+- `proof`: `local` for a `done` that was checked on your customer's computer, `simulated` for a sandbox run that didn't open the app, and `none` for every other outcome.
+- `model_calls`: on runs that reached Flow, how many AI model calls the run made. It's 0 unless model grounding, a fallback that asks an AI model where to click, is turned on (see [Security](#security)).
+- `record_changed`: `yes`, `no`, or `unknown`. With `request_id_conflict`, its `no` describes this call only. The earlier request may have saved.
+
+## Three tools
+
+| Tool | Arguments | Returns |
+| --- | --- | --- |
+| `list_workflows` | none | Each workflow's `name`, `purpose`, `done_means` (what counts as done), and `inputs` as JSON Schema. |
+| `run_workflow` | `workflow`, `inputs`, `request_id`, and optional `wait_seconds` (0 to 600, default 60) | One result. |
+| `get_run` | `run_id`, and optional `wait_seconds` (0 to 600, default 60) | The latest result for that run, including a person's decision on a stopped run. |
+
+A `request_id` is 4 to 128 characters long. It starts with a letter or digit, and the rest can be letters, digits, `.`, `_`, `:`, or `-`.
+
+A call with bad arguments, such as a missing `request_id`, returns a tool error instead of a result. For `run_workflow`, that error ends "Nothing ran." `get_run` finds only runs in the same runs folder.
+
+The sandbox has all three tools. With your own workflows, `run_workflow` appears only when the server is started with `--mode production` or `--mode attended` (see [Serve your own workflows](#serve-your-own-workflows)).
 
 ## Developer setup
 
-Python 3.10 through 3.12. This package is a local MCP server over stdio. Claude Code, Cursor, Codex, and your own MCP client can use it. It runs on the computer that can open the app.
+The package is a local Model Context Protocol (MCP) server that talks over stdio, plus an `openadapt-agent` command. It needs Python 3.10 to 3.12. It checks inputs, stops second entries, and turns Flow's report into one of the four outcomes. [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) records, replays, and checks the workflows.
 
-### Modes
+To see Flow on its own, install the OpenAdapt launcher with `pip install openadapt`, then run `openadapt flow tutorial` or `openadapt quickstart --break-it`.
 
-| Command | What it serves |
+### Connect your own agent
+
+Any MCP client can start the server with the command `uvx`. In a client that reads an `mcpServers` JSON file, such as Claude Desktop or Cursor, add:
+
+```json
+{
+  "mcpServers": {
+    "openadapt": {
+      "command": "uvx",
+      "args": ["--python", "3.12", "--from", "git+https://github.com/OpenAdaptAI/openadapt-agent", "openadapt-agent", "serve"]
+    }
+  }
+}
+```
+
+From your own Python code, use the MCP Python SDK (`pip install mcp`):
+
+```python
+import asyncio
+import json
+
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+
+SERVER = StdioServerParameters(
+    command="uvx",
+    args=["--python", "3.12", "--from", "git+https://github.com/OpenAdaptAI/openadapt-agent",
+          "openadapt-agent", "serve"],
+)
+
+
+async def main():
+    async with stdio_client(SERVER) as (read, write):
+        async with ClientSession(read, write) as session:
+            await session.initialize()
+            call = await session.call_tool("run_workflow", {
+                "workflow": "add_triage_note",
+                "inputs": {"note": "Synthetic: recheck blood pressure in 2 weeks"},
+                "request_id": "demo-py-0001",
+            })
+            result = json.loads(call.content[0].text)
+            print(result["outcome"], result["next_step"])
+
+
+asyncio.run(main())
+```
+
+The SDK starts the server with only a few environment variables. To pass others, such as `OPENADAPT_BUNDLE_KEY`, add `env=` to `StdioServerParameters`.
+
+[scripts/smoke_client.py](scripts/smoke_client.py) is a fuller example that runs every sandbox case. From a clone of this repository, run `pip install -e .`, then:
+
+```bash
+python scripts/smoke_client.py -- uvx --python 3.12 --from git+https://github.com/OpenAdaptAI/openadapt-agent openadapt-agent serve
+```
+
+If your agent runs in your own cloud, it can't reach this server, which has no network listener. The program that starts the server has to run on your customer's computer. One way to do that is a small worker there: it takes requests from your service over a connection it opens, starts this server, calls `run_workflow`, and sends each result back. The worker acts as your agent, so protect its connection like any other route to patient data. For a hosted route instead, [talk to us](https://openadapt.ai/qualify?why=embed).
+
+### Serve your own workflows
+
+A bundle is a compiled workflow folder that contains `workflow.json`, or `workflow.json.enc` with its key in `OPENADAPT_BUNDLE_KEY`. `--bundles` takes one bundle or a folder of bundles.
+
+| Command | What your agent gets |
 | --- | --- |
-| `openadapt-agent serve` | The sandbox. Tools: `list_workflows`, `run_workflow`, `get_run`. |
-| `openadapt-agent serve --bundles DIR` | Your compiled workflows, read-only: they're listed, not run. |
-| `openadapt-agent serve --mode production --bundles DIR` | Your workflows, with runs. |
-| `openadapt-agent serve --mode attended --bundles DIR --config deployment.yaml --headed` | Runs, plus decisions on paused runs by a person at this computer. |
+| `openadapt-agent serve` | The sandbox. |
+| `openadapt-agent serve --bundles DIR` | Your workflows, listed but not runnable (`run_tools_enabled: false`), and read-only tools for past and stopped runs. |
+| `openadapt-agent serve --mode production --bundles DIR --runs-dir /var/lib/openadapt/runs` | Runs of your workflows. |
+| `openadapt-agent serve --mode attended --bundles DIR --runs-dir /var/lib/openadapt/runs` | Runs, plus decisions on stopped runs. |
 
-Operator bundles always run through the governed `openadapt-flow run` command, so every admission gate in [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) still applies. Results and run records live under `--runs-dir` (default `./runs`; the sandbox uses `~/.openadapt/agent-sandbox`).
+`openadapt-agent serve --allow-run` is the older form of `--mode production`, or of the sandbox when there's no `--bundles`.
 
-If your agent runs in your cloud rather than on the customer's computer, it can't reach this stdio server. [Talk to us](https://openadapt.ai/qualify?why=embed) about the hosted route.
+Each run goes through `openadapt-flow run`. Flow drives web apps in Chromium, with the address set by `--url`. It also drives desktop apps and RDP and Citrix sessions, which can need Flow's own target flags passed with `--extra-run-arg`. The [openadapt-flow README](https://github.com/OpenAdaptAI/openadapt-flow#readme) covers each kind of app.
 
-### Describe a workflow for agents
+### Get a workflow ready to run
 
-`list_workflows` reads types and choices from the compiled workflow. Add an `openadapt-card.json` next to the bundle's `workflow.json` to give it a name, a purpose, and input descriptions:
+Flow refuses a bundle that hasn't passed the checks it requires. Your agent then gets `did_not_run` with `not_ready_to_run`, and `failed_checks` names each missing check, such as `not_certified` or `no_readiness_test`. Expect this the first time you serve a new recording.
+
+What Flow requires depends on the profile set in the deployment config (`--config`). The main differences:
+
+- No profile: the bundle must be certified with `openadapt-flow certify` against the policy.
+- `standard` or `regulated`: certification, an active admission (a signed readiness test) for that exact bundle version, and a record check that reads the saved record through a separate path, such as the app's API, its database, or a second session. Under `standard`, a Citrix session with no separate way to read the record can't end `done`.
+- `demo`: no certification, but Flow doesn't confirm the save, so a finished run ends `not_sure_if_saved`.
+
+Flow's [execution profiles](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/docs/EXECUTION_PROFILES.md) page explains each profile.
+
+### Set server options
+
+| Flag | What it does |
+| --- | --- |
+| `--runs-dir DIR` | Where run records and Flow's evidence go. The default is `./runs` in the folder where the client starts the server; the sandbox uses `~/.openadapt/agent-sandbox`. In production, pass an absolute path. The check that stops a second entry covers one runs folder, so two servers started from different folders could each enter the same request. |
+| `--url URL` | The app's address, passed to every Flow run. |
+| `--config YAML` | Flow's deployment config ([example](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/docs/deployment.example.yaml)), which sets the profile and whether model grounding is allowed. |
+| `--policy NAME-OR-PATH` | The policy Flow certifies against, such as `clinical-write` or `permissive`. |
+| `--timeout SECONDS` | How long one run may take (default 600). A run stopped at the limit is `not_sure_if_saved`. |
+| `--headed` | Shows the browser. A person needs it to continue or skip a stopped run in a web app. |
+| `--extra-run-arg ARG`, `--flow-cli CMD` | Change how Flow is called. Either one can relax Flow's checks, for example `--extra-run-arg=--allow-unencrypted`. |
+| `--allow-protected-export`, `--allow-synthetic-recorded-defaults`, `--allow-model-grounding` | Off by default. See [Security](#security). |
+
+Callers can't change `--url`, `--config`, `--policy`, or `--timeout`. The one exception is `url` on the deprecated tools, when the server has `--allow-url-override`. `openadapt-agent serve --help` lists every flag.
+
+### Use the other tools
+
+With `--bundles`, the server also registers read-only tools for workflows and runs: `get_workflow`, `get_run_report`, `list_needs_attention`, and `get_attention_item`. With `--mode production` or `--mode attended`, it also registers a deprecated `run_workflow_<id>` for each workflow. Those tools take no `request_id`, so a retry can enter the values twice. Use `run_workflow` instead.
+
+`list_workflows`, `run_workflow`, and `get_run` return `structuredContent` that matches their `outputSchema`, defined in [contract.py](src/openadapt_agent/contract.py), plus the same JSON as text.
+
+### Decide stopped runs
+
+A run that stops for a person waits in Flow's Needs Attention list on that computer. Nobody is notified. `list_needs_attention` shows the list.
+
+With `--mode attended`, your agent can send a decision with `continue_attention`, `skip_attention`, `reject_attention`, `teach_attention`, or `escalate_attention`. The person at the computer confirms each decision in a form. Continue and skip also need `--config`. If the client can't show forms, the server refuses the decision, and the person uses Flow's console instead:
+
+```bash
+openadapt-flow console --attend --allow-actions --bundles DIR --runs RUNS_DIR
+```
+
+[docs/DESIGN.md](docs/DESIGN.md#needs-attention) describes each decision. After a person decides, `get_run` shows the new outcome.
+
+### Describe a workflow with a card
+
+A card gives a workflow the `name`, `purpose`, `done_means`, and input descriptions that `list_workflows` shows your agent. Without a card, the workflow gets an opaque name. Put `openadapt-card.json` next to `workflow.json`:
 
 ```json
 {
@@ -152,118 +305,76 @@ If your agent runs in your cloud rather than on the customer's computer, it can'
 }
 ```
 
-Card text goes to the calling agent and, through it, to a hosted model. Never put patient details in it. The server ignores a card that looks like it carries an identifier and logs a warning on this computer.
+Card text reaches your agent's model, so keep patient details out of it. The server ignores the whole card and logs a warning if the card is malformed, if `purpose` or `done_means` is over 300 characters, if a description is over 200 characters, or if the text looks like it holds an identifier: 5 or more digits in a row, an email address, or a phone number.
 
-### Technical details
+### Write an Agent Skill
 
-Results come from openadapt-flow's `transaction_outcome`, never from the coarse halt label alone.
+`openadapt-agent emit-skill BUNDLE --out ~/.claude/skills` writes a `SKILL.md` for one workflow: what it does, its inputs, how to call `run_workflow`, and what to do after each outcome. The skill holds no recorded values or secrets, and you still add the server separately. `--include-bundle` also copies the bundle next to the skill. That copy can contain values from the recording, so keep it as private as the recording.
 
-| Flow `transaction_outcome` | `outcome` | `safe_to_retry` |
-| --- | --- | --- |
-| `VERIFIED` | `done` | false |
-| `HALTED_BEFORE_EFFECT` | `needs_review` | false |
-| `REJECTED_POLICY`, `CANCELED`, `FAILED_PLATFORM` while a durable pause is open | `needs_review` | false |
-| `REJECTED_POLICY`, `CANCELED`, `FAILED_PLATFORM` with no open pause | `did_not_run` | true |
-| `RECONCILIATION_REQUIRED`, `COMPLETED_UNVERIFIED`, `ROLLED_BACK` | `not_sure_if_saved` | false |
-| A timeout after Flow started, an unreadable report, or a server that stopped mid-run | `not_sure_if_saved` | false |
-| An admission refusal before Flow started, with closed `failed_checks` codes | `did_not_run` | true |
-| A person ended the run at its pause | `did_not_run` | false |
+Each skill is named after its workflow, so `enter_referral` becomes `enter-referral`. If the name would come out as `computer-use`, emit-skill uses `openadapt-gui-write` instead, so an assistant doesn't load the skill for every request to control the screen.
 
-`reason` names the case from a closed list, and `technical` carries Flow's exact `execution_outcome` and `transaction_outcome`. `needs_attention_id` points at the local Needs Attention item when there is one. `receipt_url` and `review_url` are reserved for the hosted service; this local server leaves them out. `run_workflow` and `get_run` publish an MCP `outputSchema` and return `structuredContent`. The schema is `RUN_RESULT_SCHEMA` in [`src/openadapt_agent/contract.py`](src/openadapt_agent/contract.py).
+This repository also ships a general skill for any workflow, [skills/openadapt-gui-write/SKILL.md](skills/openadapt-gui-write/SKILL.md). A skill emitted under the `openadapt-gui-write` name into the same folder replaces it.
 
-Each attempt reserves `<request>:<attempt>` in openadapt-flow's `IdempotencyLedger` before anything runs. Run records hold the result only. Inputs are never stored; a keyed fingerprint catches a `request_id` reused with different inputs.
+### Record a first workflow
 
-### Older tools and flags
+`serve --authoring` adds recording tools, such as `observe`, `start_record`, `click`, `pause_for_input`, `stop_record`, `compile`, and `admit`. Your agent uses them to help a person record a task in a web app. The recording server doesn't turn on runs.
 
-Existing clients keep working. With `--bundles`, the server also registers the older tools:
+1. Add a recording server. `--url` opens the app in a new Chromium window with no saved sign-ins, and `--headed` keeps that window visible so the person can sign in.
 
-| Tool | Status |
-| --- | --- |
-| `get_workflow`, `get_run_report`, `list_needs_attention`, `get_attention_item` | Kept. `get_run_report` also finds runs started with `run_workflow`. |
-| `run_workflow_<opaque-id>` | Deprecated. Use `run_workflow`, which takes a request id. The old tools now return the same `outcome`, `safe_to_retry`, and `what_happened` fields, and a verified run reports `success` with `proof: "local"`. |
-| `reject_attention`, `teach_attention`, `escalate_attention` | `--mode attended` (or `--allow-attended-actions`) |
-| `continue_attention`, `skip_attention` | `--mode attended` plus a qualified deployment `--config` |
+   ```bash
+   claude mcp add openadapt-authoring -- uvx --python 3.12 --from 'openadapt-agent[tutorial] @ git+https://github.com/OpenAdaptAI/openadapt-agent' openadapt-agent serve --authoring --url https://app.example.com --headed
+   ```
 
-`openadapt-agent serve --allow-run` is the older form of `--mode production` when you pass `--bundles`, and of the sandbox when you don't. `--tutorial` is the older name for the sandbox. `--allow-attended-actions` is part of `--mode attended`.
+2. Ask your agent to record the task with the person. When the agent pauses for sign-in, the person signs in to the app in that window.
+3. When the task is done, the agent calls `compile`. It writes the bundle to `<runs-dir>/authoring/bundle`, which is `./runs/authoring/bundle` by default.
+4. The person accepts the bundle, and the agent calls `admit`. This step doesn't check that a person, rather than the agent, accepted it.
+5. Get the bundle ready to run (see [Get a workflow ready to run](#get-a-workflow-ready-to-run)). Then serve it with `--mode production --bundles <runs-dir>/authoring/bundle`.
 
-### Trust boundary
+Use `--url URL --headed` on every platform. Without `--url`, the server exits on Linux, and on macOS it uses whatever window is in front when the client starts the server, or exits. For Windows desktop apps, Citrix, and RDP, the recording tools can only tell the person what to click. Record those apps with Flow's own recorder.
 
-Don't expose this process's stdin and stdout as an unauthenticated network service. It inherits the local user's OS permissions, and Flow records that OS account as the operator for attended decisions.
-
-By default every MCP response is safe to render outside the protected workflow-data boundary. Labels, recorded values, paths, raw reports, observed text, stdout, stderr, and local exception messages stay on this computer. The client gets workflow cards, fixed outcome copy from a closed list, opaque ids, and count or boolean metrics.
-
-`--allow-protected-export` sends raw local metadata and evidence to the MCP client. Use it only when that client is trusted and inside the same protected data boundary.
-
-`--allow-synthetic-recorded-defaults` lets omitted inputs reuse recorded values. It requires runs. Synthetic demonstrations only: production runs require every declared input so a wrong-record entry can't hide in a default.
-
-Remote transport, account identity, tenant isolation, fleet policy, and managed execution belong to OpenAdapt Cloud. They aren't duplicated here. The complete design is in [docs/DESIGN.md](docs/DESIGN.md).
-
-### Finish a paused run
-
-`continue_attention` doesn't perform the paused action again. Point the server at Flow's qualified deployment config when a person at this computer finishes an exception and continues the same durable run:
+ChatGPT and Claude in a web browser can't start a server on your computer. To record from one of them, start at https://openadapt.ai/start. When openadapt.ai gives you a runner link for the recording job (it contains `bind=oab_`), run this on the computer that has the app:
 
 ```bash
-openadapt-agent serve \
-  --mode attended \
-  --bundles /opt/openadapt/bundles \
-  --runs-dir /var/lib/openadapt/runs \
-  --config /etc/openadapt/deployment.yaml \
-  --headed
+openadapt-agent authoring connect '<runner link>'
 ```
 
-| Tool | What happens |
-| --- | --- |
-| `continue_attention` | The person confirms they completed the paused task in the live app. Flow rechecks the screen and the record, checkpoints it as done by a person, and resumes after it. |
-| `skip_attention` | Flow applies only an already-declared skip that changes no record. |
-| `reject_attention` | Ends this run and dispatches no new action. Earlier steps can still have effects, so read the protected local report. |
-| `teach_attention` | Records an audited request for a corrective demonstration. |
-| `escalate_attention` | Records an audited escalation and leaves the pause in place. |
+It claims the job, polls openadapt.ai over outgoing HTTPS, and asks you in the terminal before a chat account may drive it. Don't confuse it with the launcher's `openadapt connect`, which pairs a computer with OpenAdapt Cloud. [docs/MAILBOX_CLI.md](docs/MAILBOX_CLI.md) has the details.
 
-Every decision needs the queue item id, its current capability digest, a stable idempotency key, and an action-specific `true` confirmation. The server then asks the person to confirm through MCP form elicitation. Clients without form elicitation use Flow's attended console instead:
+## Security
 
-```bash
-openadapt-flow console --attend --allow-actions \
-  --bundles /opt/openadapt/bundles --runs /var/lib/openadapt/runs \
-  --config /etc/openadapt/deployment.yaml --headed
-```
+- The server talks only over stdio and has no sign-in. Anything that can write to its input acts as the OS account that started it, so don't expose it over a network or a tunnel.
+- By default your agent sees only cards, fixed sentences, opaque ids, and counts. Recorded values, paths, reports, and screen text stay on your customer's computer. The exception is errors from the recording tools, which can include Flow's error message.
+- `--allow-protected-export` sends recorded values, paths, reports, and Flow's output to your agent. Use it only when your agent's model may see the app's data.
+- Inputs reach Flow through a temporary file that only the owner can read, never the command line. This package's own run records keep a fingerprint of the inputs, not the inputs.
+- Flow keeps evidence for each run in a folder under `--runs-dir`. In our sandbox test, that folder held a report with the values entered and before-and-after screenshots of each step, and other accounts on the computer could read the screenshots. Treat the runs folder as patient data and limit who can read it.
+- Model grounding sends a screenshot to an AI model to find where to click when the recorded control can't be found. It's off by default. The deployment config can turn it on, and `--allow-model-grounding` turns it on for decisions on stopped runs. When it's on, screenshots can leave the computer.
+- `--allow-synthetic-recorded-defaults` fills missing inputs with values from the recording. Use it only for synthetic demos, because nothing checks that a workflow is synthetic.
 
-After a person decides, `get_run` shows the new outcome.
+Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
 
-### Record a first workflow with your agent
+## Limits
 
-`--authoring` adds first-demo tools over the same local stdio server: `observe`, `start_record`, `click`, `halt`, `type`, `pause_for_input`, `continue_input`, `stop_record`, `compile`, `admit`, and helpers. It doesn't enable runs.
+- Your agent, or a program acting for it, has to run on your customer's computer.
+- Nobody is notified when a run stops. Someone has to check `list_needs_attention` or Flow's console.
+- The check that stops a second entry covers one runs folder. Pass the same absolute `--runs-dir` every time.
+- If the server exits during a run, the run reads as `not_sure_if_saved`, and Flow may still finish it.
+- This server issues no signed receipts, so `proof` is never `sealed`.
+- Each call carries one request. There's no batch call.
+- Accounts, separation between customers, fleet policy, and hosted runs belong to OpenAdapt Cloud.
 
-```bash
-claude mcp add openadapt-authoring -- uvx --python 3.12 --from 'openadapt-agent[tutorial] @ git+https://github.com/OpenAdaptAI/openadapt-agent' openadapt-agent serve --authoring
-```
+## Release status
 
-Pass `--url --headed` to open a fresh Playwright Chromium with empty cookies, and sign in there during `pause_for_input`. Windows native, Citrix, and RDP sessions are coach-only here. Hosted ChatGPT.com and Claude.ai can't reach localhost stdio; send them to https://openadapt.ai/start. Once a job exists at `https://openadapt.ai/j/{id}`, `openadapt-agent authoring connect` claims it over outbound HTTPS (the job page should offer `openadapt connect <url>`). See [docs/MAILBOX_CLI.md](docs/MAILBOX_CLI.md).
+The [signed production record](https://openadapt.ai/production-lifecycle.json) says whether a release of this package is admitted for production use. An admission lasts at most 30 days and can be revoked, and a release without a valid one is "not actively admitted." On 2026-10-14, no release of this package was admitted. The admission for 2.0.1 was issued on 2026-09-02 and is past the 30-day limit, and the version on GitHub (2.0.2) has none. Check the record before you use a release with real patient data.
 
-To see the engine on its own without an agent, `openadapt flow tutorial` runs the synthetic app from the OpenAdapt launcher, and `openadapt quickstart --break-it` shows a fake saved message caught by the record check.
+Under Flow's `standard` and `regulated` profiles, each workflow version also needs its own admission (see [Get a workflow ready to run](#get-a-workflow-ready-to-run)). On 2026-10-14, every entry in the [public list of workflow admissions](https://openadapt.ai/production-workflow-admissions.json) came from synthetic tests (`remote-safe-synthetic`).
 
-### Agent Skills
+## Package history
 
-`openadapt-agent emit-skill BUNDLE --out ~/.claude/skills` writes a skill for one workflow from its card: purpose, inputs, how to call `run_workflow`, and how to read the four outcomes. A skill is loaded into model context, so it carries no recorded values, step text, or secrets, and each skill's description names its own workflow. `--include-bundle` also copies the compiled bundle, which is protected workflow data. A first-party skill lives at [`skills/openadapt-gui-write/SKILL.md`](skills/openadapt-gui-write/SKILL.md). The skill is named after the workflow, never "computer use".
+Before version 2, this package ran AI agents that drove the screen. The name now refers to the agents that call it. A customer's workflows are supplied with `--bundles` and never ship in this package or its registry listing, and an install from a registry starts read-only. The MCP registry reads [server.json](server.json), Smithery packs from [manifest.json](manifest.json), and [llms.txt](llms.txt) describes the package for AI assistants. See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
 
-### Product state
+<!-- mcp-name: io.github.OpenAdaptAI/openadapt-agent -->
 
-An exact Agent release enters Production only through an active signed admission. That admission expires and can be revoked. A missing, expired, revoked, mismatched, or unverifiable admission produces **not actively admitted**. The validator doesn't restore an older admission or assign a fallback lifecycle label.
-
-Check the [current signed Production record](https://openadapt.ai/production-lifecycle.json). That ledger currently has seven target admissions. Evidence class is `remote-safe-synthetic`.
-
-Standard and Regulated runs also need an active workflow admission for the exact bundle version. Demo and the synthetic sandbox may run without one. The public workflow ledger is [production-workflow-admissions.json](https://openadapt.ai/production-workflow-admissions.json). It lists seven synthetic admissions (`0.0.0-synthetic`). That isn't a customer job.
-
-### Package history and listings
-
-Before v2 this repository wrapped model-driven GUI agents. The execution path now lives in `openadapt-flow`. The name stays because the package connects agents to it over MCP and Agent Skills.
-
-A customer's compiled workflow is their private artifact. Supply it at launch with `--bundles`. It is never embedded in the package or a registry listing. See [`docs/DISTRIBUTION.md`](docs/DISTRIBUTION.md).
-
-The MCP registry reads [`server.json`](server.json). Smithery packs from [`manifest.json`](manifest.json). [`llms.txt`](llms.txt) exists because hosted assistants read a file, not this README. Registry-launched installs start read-only.
-
-`mcp-name: io.github.OpenAdaptAI/openadapt-agent`
-
-### Development
+## Development
 
 ```bash
 pip install -e ".[dev]"
@@ -280,4 +391,4 @@ npx -y @anthropic-ai/mcpb@2.1.2 pack . openadapt-agent.mcpb
 
 ## License
 
-MIT. See [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE). The full design is in [docs/DESIGN.md](docs/DESIGN.md), and product docs are at [docs.openadapt.ai](https://docs.openadapt.ai).
