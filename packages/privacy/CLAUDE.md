@@ -26,16 +26,16 @@ uv run pytest tests/ -v
 
 # Scrub text
 uv run python -c "
-from openadapt_privacy import PresidioScrubber
-scrubber = PresidioScrubber()
+from openadapt_privacy import PresidioScrubbingProvider
+scrubber = PresidioScrubbingProvider()
 text = 'Contact John Smith at john@example.com or 555-123-4567'
 print(scrubber.scrub_text(text))
 "
 
 # Scrub dictionary
 uv run python -c "
-from openadapt_privacy import scrub_dict, PresidioScrubber
-scrubber = PresidioScrubber()
+from openadapt_privacy import scrub_dict, PresidioScrubbingProvider
+scrubber = PresidioScrubbingProvider()
 data = {'name': 'John Smith', 'email': 'john@example.com'}
 print(scrub_dict(data, scrubber))
 "
@@ -45,16 +45,16 @@ print(scrub_dict(data, scrubber))
 
 ```
 openadapt_privacy/
-  base.py              # Base classes: Scrubber, ScrubbingProvider
+  base.py              # Base classes: ScrubbingProvider, TextScrubbingMixin
   config.py            # PrivacyConfig dataclass
   loaders.py           # Recording/Action/Screenshot loaders
   pipelines/dicts.py   # Dictionary scrubbing utilities
-  providers/presidio.py # PresidioScrubber (primary implementation)
+  providers/presidio.py # PresidioScrubbingProvider (primary implementation)
 ```
 
 ## Key Components
 
-### PresidioScrubber
+### PresidioScrubbingProvider
 Primary scrubber using Presidio NER and spaCy:
 - Detects: PERSON, EMAIL_ADDRESS, PHONE_NUMBER, US_SSN, CREDIT_CARD, DATE_TIME, LOCATION
 - `scrub_text(text)` - Redact PII from text
@@ -62,8 +62,8 @@ Primary scrubber using Presidio NER and spaCy:
 
 ### Text Scrubbing
 ```python
-from openadapt_privacy import PresidioScrubber
-scrubber = PresidioScrubber()
+from openadapt_privacy import PresidioScrubbingProvider
+scrubber = PresidioScrubbingProvider()
 text = "Contact John Smith at john@example.com"
 # Output: "Contact <PERSON> at <EMAIL_ADDRESS>"
 print(scrubber.scrub_text(text))
@@ -71,8 +71,8 @@ print(scrubber.scrub_text(text))
 
 ### Dictionary Scrubbing
 ```python
-from openadapt_privacy import scrub_dict, PresidioScrubber
-scrubber = PresidioScrubber()
+from openadapt_privacy import scrub_dict, PresidioScrubbingProvider
+scrubber = PresidioScrubbingProvider()
 action = {"text": "Email john@example.com", "title": "User John Smith"}
 scrubbed = scrub_dict(action, scrubber)
 ```

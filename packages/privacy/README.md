@@ -5,144 +5,49 @@
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Finds and removes personal and health data from GUI automation artifacts: the
-text a recording captured, the element trees around it, and the screenshots.
-Presidio does the detection; this package wires it to the shapes a recording
-actually has.
+Remove names, email addresses, phone numbers, SSNs, card numbers, medical
+record numbers, and other personal or health data from GUI recordings before
+you store or share them. It scrubs typed text, window titles, accessibility
+trees, event payloads, and screenshots. Detection uses
+[Microsoft Presidio](https://github.com/microsoft/presidio) with a local spaCy
+model, and scrubbing runs on your machine.
 
-A demonstration recording contains everything that was on screen and everything
-that was typed. So before you store one, share one, or export one, something
-has to strip the identifiers out, and that something needs to fail loudly when
-it can't. That's this.
+Use it if you record desktop or browser sessions for test automation, robotic
+process automation (RPA), or training data. It also includes
+`openadapt-privacy-scan`, a CI check that runs without Presidio and fails when a
+repository holds health-data identifiers or recording files.
 
-[Documentation](https://docs.openadapt.ai) ·
-[openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) ·
-[Repository lifecycle](https://github.com/OpenAdaptAI/.github/blob/main/REPOSITORY_LIFECYCLE.md)
-
-## Install
+## Quick start
 
 ```bash
 pip install "openadapt-privacy[presidio]"
 python -m spacy download en_core_web_sm
 ```
 
-The Presidio provider takes only the preinstalled, allowlisted `en_core_web_sm`
-pipeline and never downloads a model at runtime. A missing model, an
-unsupported language, or an inconsistent configuration raises
-`PrivacyModelUnavailable` before analysis starts, rather than quietly scrubbing
-worse than you expected.
-
-## Git / CI scan (`[scan]`)
-
-A regex gate for git trees. Clinic CI calls it so an OHIP-shaped number, a
-chart id, an MRN, a UNC path, or an RDP hostname can't land in a commit. It
-doesn't scrub recordings. It does not claim clinical validation.
-
-```bash
-pip install "openadapt-privacy[scan]"
-openadapt-privacy-scan
-openadapt-privacy-scan --self-test
-openadapt-privacy-scan --root /path/to/repo
-```
-
-The command exits with:
-
-- `0` when it read every file and no rule fired.
-- `1` when a rule fired or a file couldn't be read.
-- `2` when the scan couldn't run: the root is missing, isn't a directory, or
-  can't be accessed; a directory under it can't be listed; or it has no files.
-  Pass `--allow-empty` if an empty tree is expected.
-
-`[scan]` adds no packages. The scanner is stdlib, so `import openadapt_privacy.scan`
-works on a bare `pip install openadapt-privacy` and does not load Presidio,
-spaCy, or Pillow. `python -m openadapt_privacy.scan` is the same CLI.
-
 ```python
-from pathlib import Path
-from openadapt_privacy.scan import scan_tree, self_test
-
-hits = scan_tree(Path("."))   # ["ohip-dashed\tfile.txt:3", ...]
-self_test()                   # 0 ok, 1 a rule stayed silent
-```
-
-`scan_tree` raises `OSError` when the root is missing, isn't a directory, or has
-a directory that can't be listed. It returns `[]` for a tree with no files, so
-check `iter_scan_files(root)` first if an empty tree should fail.
-
-`--self-test` plants fixtures under `/tmp` and exits 1 if a rule does not fire.
-Matching OHIP examples are not stored in the library; they're built at runtime.
-
-Forbidden directory names: `recordings`, `captures`, `screenshots`,
-`retinology`, `.private`. Forbidden suffixes include `.rdp`, `.db`, and
-common media (`.png`, `.mp4`, and the rest of the set in `scan.py`).
-
-`openadapt_privacy/gitleaks.toml` and `openadapt_privacy/phi-patterns.txt`
-carry the same rules for gitleaks / git-secrets.
-
-## Read this before you rely on it
-
-Scrubbing is one control inside a reviewed egress process. It is not a
-guarantee that an artifact is free of protected data, and the evidence behind
-it is synthetic, not clinical.
-
-`tests/test_phi_recall.py` is the regression gate: 26 synthetic identifiers
-across names, contact details, financial identifiers, dates of birth,
-addresses, network identifiers, medical record numbers, member IDs, and
-provider licenses. It requires 26 out of 26, it pins the entity type each one
-must produce, and it also checks that ordinary operational UI text comes back
-untouched.
-
-Detection is contextual, so the same value scrubs differently depending on what
-surrounds it. Every output below was produced by running this code on
-2026-08-28, not written by hand. Some of it will surprise you:
-
-```python
->>> from openadapt_privacy.providers.presidio import PresidioScrubbingProvider
->>> s = PresidioScrubbingProvider()
-
->>> s.scrub_text("Patient John Smith, john.smith@example.com, 555-123-4567, SSN 923-45-6789")
-'Patient <PERSON>, <EMAIL_ADDRESS>, <PHONE_NUMBER>, <ORGANIZATION> <US_SSN>'
-
->>> s.scrub_text("SSN: 923-45-6789")
-'<ORGANIZATION>: <US_SSN>'
-
->>> s.scrub_text("Card 4111111111111111 on file")
-'Card <CREDIT_CARD> on file'
-
->>> s.scrub_text("Card: 4532-1234-5678-9012")
-'Card: <DATE_TIME>'
-```
-
-The last two are the interesting pair. Both card numbers get redacted, but only
-the first is labelled `CREDIT_CARD`, because only the first passes a Luhn
-check. An identifier that no recognizer can validate falls to whatever the
-spaCy model makes of it, which for a run of digits is usually `DATE_TIME`.
-
-So: the redaction holds either way, and a validated identifier now carries its
-own type. An unvalidated one does not. Measure the placeholder names against
-your own data before you route on them.
-
-For production egress: scrub a copy, verify every output file, and bind the
-human or policy approval to the verified artifact. A model that ran without
-error is not evidence that the artifact is clean.
-
-## Scrubbing text
-
-```python
-from openadapt_privacy.providers.presidio import PresidioScrubbingProvider
+from openadapt_privacy import PresidioScrubbingProvider
 
 scrubber = PresidioScrubbingProvider()
-scrubber.scrub_text("Contact John Smith at john.smith@example.com or 555-123-4567")
-# 'Contact <PERSON> at <EMAIL_ADDRESS> or <PHONE_NUMBER>'
+print(scrubber.scrub_text("Contact John Smith at john.smith@example.com or 555-123-4567"))
+# Contact <PERSON> at <EMAIL_ADDRESS> or <PHONE_NUMBER>
 ```
 
-## Scrubbing nested dicts
+If the spaCy model or a Presidio package is missing, the scrubber raises
+`PrivacyModelUnavailable` or `ImportError` instead of returning text. It doesn't
+fall back to another model, and it never downloads a model at run time.
 
-For element trees and event payloads:
+You need Python 3.10 or later. Screenshot scrubbing also needs the
+[Tesseract](https://github.com/tesseract-ocr/tesseract) OCR binary on your
+`PATH`, for example from `brew install tesseract` or
+`apt-get install tesseract-ocr`.
+
+## Scrub element trees and event payloads
+
+`scrub_dict` walks nested dicts and lists and scrubs the string values of
+known keys:
 
 ```python
-from openadapt_privacy import scrub_dict
-from openadapt_privacy.providers.presidio import PresidioScrubbingProvider
+from openadapt_privacy import PresidioScrubbingProvider, scrub_dict
 
 scrubber = PresidioScrubbingProvider()
 scrub_dict(
@@ -154,129 +59,184 @@ scrub_dict(
     },
     scrubber,
 )
+# {'title': 'User Profile - <PERSON>',
+#  'tooltip': 'Click to contact <EMAIL_ADDRESS>',
+#  'value': 'Call <PHONE_NUMBER>',
+#  'coordinates': {'x': 100, 'y': 200}}
 ```
 
-```json
-{
-    "title": "User Profile - <PERSON>",
-    "tooltip": "Click to contact <EMAIL_ADDRESS>",
-    "value": "Call <PHONE_NUMBER>",
-    "coordinates": {"x": 100, "y": 200}
-}
-```
+Only the keys in `config.SCRUB_KEYS_HTML` are scrubbed, and non-string values
+pass through unchanged. Pass `scrub_all=True` to scrub every string.
 
-Only the keys in `PrivacyConfig.SCRUB_KEYS_HTML` are scrubbed, and non-string
-values pass through, which is why the coordinates survive. Pass `scrub_all=True`
-to scrub every string regardless of key.
-
-The keys in `PrivacyConfig.SCRUB_KEYS_SEPARATED` (`text` and `canonical_text`)
-can also hold recorded keystrokes: one typed character per `ACTION_TEXT_SEP`,
-as in `j-o-h-n-@-e-x-a-m-p-l-e-.-c-o-m`. Those are reassembled before analysis,
-scrubbed, and separated again, because the PII is invisible in the split form.
-Whether that happens is decided by the value, not the key, so prose under
-`text` is scrubbed as prose:
+Recorded keystrokes often arrive one character at a time, as in
+`j-o-h-n-@-e-x-a-m-p-l-e-.-c-o-m`, where no detector can see the address. Under
+the `text` and `canonical_text` keys, the scrubber joins a value in that form,
+scrubs it, and splits it again. Prose under the same keys is scrubbed as prose:
 
 ```python
 scrub_dict({"text": "Email: john@example.com"}, scrubber)
-# {'text': '<PERSON>: <EMAIL_ADDRESS>'}
+# {'text': 'Email: <EMAIL_ADDRESS>'}
 
 scrub_dict({"text": "-".join("john@example.com")}, scrubber)
 # {'text': '<-E-M-A-I-L-_-A-D-D-R-E-S-S->'}
 ```
 
-Pass `separated_keys=[]` to turn keystroke handling off for a call, or
-`separated_keys=["keys"]` to move it to your own field name.
+Pass `separated_keys=["keys"]` to use your own field name, or
+`separated_keys=[]` to turn keystroke handling off.
 
-## Scrubbing screenshots
+## Scrub screenshots
 
 ```python
 from PIL import Image
-from openadapt_privacy.providers.presidio import PresidioScrubbingProvider
+from openadapt_privacy import PresidioScrubbingProvider
 
 scrubber = PresidioScrubbingProvider()
-scrubbed = scrubber.scrub_image(Image.open("screenshot.png"))
-scrubbed.save("screenshot_scrubbed.png")
+scrubber.scrub_image(Image.open("screenshot.png")).save("screenshot_scrubbed.png")
 ```
 
-![Original screenshot with PII](assets/screenshot_original.png)
-![Scrubbed screenshot with PII redacted](assets/screenshot_scrubbed.png)
+Tesseract finds the text, Presidio classifies it, and each detected region is
+filled with solid red. `scripts/generate_demo_images.py` produced this output:
 
-OCR finds the text regions, the analyzer classifies them, and the detected
-regions get filled with a solid colour (`SCRUB_FILL_COLOR`, red by default).
-Anything OCR misses is not redacted.
+| Before | After |
+| --- | --- |
+| ![Synthetic profile form with a name, email address, phone number, SSN, and card number](https://raw.githubusercontent.com/OpenAdaptAI/openadapt-privacy/main/assets/screenshot_original.png) | ![The same form with the email address, phone number, SSN, card number, and two field labels covered in red; the name in the dark title bar is still visible](https://raw.githubusercontent.com/OpenAdaptAI/openadapt-privacy/main/assets/screenshot_scrubbed.png) |
 
-## Whole recordings
+The name in the dark title bar is still visible because Tesseract did not read
+light text on a dark background. See [Limits](#limits).
 
-`DictRecordingLoader` takes a recording as a dict and scrubs the task
-description and every action together:
+## Scrub a whole recording
+
+`Recording.scrub` scrubs the task description, every action, and every
+screenshot in one call:
 
 ```python
-from openadapt_privacy import DictRecordingLoader
-from openadapt_privacy.providers.presidio import PresidioScrubbingProvider
+from openadapt_privacy import DictRecordingLoader, PresidioScrubbingProvider
 
-recording = DictRecordingLoader().load_from_dict({
+loader = DictRecordingLoader()
+recording = loader.load_from_dict({
     "task_description": "Send email to John Smith at john@example.com",
     "actions": [
         {"id": 1, "action_type": "click", "text": "Compose", "timestamp": 1000},
-        {"id": 2, "action_type": "click", "text": "Send",
-         "window_title": "Email to john@example.com", "timestamp": 3000},
+        {"id": 2, "action_type": "type", "text": "-".join("john@example.com"), "timestamp": 2000},
     ],
 })
 scrubbed = recording.scrub(PresidioScrubbingProvider())
+scrubbed.task_description
+# 'Send email to <PERSON> at <EMAIL_ADDRESS>'
 ```
 
-Subclass `RecordingLoader` for your own storage. Implement `load` and `save`,
-and you get `load_and_scrub` for free:
+A screenshot must have its pixels loaded in `Screenshot.image`. One that has
+only a `path` raises `UnscrubbedScreenshot` instead of passing through
+unredacted; pass `scrub_images=False` to leave screenshots out on purpose. The
+scrubbed recording's `metadata["_openadapt_privacy"]` records the provider, the
+package version, and a hash of the settings used.
+
+`DictRecordingLoader` also reads and writes JSON files with `load` and `save`.
+For your own storage, subclass `RecordingLoader` and implement `load` and
+`save`, and `load_and_scrub` works too:
 
 ```python
-from openadapt_privacy import RecordingLoader, Recording
+from openadapt_privacy import Recording, RecordingLoader
 
 class SQLiteRecordingLoader(RecordingLoader):
-    def load(self, recording_id: str) -> Recording: ...
-    def save(self, recording: Recording, recording_id: str) -> None: ...
+    def load(self, source: str) -> Recording: ...
+    def save(self, recording: Recording, destination: str) -> None: ...
 ```
+
+## Block identifiers in CI
+
+`openadapt-privacy-scan` checks the files in a directory for health-data
+identifiers (Ontario health card numbers, chart IDs, and MRNs), remote-desktop
+hostnames, UNC paths, and recording, screenshot, or database files. In a git
+repository it checks tracked files and untracked files that aren't ignored; it
+doesn't read the history. It uses only the Python standard library, so the base
+package is enough:
+
+```bash
+pip install openadapt-privacy
+openadapt-privacy-scan --self-test   # check that every rule fires on planted fixtures
+openadapt-privacy-scan --root .      # scan the tree
+```
+
+The scan exits with:
+
+- `0` when it read every file and no rule fired.
+- `1` when a rule fired or a file couldn't be read.
+- `2` when the scan couldn't run: the root is missing or unreadable, a
+  directory under it can't be listed, or it has no files. Pass `--allow-empty`
+  if an empty tree is expected.
+
+The same check is available from Python. Importing `openadapt_privacy.scan`
+does not load Presidio, spaCy, or Pillow:
+
+```python
+from pathlib import Path
+from openadapt_privacy.scan import scan_tree
+
+hits = scan_tree(Path("."))   # for example ["mrn-assigned\tnotes.txt:3"]
+```
+
+`openadapt_privacy/gitleaks.toml` and `openadapt_privacy/phi-patterns.txt`
+carry the same text patterns for gitleaks and git-secrets. They don't include
+the file-type checks.
 
 ## Configuration
 
-```python
-from openadapt_privacy.config import PrivacyConfig
+Settings live on the module-level `config` object. Change them before you
+scrub:
 
-PrivacyConfig(
-    SCRUB_CHAR="X",                                  # for scrub_text_all
-    SCRUB_FILL_COLOR=0xFF0000,                       # image redaction, BGR
-    SCRUB_KEYS_HTML=["text", "value", "title", "tooltip"],
-    SCRUB_PRESIDIO_IGNORE_ENTITIES=["DATE_TIME"],
-)
+```python
+from openadapt_privacy.config import config
+
+config.SCRUB_PRESIDIO_IGNORE_ENTITIES = ["DATE_TIME"]  # keep dates
+config.SCRUB_FILL_COLOR = 0x000000                     # black boxes; 0xBBGGRR, default red
+config.SCRUB_KEYS_HTML = [*config.SCRUB_KEYS_HTML, "label"]
 ```
 
-The full field list is `SCRUB_CHAR`, `SCRUB_LANGUAGE`, `SCRUB_FILL_COLOR`,
+The fields are `SCRUB_CHAR`, `SCRUB_LANGUAGE`, `SCRUB_FILL_COLOR`,
 `SCRUB_KEYS_HTML`, `SCRUB_KEYS_SEPARATED`, `ACTION_TEXT_NAME_PREFIX`,
 `ACTION_TEXT_NAME_SUFFIX`, `ACTION_TEXT_SEP`, `SCRUB_CONFIG_TRF`,
-`SCRUB_PRESIDIO_IGNORE_ENTITIES`, and `SPACY_MODEL_NAME`.
+`SCRUB_PRESIDIO_IGNORE_ENTITIES`, and `SPACY_MODEL_NAME`. The entity types come
+from Presidio (`PERSON`, `EMAIL_ADDRESS`, `PHONE_NUMBER`, `US_SSN`,
+`CREDIT_CARD`, `DATE_TIME`, `LOCATION`, `IP_ADDRESS`, `URL`, and others), plus
+`ORGANIZATION` from spaCy and `MEDICAL_RECORD_NUMBER` and `STREET_ADDRESS` from
+this package.
 
-The analyzer's supported entity set comes from Presidio: `CREDIT_CARD`,
-`CRYPTO`, `DATE_TIME`, `EMAIL_ADDRESS`, `IBAN_CODE`, `IP_ADDRESS`, `LOCATION`,
-`MAC_ADDRESS`, `MEDICAL_LICENSE`, `NRP`, `PERSON`, `PHONE_NUMBER`, `UK_NHS`,
-`URL`, `US_BANK_NUMBER`, `US_DRIVER_LICENSE`, `US_ITIN`, `US_PASSPORT`,
-`US_SSN`, plus `ORGANIZATION` from the spaCy pipeline. Which one fires on a
-given string depends on the text around it, so measure rather than assume.
+## Limits
 
-## Layout
+- The test set is 27 synthetic identifiers in `tests/test_phi_recall.py`. Every
+  one must be redacted with the right entity type. The data is synthetic, not
+  clinical, so measure recall on your own data before you rely on it.
+- English only, with the `en_core_web_sm` spaCy model.
+- Detection depends on context. A card number that fails the Luhn check is not
+  labeled `<CREDIT_CARD>`, and other detectors decide how much of it is
+  redacted. `4532-1234-5678-9012` becomes `<DATE_TIME>`, but
+  `4111 1111 1111 1112` keeps its first eight digits. If your code acts on
+  placeholder names, check them against your own data.
+- Street addresses are found only after a label such as `Address:` or
+  `Mail to`.
+- In screenshots, text that Tesseract can't read is not redacted.
+- `openadapt-privacy-scan` matches regular expressions. It does not claim
+  clinical validation.
 
-```
-openadapt_privacy/
-├── scan.py           # git/CI regex gate (stdlib; no Presidio)
-├── gitleaks.toml     # same rules for gitleaks
-├── phi-patterns.txt  # same rules for git-secrets
-├── base.py           # ScrubbingProvider, TextScrubbingMixin
-├── config.py         # PrivacyConfig
-├── loaders.py        # Recording, Action, Screenshot, RecordingLoader
-├── providers/
-│   └── presidio.py   # PresidioScrubbingProvider
-└── pipelines/
-    └── dicts.py      # scrub_dict, scrub_list_dicts
+If you deploy this where recordings can hold protected health information, read
+[docs/COMPLIANCE.md](https://github.com/OpenAdaptAI/openadapt-privacy/blob/main/docs/COMPLIANCE.md)
+for the fail-closed behavior, the provenance record each scrub writes, and the
+review steps around it.
+
+## Development
+
+```bash
+git clone https://github.com/OpenAdaptAI/openadapt-privacy
+cd openadapt-privacy
+uv sync --extra dev --extra presidio
+uv pip install pip    # spacy download installs the model with pip
+uv run python -m spacy download en_core_web_sm
+uv run pytest
 ```
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/OpenAdaptAI/openadapt-privacy/blob/main/LICENSE).
+openadapt-privacy is part of [OpenAdapt](https://github.com/OpenAdaptAI/OpenAdapt)
+and works without it.

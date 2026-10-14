@@ -50,6 +50,36 @@ _STATISTICAL_ENTITIES = frozenset(
     }
 )
 
+# Form-field labels that the small spaCy model reads as a name or an
+# organization: "SSN: 923-45-6789" came back as "<ORGANIZATION>: <US_SSN>" and
+# "Email: ..." as "<PERSON>: ...". A label is not an identifier, and keeping it
+# keeps the scrubbed text readable. Only a label that directly precedes another
+# finding is kept, so the identifier it introduces is still redacted.
+# Leave out a label that is also a surname, such as "Ip" or "Sin": in
+# "Dr. Sin: 555-123-4567" the name must stay redacted. Their longer forms
+# ("IP address", "social insurance number") are listed.
+_FIELD_LABELS = frozenset(
+    {
+        "address",
+        "date of birth",
+        "dob",
+        "e-mail",
+        "email",
+        "email address",
+        "health card",
+        "ip address",
+        "member id",
+        "mrn",
+        "name",
+        "patient id",
+        "phone",
+        "social insurance number",
+        "social security number",
+        "ssn",
+    }
+)
+_FIELD_LABEL_SEPARATORS = " \t:#"
+
 # Presidio scores an unvalidated, context-free digit run at 0.01-0.05. Below
 # this floor a pattern recognizer is guessing too, and must not take a label
 # away from the NER result.
@@ -132,7 +162,8 @@ def _register_phi_recognizers(analyzer_engine) -> None:
         r"(?:\s+[NSEW])?"
     )
     address_patterns = [
-        Pattern("home-address", rf"(?i)(?<=Home address:\s){street}", 0.85),
+        # Any "...address: " label: "Address:", "Home address:", "Mailing address:".
+        Pattern("address-label", rf"(?i)(?<=address:\s){street}", 0.85),
         Pattern("mail-address", rf"(?i)(?<=Mail to\s){street}", 0.85),
     ]
     analyzer_engine.registry.add_recognizer(
@@ -158,6 +189,27 @@ def _filter_automation_false_positives(text: str, analyzer_results: list) -> lis
             continue
         filtered.append(result)
     return filtered
+
+
+def _keep_field_labels(text: str, analyzer_results: list) -> list:
+    """Drop NER findings that are a field label in front of an identifier.
+
+    A PERSON or ORGANIZATION span is dropped only when its whole text is a
+    known label (``SSN``, ``Email``, ``DOB``) and another finding starts right
+    after it, past any spaces, ``:`` or ``#``. The identifier is still redacted;
+    only the label stays readable.
+    """
+    starts = {result.start for result in analyzer_results}
+    kept = []
+    for result in analyzer_results:
+        if result.entity_type in {"PERSON", "ORGANIZATION"}:
+            label = text[result.start : result.end].strip(_FIELD_LABEL_SEPARATORS).lower()
+            rest = text[result.end :]
+            next_start = result.end + len(rest) - len(rest.lstrip(_FIELD_LABEL_SEPARATORS))
+            if label in _FIELD_LABELS and next_start in starts:
+                continue
+        kept.append(result)
+    return kept
 
 
 def _covers_every_digit(text: str, result, deterministic: list) -> bool:
@@ -364,6 +416,7 @@ class PresidioScrubbingProvider(ScrubbingProvider, TextScrubbingMixin):
         )
         analyzer_results = _filter_automation_false_positives(text, analyzer_results)
         analyzer_results = _prefer_deterministic_identifier_labels(text, analyzer_results)
+        analyzer_results = _keep_field_labels(text, analyzer_results)
 
         logger.debug(f"analyzer_results: {analyzer_results}")
 

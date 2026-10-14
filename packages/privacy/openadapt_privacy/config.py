@@ -1,8 +1,8 @@
 """Configuration for privacy scrubbing.
 
 This module provides configuration settings for PII/PHI scrubbing operations.
-Settings can be customized by creating a new PrivacyConfig instance or modifying
-the global `config` instance.
+Change settings on the module-level `config` instance. The scrubbers read that
+instance; a separate PrivacyConfig you create is not used.
 """
 
 from __future__ import annotations
@@ -65,7 +65,8 @@ class PrivacyConfig:
     Attributes:
         SCRUB_CHAR: Character used to replace scrubbed text when using scrub_text_all.
         SCRUB_LANGUAGE: Language code for NLP analysis (default: "en").
-        SCRUB_FILL_COLOR: BGR color value for image redaction (default: blue 0x0000FF).
+        SCRUB_FILL_COLOR: Image redaction color as a 0xBBGGRR integer
+            (default: red, 0x0000FF).
         SCRUB_KEYS_HTML: List of dict keys that should be scrubbed.
         SCRUB_KEYS_SEPARATED: Dict keys whose values may hold character-separated
             action text rather than prose. A value under one of these keys is
@@ -87,7 +88,7 @@ class PrivacyConfig:
     # Language for NLP analysis
     SCRUB_LANGUAGE: str = "en"
 
-    # BGR color for image redaction (blue by default)
+    # Image redaction color as 0xBBGGRR (red by default)
     SCRUB_FILL_COLOR: int = 0x0000FF
 
     # Keys in dicts that should be scrubbed

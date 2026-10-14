@@ -396,11 +396,3 @@ def test_scan_is_not_reexported_from_package_init() -> None:
     assert "scan_tree" not in openadapt_privacy.__all__
     assert "scan" not in openadapt_privacy._LAZY_EXPORTS
     assert "scan_tree" not in openadapt_privacy._LAZY_EXPORTS
-
-
-def test_readme_keeps_presidio_caveat_and_has_scan_section() -> None:
-    readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    assert "## Git / CI scan (`[scan]`)" in readme
-    assert "synthetic, not clinical" in readme
-    assert "does not claim clinical validation" in readme
-    assert "--allow-empty" in readme

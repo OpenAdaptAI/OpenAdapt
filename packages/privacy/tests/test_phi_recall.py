@@ -71,6 +71,7 @@ PHI_CASES = [
         "STREET_ADDRESS",
     ),
     ("address", "Mail to 88 King St W, Toronto, ON M5H 1J9.", "88 King St W", "STREET_ADDRESS"),
+    ("address", "Address: 42 Elm Road", "42 Elm Road", "STREET_ADDRESS"),
     ("ip", "Last login from 192.168.10.22.", "192.168.10.22", "IP_ADDRESS"),
     (
         "url",
@@ -197,3 +198,66 @@ def test_a_low_confidence_pattern_does_not_take_a_label() -> None:
     kept = _prefer_deterministic_identifier_labels(text, [weak, date])
 
     assert date in kept
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("SSN: 923-45-6789", "SSN: <US_SSN>"),
+        ("Email: john@example.com", "Email: <EMAIL_ADDRESS>"),
+        ("MRN: 00123456", "MRN: <MEDICAL_RECORD_NUMBER>"),
+        (
+            "Patient John Smith, john.smith@example.com, 555-123-4567, SSN 923-45-6789",
+            "Patient <PERSON>, <EMAIL_ADDRESS>, <PHONE_NUMBER>, SSN <US_SSN>",
+        ),
+    ],
+)
+def test_a_field_label_stays_readable_and_its_identifier_is_redacted(
+    scrubber, text: str, expected: str
+) -> None:
+    assert scrubber.scrub_text(text) == expected
+
+
+def test_a_label_shaped_span_with_nothing_after_it_is_still_redacted() -> None:
+    """A label is kept only when it introduces another finding."""
+    from presidio_analyzer import RecognizerResult
+
+    from openadapt_privacy.providers.presidio import _keep_field_labels
+
+    text = "Ask Email"
+    alone = RecognizerResult(entity_type="PERSON", start=4, end=9, score=0.85)
+
+    assert _keep_field_labels(text, [alone]) == [alone]
+
+
+def test_a_name_in_front_of_an_identifier_is_still_redacted() -> None:
+    from presidio_analyzer import RecognizerResult
+
+    from openadapt_privacy.providers.presidio import _keep_field_labels
+
+    text = "John Smith: 555-123-4567"
+    person = RecognizerResult(entity_type="PERSON", start=0, end=10, score=0.85)
+    phone = RecognizerResult(entity_type="PHONE_NUMBER", start=12, end=24, score=0.75)
+
+    assert _keep_field_labels(text, [person, phone]) == [person, phone]
+
+
+@pytest.mark.parametrize("surname", ["Sin", "Ip"])
+def test_a_surname_that_spells_a_label_abbreviation_is_still_redacted(surname: str) -> None:
+    """The labels SIN and IP are also the surnames Sin and Ip."""
+    from presidio_analyzer import RecognizerResult
+
+    from openadapt_privacy.providers.presidio import _keep_field_labels
+
+    text = f"Dr. {surname}: 555-123-4567"
+    person = RecognizerResult(entity_type="PERSON", start=4, end=4 + len(surname), score=0.85)
+    phone = RecognizerResult(
+        entity_type="PHONE_NUMBER", start=text.index("555"), end=len(text), score=0.75
+    )
+
+    assert _keep_field_labels(text, [person, phone]) == [person, phone]
+
+
+@pytest.mark.parametrize("text", ["Dr. Sin: 555-123-4567", "Sin john@example.com"])
+def test_a_surname_next_to_an_identifier_is_redacted_end_to_end(scrubber, text: str) -> None:
+    assert "Sin" not in scrubber.scrub_text(text)
