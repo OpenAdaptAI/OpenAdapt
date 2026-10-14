@@ -2166,20 +2166,17 @@ def _refuse_unverified_managed_qualification_admission(
 def _resolve_run_approval_mode(args: argparse.Namespace, cfg, profile_value):
     """The approval mode a ``run`` uses, or ``None`` for an ungated run.
 
-    A direct ``--approval-mode`` wins over ``runtime.approval_mode``. For the
-    Standard and Regulated profiles a missing or unknown value means
-    ``each_item``: when the software can't tell which mode was meant, a person
-    approves each save. Demo and unprofiled runs stay ungated unless a mode is
-    named.
+    A direct ``--approval-mode`` wins over ``runtime.approval_mode``. Every
+    run is gated by default: a missing or unknown value means ``each_item``,
+    so a person approves each save whatever the profile. The only way to turn
+    the gate off is to name ``not_gated``, and the report records that choice.
     """
     from openadapt_flow.approval_mode.model import resolve_approval_mode
 
     requested = getattr(args, "approval_mode", None)
     if requested is None:
         requested = getattr(getattr(cfg, "runtime", None), "approval_mode", None)
-    if profile_value in {"standard", "regulated"} or requested is not None:
-        return resolve_approval_mode(requested)
-    return None
+    return resolve_approval_mode(requested)
 
 
 def _approval_wait_seconds(args: argparse.Namespace) -> float:
@@ -6035,7 +6032,7 @@ def _add_approval_flags(p: argparse.ArgumentParser) -> None:
         default=None,
         help=(
             "Per-item approval before each consequential save. each_item (the "
-            "default for the Standard and Regulated profiles): the run waits "
+            "default for every run): the run waits "
             "before every save until a person approves it in Desktop's Run it "
             "(see `item-approval`). problems_only: only problems go to a "
             "person; until a switch record is configured, every save still "

@@ -50,8 +50,9 @@ def _authorization(**overrides) -> GovernedRunAuthorization:
         (None, "not_gated", "standard", ApprovalMode.NOT_GATED),
         ("not_gated", "each_item", "standard", ApprovalMode.NOT_GATED),
         ("problems_only", None, "regulated", ApprovalMode.PROBLEMS_ONLY),
-        (None, None, "demo", None),
-        (None, None, None, None),
+        (None, None, "demo", ApprovalMode.EACH_ITEM),
+        (None, "not_gated", None, ApprovalMode.NOT_GATED),
+        (None, None, None, ApprovalMode.EACH_ITEM),
         ("each_item", None, "demo", ApprovalMode.EACH_ITEM),
     ],
 )
