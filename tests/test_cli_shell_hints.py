@@ -35,7 +35,9 @@ def supported_python(monkeypatch):
 
 def _quickstart_output(monkeypatch, out: Path) -> str:
     monkeypatch.setattr("openadapt.cli._invoke_flow", lambda _argv: 0)
-    monkeypatch.setattr("openadapt.cli._flow_tutorial_options", lambda: frozenset())
+    monkeypatch.setattr(
+        "openadapt.cli._flow_tutorial_options", lambda: frozenset(), raising=False
+    )
     result = CliRunner().invoke(cli_main, ["quickstart", "--out", str(out)])
     assert result.exit_code == 0, result.output
     return result.output

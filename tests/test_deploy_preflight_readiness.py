@@ -24,7 +24,7 @@ def supported_python(monkeypatch):
 
 def _deploy(monkeypatch, args, installed=READY_WEB, host=None):
     if host is not None:
-        monkeypatch.setattr("openadapt.cli._host_platform", lambda: host)
+        monkeypatch.setattr("openadapt.cli._host_platform", lambda: host, raising=False)
     monkeypatch.setattr(
         "importlib.util.find_spec",
         lambda name: object() if name in installed else None,

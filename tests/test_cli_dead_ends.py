@@ -38,7 +38,9 @@ def supported_python(monkeypatch):
 @pytest.fixture()
 def tutorial_options(monkeypatch):
     monkeypatch.setattr(
-        "openadapt.cli._flow_tutorial_options", lambda: TUTORIAL_OPTIONS
+        "openadapt.cli._flow_tutorial_options",
+        lambda: TUTORIAL_OPTIONS,
+        raising=False,
     )
 
 
@@ -65,7 +67,7 @@ def test_flow_verb_at_top_level_points_at_openadapt_flow(verb):
 
 @pytest.mark.parametrize("verb", ["run", "record", "replay"])
 def test_flow_verb_hint_works_without_a_readable_flow_parser(monkeypatch, verb):
-    monkeypatch.setattr("openadapt.cli._flow_subparsers", lambda: None)
+    monkeypatch.setattr("openadapt.cli._flow_subparsers", lambda: None, raising=False)
 
     result = CliRunner().invoke(cli_main, [verb])
 
@@ -121,7 +123,9 @@ def test_quickstart_still_forwards_tutorial_flags(
 def test_quickstart_forwards_unchanged_when_flow_options_are_unreadable(
     monkeypatch, supported_python, flow_calls
 ):
-    monkeypatch.setattr("openadapt.cli._flow_tutorial_options", lambda: None)
+    monkeypatch.setattr(
+        "openadapt.cli._flow_tutorial_options", lambda: None, raising=False
+    )
     runner = CliRunner()
     with runner.isolated_filesystem():
         result = runner.invoke(cli_main, ["quickstart", "--future-flag", "--out", "qs"])

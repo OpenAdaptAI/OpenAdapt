@@ -119,6 +119,7 @@ def test_unknown_flags_pass_through_to_engine_verbatim(
     monkeypatch.setattr(
         "openadapt.cli._flow_tutorial_options",
         lambda: frozenset({"--guided", "--interactive-record", "--profile"}),
+        raising=False,
     )
     runner = CliRunner()
     with runner.isolated_filesystem():
