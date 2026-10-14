@@ -1,7 +1,8 @@
 #!/usr/bin/env python3
 """Workspace graph helper for the monorepo CI and release drafts.
 
-Stdlib only, except `check-pins`, which needs `packaging`.
+Stdlib only on Python 3.11 and later (Python 3.10 needs `tomli`, which pytest
+already installs there), except `check-pins`, which needs `packaging`.
 
 Subcommands:
 
@@ -31,7 +32,10 @@ import re
 import sys
 from pathlib import Path
 
-import tomllib
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10: the launcher's CI still tests it.
+    import tomli as tomllib
 
 ROOT = Path(__file__).resolve().parents[2]
 ROOT_PACKAGE = "openadapt"
