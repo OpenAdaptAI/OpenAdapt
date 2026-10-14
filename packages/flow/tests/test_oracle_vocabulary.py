@@ -25,9 +25,13 @@ def test_legacy_verification_rank_maps_to_seal_oracle_tier() -> None:
 def test_public_docs_use_the_seal_oracle_ladder() -> None:
     root = Path(__file__).parents[1]
     readme = (root / "README.md").read_text(encoding="utf-8")
+    # The sample tutorial output, with its receipt tier line, lives in the
+    # tutorial guide; the README links to it.
+    tutorial = (root / "docs" / "TUTORIAL.md").read_text(encoding="utf-8")
     kit = (root / "docs" / "EFFECT_KIT.md").read_text(encoding="utf-8")
 
-    assert "Seal Oracle tier 2" in readme
-    assert "evidence tier 1 (independent system of record)" not in readme
+    assert "Seal Oracle tier 2" in tutorial
+    for text in (readme, tutorial):
+        assert "evidence tier 1 (independent system of record)" not in text
     assert "tier 0 is visual evidence" in kit
     assert "tier 2 is a system-of-record read" in kit

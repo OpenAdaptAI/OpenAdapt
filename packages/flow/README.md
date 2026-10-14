@@ -5,32 +5,39 @@
 [![Python](https://img.shields.io/pypi/pyversions/openadapt-flow)](https://pypi.org/project/openadapt-flow/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-openadapt-flow takes the last manual step off your team. It enters approved
-information into the apps you already use, such as an EMR, a payer portal, or
-a desktop app, and reads the saved record back before it reports the job done.
-When the screen and the record don't match, it stops and asks a person instead
-of guessing.
+openadapt-flow records a task you do once in a web or desktop app and compiles
+it into a program that runs on your own machine. A healthy run makes no AI
+model calls. It's built for data entry that repeats every week and has to be
+right, such as claims, referrals, eligibility checks, and invoice posting.
 
-You show it the task once. It builds an automation that runs on your own
-computer, and a normal run makes no AI model calls.
+Two checks guard the writes. Before a click on a record, the run compares the
+text around the target, such as the patient name in that row, with the
+recording, and stops if it differs. After a save, a production run reads the
+record back through a second channel, such as an API, a read-only SQL query,
+or a report export. It reports success only when the record matches what it
+entered.
+
+It drives web apps through Playwright; Windows, macOS, and Linux apps through
+their accessibility APIs; and Citrix or remote desktops through screen pixels.
+Agents can call a compiled workflow as a tool over MCP.
 
 [Docs](https://docs.openadapt.ai) ·
 [Try it in your browser](https://app.openadapt.ai/demo) ·
 [Website](https://openadapt.ai) ·
 [Discussions](https://github.com/OpenAdaptAI/openadapt-flow/discussions)
 
-## See it in one command
+## See it run
 
 ```bash
 pip install 'openadapt-flow[browser]'
 openadapt-flow demo
 ```
 
-The demo runs one task twice on a fake clinic app on your computer. The first
-run uses an honest app. The second uses an app that shows "Encounter saved"
-and then drops the note. When both runs finish, the demo opens one page with
-the two results side by side. The first run can take a few minutes while the
-browser downloads. With the
+The demo runs one recorded task twice against a fake clinic app on your
+computer. The first run uses an honest app. The second uses an app that shows
+"Encounter saved" and then drops the note. When both runs finish, the demo
+opens a page with the two results side by side. The first run can take a few
+minutes while Playwright downloads Chromium. With the
 [OpenAdapt launcher](https://github.com/OpenAdaptAI/OpenAdapt) installed,
 `openadapt flow demo` runs the same command.
 
@@ -40,246 +47,151 @@ browser downloads. With the
 wrote on 2026-10-09 against the bundled fake clinic app; regenerate it with
 [`scripts/make_demo_proof_image.py`](scripts/make_demo_proof_image.py).*
 
-The proof in three lines:
-
 | | Run 1: honest app | Run 2: app drops the note |
 |---|---|---|
 | The screen said | Encounter saved | Encounter saved |
 | The record check found | 1 note | 0 notes |
-| OpenAdapt | Done and checked | Stopped and asked a person to check the record, with no retry |
+| openadapt-flow | Done and checked | Stopped and asked a person to check the record, with no retry |
 
 The two final screens are identical, pixel for pixel. Only the record check
-tells the runs apart.
+tells the runs apart. To watch each stage in the terminal instead, run
+`openadapt-flow tutorial`, then `openadapt-flow tutorial --break-it`;
+[docs/TUTORIAL.md](docs/TUTORIAL.md) shows the output.
 
-## What changes for your team
+<!-- TODO(readme-links): link the 60-second demo here once it is published. -->
 
-Here's one example task: entering a faxed referral into an EMR.
+## How it compares
 
-| | Today | With OpenAdapt |
+| | Playwright codegen | Model-driven agent (browser-use, computer use) | openadapt-flow |
+|---|---|---|---|
+| Authoring | Record in a browser, then edit and maintain the generated script | Write the task in plain language | Record once, then declare what each write changes and how to read it back |
+| Surfaces | Browsers | Browser or desktop, depending on the agent | Browsers; Windows, macOS, and Linux apps; RDP; Citrix by pixels |
+| Model calls per run | None | One for each step | None on a healthy run |
+| Median time per run, bundled clinic app | Not measured | 37.5 s | 4.9 s |
+| Model cost per run, bundled clinic app | $0 | About $0.27 | $0 |
+| When the UI changes | Locators use role, text, or test id, so style and layout changes don't affect them. A renamed label or a removed element makes the step time out, and you edit the script. | The model reads the screen again on every run. In our one dark-theme trial it finished in 87.4 s using 23 of its 25 allowed actions; an earlier trial ran out of actions. | Each step falls back from the recorded element to image, text, and position matching, logs a proposed repair, and stops when nothing matches. In the same dark-theme trial it finished in 9.7 s with 8 repairs. [Tested changes](#when-the-ui-changes) |
+| Checks the saved record | Only if you write that check; generated assertions check the page | The model judges success from the screen unless you add a check | Yes, in a production run: reads the record back through a second channel and stops on a mismatch |
+
+The time and cost rows come from one matched comparison on MockMed, the
+bundled fake clinic app: 100 compiled runs and 20 agent runs, all scored by the
+same OCR check of the final screen
+([method](benchmark/BENCHMARK.md)). The agent was `claude-sonnet-5` with the
+computer-use tool, driving the same browser through screenshots, and cost is
+model API usage at list price. On the public OpenEMR demo, compiled replay
+completed 19 of 20 runs (the 20th stopped before saving) with a 39.2 s median;
+the agent completed 10 of 10 with a 70.4 s median at about $0.55 per run
+([method](benchmark/openemr/BENCHMARK.md)). Both comparisons ran on 2026-07-08
+with Flow 0.1.0. The Playwright column describes Playwright's documented
+behavior: we haven't timed a codegen script on the same task or run one
+through our UI-change fixtures. A side-by-side comparison with UiPath, Power
+Automate, and browser agents is at
+[openadapt.ai/compare](https://openadapt.ai/compare).
+
+## When the UI changes
+
+Each recorded step keeps several kinds of evidence for its target: the DOM
+element or accessibility node where the surface has one, an image crop, the
+label text, and the target's position relative to nearby landmarks. At replay
+the run tries them in that order and uses the first match. A step that
+resolves through a fallback is logged as a proposed repair under the run's
+`heals/` folder. `--save-healed-to` writes a repaired copy of the bundle for
+review; Flow never swaps it in by itself. When nothing matches, the run stops
+instead of clicking something plausible. If an irreversible step, such as a
+final submit, can only be found by position, the run refuses to click. On a
+step with an identity check, the target goes through that check before the
+click, however it was found.
+
+<!-- TODO(readme-links): link the drift proof here once it is published. -->
+
+These are the changes the tests cover, on MockMed or a synthetic test page.
+Except where a row says otherwise, the tests switch off the element locator,
+to test the fallbacks that pixel-only surfaces such as Citrix depend on.
+
+| Change | What happened | Evidence |
 |---|---|---|
-| Entering it | A person keys each referral by hand. Two hospital time studies put this at about 10 to 12 minutes per referral. | OpenAdapt enters the approved fields in the same EMR screens, the way a person showed it once. |
-| Knowing it saved | Someone sees "Saved" and moves on. | OpenAdapt reads the record back through a separate path, such as a report, an API, or a read-only login, and compares it with what it entered. |
-| When something is off | Nothing checks the record, so a missing or wrong entry stays until someone notices it. | The run stops before it reports done, and a person decides what happens next. |
+| Dark theme | Finished. No step matched its recorded image, so each was found another way and logged as a repair. The repaired copy then replayed on image matches alone. | [`test_record_compile_replay.py`](tests/e2e/test_record_compile_replay.py) |
+| Two buttons moved | Finished. The moved buttons were found by a whole-screen image or text search and repaired. | Same file |
+| Labels renamed (Save to Submit, Open to View) | The renamed buttons were found by position or approximate text, and the repairs recorded the new labels. Flow classes a save as irreversible and refuses an irreversible step it can find only by position, so this run finished only with the save marked reversible. | Same file |
+| A pop-up blocks the screen after Save | The expected screen after the save didn't appear, so the run stopped at the save step and named the check that failed. | Same file |
+| A look-alike row above the target, or the target row removed | Stopped before the click: the row showed a different patient name. | [`test_perturbation.py`](tests/e2e/test_perturbation.py) |
+| Targets moved, relabeled, and re-themed, with their DOM ids unchanged (element locator on) | The element locator found 15 of 15. Image, text, and position matching alone found 0 of 15. | [`benchmark/structural_action/`](benchmark/structural_action/STRUCTURAL_ACTION.md) |
+| Browser zoom, display scaling, font size, or font family changed | Zoom, scaling, and font-size changes stopped the run at the first step. In a 21-point sweep there were no wrong actions and no crashes; only the recorded settings and two serif font swaps finished, and a monospace font stopped at the identity check. With the element locator on, four of these changes produced no wrong writes. | [`benchmark/cosmetic_drift/`](benchmark/cosmetic_drift/COSMETIC_DRIFT.md), [`test_structural_action.py`](tests/e2e/test_structural_action.py) |
 
-The 10-to-12-minute figure comes from a time-and-motion study at the UCSF
-Pediatric Access Center
-([JAMIA Open, 2020](https://pmc.ncbi.nlm.nih.gov/articles/PMC7660949/), 719
-seconds on average) and a 2024 HFMA case study at Calderdale and Huddersfield
-NHS Foundation Trust (10 minutes per referral).
+<!-- TODO(readme-visual): re-cut docs/showcase/demo.gif with
+scripts/make_demo_gif.py. Its first frame is a black title card (what a still
+preview shows), four frames show the login, the captions are engine telemetry
+(step ids, coordinates, rungs, milliseconds), and the end card says "Both runs
+succeeded". Keep it here, next to the resolution ladder it illustrates, not at
+the top of the README. -->
+![One recording replayed on two UIs. Left: the theme it was recorded on. Right: a dark theme it had never seen, where each step resolves through text or position matching.](docs/showcase/demo.gif)
 
-The record check needs a second way to read the record, such as a report, an
-API, or a read-only login. You set that up once for each workflow. Nothing
-changes in the app itself.
+Left: the UI the task was recorded on. Right: a dark theme the recording never
+saw. Neither run makes a model call. The run artifacts are in
+[`docs/showcase/`](docs/showcase), and the order of fallbacks is in
+[docs/RESOLUTION_LADDER.md](docs/RESOLUTION_LADDER.md).
 
-No OpenAdapt deployment has measured an "after" time for this task yet, so
-this page doesn't claim one. We have measured what a screen-only check misses.
-In our fault test, 72 of 90 runs left the record wrong, and a check that
-trusted the success message passed 54 of those 72. With one record check
-through an API read, 9 of the 72 still got through. That's a fixed set of
-injected faults, not a field rate
-([`benchmark/effect_e2e/EFFECT_E2E.md`](benchmark/effect_e2e/EFFECT_E2E.md),
-July 2026).
+## Try it on your app
 
-## Next steps
-
-- To try it on a test copy of your own web app, record the task once:
-
-  ```bash
-  openadapt-flow record --backend web --url https://your-test-app.example --out my-task
-  ```
-
-  Then follow [Record and rehearse your workflow](#record-and-rehearse-your-workflow).
-- To have OpenAdapt set up a workflow with your team, start at
-  [openadapt.ai](https://openadapt.ai).
-
----
-
-## How it works
-
-Record yourself doing a task in a browser or a desktop app. openadapt-flow
-compiles the recording into a script that runs on your machine. The default
-healthy path makes no generative-model API call. Before a governed run reports
-`VERIFIED`, Flow confirms every declared effect through an independent
-system-of-record read. A pixel-only Citrix path with no such read cannot be
-`VERIFIED`: the run halts, or it ends `RECONCILIATION_REQUIRED`. The screen
-says saved, the configured verifier finds no declared effect, and the run
-stops.
-
-It's for work you do the same way every week and have to be able to prove
-afterwards: claims entry, referrals, eligibility checks, invoice posting. If
-you're automating something once, use an agent instead.
-
-## The tutorial, step by step
-
-`demo` is built on the bundled tutorial. To see each stage in the terminal:
+Record the task once against a test copy of your web app, compile it, and
+replay it:
 
 ```bash
 pip install 'openadapt-flow[browser]'
-openadapt-flow tutorial
-```
-
-Python 3.10 through 3.12; 3.13 isn't supported yet. On Windows `cmd.exe`,
-quote with double quotes: `pip install "openadapt-flow[browser]"`.
-
-`tutorial` records a demonstration against a bundled demo EMR, compiles it,
-certifies the result against the shipped `clinical-write` policy, replays it,
-and confirms the write by querying the record store out of band:
-
-```
-[1/5] Record the demonstration against a real persistence boundary
-[2/5] Compile and propose a fixture-specific effect contract
-      2 system-of-record effect proposal(s) derived from the fixture's record delta on step_005; review is required for a real deployment
-[3/5] Certify against the clinical-write policy
-[4/5] Admit and execute under the standard profile
-      VERIFIED in 4.1s; 0 model calls; the system of record holds 1 record(s)
-[5/5] Emit the local run receipt
-
-VERIFIED: <out>/run/REPORT.md
-  transaction     VERIFIED
-  metering class  billable (this local tutorial was not reported or charged)
-  profile         standard
-  model calls     0
-  effects         2/2 confirmed by an independent system-of-record read (Seal Oracle tier 2)
-```
-
-That output comes from the bundled MockMed fixture. Its compiler can propose
-an effect contract because the fixture exposes an observed record delta. A
-real deployment must review the proposed contract or declare it directly, then
-configure the independent verifier described in
-[`docs/EFFECT_KIT.md`](docs/EFFECT_KIT.md). The sample run used version 1.34.0
-on macOS on 2026-08-28. The path is shorter here, and the receipt paths are
-not shown. Now break it on purpose:
-
-```bash
-openadapt-flow tutorial --break-it
-```
-
-Same certified bundle, same script, but this time the backend rejects the write
-*after* the app has painted its success banner. Every check that reads the
-screen still passes:
-
-```
-  The screen claimed:  every on-screen check passed -- the app painted its success banner
-                       (observed on screen: "Encountersaved-")
-  The verifier found:  1/2 declared effect(s) REFUTED by an independent
-                       read of the system of record, which holds 0 record(s)
-  The engine did:      HALTED at the consequential step instead of claiming
-                       success (transaction: RECONCILIATION_REQUIRED, billable: no)
-  Result:              Check the record. A save may have gone through. A person checks the record before anything is retried.
-```
-
-The halted run writes a local report and no shareable receipt, because only a
-`VERIFIED` run may use the success rail. It doesn't retry the write either:
-delivery is uncertain, so the transaction ends in `RECONCILIATION_REQUIRED` for
-a person to settle. That's why the plain result is "Check the record" and not
-"Stopped before saving": the store really is empty, but the engine says nothing
-was written only when it can prove that for every declared effect. `demo` runs
-this same pair and shows it on one page. Longer walkthrough, including the
-`--guided` presentation mode and the hand-driven stages:
-[docs/TUTORIAL.md](docs/TUTORIAL.md).
-
-## Reference Execute server
-
-You can host the public Execute HTTP contract on this machine, in one process.
-
-```bash
-pip install 'openadapt-flow[execute]'
-openadapt-flow serve-execute --port 8787 --seed-mockmed
-```
-
-That command binds loopback, generates an Ed25519 key on first start, and
-keeps it under `~/.openadapt/execute-ref/`. Health is `GET /health`. Submit
-`openadapt.execute-request/v1` to `POST /v1/executions`, poll
-`GET /v1/executions/{id}` until `terminal`, then read
-`GET /v1/executions/{id}/receipt`. The same process also speaks MCP at
-`POST /mcp`.
-
-Receipts are self-signed with that local key. They aren't OpenAdapt
-production Seals. `GET /seals/{id}` is the local verify page; it shows the
-key fingerprint and a $0 meter. Counterparties that require an OpenAdapt Seal
-still use Cloud.
-
-## Record and rehearse your workflow
-
-Install the extras for the surface that will record and replay the workflow:
-
-| Surface | Install |
-|---|---|
-| Browser | `pip install 'openadapt-flow[browser]'` |
-| Native Windows | `pip install "openadapt-flow[capture,windows]"` |
-| Native macOS | `pip install 'openadapt-flow[capture,macos]'` |
-| Native Linux | `pip install 'openadapt-flow[capture,linux]'`, plus the AT-SPI packages in [`docs/desktop/LINUX_NATIVE.md`](docs/desktop/LINUX_NATIVE.md) |
-| Network RDP | Install `openadapt-flow[capture]` in the recorded session and `openadapt-flow[rdp]` on the runner |
-| Local RDP or Citrix client window | On macOS: `pip install 'openadapt-flow[capture,macos]'`. On Windows: `pip install "openadapt-flow[capture,windows]"` |
-
-Start with a local browser rehearsal:
-
-```bash
-openadapt-flow record --backend web --url https://your.app --out rec
+openadapt-flow record --backend web --url https://your-test-app.example --out rec
 openadapt-flow compile rec --out bundle --name my-task
-openadapt-flow qualify propose bundle --recording rec --out proposal.json
-openadapt-flow qualify accept bundle --proposal proposal.json
 openadapt-flow lint bundle
-openadapt-flow replay bundle --backend web --url https://your.app
+openadapt-flow replay bundle --url https://your-test-app.example
 ```
 
-`lint` exits 1 only when a gap reaches `error`. In CI, add `--strict` to fail
-on warnings too. A fresh recording usually has a few warnings, so
-`lint --strict` exits 1 on it until those gaps are closed.
+Python 3.10 through 3.12 is supported. On Windows `cmd.exe`, use double
+quotes: `pip install "openadapt-flow[browser]"`.
 
-Demo once, get a checked program. `qualify propose` fills the production-shaped
-pins from the recording: application identity, environment fingerprint,
-identity-gate fields, and the effect oracle from the write the demo actually
-observed. `qualify accept` confirms every pin in one command. If a pin isn't
-there, Flow HALTs. It will not guess.
+`lint` lists what the bundle doesn't cover yet, such as a write with no record
+check. It exits 1 only for an `error`; a fresh recording usually has a few
+warnings. `replay` is a rehearsal: it runs the steps but doesn't read the
+record back. It ends `COMPLETED_UNVERIFIED` (finished, not checked) and exits
+0, so exit 0 from `replay` doesn't mean the save was confirmed.
 
-`qualify accept` also runs that proposed oracle against a `--break-it` fault
-before it can succeed. MockMed is the default fixture: the banner says the
-row was saved, the store did not change. If the oracle would have accepted
-the lie, the proposal stays draft or halted. Actor bytes and oracle bytes
-must be disjoint. Re-reading the acting screen or the same-session banner
-HALTs and names the shared channel. An API, SQL, file, or second-session
-read is allowed; Flow will not invent an endpoint. No second read in the
-recording means HALT: do not automate until a second read exists.
+To have OpenAdapt set up a workflow with your team, start at
+[openadapt.ai](https://openadapt.ai).
 
-`--policy-pack community` is the local/MockMed pack. `cloud` and `regulated`
-bind the stricter shipped policy. They do not skip a pin. On MockMed, add
-`--admit-local` to mint a signed local admission. That test key cannot enter a
-production trust map. The pin list and the failure matrix (`--break-it`, plus
-identity-swap or extra-field when the demo has parameters) are in
-[`docs/QUALIFICATION_PROJECT.md`](docs/QUALIFICATION_PROJECT.md).
+### Add the record check
 
-To generalize a task from several recordings, induce a program:
+A production run reports success only after it reads back every write it
+declared. Each workflow needs two things:
 
-```bash
-openadapt-flow induce rec1 rec2 --out program
-```
+1. A description of what each write changes. `openadapt-flow
+   scaffold-verifier rec` drafts one from the recording's write steps. The
+   draft checks nothing until a person edits it.
+2. A second way to read the record. A database connection isn't required.
+   A read-only REST, FHIR, or GraphQL API works, and so does a read-only SQL
+   query, a file, report, or email the app exports, or a separate read-only
+   login to the same app through an adapter you register. You configure it
+   once in `deploy.yaml`, and nothing changes in the app. See
+   [docs/EFFECT_KIT.md](docs/EFFECT_KIT.md).
 
-`induce` emits a program when the traces agree, and a `record-next:` worklist of missing demonstrations when a consequential branch or loop stays underdetermined. The healthy replay path still makes no model call.
-
-`replay` is the permissive rehearsal path. It stays available while a bundle has
-certification gaps. A rehearsal never checks the record, so it ends
-`COMPLETED_UNVERIFIED` (finished, not checked) and still exits 0. Exit 0 from
-`replay` means the steps finished, not that the save was confirmed; the output
-says so, and `transaction_outcome` in `report.json` records it. For governed
-execution, complete the remaining idempotency and postcondition contracts, then
-use the gated path:
+Reading the screen the run just used doesn't count, because an app can show
+"Saved" and drop the write, as the demo shows. Without a second read, Flow can
+still rehearse the workflow, but a production run can't report a checked save:
+it stops, or it hands the result to a person.
 
 ```bash
 openadapt-flow certify bundle --config deploy.yaml
 openadapt-flow run bundle --profile standard --config deploy.yaml
 ```
 
-`run --profile standard` enforces the policy again. It still refuses the bundle
-if the standalone `certify` command failed. A new recording will usually fail
-`clinical-write` until its contracts are complete. Two built-in policies ship:
-`permissive` and `clinical-write`. `permissive` is a minimal smoke check: a
-bundle that passes it can still be refused by a governed `clinical-write` run.
+`certify` checks the bundle against a policy. `clinical-write` is the strict
+built-in policy, and `permissive` is a smoke check. A new recording usually
+fails `clinical-write` until its contracts are complete; `lint` lists the
+gaps. `run --profile standard` checks the policy again, replays, and reads the
+record back.
+
+### Exit codes
 
 | Command | Exit 0 | Exit 1 | Exit 2 |
 |---|---|---|---|
 | `demo` | Run 1 was done and checked, and run 2 stopped | The pair didn't show that difference | The demo couldn't start, a stage lacked evidence, or a usage error |
-| `replay` (Demo profile) | The steps finished, not checked | The run didn't finish, or an input couldn't be used | Refused before acting (for example, a program recorded on another surface), or a usage error |
+| `replay` | The steps finished, not checked | The run didn't finish, or an input couldn't be used | Refused before acting (for example, a program recorded on another surface), or a usage error |
 | `run --profile standard` | `VERIFIED`: done and checked | Any other ending | Refused before acting, or a usage error |
 | `certify` | Passes the policy | No policy given, or it couldn't load | Fails the policy, or a usage error |
 | `lint` | No `error` gap (with `--strict`, no warnings either) | A gap at the threshold | Usage error |
@@ -290,326 +202,116 @@ Only `VERIFIED` is a checked save, and only `HALTED_BEFORE_EFFECT`,
 written. `RECONCILIATION_REQUIRED` means a person checks the record before
 anything is retried.
 
-For a native Windows app, Capture records one local window and an in-guest agent
-drives it at replay:
+## Surfaces
+
+Install the extras for the surface that records and replays the workflow:
+
+| Surface | Install |
+|---|---|
+| Browser | `pip install 'openadapt-flow[browser]'` |
+| Native Windows | `pip install "openadapt-flow[capture,windows]"` |
+| Native macOS | `pip install 'openadapt-flow[capture,macos]'` |
+| Native Linux | `pip install 'openadapt-flow[capture,linux]'`, plus the AT-SPI packages in [`docs/desktop/LINUX_NATIVE.md`](docs/desktop/LINUX_NATIVE.md) |
+| Network RDP | Install `openadapt-flow[capture]` in the recorded session and `openadapt-flow[rdp]` on the runner |
+| Local RDP or Citrix client window | On macOS: `pip install 'openadapt-flow[capture,macos]'`. On Windows: `pip install "openadapt-flow[capture,windows]"` |
+
+[docs/SURFACES.md](docs/SURFACES.md) has the record and replay commands for
+each surface, and [docs/PRODUCT_STATUS.md](docs/PRODUCT_STATUS.md) lists the
+evidence for each one. A bundle is bound to the surface it was recorded on.
+
+One bundle drives one surface: one browser tab, one desktop app, or one
+remote desktop session. For a task that crosses surfaces, record one bundle
+per surface and chain them with `openadapt-flow compose`. Each child starts
+only after the one before it ends with a checked save, unless you allow a
+specific stop with `--allow-halt`.
+
+## Call a workflow from an agent
 
 ```bash
-openadapt-flow record --backend windows --window "Target App" --out rec
-openadapt-flow compile rec --out bundle --name my-task
-openadapt-flow replay bundle --agent-url http://localhost:5001
+pip install 'openadapt-flow[execute]'
+openadapt-flow serve-execute --port 8787 --seed-mockmed
 ```
 
-Citrix and VDI have no DOM or accessibility tree. This macOS example drives one
-exact Workspace window through its pixels and won't send input until the
-readiness text is on screen:
+This starts a local HTTP server on loopback. It speaks MCP at `POST /mcp`,
+with tools to start a run (`create_execution`), poll it (`get_execution`), and
+fetch its signed result (`get_execution_receipt`). The same operations are
+available as plain HTTP under `/v1/executions`, and requests carry the bearer
+token the server generates on first start. The server runs only bundles
+registered in its data directory, each pinned by its digest, and runs them
+under the standard profile, so the result says whether the record check
+passed. `--seed-mockmed` registers two simulated MockMed workflows, an honest
+app and one that drops the save, which return results without opening a
+browser.
 
-```bash
-openadapt-flow record --backend citrix --window "Citrix Viewer" \
-  --rdp-window "Citrix Viewer" --rdp-window-title "Ward A" \
-  --rdp-readiness-text "Appointments" --out rec
-openadapt-flow compile rec --out bundle --name my-task
-openadapt-flow replay bundle --rdp-window "Citrix Viewer" \
-  --rdp-window-title "Ward A" --rdp-readiness-text "Appointments"
-```
-
-That path is qualified against a no-DOM stand-in, 3 healthy runs and 3 drift
-halts, and the retained artifact records `ica_hdx_accepted=false`, so a live
-ICA/HDX session is something you qualify in your own deployment rather than
-inherit from ours. Pixels plus a green banner are not a system-of-record
-read. Without REST, FHIR, SQL, a file oracle, or a separately authenticated
-session, Standard and Regulated cannot report `VERIFIED`; they halt or return
-`RECONCILIATION_REQUIRED`. See [docs/LIMITS.md](docs/LIMITS.md).
-
-macOS, Linux, network RDP, and Windows-hosted Citrix have different target
-flags. Some apply only to `replay` or `run` because Capture can't use them.
-[docs/SURFACES.md](docs/SURFACES.md) has the exact commands for all six
-surfaces, and [docs/PRODUCT_STATUS.md](docs/PRODUCT_STATUS.md) gives the evidence
-for each one. A compiled bundle is bound to its recorded surface, so `--backend`
-is optional on `replay`.
-
-Compiling a bundle is not the same as clearing it to run. `lint` reports what a
-bundle failed to cover and grades each gap. Without `--strict`, warnings don't
-make `lint` exit nonzero. `certify` enforces the selected policy and refuses a
-bundle that doesn't meet it.
-
-### Workflows that use more than one application
-
-A URL or window flag selects the execution surface, not the number of screens
-in the task. One bundle can move through screens and same-origin routes inside
-its bound surface. An RDP workflow can also switch among windows inside one
-remote desktop. The public [multi-window fixture](benchmark/rdp_multiapp/README.md)
-is designed to exercise that path through one FreeRDP backend. Its three task
-windows belong to one synthetic fixture process, and the repository does not
-contain a completed campaign result. A real deployment needs its own
-qualification.
-
-The boundary is one backend per bundle. Worklists repeat that bundle over input
-records, and subflows reuse steps inside it. Neither one switches backends.
-Browser recording owns one tab and refuses popups or new tabs. Browser attach
-mode stays on one origin. macOS and Linux bind one exact app and window, while a
-governed Windows run binds its application identity.
-
-If a task crosses a browser and a native app, or otherwise changes backend,
-record one bundle per surface. `openadapt-flow compose` sequences the compiled
-bundles:
-
-```bash
-openadapt-flow compose \
-  --child intake=./intake-bundle \
-  --child posting=./posting-bundle \
-  --handoff intake.patient_id=posting.patient_id \
-  --out composed
-openadapt-flow certify composed --policy clinical-write
-openadapt-flow run composed --config deploy.yaml
-openadapt-flow visualize composed -o composed.html
-```
-
-Child A must end `VERIFIED` (or a halt class you named with `--allow-halt`)
-before child B starts. Handoffs copy parameter values that A's confirmed
-effect contract already bound. The parent will not guess a window title or a
-URL. Missing evidence stops the run. Qualify each handoff and the end-to-end
-result verifier before deployment.
-
-`visualize` on that parent draws one node per child, on the surface that child
-was recorded on. Edges follow `--after`. Handoff edges label the effect-bound
-parameters they copy. The parent ends at "End of declared steps", which isn't
-a live `VERIFIED` verdict. See [docs/VISUALIZE.md](docs/VISUALIZE.md).
-
-Compose will not retarget one recording onto a second backend. Program authors
-can bind individual steps to different HTTP systems, but that is API actuation
-rather than recorded GUI backend switching. If you installed the OpenAdapt
-launcher, `openadapt flow compose` is the same command.
-
-A V0 process contract sequences Flow children that already have signed
-qualification admissions. The parent names the order or DAG and the confirmed
-effect-bound facts that may copy as handoffs:
-
-```bash
-openadapt-flow process \
-  --child intake=./intake-bundle \
-  --admission intake=./intake-admission.json \
-  --child posting=./posting-bundle \
-  --admission posting=./posting-admission.json \
-  --handoff intake.patient_id=posting.patient_id \
-  --out process
-openadapt-flow certify process --policy clinical-write
-openadapt-flow run process --config deploy.yaml
-```
-
-`openadapt-flow replay process` refuses; governed `run` is the path, same as
-compose. `openadapt flow process` is the launcher form. Compose still sequences
-recordings. Don't wrap a `composition.json` and call it admitted. Operator
-detail lives in [docs/PROCESS_CONTRACT.md](docs/PROCESS_CONTRACT.md).
-
-ProcessContract v1 adds sealed Python children, signed human tasks, and
-verified content-addressed artifact edges to that same parent:
-
-```bash
-openadapt-flow process --spec process-v1.json --out process
-openadapt-flow run process \
-  --run-dir runs/process-001 \
-  --code-trust code-signers.json \
-  --code-runtime-environment-digest sha256:... \
-  --allow-trusted-code \
-  --process-receipt-private-key runner-ed25519.key \
-  --config deploy.yaml
-```
-
-An admitted transform doesn't prove its output. The named verifier must confirm
-the exact artifact digest before another child can read it. Human completion
-records authority and intent; the declared verifier still proves the effect.
-`RECONCILIATION_REQUIRED` stops the parent and is never retried as a general
-halt. The [V1 design](docs/design/PROCESS_CONTRACT_V1.md) records the execution,
-authentication, portability, and isolation boundaries.
-
-## How a step finds its target
-
-<!-- TODO(readme-visual): re-cut docs/showcase/demo.gif with
-scripts/make_demo_gif.py. Its first frame is a black title card (what a still
-preview shows), four frames show the login, the captions are engine telemetry
-(step ids, coordinates, rungs, milliseconds), and the end card says "Both runs
-succeeded". Keep it here, next to the resolution ladder it illustrates, not at
-the top of the README. -->
-![One demonstration, two UIs, same compiled script. The right side re-resolves under a theme it has never seen](docs/showcase/demo.gif)
-
-Left: the UI the demo was recorded on. Right: a theme it had never seen, where
-each step re-resolves through OCR or geometry and each proposed repair appears
-in the run evidence as a diff you can read. Neither run makes a generative-model
-API call. Both runs are real and their artifacts are in
-[`docs/showcase/`](docs/showcase).
-
-An anchored step keeps the evidence available on its execution surface. A
-browser or native step can carry a structural locator alongside template, OCR,
-and geometry evidence. A pixel-only step starts with visual evidence, while a
-pure keyboard or wait step may have no anchor at all. At replay the ladder tries
-structure first when it exists, then the available visual rungs. Model grounding
-stays off unless you enable it in the CLI or deployment config.
-
-A healthy step stops on its first valid match. Under drift, a lower rung can
-resolve the same target. The runtime records the proposed repair under the
-run's `heals/` evidence. Pass `--save-healed-to` to create a complete candidate
-bundle for review; Flow never promotes that candidate into the active workflow
-automatically. When no rung matches, the run halts rather than click something
-plausible.
-
-The runtime drives a pure pixel surface when that is all there is, and uses the
-structured layer as the top rung wherever one exists. On a desktop drift
-benchmark the structural rung resolved 21/21 targets where visual replay alone
-managed 6/21
-([`benchmark/structural_action/`](benchmark/structural_action/STRUCTURAL_ACTION.md)).
-
-Structure never skips the identity gate. Rung-by-rung detail:
-[docs/RESOLUTION_LADDER.md](docs/RESOLUTION_LADDER.md).
-
-## When you shouldn't use this
-
-- **The task has an API.** Call it. Driving a GUI is what you do when the
-  vendor gave you no other door.
-- **You'll run it twice.** Recording, compiling, certifying, and writing an
-  effect contract costs more than doing it by hand or pointing an agent at it.
-- **You want a Citrix number you can quote.** The pixel path runs, but its
-  counted evidence is a stand-in, not a live ICA/HDX session. Yours is a
-  qualification exercise, not a lookup.
-- **You want the halt behaviour without doing the work.** Effect verification
-  only fires against effects you declared. `scaffold-verifier` drafts a contract
-  from a recording's write-shaped steps, and the draft needs a human to edit it.
-  Skip that and you're back to trusting the screen, which is the failure mode
-  `--break-it` demonstrates.
-- **You expect every click to be checked.** The identity gate covers *armed*
-  steps, and bundles today arm a subset: the live OpenEMR bundle armed 4 to 7
-  of 12. An unarmed click has no identity check.
-
-The full boundary, capability by capability, with what each evidence basis does
-and doesn't mean: [docs/LIMITS.md](docs/LIMITS.md).
-
-## Against agents and RPA
-
-For a task nobody has automated before, an agent is the right tool. Use one.
-For the 500th referral this month, compiled replay follows retained evidence and
-doesn't need a model call on each healthy run. The comparisons below cover two
-exact benchmark configurations, not every agent or RPA product. Both arms drove
-the same interface and used the same OCR success check. Neither arm's own
-success report counted.
-
-Both comparisons ran on 2026-07-08 from a pre-v0.2.0 checkout declaring Flow
-0.1.0. The exact runtime commit wasn't retained, so these aren't current-release
-numbers:
-
-| Task | Compiled replay | Computer-use agent |
-|---|---|---|
-| OpenEMR public demo, 18-step field run ([method](benchmark/openemr/BENCHMARK.md)) | 19/20 under the saved-row OCR check, 39.2s p50, 0 recorded model API calls and $0 in model API charges; run 20 halted safely | 10/10 under the same check, 70.4s p50, about $0.55/run in model API charges |
-| MockMed bundled fixture, CI-reproducible ([method](benchmark/BENCHMARK.md)) | 100/100 under the OCR check, 4.9s p50, 0 recorded model API calls and $0 in model API charges | 20/20 under the same check, 37.5s p50, about $0.27/run in model API charges |
-
-The dollar figures cover model API usage at list price. They don't include
-infrastructure, authoring, review, or maintenance.
-
-The OpenEMR run is the interesting one because the app is not ours: it's the
-official public demo, with fake patients, that other people mutate and that
-resets daily. That also makes it impossible to reproduce in CI, and the sample
-is small.
-
-Method, caveats, the pinned Frappe lending environment, and EffectBench (the
-standalone Silent Wrong-Effect Rate benchmark) are all in
-[docs/BENCHMARKS.md](docs/BENCHMARKS.md).
-
-RPA products differ in how they repair selectors and verify effects. Compare
-their evidence contracts. Start with target selection and independent result
-proof, then inspect what happens after uncertain delivery. See the
-dimension-by-dimension comparison with UiPath, Power Automate, and browser
-agents at [openadapt.ai/compare](https://openadapt.ai/compare).
+`openadapt-flow emit-mcp bundle --out server.py` writes a standalone MCP
+server for one bundle. It replays without the record check.
 
 ## What runs where
 
-Record, compile, compose, lint, certify, replay, and run are local. By default, a healthy
-replay makes no generative-model API call. Grounding, identity, and state
-verification integrations can make calls when enabled. This is not the same as
-no network: the app you're driving, a remote backend, and any effect verifier
-still talk to their configured services. Treat the run's model-call counter as
-diagnostic data, not provider billing telemetry.
+Recording, compiling, replaying, and production runs all happen on your
+machine. A healthy run makes no model calls, and model-assisted target finding
+is off unless you turn it on in the CLI or deployment config. That isn't the
+same as no network: the app you drive and the record check still talk to
+their own services.
 
-For regulated work, PHI scrubbing on the persist and log paths comes from the
-`privacy` extra, backed by
-[openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy):
+For regulated data, the `privacy` extra scrubs PHI from the shareable report
+and the console logs:
 
 ```bash
 pip install 'openadapt-flow[privacy]' && python -m spacy download en_core_web_sm
 export OPENADAPT_FLOW_SCRUB=on
 ```
 
-That scrubs the shareable report and the console logs. The bundle and
-`report.json` keep literal identifiers on purpose, because the identity check
-and the audit trail need them. The full map of what is scrubbed and what isn't
-is [docs/PRIVACY.md](docs/PRIVACY.md). To encrypt a bundle at rest, set
-`OPENADAPT_BUNDLE_KEY`, then make a sealed copy:
+The bundle and `report.json` keep literal identifiers, because the identity
+check and the audit trail need them ([docs/PRIVACY.md](docs/PRIVACY.md)). With
+`OPENADAPT_BUNDLE_KEY` set, `openadapt-flow seal ./bundle --out ./bundle-sealed`
+encrypts `workflow.json` and the image crops with AES-256-GCM. Other bundle
+files aren't encrypted, so treat every source bundle as PHI
+([docs/phi_at_rest.md](docs/phi_at_rest.md)).
 
-```bash
-openadapt-flow seal ./bundle --out ./bundle-sealed
-```
+OpenAdapt Cloud at `app.openadapt.ai` is an optional hosted control plane for
+browser workflows. Desktop and Citrix runs are self-hosted
+([docs/HOSTED.md](docs/HOSTED.md)).
 
-The command encrypts `workflow.json` and the template crops with AES-256-GCM.
-An encrypted governed run reuses the key for its durable checkpoints. Other
-bundle files aren't covered by this command, and every source bundle must still
-be treated as PHI. See [docs/phi_at_rest.md](docs/phi_at_rest.md).
+## Limits
 
-OpenAdapt Cloud at `app.openadapt.ai` is an optional managed control plane
-covering browser workflows. Desktop and Citrix runs are self-hosted or on-prem.
-See [docs/HOSTED.md](docs/HOSTED.md).
+- If the app has an API for the task, call the API.
+- Each workflow takes setup: a recording, a description of its writes, and a
+  second read path. For a task you'll run a few times, doing it by hand or
+  pointing an agent at it costs less.
+- A record check sees only what its read path covers. In a fault test with
+  injected bad writes, a check that trusted the success message passed 54 of
+  the 72 runs that left the record wrong. One API read let 9 of the 72
+  through, all writes to a table it didn't read
+  ([`EFFECT_E2E.md`](benchmark/effect_e2e/EFFECT_E2E.md)).
+- The identity check runs only on steps where the recording captured
+  identifying context. The live OpenEMR bundle had it on 4 to 7 of 12 clicks.
+- In our tests on the pixel path, any change in zoom, display scaling, or
+  font size stopped the run at its first step.
+- The Citrix path was tested on a stand-in with no DOM (3 healthy runs and 3
+  stops on drift), not a live Citrix ICA/HDX session. Each deployment has to
+  be tested on its own Citrix setup.
+- A stop isn't a rollback. Steps before the stop may already have changed the
+  app.
+- The comparison numbers above are from July 2026, on Flow 0.1.0, with 20
+  or fewer agent runs per task. They haven't been measured again on a later
+  release.
 
-## Production admission
+The full list, capability by capability: [docs/LIMITS.md](docs/LIMITS.md).
 
-Flow reports `Production` only while a signed, expiring, revocable release
-admission is valid for the exact build. Workflow admission is separate: a
-release admission doesn't qualify a customer's bundle, application,
-environment, or verification contract. The current admission state is
-machine-readable at
-[openadapt.ai/production-lifecycle.json](https://openadapt.ai/production-lifecycle.json).
+## More documentation
 
-The registry in [`claims.yaml`](claims.yaml) assigns each registered public
-capability claim a tier and names the tests or benchmark artifacts behind it.
-The build fails when a registered claim outranks its evidence. See
-[docs/CLAIMS_AND_QUALIFICATION.md](docs/CLAIMS_AND_QUALIFICATION.md) and the
-generated [docs/VERIFICATION.md](docs/VERIFICATION.md). For security review,
-[docs/ENTERPRISE_ARCHITECTURE.md](docs/ENTERPRISE_ARCHITECTURE.md).
-
-There is more here than this page covers: workflow programs with states, loops
-and guarded transitions; data-driven `for-each` over a worklist; composing
-separately recorded bundles; multi-trace induction that quarantines an
-underdetermined intent instead of guessing;
-pluggable SQL, REST, FHIR and document-hash effect oracles; durable
-checkpoint and resume; Agent Skill and MCP emission. Those are in
-[docs/CAPABILITIES.md](docs/CAPABILITIES.md), and the whole documentation set
-is at [docs.openadapt.ai](https://docs.openadapt.ai).
-
-## Reward worker for a training loop
-
-`openadapt-flow serve-reward` scores a model's training episode by reading the
-system of record after the episode ends, through the same effect oracles the
-runtime uses. It returns a signed `RewardEvidenceReceiptV1`: the terminal
-effect landed, or it didn't, or the store couldn't be read and the episode is
-unscored. Unscored is never 0.
-
-The reward worker ships in version 1.35.1. You can install that release:
-
-```bash
-pip install 'openadapt-flow[reward]==1.35.1'
-openadapt-flow serve-reward --seed-mockmed --port 8788
-```
-
-For development, install from the repository head:
-
-```bash
-git clone https://github.com/OpenAdaptAI/openadapt-flow
-cd openadapt-flow && pip install -e '.[reward]'
-python -m openadapt_flow serve-reward --seed-mockmed --port 8788
-```
-
-A reward receipt isn't an Execute Seal. A model rollout isn't a qualified
-program, so it never gets one, and the receipt never says Flow governed the
-policy. The adapters for TRL's `GRPOTrainer` and verl's reward manager live in
-`openadapt_evals.reward` (`pip install 'openadapt-evals>=0.96.0'`), because
-TRL trains a `None` reward as 0.0 and the evals adapters drop an unscored
-episode instead. This package keeps the worker and the HTTP client. See
-[docs/REWARD_WORKER.md](docs/REWARD_WORKER.md).
+- [Production setup](docs/PRODUCTION.md): qualifying a bundle from its
+  recording, policies, multi-step processes, signed results, and release
+  status.
+- [docs/CAPABILITIES.md](docs/CAPABILITIES.md): workflow programs with branches
+  and loops, `for-each` over a worklist, `induce` from several recordings,
+  durable checkpoint and resume, and Agent Skill output.
+- [docs/BENCHMARKS.md](docs/BENCHMARKS.md): every benchmark, with method and
+  caveats.
+- [docs/REWARD_WORKER.md](docs/REWARD_WORKER.md): `serve-reward` scores a
+  model's training episode by reading the record after it ends.
+- [docs.openadapt.ai](https://docs.openadapt.ai): the full documentation set.
 
 ## Development
 
@@ -625,10 +327,10 @@ download. A minimal host may need a one-time system-library install. Flow stops
 before the download and prints a command for the exact Python environment that
 runs it.
 
-Contributions welcome, see [CONTRIBUTING.md](CONTRIBUTING.md). If you want a
-first one that is genuinely useful: pick a module off the mypy type-debt
-burn-down list (`[[tool.mypy.overrides]]` in `pyproject.toml`), tighten its
-annotations, and delete it from the list.
+Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). For a first
+contribution, pick a module off the mypy type-debt list
+(`[[tool.mypy.overrides]]` in `pyproject.toml`), tighten its annotations, and
+delete it from the list.
 
 The demo GIF is generated from real run artifacts by
 `scripts/make_demo_gif.py`. The proof image at the top of this page comes from

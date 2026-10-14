@@ -47,6 +47,31 @@ record out of band — a path the application itself never calls, so the screen
 cannot influence it. It ends `VERIFIED` with zero model calls, and writes a
 shareable `receipt.png` / `receipt.json` beside the run.
 
+```
+[1/5] Record the demonstration against a real persistence boundary
+[2/5] Compile and propose a fixture-specific effect contract
+      2 system-of-record effect proposal(s) derived from the fixture's record delta on step_005; review is required for a real deployment
+[3/5] Certify against the clinical-write policy
+[4/5] Admit and execute under the standard profile
+      VERIFIED in 4.1s; 0 model calls; the system of record holds 1 record(s)
+[5/5] Emit the local run receipt
+
+VERIFIED: <out>/run/REPORT.md
+  transaction     VERIFIED
+  metering class  billable (this local tutorial was not reported or charged)
+  profile         standard
+  model calls     0
+  effects         2/2 confirmed by an independent system-of-record read (Seal Oracle tier 2)
+```
+
+That output comes from the bundled MockMed fixture. Its compiler can propose
+an effect contract because the fixture exposes an observed record delta. A
+real deployment must review the proposed contract or declare it directly, then
+configure the independent verifier described in
+[`EFFECT_KIT.md`](EFFECT_KIT.md). The sample run used version 1.34.0 on macOS
+on 2026-08-28. The path is shortened here, and the receipt paths are not
+shown.
+
 ## What `--break-it` does
 
 `--break-it` reruns the **same certified bundle** against a backend that lies:
@@ -57,6 +82,22 @@ engine **HALTS** at the consequential step instead of believing the screen. The
 caught fault's evidence is a clearly-labeled local `run-broken/REPORT.md`; no
 shareable receipt is emitted for it, because only `VERIFIED` runs may use the
 success rail.
+
+```
+  The screen claimed:  every on-screen check passed -- the app painted its success banner
+                       (observed on screen: "Encountersaved-")
+  The verifier found:  1/2 declared effect(s) REFUTED by an independent
+                       read of the system of record, which holds 0 record(s)
+  The engine did:      HALTED at the consequential step instead of claiming
+                       success (transaction: RECONCILIATION_REQUIRED, billable: no)
+  Result:              Check the record. A save may have gone through. A person checks the record before anything is retried.
+```
+
+The halted run doesn't retry the write either: delivery is uncertain, so the
+transaction ends in `RECONCILIATION_REQUIRED` for a person to settle. That's
+why the plain result is "Check the record" and not "Stopped before saving":
+the store really is empty, but the engine says nothing was written only when
+it can prove that for every declared effect.
 
 ## What `--guided` does
 

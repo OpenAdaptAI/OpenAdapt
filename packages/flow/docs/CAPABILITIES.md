@@ -43,7 +43,10 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   When a branch condition or a value stays underdetermined it *quarantines* the
   program (`certified` is `False`) instead of guessing, and `disambiguate`
   surfaces the ambiguity as concrete multiple-choice questions rather than
-  inventing an answer.
+  inventing an answer. From the CLI, `openadapt-flow induce rec1 rec2 --out
+  program` emits a program when the traces agree, and a `record-next:`
+  worklist of missing demonstrations when a consequential branch or loop stays
+  underdetermined. The healthy replay path still makes no model call.
 - **Effect verification against the system of record.** The screen can lie: an
   optimistic UI, a duplicate submit, a partial save all read as success. A step
   may declare typed `effects`, and when a run is given an `EffectVerifier` the
