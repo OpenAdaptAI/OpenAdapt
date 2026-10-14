@@ -7,6 +7,7 @@ version / PEP 668 remedy.
 
 from __future__ import annotations
 
+import shlex
 from pathlib import Path
 
 import pytest
@@ -110,7 +111,16 @@ def test_pep668_error_prints_the_same_remedy(monkeypatch):
         ["--profile", "strict"],
     ],
 )
-def test_unknown_flags_pass_through_to_engine_verbatim(engine_calls, extra):
+def test_unknown_flags_pass_through_to_engine_verbatim(
+    monkeypatch, engine_calls, extra
+):
+    # A newer Flow tutorial that adds `--profile` gets it without a launcher
+    # change: quickstart checks flags against the installed engine's parser.
+    monkeypatch.setattr(
+        "openadapt.cli._flow_tutorial_options",
+        lambda: frozenset({"--guided", "--interactive-record", "--profile"}),
+        raising=False,
+    )
     runner = CliRunner()
     with runner.isolated_filesystem():
         result = runner.invoke(cli_main, ["quickstart", *extra])
@@ -119,3 +129,50 @@ def test_unknown_flags_pass_through_to_engine_verbatim(engine_calls, extra):
     argv = engine_calls[0]
     assert argv[0] == "tutorial"
     assert argv[-len(extra) :] == extra
+
+
+def _printed_commands(output: str) -> list[list[str]]:
+    commands = []
+    for line in output.splitlines():
+        _, found, rest = line.partition("openadapt flow ")
+        if found:
+            commands.append(shlex.split(rest))
+    return commands
+
+
+def _option(argv: list[str], name: str) -> str:
+    return argv[argv.index(name) + 1]
+
+
+def test_drift_hint_replays_a_bundle_recorded_on_plain_mockmed(engine_calls):
+    """The tutorial bundle is recorded against MockMed's fault server.
+
+    `flow replay --drift` serves plain MockMed, which opens at the login
+    screen, so replaying the tutorial bundle halts at step_000 with or
+    without drift. The drift hint must record and compile its own demo on
+    plain MockMed and replay that bundle.
+    """
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(cli_main, ["quickstart", "--out", "qs"])
+        root = Path("qs").resolve()
+
+    assert result.exit_code == 0, result.output
+    assert "fail-safe" not in result.output
+    commands = _printed_commands(result.output)
+    drift_replays = [
+        argv for argv in commands if argv[0] == "replay" and "--drift" in argv
+    ]
+    assert len(drift_replays) == 1, result.output
+    replay = drift_replays[0]
+    assert Path(replay[1]) != root / "bundle"
+
+    (record,) = [argv for argv in commands if argv[0] == "demo-record"]
+    (compile_,) = [argv for argv in commands if argv[0] == "compile"]
+    assert compile_[1] == _option(record, "--out")
+    assert replay[1] == _option(compile_, "--out")
+    assert (
+        result.output.index("flow demo-record")
+        < result.output.index("flow compile")
+        < result.output.index("--drift")
+    )

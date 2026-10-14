@@ -411,4 +411,4 @@ def test_quickstart_offers_the_agent_command_only_when_it_works(
         result = runner.invoke(cli_main, ["quickstart", "--out", "qs"])
 
     assert result.exit_code == 0, result.output
-    assert ("openadapt-agent serve --allow-run" in result.output) is serves
+    assert ("openadapt agent serve --allow-run" in result.output) is serves

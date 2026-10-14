@@ -352,7 +352,7 @@ def test_doctor_lists_quickstart_dependencies_as_core_not_extras(monkeypatch):
         assert extra_pkg not in core_section
     assert "[MISSING]" not in optional_section
     # Optional section tells the user how to install extras.
-    assert "pip install openadapt[" in optional_section
+    assert 'pip install "openadapt[' in optional_section
 
 
 def test_launcher_flow_and_substrate_extras_metadata():
@@ -370,30 +370,30 @@ def test_launcher_flow_and_substrate_extras_metadata():
 
     assert (
         metadata["dependencies"].count(
-            f"openadapt-flow[browser,hosted]>=1.29.0,<2.0.0; {supported}"
+            f"openadapt-flow[browser,hosted]>=1.35.0,<2.0.0; {supported}"
         )
         == 1
     )
     assert (
         metadata["dependencies"].count(f"openadapt-agent>=2.0.1,<3; {supported}") == 1
     )
-    assert extras["flow"] == [f"openadapt-flow>=1.29.0,<2.0.0; {supported}"]
+    assert extras["flow"] == [f"openadapt-flow>=1.35.0,<2.0.0; {supported}"]
     assert extras["agent"] == [f"openadapt-agent>=2.0.1,<3; {supported}"]
-    assert extras["browser"] == [f"openadapt-flow[browser]>=1.29.0,<2.0.0; {supported}"]
-    assert extras["privacy"] == [f"openadapt-flow[privacy]>=1.29.0,<2.0.0; {supported}"]
+    assert extras["browser"] == [f"openadapt-flow[browser]>=1.35.0,<2.0.0; {supported}"]
+    assert extras["privacy"] == [f"openadapt-flow[privacy]>=1.35.0,<2.0.0; {supported}"]
     assert extras["capture"] == [
         "openadapt-capture>=1.2.0,<2.0.0",
-        f"openadapt-flow[capture]>=1.29.0,<2.0.0; {supported}",
+        f"openadapt-flow[capture]>=1.35.0,<2.0.0; {supported}",
     ]
-    assert extras["windows"] == [f"openadapt-flow[windows]>=1.29.0,<2.0.0; {supported}"]
+    assert extras["windows"] == [f"openadapt-flow[windows]>=1.35.0,<2.0.0; {supported}"]
     assert extras["macos"] == [
-        "openadapt-flow[macos]>=1.29.0,<2.0.0; "
+        "openadapt-flow[macos]>=1.35.0,<2.0.0; "
         f"sys_platform == 'darwin' and {supported}"
     ]
     assert extras["linux"] == [
-        f"openadapt-flow[linux]>=1.29.0,<2.0.0; sys_platform == 'linux' and {supported}"
+        f"openadapt-flow[linux]>=1.35.0,<2.0.0; sys_platform == 'linux' and {supported}"
     ]
-    assert extras["rdp"] == [f"openadapt-flow[rdp]>=1.29.0,<2.0.0; {supported}"]
+    assert extras["rdp"] == [f"openadapt-flow[rdp]>=1.35.0,<2.0.0; {supported}"]
     assert extras["all"] == [
         "openadapt[browser,core,grounding,retrieval,privacy,flow,windows,rdp,agent]",
         "openadapt[macos]; sys_platform == 'darwin'",
@@ -424,12 +424,12 @@ def test_released_flow_x11_sonames_are_case_corrected(monkeypatch):
     )
 
 
-@pytest.mark.parametrize("version", ["1.29.0", "1.35.1", "1.99.0"])
+@pytest.mark.parametrize("version", ["1.35.0", "1.35.1", "1.99.0"])
 def test_launcher_accepts_flow_versions_in_the_supported_range(version):
     assert _supported_flow_version(version)
 
 
-@pytest.mark.parametrize("version", ["1.28.9", "2.0.0", "invalid"])
+@pytest.mark.parametrize("version", ["1.28.9", "1.34.0", "2.0.0", "invalid"])
 def test_launcher_rejects_flow_versions_outside_the_supported_range(version):
     assert not _supported_flow_version(version)
 
@@ -440,10 +440,118 @@ def test_doctor_does_not_require_browser_for_citrix(monkeypatch):
         "importlib.util.find_spec",
         lambda name: object() if name in core else None,
     )
+    # On Windows the Citrix window client needs no extra Python package.
+    monkeypatch.setattr("openadapt.cli._host_platform", lambda: "win32", raising=False)
     result = CliRunner().invoke(cli_main, ["doctor", "--backend", "citrix"])
     assert result.exit_code == 0, result.output
     assert "browser support is not required" in result.output
     assert "no Playwright or Chromium setup will run" in result.output
+
+
+CORE_PACKAGES = {"openadapt_flow", "openadapt_agent", "playwright"}
+MAC_MODULES = {"AppKit", "Quartz", "ApplicationServices"}
+
+# backend, host, modules its surface imports there, install command
+NATIVE_BACKEND_CASES = [
+    ("macos", "darwin", MAC_MODULES, 'python -m pip install "openadapt[macos]"'),
+    ("linux", "linux", {"gi"}, 'python -m pip install "openadapt[linux]"'),
+    ("windows", "darwin", {"requests"}, 'python -m pip install "openadapt[windows]"'),
+    ("windows", "linux", {"requests"}, 'python -m pip install "openadapt[windows]"'),
+    ("citrix", "darwin", MAC_MODULES, 'python -m pip install "openadapt[macos]"'),
+]
+
+
+def _host(monkeypatch, host: str, installed: set[str]) -> None:
+    monkeypatch.setattr("openadapt.cli._host_platform", lambda: host, raising=False)
+    monkeypatch.setattr(
+        "importlib.util.find_spec",
+        lambda name: object() if name in installed else None,
+    )
+
+
+@pytest.mark.parametrize(
+    ("backend", "host", "modules", "install"), NATIVE_BACKEND_CASES
+)
+def test_doctor_native_backend_fails_without_its_platform_extra(
+    monkeypatch, backend, host, modules, install
+):
+    """A base install can't open these surfaces, so doctor must not say [OK]."""
+    _host(monkeypatch, host, CORE_PACKAGES)
+
+    result = CliRunner().invoke(cli_main, ["doctor", "--backend", backend])
+
+    assert result.exit_code != 0, result.output
+    assert f"[MISSING] {backend}" in result.output
+    assert install in result.output
+    assert f"[OK] {backend}" not in result.output
+    assert "System check failed" in result.output
+
+
+@pytest.mark.parametrize(
+    ("backend", "host", "modules", "install"), NATIVE_BACKEND_CASES
+)
+def test_doctor_native_backend_ok_when_its_platform_extra_is_installed(
+    monkeypatch, backend, host, modules, install
+):
+    _host(monkeypatch, host, CORE_PACKAGES | modules)
+
+    result = CliRunner().invoke(cli_main, ["doctor", "--backend", backend])
+
+    assert result.exit_code == 0, result.output
+    assert f"[OK] {backend}" in result.output
+    assert "[MISSING]" not in result.output
+
+
+@pytest.mark.parametrize(
+    ("backend", "host"),
+    [("macos", "linux"), ("macos", "win32"), ("linux", "darwin"), ("citrix", "linux")],
+)
+def test_doctor_native_backend_refuses_the_wrong_host(monkeypatch, backend, host):
+    everything = CORE_PACKAGES | MAC_MODULES | {"gi", "requests"}
+    _host(monkeypatch, host, everything)
+
+    result = CliRunner().invoke(cli_main, ["doctor", "--backend", backend])
+
+    assert result.exit_code != 0, result.output
+    assert f"[UNSUPPORTED] {backend}" in result.output
+    assert f"[OK] {backend}" not in result.output
+
+
+@pytest.mark.parametrize(
+    ("backend", "host", "modules", "install"), NATIVE_BACKEND_CASES
+)
+def test_deploy_native_backend_fails_without_its_platform_extra(
+    monkeypatch, backend, host, modules, install
+):
+    _host(monkeypatch, host, {"openadapt_flow"})
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.35.0")
+
+    result = CliRunner().invoke(cli_main, ["deploy", "--backend", backend])
+
+    assert result.exit_code != 0, result.output
+    assert f"[MISSING] {backend}" in result.output
+    assert install in result.output
+    assert "Preflight passed" not in result.output
+
+
+@pytest.mark.parametrize(
+    ("backend", "host", "modules", "install"), NATIVE_BACKEND_CASES
+)
+def test_deploy_native_backend_passes_with_its_platform_extra(
+    monkeypatch, backend, host, modules, install
+):
+    _host(monkeypatch, host, {"openadapt_flow"} | modules)
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.35.0")
+
+    result = CliRunner().invoke(cli_main, ["deploy", "--backend", backend])
+
+    assert result.exit_code == 0, result.output
+    assert f"[OK] {backend}" in result.output
+    # Flow checks the target itself only when it opens, so this stays a
+    # [SETUP] item and the preflight can't call the host ready (B021).
+    assert f"[SETUP] {backend} target readiness" in result.output
+    assert "Preflight incomplete" in result.output
+    assert "Preflight passed" not in result.output
 
 
 def test_doctor_rdp_fails_without_transport_dependency(monkeypatch):
@@ -453,7 +561,7 @@ def test_doctor_rdp_fails_without_transport_dependency(monkeypatch):
 
     assert result.exit_code != 0
     assert "[MISSING] rdp" in result.output
-    assert "python -m pip install 'openadapt[rdp]'" in result.output
+    assert 'python -m pip install "openadapt[rdp]"' in result.output
     assert "System check failed" in result.output
 
 
@@ -574,6 +682,7 @@ def test_deploy_preflight_composes_existing_flow_interfaces_without_secrets(
         ),
     )
     monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.35.0")
+    monkeypatch.setenv("BYOC_CONNECTOR_TOKEN", "connector-token-value")
     result = CliRunner().invoke(
         cli_main,
         ["deploy", "--backend", "rdp", "--secret-ref", "env:BYOC_CONNECTOR_TOKEN"],
@@ -581,7 +690,8 @@ def test_deploy_preflight_composes_existing_flow_interfaces_without_secrets(
 
     assert result.exit_code == 0, result.output
     assert "Environment fingerprint" in result.output
-    assert "env:BYOC_CONNECTOR_TOKEN" in result.output
+    assert "[OK] env:BYOC_CONNECTOR_TOKEN is set" in result.output
+    assert "connector-token-value" not in result.output
     assert "dashboard/settings/connectors" in result.output
     assert "connector enroll" not in result.output
     assert "connector run" in result.output
@@ -602,7 +712,7 @@ def test_deploy_base_hosted_install_gives_conditional_console_setup(monkeypatch)
 
     assert result.exit_code == 0, result.output
     assert "optional local operator console is not installed" in result.output
-    assert "python -m pip install 'openadapt-flow[console]==1.35.0'" in result.output
+    assert 'python -m pip install "openadapt-flow[console]==1.35.0"' in result.output
     assert "openadapt flow console --bundles" not in result.output
     assert "Re-run this preflight" in result.output
 
@@ -623,7 +733,7 @@ def test_deploy_console_requires_openadapt_types(monkeypatch):
 
     assert result.exit_code == 0, result.output
     assert "optional local operator console is not installed" in result.output
-    assert "python -m pip install 'openadapt-flow[console]==1.35.0'" in result.output
+    assert 'python -m pip install "openadapt-flow[console]==1.35.0"' in result.output
     assert "openadapt flow console --bundles" not in result.output
 
 
@@ -672,7 +782,7 @@ def test_deploy_preflight_fails_without_rdp_transport(monkeypatch):
 
     assert result.exit_code != 0
     assert "[MISSING] RDP transport dependency" in result.output
-    assert "python -m pip install 'openadapt[rdp]'" in result.output
+    assert 'python -m pip install "openadapt[rdp]"' in result.output
     assert "Preflight failed" in result.output
     assert "Preflight passed" not in result.output
 
@@ -686,7 +796,7 @@ def test_deploy_preflight_fails_for_unsupported_flow(monkeypatch, flow_version):
 
     assert result.exit_code != 0
     assert "[UNSUPPORTED]" in result.output
-    assert ">=1.29.0,<2.0.0" in result.output
+    assert ">=1.35.0,<2.0.0" in result.output
     assert "Preflight passed" not in result.output
 
 
@@ -700,9 +810,9 @@ def test_top_level_help_leads_with_flow():
     assert "openadapt flow tutorial" in result.output
     assert "openadapt quickstart --break-it" in result.output
     # openadapt-agent 2.0.1 requires --bundles; the help names a command that
-    # works with every released agent.
-    assert "openadapt-agent serve --bundles DIR --allow-run" in result.output
-    assert "openadapt-agent serve --allow-run" not in result.output
+    # works with every released agent and every install method.
+    assert "openadapt agent serve --bundles DIR --allow-run" in result.output
+    assert "openadapt agent serve --allow-run" not in result.output
     assert "effect-verified first run" in result.output
     assert "Standalone local human GUI capture" in result.output
     assert "Research: evaluate" in result.output

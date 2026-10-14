@@ -2,7 +2,9 @@
 name = "openadapt"
 version = "1.16.0"
 description = "Enters approved information into the apps your team already uses, checks that it saved, and stops for a person when something doesn't match."
-readme = "README.md"
+# The package description is README.md with its lifecycle block swapped for a
+# link to the live record; see hatch_build.py.
+dynamic = ["readme"]
 requires-python = ">=3.10"
 license = "MIT"
 authors = [
@@ -54,7 +56,10 @@ classifiers = [
 # tests/test_python_support.py keeps these in step.
 dependencies = [
     "click>=8.0.0",
-    "openadapt-flow[browser,hosted]>=1.29.0,<2.0.0; python_version < '3.13'",
+    # Every Flow floor is 1.35.0: Flow 1.33 and 1.34 probe four X11 libraries in
+    # the wrong case and refuse Chromium on Linux hosts that have them
+    # (tests/test_flow_floor.py).
+    "openadapt-flow[browser,hosted]>=1.35.0,<2.0.0; python_version < '3.13'",
     # Day-1 partner kit: `pip install openadapt` must expose the
     # `openadapt-agent` command without a second package. 2.0.1 serves only
     # `--bundles`; the bundle-free tutorial `serve --allow-run` needs a later
@@ -69,7 +74,7 @@ browser = [
     # launcher now selects this Flow contract because the bundled quickstart
     # uses the browser. OpenAdapt requests Chromium on first browser use after
     # the host dependency check passes.
-    "openadapt-flow[browser]>=1.29.0,<2.0.0; python_version < '3.13'",
+    "openadapt-flow[browser]>=1.35.0,<2.0.0; python_version < '3.13'",
 ]
 # Local human desktop recording. Flow owns the supported capture adapter
 # contract; the direct floor prevents an already-installed pre-1.0 Capture
@@ -77,22 +82,22 @@ browser = [
 # separately provisioned executable, not a Python-package dependency.
 capture = [
     "openadapt-capture>=1.2.0,<2.0.0",
-    "openadapt-flow[capture]>=1.29.0,<2.0.0; python_version < '3.13'",
+    "openadapt-flow[capture]>=1.35.0,<2.0.0; python_version < '3.13'",
 ]
 # Replay substrate dependencies stay separate from capture: recording observes
 # the human on the local interactive desktop, while replay may target a WAA
 # agent, a native app, or a remote framebuffer.
 windows = [
-    "openadapt-flow[windows]>=1.29.0,<2.0.0; python_version < '3.13'",
+    "openadapt-flow[windows]>=1.35.0,<2.0.0; python_version < '3.13'",
 ]
 macos = [
-    "openadapt-flow[macos]>=1.29.0,<2.0.0; sys_platform == 'darwin' and python_version < '3.13'",
+    "openadapt-flow[macos]>=1.35.0,<2.0.0; sys_platform == 'darwin' and python_version < '3.13'",
 ]
 linux = [
-    "openadapt-flow[linux]>=1.29.0,<2.0.0; sys_platform == 'linux' and python_version < '3.13'",
+    "openadapt-flow[linux]>=1.35.0,<2.0.0; sys_platform == 'linux' and python_version < '3.13'",
 ]
 rdp = [
-    "openadapt-flow[rdp]>=1.29.0,<2.0.0; python_version < '3.13'",
+    "openadapt-flow[rdp]>=1.35.0,<2.0.0; python_version < '3.13'",
 ]
 ml = [
     "openadapt-ml>=0.2.0",
@@ -110,13 +115,13 @@ retrieval = [
     "openadapt-retrieval>=0.1.0",
 ]
 privacy = [
-    "openadapt-flow[privacy]>=1.29.0,<2.0.0; python_version < '3.13'",
+    "openadapt-flow[privacy]>=1.35.0,<2.0.0; python_version < '3.13'",
 ]
 # `flow` now ships in the base install (see `dependencies` above). This
 # extra is kept for backward compatibility so `pip install openadapt[flow]`
 # and the `all` bundle still resolve.
 flow = [
-    "openadapt-flow>=1.29.0,<2.0.0; python_version < '3.13'",
+    "openadapt-flow>=1.35.0,<2.0.0; python_version < '3.13'",
 ]
 # `openadapt-agent` also ships in the base install. Keep the extra so
 # `pip install openadapt[agent]` still resolves.
@@ -155,6 +160,8 @@ Repository = "https://github.com/OpenAdaptAI/openadapt"
 requires = ["hatchling==1.32.0"]
 build-backend = "hatchling.build"
 
+[tool.hatch.metadata.hooks.custom]
+
 [tool.hatch.build.targets.wheel]
 packages = ["openadapt"]
 
@@ -164,6 +171,7 @@ packages = ["openadapt"]
 [tool.hatch.build.targets.sdist]
 include = [
     "/openadapt",
+    "/hatch_build.py",
     "/README.md",
     "/LICENSE",
     "/CHANGELOG.md",

@@ -8,16 +8,15 @@ Usage:
     openadapt flow certify bundle --policy clinical-write
 
     openadapt capture start --name my-task
-    openadapt capture stop
     openadapt capture list
     openadapt capture view <name>
 
-    openadapt train --capture my-task --model qwen3vl-2b
+    openadapt train start --capture my-task --model qwen3vl-2b
     openadapt train status
     openadapt train stop
 
-    openadapt eval --checkpoint model.pt --benchmark waa
-    openadapt eval --agent api-claude --benchmark waa
+    openadapt eval run --checkpoint model.pt --benchmark waa
+    openadapt eval run --agent api-claude --benchmark waa
 
     openadapt serve --port 8080
 
@@ -25,6 +24,7 @@ Usage:
     openadapt doctor
 """
 
+import os
 import platform
 import re
 import shlex
@@ -57,6 +57,22 @@ class _FlowFirstGroup(click.Group):
             formatter.write(_python_remedy() + "\n\n")
         super().format_help(ctx, formatter)
 
+    def resolve_command(self, ctx, args):
+        # `openadapt run` or `openadapt replay` is a Flow verb typed without
+        # `flow`. Point at the launcher form instead of a bare "No such
+        # command" or Click's nearest launcher name (`replay` -> `deploy`).
+        name = args[0] if args else ""
+        if (
+            not ctx.resilient_parsing
+            and self.get_command(ctx, name) is None
+            and name in _flow_verbs()
+        ):
+            raise click.UsageError(
+                f"No such command '{name}'. Did you mean 'openadapt flow {name}'?",
+                ctx,
+            )
+        return super().resolve_command(ctx, args)
+
 
 @click.group(cls=_FlowFirstGroup)
 @click.version_option(version=__version__, prog_name="openadapt")
@@ -81,16 +97,18 @@ def main():
     Manual Demo Lifecycle:
         openadapt flow demo-record --out rec
         openadapt flow compile rec --out bundle --name demo
-        openadapt flow lint bundle --strict
+        openadapt flow lint bundle
         openadapt flow certify bundle --policy permissive
         openadapt flow replay bundle
 
+    Lint lists the demo's coverage gaps. The demo has warnings, so
+    `lint --strict` exits 1 on it.
     The manual demo is runnable but not certified for consequential work.
     Use `openadapt flow tutorial` for the effect-verified first run.
 
     \b
     Give an MCP client your compiled workflows:
-        openadapt-agent serve --bundles DIR --allow-run
+        openadapt agent serve --bundles DIR --allow-run
     """
     pass
 
@@ -132,12 +150,23 @@ _FLOW_COMMAND = re.compile(
 # Verbs to rewrite when Flow's parser can't be read. Only real Flow verbs are
 # rewritten, so a package name or a sentence that mentions Flow stays as is.
 _FALLBACK_FLOW_VERBS = frozenset(
-    {"compile", "explain", "lint", "record", "replay", "tutorial", "visualize"}
+    {
+        "certify",
+        "compile",
+        "demo-record",
+        "explain",
+        "lint",
+        "record",
+        "replay",
+        "run",
+        "tutorial",
+        "visualize",
+    }
 )
 
 
-def _flow_verbs() -> frozenset[str]:
-    """Return the installed Flow's top-level subcommand names."""
+def _flow_subparsers() -> Optional[dict]:
+    """Return the installed Flow's subcommand parsers, or None if unreadable."""
     try:
         import argparse
 
@@ -146,10 +175,26 @@ def _flow_verbs() -> frozenset[str]:
         parser = build_parser()
         for action in parser._actions:
             if isinstance(action, argparse._SubParsersAction):
-                return frozenset(action.choices)
+                return dict(action.choices)
     except Exception:
         pass
-    return _FALLBACK_FLOW_VERBS
+    return None
+
+
+def _flow_verbs() -> frozenset[str]:
+    """Return the installed Flow's top-level subcommand names."""
+    subparsers = _flow_subparsers()
+    return _FALLBACK_FLOW_VERBS if subparsers is None else frozenset(subparsers)
+
+
+def _flow_tutorial_options() -> Optional[frozenset[str]]:
+    """Return the installed Flow tutorial's long options, or None if unreadable."""
+    tutorial = (_flow_subparsers() or {}).get("tutorial")
+    try:
+        names = tutorial._option_string_actions
+    except AttributeError:
+        return None
+    return frozenset(name for name in names if name.startswith("--"))
 
 
 def _launcher_spelling(text: str, verbs: frozenset[str]) -> str:
@@ -231,15 +276,52 @@ _DEFAULT_QUICKSTART_DIR = "openadapt-quickstart"
 # tests/test_python_support.py keeps this range, the dependency markers, the
 # classifiers, and the CI guard matrix in step.
 _SUPPORTED_PYTHON = ((3, 10), (3, 12))
-_PYTHON_FIX = (
-    "Install OpenAdapt with uv, which downloads Python 3.12 if you don't "
-    "have it:\n"
-    "  curl -LsSf https://astral.sh/uv/install.sh | sh\n"
-    "  uv tool install --python 3.12 openadapt\n"
-    "Then run: openadapt quickstart --break-it\n"
-    "Or use the installer script: https://raw.githubusercontent.com/"
-    "OpenAdaptAI/openadapt-flow/main/scripts/install.sh"
-)
+
+
+def _host_platform() -> str:
+    return sys.platform
+
+
+def _python_fix() -> str:
+    """Return the uv install steps for the shell this host uses."""
+    if _host_platform() == "win32":
+        # cmd and PowerShell can't run `curl ... | sh` or the POSIX script.
+        installer = (
+            '  powershell -ExecutionPolicy ByPass -c "irm '
+            'https://astral.sh/uv/install.ps1 | iex"\n'
+        )
+        script = ""
+    else:
+        installer = "  curl -LsSf https://astral.sh/uv/install.sh | sh\n"
+        script = (
+            "\nOr use the installer script: https://raw.githubusercontent.com/"
+            "OpenAdaptAI/openadapt-flow/main/scripts/install.sh"
+        )
+    return (
+        "Install OpenAdapt with uv, which downloads Python 3.12 if you don't "
+        "have it:\n"
+        f"{installer}"
+        "  uv tool install --python 3.12 openadapt\n"
+        f"Then run: openadapt quickstart --break-it{script}"
+    )
+
+
+def _shell_quote(value) -> str:
+    """Quote one argument for pasting into this host's usual shell.
+
+    POSIX shells get ``shlex.quote``. Windows gets the double quotes that cmd
+    and PowerShell both read; single quotes reach the program literally there.
+    """
+    import subprocess
+
+    if _host_platform() == "win32":
+        return subprocess.list2cmdline([str(value)])
+    return shlex.quote(str(value))
+
+
+def _pip_install(spec: str) -> str:
+    """Return a pip command whose bracketed spec survives cmd, PowerShell and zsh."""
+    return f'python -m pip install "{spec}"'
 
 
 def _python_minor() -> tuple[int, int]:
@@ -269,7 +351,7 @@ def _python_remedy() -> str:
             f"{current}, which the OpenAdapt engine doesn't support yet, so "
             "only the launcher is installed."
         )
-    return f"{reason}\n{_PYTHON_FIX}"
+    return f"{reason}\n{_python_fix()}"
 
 
 def _echo_python_remedy() -> None:
@@ -356,6 +438,38 @@ def _is_externally_managed_error(error: BaseException) -> bool:
     return "externally-managed-environment" in str(error)
 
 
+# Options quickstart parses itself. Click consumes them before passthrough,
+# so they only matter here as suggestions for a mistyped flag.
+_QUICKSTART_OPTIONS = frozenset({"--out", "--headed", "--break-it", "--help"})
+
+
+def _refuse_unknown_tutorial_options(args: list[str]) -> None:
+    """Stop on a long option that neither quickstart nor Flow's tutorial has.
+
+    Without this, a typo such as ``--brek-it`` reaches the engine, whose
+    parser prints its whole ``openadapt-flow`` command list. Names must match
+    exactly: an abbreviation that Flow would expand (``--brea``) could change
+    what runs without the launcher knowing. When Flow's options can't be read,
+    everything forwards unchanged and Flow reports its own error.
+    """
+    import difflib
+
+    options = _flow_tutorial_options()
+    if options is None:
+        return
+    for token in args:
+        name = token.split("=", 1)[0]
+        if not name.startswith("--") or name == "--" or name in options:
+            continue
+        message = f"No such option: {name}."
+        close = difflib.get_close_matches(
+            name, sorted(options | _QUICKSTART_OPTIONS), n=1
+        )
+        if close:
+            message += f" Did you mean {close[0]}?"
+        raise click.UsageError(message)
+
+
 @main.command(
     "quickstart",
     context_settings={
@@ -395,12 +509,13 @@ def quickstart(
     synthetic tutorial, verifies the write through an independent read-only
     system-of-record interface, keeps every artifact on this computer, and
     enables no model or Cloud call. The output directory is never overwritten.
-    Any other flags (for example --guided or --interactive-record) pass
-    through to the engine tutorial unchanged.
+    Other flags that the engine tutorial accepts (for example --guided or
+    --interactive-record) pass through to it unchanged.
     """
     import os
 
     _require_supported_python()
+    _refuse_unknown_tutorial_options(command_ctx.args)
 
     if out is None:
         root = Path(_DEFAULT_QUICKSTART_DIR).resolve()
@@ -471,19 +586,29 @@ def quickstart(
         )
         click.echo(f"Caught-fault evidence: {root / 'run-broken' / 'REPORT.md'}")
         click.echo(_halted_rerun_result(root / "run-broken"))
-    click.echo(f"Inspect qualification gaps: openadapt flow lint {root / 'bundle'}")
+    click.echo(
+        f"Inspect qualification gaps: openadapt flow lint {_shell_quote(root / 'bundle')}"
+    )
     if not break_it:
         click.echo(
             "Watch it catch a lie: openadapt quickstart --break-it --out "
-            f"{root}-break-it"
+            f"{_shell_quote(f'{root}-break-it')}"
         )
+    # The tutorial bundle is recorded against MockMed's fault server, and
+    # `replay --drift` serves plain MockMed, so replaying that bundle halts at
+    # the login screen with or without drift. Record a demo on plain MockMed.
+    drift = Path(f"{root}-drift")
+    rec, bundle = (_shell_quote(drift / name) for name in ("rec", "bundle"))
+    click.echo("See it stop when the screen changes (a separate MockMed demo):")
+    click.echo(f"  openadapt flow demo-record --out {rec}")
+    click.echo(f"  openadapt flow compile {rec} --out {bundle} --name drift-demo")
     click.echo(
-        "See a fail-safe halt: openadapt flow replay "
-        f"{root / 'bundle'} --drift modal --run-dir {root}-halt"
+        f"  openadapt flow replay {bundle} --drift modal --run-dir "
+        f"{_shell_quote(drift / 'run')}"
     )
     if _agent_serves_tutorial():
         click.echo("Give a local agent the run tool (synthetic MockMed, no frames):")
-        click.echo("  openadapt-agent serve --allow-run")
+        click.echo("  openadapt agent serve --allow-run")
         click.echo(
             "A client sends authorized work and gets a receipt. Frames stay here."
         )
@@ -495,8 +620,10 @@ def quickstart(
 
 
 _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]+)$")
-_SUPPORTED_FLOW_RANGE = ">=1.29.0,<2.0.0"
-_RDP_INSTALL_COMMAND = "python -m pip install 'openadapt[rdp]'"
+# Flow 1.33 and 1.34 probe four X11 libraries in the wrong case, so on Linux
+# they refuse to download Chromium on hosts that have them. 1.35.0 fixed it.
+_SUPPORTED_FLOW_RANGE = ">=1.35.0,<2.0.0"
+_RDP_INSTALL_COMMAND = _pip_install("openadapt[rdp]")
 _CHROMIUM_SYSTEM_LIBS_COMMAND = (
     f"{shlex.quote(sys.executable)} -m playwright install-deps chromium"
 )
@@ -505,7 +632,55 @@ _CHROMIUM_SYSTEM_LIBS_COMMAND = (
 def _supported_flow_version(value: str) -> bool:
     """Return whether a stable Flow version is in the launcher's supported range."""
     parsed = _release_tuple(value)
-    return parsed is not None and (1, 29, 0) <= parsed < (2, 0, 0)
+    return parsed is not None and (1, 35, 0) <= parsed < (2, 0, 0)
+
+
+# The Python modules each native or remote Flow backend imports when its
+# surface opens, by host platform, and the extra that installs them. "*" means
+# any host. A host that isn't listed can't open that surface: the macOS and
+# Linux bindings install only on their own OS, and Flow's Citrix window client
+# exists for macOS (Quartz) and Windows (Win32, through ctypes) hosts only.
+_MAC_MODULES = ("AppKit", "Quartz", "ApplicationServices")
+_NATIVE_BACKENDS: dict[str, tuple[dict[str, tuple[str, ...]], str]] = {
+    "macos": ({"darwin": _MAC_MODULES}, "macos"),
+    "linux": ({"linux": ("gi",)}, "linux"),
+    "windows": ({"*": ("requests",)}, "windows"),
+    "citrix": ({"darwin": _MAC_MODULES, "win32": ()}, "macos"),
+}
+_HOST_NAMES = {"darwin": "macOS", "linux": "Linux", "win32": "Windows"}
+
+
+def _native_backend_status(backend: str) -> tuple[str, str]:
+    """Check one native or remote backend's Python dependencies on this host.
+
+    Returns ``(status, message)`` with status ``OK``, ``MISSING``, or
+    ``UNSUPPORTED``. Modules are located without being imported. Permissions,
+    windows, and the target are still checked by Flow when the surface opens.
+    """
+    from importlib.util import find_spec
+
+    hosts, extra = _NATIVE_BACKENDS[backend]
+    host = _host_platform()
+    modules = hosts.get(host, hosts.get("*"))
+    if modules is None:
+        supported = " or ".join(_HOST_NAMES[name] for name in hosts)
+        return (
+            "UNSUPPORTED",
+            f"{backend}: Flow opens this surface from {supported} hosts only, "
+            f"and this host is {_HOST_NAMES.get(host, host)}.",
+        )
+    missing = [name for name in modules if find_spec(name) is None]
+    if missing:
+        return (
+            "MISSING",
+            f"{backend}: {', '.join(missing)} not installed. "
+            f"Run: {_pip_install(f'openadapt[{extra}]')}",
+        )
+    return (
+        "OK",
+        f"{backend}: its Python dependencies are installed. Flow checks "
+        "permissions and the target when that surface opens.",
+    )
 
 
 @main.command("deploy")
@@ -546,6 +721,11 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
     click.echo(f"  openadapt-flow: {flow_version}")
     click.echo(f"  requested backend: {backend}")
 
+    # [MISSING] and [UNSUPPORTED] items fail the preflight. [SETUP] items are
+    # ones this command can't check, so their count turns a pass into
+    # "incomplete" instead of failing a host that may be ready.
+    failures = []
+    setup_pending = 0
     bad_refs = [value for value in secret_ref if not _SECRET_REFERENCE.fullmatch(value)]
     click.echo("\nSecret references:")
     if not secret_ref:
@@ -553,8 +733,22 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
     for value in secret_ref:
         if value in bad_refs:
             click.echo("  [INVALID] rejected secret reference (value hidden)")
+        elif value.startswith("env:"):
+            # Flow refuses an unset or empty variable, so this does too. Only
+            # the reference is printed, never the value.
+            if os.environ.get(value[len("env:") :]):
+                click.echo(f"  [OK] {value} is set in this environment")
+            else:
+                failures.append(value)
+                click.echo(
+                    f"  [MISSING] {value} is not set (or is empty) in this environment"
+                )
         else:
-            click.echo(f"  [OK] {value}")
+            setup_pending += 1
+            click.echo(
+                f"  [SETUP] {value}: this preflight can't check that the "
+                "keychain item exists"
+            )
     if bad_refs:
         raise click.UsageError(
             "Secret references must use env:NAME or keychain:service/item; "
@@ -567,7 +761,7 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
             f"  [UNSUPPORTED] Python {platform.python_version()}; the OpenAdapt "
             "engine supports Python 3.10\u20133.12"
         )
-        for line in _PYTHON_FIX.splitlines():
+        for line in _python_fix().splitlines():
             click.echo(f"     {line}")
         # The engine and Playwright can't install on this interpreter, so the
         # later checks would only suggest a reinstall that can't help here.
@@ -575,7 +769,6 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
             "Preflight failed. Reinstall OpenAdapt with Python 3.10\u20133.12 "
             "as shown above, and then run this command again."
         )
-    failures = []
     flow_importable = find_spec("openadapt_flow") is not None
     flow_version_ready = flow_version != "not installed" and _supported_flow_version(
         flow_version
@@ -614,8 +807,13 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
                 + _RDP_INSTALL_COMMAND
             )
     else:
+        status, message = _native_backend_status(backend)
+        if status != "OK":
+            failures.append(backend)
+        click.echo(f"  [{status}] {message}")
+        setup_pending += 1
         click.echo(
-            f"  [SETUP] {backend} readiness is checked by Flow when the "
+            f"  [SETUP] {backend} target readiness is checked by Flow when the "
             "configured target opens; this guide does not claim it is ready."
         )
 
@@ -630,13 +828,21 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
 
     if failures:
         raise click.ClickException(
-            "Preflight failed. Resolve every [MISSING], [UNSUPPORTED], and "
-            "[SETUP] item above before service setup."
+            "Preflight failed. Resolve every [MISSING] and [UNSUPPORTED] item "
+            "above before service setup."
         )
 
-    click.echo(
-        "\nPreflight passed for the installed components. No service was started."
-    )
+    if setup_pending:
+        items = "item" if setup_pending == 1 else "items"
+        click.echo(
+            "\nPreflight incomplete. The installed components passed, but this "
+            f"command can't check the {setup_pending} [SETUP] {items} above. "
+            "No service was started."
+        )
+    else:
+        click.echo(
+            "\nPreflight passed for the installed components. No service was started."
+        )
     click.echo("\nGuided deployment path:")
     click.echo(
         "  1. Re-run full host diagnostics: openadapt doctor --backend " + backend
@@ -662,9 +868,7 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
         )
     else:
         click.echo("  4. Optional local console setup:")
-        click.echo(
-            f"     python -m pip install 'openadapt-flow[console]=={flow_version}'"
-        )
+        click.echo("     " + _pip_install(f"openadapt-flow[console]=={flow_version}"))
         click.echo(
             "     Re-run this preflight after installation before you start the console."
         )
@@ -704,6 +908,35 @@ def flow(command_ctx: click.Context) -> None:
     installed engine version.
     """
     _run_flow(list(command_ctx.args))
+
+
+@main.command(
+    "agent",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        # The agent bridge owns its argparse help.
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def agent(command_ctx: click.Context) -> None:
+    """Serve compiled workflows to an MCP client (openadapt-agent).
+
+    Every argument passes to openadapt-agent unchanged. Use this form where
+    only `openadapt` is on PATH, as after `uv tool install openadapt` or
+    pipx, which keep the `openadapt-agent` executable inside the tool's own
+    environment. Nothing is written to stdout before the bridge starts, so an
+    MCP client can launch this command directly.
+    """
+    _require_supported_python()
+    try:
+        from openadapt_agent.cli import main as agent_main
+    except ImportError:
+        click.echo("Error: openadapt-agent is not installed.", err=True)
+        click.echo("Reinstall with: pip install --upgrade openadapt", err=True)
+        sys.exit(1)
+    sys.exit(int(agent_main(list(command_ctx.args)) or 0))
 
 
 @main.command("connect")
@@ -777,7 +1010,6 @@ def capture():
     \b
     Examples:
         openadapt capture start --name login-flow
-        openadapt capture stop
         openadapt capture list
         openadapt capture view login-flow
     """
@@ -823,7 +1055,10 @@ def capture_start(name: str, video: bool, audio: bool):
         sys.exit(1)
 
 
-@capture.command("stop")
+# Hidden: it can't stop a capture, so it isn't listed with the commands that
+# work. Typing it still explains how to stop one, and it exits non-zero
+# because nothing was stopped.
+@capture.command("stop", hidden=True)
 def capture_stop():
     """Explain how to stop a capture started in another terminal."""
     raise click.ClickException(
@@ -1205,26 +1440,42 @@ def version():
     from importlib.metadata import PackageNotFoundError
     from importlib.metadata import version as dist_version
 
+    def installed(name: str) -> Optional[str]:
+        try:
+            return dist_version(name)
+        except PackageNotFoundError:
+            return None
+
     click.echo("OpenAdapt Ecosystem Versions:")
     click.echo("=" * 40)
 
-    packages = [
-        "openadapt",
-        "openadapt-agent",
-        "openadapt-capture",
-        "openadapt-ml",
-        "openadapt-evals",
-        "openadapt-flow",
-        "openadapt-viewer",
-        "openadapt-grounding",
-        "openadapt-retrieval",
-    ]
+    # The base install brings in these four.
+    for name in ("openadapt", "openadapt-flow", "openadapt-agent", "openadapt-types"):
+        click.echo(f"  {name}: {installed(name) or 'not installed'}")
+    capture = installed("openadapt-capture") or "not installed (optional extra)"
+    click.echo(f"  openadapt-capture: {capture}")
+    click.echo(
+        "  OpenAdapt Desktop: a separate app, not a Python package, so its "
+        "version isn't listed here"
+    )
 
-    for name in packages:
-        try:
-            click.echo(f"  {name}: {dist_version(name)}")
-        except PackageNotFoundError:
-            click.echo(f"  {name}: not installed")
+    # Research packages print only when installed, so a base install doesn't
+    # look broken.
+    research = [
+        (name, number)
+        for name in (
+            "openadapt-ml",
+            "openadapt-evals",
+            "openadapt-viewer",
+            "openadapt-grounding",
+            "openadapt-retrieval",
+        )
+        if (number := installed(name))
+    ]
+    if research:
+        click.echo("\nResearch (optional):")
+        for name, number in research:
+            click.echo(f"  {name}: {number}")
 
 
 @main.command()
@@ -1274,10 +1525,13 @@ def doctor(backend: str | None):
                 "Run: " + _RDP_INSTALL_COMMAND
             )
     elif backend and backend != "web":
+        status, message = _native_backend_status(backend)
+        if status != "OK":
+            failures.append(backend)
+        click.echo(f"  [{status}] {message}")
         click.echo(
-            f"  [OK] {backend}: browser support is not required; "
-            "no Playwright or Chromium setup will run. The selected "
-            "native or remote driver is checked when that surface opens."
+            f"  [--] {backend}: browser support is not required; "
+            "no Playwright or Chromium setup will run."
         )
     else:
         playwright = find_spec("playwright") is not None
@@ -1369,7 +1623,7 @@ def doctor(backend: str | None):
     # Optional packages: opt-in extras the base install intentionally
     # excludes. A missing extra is expected, not a failure — report how to
     # install it rather than flagging it. Maps import name -> extra name.
-    click.echo("\nOptional packages (install with `pip install openadapt[...]`):")
+    click.echo('\nOptional packages (install with `pip install "openadapt[...]"`):')
     optional = [
         ("openadapt_capture", "capture"),
         ("openadapt_ml", "ml"),
@@ -1385,38 +1639,54 @@ def doctor(backend: str | None):
         else:
             click.echo(
                 f"  [--] {pkg} (optional; install with "
-                f"`pip install openadapt[{extra}]`)"
+                f'`pip install "openadapt[{extra}]"`)'
             )
 
-    # Check GPU
-    click.echo("\nGPU:")
-    try:
-        import torch
+    # A GPU and model API keys matter only to the research extras (`openadapt
+    # train`, `openadapt eval`). Healthy runs of compiled workflows make no
+    # model calls, so a base install doesn't list them as missing.
+    research = ("openadapt_ml", "openadapt_evals")
+    if all(find_spec(name) is None for name in research):
+        click.echo(
+            "\nModel access: not required. Healthy runs of compiled workflows "
+            "make no model calls."
+        )
+    else:
+        click.echo("\nResearch extras (not used by compiled workflows):")
+        try:
+            import torch
 
-        if torch.cuda.is_available():
-            click.echo(f"  [OK] CUDA available: {torch.cuda.get_device_name(0)}")
-        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            click.echo("  [OK] MPS available (Apple Silicon)")
-        else:
-            click.echo("  [--] No GPU detected (CPU mode)")
-    except ImportError:
-        click.echo("  [--] PyTorch not installed")
+            if torch.cuda.is_available():
+                click.echo(f"  [OK] CUDA available: {torch.cuda.get_device_name(0)}")
+            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                click.echo("  [OK] MPS available (Apple Silicon)")
+            else:
+                click.echo("  [--] No GPU detected (CPU mode)")
+        except ImportError:
+            click.echo(
+                "  [--] PyTorch not installed (needed only for `openadapt train` "
+                "and `openadapt eval run --checkpoint`)"
+            )
 
-    # Check API keys
-    click.echo("\nAPI Keys:")
-    import os
+        import os
 
-    keys = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
-    for key in keys:
-        if os.environ.get(key):
-            click.echo(f"  [OK] {key} is set")
-        else:
-            click.echo(f"  [--] {key} not set")
+        for key, agent in (
+            ("ANTHROPIC_API_KEY", "api-claude"),
+            ("OPENAI_API_KEY", "api-openai"),
+        ):
+            if os.environ.get(key):
+                click.echo(f"  [OK] {key} is set")
+            else:
+                click.echo(
+                    f"  [--] {key} not set (needed only for "
+                    f"`openadapt eval run --agent {agent}`)"
+                )
 
     if failures:
         raise click.ClickException(
             "System check failed. Install each required dependency shown as "
-            "[MISSING], and then run this command again."
+            "[MISSING], or use a host that supports each [UNSUPPORTED] surface, "
+            "and then run this command again."
         )
 
 
