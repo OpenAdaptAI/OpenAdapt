@@ -1,0 +1,21 @@
+{
+  "schema_version": "openadapt.complex-visual-cases.v1",
+  "cases": {
+    "normal": {
+      "attachments": ["N-01", "N-02", "N-03"],
+      "expected_document_text": "Processed REC-001 with 3 normal attachments\n",
+      "priority": "normal",
+      "route": "normal",
+      "target_record_id": "REC-001",
+      "worklist_rows": ["review"]
+    },
+    "urgent": {
+      "attachments": ["A-01", "A-02"],
+      "expected_document_text": "Processed REC-001 with 2 urgent attachments\n",
+      "priority": "urgent",
+      "route": "urgent",
+      "target_record_id": "REC-001",
+      "worklist_rows": ["review", "schedule"]
+    }
+  }
+}

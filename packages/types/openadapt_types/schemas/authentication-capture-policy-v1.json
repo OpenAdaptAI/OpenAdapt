@@ -1,0 +1,50 @@
+{
+  "additionalProperties": false,
+  "description": "The source-time exclusion policy for one protected interval.",
+  "properties": {
+    "account_labels": {
+      "const": "withheld_at_source",
+      "default": "withheld_at_source",
+      "title": "Account Labels",
+      "type": "string"
+    },
+    "input_targets": {
+      "const": "withheld_at_source",
+      "default": "withheld_at_source",
+      "title": "Input Targets",
+      "type": "string"
+    },
+    "input_values": {
+      "const": "withheld_at_source",
+      "default": "withheld_at_source",
+      "title": "Input Values",
+      "type": "string"
+    },
+    "media_frames": {
+      "const": "withheld_at_source",
+      "default": "withheld_at_source",
+      "title": "Media Frames",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "openadapt.authentication-capture-policy/v1",
+      "default": "openadapt.authentication-capture-policy/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "structural_values": {
+      "const": "withheld_at_source",
+      "default": "withheld_at_source",
+      "title": "Structural Values",
+      "type": "string"
+    },
+    "timeline": {
+      "const": "protected_marker_only",
+      "default": "protected_marker_only",
+      "title": "Timeline",
+      "type": "string"
+    }
+  },
+  "title": "AuthenticationCapturePolicyV1",
+  "type": "object"
+}

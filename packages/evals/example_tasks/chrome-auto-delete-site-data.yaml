@@ -1,0 +1,38 @@
+# WAA Task: Set Chrome to auto-delete on-device site data when closing
+# UUID: 99146c54-4f37-4ab8-9327-5f3291665e1e-wos
+name: "Set Chrome to auto-delete on-device site data when closing"
+id: "99146c54-4f37-4ab8-9327-5f3291665e1e-wos"
+
+setup:
+  # Dismiss Chrome sign-in dialog and navigate directly to settings
+  - execute: "powershell -c 'Start-Process chrome -ArgumentList \"--no-first-run\",\"--disable-sync\",\"chrome://settings/cookies\" -WindowStyle Normal'"
+  - sleep: 3
+  - execute: "python -c \"import pyautogui; pyautogui.press('escape'); import time; time.sleep(0.5); pyautogui.press('escape')\""
+  - sleep: 2
+
+evaluate:
+  - check: screenshot
+    description: "Chrome Settings shows that on-device site data is set to be automatically deleted when all windows are closed"
+
+max_steps: 20
+
+milestones:
+  - name: "Chrome is open"
+    check: screenshot
+    description: "Google Chrome browser window is visible"
+
+  - name: "Settings page is open"
+    check: screenshot
+    description: "Chrome Settings page is visible (chrome://settings)"
+
+  - name: "Privacy/Security section visible"
+    check: screenshot
+    description: "The Privacy and Security section of Chrome Settings is visible"
+
+  - name: "Site data settings found"
+    check: screenshot
+    description: "The on-device site data or cookies settings page is visible"
+
+  - name: "Auto-delete enabled"
+    check: screenshot
+    description: "The setting to clear site data when closing Chrome is enabled/toggled on"

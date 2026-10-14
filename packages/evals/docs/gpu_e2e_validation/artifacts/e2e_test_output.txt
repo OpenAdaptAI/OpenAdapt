@@ -1,0 +1,129 @@
+================================================================================
+GPU E2E Validation - Consolidated Test Output
+Date: 2026-03-04
+Instance: verl-train-00 (g5.xlarge, 3.236.121.184)
+================================================================================
+
+--- Stage 1: GPU Detection ---
+
+=== [21:29:50] Checking GPU availability...
+NVIDIA A10G, 23028 MiB
+=== [21:29:50] Found 1 GPU(s)
+
+--- Stage 2: Miniconda Installation ---
+
+=== [21:29:50] Installing Miniconda...
+PREFIX=/home/ubuntu/miniconda3
+Unpacking bootstrapper...
+Unpacking payload...
+
+Installing base environment...
+
+Preparing transaction: ...working... done
+Executing transaction: ...working... done
+installation finished.
+
+--- Stage 3: Conda TOS Error (first attempt) ---
+
+=== [21:30:07] Creating conda env 'verl-agent' with Python 3.12...
+
+CondaToSNonInteractiveError: Terms of Service have not been accepted for the following channels.
+Please accept or remove them before proceeding:
+    - https://repo.anaconda.com/pkgs/main
+    - https://repo.anaconda.com/pkgs/r
+
+To accept these channels' Terms of Service, run the following commands:
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+    conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+
+For information on safely removing channels from your conda configuration,
+please see the official documentation:
+
+    https://www.anaconda.com/docs/tools/working-with-conda/channels
+
+--- Stage 3b: Conda TOS Fix ---
+
+$ conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/main
+$ conda tos accept --override-channels --channel https://repo.anaconda.com/pkgs/r
+$ conda create -n verl-agent python=3.12 -y
+... environment created successfully
+
+--- Stage 4: V100 Incompatibility (original p3.2xlarge) ---
+
+Initial instance: p3.2xlarge (V100)
+Problem: V100 does NOT support GSP (GPU System Processor) mode
+         GSP is REQUIRED for modern NVIDIA drivers (580+)
+         Older driver support dropped in Miniconda 2025 CUDA builds
+
+Resolution:
+2026-03-03 16:15:35,403 [INFO] Found credentials in shared credentials file: ~/.aws/credentials
+2026-03-03 16:15:36,583 [INFO] Terminating instance verl-train-00 (i-0ddb102c6fed59c04), waiting...
+2026-03-03 16:25:32,543 [ERROR] Failed to delete instance verl-train-00: Waiter InstanceTerminated failed: Max attempts exceeded
+2026-03-03 16:25:35,320 [INFO] Using Deep Learning AMI: Deep Learning OSS Nvidia Driver AMI GPU PyTorch 2.7 (Ubuntu 22.04) 20260222
+2026-03-03 16:25:36,619 [INFO] Instance verl-train-00 (i-070f8e26b4fdca608) launching...
+2026-03-03 16:25:52,130 [INFO] Instance verl-train-00 running at 3.236.121.184
+
+Switched to: g5.xlarge (A10G, Ampere architecture, GSP-compatible)
+
+--- Stage 5: vLLM Installation ---
+
+$ pip install vllm==0.11.0
+
+Successfully installed MarkupSafe-3.0.3 aiohappyeyeballs-2.6.1 aiohttp-3.13.3
+aiosignal-1.4.0 annotated-doc-0.0.4 annotated-types-0.7.0 anyio-4.12.1
+... (130+ packages)
+torch-2.8.0 torchaudio-2.8.0 torchvision-0.23.0 vllm-0.11.0
+
+$ python -c "import vllm; print(vllm.__version__)"
+0.11.0
+
+--- Stage 6: PyTorch Version Fix ---
+
+$ pip install torch==2.8.0 --upgrade
+
+ERROR: pip's dependency resolver does not currently take into account all the packages that are installed.
+This behaviour is the source of the following dependency conflicts.
+openadapt-ml 0.12.0 requires torch>=2.9.1, but you have torch 2.8.0 which is incompatible.
+openadapt-ml 0.12.0 requires torchvision>=0.24.1, but you have torchvision 0.23.0 which is incompatible.
+Successfully installed nvidia-nccl-cu12-2.27.3 torch-2.8.0 torchvision-0.23.0 triton-3.4.0
+
+NOTE: openadapt-ml version bump planned for future release to resolve conflict.
+
+--- Stage 7: VAGEN Install + Docker Port 5050 Workaround ---
+
+7a. VAGEN installation:
+    See artifacts/vagen_registry_output.txt for full output.
+    Result: vagen-26.2.5 installed, WAADesktopEnv registered in VAGEN env registry.
+
+7b. Docker port 5050 workaround:
+    Problem: QEMU with --cap-add NET_ADMIN breaks Docker port forwarding for 5050
+    Error: "Empty reply from server" when connecting to localhost:5050
+
+    Fix: UNIX socket bridge
+    $ CONTAINER_PID=$(docker inspect --format '{{.State.Pid}}' <container_name>)
+    $ nsenter -t $CONTAINER_PID -n socat UNIX-LISTEN:/tmp/waa-bridge.sock,fork TCP:localhost:5050
+    $ socat TCP-LISTEN:5051,fork,reuseaddr UNIX-CONNECT:/tmp/waa-bridge.sock
+
+    Result: Port 5051 accessible on VM host, forwarding to container's 5050
+
+--- Stage 8: E2E Integration Test ---
+
+Configuration:
+    WAALiveConfig(
+        server_url="http://172.173.66.131:5000",
+        evaluate_url="http://172.173.66.131:5051"
+    )
+
+Connectivity checks:
+    WAA Flask API (port 5000):      reachable
+    evaluate_server (port 5051):    reachable
+
+Integration chain: WAADesktopEnv -> RLEnvironment -> WAALiveAdapter -> WAA Flask API
+    reset():      PASS (environment initialized)
+    screenshot(): PASS (PNG received)
+    step():       PASS (action executed on Windows VM)
+    evaluate():   PASS (reward signal received)
+
+================================================================================
+RESULT: ALL STAGES PASSED
+================================================================================

@@ -1,0 +1,26 @@
+[project]
+name = "openadapt-mockmed-extradup"
+description = "Reward for a synthetic EMR write, certified on the synthetic MockMed/ExtraDup corpus only: 1.0 when a tier-2 read of the system of record shows the gold effect, 0.0 otherwise. Ships the ExtraDup reward-hacking cases so a trainer can confirm the reward fails them closed."
+tags = ["single-turn", "agent", "verification", "reward-hacking", "healthcare", "synthetic", "eval", "train"]
+version = "0.2.0"
+requires-python = ">=3.11"
+license = "MIT"
+dependencies = [
+    "verifiers>=0.3.1,<0.3.2",
+    "openadapt-evals>=0.97.0",
+]
+
+[project.urls]
+Repository = "https://github.com/OpenAdaptAI/openadapt-evals/tree/main/environments/openadapt_mockmed_extradup"
+Preregistration = "https://github.com/OpenAdaptAI/openadapt-evals/blob/main/docs/preregistrations/PREREGISTRATION_CERTIFIED_REWARD_RL_2026_08_25.md"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+include = ["openadapt_mockmed_extradup.py", "scripted_policy.py", "check_fails_closed.py", "pyproject.toml", "README.md"]
+
+[tool.verifiers.eval]
+num_examples = -1
+rollouts_per_example = 1

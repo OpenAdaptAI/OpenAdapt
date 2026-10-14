@@ -1,0 +1,266 @@
+{
+  "artifacts": [
+    {
+      "path": "docs/eval_results/current_flow_v1_30_0_local_20260806/clean_postcondition_over_halt.json",
+      "sha256": "86541cb246ee59eddfe5f6a2b2b44ba2aa47c2057f2727af3f793b6066bc5c08"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_30_0_local_20260806/dependency-freeze.txt",
+      "sha256": "b969b7b148ff4beba2df5f64f9c75316215c253a41164a27dfd9e782abb89828"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_30_0_local_20260806/remote_lease_safety/dependency-freeze.txt",
+      "sha256": "b969b7b148ff4beba2df5f64f9c75316215c253a41164a27dfd9e782abb89828"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_30_0_local_20260806/remote_lease_safety/results.json",
+      "sha256": "d8783c363a80f327daf7a8bfbe9c65f9ac614e0be9edd3b4281ba206682af44f"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_30_0_local_20260806/replication/clean_postcondition_over_halt.json",
+      "sha256": "86541cb246ee59eddfe5f6a2b2b44ba2aa47c2057f2727af3f793b6066bc5c08"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_30_0_local_20260806/replication/dependency-freeze.txt",
+      "sha256": "b969b7b148ff4beba2df5f64f9c75316215c253a41164a27dfd9e782abb89828"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_30_0_local_20260806/replication/results.json",
+      "sha256": "fa775557c5f0fb5fcd178fdb8e698ac5256642438279ebe32710f044223e7e12"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_30_0_local_20260806/replication/theme_postcondition_over_halt.json",
+      "sha256": "3a0247ea3c88add5341cc9eba5baffa78bb53375c479f4e293f2c5bb62df7a27"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_30_0_local_20260806/results.json",
+      "sha256": "094c933f0ff0ae3989aada2c0a4bfe9d11dee3d2ec98c80692ebe76d912a6511"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_30_0_local_20260806/theme_postcondition_over_halt.json",
+      "sha256": "3a0247ea3c88add5341cc9eba5baffa78bb53375c479f4e293f2c5bb62df7a27"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_30_0_local_20260806/transaction_probe/dependency-freeze.txt",
+      "sha256": "b969b7b148ff4beba2df5f64f9c75316215c253a41164a27dfd9e782abb89828"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_30_0_local_20260806/transaction_probe/results.json",
+      "sha256": "0e9f376c2c3e51bb4255253d3b04ea51c48f8af7abbc8f3575daf3f6a16eb2de"
+    }
+  ],
+  "campaigns": [
+    {
+      "environment": {
+        "platform": "macOS-15.7.3-arm64-arm-64bit",
+        "python": "3.12.7"
+      },
+      "name": "remote_lease_safety",
+      "results_path": "docs/eval_results/current_flow_v1_30_0_local_20260806/remote_lease_safety/results.json",
+      "runtime": {
+        "dependency_snapshot_filename": "dependency-freeze.txt",
+        "dependency_snapshot_sha256": "b969b7b148ff4beba2df5f64f9c75316215c253a41164a27dfd9e782abb89828",
+        "openadapt_types_version": "0.9.0",
+        "python_version": "3.12.7"
+      },
+      "verifier_path": "scripts/probe_remote_lease_safety.py"
+    },
+    {
+      "environment": {
+        "chromium": "Playwright-managed headless Chromium",
+        "platform": "macOS-15.7.3-arm64-arm-64bit",
+        "playwright": "1.61.0",
+        "python": "3.12.7"
+      },
+      "name": "replication",
+      "results_path": "docs/eval_results/current_flow_v1_30_0_local_20260806/replication/results.json",
+      "runtime": {
+        "browser_revision": "1228",
+        "browser_version": "149.0.7827.55",
+        "dependency_snapshot_filename": "dependency-freeze.txt",
+        "dependency_snapshot_sha256": "b969b7b148ff4beba2df5f64f9c75316215c253a41164a27dfd9e782abb89828",
+        "openadapt_types_version": "0.9.0",
+        "python_version": "3.12.7"
+      },
+      "verifier_path": "scripts/run_current_flow_local_benchmark.py"
+    },
+    {
+      "environment": {
+        "chromium": "Playwright-managed headless Chromium",
+        "platform": "macOS-15.7.3-arm64-arm-64bit",
+        "playwright": "1.61.0",
+        "python": "3.12.7"
+      },
+      "name": "comparison",
+      "results_path": "docs/eval_results/current_flow_v1_30_0_local_20260806/results.json",
+      "runtime": {
+        "browser_revision": "1228",
+        "browser_version": "149.0.7827.55",
+        "dependency_snapshot_filename": "dependency-freeze.txt",
+        "dependency_snapshot_sha256": "b969b7b148ff4beba2df5f64f9c75316215c253a41164a27dfd9e782abb89828",
+        "openadapt_types_version": "0.9.0",
+        "python_version": "3.12.7"
+      },
+      "verifier_path": "scripts/run_current_flow_local_benchmark.py"
+    },
+    {
+      "environment": {
+        "chromium": "Playwright-managed headless Chromium",
+        "platform": "macOS-15.7.3-arm64-arm-64bit",
+        "playwright": "1.61.0",
+        "python": "3.12.7"
+      },
+      "name": "transaction_probe",
+      "results_path": "docs/eval_results/current_flow_v1_30_0_local_20260806/transaction_probe/results.json",
+      "runtime": {
+        "browser_revision": "1228",
+        "browser_version": "149.0.7827.55",
+        "dependency_snapshot_filename": "dependency-freeze.txt",
+        "dependency_snapshot_sha256": "b969b7b148ff4beba2df5f64f9c75316215c253a41164a27dfd9e782abb89828",
+        "openadapt_types_version": "0.9.0",
+        "python_version": "3.12.7"
+      },
+      "verifier_path": "scripts/run_flow_transaction_probe.py"
+    }
+  ],
+  "evals_commit": "cd4e8c3dfa9256dc7073c51977e1b94dee6dd00e",
+  "flow": {
+    "sdist_sha256": "3a402610e35f47fd54daaf066b8c3a6006c13483cb4c778740014abea1854ea4",
+    "version": "1.30.0",
+    "wheel_sha256": "7bf1a7b00388172a79bda666def182688c296ffb5bc9be2fd3281169fc36ae63"
+  },
+  "public_reports": [
+    {
+      "path": "docs/eval_results/current_flow_v1_30_0_local_20260806/REPORT.md",
+      "sha256": "09d16955bc558ef42db77b2925db79a8c0a1574caf62de7ab26a4b4f6ecafe6b"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_30_0_local_20260806/REPRODUCE.md",
+      "sha256": "12bd4dfcc43a196187a7f1a6bc538a6ff86555a1c024b687a8f8d559517a2408"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_30_0_local_20260806/remote_lease_safety/REPORT.md",
+      "sha256": "37b13776981180a1d210473f4f1ffa287f59ea2641692804dbe587decfa76744"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_30_0_local_20260806/replication/REPORT.md",
+      "sha256": "2d7540b7e460c56f30eff32cf33ed281db50da836d4b0b5443c97fc3b2cbabfb"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_30_0_local_20260806/transaction_probe/REPORT.md",
+      "sha256": "c8ff079ac170b037ba84b33441f94fbf7091fba86915b2565c2e08809433a628"
+    }
+  ],
+  "schema_version": 2,
+  "task_contracts": [
+    {
+      "results_path": "docs/eval_results/current_flow_v1_30_0_local_20260806/remote_lease_safety/results.json",
+      "sha256": "39828d04f8c9481d51d2f863896825c3b70a44185c465c8160b2b2fea1948983",
+      "value": {
+        "cells": [
+          "ungoverned_lease",
+          "governed_lease",
+          "lease_frame_changed"
+        ],
+        "profiles": [
+          "demo",
+          "standard",
+          "regulated"
+        ]
+      }
+    },
+    {
+      "results_path": "docs/eval_results/current_flow_v1_30_0_local_20260806/replication/results.json",
+      "sha256": "65d7f2d9a8ae998d58bc2b95628de0da8bf939aa57aea142fd0fb498268a36f6",
+      "value": {
+        "arms": [
+          "compiled",
+          "dom",
+          "dom_named"
+        ],
+        "conditions": [
+          "clean",
+          "theme",
+          "rename"
+        ],
+        "oracle": "arm-independent screenshot/OCR final-state check: exact note and saved banner, Triage row, intended patient, no wrong-type write",
+        "outcome_definitions": {
+          "correct": "arm reported completion and independent oracle confirmed effect",
+          "halt_or_error": "arm reported halt/incomplete and independent oracle found effect absent",
+          "over_halt": "arm reported halt/incomplete but independent oracle confirmed effect",
+          "silent_incorrect_success": "arm reported completion but independent oracle did not confirm effect",
+          "wrong_action": "independent oracle observed a wrong-patient or wrong-type write"
+        },
+        "task": "MockMed triage: sign in, open intended referral, create Triage encounter, enter a trial-unique note, save",
+        "trials_per_arm_condition": 3
+      }
+    },
+    {
+      "results_path": "docs/eval_results/current_flow_v1_30_0_local_20260806/results.json",
+      "sha256": "65d7f2d9a8ae998d58bc2b95628de0da8bf939aa57aea142fd0fb498268a36f6",
+      "value": {
+        "arms": [
+          "compiled",
+          "dom",
+          "dom_named"
+        ],
+        "conditions": [
+          "clean",
+          "theme",
+          "rename"
+        ],
+        "oracle": "arm-independent screenshot/OCR final-state check: exact note and saved banner, Triage row, intended patient, no wrong-type write",
+        "outcome_definitions": {
+          "correct": "arm reported completion and independent oracle confirmed effect",
+          "halt_or_error": "arm reported halt/incomplete and independent oracle found effect absent",
+          "over_halt": "arm reported halt/incomplete but independent oracle confirmed effect",
+          "silent_incorrect_success": "arm reported completion but independent oracle did not confirm effect",
+          "wrong_action": "independent oracle observed a wrong-patient or wrong-type write"
+        },
+        "task": "MockMed triage: sign in, open intended referral, create Triage encounter, enter a trial-unique note, save",
+        "trials_per_arm_condition": 3
+      }
+    },
+    {
+      "results_path": "docs/eval_results/current_flow_v1_30_0_local_20260806/transaction_probe/results.json",
+      "sha256": "2e11a2f0c43fdfd828a15e73311ba647c02829b9bf9f820698bb7f192ce7a63d",
+      "value": {
+        "fault_modes": [
+          "ok",
+          "timeout",
+          "optimistic",
+          "session",
+          "duplicate"
+        ],
+        "oracle": "system-of-record snapshot delta at GET /api/db: exactly one new Triage encounter for the intended patient carrying this run's note, with no pre-existing row destroyed",
+        "task": "MockMed triage against the fault-injection persistence boundary: sign in, open intended referral, create Triage encounter, enter a trial-unique note, save",
+        "verification_modes": [
+          "unverified",
+          "effect_verified"
+        ]
+      }
+    }
+  ],
+  "verifiers": [
+    {
+      "path": "scripts/run_current_flow_local_benchmark.py",
+      "sha256": "fe49e0d9fc9ebf6d66120fc8f16683390071b96af6d252b82afbb94bb7449119"
+    },
+    {
+      "path": "scripts/run_flow_transaction_probe.py",
+      "sha256": "e27ecc7fcda287c9f946bf002f02443c8628c3a2cbc50f88ed03b1ad3abf6a42"
+    },
+    {
+      "path": "scripts/probe_remote_lease_safety.py",
+      "sha256": "d75c1c62248818d937705e3a7b3170b09ea211b54591f37a57520018b25a7388"
+    },
+    {
+      "path": "scripts/extract_over_halt_regression.py",
+      "sha256": "7712798260fbf8ff50b96b00b71c7dbd5a509f7dd7553a63a0e6c791635b2554"
+    },
+    {
+      "path": "scripts/evidence_runtime.py",
+      "sha256": "334839a541c46a52892724d9285b295e503a52667899295f831dc154a887dcdd"
+    }
+  ]
+}

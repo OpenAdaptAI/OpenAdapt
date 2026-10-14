@@ -1,0 +1,106 @@
+{
+  "episodes": [
+    {
+      "canonical_id": "canon-001",
+      "canonical_name": "Open Application from Dock",
+      "canonical_description": "User clicks on an application icon in the macOS Dock to launch it",
+      "canonical_steps": [
+        "Locate application icon in the Dock",
+        "Click on the icon",
+        "Wait for application window to appear"
+      ],
+      "source_recordings": [
+        "turn-off-nightshift",
+        "open-safari",
+        "launch-notes"
+      ],
+      "occurrence_count": 3,
+      "average_duration": 2.1,
+      "applications": ["Finder/Dock"],
+      "quality_score": 0.94
+    },
+    {
+      "canonical_id": "canon-002",
+      "canonical_name": "Navigate System Preferences",
+      "canonical_description": "User opens System Preferences and navigates to a specific settings pane",
+      "canonical_steps": [
+        "Open System Preferences",
+        "Click on desired preference pane icon",
+        "Wait for pane to load"
+      ],
+      "source_recordings": [
+        "turn-off-nightshift",
+        "change-wallpaper",
+        "adjust-sound"
+      ],
+      "occurrence_count": 3,
+      "average_duration": 4.7,
+      "applications": ["System Preferences"],
+      "quality_score": 0.91
+    },
+    {
+      "canonical_id": "canon-003",
+      "canonical_name": "Toggle Setting Checkbox",
+      "canonical_description": "User enables or disables a feature by checking or unchecking a checkbox in system settings",
+      "canonical_steps": [
+        "Locate the setting checkbox",
+        "Click to toggle the checkbox state",
+        "Verify the change took effect"
+      ],
+      "source_recordings": [
+        "turn-off-nightshift",
+        "enable-firewall",
+        "disable-animations"
+      ],
+      "occurrence_count": 3,
+      "average_duration": 3.2,
+      "applications": ["System Preferences"],
+      "quality_score": 0.88
+    },
+    {
+      "canonical_id": "canon-004",
+      "canonical_name": "Type in Text Field",
+      "canonical_description": "User clicks into a text input field and types content",
+      "canonical_steps": [
+        "Click on text field to focus",
+        "Type the desired text",
+        "Verify text appears correctly"
+      ],
+      "source_recordings": [
+        "compose-email",
+        "write-note",
+        "search-web"
+      ],
+      "occurrence_count": 5,
+      "average_duration": 8.4,
+      "applications": ["Mail", "Notes", "Safari"],
+      "quality_score": 0.95
+    },
+    {
+      "canonical_id": "canon-005",
+      "canonical_name": "Close Application Window",
+      "canonical_description": "User closes an application window using the red close button or keyboard shortcut",
+      "canonical_steps": [
+        "Click the red close button in window title bar",
+        "Window closes and disappears"
+      ],
+      "source_recordings": [
+        "turn-off-nightshift",
+        "compose-email",
+        "write-note",
+        "open-safari"
+      ],
+      "occurrence_count": 4,
+      "average_duration": 1.2,
+      "applications": ["System Preferences", "Mail", "Notes", "Safari"],
+      "quality_score": 0.96
+    }
+  ],
+  "metadata": {
+    "total_episodes": 5,
+    "source_recordings_count": 6,
+    "generation_date": "2026-01-17",
+    "deduplication_threshold": 0.85,
+    "segmentation_version": "1.0.0"
+  }
+}

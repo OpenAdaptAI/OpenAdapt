@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Image Loading Test</title>
+    <style>
+        body {
+            font-family: monospace;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #e0e0e0;
+        }
+        .test-section {
+            margin: 20px 0;
+            padding: 20px;
+            background: #16213e;
+            border-radius: 8px;
+        }
+        img {
+            max-width: 400px;
+            border: 2px solid #00d9ff;
+            margin: 10px 0;
+            display: block;
+        }
+        .error {
+            color: #ff5f5f;
+        }
+        .success {
+            color: #34d399;
+        }
+    </style>
+</head>
+<body>
+    <h1>Image Loading Diagnostic Test</h1>
+
+    <p>
+        This page checks how a browser loads screenshots off disk. It needs a
+        screenshot from one of your own recordings, because recordings are local
+        data and none ship with this repository.
+    </p>
+    <p>
+        Pass one with the <code>?screenshot=</code> query parameter, for example:<br>
+        <code>test_image_loading.html?screenshot=file:///path/to/openadapt-capture/&lt;recording&gt;/screenshots/step_0.png</code>
+    </p>
+
+    <div class="test-section">
+        <h2>Test 1: Direct file:// URL</h2>
+        <p>Testing: <code id="test1-url"></code></p>
+        <img id="test1" alt="Test 1">
+        <p id="test1-status">Loading...</p>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 2: Relative path (from viewer directory)</h2>
+        <p>Testing: <code id="test2-url"></code></p>
+        <img id="test2" alt="Test 2">
+        <p id="test2-status">Loading...</p>
+    </div>
+
+    <div class="test-section">
+        <h2>Test 3: Dynamically set via JavaScript</h2>
+        <img id="test3" alt="Test 3">
+        <p id="test3-status">Loading...</p>
+    </div>
+
+    <div class="test-section">
+        <h2>Console Output</h2>
+        <div id="console-output" style="background: #0a0a0f; padding: 10px; border-radius: 4px; font-size: 12px;"></div>
+    </div>
+
+    <script>
+        const consoleOutput = document.getElementById('console-output');
+
+        // The screenshot under test. Recordings are local data that lives outside
+        // this repository, so there is no default that works for everyone: pass
+        // your own with ?screenshot=<url>. ABSOLUTE_URL drives tests 1, 3 and the
+        // fetch check; RELATIVE_URL drives test 2.
+        const params = new URLSearchParams(window.location.search);
+        const ABSOLUTE_URL = params.get('screenshot')
+            || 'file:///path/to/openadapt-capture/<recording>/screenshots/step_0.png';
+        const RELATIVE_URL = params.get('relative')
+            || '../openadapt-capture/<recording>/screenshots/step_0.png';
+
+        document.getElementById('test1-url').textContent = ABSOLUTE_URL;
+        document.getElementById('test2-url').textContent = RELATIVE_URL;
+        document.getElementById('test1').src = ABSOLUTE_URL;
+        document.getElementById('test2').src = RELATIVE_URL;
+
+        function log(msg, type = 'info') {
+            const line = document.createElement('div');
+            line.textContent = `[${new Date().toISOString()}] ${msg}`;
+            line.className = type;
+            consoleOutput.appendChild(line);
+            console.log(msg);
+        }
+
+        // Test 1: Direct file:// URL
+        const img1 = document.getElementById('test1');
+        img1.onload = () => {
+            document.getElementById('test1-status').textContent = 'SUCCESS: Image loaded';
+            document.getElementById('test1-status').className = 'success';
+            log('Test 1: SUCCESS - Direct file:// URL works', 'success');
+        };
+        img1.onerror = (e) => {
+            document.getElementById('test1-status').textContent = 'ERROR: Failed to load';
+            document.getElementById('test1-status').className = 'error';
+            log('Test 1: ERROR - Direct file:// URL failed: ' + e.message, 'error');
+        };
+
+        // Test 2: Relative path
+        const img2 = document.getElementById('test2');
+        img2.onload = () => {
+            document.getElementById('test2-status').textContent = 'SUCCESS: Image loaded';
+            document.getElementById('test2-status').className = 'success';
+            log('Test 2: SUCCESS - Relative path works', 'success');
+        };
+        img2.onerror = (e) => {
+            document.getElementById('test2-status').textContent = 'ERROR: Failed to load';
+            document.getElementById('test2-status').className = 'error';
+            log('Test 2: ERROR - Relative path failed: ' + e.message, 'error');
+        };
+
+        // Test 3: JavaScript set src
+        const img3 = document.getElementById('test3');
+        img3.src = ABSOLUTE_URL;
+        img3.onload = () => {
+            document.getElementById('test3-status').textContent = 'SUCCESS: Image loaded';
+            document.getElementById('test3-status').className = 'success';
+            log('Test 3: SUCCESS - JavaScript set src works', 'success');
+        };
+        img3.onerror = (e) => {
+            document.getElementById('test3-status').textContent = 'ERROR: Failed to load';
+            document.getElementById('test3-status').className = 'error';
+            log('Test 3: ERROR - JavaScript set src failed: ' + e.message, 'error');
+        };
+
+        log('Starting image loading tests...');
+        log('Current document URL: ' + window.location.href);
+        log('Browser: ' + navigator.userAgent);
+
+        // Check if we can access the file system
+        fetch(ABSOLUTE_URL)
+            .then(response => {
+                log('Fetch test: SUCCESS - Can access file:// URLs via fetch', 'success');
+            })
+            .catch(error => {
+                log('Fetch test: ERROR - Cannot access file:// URLs via fetch: ' + error.message, 'error');
+                log('This indicates browser security restrictions on file:// protocol', 'error');
+            });
+    </script>
+</body>
+</html>

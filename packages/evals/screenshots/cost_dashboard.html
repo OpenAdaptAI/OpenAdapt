@@ -1,0 +1,579 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cost Tracking Dashboard - monitoring.py Demo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 40px 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 16px;
+            padding: 40px;
+            margin-bottom: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+        }
+
+        .header h1 {
+            font-size: 42px;
+            color: #2d3748;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .header-emoji {
+            font-size: 48px;
+        }
+
+        .header-subtitle {
+            color: #718096;
+            font-size: 18px;
+            margin-bottom: 20px;
+        }
+
+        .header-info {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 15px;
+            margin-top: 20px;
+            padding-top: 20px;
+            border-top: 2px solid #e2e8f0;
+        }
+
+        .info-item {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .info-label {
+            font-size: 13px;
+            color: #718096;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+
+        .info-value {
+            font-size: 16px;
+            color: #2d3748;
+            font-weight: 500;
+            font-family: 'Monaco', 'Menlo', 'Courier New', monospace;
+        }
+
+        .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 25px;
+            margin-bottom: 30px;
+        }
+
+        .metric-card {
+            background: white;
+            border-radius: 16px;
+            padding: 32px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+            transition: transform 0.2s, box-shadow 0.2s;
+        }
+
+        .metric-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 25px 70px rgba(0,0,0,0.2);
+        }
+
+        .metric-label {
+            font-size: 14px;
+            color: #718096;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            margin-bottom: 12px;
+            font-weight: 600;
+        }
+
+        .metric-value {
+            font-size: 48px;
+            font-weight: 800;
+            color: #2d3748;
+            line-height: 1;
+        }
+
+        .metric-value.success {
+            color: #38a169;
+        }
+
+        .metric-value.warning {
+            color: #dd6b20;
+        }
+
+        .metric-value.info {
+            color: #3182ce;
+        }
+
+        .metric-unit {
+            font-size: 20px;
+            color: #a0aec0;
+            margin-left: 5px;
+        }
+
+        .savings-card {
+            background: linear-gradient(135deg, #38a169, #2f855a);
+            color: white;
+            border-radius: 16px;
+            padding: 40px;
+            margin-bottom: 30px;
+            box-shadow: 0 20px 60px rgba(56, 161, 105, 0.3);
+        }
+
+        .savings-card h2 {
+            font-size: 32px;
+            margin-bottom: 25px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .savings-breakdown {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 20px;
+        }
+
+        .savings-item {
+            background: rgba(255,255,255,0.15);
+            border-radius: 12px;
+            padding: 25px;
+            backdrop-filter: blur(10px);
+        }
+
+        .savings-item-label {
+            font-size: 13px;
+            opacity: 0.95;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+
+        .savings-item-value {
+            font-size: 32px;
+            font-weight: 800;
+        }
+
+        .chart-container {
+            background: white;
+            border-radius: 16px;
+            padding: 35px;
+            margin-bottom: 30px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+        }
+
+        .chart-title {
+            font-size: 24px;
+            font-weight: 700;
+            color: #2d3748;
+            margin-bottom: 30px;
+        }
+
+        .bar-chart {
+            display: flex;
+            flex-direction: column;
+            gap: 25px;
+        }
+
+        .bar-item {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+        }
+
+        .bar-label {
+            min-width: 140px;
+            font-size: 16px;
+            color: #4a5568;
+            font-weight: 600;
+        }
+
+        .bar-container {
+            flex: 1;
+            height: 45px;
+            background: #edf2f7;
+            border-radius: 25px;
+            overflow: hidden;
+            position: relative;
+        }
+
+        .bar-fill {
+            height: 100%;
+            border-radius: 25px;
+            display: flex;
+            align-items: center;
+            padding-left: 20px;
+            color: white;
+            font-size: 14px;
+            font-weight: 700;
+            transition: width 1s cubic-bezier(0.4, 0, 0.2, 1);
+            box-shadow: inset 0 2px 4px rgba(255,255,255,0.3);
+        }
+
+        .bar-fill.simple {
+            background: linear-gradient(90deg, #48bb78, #38a169);
+        }
+        .bar-fill.medium {
+            background: linear-gradient(90deg, #ed8936, #dd6b20);
+        }
+        .bar-fill.complex {
+            background: linear-gradient(90deg, #e53e3e, #c53030);
+        }
+
+        .bar-value {
+            min-width: 100px;
+            text-align: right;
+            font-size: 16px;
+            color: #4a5568;
+            font-weight: 700;
+        }
+
+        .workers-table {
+            background: white;
+            border-radius: 16px;
+            padding: 35px;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.15);
+            overflow-x: auto;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        th {
+            text-align: left;
+            padding: 16px;
+            background: #f7fafc;
+            color: #4a5568;
+            font-size: 13px;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            font-weight: 700;
+            border-bottom: 3px solid #e2e8f0;
+        }
+
+        td {
+            padding: 18px 16px;
+            border-bottom: 1px solid #e2e8f0;
+            color: #2d3748;
+            font-size: 15px;
+        }
+
+        tr:hover {
+            background: #f7fafc;
+        }
+
+        .tier-badge {
+            display: inline-block;
+            padding: 6px 14px;
+            border-radius: 14px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .tier-badge.simple {
+            background: #c6f6d5;
+            color: #22543d;
+        }
+        .tier-badge.medium {
+            background: #feebc8;
+            color: #7c2d12;
+        }
+        .tier-badge.complex {
+            background: #fed7d7;
+            color: #742a2a;
+        }
+
+        .spot-badge {
+            display: inline-block;
+            padding: 5px 10px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 700;
+            background: #bee3f8;
+            color: #2c5282;
+            margin-left: 8px;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .metric-card, .savings-card, .chart-container, .workers-table {
+            animation: fadeIn 0.6s ease-out;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>
+                <span class="header-emoji">💰</span>
+                Cost Tracking Dashboard
+            </h1>
+            <div class="header-subtitle">
+                Real-time cost monitoring for Azure ML evaluations with tiered VMs and spot instances
+            </div>
+            <div class="header-info">
+                <div class="info-item">
+                    <div class="info-label">Run ID</div>
+                    <div class="info-value">demo_evaluation_2026-01-18</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Module</div>
+                    <div class="info-value">monitoring.py</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Status</div>
+                    <div class="info-value" style="color: #38a169;">✓ Complete</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="metrics-grid">
+            <div class="metric-card">
+                <div class="metric-label">Total Cost</div>
+                <div class="metric-value success">
+                    $2.50
+                </div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Tasks Completed</div>
+                <div class="metric-value info">154</div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Cost per Task</div>
+                <div class="metric-value">
+                    $0.0162
+                </div>
+            </div>
+            <div class="metric-card">
+                <div class="metric-label">Total Runtime</div>
+                <div class="metric-value warning">
+                    5.36<span class="metric-unit">hours</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="savings-card">
+            <h2>
+                <span>💵</span>
+                Cost Savings Breakdown
+            </h2>
+            <div class="savings-breakdown">
+                <div class="savings-item">
+                    <div class="savings-item-label">Spot Instances</div>
+                    <div class="savings-item-value">$5.18</div>
+                </div>
+                <div class="savings-item">
+                    <div class="savings-item-label">Tiered VMs</div>
+                    <div class="savings-item-value">$0.00</div>
+                </div>
+                <div class="savings-item">
+                    <div class="savings-item-label">Total Saved</div>
+                    <div class="savings-item-value">$5.18</div>
+                </div>
+                <div class="savings-item">
+                    <div class="savings-item-label">vs Baseline</div>
+                    <div class="savings-item-value">67.4%</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <div class="chart-title">VM Usage by Tier</div>
+            <div class="bar-chart">
+                <div class="bar-item">
+                    <div class="bar-label">Simple (D2_v3)</div>
+                    <div class="bar-container">
+                        <div class="bar-fill simple" style="width: 25.6%">
+                            1.37 hours
+                        </div>
+                    </div>
+                    <div class="bar-value">25.6%</div>
+                </div>
+                <div class="bar-item">
+                    <div class="bar-label">Medium (D4_v3)</div>
+                    <div class="bar-container">
+                        <div class="bar-fill medium" style="width: 38.4%">
+                            2.06 hours
+                        </div>
+                    </div>
+                    <div class="bar-value">38.4%</div>
+                </div>
+                <div class="bar-item">
+                    <div class="bar-label">Complex (D8_v3)</div>
+                    <div class="bar-container">
+                        <div class="bar-fill complex" style="width: 36.7%">
+                            1.97 hours
+                        </div>
+                    </div>
+                    <div class="bar-value">36.7%</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="workers-table">
+            <div class="chart-title">Worker Cost Details</div>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Worker</th>
+                        <th>VM Size</th>
+                        <th>Tier</th>
+                        <th>Tasks</th>
+                        <th>Runtime</th>
+                        <th>Hourly Rate</th>
+                        <th>Total Cost</th>
+                        <th>Cost/Task</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>#1</strong></td>
+                        <td>Standard_D2_v3 <span class="spot-badge">SPOT</span></td>
+                        <td><span class="tier-badge simple">Simple</span></td>
+                        <td>15</td>
+                        <td>0.45h</td>
+                        <td>$0.024/h</td>
+                        <td>$0.01</td>
+                        <td>$0.0007</td>
+                    </tr>
+                    <tr>
+                        <td><strong>#2</strong></td>
+                        <td>Standard_D2_v3 <span class="spot-badge">SPOT</span></td>
+                        <td><span class="tier-badge simple">Simple</span></td>
+                        <td>16</td>
+                        <td>0.48h</td>
+                        <td>$0.024/h</td>
+                        <td>$0.01</td>
+                        <td>$0.0007</td>
+                    </tr>
+                    <tr>
+                        <td><strong>#3</strong></td>
+                        <td>Standard_D2_v3 <span class="spot-badge">SPOT</span></td>
+                        <td><span class="tier-badge simple">Simple</span></td>
+                        <td>15</td>
+                        <td>0.44h</td>
+                        <td>$0.024/h</td>
+                        <td>$0.01</td>
+                        <td>$0.0007</td>
+                    </tr>
+                    <tr>
+                        <td><strong>#4</strong></td>
+                        <td>Standard_D4_v3 <span class="spot-badge">SPOT</span></td>
+                        <td><span class="tier-badge medium">Medium</span></td>
+                        <td>16</td>
+                        <td>0.52h</td>
+                        <td>$0.048/h</td>
+                        <td>$0.02</td>
+                        <td>$0.0016</td>
+                    </tr>
+                    <tr>
+                        <td><strong>#5</strong></td>
+                        <td>Standard_D4_v3 <span class="spot-badge">SPOT</span></td>
+                        <td><span class="tier-badge medium">Medium</span></td>
+                        <td>15</td>
+                        <td>0.51h</td>
+                        <td>$0.048/h</td>
+                        <td>$0.02</td>
+                        <td>$0.0016</td>
+                    </tr>
+                    <tr>
+                        <td><strong>#6</strong></td>
+                        <td>Standard_D4_v3 <span class="spot-badge">SPOT</span></td>
+                        <td><span class="tier-badge medium">Medium</span></td>
+                        <td>16</td>
+                        <td>0.53h</td>
+                        <td>$0.048/h</td>
+                        <td>$0.03</td>
+                        <td>$0.0016</td>
+                    </tr>
+                    <tr>
+                        <td><strong>#7</strong></td>
+                        <td>Standard_D4_v3 <span class="spot-badge">SPOT</span></td>
+                        <td><span class="tier-badge medium">Medium</span></td>
+                        <td>15</td>
+                        <td>0.50h</td>
+                        <td>$0.048/h</td>
+                        <td>$0.02</td>
+                        <td>$0.0016</td>
+                    </tr>
+                    <tr>
+                        <td><strong>#8</strong></td>
+                        <td>Standard_D8_v3 <span class="spot-badge">SPOT</span></td>
+                        <td><span class="tier-badge complex">Complex</span></td>
+                        <td>15</td>
+                        <td>0.65h</td>
+                        <td>$0.096/h</td>
+                        <td>$0.06</td>
+                        <td>$0.0042</td>
+                    </tr>
+                    <tr>
+                        <td><strong>#9</strong></td>
+                        <td>Standard_D8_v3 <span class="spot-badge">SPOT</span></td>
+                        <td><span class="tier-badge complex">Complex</span></td>
+                        <td>16</td>
+                        <td>0.68h</td>
+                        <td>$0.096/h</td>
+                        <td>$0.07</td>
+                        <td>$0.0041</td>
+                    </tr>
+                    <tr>
+                        <td><strong>#10</strong></td>
+                        <td>Standard_D8_v3 <span class="spot-badge">SPOT</span></td>
+                        <td><span class="tier-badge complex">Complex</span></td>
+                        <td>15</td>
+                        <td>0.64h</td>
+                        <td>$0.096/h</td>
+                        <td>$0.06</td>
+                        <td>$0.0041</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Animate bars on load
+        window.addEventListener('load', () => {
+            const bars = document.querySelectorAll('.bar-fill');
+            bars.forEach(bar => {
+                const width = bar.style.width;
+                bar.style.width = '0%';
+                setTimeout(() => {
+                    bar.style.width = width;
+                }, 100);
+            });
+        });
+    </script>
+</body>
+</html>

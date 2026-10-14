@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Screenshot Verification</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: #1a1a2e;
+            color: #e0e0e0;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        h1 {
+            color: #00d9ff;
+        }
+        .test {
+            margin: 20px 0;
+            padding: 20px;
+            background: #16213e;
+            border-radius: 8px;
+            border: 2px solid #333;
+        }
+        .test.success {
+            border-color: #34d399;
+        }
+        .test.error {
+            border-color: #ff5f5f;
+        }
+        .status {
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .status.success {
+            color: #34d399;
+        }
+        .status.error {
+            color: #ff5f5f;
+        }
+        img {
+            max-width: 300px;
+            margin: 10px 0;
+            border: 1px solid #444;
+            display: block;
+        }
+        code {
+            background: #0a0a0f;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+        .info {
+            color: #b8b8d1;
+            font-size: 0.9em;
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>Screenshot Loading Verification</h1>
+    <p class="info">This page tests if screenshots can be loaded using relative paths from the viewer directory.</p>
+
+    <div id="results"></div>
+
+    <script>
+        const testPaths = [
+            {
+                name: "Episode 1 Thumbnail",
+                path: "../openadapt-capture/turn-off-nightshift/screenshots/capture_31807990_step_0.png",
+                description: "First episode thumbnail - System Settings icon"
+            },
+            {
+                name: "Episode 1 Key Frame 2",
+                path: "../openadapt-capture/turn-off-nightshift/screenshots/capture_31807990_step_2.png",
+                description: "Settings window opened"
+            },
+            {
+                name: "Episode 2 Thumbnail",
+                path: "../openadapt-capture/turn-off-nightshift/screenshots/capture_31807990_step_4.png",
+                description: "Second episode thumbnail - Displays settings"
+            },
+            {
+                name: "Episode 2 Key Frame",
+                path: "../openadapt-capture/turn-off-nightshift/screenshots/capture_31807990_step_6.png",
+                description: "Night Shift option visible"
+            },
+            {
+                name: "Episode 2 Final Frame",
+                path: "../openadapt-capture/turn-off-nightshift/screenshots/capture_31807990_step_8.png",
+                description: "Night Shift toggled off"
+            }
+        ];
+
+        const resultsContainer = document.getElementById('results');
+        let successCount = 0;
+        let errorCount = 0;
+
+        function createTest(testData) {
+            const testDiv = document.createElement('div');
+            testDiv.className = 'test';
+            testDiv.innerHTML = `
+                <h3>${testData.name}</h3>
+                <p class="info">${testData.description}</p>
+                <p class="info">Path: <code>${testData.path}</code></p>
+                <div class="status" id="status-${testData.name.replace(/\s+/g, '-')}">Loading...</div>
+                <img id="img-${testData.name.replace(/\s+/g, '-')}" src="${testData.path}" alt="${testData.name}">
+            `;
+            return testDiv;
+        }
+
+        testPaths.forEach((testData, index) => {
+            const testDiv = createTest(testData);
+            resultsContainer.appendChild(testDiv);
+
+            const imgId = `img-${testData.name.replace(/\s+/g, '-')}`;
+            const statusId = `status-${testData.name.replace(/\s+/g, '-')}`;
+
+            setTimeout(() => {
+                const img = document.getElementById(imgId);
+                const statusDiv = document.getElementById(statusId);
+
+                img.onload = () => {
+                    statusDiv.textContent = `✓ SUCCESS: Image loaded (${img.naturalWidth}x${img.naturalHeight})`;
+                    statusDiv.className = 'status success';
+                    testDiv.classList.add('success');
+                    successCount++;
+                    updateSummary();
+                };
+
+                img.onerror = (e) => {
+                    statusDiv.textContent = `✗ ERROR: Failed to load image`;
+                    statusDiv.className = 'status error';
+                    testDiv.classList.add('error');
+                    errorCount++;
+                    updateSummary();
+                    console.error(`Failed to load: ${testData.path}`, e);
+                };
+            }, index * 100);
+        });
+
+        function updateSummary() {
+            const total = testPaths.length;
+            const tested = successCount + errorCount;
+            if (tested === total) {
+                const summaryDiv = document.createElement('div');
+                summaryDiv.className = successCount === total ? 'test success' : 'test error';
+                summaryDiv.innerHTML = `
+                    <h2>Summary</h2>
+                    <p class="status ${successCount === total ? 'success' : 'error'}">
+                        ${successCount} / ${total} tests passed
+                    </p>
+                    ${successCount === total ?
+                        '<p>✓ All screenshots loaded successfully! The viewer should work correctly.</p>' :
+                        '<p>✗ Some screenshots failed to load. Check browser console for details.</p>'}
+                `;
+                resultsContainer.insertBefore(summaryDiv, resultsContainer.firstChild);
+            }
+        }
+
+        console.log('Current location:', window.location.href);
+        console.log('Testing', testPaths.length, 'screenshot paths...');
+    </script>
+</body>
+</html>

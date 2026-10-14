@@ -1,0 +1,138 @@
+{
+  "$defs": {
+    "ArtifactDataClassification": {
+      "enum": [
+        "public",
+        "internal",
+        "sensitive",
+        "regulated"
+      ],
+      "title": "ArtifactDataClassification",
+      "type": "string"
+    },
+    "ArtifactStorageBoundary": {
+      "enum": [
+        "local_protected",
+        "customer_controlled",
+        "hosted_private"
+      ],
+      "title": "ArtifactStorageBoundary",
+      "type": "string"
+    },
+    "ArtifactVerificationState": {
+      "enum": [
+        "pending",
+        "verified",
+        "refuted",
+        "indeterminate"
+      ],
+      "title": "ArtifactVerificationState",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A path-free reference to one immutable process artifact.",
+  "properties": {
+    "artifact_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Artifact Id",
+      "type": "string"
+    },
+    "content_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Content Digest",
+      "type": "string"
+    },
+    "created_at": {
+      "maxLength": 40,
+      "minLength": 20,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$",
+      "title": "Created At",
+      "type": "string"
+    },
+    "data_classification": {
+      "$ref": "#/$defs/ArtifactDataClassification"
+    },
+    "logical_name": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,127}$",
+      "title": "Logical Name",
+      "type": "string"
+    },
+    "media_type": {
+      "maxLength": 192,
+      "minLength": 3,
+      "pattern": "^[a-z0-9][a-z0-9!#$&^_.+-]{0,63}/[a-z0-9][a-z0-9!#$&^_.+-]{0,127}$",
+      "title": "Media Type",
+      "type": "string"
+    },
+    "metadata_digest": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Metadata Digest"
+    },
+    "producer_execution_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Producer Execution Id",
+      "type": "string"
+    },
+    "producer_output_name": {
+      "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,127}$",
+      "title": "Producer Output Name",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "openadapt.artifact-ref/v1",
+      "default": "openadapt.artifact-ref/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "size_bytes": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "title": "Size Bytes",
+      "type": "integer"
+    },
+    "storage_boundary": {
+      "$ref": "#/$defs/ArtifactStorageBoundary"
+    },
+    "verification_state": {
+      "$ref": "#/$defs/ArtifactVerificationState"
+    },
+    "verifier_receipt_digest": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Verifier Receipt Digest"
+    }
+  },
+  "required": [
+    "artifact_id",
+    "content_digest",
+    "size_bytes",
+    "media_type",
+    "logical_name",
+    "producer_execution_id",
+    "producer_output_name",
+    "storage_boundary",
+    "data_classification",
+    "verification_state",
+    "created_at"
+  ],
+  "title": "ArtifactRefV1",
+  "type": "object"
+}

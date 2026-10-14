@@ -1,0 +1,117 @@
+name: test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.29"
+
+      # Without --no-sources on purpose: this is what a fresh clone does with
+      # the README's `uv sync --extra dev`. A path source to a sibling checkout
+      # or a git source the lockfile was not resolved with fails here.
+      - name: Check the lockfile works in a fresh clone
+        run: uv lock --check
+
+      - name: Install dependencies
+        run: uv sync --locked --extra dev --no-sources
+
+      - name: Guard against bare heavy imports in tests
+        run: |
+          # Fail CI if any test file has a bare top-level import of a heavy package.
+          # Heavy packages must use pytest.importorskip() at module level.
+          if grep -rn '^import \(torch\|transformers\|trl\|datasets\|unsloth\|accelerate\|peft\|bitsandbytes\)\b' tests/ || \
+             grep -rn '^from \(torch\|transformers\|trl\|datasets\|unsloth\|accelerate\|peft\|bitsandbytes\|openadapt_ml\)\b' tests/; then
+            echo ""
+            echo "ERROR: Found bare top-level import of heavy package in tests."
+            echo "Use pytest.importorskip() instead. Example:"
+            echo '  torch = pytest.importorskip("torch")'
+            echo '  openadapt_ml = pytest.importorskip("openadapt_ml")'
+            exit 1
+          fi
+
+      # Offline half of the published-evidence drift guard: the manifest must
+      # agree with the artifacts it describes. The network half (is the pinned
+      # release still the current one?) runs in evidence-freshness.yml.
+      - name: Check published evidence manifest consistency
+        run: python scripts/check_published_evidence_freshness.py --offline
+
+      # This repo declared a ruff config for years with nothing enforcing it,
+      # and drifted to 478 findings against its own declared rule set --
+      # including three undefined names. PR #275 cleared all of them; without a
+      # gate the same decay restarts immediately, and the next person to add one
+      # hits the same wall. Costs about 10 seconds inside a job that already
+      # installs ruff, so it needs no runner, no install step and no new
+      # workflow. The linter is version-bounded (ruff>=0.16,<0.17) and the rule
+      # set is explicit, so this cannot go red because ruff shipped a release.
+      - name: Lint
+        run: uv run --no-sources ruff check .
+
+      - name: Build and verify the public distribution boundary
+        run: |
+          uv build --no-sources
+          python scripts/check_source_boundary.py --require-dist
+          python scripts/check_third_party_notices.py --require-dist
+
+      - name: Run tests
+        run: |
+          uv run --no-sources pytest tests/ -q \
+            -m "not heavy and not gpu and not vm" \
+            -k "not (test_demo_format_and_persistence or test_synthetic_demos)"
+
+  # The Prime Intellect Environments Hub package under environments/ depends
+  # on `verifiers`, which is not an openadapt-evals dependency and is not in
+  # uv.lock. tests/test_prime_env_mockmed_extradup.py skips without it, so a
+  # green `test` job says nothing about the environment. This job installs
+  # verifiers into a throwaway venv and runs the environment for real: its
+  # self-test, its pytest file, and vf-eval against the scripted policy for
+  # every labeled reward-hacking case.
+  prime-env:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.29"
+
+      - name: Install verifiers and the environment
+        run: |
+          uv venv .venv-prime
+          uv pip install --python .venv-prime/bin/python --no-sources -e . "verifiers==0.3.1" pytest
+          uv pip install --python .venv-prime/bin/python --no-deps -e environments/openadapt_mockmed_extradup
+
+      - name: Self-test the certified reward on the synthetic corpus
+        run: .venv-prime/bin/python environments/openadapt_mockmed_extradup/openadapt_mockmed_extradup.py
+
+      - name: Run the environment tests
+        run: .venv-prime/bin/python -m pytest tests/test_prime_env_mockmed_extradup.py -q
+
+      - name: vf-eval fails closed on every labeled case
+        working-directory: environments/openadapt_mockmed_extradup
+        run: ../../.venv-prime/bin/python check_fails_closed.py --num-examples 2

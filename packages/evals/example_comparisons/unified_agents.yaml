@@ -1,0 +1,41 @@
+# Example comparison config: API + local (SGLang) models as unified agents
+#
+# Usage:
+#   # API models only (no --gpu-host, sglang models are skipped):
+#   python scripts/compare_models.py --config example_comparisons/unified_agents.yaml
+#
+#   # API + local models (SGLang on remote GPU):
+#   python scripts/compare_models.py \
+#       --config example_comparisons/unified_agents.yaml \
+#       --gpu-host user@gpu-server
+#
+#   # With specific SSH key:
+#   python scripts/compare_models.py \
+#       --config example_comparisons/unified_agents.yaml \
+#       --gpu-host user@gpu-server --ssh-key ~/.ssh/gpu_key
+
+name: "Unified Agent Comparison (API + Local)"
+description: "Compare API models vs locally-served models as unified desktop agents"
+
+tasks:
+  - example_tasks/notepad-hello.yaml
+  - example_tasks/clear-browsing-data-chrome.yaml
+
+models:
+  - name: gpt-5.4-mini
+    provider: openai
+    type: unified
+
+  - name: Qwen/Qwen3.5-9B
+    provider: sglang
+    type: unified
+    max_new_tokens: 2048
+    serve:
+      engine: sglang
+      port: 8080
+
+server_url: http://localhost:5001
+max_steps: 10
+runs_per_config: 1
+save_screenshots: true
+output_dir: comparison_results/unified/

@@ -1,0 +1,60 @@
+{
+  "arm": "compiled",
+  "condition": {
+    "kind": "clean",
+    "query": ""
+  },
+  "counted_trials": 3,
+  "expected": "if the independently verified effect succeeded, the runtime must not leave the run in an unresumable false-incomplete state",
+  "flow": {
+    "artifact": {
+      "filename": "openadapt_flow-1.24.0-py3-none-any.whl",
+      "import_mode": "locally extracted published wheel",
+      "sha256": "170fdac154794292c99dc6eea6486e7a2c3fdf321bcd87976d924bccd3db4aef"
+    },
+    "commit": "4ca7566b73154769398d3135507060fa020aad0a",
+    "release_tag": "v1.24.0",
+    "tags": [
+      "v1.24.0"
+    ],
+    "tracked_clean": true,
+    "version": "1.24.0"
+  },
+  "observations": [
+    {
+      "end_to_end_wall_s": 15.398066583000173,
+      "final_screenshot_sha256": "28868357daf60fd146bb494cf7a9840e6507cced77479394cdad1d862f117133",
+      "first_failure": {
+        "error": "Postconditions failed for step 'step_010' (click 'Save Encounter'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(0, 228, 696, 223) \u2014 run aborted",
+        "step": "step_010"
+      },
+      "note_sha256": "ac705b1533fec84a917710f37f46cc3c971668133ac443544636ca5c87730bda",
+      "oracle_success": true,
+      "primary_outcome": "over_halt",
+      "replayer_success": false,
+      "steady_wall_s": 14.54471687499995,
+      "trial": 2
+    },
+    {
+      "end_to_end_wall_s": 12.888145334,
+      "final_screenshot_sha256": "0fbf9eb820d2ec10cf4a6db9f5426a12650074df5e676e9118238dd7b048492f",
+      "first_failure": {
+        "error": "Postconditions failed for step 'step_010' (click 'Save Encounter'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(0, 228, 696, 223) \u2014 run aborted",
+        "step": "step_010"
+      },
+      "note_sha256": "d936959a095f73f37e6bb533e6a491a248117661b9428db1436f23a2518f4a9e",
+      "oracle_success": true,
+      "primary_outcome": "over_halt",
+      "replayer_success": false,
+      "steady_wall_s": 12.262749083000017,
+      "trial": 3
+    }
+  ],
+  "observed_count": 2,
+  "oracle": "arm-independent screenshot/OCR final-state check: exact note and saved banner, Triage row, intended patient, no wrong-type write",
+  "reproduce": "python scripts/run_current_flow_local_benchmark.py --flow-source <v1.24.0-checkout> --flow-wheel <openadapt_flow-1.24.0-py3-none-any.whl> --out <new-output-directory>; python scripts/extract_over_halt_regression.py --results <new-output-directory>/results.json --condition clean",
+  "runner_sha256": "ac58c0b9a02cfc991144a1f5c7a2814c6b6b748bcba27b87f8e1027ee575970f",
+  "schema_version": 1,
+  "task": "MockMed triage: sign in, open intended referral, create Triage encounter, enter a trial-unique note, save",
+  "title": "clean baseline effect succeeds but region_stable reports halt"
+}

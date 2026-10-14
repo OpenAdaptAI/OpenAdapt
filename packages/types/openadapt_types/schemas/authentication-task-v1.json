@@ -1,0 +1,236 @@
+{
+  "$defs": {
+    "AuthenticationCapturePolicyV1": {
+      "additionalProperties": false,
+      "description": "The source-time exclusion policy for one protected interval.",
+      "properties": {
+        "account_labels": {
+          "const": "withheld_at_source",
+          "default": "withheld_at_source",
+          "title": "Account Labels",
+          "type": "string"
+        },
+        "input_targets": {
+          "const": "withheld_at_source",
+          "default": "withheld_at_source",
+          "title": "Input Targets",
+          "type": "string"
+        },
+        "input_values": {
+          "const": "withheld_at_source",
+          "default": "withheld_at_source",
+          "title": "Input Values",
+          "type": "string"
+        },
+        "media_frames": {
+          "const": "withheld_at_source",
+          "default": "withheld_at_source",
+          "title": "Media Frames",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "openadapt.authentication-capture-policy/v1",
+          "default": "openadapt.authentication-capture-policy/v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "structural_values": {
+          "const": "withheld_at_source",
+          "default": "withheld_at_source",
+          "title": "Structural Values",
+          "type": "string"
+        },
+        "timeline": {
+          "const": "protected_marker_only",
+          "default": "protected_marker_only",
+          "title": "Timeline",
+          "type": "string"
+        }
+      },
+      "title": "AuthenticationCapturePolicyV1",
+      "type": "object"
+    },
+    "AuthenticationMethod": {
+      "enum": [
+        "existing_session",
+        "saved_account_selection",
+        "password_manager_autofill",
+        "passkey",
+        "federated_identity",
+        "smart_card",
+        "device_broker",
+        "manual_secret_entry"
+      ],
+      "title": "AuthenticationMethod",
+      "type": "string"
+    },
+    "AuthenticationMfaPolicy": {
+      "enum": [
+        "required",
+        "if_challenged",
+        "not_required"
+      ],
+      "title": "AuthenticationMfaPolicy",
+      "type": "string"
+    },
+    "AuthenticationPrincipalClass": {
+      "enum": [
+        "named_user",
+        "shared_service_account",
+        "workforce_identity",
+        "device_identity"
+      ],
+      "title": "AuthenticationPrincipalClass",
+      "type": "string"
+    },
+    "AuthenticationVerifierKind": {
+      "enum": [
+        "authenticated_session_probe",
+        "post_auth_application_state",
+        "identity_provider_introspection"
+      ],
+      "title": "AuthenticationVerifierKind",
+      "type": "string"
+    },
+    "HumanDecisionSubstrate": {
+      "enum": [
+        "browser",
+        "windows",
+        "macos",
+        "linux",
+        "rdp",
+        "citrix",
+        "mixed",
+        "unknown"
+      ],
+      "title": "HumanDecisionSubstrate",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One value-free authentication requirement bound to an attended task.",
+  "properties": {
+    "allowed_methods": {
+      "items": {
+        "$ref": "#/$defs/AuthenticationMethod"
+      },
+      "maxItems": 8,
+      "minItems": 1,
+      "title": "Allowed Methods",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "application_contract_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Application Contract Digest",
+      "type": "string"
+    },
+    "attended_task_kind": {
+      "const": "human_step",
+      "default": "human_step",
+      "title": "Attended Task Kind",
+      "type": "string"
+    },
+    "broker_attestation": {
+      "default": "optional",
+      "enum": [
+        "required",
+        "optional",
+        "not_applicable"
+      ],
+      "title": "Broker Attestation",
+      "type": "string"
+    },
+    "capture": {
+      "$ref": "#/$defs/AuthenticationCapturePolicyV1"
+    },
+    "credential_provider_boundary": {
+      "const": "external_adapter_only",
+      "default": "external_adapter_only",
+      "title": "Credential Provider Boundary",
+      "type": "string"
+    },
+    "environment_contract_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Environment Contract Digest",
+      "type": "string"
+    },
+    "human_decision_task_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Human Decision Task Digest",
+      "type": "string"
+    },
+    "max_session_age_seconds": {
+      "default": 900,
+      "maximum": 86400,
+      "minimum": 30,
+      "title": "Max Session Age Seconds",
+      "type": "integer"
+    },
+    "mfa_policy": {
+      "$ref": "#/$defs/AuthenticationMfaPolicy",
+      "default": "if_challenged"
+    },
+    "principal_binding_contract_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Principal Binding Contract Digest",
+      "type": "string"
+    },
+    "principal_class": {
+      "$ref": "#/$defs/AuthenticationPrincipalClass"
+    },
+    "question_template": {
+      "const": "complete_human_step",
+      "default": "complete_human_step",
+      "title": "Question Template",
+      "type": "string"
+    },
+    "requires_user_presence": {
+      "default": true,
+      "title": "Requires User Presence",
+      "type": "boolean"
+    },
+    "schema_version": {
+      "const": "openadapt.authentication-task/v1",
+      "default": "openadapt.authentication-task/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "substrate": {
+      "$ref": "#/$defs/HumanDecisionSubstrate"
+    },
+    "task_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Task Id",
+      "type": "string"
+    },
+    "verifier_contract_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Verifier Contract Digest",
+      "type": "string"
+    },
+    "verifier_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Verifier Id",
+      "type": "string"
+    },
+    "verifier_kind": {
+      "$ref": "#/$defs/AuthenticationVerifierKind"
+    }
+  },
+  "required": [
+    "task_id",
+    "human_decision_task_digest",
+    "substrate",
+    "allowed_methods",
+    "principal_class",
+    "verifier_id",
+    "verifier_kind",
+    "verifier_contract_digest",
+    "principal_binding_contract_digest",
+    "application_contract_digest",
+    "environment_contract_digest"
+  ],
+  "title": "AuthenticationTaskContractV1",
+  "type": "object"
+}

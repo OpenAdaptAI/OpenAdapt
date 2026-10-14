@@ -1,0 +1,40 @@
+DEMONSTRATION:
+Task: Open Notepad, create a new file named 'draft.txt', type 'This is a draft.', and save it to the Documents folder.
+
+Step 1:
+  Observation: The BEFORE image shows the Windows PowerShell application open. The taskbar is visible at the bottom with various application icons. The Start menu is not open.
+  Intent: The user is attempting to open Notepad by searching for it.
+  Action: TYPE("notepad")
+  Result: The AFTER image shows the Start menu open with search results for 'notepad'. The Notepad application is listed as the best match.
+
+Step 2:
+  Observation: The BEFORE image shows the Start menu with search results for 'notepad'. Key UI elements include the search bar at the top, 'Best match' section with 'notepad' listed, 'Apps' section with 'Notepad', and options like 'Open', 'Run as administrator', and 'Open file location' on the right.
+  Intent: The user intends to open Notepad to create a new text file.
+  Action: TYPE("Thisisadraft.")
+  Result: The AFTER image shows the Notepad application open with a 'Save As' dialog. The text 'This is a draft.' is typed in the 'File name' field.
+
+Step 3:
+  Observation: The window is titled 'Save As' within the Notepad application. The current panel shows the Documents folder. Key visible UI elements include the 'File name' field with 'This is a draft.' typed in it, the 'Save as type' dropdown set to 'Text documents (*.txt)', the 'Save' button, and the 'Cancel' button.
+  Intent: The user is attempting to save the file with the specified name and content.
+  Action: CLICK(0.294, 0.532)
+  Result: There is no visible change between the BEFORE and AFTER images.
+
+Step 4:
+  Observation: The application window is 'Save As' dialog in Notepad. Key visible UI elements include the 'File name' input field at the bottom, 'Save as type' dropdown next to it, 'Save' button at the bottom right, 'Cancel' button next to 'Save', and the file list in the main area showing existing files.
+  Intent: The user is entering the desired file name to save the document as 'draft.txt'.
+  Action: TYPE("draft.txt")
+  Result: A 'Confirm Save As' dialog appeared, indicating that 'draft.txt' already exists and asking if the user wants to replace it.
+
+Step 5:
+  Observation: The application window is 'Save As' with a 'Confirm Save As' dialog open. Key UI elements include the dialog box with the message 'draft.txt already exists. Do you want to replace it?', and buttons labeled 'Yes' and 'No'. The red marker indicates interaction with the 'Yes' button.
+  Intent: The user intends to confirm overwriting the existing 'draft.txt' file.
+  Action: TYPE("")
+  Result: The 'Confirm Save As' dialog is closed, and the focus returns to the previous application window.
+
+Step 6:
+  Observation: The application window is Windows PowerShell. The current panel displays a series of log entries. Key visible UI elements include the title bar with the application name at the top, a series of log entries in the main panel, a tab bar with a '+' button for new tabs, and a taskbar at the bottom with various application icons.
+  Intent: The user is attempting to type a command or text into the PowerShell window.
+  Action: TYPE("")
+  Result: The expected result is that the text or command typed by the user will appear in the PowerShell window at the location of the cursor.
+
+---

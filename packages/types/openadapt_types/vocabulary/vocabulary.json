@@ -1,0 +1,327 @@
+{
+  "schema_version": "openadapt.vocabulary/v1",
+  "updated": "2026-10-09",
+  "_about": [
+    "One plain term per concept for business-facing surfaces, with the exact technical term kept one level deeper.",
+    "A business_term may appear at every level. min_level is the shallowest level where a technical term may appear. A technical term never moves off engineering surfaces.",
+    "severity error marks the terms that must never reach a business-facing first screen. severity warn marks the rest.",
+    "Patterns use syntax that Python re and JavaScript RegExp both accept. case_sensitive false means the i flag.",
+    "openadapt_types.vocabulary.lint reads this file and checks that every term with a result uses the same label as outcomes.json."
+  ],
+  "levels": [
+    {
+      "id": "business",
+      "meaning": "The first screens a buyer or a new user sees.",
+      "examples": [
+        "website business pages",
+        "README top sections",
+        "the docs Evaluate path",
+        "Cloud owner views",
+        "Desktop first run",
+        "email",
+        "blog posts for business readers"
+      ]
+    },
+    {
+      "id": "detail",
+      "meaning": "One level deeper, opened on purpose by someone who wants the exact term.",
+      "examples": [
+        "a Technical details disclosure",
+        "an IT or security section",
+        "run detail views",
+        "partner integration pages",
+        "CLI --verbose output"
+      ]
+    },
+    {
+      "id": "engineering",
+      "meaning": "Reference and evidence for engineers and auditors. Every term may appear here.",
+      "examples": ["reference docs", "evidence views", "report.json", "API fields", "the openadapt flow CLI", "code"]
+    }
+  ],
+  "terms": [
+    {
+      "id": "workflow",
+      "business_term": "workflow",
+      "meaning": "The task you hand off, such as entering a referral.",
+      "technical": []
+    },
+    {
+      "id": "recording",
+      "business_term": "showing the task",
+      "also_business": ["recording"],
+      "meaning": "A person does the task once while OpenAdapt watches.",
+      "technical": [
+        {"term": "demonstration", "pattern": "\\bdemonstrat(e|es|ed|ion|ions)\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"},
+        {"term": "capture", "pattern": "\\bcaptures?\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"},
+        {"term": "trace", "pattern": "\\btraces?\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"}
+      ]
+    },
+    {
+      "id": "automation",
+      "business_term": "the automation",
+      "meaning": "What OpenAdapt builds from the recording.",
+      "technical": [
+        {"term": "program", "pattern": "\\bprograms?\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"},
+        {"term": "compiled program", "pattern": "\\bcompiled\\s+(program|workflow)s?\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"},
+        {"term": "bundle", "pattern": "\\bbundles?\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"},
+        {"term": "compile", "pattern": "\\bcompil(e|es|ed|er|ers|ation)\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"}
+      ]
+    },
+    {
+      "id": "run",
+      "business_term": "run",
+      "meaning": "One time the automation does the task.",
+      "technical": [
+        {"term": "replay", "pattern": "\\breplay(s|ed|ing)?\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"}
+      ]
+    },
+    {
+      "id": "done_and_checked",
+      "business_term": "Done and checked",
+      "result": "done",
+      "meaning": "It saved the entry and read the record back to confirm it.",
+      "technical": [
+        {"term": "VERIFIED", "pattern": "\\bVERIFIED\\b", "case_sensitive": true, "min_level": "detail", "severity": "error"}
+      ]
+    },
+    {
+      "id": "stopped_before_saving",
+      "business_term": "Stopped before saving",
+      "result": "stopped_before_change",
+      "meaning": "Something didn't match, so it stopped before changing anything and asked a person. Nothing was written.",
+      "technical": [
+        {"term": "HALTED_BEFORE_EFFECT", "pattern": "\\bHALTED_BEFORE_EFFECT\\b", "case_sensitive": false, "min_level": "detail", "severity": "error"},
+        {"term": "CANCELED", "pattern": "\\bCANCELED\\b", "case_sensitive": true, "min_level": "detail", "severity": "error"}
+      ]
+    },
+    {
+      "id": "coarse_halt",
+      "business_term": null,
+      "use_instead": "Check the record. Say Stopped before saving only when transaction_outcome is HALTED_BEFORE_EFFECT, and Stopped for review where you claim nothing about a write.",
+      "meaning": "The coarse stop label. On its own it doesn't say whether anything was written.",
+      "technical": [
+        {"term": "HALTED", "pattern": "\\bHALT(ED|S)?\\b", "case_sensitive": true, "min_level": "detail", "severity": "error"}
+      ]
+    },
+    {
+      "id": "check_the_record",
+      "business_term": "Check the record",
+      "result": "check_the_record",
+      "meaning": "A save may have gone through. A person checks the record before anything is retried.",
+      "technical": [
+        {"term": "RECONCILIATION_REQUIRED", "pattern": "\\bRECONCILIATION_REQUIRED\\b", "case_sensitive": false, "min_level": "detail", "severity": "error"},
+        {"term": "ROLLED_BACK", "pattern": "\\bROLLED_BACK(_VERIFIED)?\\b", "case_sensitive": false, "min_level": "detail", "severity": "error"},
+        {"term": "reconciliation", "pattern": "\\breconcil(e|es|ed|ing|iation)\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"}
+      ]
+    },
+    {
+      "id": "finished_not_checked",
+      "business_term": "Finished, not checked",
+      "result": "finished_not_checked",
+      "meaning": "It did the steps but didn't confirm the saved result.",
+      "technical": [
+        {"term": "COMPLETED_UNVERIFIED", "pattern": "\\bCOMPLETED_UNVERIFIED\\b", "case_sensitive": false, "min_level": "detail", "severity": "error"}
+      ]
+    },
+    {
+      "id": "did_not_finish",
+      "business_term": "Didn't finish",
+      "result": "did_not_finish",
+      "meaning": "It couldn't complete the task. The next step says what's known about whether anything was written.",
+      "technical": [
+        {"term": "FAILED_PLATFORM", "pattern": "\\bFAILED_PLATFORM\\b", "case_sensitive": false, "min_level": "detail", "severity": "error"},
+        {"term": "FAILED", "pattern": "\\bFAILED\\b", "case_sensitive": true, "min_level": "detail", "severity": "error"}
+      ]
+    },
+    {
+      "id": "refused",
+      "business_term": "Blocked before saving",
+      "result": "refused",
+      "meaning": "A rule, an approval, or the right-record check blocked the run before it saved anything. Nothing was written.",
+      "technical": [
+        {"term": "REJECTED_POLICY", "pattern": "\\bREJECTED_POLICY\\b", "case_sensitive": false, "min_level": "detail", "severity": "error"}
+      ]
+    },
+    {
+      "id": "receipt",
+      "business_term": "receipt",
+      "also_business": ["signed receipt"],
+      "meaning": "A record of what was entered and how it was checked. Say signed receipt where the signature matters.",
+      "technical": [
+        {"term": "Seal", "pattern": "\\bseal(s|ed|ing)?\\b", "case_sensitive": false, "min_level": "detail", "severity": "error"},
+        {"term": "attestation", "pattern": "\\battest(s|ed|ation|ations)?\\b", "case_sensitive": false, "min_level": "engineering", "severity": "warn"}
+      ]
+    },
+    {
+      "id": "readiness_test",
+      "business_term": "readiness test",
+      "meaning": "Testing the automation on your system with your cases before it goes live.",
+      "technical": [
+        {"term": "qualification profile", "pattern": "\\bqualification\\s+profiles?\\b", "case_sensitive": false, "min_level": "engineering", "severity": "error"},
+        {"term": "qualification", "pattern": "\\bqualif(y|ies|ied|ying|ication|ications)\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"},
+        {"term": "admission", "pattern": "\\badmi(t|ts|tted|tting|ssion|ssions)\\b", "case_sensitive": false, "min_level": "detail", "severity": "error"},
+        {"term": "certification", "pattern": "\\bcertif(y|ies|ied|ying|ication|ications)\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"}
+      ]
+    },
+    {
+      "id": "approved_fix",
+      "business_term": "approved fix",
+      "meaning": "When a screen changes, OpenAdapt proposes a fix and a person approves it.",
+      "technical": [
+        {"term": "governed repair", "pattern": "\\bgoverned\\s+repairs?\\b", "case_sensitive": false, "min_level": "detail", "severity": "error"},
+        {"term": "repair candidate", "pattern": "\\brepair\\s+candidates?\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"}
+      ]
+    },
+    {
+      "id": "screen_changes",
+      "business_term": "screen changes",
+      "meaning": "The app looks different, so OpenAdapt finds the same field again or stops.",
+      "technical": [
+        {"term": "drift", "pattern": "\\bdrift(s|ed|ing)?\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"},
+        {"term": "re-resolve", "pattern": "\\bre-?resol(ve|ves|ved|ving|ution)\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"},
+        {"term": "self-healing", "pattern": "\\bself-?heal(s|ed|ing)?\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"}
+      ]
+    },
+    {
+      "id": "right_record_check",
+      "business_term": "right-record check",
+      "meaning": "It confirms it's in the right patient's chart before typing.",
+      "technical": [
+        {"term": "identity gate", "pattern": "\\bidentity\\s+(gate|gates|check|checks|coverage)\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"},
+        {"term": "wrong-patient defense", "pattern": "\\bwrong-patient\\s+defen[cs]e\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"}
+      ]
+    },
+    {
+      "id": "record_check",
+      "business_term": "record check",
+      "meaning": "It reads the saved record back from the system to confirm the change.",
+      "technical": [
+        {"term": "effect check", "pattern": "\\beffect\\s+(check|checks|verifier|verifiers)\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"},
+        {"term": "read-back", "pattern": "\\bread-?backs?\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"},
+        {"term": "system-of-record read", "pattern": "\\bsystems?[- ]of[- ]record\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"},
+        {"term": "effect contract", "pattern": "\\beffect\\s+contracts?\\b", "case_sensitive": false, "min_level": "engineering", "severity": "error"},
+        {"term": "oracle", "pattern": "\\boracles?\\b(?!\\s+(health|cerner))", "case_sensitive": false, "min_level": "engineering", "severity": "error"}
+      ]
+    },
+    {
+      "id": "person_steps_in",
+      "business_term": "a person steps in",
+      "meaning": "Someone takes over or decides, then the automation continues.",
+      "technical": [
+        {"term": "attended operation", "pattern": "\\battended\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"},
+        {"term": "takeover", "pattern": "\\btake-?overs?\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"}
+      ]
+    },
+    {
+      "id": "computer_that_runs_it",
+      "business_term": "the computer that runs it",
+      "meaning": "A machine you control, or one we host.",
+      "technical": [
+        {"term": "runner", "pattern": "\\brunners?\\b", "case_sensitive": false, "min_level": "detail", "severity": "error"}
+      ]
+    },
+    {
+      "id": "governed",
+      "business_term": null,
+      "use_instead": "Say what the check does, for example: it stops and asks a person.",
+      "meaning": "Internal word for running under OpenAdapt's checks and approvals.",
+      "technical": [
+        {"term": "governed", "pattern": "\\bgovern(ed|ance)\\b", "case_sensitive": false, "min_level": "detail", "severity": "error"}
+      ]
+    },
+    {
+      "id": "execution_profile",
+      "business_term": null,
+      "use_instead": "checks on, or practice run",
+      "meaning": "Internal name for how strict a run's checks are.",
+      "technical": [
+        {"term": "Standard profile", "pattern": "\\b(standard|regulated|demo)\\s+profiles?\\b", "case_sensitive": false, "min_level": "detail", "severity": "error"}
+      ]
+    },
+    {
+      "id": "substrate",
+      "business_term": null,
+      "use_instead": "app type, such as a browser, a Windows app, or Citrix",
+      "meaning": "Internal name for the kind of app a workflow runs in.",
+      "technical": [
+        {"term": "substrate", "pattern": "\\bsubstrates?\\b", "case_sensitive": false, "min_level": "engineering", "severity": "error"}
+      ]
+    },
+    {
+      "id": "fixture",
+      "business_term": null,
+      "use_instead": "test data, or sample app",
+      "meaning": "Internal name for test data or a sample app.",
+      "technical": [
+        {"term": "fixture", "pattern": "\\bfixtures?\\b", "case_sensitive": false, "min_level": "engineering", "severity": "error"}
+      ]
+    },
+    {
+      "id": "rest_sql_parity",
+      "business_term": null,
+      "use_instead": "Say what was compared and why it matters.",
+      "meaning": "Internal name for comparing an API read with a database read.",
+      "technical": [
+        {"term": "REST+SQL parity", "pattern": "\\bREST\\s*\\+\\s*SQL\\s+parity\\b", "case_sensitive": false, "min_level": "engineering", "severity": "error"}
+      ]
+    },
+    {
+      "id": "non_target_delta",
+      "business_term": null,
+      "use_instead": "an extra change in another record",
+      "meaning": "Internal name for a change outside the record the run meant to change.",
+      "technical": [
+        {"term": "non-target delta", "pattern": "\\bnon-target\\s+deltas?\\b", "case_sensitive": false, "min_level": "engineering", "severity": "error"}
+      ]
+    },
+    {
+      "id": "sha256",
+      "business_term": null,
+      "use_instead": "Keep fingerprints in Technical details.",
+      "meaning": "A content fingerprint.",
+      "technical": [
+        {"term": "sha256", "pattern": "\\bsha-?256\\b", "case_sensitive": false, "min_level": "engineering", "severity": "error"}
+      ]
+    },
+    {
+      "id": "program_state_console",
+      "business_term": null,
+      "use_instead": "Say what the reader sees.",
+      "meaning": "Internal name for a website component.",
+      "technical": [
+        {"term": "Program State Console", "pattern": "\\bProgram\\s+State\\s+Console\\b", "case_sensitive": false, "min_level": "engineering", "severity": "error"}
+      ]
+    },
+    {
+      "id": "mcp",
+      "business_term": null,
+      "use_instead": "connect your AI agent",
+      "meaning": "The protocol an AI agent uses to call OpenAdapt.",
+      "technical": [
+        {"term": "MCP", "pattern": "\\bMCP\\b", "case_sensitive": true, "min_level": "detail", "severity": "error"}
+      ]
+    }
+  ],
+  "phrases": [
+    {
+      "text": "Stopped for review",
+      "rule": "Use it only where the surface claims nothing about whether a write happened."
+    }
+  ],
+  "no_change_claims": {
+    "rule": "A sentence that claims no write happened, or that a retry can't duplicate anything, needs an outcome that proves no effect nearby. HALTED alone never proves it.",
+    "claim_patterns": [
+      "\\bnothing\\s+(was\\s+|were\\s+|has\\s+been\\s+|got\\s+)?(written|changed|saved|entered|submitted|modified)\\b",
+      "\\b(did\\s+not|didn't|was\\s+not|wasn't|has\\s+not|hasn't|never)\\s+(change|changed|write|written|save|saved)\\b",
+      "\\bno\\s+(changes?|writes?)\\s+(was\\s+|were\\s+)?(made|written)\\b",
+      "\\bhalted\\s+before\\s+writing\\b",
+      "\\bstopped\\s+safely\\b",
+      "\\bsafe\\s+to\\s+(re-?run|retry|try\\s+again|run\\s+(it\\s+|this\\s+)?again)\\b",
+      "\\b(record|chart|entry)\\s+(is|was|stays|stayed|remains|remained)\\s+unchanged\\b"
+    ],
+    "stop_context": "\\bhalt(s|ed|ing)?\\b|\\bstop(s|ped|ping)?\\b|\\bfail(s|ed|ure|ures)?\\b|\\berrors?\\b|\\btime[ds]?[- ]?out\\b|\\bcancel+(s|ed|ing)?\\b|\\babort(s|ed|ing)?\\b",
+    "proof_tokens": "\\b(HALTED_BEFORE_EFFECT|halted_before_effect|REJECTED_POLICY|rejected_policy|CANCELED|FAILED_PLATFORM|failed_platform|stopped_before_change|may_have_changed|plain_outcome)\\b",
+    "window_lines": 3
+  }
+}

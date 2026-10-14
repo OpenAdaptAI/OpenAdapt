@@ -1,0 +1,128 @@
+{
+  "$defs": {
+    "BusinessDecisionAnswerReceiptReason": {
+      "enum": [
+        "recorded_pending_revalidation",
+        "authorization_refused",
+        "option_refused",
+        "evidence_refused",
+        "revalidation_refused",
+        "expired",
+        "superseded",
+        "delivery_uncertain"
+      ],
+      "title": "BusinessDecisionAnswerReceiptReason",
+      "type": "string"
+    },
+    "BusinessDecisionAnswerReceiptState": {
+      "description": "A runner result for one answer.  No member claims a verified effect.",
+      "enum": [
+        "answer_recorded",
+        "refused",
+        "expired",
+        "superseded",
+        "delivery_uncertain"
+      ],
+      "title": "BusinessDecisionAnswerReceiptState",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A signed runner result that reports answer handling, not business success.",
+  "properties": {
+    "answer_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Answer Digest",
+      "type": "string"
+    },
+    "decided_at": {
+      "maxLength": 40,
+      "minLength": 20,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?(Z|[+-]\\d{2}:\\d{2})$",
+      "title": "Decided At",
+      "type": "string"
+    },
+    "issuer_key_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Issuer Key Id",
+      "type": "string"
+    },
+    "option_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$",
+      "title": "Option Id",
+      "type": "string"
+    },
+    "reason_code": {
+      "$ref": "#/$defs/BusinessDecisionAnswerReceiptReason"
+    },
+    "request_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Request Digest",
+      "type": "string"
+    },
+    "runner_decision_receipt_digest": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Runner Decision Receipt Digest"
+    },
+    "schema_version": {
+      "const": "openadapt.business-decision-answer-receipt/v1",
+      "default": "openadapt.business-decision-answer-receipt/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "signature": {
+      "pattern": "^hmac-sha256:[0-9a-f]{64}$",
+      "title": "Signature",
+      "type": "string"
+    },
+    "signature_algorithm": {
+      "const": "hmac-sha256",
+      "default": "hmac-sha256",
+      "title": "Signature Algorithm",
+      "type": "string"
+    },
+    "state": {
+      "$ref": "#/$defs/BusinessDecisionAnswerReceiptState"
+    },
+    "task_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Task Digest",
+      "type": "string"
+    },
+    "task_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Task Id",
+      "type": "string"
+    },
+    "task_revision": {
+      "maximum": 2147483647,
+      "minimum": 1,
+      "title": "Task Revision",
+      "type": "integer"
+    }
+  },
+  "required": [
+    "task_id",
+    "task_revision",
+    "task_digest",
+    "request_digest",
+    "answer_digest",
+    "option_id",
+    "state",
+    "reason_code",
+    "decided_at",
+    "issuer_key_id",
+    "signature"
+  ],
+  "title": "BusinessDecisionAnswerReceiptV1",
+  "type": "object"
+}

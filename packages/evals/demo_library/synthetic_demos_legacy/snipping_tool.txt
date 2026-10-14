@@ -1,0 +1,53 @@
+TASK: Take a screenshot using Snipping Tool
+DOMAIN: snipping_tool
+
+STEPS:
+1. Open Snipping Tool using keyboard shortcut
+   REASONING: Windows+Shift+S is the fastest way to open Snipping Tool
+   ACTION: HOTKEY("win", "shift", "s")
+
+2. Wait for Snipping Tool overlay to appear
+   REASONING: The screen dims and toolbar appears at top
+   ACTION: WAIT(1.0)
+
+3. Click on the Rectangular Snip option
+   REASONING: Rectangular snip is the default and most common mode
+   ACTION: CLICK(x=0.45, y=0.02)
+
+4. Click and drag to select a screen region
+   REASONING: Define the area to capture by dragging
+   ACTION: DRAG(start_x=0.2, start_y=0.2, end_x=0.8, end_y=0.8)
+
+5. Wait for screenshot to be captured
+   REASONING: Snipping Tool captures and copies to clipboard
+   ACTION: WAIT(1.0)
+
+6. Click on the notification that appears
+   REASONING: Clicking the notification opens Snipping Tool editor
+   ACTION: CLICK(x=0.95, y=0.9)
+
+7. Wait for Snipping Tool editor to open
+   REASONING: Editor window needs time to load with the screenshot
+   ACTION: WAIT(1.0)
+
+8. Click the Save button
+   REASONING: Save the screenshot to a file
+   ACTION: CLICK(x=0.03, y=0.06)
+
+9. Wait for Save dialog to appear
+   REASONING: File dialog needs time to open
+   ACTION: WAIT(0.5)
+
+10. Type a filename for the screenshot
+    REASONING: Provide a descriptive name for the saved file
+    ACTION: TYPE("my_screenshot")
+
+11. Click the Save button in the dialog
+    REASONING: Confirm the save operation
+    ACTION: CLICK(x=0.85, y=0.95)
+
+12. Verify screenshot is saved
+    REASONING: File should be saved to default Pictures folder
+    ACTION: DONE()
+
+EXPECTED_OUTCOME: Screenshot is captured and saved as a PNG file in the Pictures folder

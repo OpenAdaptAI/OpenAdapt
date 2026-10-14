@@ -1,0 +1,394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpenAdapt Eval: Zero-Shot vs Demo-Conditioned (2026-02-19)</title>
+<style>
+:root {
+  --bg: #0d1117; --bg2: #161b22; --bg3: #21262d;
+  --fg: #c9d1d9; --fg2: #8b949e; --accent: #58a6ff;
+  --green: #3fb950; --red: #f85149; --yellow: #d29922;
+  --border: #30363d;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--fg); }
+.header { background: var(--bg2); border-bottom: 1px solid var(--border); padding: 20px 32px; }
+.header h1 { font-size: 24px; font-weight: 600; }
+.header .subtitle { color: var(--fg2); margin-top: 4px; font-size: 14px; }
+.summary-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; padding: 24px 32px; }
+.summary-card { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; }
+.summary-card .label { font-size: 12px; color: var(--fg2); text-transform: uppercase; letter-spacing: 0.5px; }
+.summary-card .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+.summary-card .value.zero { color: var(--red); }
+.summary-card .value.good { color: var(--green); }
+.tabs { display: flex; gap: 0; padding: 0 32px; background: var(--bg2); border-bottom: 1px solid var(--border); }
+.tab { padding: 12px 24px; cursor: pointer; color: var(--fg2); border-bottom: 2px solid transparent; font-size: 14px; font-weight: 500; transition: all 0.15s; }
+.tab:hover { color: var(--fg); background: var(--bg3); }
+.tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.content { padding: 24px 32px; }
+.comparison-panel { display: none; }
+.comparison-panel.active { display: block; }
+.task-header { margin-bottom: 20px; }
+.task-header h2 { font-size: 20px; margin-bottom: 8px; }
+.task-header .instruction { color: var(--fg2); font-style: italic; padding: 12px 16px; background: var(--bg2); border-radius: 6px; border-left: 3px solid var(--accent); }
+.side-by-side { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; margin-top: 20px; }
+.condition-col { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+.condition-col .col-header { padding: 12px 16px; font-weight: 600; font-size: 14px; border-bottom: 1px solid var(--border); display: flex; justify-content: space-between; align-items: center; }
+.condition-col .col-header.zero-shot { background: linear-gradient(135deg, #1a1a2e, #16213e); }
+.condition-col .col-header.demo-cond { background: linear-gradient(135deg, #1a2e1a, #0d3321); }
+.condition-col .col-header .badge { font-size: 11px; padding: 2px 8px; border-radius: 12px; font-weight: 600; }
+.badge.fail { background: rgba(248,81,73,0.2); color: var(--red); }
+.badge.pass { background: rgba(63,185,80,0.2); color: var(--green); }
+.screenshot-area { padding: 16px; position: relative; }
+.screenshot-area img { width: 100%; border-radius: 4px; border: 1px solid var(--border); display: block; }
+.step-controls { padding: 12px 16px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+.step-controls button { background: var(--bg3); border: 1px solid var(--border); color: var(--fg); padding: 6px 14px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+.step-controls button:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
+.step-controls button:disabled { opacity: 0.4; cursor: default; }
+.step-controls button:disabled:hover { background: var(--bg3); color: var(--fg); border-color: var(--border); }
+.step-indicator { font-size: 13px; color: var(--fg2); min-width: 80px; text-align: center; }
+.action-line { font-size: 12px; font-family: 'SFMono-Regular', Consolas, monospace; padding: 8px 16px; border-top: 1px solid var(--border); color: var(--fg2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.action-line .action-type { font-weight: 700; display: inline-block; min-width: 50px; }
+.action-line .action-type.click { color: var(--accent); }
+.action-line .action-type.type { color: var(--green); }
+.action-line .action-type.key { color: var(--yellow); }
+.action-line .action-type.done { color: #a371f7; }
+.click-marker { position: absolute; width: 20px; height: 20px; border-radius: 50%; border: 3px solid var(--red); background: rgba(248,81,73,0.3); transform: translate(-50%, -50%); pointer-events: none; z-index: 10; transition: all 0.3s; }
+.stats-row { display: flex; gap: 16px; padding: 8px 16px; border-top: 1px solid var(--border); font-size: 12px; color: var(--fg2); }
+.stats-row span { display: flex; align-items: center; gap: 4px; }
+.action-log { max-height: 300px; overflow-y: auto; border-top: 1px solid var(--border); }
+.action-log .log-entry { padding: 4px 16px; font-size: 11px; font-family: monospace; border-bottom: 1px solid rgba(48,54,61,0.5); display: flex; gap: 8px; }
+.action-log .log-entry:hover { background: var(--bg3); }
+.action-log .log-entry .step-num { color: var(--fg2); min-width: 24px; }
+.demo-section { margin-top: 24px; }
+.demo-section h3 { font-size: 16px; margin-bottom: 12px; }
+.demo-text { background: var(--bg2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; font-size: 13px; line-height: 1.6; white-space: pre-wrap; max-height: 400px; overflow-y: auto; }
+.playback-bar { padding: 16px 32px; background: var(--bg2); border-top: 1px solid var(--border); position: sticky; bottom: 0; display: flex; align-items: center; gap: 16px; z-index: 100; }
+.playback-bar input[type=range] { flex: 1; accent-color: var(--accent); }
+.playback-bar .play-btn { background: var(--accent); color: #fff; border: none; padding: 8px 20px; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 600; min-width: 80px; }
+.playback-bar .play-btn:hover { opacity: 0.9; }
+.viewer-links { margin-top: 16px; display: flex; gap: 12px; }
+.viewer-links a { color: var(--accent); text-decoration: none; font-size: 13px; padding: 6px 12px; border: 1px solid var(--border); border-radius: 6px; }
+.viewer-links a:hover { background: var(--bg3); }
+@media (max-width: 900px) { .side-by-side { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <h1>Zero-Shot vs Demo-Conditioned Evaluation</h1>
+  <div class="subtitle">WAA Benchmark &middot; GPT-5.1 &middot; 2026-02-19 &middot; 3 tasks &times; 2 conditions = 6 runs</div>
+</div>
+
+<div class="summary-grid">
+  <div class="summary-card">
+    <div class="label">Zero-Shot Success</div>
+    <div class="value zero">0 / 3</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Demo-Conditioned Success</div>
+    <div class="value zero">0 / 3</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Closest to Success</div>
+    <div class="value" style="font-size:16px; color: var(--yellow);">Notepad (demo): 1 click away</div>
+  </div>
+  <div class="summary-card">
+    <div class="label">Key Finding</div>
+    <div class="value" style="font-size:14px;">Demo dramatically improves action coherence</div>
+  </div>
+</div>
+
+<div class="tabs">
+  <div class="tab active" onclick="showTask('settings')">Settings</div>
+  <div class="tab" onclick="showTask('archive')">Archive</div>
+  <div class="tab" onclick="showTask('notepad')">Notepad</div>
+  <div class="tab" onclick="showTask('demos')">Demo Prompts</div>
+  <div class="tab" onclick="showTask('analysis')">Analysis</div>
+</div>
+
+<div id="panels"></div>
+
+<div class="playback-bar">
+  <button class="play-btn" id="playBtn" onclick="togglePlay()">&#9654; Play</button>
+  <input type="range" id="stepSlider" min="0" max="19" value="0" oninput="setStep(parseInt(this.value))">
+  <span id="globalStepLabel" style="color:var(--fg2);font-size:13px;min-width:80px;text-align:right;">Step 0 / 19</span>
+</div>
+
+<script>
+const RUNS = {"zero-shot_settings": {"condition": "zero-shot", "task": "settings", "run_name": "waa-live_eval_20260219_194444", "task_id": "37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos", "instruction": "I need to \"turn off\" notifications for my system in the settings.", "score": 0.0, "num_steps": 20, "total_time": 469.92317525006365, "actions": [{"type": "click", "code": "computer.click(640, 686)", "x": 0.3333333333333333, "y": 0.5716666666666667}, {"type": "click", "code": "computer.click(690, 710)", "x": 0.359375, "y": 0.5916666666666667}, {"type": "click", "code": "computer.click(690, 710)", "x": 0.359375, "y": 0.5916666666666667}, {"type": "click", "code": "computer.click(640, 706)", "x": 0.3333333333333333, "y": 0.5883333333333334}, {"type": "click", "code": "computer.click(846, 502)", "x": 0.440625, "y": 0.41833333333333333}, {"type": "click", "code": "computer.click(640, 360)", "x": 0.3333333333333333, "y": 0.3}, {"type": "click", "code": "computer.click(92, 170)", "x": 0.04791666666666667, "y": 0.14166666666666666}, {"type": "click", "code": "computer.click(108, 214)", "x": 0.05625, "y": 0.17833333333333334}, {"type": "click", "code": "computer.click(333, 409)", "x": 0.1734375, "y": 0.3408333333333333}, {"type": "click", "code": "computer.click(98, 164)", "x": 0.051041666666666666, "y": 0.13666666666666666}, {"type": "click", "code": "computer.click(102, 214)", "x": 0.053125, "y": 0.17833333333333334}, {"type": "click", "code": "computer.click(333, 409)", "x": 0.1734375, "y": 0.3408333333333333}, {"type": "click", "code": "computer.click(96, 166)", "x": 0.05, "y": 0.13833333333333334}, {"type": "click", "code": "computer.click(104, 214)", "x": 0.05416666666666667, "y": 0.17833333333333334}, {"type": "click", "code": "computer.click(333, 409)", "x": 0.1734375, "y": 0.3408333333333333}, {"type": "click", "code": "computer.click(95, 170)", "x": 0.049479166666666664, "y": 0.14166666666666666}, {"type": "click", "code": "computer.click(103, 214)", "x": 0.05364583333333333, "y": 0.17833333333333334}, {"type": "click", "code": "computer.click(338, 465)", "x": 0.17604166666666668, "y": 0.3875}, {"type": "click", "code": "computer.click(93, 183)", "x": 0.0484375, "y": 0.1525}, {"type": "click", "code": "computer.click(103, 214)", "x": 0.05364583333333333, "y": 0.17833333333333334}], "screenshots": ["../../benchmark_results/waa-live_eval_20260219_194444/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_000.png", "../../benchmark_results/waa-live_eval_20260219_194444/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_001.png", "../../benchmark_results/waa-live_eval_20260219_194444/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_002.png", "../../benchmark_results/waa-live_eval_20260219_194444/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_003.png", "../../benchmark_results/waa-live_eval_20260219_194444/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_004.png", "../../benchmark_results/waa-live_eval_20260219_194444/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_005.png", "../../benchmark_results/waa-live_eval_20260219_194444/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_006.png", "../../benchmark_results/waa-live_eval_20260219_194444/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_007.png", "../../benchmark_results/waa-live_eval_20260219_194444/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_008.png", "../../benchmark_results/waa-live_eval_20260219_194444/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_009.png", "../../benchmark_results/waa-live_eval_20260219_194444/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_010.png", "../../benchmark_results/waa-live_eval_20260219_194444/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_011.png", "../../benchmark_results/waa-live_eval_20260219_194444/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_012.png", "../../benchmark_results/waa-live_eval_20260219_194444/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_013.png", "../../benchmark_results/waa-live_eval_20260219_194444/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_014.png", "../../benchmark_results/waa-live_eval_20260219_194444/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_015.png", "../../benchmark_results/waa-live_eval_20260219_194444/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_016.png", "../../benchmark_results/waa-live_eval_20260219_194444/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_017.png", "../../benchmark_results/waa-live_eval_20260219_194444/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_018.png", "../../benchmark_results/waa-live_eval_20260219_194444/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_019.png"], "viewer_path": "../../benchmark_results/waa-live_eval_20260219_194444/viewer.html"}, "zero-shot_archive": {"condition": "zero-shot", "task": "archive", "run_name": "waa-live_eval_20260219_202921", "task_id": "0c9dda13-428c-492b-900b-f48562111f93-WOS", "instruction": "Create a new folder named \"Archive\" in the Documents folder and move all .docx files into it.", "score": 0.0, "num_steps": 20, "total_time": 512.8050935000647, "actions": [{"type": "click", "code": "computer.click(603, 683)", "x": 0.3140625, "y": 0.5691666666666667}, {"type": "click", "code": "computer.click(580, 540)", "x": 0.3020833333333333, "y": 0.45}, {"type": "click", "code": "computer.click(607, 683)", "x": 0.31614583333333335, "y": 0.5691666666666667}, {"type": "click", "code": "computer.click(273, 610)", "x": 0.1421875, "y": 0.5083333333333333}, {"type": "click", "code": "computer.click(640, 683)", "x": 0.3333333333333333, "y": 0.5691666666666667}, {"type": "click", "code": "computer.click(630, 418)", "x": 0.328125, "y": 0.34833333333333333}, {"type": "click", "code": "computer.click(606, 683)", "x": 0.315625, "y": 0.5691666666666667}, {"type": "click", "code": "computer.click(580, 418)", "x": 0.3020833333333333, "y": 0.34833333333333333}, {"type": "click", "code": "computer.click(606, 683)", "x": 0.315625, "y": 0.5691666666666667}, {"type": "click", "code": "computer.click(580, 418)", "x": 0.3020833333333333, "y": 0.34833333333333333}, {"type": "click", "code": "computer.click(640, 683)", "x": 0.3333333333333333, "y": 0.5691666666666667}, {"type": "click", "code": "computer.click(580, 418)", "x": 0.3020833333333333, "y": 0.34833333333333333}, {"type": "click", "code": "computer.click(606, 683)", "x": 0.315625, "y": 0.5691666666666667}, {"type": "click", "code": "computer.click(580, 418)", "x": 0.3020833333333333, "y": 0.34833333333333333}, {"type": "click", "code": "computer.click(606, 683)", "x": 0.315625, "y": 0.5691666666666667}, {"type": "click", "code": "computer.click(580, 418)", "x": 0.3020833333333333, "y": 0.34833333333333333}, {"type": "click", "code": "computer.click(606, 683)", "x": 0.315625, "y": 0.5691666666666667}, {"type": "click", "code": "computer.click(580, 418)", "x": 0.3020833333333333, "y": 0.34833333333333333}, {"type": "click", "code": "computer.click(606, 683)", "x": 0.315625, "y": 0.5691666666666667}, {"type": "click", "code": "computer.click(412, 514)", "x": 0.21458333333333332, "y": 0.42833333333333334}], "screenshots": ["../../benchmark_results/waa-live_eval_20260219_202921/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_000.png", "../../benchmark_results/waa-live_eval_20260219_202921/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_001.png", "../../benchmark_results/waa-live_eval_20260219_202921/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_002.png", "../../benchmark_results/waa-live_eval_20260219_202921/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_003.png", "../../benchmark_results/waa-live_eval_20260219_202921/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_004.png", "../../benchmark_results/waa-live_eval_20260219_202921/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_005.png", "../../benchmark_results/waa-live_eval_20260219_202921/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_006.png", "../../benchmark_results/waa-live_eval_20260219_202921/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_007.png", "../../benchmark_results/waa-live_eval_20260219_202921/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_008.png", "../../benchmark_results/waa-live_eval_20260219_202921/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_009.png", "../../benchmark_results/waa-live_eval_20260219_202921/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_010.png", "../../benchmark_results/waa-live_eval_20260219_202921/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_011.png", "../../benchmark_results/waa-live_eval_20260219_202921/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_012.png", "../../benchmark_results/waa-live_eval_20260219_202921/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_013.png", "../../benchmark_results/waa-live_eval_20260219_202921/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_014.png", "../../benchmark_results/waa-live_eval_20260219_202921/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_015.png", "../../benchmark_results/waa-live_eval_20260219_202921/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_016.png", "../../benchmark_results/waa-live_eval_20260219_202921/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_017.png", "../../benchmark_results/waa-live_eval_20260219_202921/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_018.png", "../../benchmark_results/waa-live_eval_20260219_202921/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_019.png"], "viewer_path": "../../benchmark_results/waa-live_eval_20260219_202921/viewer.html"}, "zero-shot_notepad": {"condition": "zero-shot", "task": "notepad", "run_name": "waa-live_eval_20260219_203754", "task_id": "366de66e-cbae-4d72-b042-26390db2b145-WOS", "instruction": "Please open Notepad, create a new file named \"draft.txt\", type \"This is a draft.\", and save it to the Documents folder.", "score": 0.0, "num_steps": 20, "total_time": 407.0789629999781, "actions": [{"type": "click", "code": "computer.click(640, 688)", "x": 0.3333333333333333, "y": 0.5733333333333334}, {"type": "click", "code": "computer.click(460, 688)", "x": 0.23958333333333334, "y": 0.5733333333333334}, {"type": "click", "code": "computer.click(410, 688)", "x": 0.21354166666666666, "y": 0.5733333333333334}, {"type": "click", "code": "computer.click(640, 688)", "x": 0.3333333333333333, "y": 0.5733333333333334}, {"type": "click", "code": "computer.click(410, 688)", "x": 0.21354166666666666, "y": 0.5733333333333334}, {"type": "click", "code": "computer.click(640, 688)", "x": 0.3333333333333333, "y": 0.5733333333333334}, {"type": "type", "code": "computer.type(\"Notepad\")", "x": null, "y": null}, {"type": "click", "code": "computer.click(560, 246)", "x": 0.2916666666666667, "y": 0.205}, {"type": "click", "code": "computer.click(548, 86)", "x": 0.28541666666666665, "y": 0.07166666666666667}, {"type": "click", "code": "computer.click(560, 246)", "x": 0.2916666666666667, "y": 0.205}, {"type": "click", "code": "computer.click(365, 86)", "x": 0.19010416666666666, "y": 0.07166666666666667}, {"type": "click", "code": "computer.click(640, 688)", "x": 0.3333333333333333, "y": 0.5733333333333334}, {"type": "type", "code": "computer.type(\"notepad\")", "x": null, "y": null}, {"type": "click", "code": "computer.click(560, 246)", "x": 0.2916666666666667, "y": 0.205}, {"type": "click", "code": "computer.click(365, 86)", "x": 0.19010416666666666, "y": 0.07166666666666667}, {"type": "click", "code": "computer.click(640, 688)", "x": 0.3333333333333333, "y": 0.5733333333333334}, {"type": "type", "code": "computer.type(\"notepad\")", "x": null, "y": null}, {"type": "click", "code": "computer.click(560, 246)", "x": 0.2916666666666667, "y": 0.205}, {"type": "click", "code": "computer.click(365, 86)", "x": 0.19010416666666666, "y": 0.07166666666666667}, {"type": "click", "code": "computer.click(640, 688)", "x": 0.3333333333333333, "y": 0.5733333333333334}], "screenshots": ["../../benchmark_results/waa-live_eval_20260219_203754/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_000.png", "../../benchmark_results/waa-live_eval_20260219_203754/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_001.png", "../../benchmark_results/waa-live_eval_20260219_203754/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_002.png", "../../benchmark_results/waa-live_eval_20260219_203754/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_003.png", "../../benchmark_results/waa-live_eval_20260219_203754/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_004.png", "../../benchmark_results/waa-live_eval_20260219_203754/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_005.png", "../../benchmark_results/waa-live_eval_20260219_203754/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_006.png", "../../benchmark_results/waa-live_eval_20260219_203754/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_007.png", "../../benchmark_results/waa-live_eval_20260219_203754/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_008.png", "../../benchmark_results/waa-live_eval_20260219_203754/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_009.png", "../../benchmark_results/waa-live_eval_20260219_203754/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_010.png", "../../benchmark_results/waa-live_eval_20260219_203754/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_011.png", "../../benchmark_results/waa-live_eval_20260219_203754/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_012.png", "../../benchmark_results/waa-live_eval_20260219_203754/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_013.png", "../../benchmark_results/waa-live_eval_20260219_203754/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_014.png", "../../benchmark_results/waa-live_eval_20260219_203754/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_015.png", "../../benchmark_results/waa-live_eval_20260219_203754/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_016.png", "../../benchmark_results/waa-live_eval_20260219_203754/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_017.png", "../../benchmark_results/waa-live_eval_20260219_203754/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_018.png", "../../benchmark_results/waa-live_eval_20260219_203754/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_019.png"], "viewer_path": "../../benchmark_results/waa-live_eval_20260219_203754/viewer.html"}, "demo-cond_settings": {"condition": "demo-cond", "task": "settings", "run_name": "waa-live_eval_20260219_204442", "task_id": "37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos", "instruction": "I need to \"turn off\" notifications for my system in the settings.", "score": 0.0, "num_steps": 20, "total_time": 398.36664941709023, "actions": [{"type": "click", "code": "computer.click(608, 684)", "x": 0.31666666666666665, "y": 0.57}, {"type": "click", "code": "computer.click(469, 692)", "x": 0.24427083333333333, "y": 0.5766666666666667}, {"type": "type", "code": "computer.type(\"Settings\")", "x": null, "y": null}, {"type": "click", "code": "computer.click(430, 259)", "x": 0.22395833333333334, "y": 0.21583333333333332}, {"type": "click", "code": "computer.click(640, 692)", "x": 0.3333333333333333, "y": 0.5766666666666667}, {"type": "click", "code": "computer.click(457, 692)", "x": 0.23802083333333332, "y": 0.5766666666666667}, {"type": "type", "code": "computer.type(\"Settings\")", "x": null, "y": null}, {"type": "click", "code": "computer.click(430, 259)", "x": 0.22395833333333334, "y": 0.21583333333333332}, {"type": "click", "code": "computer.click(640, 692)", "x": 0.3333333333333333, "y": 0.5766666666666667}, {"type": "click", "code": "computer.click(457, 692)", "x": 0.23802083333333332, "y": 0.5766666666666667}, {"type": "click", "code": "computer.click(507, 710)", "x": 0.2640625, "y": 0.5916666666666667}, {"type": "type", "code": "computer.type(\"Settings\")", "x": null, "y": null}, {"type": "click", "code": "computer.click(430, 259)", "x": 0.22395833333333334, "y": 0.21583333333333332}, {"type": "click", "code": "computer.click(640, 692)", "x": 0.3333333333333333, "y": 0.5766666666666667}, {"type": "click", "code": "computer.click(457, 692)", "x": 0.23802083333333332, "y": 0.5766666666666667}, {"type": "click", "code": "computer.click(507, 710)", "x": 0.2640625, "y": 0.5916666666666667}, {"type": "type", "code": "computer.type(\"Settings\")", "x": null, "y": null}, {"type": "click", "code": "computer.click(412, 197)", "x": 0.21458333333333332, "y": 0.16416666666666666}, {"type": "click", "code": "computer.click(640, 692)", "x": 0.3333333333333333, "y": 0.5766666666666667}, {"type": "click", "code": "computer.click(457, 692)", "x": 0.23802083333333332, "y": 0.5766666666666667}], "screenshots": ["../../benchmark_results/waa-live_eval_20260219_204442/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_000.png", "../../benchmark_results/waa-live_eval_20260219_204442/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_001.png", "../../benchmark_results/waa-live_eval_20260219_204442/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_002.png", "../../benchmark_results/waa-live_eval_20260219_204442/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_003.png", "../../benchmark_results/waa-live_eval_20260219_204442/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_004.png", "../../benchmark_results/waa-live_eval_20260219_204442/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_005.png", "../../benchmark_results/waa-live_eval_20260219_204442/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_006.png", "../../benchmark_results/waa-live_eval_20260219_204442/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_007.png", "../../benchmark_results/waa-live_eval_20260219_204442/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_008.png", "../../benchmark_results/waa-live_eval_20260219_204442/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_009.png", "../../benchmark_results/waa-live_eval_20260219_204442/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_010.png", "../../benchmark_results/waa-live_eval_20260219_204442/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_011.png", "../../benchmark_results/waa-live_eval_20260219_204442/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_012.png", "../../benchmark_results/waa-live_eval_20260219_204442/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_013.png", "../../benchmark_results/waa-live_eval_20260219_204442/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_014.png", "../../benchmark_results/waa-live_eval_20260219_204442/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_015.png", "../../benchmark_results/waa-live_eval_20260219_204442/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_016.png", "../../benchmark_results/waa-live_eval_20260219_204442/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_017.png", "../../benchmark_results/waa-live_eval_20260219_204442/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_018.png", "../../benchmark_results/waa-live_eval_20260219_204442/tasks/37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos/screenshots/step_019.png"], "viewer_path": "../../benchmark_results/waa-live_eval_20260219_204442/viewer.html"}, "demo-cond_archive": {"condition": "demo-cond", "task": "archive", "run_name": "waa-live_eval_20260219_205121", "task_id": "0c9dda13-428c-492b-900b-f48562111f93-WOS", "instruction": "Create a new folder named \"Archive\" in the Documents folder and move all .docx files into it.", "score": 0.0, "num_steps": 20, "total_time": 468.3551338330144, "actions": [{"type": "type", "code": "computer.type(\"e\")", "x": null, "y": null}, {"type": "key", "code": "computer.press(\"enter\")", "x": null, "y": null}, {"type": "click", "code": "computer.click(777, 458)", "x": 0.4046875, "y": 0.38166666666666665}, {"type": "click", "code": "computer.click(632, 483)", "x": 0.32916666666666666, "y": 0.4025}, {"type": "click", "code": "computer.click(777, 458)", "x": 0.4046875, "y": 0.38166666666666665}, {"type": "click", "code": "computer.click(640, 458)", "x": 0.3333333333333333, "y": 0.38166666666666665}, {"type": "click", "code": "computer.click(777, 458)", "x": 0.4046875, "y": 0.38166666666666665}, {"type": "click", "code": "computer.click(640, 458)", "x": 0.3333333333333333, "y": 0.38166666666666665}, {"type": "click", "code": "computer.click(777, 458)", "x": 0.4046875, "y": 0.38166666666666665}, {"type": "click", "code": "computer.click(640, 458)", "x": 0.3333333333333333, "y": 0.38166666666666665}, {"type": "click", "code": "computer.click(777, 458)", "x": 0.4046875, "y": 0.38166666666666665}, {"type": "click", "code": "computer.click(640, 458)", "x": 0.3333333333333333, "y": 0.38166666666666665}, {"type": "click", "code": "computer.click(777, 458)", "x": 0.4046875, "y": 0.38166666666666665}, {"type": "click", "code": "computer.click(640, 458)", "x": 0.3333333333333333, "y": 0.38166666666666665}, {"type": "click", "code": "computer.click(777, 458)", "x": 0.4046875, "y": 0.38166666666666665}, {"type": "click", "code": "computer.click(640, 458)", "x": 0.3333333333333333, "y": 0.38166666666666665}, {"type": "click", "code": "computer.click(777, 458)", "x": 0.4046875, "y": 0.38166666666666665}, {"type": "click", "code": "computer.click(640, 458)", "x": 0.3333333333333333, "y": 0.38166666666666665}, {"type": "click", "code": "computer.click(777, 458)", "x": 0.4046875, "y": 0.38166666666666665}, {"type": "click", "code": "computer.click(640, 458)", "x": 0.3333333333333333, "y": 0.38166666666666665}], "screenshots": ["../../benchmark_results/waa-live_eval_20260219_205121/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_000.png", "../../benchmark_results/waa-live_eval_20260219_205121/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_001.png", "../../benchmark_results/waa-live_eval_20260219_205121/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_002.png", "../../benchmark_results/waa-live_eval_20260219_205121/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_003.png", "../../benchmark_results/waa-live_eval_20260219_205121/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_004.png", "../../benchmark_results/waa-live_eval_20260219_205121/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_005.png", "../../benchmark_results/waa-live_eval_20260219_205121/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_006.png", "../../benchmark_results/waa-live_eval_20260219_205121/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_007.png", "../../benchmark_results/waa-live_eval_20260219_205121/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_008.png", "../../benchmark_results/waa-live_eval_20260219_205121/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_009.png", "../../benchmark_results/waa-live_eval_20260219_205121/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_010.png", "../../benchmark_results/waa-live_eval_20260219_205121/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_011.png", "../../benchmark_results/waa-live_eval_20260219_205121/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_012.png", "../../benchmark_results/waa-live_eval_20260219_205121/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_013.png", "../../benchmark_results/waa-live_eval_20260219_205121/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_014.png", "../../benchmark_results/waa-live_eval_20260219_205121/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_015.png", "../../benchmark_results/waa-live_eval_20260219_205121/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_016.png", "../../benchmark_results/waa-live_eval_20260219_205121/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_017.png", "../../benchmark_results/waa-live_eval_20260219_205121/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_018.png", "../../benchmark_results/waa-live_eval_20260219_205121/tasks/0c9dda13-428c-492b-900b-f48562111f93-WOS/screenshots/step_019.png"], "viewer_path": "../../benchmark_results/waa-live_eval_20260219_205121/viewer.html"}, "demo-cond_notepad": {"condition": "demo-cond", "task": "notepad", "run_name": "waa-live_eval_20260219_205910", "task_id": "366de66e-cbae-4d72-b042-26390db2b145-WOS", "instruction": "Please open Notepad, create a new file named \"draft.txt\", type \"This is a draft.\", and save it to the Documents folder.", "score": 0.0, "num_steps": 17, "total_time": 398.98406920791604, "actions": [{"type": "click", "code": "computer.click(512, 690)", "x": 0.26666666666666666, "y": 0.575}, {"type": "type", "code": "computer.type(\"notepad\")", "x": null, "y": null}, {"type": "click", "code": "computer.click(640, 246)", "x": 0.3333333333333333, "y": 0.205}, {"type": "click", "code": "computer.click(552, 92)", "x": 0.2875, "y": 0.07666666666666666}, {"type": "click", "code": "computer.click(640, 246)", "x": 0.3333333333333333, "y": 0.205}, {"type": "click", "code": "computer.click(427, 92)", "x": 0.22239583333333332, "y": 0.07666666666666666}, {"type": "click", "code": "computer.click(640, 690)", "x": 0.3333333333333333, "y": 0.575}, {"type": "click", "code": "computer.click(430, 690)", "x": 0.22395833333333334, "y": 0.575}, {"type": "click", "code": "computer.click(624, 332)", "x": 0.325, "y": 0.27666666666666667}, {"type": "click", "code": "computer.click(640, 690)", "x": 0.3333333333333333, "y": 0.575}, {"type": "click", "code": "computer.click(263, 411)", "x": 0.13697916666666668, "y": 0.3425}, {"type": "type", "code": "computer.type(\"This is a draft.\")", "x": null, "y": null}, {"type": "key", "code": "computer.hotkey('ctrl', 's')", "x": null, "y": null}, {"type": "click", "code": "computer.click(184, 150)", "x": 0.09583333333333334, "y": 0.125}, {"type": "click", "code": "computer.click(384, 620)", "x": 0.2, "y": 0.5166666666666667}, {"type": "type", "code": "computer.type(\"draft.txt\")", "x": null, "y": null}, {"type": "click", "code": "computer.click(640, 650)", "x": 0.3333333333333333, "y": 0.5416666666666666}, {"type": "done", "code": "DONE", "x": null, "y": null}], "screenshots": ["../../benchmark_results/waa-live_eval_20260219_205910/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_000.png", "../../benchmark_results/waa-live_eval_20260219_205910/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_001.png", "../../benchmark_results/waa-live_eval_20260219_205910/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_002.png", "../../benchmark_results/waa-live_eval_20260219_205910/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_003.png", "../../benchmark_results/waa-live_eval_20260219_205910/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_004.png", "../../benchmark_results/waa-live_eval_20260219_205910/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_005.png", "../../benchmark_results/waa-live_eval_20260219_205910/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_006.png", "../../benchmark_results/waa-live_eval_20260219_205910/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_007.png", "../../benchmark_results/waa-live_eval_20260219_205910/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_008.png", "../../benchmark_results/waa-live_eval_20260219_205910/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_009.png", "../../benchmark_results/waa-live_eval_20260219_205910/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_010.png", "../../benchmark_results/waa-live_eval_20260219_205910/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_011.png", "../../benchmark_results/waa-live_eval_20260219_205910/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_012.png", "../../benchmark_results/waa-live_eval_20260219_205910/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_013.png", "../../benchmark_results/waa-live_eval_20260219_205910/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_014.png", "../../benchmark_results/waa-live_eval_20260219_205910/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_015.png", "../../benchmark_results/waa-live_eval_20260219_205910/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_016.png", "../../benchmark_results/waa-live_eval_20260219_205910/tasks/366de66e-cbae-4d72-b042-26390db2b145-WOS/screenshots/step_017.png"], "viewer_path": "../../benchmark_results/waa-live_eval_20260219_205910/viewer.html"}};
+const DEMOS = {"0c9dda13-428c-492b-900b-f48562111f93-WOS": "DEMONSTRATION:\nTask: Create a new folder named 'Archive' in the Documents folder and move all .docx files into it.\n\nStep 1:\n  Observation: The BEFORE image shows a Windows PowerShell window open with various log entries. The taskbar is visible at the bottom with icons for different applications. The red marker indicates interaction with the 'Search' icon on the taskbar.\n  Intent: The user is attempting to open File Explorer to access the Documents folder.\n  Action: TYPE(\"e\")\n  Result: The AFTER image shows that File Explorer has opened, displaying the Home directory with quick access to folders like Desktop, Documents, and Downloads.\n\nStep 2:\n  Observation: The BEFORE image shows the File Explorer application open to the Home directory. Key visible UI elements include: the 'Quick access' section with folders like Desktop and Documents, the 'Documents' folder in the navigation pane, the 'Search Home' bar at the top, and the 'New' button in the toolbar.\n  Intent: The user is navigating to the Documents folder to create a new folder named 'Archive'.\n  Action: CLICK(0.166, 0.569)\n  Result: The AFTER image shows that the File Explorer window now displays the contents of the Documents folder, including several files and folders.\n\nStep 3:\n  Observation: The application is File Explorer. The current panel displays the contents of the 'Documents' folder. Key visible UI elements include the navigation pane on the left, the 'New' button in the toolbar, the search bar at the top right, and a list of files and folders in the main area. The red marker indicates a right-click action in the main area.\n  Intent: The user is attempting to create a new folder in the 'Documents' directory.\n  Action: CLICK(0.345, 0.649)\n  Result: A context menu has appeared, offering options such as 'View', 'Sort by', 'Group by', 'New', and others.\n\nStep 4:\n  Observation: The application is Windows File Explorer, currently displaying the 'Documents' folder. Key visible UI elements include the navigation pane on the left, the file list in the center, a context menu with options like 'View', 'Sort by', 'Group by', and 'New', and a highlighted 'Folder' option in the context menu.\n  Intent: The user is creating a new folder named 'Archive' in the 'Documents' folder.\n  Action: TYPE(\"Archive\")\n  Result: A new folder named 'Archive' has been created in the 'Documents' folder.\n\nStep 5:\n  Observation: The application is File Explorer, displaying the 'Documents' folder. Key visible UI elements include the navigation pane on the left, the toolbar with options like 'New' and 'Sort' at the top, the file list in the center showing various files and folders, and the search bar at the top right.\n  Intent: The user is preparing to move .docx files into the newly created 'Archive' folder.\n  Action: TYPE(\"\")\n  Result: The file 'meeting_notes' is now selected in the file list.\n\nStep 6:\n  Observation: The application is File Explorer, currently displaying the 'Documents' folder. Key visible UI elements include the navigation pane on the left, the file list in the center, the 'New' button at the top left, and the search bar at the top right. The file 'meeting_notes' is selected.\n  Intent: The user is selecting multiple .docx files to move them into the 'Archive' folder.\n  Action: CLICK(0.284, 0.524)\n  Result: The file 'proposal' is now selected along with 'meeting_notes', indicating multiple selection.\n\nStep 7:\n  Observation: The application is File Explorer, currently displaying the 'Documents' folder. Key visible UI elements include the navigation pane on the left, the toolbar with options like 'New' and 'Sort' at the top, the file list in the center showing files and folders, and the search bar at the top right. The files 'meeting_notes' and 'proposal' are selected.\n  Intent: The user is attempting to select all .docx files to move them to the 'Archive' folder.\n  Action: TYPE(\"\u0018\")\n  Result: The file 'report' is now also selected, along with 'meeting_notes' and 'proposal'.\n\nStep 8:\n  Observation: The application is File Explorer, currently displaying the 'Documents' folder. Key visible UI elements include the navigation pane on the left, the toolbar with options like 'New' and 'Sort', the file list showing items such as 'meeting_notes', 'proposal', and 'report', and the 'Archive' folder. The red marker indicates a click on the 'Archive' folder.\n  Intent: The user intends to open the 'Archive' folder to move the selected .docx files into it.\n  Action: DOUBLE_CLICK(0.283, 0.610)\n  Result: The 'Documents' folder view is now empty, indicating that the user has navigated into the 'Archive' folder.\n\nStep 9:\n  Observation: The application is File Explorer. The current panel is the 'Archive' folder within the 'Documents' directory. Key visible UI elements include the navigation bar at the top showing 'Documents > Archive', the 'New' button on the toolbar, the empty file list area, and the sidebar with folder shortcuts.\n  Intent: The user is pasting the previously copied or cut .docx files into the 'Archive' folder.\n  Action: TYPE(\"\u0016\")\n  Result: The .docx files should appear in the 'Archive' folder, populating the previously empty file list area.\n\n---", "366de66e-cbae-4d72-b042-26390db2b145-WOS": "DEMONSTRATION:\nTask: Open Notepad, create a new file named 'draft.txt', type 'This is a draft.', and save it to the Documents folder.\n\nStep 1:\n  Observation: The BEFORE image shows the Windows PowerShell application open. The taskbar is visible at the bottom with various application icons. The Start menu is not open.\n  Intent: The user is attempting to open Notepad by searching for it.\n  Action: TYPE(\"notepad\")\n  Result: The AFTER image shows the Start menu open with search results for 'notepad'. The Notepad application is listed as the best match.\n\nStep 2:\n  Observation: The BEFORE image shows the Start menu with search results for 'notepad'. Key UI elements include the search bar at the top, 'Best match' section with 'notepad' listed, 'Apps' section with 'Notepad', and options like 'Open', 'Run as administrator', and 'Open file location' on the right.\n  Intent: The user intends to open Notepad to create a new text file.\n  Action: TYPE(\"Thisisadraft.\u0013\")\n  Result: The AFTER image shows the Notepad application open with a 'Save As' dialog. The text 'This is a draft.' is typed in the 'File name' field.\n\nStep 3:\n  Observation: The window is titled 'Save As' within the Notepad application. The current panel shows the Documents folder. Key visible UI elements include the 'File name' field with 'This is a draft.' typed in it, the 'Save as type' dropdown set to 'Text documents (*.txt)', the 'Save' button, and the 'Cancel' button.\n  Intent: The user is attempting to save the file with the specified name and content.\n  Action: CLICK(0.294, 0.532)\n  Result: There is no visible change between the BEFORE and AFTER images.\n\nStep 4:\n  Observation: The application window is 'Save As' dialog in Notepad. Key visible UI elements include the 'File name' input field at the bottom, 'Save as type' dropdown next to it, 'Save' button at the bottom right, 'Cancel' button next to 'Save', and the file list in the main area showing existing files.\n  Intent: The user is entering the desired file name to save the document as 'draft.txt'.\n  Action: TYPE(\"draft.txt\")\n  Result: A 'Confirm Save As' dialog appeared, indicating that 'draft.txt' already exists and asking if the user wants to replace it.\n\nStep 5:\n  Observation: The application window is 'Save As' with a 'Confirm Save As' dialog open. Key UI elements include the dialog box with the message 'draft.txt already exists. Do you want to replace it?', and buttons labeled 'Yes' and 'No'. The red marker indicates interaction with the 'Yes' button.\n  Intent: The user intends to confirm overwriting the existing 'draft.txt' file.\n  Action: TYPE(\"\")\n  Result: The 'Confirm Save As' dialog is closed, and the focus returns to the previous application window.\n\nStep 6:\n  Observation: The application window is Windows PowerShell. The current panel displays a series of log entries. Key visible UI elements include the title bar with the application name at the top, a series of log entries in the main panel, a tab bar with a '+' button for new tabs, and a taskbar at the bottom with various application icons.\n  Intent: The user is attempting to type a command or text into the PowerShell window.\n  Action: TYPE(\"\")\n  Result: The expected result is that the text or command typed by the user will appear in the PowerShell window at the location of the cursor.\n\n---", "37e10fc4-b4c5-4b02-a65c-bfae8bc51d3f-wos": "DEMONSTRATION:\nTask: Turn off notifications for my system in the settings.\n\nStep 1:\n  Observation: The application is Windows PowerShell. The taskbar is visible at the bottom of the screen. Key UI elements include the Start button on the left, several application icons in the taskbar, and the system tray on the right.\n  Intent: The user is trying to open the Start menu to access system settings.\n  Action: CLICK(0.263, 0.958)\n  Result: The Start menu is now open, displaying pinned applications and a search bar.\n\nStep 2:\n  Observation: The Start menu is open, displaying pinned applications and a search bar. Key visible UI elements include: 'Search for apps, settings, and documents' bar at the top, 'Pinned' section with app icons like Edge, Word, and Excel, 'Settings' icon in the Pinned section, 'Recommended' section with recent documents, and 'All apps' button on the right.\n  Intent: The user is trying to access the system settings to turn off notifications.\n  Action: CLICK(0.335, 0.518)\n  Result: The Settings application is now open, displaying the Home page with options like System, Bluetooth & devices, and Network & internet on the left sidebar.\n\nStep 3:\n  Observation: The application is 'Settings'. The current panel is 'Home'. Key visible UI elements include: 'Find a setting' search bar at the top, 'Home' highlighted in the left sidebar, 'System' option below 'Home' in the sidebar, a notification about backing up to Microsoft account in the main area, and 'Recommended settings' section at the bottom.\n  Intent: The user is navigating to the 'System' settings to access notification settings.\n  Action: CLICK(0.349, 0.311)\n  Result: The 'System' panel is now open, displaying options such as 'Display', 'Sound', 'Notifications', 'Focus', and others.\n\nStep 4:\n  Observation: The application is 'Settings'. The current panel is 'System'. Key visible UI elements include 'Display' at the top, 'Sound' below it, 'Notifications' with a red marker indicating interaction, 'Focus', and 'Power & battery' further down.\n  Intent: The user is attempting to access the notifications settings to turn off notifications.\n  Action: CLICK(0.576, 0.533)\n  Result: The screen now displays the 'Notifications' settings page, showing options like 'Notifications' toggle, 'Do not disturb', and 'Set priority notifications'.\n\nStep 5:\n  Observation: The application is 'Settings'. The current panel is 'System > Notifications'. Key visible UI elements include: 'Notifications' toggle at the top right, 'Do not disturb' toggle below it, 'Turn on do not disturb automatically' option below that, 'Set priority notifications' option further down, and 'Focus' option below that.\n  Intent: The user is performing this action to turn off notifications for the system.\n  Action: TYPE(\"\")\n  Result: The 'Notifications' toggle is expected to change from 'On' to 'Off'.\n\n---"};
+
+const TASKS = ['settings', 'archive', 'notepad'];
+let currentTask = 'settings';
+let currentStep = 0;
+let playing = false;
+let playInterval = null;
+
+function showTask(task) {
+  currentTask = task;
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', 
+      (task === 'settings' && i === 0) ||
+      (task === 'archive' && i === 1) ||
+      (task === 'notepad' && i === 2) ||
+      (task === 'demos' && i === 3) ||
+      (task === 'analysis' && i === 4)
+    );
+  });
+  document.querySelectorAll('.comparison-panel').forEach(p => {
+    p.classList.toggle('active', p.dataset.task === task);
+  });
+  if (TASKS.includes(task)) {
+    currentStep = 0;
+    updateStep();
+    document.querySelector('.playback-bar').style.display = 'flex';
+  } else {
+    document.querySelector('.playback-bar').style.display = 'none';
+  }
+}
+
+function getMaxSteps() {
+  const zs = RUNS['zero-shot_' + currentTask];
+  const dc = RUNS['demo-cond_' + currentTask];
+  return Math.max(zs ? zs.screenshots.length : 0, dc ? dc.screenshots.length : 0) - 1;
+}
+
+function setStep(step) {
+  currentStep = Math.max(0, Math.min(step, getMaxSteps()));
+  updateStep();
+}
+
+function updateStep() {
+  const maxSteps = getMaxSteps();
+  document.getElementById('stepSlider').max = maxSteps;
+  document.getElementById('stepSlider').value = currentStep;
+  document.getElementById('globalStepLabel').textContent = 'Step ' + currentStep + ' / ' + maxSteps;
+  
+  ['zero-shot', 'demo-cond'].forEach(cond => {
+    const key = cond + '_' + currentTask;
+    const run = RUNS[key];
+    if (!run) return;
+    
+    const imgEl = document.getElementById('img_' + key);
+    const actionEl = document.getElementById('action_' + key);
+    const stepEl = document.getElementById('step_' + key);
+    const markerEl = document.getElementById('marker_' + key);
+    
+    if (stepEl) {
+      stepEl.textContent = 'Step ' + currentStep + ' / ' + (run.screenshots.length - 1);
+    }
+
+    if (actionEl && currentStep < run.actions.length) {
+      const a = run.actions[currentStep];
+      actionEl.innerHTML = '<span class="action-type ' + a.type + '">' + a.type.toUpperCase() + '</span> ' + escapeHtml(a.code);
+    } else if (actionEl) {
+      actionEl.innerHTML = '<span class="action-type">--</span> (no action)';
+    }
+
+    // Position marker after image loads to ensure correct dimensions
+    const placeMarker = () => {
+      if (markerEl && currentStep < run.actions.length) {
+        const a = run.actions[currentStep];
+        const imgEl2 = document.getElementById('img_' + key);
+        const ssEl = imgEl2 ? imgEl2.parentElement : null;
+        if (a.x !== null && a.y !== null && a.type === 'click' && imgEl2 && ssEl) {
+          let nx = a.x, ny = a.y;
+          const code = a.code || '';
+          const cm = code.match(/computer\.click\((\d+),\s*(\d+)\)/);
+          if (cm && imgEl2.naturalWidth > 0) {
+            nx = parseInt(cm[1]) / imgEl2.naturalWidth;
+            ny = parseInt(cm[2]) / imgEl2.naturalHeight;
+          }
+          const imgR = imgEl2.getBoundingClientRect();
+          const ssR = ssEl.getBoundingClientRect();
+          if (imgR.width > 0) {
+            markerEl.style.display = 'block';
+            markerEl.style.left = (imgR.left - ssR.left + nx * imgR.width) + 'px';
+            markerEl.style.top = (imgR.top - ssR.top + ny * imgR.height) + 'px';
+          } else {
+            markerEl.style.display = 'none';
+          }
+        } else {
+          markerEl.style.display = 'none';
+        }
+      } else if (markerEl) {
+        markerEl.style.display = 'none';
+      }
+    };
+
+    if (imgEl && currentStep < run.screenshots.length) {
+      imgEl.onload = placeMarker;
+      imgEl.src = run.screenshots[currentStep];
+      if (imgEl.complete && imgEl.naturalWidth > 0) placeMarker();
+    }
+  });
+}
+
+function togglePlay() {
+  playing = !playing;
+  const btn = document.getElementById('playBtn');
+  if (playing) {
+    btn.innerHTML = '&#10074;&#10074; Pause';
+    playInterval = setInterval(() => {
+      if (currentStep >= getMaxSteps()) {
+        togglePlay();
+        return;
+      }
+      setStep(currentStep + 1);
+    }, 1500);
+  } else {
+    btn.innerHTML = '&#9654; Play';
+    clearInterval(playInterval);
+  }
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function buildPanels() {
+  const container = document.getElementById('panels');
+  let html = '';
+  
+  // Task comparison panels
+  TASKS.forEach(task => {
+    const zs = RUNS['zero-shot_' + task];
+    const dc = RUNS['demo-cond_' + task];
+    if (!zs || !dc) return;
+    
+    html += '<div class="comparison-panel' + (task === 'settings' ? ' active' : '') + '" data-task="' + task + '">';
+    html += '<div class="content">';
+    html += '<div class="task-header">';
+    html += '<h2>' + task.charAt(0).toUpperCase() + task.slice(1) + ' Task</h2>';
+    html += '<div class="instruction">' + escapeHtml(zs.instruction) + '</div>';
+    html += '<div class="viewer-links">';
+    html += '<a href="' + zs.viewer_path + '" target="_blank">Open Zero-Shot Viewer</a>';
+    html += '<a href="' + dc.viewer_path + '" target="_blank">Open Demo-Cond Viewer</a>';
+    html += '</div>';
+    html += '</div>';
+    
+    html += '<div class="side-by-side">';
+    
+    // Zero-shot column
+    html += buildColumn('zero-shot', task, zs);
+    // Demo-cond column
+    html += buildColumn('demo-cond', task, dc);
+    
+    html += '</div>'; // side-by-side
+    html += '</div>'; // content
+    html += '</div>'; // panel
+  });
+  
+  // Demo prompts panel
+  html += '<div class="comparison-panel" data-task="demos"><div class="content">';
+  html += '<h2>Demo Prompts</h2>';
+  html += '<p style="color:var(--fg2);margin-bottom:16px;">These annotated demonstrations are provided to the agent at every step in demo-conditioned mode.</p>';
+  for (const [name, text] of Object.entries(DEMOS)) {
+    html += '<div class="demo-section"><h3>' + escapeHtml(name) + '</h3>';
+    html += '<div class="demo-text">' + escapeHtml(text) + '</div></div>';
+  }
+  html += '</div></div>';
+  
+  // Analysis panel
+  html += '<div class="comparison-panel" data-task="analysis"><div class="content">';
+  html += '<h2>Comparative Analysis</h2>';
+  
+  // Action type breakdown table
+  html += '<h3 style="margin:20px 0 12px;">Action Type Distribution</h3>';
+  html += '<table style="width:100%;border-collapse:collapse;font-size:13px;">';
+  html += '<tr style="border-bottom:1px solid var(--border);"><th style="text-align:left;padding:8px;">Condition</th><th style="text-align:left;padding:8px;">Task</th><th style="padding:8px;">Clicks</th><th style="padding:8px;">Types</th><th style="padding:8px;">Keys</th><th style="padding:8px;">Done</th><th style="padding:8px;">Steps</th><th style="padding:8px;">Time</th></tr>';
+  
+  for (const key of Object.keys(RUNS).sort()) {
+    const r = RUNS[key];
+    const counts = {click:0, type:0, key:0, done:0};
+    r.actions.forEach(a => { counts[a.type] = (counts[a.type] || 0) + 1; });
+    const rowBg = r.condition === 'demo-cond' ? 'rgba(63,185,80,0.05)' : '';
+    html += '<tr style="border-bottom:1px solid var(--border);background:' + rowBg + ';">';
+    html += '<td style="padding:8px;font-weight:600;">' + r.condition + '</td>';
+    html += '<td style="padding:8px;">' + r.task + '</td>';
+    html += '<td style="padding:8px;text-align:center;color:var(--accent);">' + counts.click + '</td>';
+    html += '<td style="padding:8px;text-align:center;color:var(--green);">' + counts.type + '</td>';
+    html += '<td style="padding:8px;text-align:center;color:var(--yellow);">' + counts.key + '</td>';
+    html += '<td style="padding:8px;text-align:center;color:#a371f7;">' + counts.done + '</td>';
+    html += '<td style="padding:8px;text-align:center;">' + r.num_steps + '</td>';
+    html += '<td style="padding:8px;text-align:center;">' + Math.round(r.total_time) + 's</td>';
+    html += '</tr>';
+  }
+  html += '</table>';
+  
+  // Key findings
+  html += '<h3 style="margin:24px 0 12px;">Key Findings</h3>';
+  html += '<div style="background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:20px;line-height:1.8;">';
+  html += '<p><strong style="color:var(--accent);">1. Demo-conditioning improves action coherence.</strong> Zero-shot agents default to repetitive clicking (100% clicks for settings and archive). Demo-conditioned agents use diverse actions: type, key, done signals.</p>';
+  html += '<p style="margin-top:12px;"><strong style="color:var(--accent);">2. Notepad demo-cond was 1 click from success.</strong> The agent opened Notepad, typed "This is a draft.", navigated Save As to Documents, typed "draft.txt" — then signaled DONE without clicking Save.</p>';
+  html += '<p style="margin-top:12px;"><strong style="color:var(--accent);">3. OneDrive popup interferes.</strong> The Windows Backup popup appears in nearly every screenshot, potentially blocking clicks and stealing focus.</p>';
+  html += '<p style="margin-top:12px;"><strong style="color:var(--accent);">4. Action loops detected.</strong> The loop detection substitutes coordinates (640,686 → 690,710) which may send the agent to unintended UI elements.</p>';
+  html += '<p style="margin-top:12px;"><strong style="color:var(--accent);">5. Settings demo has annotation issues.</strong> Step 5 of the settings demo has ACTION: TYPE("") — an empty action — which may confuse the agent about how to toggle the notification switch.</p>';
+  html += '</div>';
+  
+  html += '</div></div>';
+  
+  container.innerHTML = html;
+}
+
+function buildColumn(condition, task, run) {
+  const key = condition + '_' + task;
+  const condClass = condition === 'zero-shot' ? 'zero-shot' : 'demo-cond';
+  const condLabel = condition === 'zero-shot' ? 'Zero-Shot' : 'Demo-Conditioned';
+  
+  let html = '<div class="condition-col">';
+  html += '<div class="col-header ' + condClass + '">';
+  html += '<span>' + condLabel + '</span>';
+  html += '<span class="badge fail">Score: ' + run.score.toFixed(2) + '</span>';
+  html += '</div>';
+  
+  html += '<div class="screenshot-area" style="position:relative;">';
+  html += '<img id="img_' + key + '" src="' + (run.screenshots[0] || '') + '" alt="Step 0">';
+  html += '<div class="click-marker" id="marker_' + key + '" style="display:none;"></div>';
+  html += '</div>';
+  
+  html += '<div class="action-line" id="action_' + key + '">--</div>';
+  
+  html += '<div class="stats-row">';
+  html += '<span id="step_' + key + '">Step 0 / ' + (run.screenshots.length - 1) + '</span>';
+  html += '<span>' + run.num_steps + ' steps</span>';
+  html += '<span>' + Math.round(run.total_time) + 's</span>';
+  html += '</div>';
+  
+  // Full action log
+  html += '<div class="action-log">';
+  run.actions.forEach((a, i) => {
+    html += '<div class="log-entry"><span class="step-num">' + i + '</span>';
+    html += '<span class="action-type ' + a.type + '" style="min-width:40px;font-weight:600;font-size:11px;">' + a.type.toUpperCase() + '</span>';
+    html += '<span style="font-size:11px;">' + escapeHtml(a.code) + '</span>';
+    html += '</div>';
+  });
+  html += '</div>';
+  
+  html += '</div>';
+  return html;
+}
+
+// Keyboard shortcuts
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'ArrowRight') { e.preventDefault(); setStep(currentStep + 1); }
+  if (e.key === 'ArrowLeft') { e.preventDefault(); setStep(currentStep - 1); }
+  if (e.key === ' ') { e.preventDefault(); togglePlay(); }
+  if (e.key === 'Home') { e.preventDefault(); setStep(0); }
+  if (e.key === 'End') { e.preventDefault(); setStep(getMaxSteps()); }
+  if (e.key === '1') showTask('settings');
+  if (e.key === '2') showTask('archive');
+  if (e.key === '3') showTask('notepad');
+  if (e.key === '4') showTask('demos');
+  if (e.key === '5') showTask('analysis');
+});
+
+buildPanels();
+updateStep();
+</script>
+</body>
+</html>

@@ -1,0 +1,129 @@
+name: Import production acceptance
+
+# The one workflow authorised to run the production-acceptance importer.
+#
+# The private-export contract names this file and ref in importer_workflow_ref,
+# and `verify_importer_identity` refuses unless GITHUB_WORKFLOW_REF matches it
+# exactly. Renaming this file, moving it to another branch, or copying it to
+# another repository all break that binding, which is the intent.
+#
+# Today every run refuses. `import_files` is closed until an approved contract
+# exists, and staging the private evidence into the runner is not implemented.
+# What a run does prove is the part that must be true before anything else can
+# be: this workflow is the approved importer, and the supplied contract is
+# exact. Those checks happen before any private evidence is read.
+
+on:
+  workflow_dispatch:
+    inputs:
+      private_export_contract:
+        description: Repository-relative path to the approved contract
+        required: true
+        type: string
+      expected_cloud_source_commit:
+        description: Full 40-character approved Cloud source commit
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  reject-lifecycle-app:
+    permissions: {}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject the lifecycle App
+        env:
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          test "$ACTOR" != 'openadapt-lifecycle[bot]'
+          test "$TRIGGERING_ACTOR" != 'openadapt-lifecycle[bot]'
+
+  import-production-acceptance:
+    needs: reject-lifecycle-app
+    if: >-
+      github.repository == 'OpenAdaptAI/openadapt-evals' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.actor != 'openadapt-lifecycle[bot]' &&
+      github.triggering_actor != 'openadapt-lifecycle[bot]'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production-acceptance-import
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout exact main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          token: ${{ github.token }}
+
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: '3.12'
+
+      - name: Verify the approved importer identity and contract
+        env:
+          CONTRACT: ${{ inputs.private_export_contract }}
+          COMMIT: ${{ inputs.expected_cloud_source_commit }}
+        run: |
+          set -euo pipefail
+          if ! printf '%s' "$COMMIT" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo '::error::approved Cloud source commit is not exact' >&2
+            exit 1
+          fi
+          case "$CONTRACT" in
+            /*|*..*) echo '::error::contract path must be repository-relative' >&2; exit 1 ;;
+          esac
+          test -f "$CONTRACT"
+          echo "GITHUB_WORKFLOW_REF=${GITHUB_WORKFLOW_REF}"
+          python - "$CONTRACT" <<'PY'
+          import importlib.util, json, os, sys
+          from pathlib import Path
+
+          spec = importlib.util.spec_from_file_location(
+              "importer", "scripts/import_production_acceptance.py"
+          )
+          importer = importlib.util.module_from_spec(spec)
+          sys.modules["importer"] = importer
+          spec.loader.exec_module(importer)
+
+          contract = importer.validate_private_export_contract(
+              json.loads(Path(sys.argv[1]).read_text(encoding="utf-8"))
+          )
+          importer.verify_importer_identity(contract, os.environ)
+          print("contract_sha256:", contract["contract_sha256"])
+          print("approval_authority:", contract["approval_authority"])
+          print("importer identity verified")
+          PY
+
+      - name: Run the importer
+        env:
+          CONTRACT: ${{ inputs.private_export_contract }}
+          COMMIT: ${{ inputs.expected_cloud_source_commit }}
+        run: |
+          set -euo pipefail
+          echo 'Staging private evidence is not implemented, and the import gate is closed.'
+          echo 'This step records the refusal rather than hiding it.'
+          if python scripts/import_production_acceptance.py \
+              --private-export-contract "$CONTRACT" \
+              --certificate /nonexistent/certificate.json \
+              --campaign /nonexistent/campaign.json \
+              --qualification-admission /nonexistent/admission.json \
+              --attestation-bundle /nonexistent/bundle.jsonl \
+              --expected-cloud-source-commit "$COMMIT" \
+              --trusted-admission-signers \
+                tests/fixtures/production_acceptance/qualification-admission-trust.json \
+              --output "${RUNNER_TEMP}/derived.json"; then
+            echo '::error::the importer produced a result while the gate is closed' >&2
+            exit 1
+          fi
+          test ! -e "${RUNNER_TEMP}/derived.json"
+          echo 'Refused as expected.'

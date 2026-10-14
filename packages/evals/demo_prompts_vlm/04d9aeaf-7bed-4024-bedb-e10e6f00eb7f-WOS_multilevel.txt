@@ -1,0 +1,117 @@
+GOAL: In a new sheet with 4 headers "Year", "CA changes", "FA changes", and "OA changes", calculate the annual changes for the Current Assets, Fixed Assets, and Other Assets columns
+
+PLAN:
+1. Create a new sheet in the workbook for annual asset changes
+2. Set up headers in row 1 (Year, CA changes, FA changes, OA changes)
+3. Enter years 2015-2019 in column A
+4. For each asset column (B=CA, C=FA, D=OA), enter the percentage-change formula and drag-fill down for all years
+5. Select the data range and format as percentage
+
+REFERENCE TRAJECTORY (for disambiguation -- adapt actions to your actual screen):
+
+Step 1:
+  Think: I need to create a new sheet for calculating and displaying annual changes in asset categories.
+  Action: Right-click on the "Sheet1" tab at the bottom and select "Insert Sheet" or "New Sheet".
+  Expect: A new, blank sheet named "Sheet2" should be added to the workbook and displayed.
+
+Step 2:
+  Think: I need to create a header row for organizing annual asset changes.
+  Action: Click cell A1 and type "Year"
+  Expect: The text "Year" should appear in cell A1.
+
+Step 3:
+  Think: I need to add the next header, "CA changes," as part of setting up the required columns for annual asset changes.
+  Action: Press Tab and type "CA changes"
+  Expect: The header "CA changes" should be entered in cell B1, and the sheet should display two headers: "Year" and "CA changes."
+
+Step 4:
+  Think: I need to continue setting up the required headers for calculating annual changes in asset categories.
+  Action: Press Tab and type "FA changes".
+  Expect: The header "FA changes" should be added to cell C1.
+
+Step 5:
+  Think: I need to complete the set of required headers by adding "OA changes" as the fourth column.
+  Action: Press Tab and type "OA changes".
+  Expect: The "OA changes" header should be added in cell D1, completing the four required headers in the first row.
+
+Step 6:
+  Think: I need to begin entering annual data by specifying the first year in the "Year" column.
+  Action: Click cell A2 and type "2015".
+  Expect: The value "2015" appears in cell A2 under the "Year" header.
+
+Step 7:
+  Think: I need to begin entering the years for which asset changes will be calculated.
+  Action: Press Enter and type "2016" in cell A2.
+  Expect: The value "2016" appears in cell A2, starting the list of years under the "Year" header.
+
+Step 8:
+  Think: I need to begin listing the years for which annual changes will be calculated.
+  Action: Press Enter and type "2017".
+  Expect: "2017" should be entered into cell A3, directly below "2016" in the "Year" column.
+
+Step 9:
+  Think: I need to continue populating the "Year" column with the next chronological year for annual change calculations.
+  Action: Press Enter and type "2018".
+  Expect: The value "2018" appears in the next row of the "Year" column.
+
+Step 10:
+  Think: I need to add the next year in the sequence to the "Year" column in preparation for calculating annual changes.
+  Action: Press Enter and type "2019".
+  Expect: The value "2019" appears in the next row under the "Year" column.
+
+Step 11:
+  Think: I need to calculate the annual percentage change for Current Assets using data from Sheet1.
+  Action: Click cell B2 and type "=(Sheet1.B3-Sheet1.B2)/Sheet1.B2".
+  Expect: Cell B2 should contain a formula to compute the percentage change in Current Assets between two years from Sheet1.
+
+Step 12:
+  Think: I need to confirm and apply the formula entered in cell B2 for calculating annual changes in Current Assets.
+  Action: Press Enter
+  Expect: The formula in cell B2 should be executed, displaying the calculated percentage change for "CA changes" in 2016.
+
+Step 13:
+  Think: I need to copy the formula in B2 down the column so that annual changes for "CA changes" are calculated for each year.
+  Action: Click cell B2, then drag the fill handle down to B6.
+  Expect: The formula from B2 is filled down to B6, calculating "CA changes" for all listed years.
+
+Step 14:
+  Think: I need to calculate the annual change for Fixed Assets as a percentage using data from Sheet1.
+  Action: Click cell C2 and type "=(Sheet1.C3-Sheet1.C2)/Sheet1.C2"
+  Expect: Cell C2 should contain the formula to compute the percentage change in Fixed Assets between two years from Sheet1.
+
+Step 15:
+  Think: I need to confirm or complete the entry of a formula or value in the spreadsheet.
+  Action: Press Enter.
+  Expect: The cell selection moves from the current cell (D2) to the next cell below (D3), confirming the entry in D2.
+
+Step 16:
+  Think: I need to apply the formula in C2 to the rest of the rows in the "CA changes" column for consistent annual change calculations.
+  Action: Click cell C2, then drag the fill handle down to C6.
+  Expect: The formula from C2 is copied down to C6, populating the "CA changes" column with calculated values for each year.
+
+Step 17:
+  Think: I need to calculate the annual percentage change for the "OA changes" column using data from Sheet1.
+  Action: Click cell D2 and type "=(Sheet1.D3-Sheet1.D2)/Sheet1.D2"
+  Expect: Cell D2 should be populated with the formula to compute the percentage change for "OA changes" between two years.
+
+Step 18:
+  Think: I need to compute the annual percentage change for Other Assets in the new sheet.
+  Action: Press Enter
+  Expect: The formula should be executed in cell D3, displaying the calculated percentage change for Other Assets.
+
+Step 19:
+  Think: I need to copy the formula in D2 down the "OA changes" column for all relevant rows.
+  Action: Click cell D2, then drag the fill handle down to D6.
+  Expect: The formula from D2 is filled down through D6, calculating values for each row in the "OA changes" column.
+
+Step 20:
+  Think: I need to select the range of calculated annual changes and their corresponding years for further formatting or analysis.
+  Action: Click and drag to select cells B2:D6.
+  Expect: Cells B2:D6 should be highlighted, indicating they should be selected for the next operation.
+
+Step 21:
+  Think: I need to format the annual change values as percentages for better readability.
+  Action: Click the % button in the toolbar (or press Ctrl+Shift+5).
+  Expect: The values in columns B, C, and D should now be displayed as percentages.
+
+If your screen doesn't match what's expected, re-evaluate based on the PLAN and decide the best next action.

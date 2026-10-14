@@ -1,0 +1,145 @@
+{
+  "manifest_version": "0.4",
+  "name": "openadapt-agent",
+  "display_name": "OpenAdapt",
+  "version": "2.0.2",
+  "description": "Lets your AI agent enter information in an app with no API and get back whether it saved.",
+  "long_description": "Your agent sends a workflow name, its inputs, and its own request id. OpenAdapt enters the values in the app's own screens on this computer, reads the saved record back, and returns done, needs review, not sure if saved, or did not run. The same request id never writes twice. Workflow files and evidence stay on this computer.",
+  "author": {
+    "name": "OpenAdaptAI",
+    "email": "contact@openadapt.ai",
+    "url": "https://openadapt.ai"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/OpenAdaptAI/openadapt-agent.git"
+  },
+  "homepage": "https://openadapt.ai",
+  "documentation": "https://docs.openadapt.ai",
+  "support": "https://github.com/OpenAdaptAI/openadapt-agent/issues",
+  "server": {
+    "type": "uv",
+    "entry_point": "src/openadapt_agent/mcpb_entry.py",
+    "mcp_config": {
+      "command": "uv",
+      "args": [
+        "run",
+        "--directory",
+        "${__dirname}",
+        "python",
+        "-m",
+        "openadapt_agent.mcpb_entry"
+      ],
+      "env": {
+        "OPENADAPT_AGENT_BUNDLES_DIR": "${user_config.bundles_dir}",
+        "OPENADAPT_AGENT_RUNS_DIR": "${user_config.runs_dir}",
+        "OPENADAPT_AGENT_ALLOW_RUN": "${user_config.allow_run}",
+        "OPENADAPT_AGENT_ALLOW_ATTENDED_ACTIONS": "${user_config.allow_attended_actions}",
+        "OPENADAPT_AGENT_DEPLOYMENT_CONFIG": "${user_config.deployment_config}",
+        "OPENADAPT_AGENT_HEADED": "${user_config.headed}",
+        "OPENADAPT_AGENT_BUNDLE_KEY": "${user_config.bundle_key}"
+      }
+    }
+  },
+  "tools": [
+    {
+      "name": "list_workflows",
+      "description": "List each workflow's name, purpose, what done means, and typed inputs."
+    },
+    {
+      "name": "run_workflow",
+      "description": "Run one workflow with your request id and get done, needs_review, not_sure_if_saved, or did_not_run."
+    },
+    {
+      "name": "get_run",
+      "description": "Get the result of a run that was still going."
+    },
+    {
+      "name": "get_workflow",
+      "description": "Older tool: one workflow's structural summary."
+    },
+    {
+      "name": "get_run_report",
+      "description": "Older tool: a status and count summary for a run on this server."
+    },
+    {
+      "name": "list_needs_attention",
+      "description": "List paused runs that need a person's decision."
+    },
+    {
+      "name": "get_attention_item",
+      "description": "Inspect one paused run and its allowed decisions."
+    }
+  ],
+  "tools_generated": true,
+  "keywords": [
+    "mcp",
+    "automation",
+    "workflow",
+    "gui",
+    "ai-agents",
+    "ehr",
+    "rpa",
+    "human-in-the-loop"
+  ],
+  "license": "MIT",
+  "compatibility": {
+    "platforms": [
+      "darwin",
+      "linux",
+      "win32"
+    ],
+    "runtimes": {
+      "python": ">=3.10,<3.13"
+    }
+  },
+  "user_config": {
+    "bundles_dir": {
+      "type": "directory",
+      "title": "Workflow bundles",
+      "description": "Choose a compiled OpenAdapt bundle or a directory containing bundles. The files stay on this machine.",
+      "required": true
+    },
+    "runs_dir": {
+      "type": "directory",
+      "title": "Run evidence",
+      "description": "Directory for local reports, durable pauses, and protected evidence.",
+      "required": false,
+      "default": "${HOME}/.openadapt/runs"
+    },
+    "allow_run": {
+      "type": "boolean",
+      "title": "Allow workflow runs",
+      "description": "Add run_workflow. Every run still passes OpenAdapt's admission, right-record, policy, and record-check gates, and the same request id never writes twice.",
+      "required": false,
+      "default": false
+    },
+    "allow_attended_actions": {
+      "type": "boolean",
+      "title": "Allow Needs Attention decisions",
+      "description": "Add Reject, Teach, and Escalate. Reject dispatches no new action, but earlier run effects still require protected local review. A qualified deployment config also enables Continue and Skip with live revalidation.",
+      "required": false,
+      "default": false
+    },
+    "deployment_config": {
+      "type": "file",
+      "title": "Qualified deployment config",
+      "description": "Optional OpenAdapt deployment YAML used for live Continue and Skip verification.",
+      "required": false
+    },
+    "headed": {
+      "type": "boolean",
+      "title": "Show the attended browser",
+      "description": "Keep a deployment-configured browser visible while resolving attended pauses.",
+      "required": false,
+      "default": false
+    },
+    "bundle_key": {
+      "type": "string",
+      "title": "Bundle decryption key",
+      "description": "Optional key for an encrypted-at-rest workflow bundle.",
+      "sensitive": true,
+      "required": false
+    }
+  }
+}

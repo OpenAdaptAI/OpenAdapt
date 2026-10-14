@@ -1,0 +1,49 @@
+TASK: Open Microsoft Edge browser and navigate to a URL
+DOMAIN: edge_browser
+
+STEPS:
+1. Click on the Start menu button in the taskbar
+   REASONING: Need to access the Start menu to find Edge
+   ACTION: CLICK(x=0.02, y=0.98)
+
+2. Type "edge" in the search box
+   REASONING: Searching is the fastest way to find Microsoft Edge
+   ACTION: TYPE("edge")
+
+3. Wait for search results to appear
+   REASONING: Windows needs time to index and display results
+   ACTION: WAIT(1.0)
+
+4. Click on Microsoft Edge in search results
+   REASONING: Edge should appear as the first result
+   ACTION: CLICK(x=0.15, y=0.3)
+
+5. Wait for Edge browser to open
+   REASONING: Browser needs time to launch and render
+   ACTION: WAIT(2.0)
+
+6. Click on the address bar
+   REASONING: Need to focus the address bar to type URL
+   ACTION: CLICK(x=0.5, y=0.05)
+
+7. Clear any existing text in the address bar
+   REASONING: Ensure clean input for new URL
+   ACTION: HOTKEY("ctrl", "a")
+
+8. Type the target URL
+   REASONING: Enter the website address to navigate to
+   ACTION: TYPE("https://www.microsoft.com")
+
+9. Press Enter to navigate
+   REASONING: Submit the URL to load the page
+   ACTION: HOTKEY("enter")
+
+10. Wait for page to load
+    REASONING: Web page needs time to download and render
+    ACTION: WAIT(3.0)
+
+11. Verify the page has loaded
+    REASONING: Page content should be visible and address bar shows URL
+    ACTION: DONE()
+
+EXPECTED_OUTCOME: Microsoft Edge is open and displaying the Microsoft homepage

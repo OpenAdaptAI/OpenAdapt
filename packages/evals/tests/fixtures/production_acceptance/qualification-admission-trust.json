@@ -1,0 +1,21 @@
+{
+  "expires_at": "2026-08-25T11:50:00Z",
+  "generated_at": "2026-08-18T11:50:00Z",
+  "revision": 1,
+  "schema_version": "openadapt.qualification-signer-registry/v2",
+  "signers": [
+    {
+      "algorithm": "ed25519",
+      "allowed_ref_prefixes": [
+        "refs/heads/main@"
+      ],
+      "allowed_workflows": [
+        "OpenAdaptAI/openadapt-internal/.github/workflows/production-qualification-admission.yml"
+      ],
+      "key_id": "qa-ed25519-34750f98bd59fcfc",
+      "public_key": "iojj3XQJ8ZX9UtstPLpdcspnCb8dlBIb83SIAbQPb1w=",
+      "revoked_at": null,
+      "status": "active"
+    }
+  ]
+}

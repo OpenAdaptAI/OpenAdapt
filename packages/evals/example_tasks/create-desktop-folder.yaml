@@ -1,0 +1,26 @@
+# Simple 2-step task: create a folder named "TestFolder" on the Desktop
+name: "Create a folder named TestFolder on the Desktop"
+id: custom-desktop-folder
+
+setup:
+  - execute: "powershell -c \"Remove-Item -Path $env:USERPROFILE\\Desktop\\TestFolder -Recurse -Force -ErrorAction SilentlyContinue\""
+  - sleep: 1
+
+evaluate:
+  - check: command
+    run: "powershell -c \"Test-Path $env:USERPROFILE\\Desktop\\TestFolder\""
+    expect: "True"
+    match: exact
+
+max_steps: 10
+
+milestones:
+  - name: "Desktop is visible"
+    check: screenshot
+    description: "The Windows desktop is visible with icons"
+
+  - name: "Folder exists"
+    check: command
+    run: "powershell -c \"Test-Path $env:USERPROFILE\\Desktop\\TestFolder\""
+    expect: "True"
+    match: exact

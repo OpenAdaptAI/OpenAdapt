@@ -1,0 +1,98 @@
+name: Release and PyPI Publish
+
+# WHY THIS IS DISPATCH-ONLY AND USES ADMIN_TOKEN
+# ----------------------------------------------
+# This workflow ran on every push to main with the default GITHUB_TOKEN. Since
+# branch protection was enabled on main (some time after the last successful
+# release on 2026-01-29; the first rejection is the run of 2026-02-18), it could
+# not succeed. python-semantic-release computes the next version, commits the
+# bump, tags it, and pushes to main -- and main now requires a pull request:
+#
+#     remote: error: GH006: Protected branch update failed for refs/heads/main.
+#     remote: - Changes must be made through a pull request.
+#     ##[error] Failed to push branch (main) to remote
+#
+# The push is the step *before* build and publish, so nothing was ever
+# published from a failing run. PyPI, the git tag, the GitHub Release, and
+# pyproject.toml all still agree; the release simply stopped moving.
+# openadapt-privacy hit the identical failure on the same day and was repaired
+# on 2026-07-15 by adding ADMIN_TOKEN; this applies the same repair here.
+#
+# Two changes:
+#
+#   1. secrets.ADMIN_TOKEN -- the organization-scoped release credential
+#      (visibility "all") already used by openadapt-flow and openadapt-privacy.
+#      Branch protection here sets enforce_admins=false, so an admin credential
+#      can push the generated version commit and tag; GITHUB_TOKEN cannot.
+#
+#   2. workflow_dispatch instead of push -- releasing becomes an explicit act
+#      rather than a side effect of merging a README edit. This matches the
+#      canonical openadapt-flow release workflow and keeps release minutes off
+#      every push (AGENTS.md 5.1, build-speed and hosted-CI cost discipline).
+#      It also matters here specifically: the commits accumulated since v0.2.0
+#      are CI config, .gitignore, and docs only -- no library code has changed,
+#      so an automatic release would publish a version whose sole content is a
+#      version bump.
+#
+# To cut a release:
+#
+#     gh workflow run "Release and PyPI Publish" \
+#       --repo OpenAdaptAI/openadapt-viewer --ref main
+#
+# python-semantic-release then coalesces the Conventional Commits since the last
+# tag, picks the next version, tags it, and publishes to PyPI and GitHub
+# Releases. Prerequisites are repository/organization settings, not code:
+# secrets.ADMIN_TOKEN with visibility "all", and PyPI Trusted Publishing for
+# this package.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  release:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency: release
+    permissions:
+      id-token: write # PyPI Trusted Publishing (OIDC)
+      contents: write # push the version bump commit + tag, create the Release
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.ADMIN_TOKEN }}
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Python Semantic Release
+        id: release
+        uses: python-semantic-release/python-semantic-release@v9.15.2
+        with:
+          github_token: ${{ secrets.ADMIN_TOKEN }}
+
+      - name: Build package
+        if: steps.release.outputs.released == 'true'
+        run: uv build
+
+      # Pinned to a commit SHA, not the floating release/v1 tag, so an upstream
+      # change cannot alter a release with no commit here. v1.14.2 bundles twine
+      # 7.0.0 and packaging 26.2, which accept the Metadata-Version 2.5 that current
+      # hatchling emits. v1.14.0 rejected it and broke the openadapt-evals 0.91.0
+      # publish after the tag had already landed.
+      - name: Publish to PyPI
+        if: steps.release.outputs.released == 'true'
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+
+      - name: Publish to GitHub Releases
+        if: steps.release.outputs.released == 'true'
+        uses: python-semantic-release/publish-action@v9.15.2
+        with:
+          github_token: ${{ secrets.ADMIN_TOKEN }}

@@ -1,0 +1,2067 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>JavaScript Utilities Demo</title>
+    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
+
+    <style>
+        /* OpenAdapt Viewer - Core Styles
+ * Shared CSS variables and base component styles.
+ * All classes use the 'oa-' prefix to avoid conflicts.
+ */
+
+/* === CSS Variables === */
+:root {
+    /* Background colors */
+    --oa-bg-primary: #0a0a0f;
+    --oa-bg-secondary: #12121a;
+    --oa-bg-tertiary: #1a1a24;
+
+    /* Border */
+    --oa-border-color: rgba(255, 255, 255, 0.06);
+    --oa-border-radius: 8px;
+    --oa-border-radius-lg: 12px;
+
+    /* Text colors */
+    --oa-text-primary: #f0f0f0;
+    --oa-text-secondary: #888;
+    --oa-text-muted: #555;
+
+    /* Accent colors */
+    --oa-accent: #00d4aa;
+    --oa-accent-dim: rgba(0, 212, 170, 0.15);
+    --oa-accent-secondary: #a78bfa;
+
+    /* Status colors */
+    --oa-success: #34d399;
+    --oa-success-bg: rgba(52, 211, 153, 0.15);
+    --oa-error: #ff5f5f;
+    --oa-error-bg: rgba(255, 95, 95, 0.15);
+    --oa-warning: #f59e0b;
+    --oa-warning-bg: rgba(245, 158, 11, 0.15);
+    --oa-info: #3b82f6;
+    --oa-info-bg: rgba(59, 130, 246, 0.15);
+
+    /* Spacing */
+    --oa-space-xs: 4px;
+    --oa-space-sm: 8px;
+    --oa-space-md: 16px;
+    --oa-space-lg: 24px;
+    --oa-space-xl: 32px;
+
+    /* Typography */
+    --oa-font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+    --oa-font-mono: "SF Mono", Monaco, "Cascadia Code", Consolas, monospace;
+    --oa-font-size-xs: 0.75rem;
+    --oa-font-size-sm: 0.85rem;
+    --oa-font-size-md: 1rem;
+    --oa-font-size-lg: 1.125rem;
+    --oa-font-size-xl: 1.5rem;
+
+    /* Shadows */
+    --oa-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --oa-shadow-md: 0 4px 6px rgba(0, 0, 0, 0.3);
+    --oa-shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.4);
+
+    /* Transitions */
+    --oa-transition-fast: 0.15s ease;
+    --oa-transition-normal: 0.2s ease;
+    --oa-transition-slow: 0.3s ease;
+}
+
+/* Light mode overrides */
+.oa-light, [data-theme="light"] {
+    --oa-bg-primary: #ffffff;
+    --oa-bg-secondary: #f3f4f6;
+    --oa-bg-tertiary: #e5e7eb;
+    --oa-border-color: rgba(0, 0, 0, 0.1);
+    --oa-text-primary: #111827;
+    --oa-text-secondary: #6b7280;
+    --oa-text-muted: #9ca3af;
+}
+
+/* === Screenshot Component === */
+.oa-screenshot-container {
+    position: relative;
+    background: var(--oa-bg-tertiary);
+    border-radius: var(--oa-border-radius);
+    overflow: hidden;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.oa-screenshot-image {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+}
+
+.oa-screenshot-placeholder {
+    color: var(--oa-text-muted);
+    font-size: var(--oa-font-size-sm);
+    padding: var(--oa-space-lg);
+    text-align: center;
+}
+
+.oa-screenshot-caption {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    padding: var(--oa-space-sm) var(--oa-space-md);
+    background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+    color: var(--oa-text-primary);
+    font-size: var(--oa-font-size-sm);
+}
+
+/* Overlay markers */
+.oa-overlay {
+    position: absolute;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+}
+
+.oa-overlay-click {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 3px solid var(--oa-accent);
+    background: var(--oa-accent-dim);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.oa-overlay-click.oa-overlay-human {
+    border-color: #22c55e;
+    background: rgba(34, 197, 94, 0.2);
+}
+
+.oa-overlay-click.oa-overlay-predicted {
+    border-color: #3b82f6;
+    background: rgba(59, 130, 246, 0.2);
+}
+
+.oa-overlay-label {
+    font-size: 10px;
+    font-weight: bold;
+    color: white;
+}
+
+/* === Playback Controls === */
+.oa-playback-controls {
+    display: flex;
+    align-items: center;
+    gap: var(--oa-space-sm);
+    padding: var(--oa-space-md);
+    background: var(--oa-bg-secondary);
+    border-radius: var(--oa-border-radius);
+    border: 1px solid var(--oa-border-color);
+}
+
+.oa-playback-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: var(--oa-border-radius);
+    background: var(--oa-bg-tertiary);
+    color: var(--oa-text-primary);
+    cursor: pointer;
+    transition: all var(--oa-transition-fast);
+}
+
+.oa-playback-btn:hover {
+    background: var(--oa-accent-dim);
+    color: var(--oa-accent);
+}
+
+.oa-playback-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.oa-playback-btn.oa-playback-btn-primary {
+    background: var(--oa-accent);
+    color: var(--oa-bg-primary);
+}
+
+.oa-playback-btn.oa-playback-btn-primary:hover {
+    background: #00e5b8;
+}
+
+.oa-playback-counter {
+    font-size: var(--oa-font-size-sm);
+    color: var(--oa-text-secondary);
+    min-width: 100px;
+    text-align: center;
+}
+
+.oa-playback-speed {
+    padding: var(--oa-space-sm) var(--oa-space-md);
+    border: 1px solid var(--oa-border-color);
+    border-radius: var(--oa-border-radius);
+    background: var(--oa-bg-tertiary);
+    color: var(--oa-text-primary);
+    font-size: var(--oa-font-size-sm);
+    cursor: pointer;
+}
+
+/* === Timeline === */
+.oa-timeline {
+    width: 100%;
+    padding: var(--oa-space-sm) 0;
+}
+
+.oa-timeline-track {
+    height: 8px;
+    background: var(--oa-bg-tertiary);
+    border-radius: 4px;
+    overflow: hidden;
+    cursor: pointer;
+}
+
+.oa-timeline-progress {
+    height: 100%;
+    background: linear-gradient(90deg, var(--oa-accent), var(--oa-accent-secondary));
+    border-radius: 4px;
+    transition: width var(--oa-transition-normal);
+}
+
+.oa-timeline-markers {
+    display: flex;
+    justify-content: space-between;
+    margin-top: var(--oa-space-xs);
+    font-size: var(--oa-font-size-xs);
+    color: var(--oa-text-muted);
+}
+
+/* === Action Display === */
+.oa-action {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--oa-space-sm);
+}
+
+.oa-action-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--oa-space-xs) var(--oa-space-sm);
+    background: var(--oa-bg-tertiary);
+    border-radius: var(--oa-border-radius);
+    font-size: var(--oa-font-size-sm);
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.oa-action-badge.oa-action-click { color: var(--oa-info); }
+.oa-action-badge.oa-action-type { color: var(--oa-accent); }
+.oa-action-badge.oa-action-scroll { color: var(--oa-warning); }
+.oa-action-badge.oa-action-key { color: var(--oa-accent-secondary); }
+
+.oa-action-details {
+    font-size: var(--oa-font-size-sm);
+    color: var(--oa-text-secondary);
+    font-family: var(--oa-font-mono);
+}
+
+/* === Metrics === */
+.oa-metrics-grid {
+    display: grid;
+    gap: var(--oa-space-md);
+}
+
+.oa-metrics-card {
+    background: var(--oa-bg-secondary);
+    border: 1px solid var(--oa-border-color);
+    border-radius: var(--oa-border-radius-lg);
+    padding: var(--oa-space-md);
+    transition: border-color var(--oa-transition-fast);
+}
+
+.oa-metrics-card:hover {
+    border-color: var(--oa-accent-dim);
+}
+
+.oa-metrics-card-label {
+    font-size: var(--oa-font-size-sm);
+    color: var(--oa-text-secondary);
+    margin-bottom: var(--oa-space-xs);
+}
+
+.oa-metrics-card-value {
+    font-size: var(--oa-font-size-xl);
+    font-weight: 700;
+    color: var(--oa-text-primary);
+}
+
+.oa-metrics-card-value.oa-metrics-success { color: var(--oa-success); }
+.oa-metrics-card-value.oa-metrics-error { color: var(--oa-error); }
+.oa-metrics-card-value.oa-metrics-warning { color: var(--oa-warning); }
+.oa-metrics-card-value.oa-metrics-accent { color: var(--oa-accent); }
+
+.oa-metrics-card-change {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    font-size: var(--oa-font-size-xs);
+    margin-top: var(--oa-space-xs);
+}
+
+.oa-metrics-card-change.positive { color: var(--oa-success); }
+.oa-metrics-card-change.negative { color: var(--oa-error); }
+
+/* === Filter Bar === */
+.oa-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--oa-space-md);
+    padding: var(--oa-space-md);
+    background: var(--oa-bg-secondary);
+    border-radius: var(--oa-border-radius-lg);
+    border: 1px solid var(--oa-border-color);
+}
+
+.oa-filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: var(--oa-space-xs);
+}
+
+.oa-filter-label {
+    font-size: var(--oa-font-size-xs);
+    font-weight: 600;
+    color: var(--oa-text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.oa-filter-dropdown {
+    padding: var(--oa-space-sm) var(--oa-space-md);
+    background: var(--oa-bg-tertiary);
+    border: 1px solid var(--oa-border-color);
+    border-radius: var(--oa-border-radius);
+    color: var(--oa-text-primary);
+    font-size: var(--oa-font-size-sm);
+    cursor: pointer;
+    min-width: 150px;
+}
+
+.oa-filter-dropdown:focus {
+    outline: none;
+    border-color: var(--oa-accent);
+}
+
+.oa-filter-search {
+    padding: var(--oa-space-sm) var(--oa-space-md);
+    background: var(--oa-bg-tertiary);
+    border: 1px solid var(--oa-border-color);
+    border-radius: var(--oa-border-radius);
+    color: var(--oa-text-primary);
+    font-size: var(--oa-font-size-sm);
+    min-width: 200px;
+}
+
+.oa-filter-search::placeholder {
+    color: var(--oa-text-muted);
+}
+
+/* === List View === */
+.oa-list {
+    background: var(--oa-bg-secondary);
+    border-radius: var(--oa-border-radius-lg);
+    border: 1px solid var(--oa-border-color);
+    overflow: hidden;
+}
+
+.oa-list-header {
+    padding: var(--oa-space-md);
+    border-bottom: 1px solid var(--oa-border-color);
+}
+
+.oa-list-title {
+    font-weight: 600;
+    color: var(--oa-text-primary);
+}
+
+.oa-list-subtitle {
+    font-size: var(--oa-font-size-sm);
+    color: var(--oa-text-secondary);
+    margin-top: var(--oa-space-xs);
+}
+
+.oa-list-items {
+    max-height: 600px;
+    overflow-y: auto;
+}
+
+.oa-list-item {
+    padding: var(--oa-space-md);
+    border-bottom: 1px solid var(--oa-border-color);
+    cursor: pointer;
+    transition: background var(--oa-transition-fast);
+}
+
+.oa-list-item:last-child {
+    border-bottom: none;
+}
+
+.oa-list-item:hover {
+    background: var(--oa-bg-tertiary);
+}
+
+.oa-list-item.oa-list-item-selected {
+    background: var(--oa-accent-dim);
+    border-left: 4px solid var(--oa-accent);
+}
+
+.oa-list-item-content {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: var(--oa-space-sm);
+}
+
+.oa-list-item-title {
+    font-weight: 500;
+    color: var(--oa-text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.oa-list-item-subtitle {
+    font-size: var(--oa-font-size-sm);
+    color: var(--oa-text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* === Status Badges === */
+.oa-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: var(--oa-space-xs) var(--oa-space-sm);
+    border-radius: 9999px;
+    font-size: var(--oa-font-size-xs);
+    font-weight: 600;
+}
+
+.oa-badge-success {
+    background: var(--oa-success-bg);
+    color: var(--oa-success);
+}
+
+.oa-badge-error {
+    background: var(--oa-error-bg);
+    color: var(--oa-error);
+}
+
+.oa-badge-warning {
+    background: var(--oa-warning-bg);
+    color: var(--oa-warning);
+}
+
+.oa-badge-info {
+    background: var(--oa-info-bg);
+    color: var(--oa-info);
+}
+
+/* === Chart Container === */
+.oa-chart-container {
+    background: var(--oa-bg-secondary);
+    border-radius: var(--oa-border-radius-lg);
+    border: 1px solid var(--oa-border-color);
+    padding: var(--oa-space-md);
+}
+
+.oa-chart-title {
+    font-size: var(--oa-font-size-md);
+    font-weight: 600;
+    color: var(--oa-text-primary);
+    margin-bottom: var(--oa-space-md);
+}
+
+/* === Utility Classes === */
+.oa-hidden { display: none !important; }
+.oa-flex { display: flex; }
+.oa-flex-col { flex-direction: column; }
+.oa-items-center { align-items: center; }
+.oa-justify-between { justify-content: space-between; }
+.oa-gap-sm { gap: var(--oa-space-sm); }
+.oa-gap-md { gap: var(--oa-space-md); }
+.oa-gap-lg { gap: var(--oa-space-lg); }
+.oa-p-md { padding: var(--oa-space-md); }
+.oa-mb-md { margin-bottom: var(--oa-space-md); }
+.oa-text-center { text-align: center; }
+.oa-text-muted { color: var(--oa-text-muted); }
+
+        
+    </style>
+</head>
+<body style="background: var(--oa-bg-primary); color: var(--oa-text-primary); font-family: var(--oa-font-sans); min-height: 100vh; margin: 0;">
+    
+        <header style="padding: 16px 24px; background: var(--oa-bg-secondary); border-bottom: 1px solid var(--oa-border-color); margin-bottom: 24px;">
+            <div style="display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                    <h1 style="font-size: 1.25rem; font-weight: 600; margin: 0;">JavaScript Utilities Demo</h1>
+                    <p style="font-size: 0.85rem; color: var(--oa-text-secondary);">Demonstrating search, filter, and utility functions</p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 16px;">
+                    
+                    
+        <button onclick="document.body.classList.toggle('oa-light')"
+                style="padding: 8px; border-radius: 8px; background: var(--oa-bg-tertiary); border: none; cursor: pointer; color: var(--oa-text-primary);"
+                title="Toggle dark/light mode">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"/>
+            </svg>
+        </button>
+        
+                </div>
+            </div>
+        </header>
+        
+    
+    <main style="max-width: 1400px; margin: 0 auto; padding: 0 24px 24px;">
+        
+        <section class="oa-section" style="margin-bottom: 24px;">
+            <h2 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 16px;">Demo Data</h2>
+            
+        <div id="demo-data" style="display: none;">
+            <script>
+                // Sample episode data
+                window.episodes = [
+                    {
+                        name: "Disable night shift",
+                        description: "Turn off Night Shift in System Settings",
+                        domain: "system",
+                        duration: 45.5,
+                        steps: ["Open Settings", "Click Displays", "Toggle Night Shift"],
+                        created_at: "2024-01-15T10:30:00Z"
+                    },
+                    {
+                        name: "Open Notepad",
+                        description: "Launch notepad application",
+                        domain: "notepad",
+                        duration: 12.3,
+                        steps: ["Click Start", "Search notepad", "Click Notepad"],
+                        created_at: "2024-01-16T14:20:00Z"
+                    },
+                    {
+                        name: "Draw rectangle in Paint",
+                        description: "Create a rectangle shape in Paint",
+                        domain: "paint",
+                        duration: 67.8,
+                        steps: ["Open Paint", "Select rectangle tool", "Draw shape"],
+                        created_at: "2024-01-17T09:15:00Z"
+                    },
+                    {
+                        name: "Configure nightshift schedule",
+                        description: "Set up automatic Night Shift schedule",
+                        domain: "system",
+                        duration: 120.0,
+                        steps: ["Open Settings", "Navigate to Displays", "Configure schedule"],
+                        created_at: "2024-01-18T16:45:00Z"
+                    }
+                ];
+            </script>
+        </div>
+        
+        </section>
+        
+
+        <section class="oa-section" style="margin-bottom: 24px;">
+            <h2 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 16px;">1. Advanced Search</h2>
+            
+        <div style="background: var(--oa-bg-secondary); padding: 24px; border-radius: 12px;">
+            <h3 style="margin-bottom: 16px; color: var(--oa-accent);">Search Demo (search.js)</h3>
+
+            <div style="margin-bottom: 16px;">
+                <label style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--oa-text-secondary);">
+                    Search Query:
+                </label>
+                <input
+                    id="search-input"
+                    type="text"
+                    placeholder="Try: nightshift, notepad, paint..."
+                    style="width: 100%; padding: 12px; background: var(--oa-bg-tertiary); border: 1px solid var(--oa-border-color); border-radius: 8px; color: var(--oa-text-primary); font-size: 1rem;"
+                />
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <div style="font-size: 0.85rem; color: var(--oa-text-muted); margin-bottom: 8px;">
+                    Results: <span id="search-count" style="color: var(--oa-accent); font-weight: 600;">4</span>
+                </div>
+                <div id="search-results" style="display: flex; flex-direction: column; gap: 8px;"></div>
+            </div>
+
+            <div style="padding: 12px; background: var(--oa-bg-tertiary); border-radius: 8px; font-family: var(--oa-font-mono); font-size: 0.85rem;">
+                <strong>Try these searches:</strong><br>
+                • "nightshift" → finds "Disable night shift" and "Configure nightshift"<br>
+                • "shift night" → same results (order independent)<br>
+                • "paint rect" → finds "Draw rectangle in Paint"<br>
+                • "note" → finds "Open Notepad"
+            </div>
+        </div>
+        
+        </section>
+        
+
+        <section class="oa-section" style="margin-bottom: 24px;">
+            <h2 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 16px;">2. Multi-Field Filtering</h2>
+            
+        <div style="background: var(--oa-bg-secondary); padding: 24px; border-radius: 12px;">
+            <h3 style="margin-bottom: 16px; color: var(--oa-accent);">Filter Demo (filters.js)</h3>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; margin-bottom: 16px;">
+                <div>
+                    <label style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--oa-text-secondary);">
+                        Domain:
+                    </label>
+                    <select
+                        id="domain-filter"
+                        style="width: 100%; padding: 12px; background: var(--oa-bg-tertiary); border: 1px solid var(--oa-border-color); border-radius: 8px; color: var(--oa-text-primary);"
+                    >
+                        <option value="">All Domains</option>
+                        <option value="system">System</option>
+                        <option value="notepad">Notepad</option>
+                        <option value="paint">Paint</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label style="display: block; margin-bottom: 8px; font-size: 0.9rem; color: var(--oa-text-secondary);">
+                        Duration (seconds):
+                    </label>
+                    <select
+                        id="duration-filter"
+                        style="width: 100%; padding: 12px; background: var(--oa-bg-tertiary); border: 1px solid var(--oa-border-color); border-radius: 8px; color: var(--oa-text-primary);"
+                    >
+                        <option value="">All Durations</option>
+                        <option value="0-30">0-30s (Short)</option>
+                        <option value="30-60">30-60s (Medium)</option>
+                        <option value="60+">60s+ (Long)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <div style="font-size: 0.85rem; color: var(--oa-text-muted); margin-bottom: 8px;">
+                    Filtered: <span id="filter-count" style="color: var(--oa-accent); font-weight: 600;">4</span>
+                </div>
+                <div id="filter-results" style="display: flex; flex-direction: column; gap: 8px;"></div>
+            </div>
+        </div>
+        
+        </section>
+        
+
+        <section class="oa-section" style="margin-bottom: 24px;">
+            <h2 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 16px;">3. Format Utilities</h2>
+            
+        <div style="background: var(--oa-bg-secondary); padding: 24px; border-radius: 12px;">
+            <h3 style="margin-bottom: 16px; color: var(--oa-accent);">Utilities Demo (utils.js)</h3>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 16px;">
+                <div style="padding: 16px; background: var(--oa-bg-tertiary); border-radius: 8px;">
+                    <div style="font-size: 0.85rem; color: var(--oa-text-muted); margin-bottom: 4px;">Duration Formatting</div>
+                    <div style="font-family: var(--oa-font-mono); font-size: 0.9rem;">
+                        <code>45.5</code> → <span style="color: var(--oa-accent);" id="duration-demo"></span>
+                    </div>
+                </div>
+
+                <div style="padding: 16px; background: var(--oa-bg-tertiary); border-radius: 8px;">
+                    <div style="font-size: 0.85rem; color: var(--oa-text-muted); margin-bottom: 4px;">Timestamp Formatting</div>
+                    <div style="font-family: var(--oa-font-mono); font-size: 0.9rem;">
+                        <span style="color: var(--oa-accent);" id="timestamp-demo"></span>
+                    </div>
+                </div>
+
+                <div style="padding: 16px; background: var(--oa-bg-tertiary); border-radius: 8px;">
+                    <div style="font-size: 0.85rem; color: var(--oa-text-muted); margin-bottom: 4px;">Relative Time</div>
+                    <div style="font-family: var(--oa-font-mono); font-size: 0.9rem;">
+                        <span style="color: var(--oa-accent);" id="relative-demo"></span>
+                    </div>
+                </div>
+
+                <div style="padding: 16px; background: var(--oa-bg-tertiary); border-radius: 8px;">
+                    <div style="font-size: 0.85rem; color: var(--oa-text-muted); margin-bottom: 4px;">Percentage Formatting</div>
+                    <div style="font-family: var(--oa-font-mono); font-size: 0.9rem;">
+                        <code>0.856</code> → <span style="color: var(--oa-accent);" id="percentage-demo"></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        </section>
+        
+
+        <section class="oa-section" style="margin-bottom: 24px;">
+            <h2 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 16px;">4. Search + Filter + Format (Combined)</h2>
+            
+        <div style="background: var(--oa-bg-secondary); padding: 24px; border-radius: 12px;">
+            <h3 style="margin-bottom: 16px; color: var(--oa-accent);">Combined Demo</h3>
+
+            <div style="margin-bottom: 16px;">
+                <input
+                    id="combined-search"
+                    type="text"
+                    placeholder="Search (combines with filters below)..."
+                    style="width: 100%; padding: 12px; background: var(--oa-bg-tertiary); border: 1px solid var(--oa-border-color); border-radius: 8px; color: var(--oa-text-primary); font-size: 1rem; margin-bottom: 12px;"
+                />
+
+                <select
+                    id="combined-domain"
+                    style="padding: 12px; background: var(--oa-bg-tertiary); border: 1px solid var(--oa-border-color); border-radius: 8px; color: var(--oa-text-primary); margin-right: 8px;"
+                >
+                    <option value="">All Domains</option>
+                    <option value="system">System</option>
+                    <option value="notepad">Notepad</option>
+                    <option value="paint">Paint</option>
+                </select>
+
+                <button
+                    onclick="clearCombinedFilters()"
+                    style="padding: 12px 24px; background: var(--oa-error); color: white; border: none; border-radius: 8px; cursor: pointer; font-weight: 600;"
+                >
+                    Clear All
+                </button>
+            </div>
+
+            <div style="margin-bottom: 16px;">
+                <div style="font-size: 0.85rem; color: var(--oa-text-muted); margin-bottom: 8px;">
+                    Results: <span id="combined-count" style="color: var(--oa-accent); font-weight: 600;">4</span>
+                </div>
+                <div id="combined-results" style="display: flex; flex-direction: column; gap: 8px;"></div>
+            </div>
+        </div>
+        
+        </section>
+        
+    </main>
+    <footer style="text-align: center; padding: 24px; font-size: 0.8rem; color: var(--oa-text-muted);">
+        Generated by <a href="https://github.com/OpenAdaptAI/openadapt-viewer" style="color: var(--oa-accent);">openadapt-viewer</a>
+    </footer>
+    <script>
+/**
+ * OpenAdapt Viewer - Advanced Search Utilities
+ *
+ * Provides token-based search with flexible matching capabilities.
+ * Supports case-insensitive, token order independent, partial matching.
+ *
+ * Example:
+ *   advancedSearch(episodes, "nightshift", ['name', 'description'])
+ *   // Finds "Disable night shift" even with different spacing/case
+ *
+ * @module search
+ */
+
+/**
+ * Advanced token-based search with flexible matching
+ *
+ * Algorithm:
+ * 1. Normalizes query by:
+ *    - Converting to lowercase
+ *    - Removing punctuation (replaced with spaces)
+ *    - Normalizing whitespace
+ *    - Splitting into tokens
+ *
+ * 2. For each item:
+ *    - Extracts searchable text from specified fields
+ *    - Normalizes text the same way
+ *    - Checks if all query tokens match
+ *
+ * 3. Token matching:
+ *    - Bidirectional substring matching
+ *    - "nightshift" matches "night" and "shift"
+ *    - "night" matches "nightshift"
+ *
+ * Examples:
+ *   - "nightshift" finds "Disable night shift" ✓
+ *   - "night shift" finds "Configure nightshift" ✓
+ *   - "shift night" finds "night shift" (order independent) ✓
+ *   - "nightsh" finds "nightshift" (partial) ✓
+ *
+ * @param {Array<Object>} items - Items to search through
+ * @param {string} query - Search query string
+ * @param {string[]} fields - Fields to search in (default: ['name', 'description'])
+ * @returns {Array<Object>} Filtered items that match the query
+ *
+ * @example
+ * const episodes = [
+ *   { name: "Disable night shift", description: "Turn off Night Shift", steps: [...] },
+ *   { name: "Open Notepad", description: "Launch notepad application", steps: [...] }
+ * ];
+ *
+ * // Find episodes about nightshift
+ * const results = advancedSearch(episodes, "nightshift", ['name', 'description', 'steps']);
+ * // Returns: [{ name: "Disable night shift", ... }]
+ *
+ * // Order independent
+ * const results2 = advancedSearch(episodes, "shift night", ['name', 'description']);
+ * // Returns same result
+ */
+function advancedSearch(items, query, fields = ['name', 'description']) {
+    if (!query || query.trim() === '') {
+        return items;
+    }
+
+    // Tokenize and normalize query
+    const queryTokens = query
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')  // Replace punctuation with space
+        .replace(/\s+/g, ' ')           // Normalize whitespace
+        .trim()
+        .split(' ')
+        .filter(t => t.length > 0);
+
+    if (queryTokens.length === 0) {
+        return items;
+    }
+
+    return items.filter(item => {
+        // Build searchable text from all specified fields
+        const searchText = fields
+            .map(field => {
+                const value = item[field];
+                if (Array.isArray(value)) {
+                    // Handle array fields like steps
+                    return value.map(v => typeof v === 'string' ? v : v.description || '').join(' ');
+                }
+                return value || '';
+            })
+            .join(' ')
+            .toLowerCase()
+            .replace(/[^a-z0-9\s]/g, ' ')
+            .replace(/\s+/g, ' ');
+
+        // All query tokens must match somewhere in the searchable text
+        return queryTokens.every(queryToken => {
+            // Split search text into tokens
+            const searchTokens = searchText.split(' ');
+
+            // Check if any search token contains the query token or vice versa
+            return searchTokens.some(searchToken =>
+                searchToken.includes(queryToken) || queryToken.includes(searchToken)
+            );
+        });
+    });
+}
+
+/**
+ * Simplified search for non-module usage (standalone HTML files)
+ * Can be copied directly into <script> tags
+ *
+ * @param {Array<Object>} items - Items to search
+ * @param {string} query - Search query
+ * @param {string[]} fields - Fields to search in
+ * @returns {Array<Object>} Filtered items
+ */
+function simpleSearch(items, query, fields = ['name', 'description']) {
+    if (!query || query.trim() === '') return items;
+
+    const lowerQuery = query.toLowerCase();
+
+    return items.filter(item => {
+        const searchText = fields
+            .map(field => item[field] || '')
+            .join(' ')
+            .toLowerCase();
+
+        return searchText.includes(lowerQuery);
+    });
+}
+
+/**
+ * Fuzzy search with edit distance (Levenshtein)
+ * More forgiving for typos but slower
+ *
+ * @param {Array<Object>} items - Items to search
+ * @param {string} query - Search query
+ * @param {string[]} fields - Fields to search in
+ * @param {number} maxDistance - Maximum edit distance (default: 2)
+ * @returns {Array<Object>} Filtered items
+ */
+function fuzzySearch(items, query, fields = ['name', 'description'], maxDistance = 2) {
+    if (!query || query.trim() === '') return items;
+
+    const lowerQuery = query.toLowerCase();
+
+    return items.filter(item => {
+        const searchText = fields
+            .map(field => item[field] || '')
+            .join(' ')
+            .toLowerCase();
+
+        // Check if query is a substring (fast path)
+        if (searchText.includes(lowerQuery)) return true;
+
+        // Check edit distance for individual words
+        const words = searchText.split(/\s+/);
+        return words.some(word => levenshteinDistance(word, lowerQuery) <= maxDistance);
+    });
+}
+
+/**
+ * Calculate Levenshtein distance between two strings
+ *
+ * @param {string} a - First string
+ * @param {string} b - Second string
+ * @returns {number} Edit distance
+ */
+function levenshteinDistance(a, b) {
+    const matrix = [];
+
+    // Initialize matrix
+    for (let i = 0; i <= b.length; i++) {
+        matrix[i] = [i];
+    }
+    for (let j = 0; j <= a.length; j++) {
+        matrix[0][j] = j;
+    }
+
+    // Fill matrix
+    for (let i = 1; i <= b.length; i++) {
+        for (let j = 1; j <= a.length; j++) {
+            if (b.charAt(i - 1) === a.charAt(j - 1)) {
+                matrix[i][j] = matrix[i - 1][j - 1];
+            } else {
+                matrix[i][j] = Math.min(
+                    matrix[i - 1][j - 1] + 1, // substitution
+                    matrix[i][j - 1] + 1,     // insertion
+                    matrix[i - 1][j] + 1      // deletion
+                );
+            }
+        }
+    }
+
+    return matrix[b.length][a.length];
+}
+
+/**
+ * Highlight matching tokens in text
+ *
+ * @param {string} text - Text to highlight
+ * @param {string} query - Search query
+ * @returns {string} HTML with highlighted matches
+ *
+ * @example
+ * highlightMatches("Disable night shift", "nightshift")
+ * // Returns: "Disable <mark>night</mark> <mark>shift</mark>"
+ */
+function highlightMatches(text, query) {
+    if (!query || query.trim() === '') return text;
+
+    const queryTokens = query
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .split(' ')
+        .filter(t => t.length > 0);
+
+    let result = text;
+
+    queryTokens.forEach(token => {
+        const regex = new RegExp(`(${token})`, 'gi');
+        result = result.replace(regex, '<mark>$1</mark>');
+    });
+
+    return result;
+}
+
+/**
+ * Get inline version of advancedSearch for embedding in HTML
+ * Returns the function as a string that can be inserted into <script> tags
+ *
+ * @returns {string} JavaScript function code
+ */
+function getInlineSearchFunction() {
+    return `
+function advancedSearch(items, query, fields = ['name', 'description']) {
+    if (!query || query.trim() === '') {
+        return items;
+    }
+
+    const queryTokens = query
+        .toLowerCase()
+        .replace(/[^a-z0-9\\s]/g, ' ')
+        .replace(/\\s+/g, ' ')
+        .trim()
+        .split(' ')
+        .filter(t => t.length > 0);
+
+    if (queryTokens.length === 0) {
+        return items;
+    }
+
+    return items.filter(item => {
+        const searchText = fields
+            .map(field => {
+                const value = item[field];
+                if (Array.isArray(value)) {
+                    return value.map(v => typeof v === 'string' ? v : v.description || '').join(' ');
+                }
+                return value || '';
+            })
+            .join(' ')
+            .toLowerCase()
+            .replace(/[^a-z0-9\\s]/g, ' ')
+            .replace(/\\s+/g, ' ');
+
+        return queryTokens.every(queryToken => {
+            const searchTokens = searchText.split(' ');
+            return searchTokens.some(searchToken =>
+                searchToken.includes(queryToken) || queryToken.includes(searchToken)
+            );
+        });
+    });
+}
+`.trim();
+}
+
+// For non-module usage (standalone scripts)
+if (typeof window !== 'undefined') {
+    window.advancedSearch = advancedSearch;
+    window.simpleSearch = simpleSearch;
+    window.fuzzySearch = fuzzySearch;
+    window.highlightMatches = highlightMatches;
+}
+
+</script>
+<script>
+/**
+ * OpenAdapt Viewer - Filter Utilities
+ *
+ * Provides flexible multi-field filtering with combining logic.
+ * Supports exact matching, range filtering, and multiple criteria.
+ *
+ * @module filters
+ */
+
+/**
+ * Filter items based on multiple criteria
+ *
+ * Supports:
+ * - Single field filtering: { recording_id: "rec_001" }
+ * - Multi-field filtering: { domain: "notepad", status: "passed" }
+ * - Array field matching: { tags: ["automation", "demo"] }
+ * - Range filtering: { duration: { min: 10, max: 60 } }
+ * - Custom predicates: { steps: (steps) => steps.length > 5 }
+ *
+ * @param {Array<Object>} items - Items to filter
+ * @param {Object} filters - Filter criteria object
+ * @param {string} combineMode - How to combine filters: 'AND' or 'OR' (default: 'AND')
+ * @returns {Array<Object>} Filtered items
+ *
+ * @example
+ * const episodes = [
+ *   { name: "Episode 1", domain: "notepad", duration: 30, tags: ["demo"] },
+ *   { name: "Episode 2", domain: "paint", duration: 60, tags: ["automation"] }
+ * ];
+ *
+ * // Single filter
+ * filterItems(episodes, { domain: "notepad" })
+ * // Returns: [{ name: "Episode 1", ... }]
+ *
+ * // Multi-field AND
+ * filterItems(episodes, { domain: "notepad", duration: { min: 20 } })
+ * // Returns: [{ name: "Episode 1", ... }]
+ *
+ * // Multi-field OR
+ * filterItems(episodes, { domain: "notepad", tags: ["automation"] }, 'OR')
+ * // Returns: both episodes
+ */
+function filterItems(items, filters, combineMode = 'AND') {
+    if (!filters || Object.keys(filters).length === 0) {
+        return items;
+    }
+
+    return items.filter(item => {
+        const results = Object.entries(filters).map(([field, criteria]) => {
+            return matchesCriteria(item, field, criteria);
+        });
+
+        return combineMode === 'OR'
+            ? results.some(r => r)
+            : results.every(r => r);
+    });
+}
+
+/**
+ * Check if an item matches a specific criteria
+ *
+ * @param {Object} item - Item to check
+ * @param {string} field - Field name
+ * @param {*} criteria - Criteria to match (value, object, or function)
+ * @returns {boolean} True if matches
+ */
+function matchesCriteria(item, field, criteria) {
+    const value = item[field];
+
+    // Function predicate
+    if (typeof criteria === 'function') {
+        return criteria(value, item);
+    }
+
+    // Range filter (e.g., { min: 10, max: 60 })
+    if (typeof criteria === 'object' && criteria !== null && !Array.isArray(criteria)) {
+        if ('min' in criteria || 'max' in criteria) {
+            const numValue = Number(value);
+            if (isNaN(numValue)) return false;
+
+            if ('min' in criteria && numValue < criteria.min) return false;
+            if ('max' in criteria && numValue > criteria.max) return false;
+            return true;
+        }
+
+        // Nested object matching
+        if (typeof value === 'object' && value !== null) {
+            return Object.entries(criteria).every(([k, v]) => value[k] === v);
+        }
+    }
+
+    // Array field: check if item's array contains any of the criteria values
+    if (Array.isArray(value)) {
+        if (Array.isArray(criteria)) {
+            return criteria.some(c => value.includes(c));
+        }
+        return value.includes(criteria);
+    }
+
+    // Array criteria: check if value is in criteria array
+    if (Array.isArray(criteria)) {
+        return criteria.includes(value);
+    }
+
+    // Exact match
+    return value === criteria;
+}
+
+/**
+ * Create a filter function from criteria
+ * Useful for passing to Array.filter()
+ *
+ * @param {Object} filters - Filter criteria
+ * @param {string} combineMode - 'AND' or 'OR'
+ * @returns {Function} Filter function
+ *
+ * @example
+ * const episodes = [...];
+ * const filterFn = createFilter({ domain: "notepad" });
+ * const filtered = episodes.filter(filterFn);
+ */
+function createFilter(filters, combineMode = 'AND') {
+    return (item) => {
+        if (!filters || Object.keys(filters).length === 0) {
+            return true;
+        }
+
+        const results = Object.entries(filters).map(([field, criteria]) => {
+            return matchesCriteria(item, field, criteria);
+        });
+
+        return combineMode === 'OR'
+            ? results.some(r => r)
+            : results.every(r => r);
+    };
+}
+
+/**
+ * Filter by multiple values in a single field
+ *
+ * @param {Array<Object>} items - Items to filter
+ * @param {string} field - Field name
+ * @param {Array} values - Allowed values
+ * @returns {Array<Object>} Filtered items
+ *
+ * @example
+ * filterByValues(episodes, 'domain', ['notepad', 'paint'])
+ * // Returns episodes with domain "notepad" or "paint"
+ */
+function filterByValues(items, field, values) {
+    if (!values || values.length === 0) {
+        return items;
+    }
+
+    return items.filter(item => values.includes(item[field]));
+}
+
+/**
+ * Filter by numeric range
+ *
+ * @param {Array<Object>} items - Items to filter
+ * @param {string} field - Field name
+ * @param {number} min - Minimum value (inclusive)
+ * @param {number} max - Maximum value (inclusive)
+ * @returns {Array<Object>} Filtered items
+ *
+ * @example
+ * filterByRange(episodes, 'duration', 10, 60)
+ * // Returns episodes with duration between 10 and 60 seconds
+ */
+function filterByRange(items, field, min, max) {
+    return items.filter(item => {
+        const value = Number(item[field]);
+        if (isNaN(value)) return false;
+        return value >= min && value <= max;
+    });
+}
+
+/**
+ * Filter by date range
+ *
+ * @param {Array<Object>} items - Items to filter
+ * @param {string} field - Field name (containing ISO date string or timestamp)
+ * @param {Date|string|number} startDate - Start date
+ * @param {Date|string|number} endDate - End date
+ * @returns {Array<Object>} Filtered items
+ *
+ * @example
+ * filterByDateRange(episodes, 'created_at', '2024-01-01', '2024-12-31')
+ */
+function filterByDateRange(items, field, startDate, endDate) {
+    const start = new Date(startDate).getTime();
+    const end = new Date(endDate).getTime();
+
+    return items.filter(item => {
+        const value = new Date(item[field]).getTime();
+        if (isNaN(value)) return false;
+        return value >= start && value <= end;
+    });
+}
+
+/**
+ * Combine multiple filters with different logic
+ *
+ * @param {Array<Object>} items - Items to filter
+ * @param {Array<Object>} filterGroups - Array of {filters, mode} objects
+ * @returns {Array<Object>} Filtered items
+ *
+ * @example
+ * combineFilters(episodes, [
+ *   { filters: { domain: "notepad" }, mode: 'AND' },
+ *   { filters: { status: "passed", tags: ["demo"] }, mode: 'OR' }
+ * ])
+ */
+function combineFilters(items, filterGroups) {
+    let result = items;
+
+    for (const group of filterGroups) {
+        result = filterItems(result, group.filters, group.mode || 'AND');
+    }
+
+    return result;
+}
+
+/**
+ * Get unique values for a field (useful for populating filter dropdowns)
+ *
+ * @param {Array<Object>} items - Items to extract values from
+ * @param {string} field - Field name
+ * @returns {Array} Unique values sorted alphabetically
+ *
+ * @example
+ * getUniqueValues(episodes, 'domain')
+ * // Returns: ["notepad", "paint", "clock"]
+ */
+function getUniqueValues(items, field) {
+    const values = new Set();
+
+    items.forEach(item => {
+        const value = item[field];
+        if (Array.isArray(value)) {
+            value.forEach(v => values.add(v));
+        } else if (value !== null && value !== undefined) {
+            values.add(value);
+        }
+    });
+
+    return Array.from(values).sort();
+}
+
+/**
+ * Get filter statistics (counts per value)
+ *
+ * @param {Array<Object>} items - Items to analyze
+ * @param {string} field - Field name
+ * @returns {Object} Map of value -> count
+ *
+ * @example
+ * getFilterStats(episodes, 'domain')
+ * // Returns: { notepad: 15, paint: 12, clock: 8 }
+ */
+function getFilterStats(items, field) {
+    const stats = {};
+
+    items.forEach(item => {
+        const value = item[field];
+        if (Array.isArray(value)) {
+            value.forEach(v => {
+                stats[v] = (stats[v] || 0) + 1;
+            });
+        } else if (value !== null && value !== undefined) {
+            stats[value] = (stats[value] || 0) + 1;
+        }
+    });
+
+    return stats;
+}
+
+/**
+ * Create a multi-field filter UI state manager
+ *
+ * @returns {Object} Filter state manager
+ *
+ * @example
+ * const filterManager = createFilterManager();
+ * filterManager.addFilter('domain', 'notepad');
+ * filterManager.addFilter('status', 'passed');
+ * const filtered = filterManager.apply(episodes);
+ * filterManager.clearAll();
+ */
+function createFilterManager() {
+    const state = {
+        filters: {},
+        combineMode: 'AND'
+    };
+
+    return {
+        /**
+         * Add or update a filter
+         */
+        addFilter(field, criteria) {
+            state.filters[field] = criteria;
+            return this;
+        },
+
+        /**
+         * Remove a filter
+         */
+        removeFilter(field) {
+            delete state.filters[field];
+            return this;
+        },
+
+        /**
+         * Clear all filters
+         */
+        clearAll() {
+            state.filters = {};
+            return this;
+        },
+
+        /**
+         * Set combine mode
+         */
+        setCombineMode(mode) {
+            state.combineMode = mode;
+            return this;
+        },
+
+        /**
+         * Get current filters
+         */
+        getFilters() {
+            return { ...state.filters };
+        },
+
+        /**
+         * Apply filters to items
+         */
+        apply(items) {
+            return filterItems(items, state.filters, state.combineMode);
+        },
+
+        /**
+         * Check if any filters are active
+         */
+        hasActiveFilters() {
+            return Object.keys(state.filters).length > 0;
+        },
+
+        /**
+         * Get count of active filters
+         */
+        getFilterCount() {
+            return Object.keys(state.filters).length;
+        }
+    };
+}
+
+// For non-module usage (standalone scripts)
+if (typeof window !== 'undefined') {
+    window.filterItems = filterItems;
+    window.createFilter = createFilter;
+    window.filterByValues = filterByValues;
+    window.filterByRange = filterByRange;
+    window.filterByDateRange = filterByDateRange;
+    window.combineFilters = combineFilters;
+    window.getUniqueValues = getUniqueValues;
+    window.getFilterStats = getFilterStats;
+    window.createFilterManager = createFilterManager;
+}
+
+</script>
+<script>
+/**
+ * OpenAdapt Viewer - Common Utilities
+ *
+ * Provides utility functions for formatting, data loading, and event handling.
+ * Shared across all OpenAdapt viewers.
+ *
+ * @module utils
+ */
+
+/* ==========================================================================
+   Formatting Utilities
+   ========================================================================== */
+
+/**
+ * Format duration in seconds to human-readable string
+ *
+ * @param {number} seconds - Duration in seconds
+ * @param {boolean} compact - Use compact format (default: false)
+ * @returns {string} Formatted duration
+ *
+ * @example
+ * formatDuration(65)       // "1m 5s"
+ * formatDuration(65, true) // "1:05"
+ * formatDuration(3665)     // "1h 1m 5s"
+ * formatDuration(45.7)     // "45.7s"
+ */
+function formatDuration(seconds, compact = false) {
+    if (seconds === null || seconds === undefined || isNaN(seconds)) {
+        return 'N/A';
+    }
+
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = seconds % 60;
+
+    if (compact) {
+        // Compact format: "1:23:45" or "12:34"
+        if (hours > 0) {
+            return `${hours}:${String(minutes).padStart(2, '0')}:${String(Math.floor(secs)).padStart(2, '0')}`;
+        }
+        return `${minutes}:${String(Math.floor(secs)).padStart(2, '0')}`;
+    }
+
+    // Human-readable format: "1h 23m 45s"
+    const parts = [];
+    if (hours > 0) parts.push(`${hours}h`);
+    if (minutes > 0) parts.push(`${minutes}m`);
+
+    if (secs > 0 || parts.length === 0) {
+        // Show decimal for sub-minute durations
+        const secStr = seconds < 60 ? secs.toFixed(1) : Math.floor(secs);
+        parts.push(`${secStr}s`);
+    }
+
+    return parts.join(' ');
+}
+
+/**
+ * Format timestamp to human-readable date/time
+ *
+ * @param {number|string|Date} timestamp - Unix timestamp, ISO string, or Date object
+ * @param {Object} options - Formatting options
+ * @returns {string} Formatted timestamp
+ *
+ * @example
+ * formatTimestamp(1704067200000)
+ * // "Jan 1, 2024, 12:00 AM"
+ *
+ * formatTimestamp("2024-01-01T00:00:00Z", { dateStyle: 'full' })
+ * // "Monday, January 1, 2024"
+ */
+function formatTimestamp(timestamp, options = {}) {
+    if (!timestamp) return 'N/A';
+
+    try {
+        const date = new Date(timestamp);
+        if (isNaN(date.getTime())) return 'Invalid Date';
+
+        const defaultOptions = {
+            dateStyle: 'medium',
+            timeStyle: 'short',
+            ...options
+        };
+
+        return new Intl.DateTimeFormat('en-US', defaultOptions).format(date);
+    } catch (error) {
+        return 'Invalid Date';
+    }
+}
+
+/**
+ * Format relative time (e.g., "2 hours ago")
+ *
+ * @param {number|string|Date} timestamp - Timestamp to format
+ * @returns {string} Relative time string
+ *
+ * @example
+ * formatRelativeTime(Date.now() - 3600000) // "1 hour ago"
+ * formatRelativeTime(Date.now() + 86400000) // "in 1 day"
+ */
+function formatRelativeTime(timestamp) {
+    if (!timestamp) return 'N/A';
+
+    try {
+        const date = new Date(timestamp);
+        const now = new Date();
+        const diffMs = date - now;
+        const diffSec = Math.floor(diffMs / 1000);
+        const diffMin = Math.floor(diffSec / 60);
+        const diffHour = Math.floor(diffMin / 60);
+        const diffDay = Math.floor(diffHour / 24);
+
+        if (Math.abs(diffDay) > 0) {
+            return new Intl.RelativeTimeFormat('en', { numeric: 'auto' }).format(diffDay, 'day');
+        }
+        if (Math.abs(diffHour) > 0) {
+            return new Intl.RelativeTimeFormat('en', { numeric: 'auto' }).format(diffHour, 'hour');
+        }
+        if (Math.abs(diffMin) > 0) {
+            return new Intl.RelativeTimeFormat('en', { numeric: 'auto' }).format(diffMin, 'minute');
+        }
+        return new Intl.RelativeTimeFormat('en', { numeric: 'auto' }).format(diffSec, 'second');
+    } catch (error) {
+        return 'N/A';
+    }
+}
+
+/**
+ * Format number with thousands separators
+ *
+ * @param {number} num - Number to format
+ * @param {number} decimals - Number of decimal places (default: 0)
+ * @returns {string} Formatted number
+ *
+ * @example
+ * formatNumber(1234567)      // "1,234,567"
+ * formatNumber(1234.5678, 2) // "1,234.57"
+ */
+function formatNumber(num, decimals = 0) {
+    if (num === null || num === undefined || isNaN(num)) {
+        return 'N/A';
+    }
+
+    return new Intl.NumberFormat('en-US', {
+        minimumFractionDigits: decimals,
+        maximumFractionDigits: decimals
+    }).format(num);
+}
+
+/**
+ * Format percentage
+ *
+ * @param {number} value - Value (0-1 or 0-100)
+ * @param {boolean} isDecimal - Whether value is 0-1 (default: true)
+ * @param {number} decimals - Decimal places (default: 1)
+ * @returns {string} Formatted percentage
+ *
+ * @example
+ * formatPercentage(0.856)        // "85.6%"
+ * formatPercentage(85.6, false)  // "85.6%"
+ * formatPercentage(0.1234, true, 2) // "12.34%"
+ */
+function formatPercentage(value, isDecimal = true, decimals = 1) {
+    if (value === null || value === undefined || isNaN(value)) {
+        return 'N/A';
+    }
+
+    const percent = isDecimal ? value * 100 : value;
+    return `${percent.toFixed(decimals)}%`;
+}
+
+/**
+ * Format file size in bytes to human-readable string
+ *
+ * @param {number} bytes - File size in bytes
+ * @param {number} decimals - Decimal places (default: 2)
+ * @returns {string} Formatted size
+ *
+ * @example
+ * formatFileSize(1024)        // "1.00 KB"
+ * formatFileSize(1536000)     // "1.46 MB"
+ * formatFileSize(1073741824)  // "1.00 GB"
+ */
+function formatFileSize(bytes, decimals = 2) {
+    if (bytes === 0) return '0 Bytes';
+    if (!bytes) return 'N/A';
+
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+
+    return `${parseFloat((bytes / Math.pow(k, i)).toFixed(decimals))} ${sizes[i]}`;
+}
+
+/* ==========================================================================
+   Data Loading Utilities
+   ========================================================================== */
+
+/**
+ * Load JSON data from a URL or file path
+ *
+ * @param {string} path - URL or file path
+ * @returns {Promise<Object>} Parsed JSON data
+ *
+ * @example
+ * const data = await loadJSON('episodes.json');
+ * console.log(data.episodes);
+ */
+export async function loadJSON(path) {
+    try {
+        const response = await fetch(path);
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return await response.json();
+    } catch (error) {
+        console.error('Error loading JSON:', error);
+        throw error;
+    }
+}
+
+/**
+ * Load JSON with error handling and fallback
+ *
+ * @param {string} path - URL or file path
+ * @param {Object} fallback - Fallback data if load fails
+ * @returns {Promise<Object>} Parsed JSON or fallback
+ */
+export async function loadJSONSafe(path, fallback = null) {
+    try {
+        return await loadJSON(path);
+    } catch (error) {
+        console.warn(`Failed to load ${path}, using fallback:`, error);
+        return fallback;
+    }
+}
+
+/**
+ * Load multiple JSON files in parallel
+ *
+ * @param {string[]} paths - Array of URLs or file paths
+ * @returns {Promise<Object[]>} Array of parsed JSON data
+ *
+ * @example
+ * const [episodes, recordings] = await loadMultipleJSON([
+ *   'episodes.json',
+ *   'recordings.json'
+ * ]);
+ */
+export async function loadMultipleJSON(paths) {
+    return Promise.all(paths.map(path => loadJSON(path)));
+}
+
+/**
+ * Load image with preloading
+ *
+ * @param {string} src - Image URL
+ * @returns {Promise<HTMLImageElement>} Loaded image element
+ *
+ * @example
+ * const img = await loadImage('screenshot.png');
+ * document.body.appendChild(img);
+ */
+function loadImage(src) {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => resolve(img);
+        img.onerror = reject;
+        img.src = src;
+    });
+}
+
+/* ==========================================================================
+   Event Handling Utilities
+   ========================================================================== */
+
+/**
+ * Debounce function calls
+ *
+ * @param {Function} func - Function to debounce
+ * @param {number} wait - Wait time in milliseconds
+ * @returns {Function} Debounced function
+ *
+ * @example
+ * const handleSearch = debounce((query) => {
+ *   console.log('Searching:', query);
+ * }, 300);
+ *
+ * input.addEventListener('input', (e) => handleSearch(e.target.value));
+ */
+function debounce(func, wait) {
+    let timeout;
+    return function executedFunction(...args) {
+        const later = () => {
+            clearTimeout(timeout);
+            func(...args);
+        };
+        clearTimeout(timeout);
+        timeout = setTimeout(later, wait);
+    };
+}
+
+/**
+ * Throttle function calls
+ *
+ * @param {Function} func - Function to throttle
+ * @param {number} limit - Time limit in milliseconds
+ * @returns {Function} Throttled function
+ *
+ * @example
+ * const handleScroll = throttle(() => {
+ *   console.log('Scrolled');
+ * }, 100);
+ *
+ * window.addEventListener('scroll', handleScroll);
+ */
+function throttle(func, limit) {
+    let inThrottle;
+    return function executedFunction(...args) {
+        if (!inThrottle) {
+            func(...args);
+            inThrottle = true;
+            setTimeout(() => inThrottle = false, limit);
+        }
+    };
+}
+
+/**
+ * Wait for DOM element to exist
+ *
+ * @param {string} selector - CSS selector
+ * @param {number} timeout - Timeout in milliseconds (default: 5000)
+ * @returns {Promise<Element>} Element when found
+ *
+ * @example
+ * const element = await waitForElement('#episode-list');
+ * element.classList.add('visible');
+ */
+function waitForElement(selector, timeout = 5000) {
+    return new Promise((resolve, reject) => {
+        const element = document.querySelector(selector);
+        if (element) {
+            return resolve(element);
+        }
+
+        const observer = new MutationObserver(() => {
+            const element = document.querySelector(selector);
+            if (element) {
+                observer.disconnect();
+                resolve(element);
+            }
+        });
+
+        observer.observe(document.body, {
+            childList: true,
+            subtree: true
+        });
+
+        setTimeout(() => {
+            observer.disconnect();
+            reject(new Error(`Element ${selector} not found within ${timeout}ms`));
+        }, timeout);
+    });
+}
+
+/* ==========================================================================
+   DOM Utilities
+   ========================================================================== */
+
+/**
+ * Escape HTML to prevent XSS
+ *
+ * @param {string} text - Text to escape
+ * @returns {string} Escaped HTML
+ *
+ * @example
+ * escapeHTML('<script>alert("XSS")</script>')
+ * // "&lt;script&gt;alert(&quot;XSS&quot;)&lt;/script&gt;"
+ */
+function escapeHTML(text) {
+    const div = document.createElement('div');
+    div.textContent = text;
+    return div.innerHTML;
+}
+
+/**
+ * Create element with attributes and children
+ *
+ * @param {string} tag - Element tag name
+ * @param {Object} attrs - Element attributes
+ * @param {Array|string} children - Child elements or text
+ * @returns {HTMLElement} Created element
+ *
+ * @example
+ * const div = createElement('div',
+ *   { class: 'container', id: 'main' },
+ *   [
+ *     createElement('h1', {}, 'Title'),
+ *     createElement('p', {}, 'Content')
+ *   ]
+ * );
+ */
+function createElement(tag, attrs = {}, children = []) {
+    const element = document.createElement(tag);
+
+    // Set attributes
+    Object.entries(attrs).forEach(([key, value]) => {
+        if (key === 'class') {
+            element.className = value;
+        } else if (key === 'style' && typeof value === 'object') {
+            Object.assign(element.style, value);
+        } else {
+            element.setAttribute(key, value);
+        }
+    });
+
+    // Add children
+    if (typeof children === 'string') {
+        element.textContent = children;
+    } else if (Array.isArray(children)) {
+        children.forEach(child => {
+            if (typeof child === 'string') {
+                element.appendChild(document.createTextNode(child));
+            } else if (child instanceof HTMLElement) {
+                element.appendChild(child);
+            }
+        });
+    }
+
+    return element;
+}
+
+/* ==========================================================================
+   Utility Helpers
+   ========================================================================== */
+
+/**
+ * Deep clone an object
+ *
+ * @param {Object} obj - Object to clone
+ * @returns {Object} Cloned object
+ */
+function deepClone(obj) {
+    return JSON.parse(JSON.stringify(obj));
+}
+
+/**
+ * Get nested property safely
+ *
+ * @param {Object} obj - Object to query
+ * @param {string} path - Property path (e.g., "user.profile.name")
+ * @param {*} defaultValue - Default value if not found
+ * @returns {*} Property value or default
+ *
+ * @example
+ * const user = { profile: { name: "Alice" } };
+ * getNestedProperty(user, "profile.name")        // "Alice"
+ * getNestedProperty(user, "profile.age", 25)     // 25
+ */
+function getNestedProperty(obj, path, defaultValue = undefined) {
+    const keys = path.split('.');
+    let result = obj;
+
+    for (const key of keys) {
+        if (result && typeof result === 'object' && key in result) {
+            result = result[key];
+        } else {
+            return defaultValue;
+        }
+    }
+
+    return result;
+}
+
+/**
+ * Group array of objects by a field
+ *
+ * @param {Array<Object>} items - Items to group
+ * @param {string} field - Field to group by
+ * @returns {Object} Grouped object
+ *
+ * @example
+ * const episodes = [
+ *   { name: "E1", domain: "notepad" },
+ *   { name: "E2", domain: "paint" },
+ *   { name: "E3", domain: "notepad" }
+ * ];
+ * groupBy(episodes, 'domain')
+ * // { notepad: [E1, E3], paint: [E2] }
+ */
+function groupBy(items, field) {
+    return items.reduce((groups, item) => {
+        const key = item[field];
+        if (!groups[key]) {
+            groups[key] = [];
+        }
+        groups[key].push(item);
+        return groups;
+    }, {});
+}
+
+/**
+ * Sort array of objects by a field
+ *
+ * @param {Array<Object>} items - Items to sort
+ * @param {string} field - Field to sort by
+ * @param {boolean} ascending - Sort ascending (default: true)
+ * @returns {Array<Object>} Sorted array (new array)
+ *
+ * @example
+ * sortBy(episodes, 'duration', false) // Sort by duration descending
+ */
+function sortBy(items, field, ascending = true) {
+    return [...items].sort((a, b) => {
+        const aVal = a[field];
+        const bVal = b[field];
+
+        if (aVal < bVal) return ascending ? -1 : 1;
+        if (aVal > bVal) return ascending ? 1 : -1;
+        return 0;
+    });
+}
+
+// For non-module usage (standalone scripts)
+if (typeof window !== 'undefined') {
+    window.formatDuration = formatDuration;
+    window.formatTimestamp = formatTimestamp;
+    window.formatRelativeTime = formatRelativeTime;
+    window.formatNumber = formatNumber;
+    window.formatPercentage = formatPercentage;
+    window.formatFileSize = formatFileSize;
+    window.loadJSON = loadJSON;
+    window.loadJSONSafe = loadJSONSafe;
+    window.loadMultipleJSON = loadMultipleJSON;
+    window.loadImage = loadImage;
+    window.debounce = debounce;
+    window.throttle = throttle;
+    window.waitForElement = waitForElement;
+    window.escapeHTML = escapeHTML;
+    window.createElement = createElement;
+    window.deepClone = deepClone;
+    window.getNestedProperty = getNestedProperty;
+    window.groupBy = groupBy;
+    window.sortBy = sortBy;
+}
+
+</script>
+    
+    <script>
+        // Helper to render episode card
+        function renderEpisode(episode) {
+            return `
+                <div style="padding: 16px; background: var(--oa-bg-tertiary); border-radius: 8px; border-left: 4px solid var(--oa-accent);">
+                    <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 8px;">
+                        <div style="font-weight: 600; color: var(--oa-text-primary);">${episode.name}</div>
+                        <div style="font-size: 0.85rem; color: var(--oa-text-secondary);">${formatDuration(episode.duration)}</div>
+                    </div>
+                    <div style="font-size: 0.9rem; color: var(--oa-text-secondary); margin-bottom: 8px;">${episode.description}</div>
+                    <div style="display: flex; gap: 12px; font-size: 0.85rem;">
+                        <span style="color: var(--oa-text-muted);">Domain: <span style="color: var(--oa-accent);">${episode.domain}</span></span>
+                        <span style="color: var(--oa-text-muted);">Steps: <span style="color: var(--oa-accent);">${episode.steps.length}</span></span>
+                    </div>
+                </div>
+            `;
+        }
+
+        // Search demo
+        function updateSearch() {
+            const query = document.getElementById('search-input').value;
+            const results = advancedSearch(episodes, query, ['name', 'description', 'steps']);
+
+            document.getElementById('search-count').textContent = results.length;
+            document.getElementById('search-results').innerHTML = results.map(renderEpisode).join('');
+        }
+
+        // Filter demo
+        function updateFilters() {
+            const domain = document.getElementById('domain-filter').value;
+            const durationRange = document.getElementById('duration-filter').value;
+
+            let filters = {};
+
+            if (domain) {
+                filters.domain = domain;
+            }
+
+            if (durationRange === '0-30') {
+                filters.duration = { min: 0, max: 30 };
+            } else if (durationRange === '30-60') {
+                filters.duration = { min: 30, max: 60 };
+            } else if (durationRange === '60+') {
+                filters.duration = { min: 60 };
+            }
+
+            const results = filterItems(episodes, filters);
+
+            document.getElementById('filter-count').textContent = results.length;
+            document.getElementById('filter-results').innerHTML = results.map(renderEpisode).join('');
+        }
+
+        // Utils demo
+        function updateUtils() {
+            document.getElementById('duration-demo').textContent = formatDuration(45.5);
+            document.getElementById('timestamp-demo').textContent = formatTimestamp('2024-01-15T10:30:00Z');
+            document.getElementById('relative-demo').textContent = formatRelativeTime(new Date().getTime() - 3600000);
+            document.getElementById('percentage-demo').textContent = formatPercentage(0.856);
+        }
+
+        // Combined demo
+        function updateCombined() {
+            const query = document.getElementById('combined-search').value;
+            const domain = document.getElementById('combined-domain').value;
+
+            // First apply search
+            let results = advancedSearch(episodes, query, ['name', 'description', 'steps']);
+
+            // Then apply filters
+            if (domain) {
+                results = filterItems(results, { domain });
+            }
+
+            document.getElementById('combined-count').textContent = results.length;
+            document.getElementById('combined-results').innerHTML = results.map(renderEpisode).join('');
+        }
+
+        function clearCombinedFilters() {
+            document.getElementById('combined-search').value = '';
+            document.getElementById('combined-domain').value = '';
+            updateCombined();
+        }
+
+        // Set up event listeners
+        document.addEventListener('DOMContentLoaded', () => {
+            // Search demo
+            document.getElementById('search-input').addEventListener('input', updateSearch);
+            updateSearch();
+
+            // Filter demo
+            document.getElementById('domain-filter').addEventListener('change', updateFilters);
+            document.getElementById('duration-filter').addEventListener('change', updateFilters);
+            updateFilters();
+
+            // Utils demo
+            updateUtils();
+
+            // Combined demo
+            document.getElementById('combined-search').addEventListener('input', updateCombined);
+            document.getElementById('combined-domain').addEventListener('change', updateCombined);
+            updateCombined();
+        });
+    </script>
+</body>
+</html>

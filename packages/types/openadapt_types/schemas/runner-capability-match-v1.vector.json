@@ -1,0 +1,106 @@
+{
+  "expected_match": {
+    "manifest_digest": "sha256:acc05cdf064569d93df594df151b01e7d1740f97c47d02fb056e225d745714fe",
+    "matched": true,
+    "mismatch_codes": [],
+    "missing_capabilities": [],
+    "requirements_digest": "sha256:b08b0b77a70c0a5fc274eaa8e4ef9e1ea4ab465844d27ea69f5249ab1e69541d",
+    "schema_version": "openadapt.capability-match/v1"
+  },
+  "manifest": {
+    "agent_version": "0.15.0",
+    "architecture": "aarch64",
+    "expires_at": "2026-07-28T12:15:00Z",
+    "flow_version": "1.26.0",
+    "generated_at": "2026-07-28T12:00:00Z",
+    "host_os": "macos",
+    "installation_id": "install_reference_01",
+    "lanes": [
+      {
+        "capabilities": [
+          "application_identity",
+          "durable_resume",
+          "effect_tier_2",
+          "effect_verification",
+          "evidence_export",
+          "governed_authorization",
+          "local_secret_resolution",
+          "no_external_egress",
+          "ocr_relational_resolution",
+          "parameter_by_reference",
+          "physical_input_actuation",
+          "pixel_observation",
+          "postcondition_verification",
+          "record_identity",
+          "session_continuity",
+          "session_identity",
+          "settled_state_detection",
+          "workflow_state_identity"
+        ],
+        "execution_mode": "external",
+        "supported_profiles": [
+          "regulated",
+          "standard"
+        ],
+        "surface": "citrix"
+      },
+      {
+        "capabilities": [
+          "application_identity",
+          "durable_resume",
+          "effect_tier_1",
+          "playwright_actuation",
+          "playwright_dom",
+          "settled_state_detection",
+          "structural_resolution",
+          "workflow_state_identity"
+        ],
+        "execution_mode": "in_session",
+        "supported_profiles": [
+          "standard"
+        ],
+        "surface": "web"
+      }
+    ],
+    "runner_id": "runner_reference_01",
+    "schema_version": "openadapt.runner-capability-manifest/v1"
+  },
+  "manifest_canonical_json": "{\"agent_version\":\"0.15.0\",\"architecture\":\"aarch64\",\"expires_at\":\"2026-07-28T12:15:00Z\",\"flow_version\":\"1.26.0\",\"generated_at\":\"2026-07-28T12:00:00Z\",\"host_os\":\"macos\",\"installation_id\":\"install_reference_01\",\"lanes\":[{\"capabilities\":[\"application_identity\",\"durable_resume\",\"effect_tier_2\",\"effect_verification\",\"evidence_export\",\"governed_authorization\",\"local_secret_resolution\",\"no_external_egress\",\"ocr_relational_resolution\",\"parameter_by_reference\",\"physical_input_actuation\",\"pixel_observation\",\"postcondition_verification\",\"record_identity\",\"session_continuity\",\"session_identity\",\"settled_state_detection\",\"workflow_state_identity\"],\"execution_mode\":\"external\",\"supported_profiles\":[\"regulated\",\"standard\"],\"surface\":\"citrix\"},{\"capabilities\":[\"application_identity\",\"durable_resume\",\"effect_tier_1\",\"playwright_actuation\",\"playwright_dom\",\"settled_state_detection\",\"structural_resolution\",\"workflow_state_identity\"],\"execution_mode\":\"in_session\",\"supported_profiles\":[\"standard\"],\"surface\":\"web\"}],\"runner_id\":\"runner_reference_01\",\"schema_version\":\"openadapt.runner-capability-manifest/v1\"}",
+  "manifest_digest": "sha256:acc05cdf064569d93df594df151b01e7d1740f97c47d02fb056e225d745714fe",
+  "match_at": "2026-07-28T12:05:00Z",
+  "requirements": {
+    "authorization_digest": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+    "binding_digest": "sha256:4444444444444444444444444444444444444444444444444444444444444444",
+    "execution_mode": "external",
+    "maximum_runtime_version": "1.26.9",
+    "minimum_effect_tier": 2,
+    "minimum_runtime_version": "1.26.0",
+    "permitted_executor_ids": [],
+    "permitted_runner_ids": [
+      "runner_reference_01"
+    ],
+    "plan_digest": "sha256:2222222222222222222222222222222222222222222222222222222222222222",
+    "portable_intent_digest": "sha256:1111111111111111111111111111111111111111111111111111111111111111",
+    "profile": "regulated",
+    "qualification_digest": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+    "required_capabilities": [
+      "durable_resume",
+      "governed_authorization",
+      "local_secret_resolution",
+      "no_external_egress",
+      "ocr_relational_resolution",
+      "parameter_by_reference",
+      "pixel_observation",
+      "record_identity",
+      "settled_state_detection"
+    ],
+    "runtime_input_digest": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+    "schema_version": "openadapt.execution-requirements/v1",
+    "selected_plan_id": "plan_reference_01",
+    "surface": "citrix",
+    "workflow_family_id": "family_reference_01"
+  },
+  "requirements_canonical_json": "{\"authorization_digest\":\"sha256:5555555555555555555555555555555555555555555555555555555555555555\",\"binding_digest\":\"sha256:4444444444444444444444444444444444444444444444444444444444444444\",\"execution_mode\":\"external\",\"maximum_runtime_version\":\"1.26.9\",\"minimum_effect_tier\":2,\"minimum_runtime_version\":\"1.26.0\",\"permitted_executor_ids\":[],\"permitted_runner_ids\":[\"runner_reference_01\"],\"plan_digest\":\"sha256:2222222222222222222222222222222222222222222222222222222222222222\",\"portable_intent_digest\":\"sha256:1111111111111111111111111111111111111111111111111111111111111111\",\"profile\":\"regulated\",\"qualification_digest\":\"sha256:3333333333333333333333333333333333333333333333333333333333333333\",\"required_capabilities\":[\"durable_resume\",\"governed_authorization\",\"local_secret_resolution\",\"no_external_egress\",\"ocr_relational_resolution\",\"parameter_by_reference\",\"pixel_observation\",\"record_identity\",\"settled_state_detection\"],\"runtime_input_digest\":\"sha256:6666666666666666666666666666666666666666666666666666666666666666\",\"schema_version\":\"openadapt.execution-requirements/v1\",\"selected_plan_id\":\"plan_reference_01\",\"surface\":\"citrix\",\"workflow_family_id\":\"family_reference_01\"}",
+  "requirements_digest": "sha256:b08b0b77a70c0a5fc274eaa8e4ef9e1ea4ab465844d27ea69f5249ab1e69541d",
+  "schema_version": "openadapt.runner-capability-match-vector/v1"
+}

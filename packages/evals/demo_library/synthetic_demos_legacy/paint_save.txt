@@ -1,0 +1,43 @@
+TASK: Save a Paint drawing as PNG file
+DOMAIN: paint
+
+PRECONDITIONS: Paint is open with a drawing
+
+STEPS:
+1. Click on the File menu
+   REASONING: Save option is located in the File menu
+   ACTION: CLICK(x=0.03, y=0.03)
+
+2. Click on "Save as" option
+   REASONING: Save as allows us to specify format and filename
+   ACTION: CLICK(x=0.08, y=0.15)
+
+3. Wait for save format options to appear
+   REASONING: Submenu needs time to expand
+   ACTION: WAIT(0.3)
+
+4. Click on "PNG picture" option
+   REASONING: PNG is a good format for lossless image saving
+   ACTION: CLICK(x=0.2, y=0.2)
+
+5. Wait for Save As dialog to appear
+   REASONING: Dialog needs time to load
+   ACTION: WAIT(0.5)
+
+6. Clear the filename field
+   REASONING: Ensure we start with empty filename field
+   ACTION: HOTKEY("ctrl", "a")
+
+7. Type the desired filename
+   REASONING: Entering the name for the image file
+   ACTION: TYPE("my_drawing")
+
+8. Click the Save button
+   REASONING: Confirm the save operation
+   ACTION: CLICK(x=0.85, y=0.95)
+
+9. Verify file is saved
+   REASONING: No unsaved changes indicator should appear
+   ACTION: DONE()
+
+EXPECTED_OUTCOME: Drawing is saved as "my_drawing.png" in the selected location

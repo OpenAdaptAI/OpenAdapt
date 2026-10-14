@@ -1,0 +1,175 @@
+{
+  "$defs": {
+    "BusinessDecisionDeliveryMode": {
+      "description": "Whether the decision can leave the customer-controlled context.",
+      "enum": [
+        "remote_answerable",
+        "local_answer_required"
+      ],
+      "title": "BusinessDecisionDeliveryMode",
+      "type": "string"
+    },
+    "BusinessDecisionRequiredAuthn": {
+      "description": "The exact authentication profile required by the qualified contract.",
+      "enum": [
+        "local_enterprise_identity",
+        "aal2",
+        "webauthn"
+      ],
+      "title": "BusinessDecisionRequiredAuthn",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Signed qualification policy for local or remote decision delivery.",
+  "properties": {
+    "authorized_answer_issuer_key_ids": {
+      "items": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+        "type": "string"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Authorized Answer Issuer Key Ids",
+      "type": "array"
+    },
+    "authorized_role_refs": {
+      "items": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+        "type": "string"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Authorized Role Refs",
+      "type": "array"
+    },
+    "authorized_route_refs": {
+      "items": {
+        "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+        "type": "string"
+      },
+      "maxItems": 16,
+      "minItems": 1,
+      "title": "Authorized Route Refs",
+      "type": "array"
+    },
+    "created_at": {
+      "maxLength": 40,
+      "minLength": 20,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?(Z|[+-]\\d{2}:\\d{2})$",
+      "title": "Created At",
+      "type": "string"
+    },
+    "decision_contract_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Decision Contract Digest",
+      "type": "string"
+    },
+    "decision_contract_revision": {
+      "maximum": 2147483647,
+      "minimum": 1,
+      "title": "Decision Contract Revision",
+      "type": "integer"
+    },
+    "delivery_mode": {
+      "$ref": "#/$defs/BusinessDecisionDeliveryMode"
+    },
+    "expires_at": {
+      "maxLength": 40,
+      "minLength": 20,
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,6})?(Z|[+-]\\d{2}:\\d{2})$",
+      "title": "Expires At",
+      "type": "string"
+    },
+    "issuer_key_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Issuer Key Id",
+      "type": "string"
+    },
+    "policy_ref": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Policy Ref",
+      "type": "string"
+    },
+    "policy_revision": {
+      "maximum": 2147483647,
+      "minimum": 1,
+      "title": "Policy Revision",
+      "type": "integer"
+    },
+    "presentation_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Presentation Digest",
+      "type": "string"
+    },
+    "presentation_egress_review_digest": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Presentation Egress Review Digest"
+    },
+    "presentation_ref": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Presentation Ref",
+      "type": "string"
+    },
+    "relay_capability_digest": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Relay Capability Digest",
+      "type": "string"
+    },
+    "required_authn": {
+      "$ref": "#/$defs/BusinessDecisionRequiredAuthn"
+    },
+    "role_mapping_digest": {
+      "pattern": "^hmac-sha256:[0-9a-f]{64}$",
+      "title": "Role Mapping Digest",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "openadapt.business-decision-delivery-policy/v1",
+      "default": "openadapt.business-decision-delivery-policy/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "signature": {
+      "pattern": "^hmac-sha256:[0-9a-f]{64}$",
+      "title": "Signature",
+      "type": "string"
+    },
+    "signature_algorithm": {
+      "const": "hmac-sha256",
+      "default": "hmac-sha256",
+      "title": "Signature Algorithm",
+      "type": "string"
+    }
+  },
+  "required": [
+    "policy_ref",
+    "policy_revision",
+    "decision_contract_digest",
+    "decision_contract_revision",
+    "presentation_ref",
+    "presentation_digest",
+    "authorized_role_refs",
+    "authorized_route_refs",
+    "authorized_answer_issuer_key_ids",
+    "role_mapping_digest",
+    "required_authn",
+    "delivery_mode",
+    "relay_capability_digest",
+    "created_at",
+    "expires_at",
+    "issuer_key_id",
+    "signature"
+  ],
+  "title": "BusinessDecisionDeliveryPolicyV1",
+  "type": "object"
+}

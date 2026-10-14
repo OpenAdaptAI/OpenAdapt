@@ -1,0 +1,24 @@
+# Simple 2-step task: open Notepad and type "Hello World"
+name: "Open Windows Notepad (the built-in text editor, NOT VS Code or any browser) using the Start menu or Win+R run dialog, then type Hello World"
+id: custom-notepad-hello
+
+setup:
+  - execute: "powershell -c 'Stop-Process -Name notepad -Force -ErrorAction SilentlyContinue'"
+  - execute: "powershell -c 'Stop-Process -Name msedge -Force -ErrorAction SilentlyContinue'"
+  - execute: "powershell -c 'Stop-Process -Name Code -Force -ErrorAction SilentlyContinue'"
+  - execute: "powershell -c 'Remove-Item $env:USERPROFILE\\Desktop\\*.txt -Force -ErrorAction SilentlyContinue'"
+  - sleep: 1
+
+evaluate:
+  - check: screenshot
+    description: "A Notepad window is open with 'Hello World' typed in the text area"
+max_steps: 10
+
+milestones:
+  - name: "Notepad is open"
+    check: screenshot
+    description: "A Notepad window is visible on screen (classic or modern Windows 11 style)"
+
+  - name: "Text is typed"
+    check: screenshot
+    description: "Notepad shows 'Hello World' in the text area"

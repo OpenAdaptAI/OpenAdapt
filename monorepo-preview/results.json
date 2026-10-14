@@ -1,0 +1,396 @@
+{
+  "generated": "2026-10-14",
+  "environment": {
+    "os": "macOS 15 (Darwin 24.6), arm64",
+    "python": "3.12.13",
+    "uv": "0.11.29"
+  },
+  "host_base_commit": "60938ae0e8d52badaa557ac71b1b8abb60e97053",
+  "legacy_archive": {
+    "branch": "archive/legacy",
+    "tag": "legacy-final",
+    "commit": "60938ae0e8d52badaa557ac71b1b8abb60e97053",
+    "pushed": false,
+    "subtree_split_of_legacy_dir": {
+      "commit": "e7711f49650471131ac56c471a6782a9ba35ec72",
+      "commits": 5
+    }
+  },
+  "imports": {
+    "types": {
+      "repository": "OpenAdaptAI/openadapt-types",
+      "commit": "c9113b82b75d73b96dce34b1a09cdf7865276ce1",
+      "commits": 69,
+      "method": "git subtree add, no --squash"
+    },
+    "privacy": {
+      "repository": "OpenAdaptAI/openadapt-privacy",
+      "commit": "8f887cfb658a8302747f00d76443900ea5cafa5b",
+      "commits": 35,
+      "method": "git subtree add, no --squash"
+    },
+    "capture": {
+      "repository": "OpenAdaptAI/openadapt-capture",
+      "commit": "5d54530af362f0afc716a6c5e52b15ccdb794777",
+      "commits": 143,
+      "method": "git subtree add, no --squash"
+    },
+    "agent": {
+      "repository": "OpenAdaptAI/openadapt-agent",
+      "commit": "4b0b9bb780973040d4d58abbc291609d1a1d391f",
+      "commits": 54,
+      "method": "git subtree add, no --squash"
+    },
+    "evals": {
+      "repository": "OpenAdaptAI/openadapt-evals",
+      "commit": "d40b8509f6d0fccac690e0f3fbabed4bd9976efd",
+      "commits": 562,
+      "method": "git subtree add, no --squash"
+    },
+    "viewer": {
+      "repository": "OpenAdaptAI/openadapt-viewer",
+      "commit": "6cfad96af7694b08e5ad1d7105f75a67c0bfa9c5",
+      "commits": 49,
+      "method": "git subtree add, no --squash"
+    }
+  },
+  "not_imported": {
+    "flow": {
+      "repository": "OpenAdaptAI/openadapt-flow",
+      "commit_audited": "0ada25b29fc514108c581c8322a4bd09606da288",
+      "reason": "history must be rewritten before import"
+    }
+  },
+  "builds": {
+    "types": {
+      "name": "openadapt-types",
+      "version": "0.19.0",
+      "wheel_metadata_identical_to_standalone": true,
+      "wheel_files_identical_to_standalone": true,
+      "sdist_files_identical_to_standalone": true,
+      "sdist_files_only_standalone": [],
+      "published_version_compared": "0.19.0",
+      "metadata_lines_differing_from_published": 0
+    },
+    "privacy": {
+      "name": "openadapt-privacy",
+      "version": "1.1.1",
+      "wheel_metadata_identical_to_standalone": true,
+      "wheel_files_identical_to_standalone": true,
+      "sdist_files_identical_to_standalone": true,
+      "sdist_files_only_standalone": [],
+      "published_version_compared": "1.1.1",
+      "metadata_lines_differing_from_published": 0
+    },
+    "capture": {
+      "name": "openadapt-capture",
+      "version": "1.3.0",
+      "wheel_metadata_identical_to_standalone": true,
+      "wheel_files_identical_to_standalone": true,
+      "sdist_files_identical_to_standalone": true,
+      "sdist_files_only_standalone": [],
+      "published_version_compared": "1.2.2",
+      "metadata_lines_differing_from_published": 560
+    },
+    "agent": {
+      "name": "openadapt-agent",
+      "version": "2.0.2",
+      "wheel_metadata_identical_to_standalone": true,
+      "wheel_files_identical_to_standalone": true,
+      "sdist_files_identical_to_standalone": true,
+      "sdist_files_only_standalone": [],
+      "published_version_compared": "2.0.1",
+      "metadata_lines_differing_from_published": 650
+    },
+    "evals": {
+      "name": "openadapt-evals",
+      "version": "0.97.1",
+      "wheel_metadata_identical_to_standalone": true,
+      "wheel_files_identical_to_standalone": true,
+      "sdist_files_identical_to_standalone": false,
+      "sdist_files_only_standalone": [
+        "docs/eval_results/archive_comparison.html",
+        "docs/eval_results/notepad_comparison.html",
+        "docs/eval_results/settings_comparison.html"
+      ],
+      "published_version_compared": "0.97.1",
+      "metadata_lines_differing_from_published": 15
+    },
+    "viewer": {
+      "name": "openadapt-viewer",
+      "version": "0.2.0",
+      "wheel_metadata_identical_to_standalone": true,
+      "wheel_files_identical_to_standalone": true,
+      "sdist_files_identical_to_standalone": false,
+      "sdist_files_only_standalone": [
+        "EXECUTIVE_SUMMARY.md",
+        "REPOSITORY_ANALYSIS_README.md",
+        "archival_action_plan.md",
+        "openadaptai_repository_analysis.md",
+        "openadaptai_repository_inventory.csv"
+      ],
+      "published_version_compared": "0.2.0",
+      "metadata_lines_differing_from_published": 526
+    },
+    "host": {
+      "name": "openadapt",
+      "version": "1.16.0",
+      "wheel_metadata_identical_to_standalone": false,
+      "wheel_files_identical_to_standalone": false,
+      "sdist_files_identical_to_standalone": false,
+      "sdist_files_only_standalone": [],
+      "published_version_compared": "1.16.0",
+      "metadata_lines_differing_from_published": 786
+    }
+  },
+  "tests": {
+    "types": {
+      "standalone": {
+        "passed": 653,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 1
+      },
+      "workspace_first_run": {
+        "passed": 653,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 1
+      },
+      "workspace_final": {
+        "passed": 653,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 1
+      }
+    },
+    "privacy": {
+      "standalone": {
+        "passed": 120,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 2
+      },
+      "workspace_first_run": {
+        "passed": 120,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 2
+      },
+      "workspace_final": {
+        "passed": 120,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 2
+      }
+    },
+    "capture": {
+      "standalone": {
+        "passed": 846,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 4
+      },
+      "workspace_first_run": {
+        "passed": 840,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 10
+      },
+      "workspace_final": {
+        "passed": 846,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 4
+      }
+    },
+    "agent": {
+      "standalone": {
+        "passed": 335,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 6
+      },
+      "workspace_first_run": {
+        "passed": 335,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 6
+      },
+      "workspace_final": {
+        "passed": 335,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 6
+      }
+    },
+    "evals": {
+      "standalone": {
+        "passed": 2715,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 57
+      },
+      "workspace_first_run": {
+        "passed": 2684,
+        "failed": 19,
+        "errors": 12,
+        "skipped": 57
+      },
+      "workspace_final": {
+        "passed": 2684,
+        "failed": 19,
+        "errors": 12,
+        "skipped": 57
+      }
+    },
+    "viewer": {
+      "standalone": {
+        "passed": 193,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 45
+      },
+      "workspace_first_run": {
+        "passed": 193,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 45
+      },
+      "workspace_final": {
+        "passed": 193,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 45
+      }
+    },
+    "host": {
+      "standalone": {
+        "passed": 347,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 1
+      },
+      "workspace_first_run": {
+        "passed": 346,
+        "failed": 1,
+        "errors": 0,
+        "skipped": 1
+      },
+      "workspace_final": {
+        "passed": 358,
+        "failed": 0,
+        "errors": 0,
+        "skipped": 1
+      }
+    }
+  },
+  "dependency_versions": {
+    "types": {
+      "standalone_packages": 13,
+      "workspace_packages": 13,
+      "versions_differ": 11,
+      "only_standalone": 0,
+      "only_workspace": 0,
+      "internal": {}
+    },
+    "privacy": {
+      "standalone_packages": 15,
+      "workspace_packages": 15,
+      "versions_differ": 1,
+      "only_standalone": 0,
+      "only_workspace": 0,
+      "internal": {}
+    },
+    "capture": {
+      "standalone_packages": 52,
+      "workspace_packages": 52,
+      "versions_differ": 17,
+      "only_standalone": 0,
+      "only_workspace": 0,
+      "internal": {}
+    },
+    "agent": {
+      "standalone_packages": 55,
+      "workspace_packages": 53,
+      "versions_differ": 32,
+      "only_standalone": 2,
+      "only_workspace": 0,
+      "internal": {}
+    },
+    "evals": {
+      "standalone_packages": 68,
+      "workspace_packages": 69,
+      "versions_differ": 42,
+      "only_standalone": 2,
+      "only_workspace": 3,
+      "internal": {
+        "openadapt-consilium": [
+          "0.4.0",
+          "0.4.1"
+        ],
+        "openadapt-telemetry": [
+          "0.2.0",
+          "0.3.1"
+        ],
+        "openadapt-types": [
+          "0.17.0",
+          "0.19.0"
+        ]
+      }
+    },
+    "viewer": {
+      "standalone_packages": 22,
+      "workspace_packages": 22,
+      "versions_differ": 19,
+      "only_standalone": 0,
+      "only_workspace": 0,
+      "internal": {}
+    },
+    "host": {
+      "standalone_packages": 175,
+      "workspace_packages": 178,
+      "versions_differ": 12,
+      "only_standalone": 1,
+      "only_workspace": 4,
+      "internal": {
+        "openadapt-agent": [
+          "2.0.1",
+          "2.0.2"
+        ],
+        "openadapt-capture": [
+          "1.2.2",
+          "1.3.0"
+        ],
+        "openadapt-flow": [
+          "1.35.1",
+          "1.34.0"
+        ],
+        "openadapt-types": [
+          "0.17.1",
+          "0.19.0"
+        ]
+      }
+    }
+  },
+  "tests_final_run_commit": "b6ddcae2c624bc635be3bee82994e91554b1f09b",
+  "tests_note": "standalone: each repository's own CI test command in a fresh clone at the imported commit (launcher: dependencies installed from PyPI as its CI does). workspace_first_run: at b5c30cca, before the SQLAlchemy pin and the policy-copy rule. workspace_final: at tests_final_run_commit.",
+  "evals_skew_check": {
+    "files": [
+      "tests/test_extradup_kill_scan.py",
+      "tests/test_reward_certificate_narrowing.py",
+      "tests/test_reward_proof.py",
+      "tests/test_reward_trl.py",
+      "tests/test_reward_verl.py"
+    ],
+    "with_openadapt_types_0.17.1": "61 passed",
+    "with_openadapt_types_0.19.0_in_tree": "31 failed or errored, all TypeError: score() missing 'contract'"
+  },
+  "checks_before_push": {
+    "name_guard": "CLEAN on the net diff",
+    "name_pattern_in_new_history": "87 matches, all inside base64 data in three evals HTML pages; 0 elsewhere; 0 in commit messages and paths",
+    "gitleaks_new_commits": 0,
+    "copyleft_license_text_in_packages_tree": 0,
+    "source_boundary_tree": "OK"
+  }
+}

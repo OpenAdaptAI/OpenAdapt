@@ -1,0 +1,263 @@
+name: Generate Screenshots
+
+on:
+  workflow_dispatch:
+    inputs:
+      upload_artifacts:
+        description: 'Upload screenshots as artifacts'
+        required: false
+        type: boolean
+        default: true
+  push:
+    branches:
+      - main
+    paths:
+      - 'src/openadapt_viewer/**'
+      - 'scripts/generate_readme_screenshots.py'
+      - '.github/workflows/screenshots.yml'
+  pull_request:
+    paths:
+      - 'src/openadapt_viewer/**'
+      - 'scripts/generate_readme_screenshots.py'
+
+# The repository default for the workflow token is read-only, and this workflow
+# both pushes a screenshot branch and opens a pull request from it. Without
+# these the push fails and no pull request is ever attempted.
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  generate-screenshots:
+    name: Generate README Screenshots
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout openadapt-viewer
+        uses: actions/checkout@v4
+        with:
+          path: openadapt-viewer
+
+      - name: Checkout openadapt-capture
+        uses: actions/checkout@v4
+        with:
+          repository: OpenAdaptAI/openadapt-capture
+          path: openadapt-capture
+          # Use default branch or specific ref if needed
+          # ref: main
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+        with:
+          version: "latest"
+
+      - name: Set up Python 3.11
+        run: uv python install 3.11
+
+      - name: Create shared virtual environment
+        run: uv venv --python 3.11 .venv
+
+      - name: Install openadapt-capture
+        working-directory: openadapt-capture
+        run: |
+          source ../.venv/bin/activate
+          uv pip install -e .
+
+      - name: Install openadapt-viewer with screenshots extra
+        working-directory: openadapt-viewer
+        run: |
+          source ../.venv/bin/activate
+          uv pip install -e ".[screenshots]"
+
+      - name: Install Playwright browsers
+        run: |
+          source .venv/bin/activate
+          playwright install chromium
+
+      - name: Check if captures exist
+        id: check-captures
+        working-directory: openadapt-capture
+        run: |
+          # Captures live under examples/captures/. The repository root is not a
+          # candidate: .gitignore excludes `demo_*/` and `turn-off-nightshift/`
+          # there as "large data files", so a capture placed at the root cannot
+          # be committed and this job would never see it.
+          #
+          # The current recorder writes recording.db (SQLAlchemy). The older
+          # bespoke capture.db format was replaced on 2026-07-17 by
+          # openadapt-capture PR #28, and CaptureSession.load() reads only
+          # recording.db, so a legacy capture is reported here as unusable
+          # rather than silently missing.
+          for name in turn-off-nightshift demo_new; do
+            if [ "$name" = "turn-off-nightshift" ]; then key=nightshift_exists; else key=demo_exists; fi
+            if [ -f "examples/captures/$name/recording.db" ]; then
+              echo "$key=true" >> $GITHUB_OUTPUT
+            else
+              echo "$key=false" >> $GITHUB_OUTPUT
+              if [ -f "examples/captures/$name/capture.db" ] || [ -f "$name/capture.db" ]; then
+                echo "::warning title=Legacy capture format::$name has capture.db, but the recorder now writes recording.db. Re-record it with the current openadapt-capture."
+              else
+                echo "::warning title=Capture missing::examples/captures/$name/recording.db is absent."
+              fi
+            fi
+          done
+
+      - name: Fail if there is nothing to screenshot
+        if: steps.check-captures.outputs.nightshift_exists != 'true' && steps.check-captures.outputs.demo_exists != 'true'
+        run: |
+          {
+            echo "### No usable capture, so no screenshot was generated"
+            echo
+            echo "This job needs at least one capture at"
+            echo "\`openadapt-capture/examples/captures/<name>/recording.db\`."
+            echo
+            echo "Record one with the current tooling, which writes recording.db:"
+            echo
+            echo '```'
+            echo "uv run capture record turn-off-nightshift"
+            echo "uv run capture record demo_new"
+            echo '```'
+            echo
+            echo "Then commit the capture directory (recording.db, screenshots/,"
+            echo "episodes.json) under examples/captures/ in openadapt-capture."
+            echo "Leave audio.flac, video.mp4 and the transcripts out: both"
+            echo "repositories are public and the workflow does not read them."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "::error title=No usable capture::Nothing to screenshot. See the run summary."
+          exit 1
+
+      - name: Generate screenshots
+        if: steps.check-captures.outputs.nightshift_exists == 'true' || steps.check-captures.outputs.demo_exists == 'true'
+        working-directory: openadapt-viewer
+        run: |
+          source ../.venv/bin/activate
+          python scripts/generate_readme_screenshots.py \
+            --capture-dir ../openadapt-capture/examples/captures \
+            --output-dir docs/images \
+            --max-events 50
+        continue-on-error: false
+
+      - name: Check generated screenshots
+        if: steps.check-captures.outputs.nightshift_exists == 'true' || steps.check-captures.outputs.demo_exists == 'true'
+        working-directory: openadapt-viewer
+        run: |
+          echo "📸 Generated screenshots:"
+          ls -lh docs/images/*.png || echo "No PNG files found"
+
+          echo ""
+          echo "📊 Screenshot details:"
+          for img in docs/images/*.png; do
+            if [ -f "$img" ]; then
+              size=$(du -h "$img" | cut -f1)
+              echo "  - $(basename "$img"): $size"
+            fi
+          done
+
+      - name: Upload screenshots as artifacts
+        if: |
+          (github.event_name == 'workflow_dispatch' && github.event.inputs.upload_artifacts == 'true') ||
+          (github.event_name != 'workflow_dispatch' && (steps.check-captures.outputs.nightshift_exists == 'true' || steps.check-captures.outputs.demo_exists == 'true'))
+        uses: actions/upload-artifact@v4
+        with:
+          name: readme-screenshots
+          path: openadapt-viewer/docs/images/*.png
+          if-no-files-found: warn
+          retention-days: 30
+
+      - name: Create pull request with screenshots (on main push)
+        if: |
+          github.event_name == 'push' &&
+          github.ref == 'refs/heads/main' &&
+          (steps.check-captures.outputs.nightshift_exists == 'true' || steps.check-captures.outputs.demo_exists == 'true')
+        uses: peter-evans/create-pull-request@v6
+        with:
+          path: openadapt-viewer
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "docs: update README screenshots"
+          title: "Update README screenshots"
+          body: |
+            ## Automated Screenshot Update
+
+            This PR updates the README screenshots using the latest viewer code.
+
+            ### Generated Screenshots
+            - Turn off Night Shift workflow
+            - Demo workflow examples
+
+            ### Changes
+            - Updated screenshot images in `docs/images/`
+
+            Screenshots were automatically generated by the [Screenshots workflow](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).
+          branch: update-screenshots-${{ github.run_id }}
+          delete-branch: true
+          labels: documentation,automated
+
+      - name: Comment on PR with screenshot preview (on pull request)
+        if: |
+          github.event_name == 'pull_request' &&
+          (steps.check-captures.outputs.nightshift_exists == 'true' || steps.check-captures.outputs.demo_exists == 'true')
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require('fs');
+            const path = require('path');
+
+            const imagesDir = path.join(process.env.GITHUB_WORKSPACE, 'openadapt-viewer', 'docs', 'images');
+
+            let comment = '## 📸 Generated Screenshots Preview\n\n';
+            comment += 'Screenshots have been generated. Download the artifacts to preview them.\n\n';
+
+            if (fs.existsSync(imagesDir)) {
+              const files = fs.readdirSync(imagesDir).filter(f => f.endsWith('.png'));
+              if (files.length > 0) {
+                comment += '### Generated Files:\n';
+                files.forEach(file => {
+                  const stats = fs.statSync(path.join(imagesDir, file));
+                  const sizeMB = (stats.size / 1024 / 1024).toFixed(2);
+                  comment += `- \`${file}\` (${sizeMB} MB)\n`;
+                });
+              }
+            }
+
+            comment += '\n---\n';
+            comment += `🔗 [Download screenshots artifact](https://github.com/${context.repo.owner}/${context.repo.repo}/actions/runs/${context.runId})`;
+
+            github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: comment
+            });
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "## Screenshot Generation Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.check-captures.outputs.nightshift_exists }}" == "true" ]; then
+            echo "✅ turn-off-nightshift capture found" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ turn-off-nightshift capture not found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          if [ "${{ steps.check-captures.outputs.demo_exists }}" == "true" ]; then
+            echo "✅ demo_new capture found" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ demo_new capture not found" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ -d "openadapt-viewer/docs/images" ]; then
+            echo "### Generated Screenshots" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            for img in openadapt-viewer/docs/images/*.png; do
+              if [ -f "$img" ]; then
+                size=$(du -h "$img" | cut -f1)
+                echo "- $(basename "$img"): $size" >> $GITHUB_STEP_SUMMARY
+              fi
+            done
+          else
+            echo "⚠️ No screenshots generated" >> $GITHUB_STEP_SUMMARY
+          fi

@@ -1,0 +1,67 @@
+DEMONSTRATION:
+Task: In a new sheet with 4 headers "Year", "CA changes", "FA changes", and "OA changes", calculate the annual changes for the Current Assets, Fixed Assets, and Other Assets columns. Set the results as percentage type.
+
+Step 1:
+  Action: Right-click on the "Sheet1" tab at the bottom and select "Insert Sheet" or "New Sheet"
+
+Step 2:
+  Action: Click cell A1 and type "Year"
+
+Step 3:
+  Action: Press Tab and type "CA changes"
+
+Step 4:
+  Action: Press Tab and type "FA changes"
+
+Step 5:
+  Action: Press Tab and type "OA changes"
+
+Step 6:
+  Action: Click cell A2 and type "2015"
+
+Step 7:
+  Action: Press Enter and type "2016"
+
+Step 8:
+  Action: Press Enter and type "2017"
+
+Step 9:
+  Action: Press Enter and type "2018"
+
+Step 10:
+  Action: Press Enter and type "2019"
+
+Step 11:
+  Action: Click cell B2 and type "=(Sheet1.B3-Sheet1.B2)/Sheet1.B2"
+
+Step 12:
+  Action: Press Enter
+
+Step 13:
+  Action: Click cell B2, then drag the fill handle down to B6
+
+Step 14:
+  Action: Click cell C2 and type "=(Sheet1.C3-Sheet1.C2)/Sheet1.C2"
+
+Step 15:
+  Action: Press Enter
+
+Step 16:
+  Action: Click cell C2, then drag the fill handle down to C6
+
+Step 17:
+  Action: Click cell D2 and type "=(Sheet1.D3-Sheet1.D2)/Sheet1.D2"
+
+Step 18:
+  Action: Press Enter
+
+Step 19:
+  Action: Click cell D2, then drag the fill handle down to D6
+
+Step 20:
+  Action: Click and drag to select cells B2:D6
+
+Step 21:
+  Action: Click the % button in the toolbar (or press Ctrl+Shift+5)
+
+---

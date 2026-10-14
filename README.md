@@ -475,7 +475,8 @@ has the methodology, results, and limits.
 `openadapt-consilium`, `openadapt-telemetry`, and `openadapt-viewer` support
 development and operations. The runtime doesn't need any of them.
 
-The pre-1.0 monolith (v0.46.0) is frozen under [`legacy/`](legacy/) and still
+The pre-1.0 monolith (v0.46.0) is archived on the `archive/legacy` branch
+(last tree: [`legacy/` at 60938ae](https://github.com/OpenAdaptAI/OpenAdapt/tree/60938ae0e8d52badaa557ac71b1b8abb60e97053/legacy)) and still
 installable with `pip install openadapt==0.46.0`. Migration guide:
 [docs/LEGACY_FREEZE.md](docs/LEGACY_FREEZE.md). Early demonstrations are on
 [Twitter](https://twitter.com/abrichr/status/1784307190062342237) and

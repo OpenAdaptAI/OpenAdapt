@@ -28,7 +28,8 @@ retrieval, and general computer-use agents are separate research surfaces.
 
 - `openadapt/`: launcher package and unified CLI
 - `tests/`: launcher, integration-seam, and release-artifact tests
-- `legacy/`: frozen pre-1.0 monolith
+- `packages/`: uv workspace members, each published to its own PyPI name
+  (monorepo preview; see `monorepo-preview/README.md`)
 - `docs/`: noncanonical historical repository documentation;
   docs.openadapt.ai is maintained in `OpenAdaptAI/openadapt-ops`
 - `.github/`: CI, security, dependency, and release workflows

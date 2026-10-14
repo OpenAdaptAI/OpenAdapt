@@ -1,7 +1,10 @@
+# Patterns that only made sense for the old single-package root are anchored
+# with a leading slash so they do not hide files under packages/.
+
 # Envirionment
 .env
-config.json
-data
+/config.json
+/data
 
 # Python
 __pycache__
@@ -13,9 +16,9 @@ __pycache__
 # Vim
 *.sw[m-p]
 
-# db
-*.db
-*.db-journal
+# db (root only: packages/capture tracks example recording.db files)
+/*.db
+/*.db-journal
 
 # VSCode
 .VSCode
@@ -25,10 +28,11 @@ __pycache__
 .idea
 
 # Generated performance charts
-performance
+/performance
 
-# Generated when adding editable dependencies in requirements.txt (-e)
-src
+# Generated when adding editable dependencies in requirements.txt (-e).
+# Root only: packages/agent and packages/viewer keep their code under src/.
+/src
 
 # MacOS file
 .DS_Store
@@ -42,15 +46,15 @@ build/
 OpenAdapt.spec
 build_scripts/OpenAdapt.iss
 
-# Temporary files
-install.sh
-*.txt
-output.png
+# Temporary files (root only: packages track .txt data and fixtures)
+/install.sh
+/*.txt
+/output.png
 
 # Legacy untracked directories (not part of repo)
-omnimcp/
-omnimcp.bak/
-performance/
+/omnimcp/
+/omnimcp.bak/
+/performance/
 
 # Secrets (should never be committed)
 *.pem

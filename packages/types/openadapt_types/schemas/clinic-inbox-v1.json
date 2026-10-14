@@ -1,0 +1,42 @@
+{
+  "additionalProperties": false,
+  "description": "Workbench to OpenAdapt job. Token only; never a name.",
+  "properties": {
+    "artifact_path": {
+      "maxLength": 512,
+      "minLength": 1,
+      "pattern": "^[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*(?:/[A-Za-z0-9_-]+(?:\\.[A-Za-z0-9_-]+)*)*$",
+      "title": "Artifact Path",
+      "type": "string"
+    },
+    "patient_token": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Patient Token",
+      "type": "string"
+    },
+    "recorded_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$",
+      "title": "Recorded At",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "openadapt.clinic-inbox/v1",
+      "default": "openadapt.clinic-inbox/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "source": {
+      "pattern": "^[a-z][a-z0-9_]{0,63}$",
+      "title": "Source",
+      "type": "string"
+    }
+  },
+  "required": [
+    "patient_token",
+    "artifact_path",
+    "source",
+    "recorded_at"
+  ],
+  "title": "ClinicInboxV1",
+  "type": "object"
+}

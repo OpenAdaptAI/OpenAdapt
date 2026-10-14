@@ -1,1 +1,0 @@
-export { SimpleTable } from './SimpleTable';

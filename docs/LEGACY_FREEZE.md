@@ -34,13 +34,15 @@ The monolithic OpenAdapt codebase in this repository has been **frozen** as of v
 pip install openadapt==0.46.0
 ```
 
-**Or clone and install from this repository:**
+**Or clone the archived source:**
 ```bash
-git clone https://github.com/OpenAdaptAI/OpenAdapt.git
-cd OpenAdapt
-pip install poetry
-poetry install
+git clone --branch archive/legacy https://github.com/OpenAdaptAI/OpenAdapt.git
+cd OpenAdapt/legacy
 ```
+
+The `legacy/` tree left `main` when the core packages moved into this
+repository. The `archive/legacy` branch and the `legacy-final` tag keep its
+last state.
 
 ---
 

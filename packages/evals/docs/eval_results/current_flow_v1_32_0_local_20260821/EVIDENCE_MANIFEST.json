@@ -1,0 +1,487 @@
+{
+  "artifacts": [
+    {
+      "path": "docs/eval_results/current_flow_v1_32_0_local_20260821/dependency-freeze.txt",
+      "sha256": "ba74159f2cbcabcb7f05344989d330d4b0f4010f6b7aceb7258fc076eb2018db"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_32_0_local_20260821/remote_lease_safety/dependency-freeze.txt",
+      "sha256": "ba74159f2cbcabcb7f05344989d330d4b0f4010f6b7aceb7258fc076eb2018db"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_32_0_local_20260821/remote_lease_safety/results.json",
+      "sha256": "edaa895c33d1d43bfbbbbf4742cc30c4df1e7792e0586a9386fa430bc8a97a34"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_32_0_local_20260821/replication/dependency-freeze.txt",
+      "sha256": "ba74159f2cbcabcb7f05344989d330d4b0f4010f6b7aceb7258fc076eb2018db"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_32_0_local_20260821/replication/results.json",
+      "sha256": "a05461905fe3f582beef9aff8e7cab7f2f044d1cd763c4476283c829e1b6d4d7"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_32_0_local_20260821/replication/theme_postcondition_over_halt.json",
+      "sha256": "c96f27aec794d6da736d150791f3b502fb922cb6126c9953061aeccf9c7c4a17"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_32_0_local_20260821/results.json",
+      "sha256": "29bb0ff4087a9c485b1b3e1d6ef6486ce1f55985e1368f1db5b056809c798ef3"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_32_0_local_20260821/theme_postcondition_over_halt.json",
+      "sha256": "c96f27aec794d6da736d150791f3b502fb922cb6126c9953061aeccf9c7c4a17"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_32_0_local_20260821/transaction_probe/dependency-freeze.txt",
+      "sha256": "ba74159f2cbcabcb7f05344989d330d4b0f4010f6b7aceb7258fc076eb2018db"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_32_0_local_20260821/transaction_probe/results.json",
+      "sha256": "8241c4ae6b50bcd177c6b3b2bfc249dd304805618dce2f24933aad6725479c5d"
+    }
+  ],
+  "campaigns": [
+    {
+      "environment": {
+        "platform": "macOS-15.7.3-arm64-arm-64bit",
+        "python": "3.12.7"
+      },
+      "evidence_scope": {
+        "class": "contract_fixture",
+        "customer_workflow": false,
+        "hosted_execution": false,
+        "production_acceptance": false,
+        "real_remote_session": false
+      },
+      "metric_coverage": {
+        "over_halt": "not_counted",
+        "silent_incorrect_success": "not_counted"
+      },
+      "name": "remote_lease_safety",
+      "results_path": "docs/eval_results/current_flow_v1_32_0_local_20260821/remote_lease_safety/results.json",
+      "runtime": {
+        "dependency_snapshot_filename": "dependency-freeze.txt",
+        "dependency_snapshot_sha256": "ba74159f2cbcabcb7f05344989d330d4b0f4010f6b7aceb7258fc076eb2018db",
+        "openadapt_types_version": "0.10.1",
+        "python_version": "3.12.7"
+      },
+      "verifier_path": "scripts/probe_remote_lease_safety.py"
+    },
+    {
+      "environment": {
+        "chromium": "Playwright-managed headless Chromium",
+        "platform": "macOS-15.7.3-arm64-arm-64bit",
+        "playwright": "1.62.0",
+        "python": "3.12.7"
+      },
+      "evidence_scope": {
+        "class": "local_synthetic",
+        "customer_workflow": false,
+        "hosted_execution": false,
+        "production_acceptance": false,
+        "real_remote_session": false
+      },
+      "metric_coverage": {
+        "over_halt": "counted",
+        "silent_incorrect_success": "counted"
+      },
+      "name": "replication",
+      "results_path": "docs/eval_results/current_flow_v1_32_0_local_20260821/replication/results.json",
+      "runtime": {
+        "browser_revision": "1234",
+        "browser_version": "151.0.7922.34",
+        "dependency_snapshot_filename": "dependency-freeze.txt",
+        "dependency_snapshot_sha256": "ba74159f2cbcabcb7f05344989d330d4b0f4010f6b7aceb7258fc076eb2018db",
+        "openadapt_types_version": "0.10.1",
+        "python_version": "3.12.7"
+      },
+      "verifier_path": "scripts/run_current_flow_local_benchmark.py"
+    },
+    {
+      "environment": {
+        "chromium": "Playwright-managed headless Chromium",
+        "platform": "macOS-15.7.3-arm64-arm-64bit",
+        "playwright": "1.62.0",
+        "python": "3.12.7"
+      },
+      "evidence_scope": {
+        "class": "local_synthetic",
+        "customer_workflow": false,
+        "hosted_execution": false,
+        "production_acceptance": false,
+        "real_remote_session": false
+      },
+      "metric_coverage": {
+        "over_halt": "counted",
+        "silent_incorrect_success": "counted"
+      },
+      "name": "comparison",
+      "results_path": "docs/eval_results/current_flow_v1_32_0_local_20260821/results.json",
+      "runtime": {
+        "browser_revision": "1234",
+        "browser_version": "151.0.7922.34",
+        "dependency_snapshot_filename": "dependency-freeze.txt",
+        "dependency_snapshot_sha256": "ba74159f2cbcabcb7f05344989d330d4b0f4010f6b7aceb7258fc076eb2018db",
+        "openadapt_types_version": "0.10.1",
+        "python_version": "3.12.7"
+      },
+      "verifier_path": "scripts/run_current_flow_local_benchmark.py"
+    },
+    {
+      "environment": {
+        "chromium": "Playwright-managed headless Chromium",
+        "platform": "macOS-15.7.3-arm64-arm-64bit",
+        "playwright": "1.62.0",
+        "python": "3.12.7"
+      },
+      "evidence_scope": {
+        "class": "local_synthetic",
+        "customer_workflow": false,
+        "hosted_execution": false,
+        "production_acceptance": false,
+        "real_remote_session": false
+      },
+      "metric_coverage": {
+        "over_halt": "not_counted",
+        "silent_incorrect_success": "not_counted"
+      },
+      "name": "transaction_probe",
+      "results_path": "docs/eval_results/current_flow_v1_32_0_local_20260821/transaction_probe/results.json",
+      "runtime": {
+        "browser_revision": "1234",
+        "browser_version": "151.0.7922.34",
+        "dependency_snapshot_filename": "dependency-freeze.txt",
+        "dependency_snapshot_sha256": "ba74159f2cbcabcb7f05344989d330d4b0f4010f6b7aceb7258fc076eb2018db",
+        "openadapt_types_version": "0.10.1",
+        "python_version": "3.12.7"
+      },
+      "verifier_path": "scripts/run_flow_transaction_probe.py"
+    }
+  ],
+  "evals_commit": "b7d4fe842f5a9ae9e4188df6087911b24a1706f2",
+  "flow": {
+    "release_tag": "v1.32.0",
+    "sdist_sha256": "c3125f16c1b12420dff4a3af4c3d676e1d267cd961cb9e5f4825beb372b7f97e",
+    "source_commit": "d1b054c718d60465fb8a2e1853e6a84c7f26dec2",
+    "version": "1.32.0",
+    "wheel_sha256": "d58dcf8b7e54c8a45199db4390a588dc261bb754c5ab2af0fdb540e44cb6bb8a"
+  },
+  "public_reports": [
+    {
+      "path": "docs/eval_results/current_flow_v1_32_0_local_20260821/REPORT.md",
+      "sha256": "4792eefd94254a07bbbafa38fa838d1f8003561eedcb0c140cceacf6f3a4827e"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_32_0_local_20260821/REPRODUCE.md",
+      "sha256": "821cac59aa544fb07d45e6a4601a4f48d74d6a2fe4f13d84b5c79a3cd602f08b"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_32_0_local_20260821/remote_lease_safety/REPORT.md",
+      "sha256": "3defa2b18a9e21900771b065f0b3a18d7e364b40932c74b502997394e0eff347"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_32_0_local_20260821/replication/REPORT.md",
+      "sha256": "00ee681d1c30ba95abb98cd335e28ee1a3729a69de2fe38f704e7a1db9e00f2e"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_32_0_local_20260821/transaction_probe/REPORT.md",
+      "sha256": "a6b16bfecdc7476126bc52fa4f8cba72dc9ede43fea0bc2022cc2b48c71791b6"
+    }
+  ],
+  "schema_version": 3,
+  "task_contracts": [
+    {
+      "results_path": "docs/eval_results/current_flow_v1_32_0_local_20260821/remote_lease_safety/results.json",
+      "sha256": "108c3c9b003db7febc9bd3d0e0f4b6b3948d2eac75344cd41d8ddea893df21a2",
+      "value": {
+        "caveats": [
+          "The backend is a fake implementing only the two-phase remote actuation lease; this measures a runtime contract, not a real remote session.",
+          "One synthetic single-step workflow; resolution is scripted so the delivery decision is the only variable.",
+          "No wrong-target immunity, identity coverage, or hosted lifecycle claim is made here."
+        ],
+        "cells": [
+          "ungoverned_lease",
+          "governed_lease",
+          "lease_frame_changed"
+        ],
+        "invariants": [
+          {
+            "applicable_count": 3,
+            "holds": true,
+            "id": "governed_run_refuses_receiptless_remote_write",
+            "statement": "A governed run must refuse a consequential remote click on a backend that cannot bind its exact fresh frame and target to delivery, before the first input edge.",
+            "vacuous": false,
+            "violation_count": 0,
+            "violations": []
+          },
+          {
+            "applicable_count": 9,
+            "holds": true,
+            "id": "lease_delivery_is_never_a_production_success",
+            "statement": "A remote write delivered through the frame lease alone carries no typed receipt, so no execution profile may classify it VERIFIED or production-eligible.",
+            "vacuous": false,
+            "violation_count": 0,
+            "violations": []
+          },
+          {
+            "applicable_count": 3,
+            "holds": true,
+            "id": "lease_delivery_carries_no_receipt_or_actuation_tier",
+            "statement": "A lease-only delivery must leave the result unlabeled: no typed delivery receipt and no recorded actuation tier.",
+            "vacuous": false,
+            "violation_count": 0,
+            "violations": []
+          },
+          {
+            "applicable_count": 3,
+            "holds": true,
+            "id": "changed_frame_aborts_delivery",
+            "statement": "The lease is the safety property: a remote frame that changed between the lease and the input edge must stop delivery.",
+            "vacuous": false,
+            "violation_count": 0,
+            "violations": []
+          },
+          {
+            "applicable_count": 9,
+            "holds": true,
+            "id": "zero_model_calls_and_cost",
+            "statement": "A compiled remote replay makes no model calls and costs $0.",
+            "vacuous": false,
+            "violation_count": 0,
+            "violations": []
+          }
+        ],
+        "paid_or_remote_mutations": [],
+        "profiles": [
+          "demo",
+          "standard",
+          "regulated"
+        ],
+        "scope": "remote frame-lease delivery safety properties (runtime contract)",
+        "trials_per_cell": 3
+      }
+    },
+    {
+      "results_path": "docs/eval_results/current_flow_v1_32_0_local_20260821/replication/results.json",
+      "sha256": "f76e277a4550d273f903fe478ac872f7d79d28e08c4a95d128a34e652aab220d",
+      "value": {
+        "arms": [
+          "compiled",
+          "dom",
+          "dom_named"
+        ],
+        "caveats": [
+          "Synthetic MockMed, one workflow, one macOS host, headless Chromium.",
+          "Published Flow wheel and release-tagged source are exact-bound.",
+          "Warm OS/browser caches remain after the first fresh-browser launch.",
+          "Final screenshot bytes were discarded after their hashes were retained.",
+          "No hosted, Windows, RDP, Citrix, or customer workflow is represented."
+        ],
+        "conditions": [
+          "clean",
+          "theme",
+          "rename"
+        ],
+        "identity_coverage": {
+          "applicable_steps": 8,
+          "armed_steps": 5,
+          "unarmed": [
+            {
+              "reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+              "step_id": "step_000"
+            },
+            {
+              "reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+              "step_id": "step_002"
+            },
+            {
+              "reason": "the only readable row text is the target's own label (mutable evidence, excluded from identity)",
+              "step_id": "step_004"
+            }
+          ]
+        },
+        "oracle": "arm-independent screenshot/OCR final-state check: exact note and saved banner, Triage row, intended patient, no wrong-type write",
+        "outcome_definitions": {
+          "correct": "arm reported completion and independent oracle confirmed effect",
+          "halt_or_error": "arm reported halt/incomplete and independent oracle found effect absent",
+          "over_halt": "arm reported halt/incomplete but independent oracle confirmed effect",
+          "silent_incorrect_success": "arm reported completion but independent oracle did not confirm effect",
+          "wrong_action": "independent oracle observed a wrong-patient or wrong-type write"
+        },
+        "paid_or_remote_mutations": [],
+        "scope": "exact-current local deterministic runtime overhead and robustness",
+        "task": "MockMed triage: sign in, open intended referral, create Triage encounter, enter a trial-unique note, save",
+        "trials_per_arm_condition": 3
+      }
+    },
+    {
+      "results_path": "docs/eval_results/current_flow_v1_32_0_local_20260821/results.json",
+      "sha256": "f76e277a4550d273f903fe478ac872f7d79d28e08c4a95d128a34e652aab220d",
+      "value": {
+        "arms": [
+          "compiled",
+          "dom",
+          "dom_named"
+        ],
+        "caveats": [
+          "Synthetic MockMed, one workflow, one macOS host, headless Chromium.",
+          "Published Flow wheel and release-tagged source are exact-bound.",
+          "Warm OS/browser caches remain after the first fresh-browser launch.",
+          "Final screenshot bytes were discarded after their hashes were retained.",
+          "No hosted, Windows, RDP, Citrix, or customer workflow is represented."
+        ],
+        "conditions": [
+          "clean",
+          "theme",
+          "rename"
+        ],
+        "identity_coverage": {
+          "applicable_steps": 8,
+          "armed_steps": 5,
+          "unarmed": [
+            {
+              "reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+              "step_id": "step_000"
+            },
+            {
+              "reason": "row text outside the target's label is too generic (< 12 squashed chars after volatile-line filtering)",
+              "step_id": "step_002"
+            },
+            {
+              "reason": "the only readable row text is the target's own label (mutable evidence, excluded from identity)",
+              "step_id": "step_004"
+            }
+          ]
+        },
+        "oracle": "arm-independent screenshot/OCR final-state check: exact note and saved banner, Triage row, intended patient, no wrong-type write",
+        "outcome_definitions": {
+          "correct": "arm reported completion and independent oracle confirmed effect",
+          "halt_or_error": "arm reported halt/incomplete and independent oracle found effect absent",
+          "over_halt": "arm reported halt/incomplete but independent oracle confirmed effect",
+          "silent_incorrect_success": "arm reported completion but independent oracle did not confirm effect",
+          "wrong_action": "independent oracle observed a wrong-patient or wrong-type write"
+        },
+        "paid_or_remote_mutations": [],
+        "scope": "exact-current local deterministic runtime overhead and robustness",
+        "task": "MockMed triage: sign in, open intended referral, create Triage encounter, enter a trial-unique note, save",
+        "trials_per_arm_condition": 3
+      }
+    },
+    {
+      "results_path": "docs/eval_results/current_flow_v1_32_0_local_20260821/transaction_probe/results.json",
+      "sha256": "79dd9acdaab30a6cb0c6717f6d390796db4570725901160c7db5a3d2c8b01102",
+      "value": {
+        "caveats": [
+          "Synthetic MockMed fault server, one workflow, one macOS host, headless Chromium.",
+          "Published Flow wheel and release-tagged source are exact-bound.",
+          "The effect contract in the effect_verified cells is authored by this script.",
+          "No hosted, Windows, RDP, Citrix, or customer workflow is represented."
+        ],
+        "fault_modes": [
+          "ok",
+          "timeout",
+          "optimistic",
+          "session",
+          "duplicate"
+        ],
+        "invariants": [
+          {
+            "applicable_count": 12,
+            "holds": true,
+            "id": "completed_unverified_is_never_success",
+            "statement": "COMPLETED_UNVERIFIED must never be reported as a production success and must never be billable.",
+            "vacuous": false,
+            "violation_count": 0,
+            "violations": []
+          },
+          {
+            "applicable_count": 30,
+            "holds": true,
+            "id": "only_verified_is_billable",
+            "statement": "Only VERIFIED may be billable.",
+            "vacuous": false,
+            "violation_count": 0,
+            "violations": []
+          },
+          {
+            "applicable_count": 0,
+            "holds": true,
+            "id": "no_false_absence_claim",
+            "statement": "An outcome that asserts no business effect occurred (HALTED_BEFORE_EFFECT / FAILED_PLATFORM / CANCELED / REJECTED_POLICY) must not be reported when the system of record shows the write landed.",
+            "vacuous": true,
+            "violation_count": 0,
+            "violations": []
+          },
+          {
+            "applicable_count": 21,
+            "holds": true,
+            "id": "unverified_delivered_write_needs_reconciliation",
+            "statement": "A consequential step that reached actuation but whose effect was never verified cannot be classified as a proven absence; it must be RECONCILIATION_REQUIRED.",
+            "vacuous": false,
+            "violation_count": 0,
+            "violations": []
+          },
+          {
+            "applicable_count": 24,
+            "holds": true,
+            "id": "no_blind_retry_of_consequential_write",
+            "statement": "A single run must never write the intended record more than once. A duplicate row from a run whose backend is NOT the double-accepting 'duplicate' mode would be a blind retry.",
+            "vacuous": false,
+            "violation_count": 0,
+            "violations": []
+          },
+          {
+            "applicable_count": 0,
+            "holds": true,
+            "id": "verified_requires_a_real_effect",
+            "statement": "VERIFIED must never be reported when nothing landed.",
+            "vacuous": true,
+            "violation_count": 0,
+            "violations": []
+          },
+          {
+            "applicable_count": 30,
+            "holds": true,
+            "id": "zero_model_calls_and_cost",
+            "statement": "A healthy compiled run makes no model calls and costs $0.",
+            "vacuous": false,
+            "violation_count": 0,
+            "violations": []
+          }
+        ],
+        "oracle": "system-of-record snapshot delta at GET /api/db: exactly one new Triage encounter for the intended patient carrying this run's note, with no pre-existing row destroyed",
+        "paid_or_remote_mutations": [],
+        "scope": "transaction outcome taxonomy against a real persistence boundary",
+        "task": "MockMed triage against the fault-injection persistence boundary: sign in, open intended referral, create Triage encounter, enter a trial-unique note, save",
+        "trials_per_cell": 3,
+        "verification_modes": [
+          "unverified",
+          "effect_verified"
+        ]
+      }
+    }
+  ],
+  "verifiers": [
+    {
+      "path": "scripts/run_current_flow_local_benchmark.py",
+      "sha256": "fe49e0d9fc9ebf6d66120fc8f16683390071b96af6d252b82afbb94bb7449119"
+    },
+    {
+      "path": "scripts/run_flow_transaction_probe.py",
+      "sha256": "e27ecc7fcda287c9f946bf002f02443c8628c3a2cbc50f88ed03b1ad3abf6a42"
+    },
+    {
+      "path": "scripts/probe_remote_lease_safety.py",
+      "sha256": "d75c1c62248818d937705e3a7b3170b09ea211b54591f37a57520018b25a7388"
+    },
+    {
+      "path": "scripts/extract_over_halt_regression.py",
+      "sha256": "7712798260fbf8ff50b96b00b71c7dbd5a509f7dd7553a63a0e6c791635b2554"
+    },
+    {
+      "path": "scripts/evidence_runtime.py",
+      "sha256": "334839a541c46a52892724d9285b295e503a52667899295f831dc154a887dcdd"
+    }
+  ]
+}

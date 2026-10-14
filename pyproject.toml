@@ -213,3 +213,29 @@ git add uv.lock
 allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "style", "test"]
 minor_tags = ["feat"]
 patch_tags = ["fix", "perf"]
+
+# uv workspace (monorepo preview). Every directory under packages/ is a member
+# and keeps its own [project] table, version, and PyPI name. The root stays the
+# `openadapt` launcher package. Sources declared here apply to every member, so
+# member pyproject.toml files are unchanged from their standalone repositories
+# and build the same metadata. Sources affect local resolution only; published
+# wheels keep the version ranges written in each package's dependencies.
+[tool.uv.workspace]
+members = ["packages/*"]
+
+[tool.uv]
+# One lock serves every member, so a version that one package's tests depend
+# on is pinned here for all of them. packages/capture regenerates its committed
+# recording.db fixtures byte for byte only with the SQLAlchemy release its
+# reference builder names (REQUIRED_SQLALCHEMY_VERSION in
+# packages/capture/scripts/generate_synthetic_captures.py). With any other
+# release those byte checks skip. Change both together.
+constraint-dependencies = ["sqlalchemy==2.0.52"]
+
+[tool.uv.sources]
+openadapt-agent = { workspace = true }
+openadapt-capture = { workspace = true }
+openadapt-evals = { workspace = true }
+openadapt-privacy = { workspace = true }
+openadapt-types = { workspace = true }
+openadapt-viewer = { workspace = true }

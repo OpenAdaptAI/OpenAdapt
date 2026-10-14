@@ -1,0 +1,53 @@
+TASK: Open WordPad and format text with bold and italic
+DOMAIN: wordpad
+
+STEPS:
+1. Click on the Start menu button in the taskbar
+   REASONING: Need to access the Start menu to find WordPad
+   ACTION: CLICK(x=0.02, y=0.98)
+
+2. Type "wordpad" in the search box
+   REASONING: Searching is the fastest way to find WordPad
+   ACTION: TYPE("wordpad")
+
+3. Wait for search results to appear
+   REASONING: Windows needs time to index and display results
+   ACTION: WAIT(1.0)
+
+4. Click on the WordPad app in search results
+   REASONING: WordPad should appear as the first result
+   ACTION: CLICK(x=0.15, y=0.3)
+
+5. Wait for WordPad to open
+   REASONING: Application needs time to launch
+   ACTION: WAIT(1.5)
+
+6. Type some sample text to format
+   REASONING: Need text content before applying formatting
+   ACTION: TYPE("Hello World - Sample Text")
+
+7. Select all the text using keyboard shortcut
+   REASONING: Ctrl+A selects all text for uniform formatting
+   ACTION: HOTKEY("ctrl", "a")
+
+8. Click the Bold button in the ribbon toolbar
+   REASONING: Bold button is typically in the Font group on Home tab
+   ACTION: CLICK(x=0.15, y=0.12)
+
+9. Click at the end of the text to deselect
+   REASONING: Need to deselect before selecting specific text for italic
+   ACTION: CLICK(x=0.5, y=0.3)
+
+10. Double-click on the word "Sample" to select it
+    REASONING: Double-click selects a single word for partial formatting
+    ACTION: DOUBLECLICK(x=0.35, y=0.25)
+
+11. Click the Italic button in the ribbon toolbar
+    REASONING: Italic button is next to Bold in the Font group
+    ACTION: CLICK(x=0.17, y=0.12)
+
+12. Verify formatting is applied
+    REASONING: Text should now show bold and italic formatting
+    ACTION: DONE()
+
+EXPECTED_OUTCOME: WordPad is open with text that is bold, and the word "Sample" is also italicized

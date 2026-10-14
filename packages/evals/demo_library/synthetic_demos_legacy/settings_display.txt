@@ -1,0 +1,37 @@
+TASK: Open Windows Settings and change display brightness
+DOMAIN: settings
+
+STEPS:
+1. Open Windows Settings using keyboard shortcut
+   REASONING: Windows+I is the fastest way to open Settings
+   ACTION: HOTKEY("win", "i")
+
+2. Wait for Settings window to open
+   REASONING: Application needs time to launch
+   ACTION: WAIT(1.0)
+
+3. Click on "System" category
+   REASONING: Display settings are under System
+   ACTION: CLICK(x=0.2, y=0.25)
+
+4. Wait for System settings to load
+   REASONING: Page needs time to render
+   ACTION: WAIT(0.5)
+
+5. Click on "Display" in the left sidebar
+   REASONING: Navigate to display-specific settings
+   ACTION: CLICK(x=0.15, y=0.2)
+
+6. Locate the brightness slider
+   REASONING: Brightness control is typically at the top of display settings
+   ACTION: SCROLL(direction="up")
+
+7. Click and drag the brightness slider to 75%
+   REASONING: Adjusting brightness to desired level
+   ACTION: DRAG(start_x=0.3, start_y=0.35, end_x=0.55, end_y=0.35)
+
+8. Verify brightness has changed
+   REASONING: Screen brightness should visibly change
+   ACTION: DONE()
+
+EXPECTED_OUTCOME: Display brightness is set to approximately 75%

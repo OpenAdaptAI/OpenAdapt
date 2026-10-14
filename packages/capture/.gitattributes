@@ -1,0 +1,5 @@
+/scripts/generate_synthetic_captures.py text eol=lf
+/uv.lock text eol=lf
+/examples/captures/specs/*.json text eol=lf
+/examples/captures/*/*.json text eol=lf
+/examples/captures/*/recording.db binary
