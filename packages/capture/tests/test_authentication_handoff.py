@@ -29,7 +29,7 @@ from openadapt_capture.authentication import (
 )
 from openadapt_capture.capture import CaptureSession, InvalidCaptureEvent
 from openadapt_capture.config import RecordingConfig, config_override
-from openadapt_capture.input_observer import ObservedMouseButton
+from openadapt_capture.input_observer import ObservedMouseButton, ThreadedInputObserver
 from openadapt_capture.recorder import OrderedEventJournal, read_screen_events
 from openadapt_capture.terminal import (
     ARTIFACT_MANIFEST_FILENAME,
@@ -499,3 +499,116 @@ def test_input_is_dropped_before_structural_observation(tmp_path, monkeypatch) -
 
     assert event_q.empty()
     assert observations == []
+
+
+class _ReceiptObserver(ThreadedInputObserver):
+    """Reserve and emit input the way a native observer callback does."""
+
+    def __init__(self, callback, **kwargs) -> None:
+        super().__init__(callback, shutdown_timeout=1.0, **kwargs)
+        self.release_loop = threading.Event()
+
+    def receive(self, event, *, deliver: bool = True) -> object | None:
+        receipt = self._reserve_receipt(event.timestamp)
+        if deliver:
+            self._emit_received(event, receipt)
+        return receipt
+
+    def _setup(self) -> None:
+        return
+
+    def _run_loop(self) -> None:
+        self.release_loop.wait()
+
+    def _teardown(self) -> None:
+        return
+
+    def _wake(self) -> None:
+        self.release_loop.set()
+
+
+def _start_receipt_reader(controller, monkeypatch):
+    journal = OrderedEventJournal()
+    terminate = threading.Event()
+    started = threading.Event()
+    observers = []
+    failures = []
+
+    def create(callback, **kwargs):
+        observers.append(_ReceiptObserver(callback, **kwargs))
+        return observers[-1]
+
+    def read() -> None:
+        try:
+            recorder_module.read_input_events(
+                journal,
+                terminate,
+                object(),
+                started,
+                authentication=controller,
+            )
+        except BaseException as exc:
+            failures.append(exc)
+
+    monkeypatch.setattr(recorder_module, "create_input_observer", create)
+    reader = threading.Thread(target=read, daemon=True)
+    reader.start()
+    assert started.wait(timeout=2)
+    return journal, terminate, reader, observers[0], failures
+
+
+def test_gated_and_suppressed_receipts_finish_for_the_observer(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    """The observer checks every receipt it delivered; both gate outcomes pass."""
+    controller = _bound_controller(tmp_path)
+    journal, terminate, reader, observer, failures = _start_receipt_reader(
+        controller,
+        monkeypatch,
+    )
+
+    observer.receive(
+        ObservedMouseButton(x=10, y=20, button="left", pressed=True, timestamp=5.0)
+    )
+    click = journal.get(timeout=2)
+    controller.begin(methods="password_manager", requires_user_presence=True)
+    observer.receive(
+        ObservedMouseButton(x=10, y=20, button="left", pressed=False, timestamp=6.0)
+    )
+    observer._delivery_queue.join()
+    observer.check_health()
+    terminate.set()
+    reader.join(timeout=5)
+
+    assert not reader.is_alive()
+    assert failures == []
+    assert (click.data["name"], click.data["mouse_pressed"]) == ("click", True)
+    assert journal.empty()
+    assert controller._active_retentions == 0
+
+
+def test_undelivered_gated_receipt_fails_its_position_and_releases_the_gate(
+    tmp_path,
+    monkeypatch,
+) -> None:
+    controller = _bound_controller(tmp_path)
+    journal, terminate, reader, observer, failures = _start_receipt_reader(
+        controller,
+        monkeypatch,
+    )
+
+    receipt = observer.receive(
+        ObservedMouseButton(x=10, y=20, button="left", pressed=True, timestamp=5.0),
+        deliver=False,
+    )
+    terminate.set()
+    reader.join(timeout=5)
+
+    assert not reader.is_alive()
+    assert len(failures) == 1
+    assert "stopped before reserved native input" in str(failures[0])
+    assert receipt.finished
+    with pytest.raises(recorder_module.EventJournalReservationError):
+        journal.get_nowait()
+    assert controller._active_retentions == 0

@@ -341,15 +341,40 @@ class WindowActionReservation:
 
 @dataclass
 class _GatedInputReservation:
-    """A native input reservation that holds the privacy boundary open."""
+    """A native input reservation that holds the privacy boundary open.
+
+    The input observer reads ``finished`` after delivery and calls ``fail``
+    for input that never reaches the consumer. Both act on the wrapped
+    journal position, and ``fail`` also releases the privacy boundary.
+    """
 
     reservation: EventReservation | WindowActionReservation
     retention: Any
 
+    @property
+    def finished(self) -> bool:
+        return self.reservation.finished
+
+    def fail(self, error: BaseException) -> None:
+        try:
+            self.reservation.fail(error)
+        finally:
+            self.retention.release()
+
 
 @dataclass(frozen=True)
 class _SuppressedInputReservation:
-    """Marker returned when a protected interval drops native input."""
+    """Marker returned when a protected interval drops native input.
+
+    It owns no journal position, so it is always finished.
+    """
+
+    @property
+    def finished(self) -> bool:
+        return True
+
+    def fail(self, error: BaseException) -> None:
+        del error
 
 
 class OrderedEventJournal:
@@ -1035,6 +1060,7 @@ def process_events(
             num_video_events.value += 1
 
     while not processing_complete():
+        producers_exited = producers_finished is not None and producers_finished.is_set()
         # Bounded get: a bare event_q.get() deadlocks shutdown when terminate
         # is set while the queue is empty and the readers have already exited
         # (nobody left to feed an event, so the loop condition is never
@@ -1042,6 +1068,13 @@ def process_events(
         try:
             event = event_q.get(timeout=1)
         except queue.Empty:
+            if producers_exited and not event_q.empty():
+                # Every producer exited before this wait, so nothing can
+                # complete the reservation at the head of the journal.
+                raise EventJournalReservationError(
+                    "a source producer exited without completing its reserved "
+                    "journal position"
+                )
             continue
         if not started:
             started_event.set()

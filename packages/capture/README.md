@@ -180,11 +180,12 @@ are qualified are covered in [docs/COMPLIANCE.md](https://github.com/OpenAdaptAI
 
 - Recording needs a signed-in desktop session and the permissions listed in
   the quick start.
-- Recording on Linux doesn't work yet. On an X11 display the recorder
-  starts, but after the first mouse or keyboard event it either fails or
-  stops responding, and it doesn't save a usable recording
-  (`scripts/linux_xvfb_quickstart.sh` reproduces this). Loading and
-  inspecting recordings works on every platform.
+- On Linux, recording needs an X11 session. Capture doesn't record under
+  Wayland. It saves the text of a key only when an application receives the
+  key. After a click or key that no application receives (for example,
+  typing with no window focused), the rest of that recording saves each
+  key's code but not its text. `scripts/linux_xvfb_quickstart.sh` runs the
+  quick start on Linux in a container.
 - Accessibility data appears only where the application exposes it. Across a
   remote-desktop connection, Capture sees pixels only.
 - Changing a display (connecting a monitor, rotating, or changing resolution

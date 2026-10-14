@@ -9,6 +9,8 @@ import time
 
 import pytest
 
+from openadapt_capture import recorder as recorder_module
+from openadapt_capture.authentication import AuthenticationHandoffController
 from openadapt_capture.input_observer import (
     InputObserverError,
     InputObserverUnavailableError,
@@ -1748,3 +1750,154 @@ def test_outer_timeout_cancels_already_armed_record_batch_transactionally() -> N
     assert x11.close_count == 2
     assert observer._thread is None
     assert observer._delivery_thread is None
+
+
+def test_recorder_journals_x_record_click_and_text_through_the_privacy_gate(
+    tmp_path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Every receipt X RECORD reserves reaches the journal during a recording.
+
+    ``capture record`` always binds an authentication controller, so the
+    recorder wraps each receipt in its privacy gate. The observer must see that
+    wrapper finish after delivery, or the first click stops the recording.
+    """
+    journal = recorder_module.OrderedEventJournal()
+    controller = AuthenticationHandoffController()
+    controller.bind(tmp_path, time.time)
+    terminate = threading.Event()
+    started = threading.Event()
+    failures = []
+    delivered_client = 0x800000
+    script = [
+        # Device event first, then the copy delivered to the focused client.
+        (wire_event(event_type=linux_module._MOTION_NOTIFY, detail=0,
+                    event_time=10, root_x=200, root_y=200), 0),
+        (wire_event(event_type=linux_module._BUTTON_PRESS, detail=1,
+                    event_time=11), 0),
+        (wire_event(event_type=linux_module._BUTTON_PRESS, detail=1,
+                    event_time=11, root_x=200, root_y=200), delivered_client),
+        (wire_event(event_type=linux_module._BUTTON_RELEASE, detail=1,
+                    event_time=12), 0),
+        (wire_event(event_type=linux_module._BUTTON_RELEASE, detail=1,
+                    event_time=12, root_x=200, root_y=200, state=0x100),
+         delivered_client),
+        (wire_event(event_type=linux_module._KEY_PRESS, detail=43,
+                    event_time=13), 0),
+        (wire_event(event_type=linux_module._KEY_PRESS, detail=43,
+                    event_time=13), delivered_client),
+        (wire_event(event_type=linux_module._KEY_RELEASE, detail=43,
+                    event_time=14), 0),
+        (wire_event(event_type=linux_module._KEY_RELEASE, detail=43,
+                    event_time=14), delivered_client),
+    ]
+
+    class ScriptedX11(FakeX11):
+        def XSync(self, _display, _discard) -> int:
+            return 1
+
+        def XCloseDisplay(self, _display) -> int:
+            return 0
+
+    class ScriptedXtst:
+        def __init__(self) -> None:
+            self.observer: LinuxXInputObserver | None = None
+            self.sent = False
+            self.disabled = False
+
+        def XRecordProcessReplies(self, _display) -> None:
+            assert self.observer is not None
+            if self.disabled:
+                intercept_record(
+                    self.observer,
+                    category=linux_module._XRECORD_END_OF_DATA,
+                )
+                return
+            if self.sent or not started.is_set():
+                return
+            self.sent = True
+            for payload, id_base in script:
+                intercept_record(
+                    self.observer,
+                    category=linux_module._XRECORD_FROM_SERVER,
+                    payload=payload,
+                    id_base=id_base,
+                )
+
+        def XRecordDisableContext(self, _display, _context) -> int:
+            self.disabled = True
+            return 1
+
+        def XRecordFreeData(self, _pointer) -> None:
+            return
+
+        def XRecordFreeContext(self, _display, _context) -> int:
+            return 1
+
+    xtst = ScriptedXtst()
+
+    class ScriptedObserver(LinuxXInputObserver):
+        def _setup(self) -> None:
+            self._x11 = ScriptedX11(keysym=0x68, keysym_name="h")
+            self._xtst = xtst
+            self._xkbcommon = FakeXkbCommon({0x68: "h"})
+            self._control_display = object()
+            self._data_display = object()
+            self._record_context = 11
+            self._record_enabled = True
+            self._record_started = True
+            self._control_id_base = 0x400000
+            self._last_pointer = (0.0, 0.0)
+            self._accepting_events = True
+            self._setup_complete = True
+
+    def create(callback, **kwargs):
+        observer = ScriptedObserver(
+            callback,
+            shutdown_timeout=1.0,
+            environ={"DISPLAY": ":0", "XDG_SESSION_TYPE": "x11"},
+            **kwargs,
+        )
+        xtst.observer = observer
+        return observer
+
+    def read() -> None:
+        try:
+            recorder_module.read_input_events(
+                journal,
+                terminate,
+                object(),
+                started,
+                authentication=controller,
+            )
+        except BaseException as exc:
+            failures.append(exc)
+
+    monkeypatch.setattr(recorder_module, "create_input_observer", create)
+    reader = threading.Thread(target=read, daemon=True)
+    reader.start()
+    assert started.wait(timeout=2)
+    actions = [journal.get(timeout=2).data for _ in range(5)]
+    terminate.set()
+    reader.join(timeout=5)
+
+    assert not reader.is_alive()
+    assert failures == []
+    assert [
+        (
+            action["name"],
+            action.get("mouse_x"),
+            action.get("mouse_y"),
+            action.get("mouse_pressed"),
+            action.get("key_char"),
+        )
+        for action in actions
+    ] == [
+        ("move", 200.0, 200.0, None, None),
+        ("click", 200.0, 200.0, True, None),
+        ("click", 200.0, 200.0, False, None),
+        ("press", None, None, None, "h"),
+        ("release", None, None, None, "h"),
+    ]
+    assert journal.empty()
+    assert controller._active_retentions == 0

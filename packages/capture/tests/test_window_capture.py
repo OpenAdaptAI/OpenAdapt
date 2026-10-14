@@ -647,6 +647,40 @@ def test_processor_can_abort_without_claiming_that_producers_finished():
     assert all(counter.value == 0 for counter in counters)
 
 
+def test_processor_fails_instead_of_waiting_for_an_abandoned_reservation():
+    """After every producer exits, an open reservation can never complete."""
+    journal = OrderedEventJournal()
+    journal.reserve(1.0)
+    queues = [queue.Queue() for _ in range(6)]
+    counters = [multiprocessing.Value("i", 0) for _ in range(5)]
+    producers_finished = threading.Event()
+    producers_finished.set()
+    failures = []
+
+    def process() -> None:
+        try:
+            recorder_module.process_events(
+                journal,
+                *queues,
+                SimpleNamespace(timestamp=0.0),
+                threading.Event(),
+                threading.Event(),
+                *counters,
+                producers_finished,
+            )
+        except BaseException as exc:
+            failures.append(exc)
+
+    processor = threading.Thread(target=process, daemon=True)
+    processor.start()
+    processor.join(timeout=5)
+
+    assert not processor.is_alive()
+    assert len(failures) == 1
+    assert isinstance(failures[0], recorder_module.EventJournalReservationError)
+    assert all(counter.value == 0 for counter in counters)
+
+
 def test_processor_fails_loud_when_an_action_precedes_configured_window_evidence():
     from openadapt_capture.config import RecordingConfig, config_override
 

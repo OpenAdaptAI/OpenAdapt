@@ -6,8 +6,10 @@
 #
 #   scripts/linux_xvfb_quickstart.sh    # uses a running docker, else podman
 #
-# It prints the recorder's result and exits non-zero when the quick start
-# fails. Nothing leaves the container; the recording is discarded with it.
+# It clicks into a terminal window, types "hello", stops the recorder the way
+# Ctrl+C does, and exits non-zero unless the saved recording holds that click
+# and that text. Nothing leaves the container; the recording is discarded with
+# it.
 set -euo pipefail
 
 if [ "${1:-}" != "--inside" ]; then
@@ -34,7 +36,7 @@ export DEBIAN_FRONTEND=noninteractive PYTHONUNBUFFERED=1
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
   xvfb xkb-data x11-xkb-utils xdotool ffmpeg libxtst6 libx11-6 libxkbcommon0 \
-  openbox >/dev/null
+  openbox xterm >/dev/null
 python -m venv /venv
 export PATH="/venv/bin:${PATH}"
 mkdir -p /tmp/src
@@ -46,10 +48,18 @@ export DISPLAY=:99
 sleep 2
 openbox >/dev/null 2>&1 &
 sleep 1
+# Typed text is recorded only when an application receives the keys, so type
+# into a window under the click, as a person would.
+xterm -geometry 80x24+0+0 >/dev/null 2>&1 &
+sleep 1
 cd /tmp
 
+# Job control gives the recorder its own process group, as a terminal does.
+# Without it, bash starts background jobs with SIGINT ignored.
+set -m
 capture record ./my-capture --description "Rename a file" >/tmp/record.log 2>&1 &
 pid=$!
+set +m
 for _ in $(seq 1 60); do
   grep -q "Capture session:" /tmp/record.log && break
   kill -0 "${pid}" 2>/dev/null || break
@@ -62,7 +72,8 @@ if grep -q "Capture session:" /tmp/record.log; then
   sleep 0.5
   xdotool type --delay 80 "hello"
   sleep 1
-  kill -INT "${pid}" 2>/dev/null || true
+  # Ctrl+C signals the whole foreground process group.
+  kill -INT -- "-${pid}" 2>/dev/null || true
 fi
 
 status=0
@@ -73,7 +84,7 @@ for _ in $(seq 1 60); do
 done
 if kill -0 "${pid}" 2>/dev/null; then
   echo "capture record did not exit within 60 seconds"
-  kill -KILL "${pid}" 2>/dev/null || true
+  kill -KILL -- "-${pid}" 2>/dev/null || true
   status=1
 fi
 wait "${pid}" 2>/dev/null || status=$?
@@ -84,3 +95,21 @@ if [ "${status}" -ne 0 ]; then
   exit "${status}"
 fi
 capture info ./my-capture
+python - <<'EOF'
+from openadapt_capture import CaptureSession
+from openadapt_capture.events import EventType
+
+with CaptureSession.load("./my-capture") as capture:
+    actions = list(capture.actions())
+    clicks = [
+        action
+        for action in actions
+        if action.type == EventType.MOUSE_SINGLECLICK and (action.x, action.y) == (200, 200)
+    ]
+    text = "".join(
+        action.text or "" for action in actions if action.type == EventType.KEY_TYPE
+    )
+print(f"click at (200, 200): {len(clicks)}; typed text: {text!r}")
+if len(clicks) != 1 or text != "hello":
+    raise SystemExit("the recording does not hold the click and the typed text")
+EOF
