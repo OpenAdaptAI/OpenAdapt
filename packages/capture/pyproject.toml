@@ -171,3 +171,11 @@ dev = [
     # dependency are not part of wheel or source-distribution runtime.
     "websockets>=12.0",
 ]
+
+[tool.uv]
+# Lockfile-only floor for a transitive dependency of the `share` extra
+# (magic-wormhole -> autobahn). autobahn 26.7.1 fixes GHSA-hxp9-w8x3-p566 but
+# requires Python 3.11+, so Python 3.10 keeps the last compatible release.
+constraint-dependencies = [
+    "autobahn>=26.7.1; python_full_version >= '3.11'",
+]
