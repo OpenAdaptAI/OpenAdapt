@@ -1,5 +1,33 @@
 # What the versioned wire contracts may carry
 
+These are the messages that OpenAdapt components exchange: runners, the
+Execute API, Cloud, Desktop, and agent connectors. Each one is a Pydantic
+model in `openadapt_types` and a file under `openadapt_types/schemas/`. Most
+files are JSON Schema. `execute-v1-openapi.json` is an OpenAPI document, and
+two files hold test vectors for matching a runner to a plan's requirements.
+A test checks that every file in that directory appears in this index.
+
+| Schema files | Python models | What it holds | Details |
+|---|---|---|---|
+| `control-overlay-frame-v1.json`, `control-overlay-frame-v2.json`, `control-overlay-timeline-v1.json`, `control-overlay-timeline-v2.json` | `ControlOverlayFrameV1`, `ControlOverlayFrameV2`, `ControlOverlayTimelineV1`, `ControlOverlayTimelineV2` | PHI-safe execution overlay states, one at a time or as a timeline | [Control overlays](#control-overlays) |
+| `execute-v1-openapi.json` | `ExecuteRequestV1`, `ExecuteStatusV1`, `ExecuteEvidenceReceiptV1`, `ExecuteClient` | Asynchronous qualified execution: request, status, terminal receipt, and signed webhooks | [OpenAdapt Execute v1](#openadapt-execute-v1) |
+| `business-decision-task-v1.json`, `business-decision-presentation-v1.json`, `business-decision-delivery-policy-v1.json`, `business-decision-answer-v1.json`, `business-decision-answer-receipt-v1.json` | `BusinessDecisionTaskV1`, `BusinessDecisionPresentationV1`, `BusinessDecisionDeliveryPolicyV1`, `BusinessDecisionAnswerV1`, `BusinessDecisionAnswerReceiptV1` | A signed, finite human choice that the workflow declared before execution | [Business decisions](#business-decisions) |
+| `human-decision-task-v1.json`, `human-decision-task-v2.json`, `human-decision-receipt-v1.json` | `HumanDecisionTaskV1`, `HumanDecisionTaskV2`, `HumanDecisionReceiptV1` | A signed, PHI-free projection of one attended runtime pause, and its terminal outcome | |
+| `production-admission-registry-state-v1.json` | `ProductionAdmissionRegistryStateV1` | One signed current state for active and revoked Production admissions | [Production admission registry](#production-admission-registry) |
+| `production-lifecycle-target-v2.json`, `qualification-release-reference-v2.json`, `production-lifecycle-admission-binding-v2.json` | `ProductionLifecycleTargetV2`, `QualificationReleaseReferenceV2`, `ProductionLifecycleAdmissionBindingV2` | One exact Production target, one immutable release index entry, and the target, release, artifact, digest, authority, and validity fields from one verified admission | |
+| `runner-capability-manifest-v1.json`, `execution-requirements-v1.json`, `runner-capability-match-v1.vector.json`, `runner-capability-negative-v1.vector.json` | `RunnerCapabilityManifestV1`, `ExecutionRequirementsV1` | What one runner installation advertises, what one qualified plan requires, and test vectors for matching them | |
+| `artifact-ref-v1.json`, `code-capability-manifest-v1.json`, `code-capability-admission-v1.json`, `process-evidence-receipt-v1.json` | `ArtifactRefV1`, `CodeCapabilityManifestV1`, `CodeCapabilityAdmissionEnvelopeV1`, `ProcessEvidenceReceiptV1` | A path-free artifact reference; an exact Python program with locked dependencies, typed I/O, permissions, and verifier bindings; its time-bounded admission; and one signed root over child receipts, human receipts, and the artifact graph | [Process artifacts and code capabilities](#process-artifacts-and-code-capabilities) |
+| `reward-contract-v1.json`, `reward-certificate-v1.json`, `reward-evidence-receipt-v1.json` | `RewardContractV1`, `RewardCertificateV1`, `RewardEvidenceReceiptV1` | Training against one verified terminal effect. The receipt is not an Execute Seal | [Reward contracts](#reward-contracts) |
+| `authentication-task-v1.json`, `authentication-receipt-v1.json`, `authentication-capture-policy-v1.json` | `AuthenticationTaskContractV1`, `AuthenticationReceiptV1`, `AuthenticationCapturePolicyV1` | A value-free login requirement bound to an existing attended task, its receipt, and the capture-exclusion policy | [Authentication tasks](#authentication-tasks) |
+| `authoring-observe-v1.json`, `authoring-command-v1.json`, `authoring-bind-v1.json` | `AuthoringObserveV1`, `AuthoringCommandV1`, `AuthoringBindV1` | The hosted authoring MCP wire: a PHI-safe observe tree, the mailbox command envelope, and bind status | [Authoring MCP wire](#authoring-mcp-wire) |
+| `clinic-inbox-v1.json`, `clinic-outbox-v1.json`, `clinic-tool-result-v1.json`, `clinic-mcp-tools-v1.json` | `ClinicInboxV1`, `ClinicOutboxV1`, `ClinicToolResultV1`, `ClinicMcpToolCatalogV1` | The clinic job handoff: an inbox job, an actuation intent, an MCP tool result, and the tool catalog | [Clinic job inbox and MCP tools](#clinic-job-inbox-and-mcp-tools) |
+| `plain-outcome-v1.json`, `plain-progress-v1.json` | `PlainOutcomeV1`, `PlainProgressV1` | One run's result in plain words, or the state of a run that hasn't ended | [Plain results](#plain-results) |
+
+`OracleObservation` and `EffectStrengthV1` have no schema file of their own.
+See [Oracle tiers](#oracle-tiers).
+
+## Control overlays
+
 Version 1 remains the control-state contract. Version 2 adds an optional
 normalized top-level viewport rectangle, the exact source viewport and DPR, and
 an exact observation or decoded-media-frame binding, without changing V1.
@@ -23,11 +51,7 @@ If multiple runtime states land in one decoded media frame, the producer must
 coalesce them deterministically; it must not invent extra media frames or
 approximate their timing.
 
-`openadapt_types/schemas/execute-v1-openapi.json` is the public OpenAdapt
-Execute v1 contract. It defines asynchronous execution submission, lifecycle
-status, terminal evidence receipts, and signed decision and terminal webhooks.
-It keeps `waiting_for_reconciliation` as a lifecycle state and
-`reconciliation_required` as a terminal outcome.
+## Business decisions
 
 The separate `business-decision-*-v1.json` files define a finite human branch
 that the workflow declared before execution. They do not reuse the operational
@@ -66,9 +90,16 @@ not expose a runner, customer data, evidence bytes, application recipes, or
 Cloud control-plane internals.
 
 The generated OpenAPI document is packaged at
-`openadapt_types/schemas/execute-v1-openapi.json`. The package also includes a
+`openadapt_types/schemas/execute-v1-openapi.json`. It defines asynchronous
+execution submission, lifecycle status, terminal evidence receipts, and signed
+decision and terminal webhooks. It keeps `waiting_for_reconciliation` as a
+lifecycle state and `reconciliation_required` as a terminal outcome. A
+`verified` receipt needs an oracle read at tier 2 or 3 (see
+[Oracle tiers](#oracle-tiers)).
+
+The package also includes a
 small Python client. The reference Python and TypeScript clients are in
-[`examples/execute`](examples/execute/). Use `https://app.openadapt.ai/api` as
+[`examples/execute`](../examples/execute/). Use `https://app.openadapt.ai/api` as
 the OpenAdapt Cloud base URL. It uses a partner-provisioned bearer token and
 the client appends the stable `/v1` paths.
 The client requires an HTTPS base URL and rejects redirects before it can send

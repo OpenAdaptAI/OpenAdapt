@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "openadapt-types"
 version = "0.19.0"
-description = "Canonical Pydantic schemas for computer-use agents: ComputerState, Action, ActionResult, UINode"
+description = "Pydantic models for computer-use agents: screen state (ComputerState, UINode), actions (Action), and results (ActionResult)"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"

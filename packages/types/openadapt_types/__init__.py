@@ -1,11 +1,14 @@
-"""openadapt-types: Canonical Pydantic schemas for computer-use agents.
+"""openadapt-types: Pydantic models for computer-use agents.
 
-This package provides the shared type definitions used across the OpenAdapt
-ecosystem and designed for adoption by any computer-use agent project.
+The models describe what is on the screen, what to do to it, and what
+happened. OpenAdapt's own packages use them, and any computer-use agent
+project can too.
 
 Quick start::
 
-    from openadapt_types import ComputerState, Action, ActionType, UINode
+    from openadapt_types import (
+        Action, ActionTarget, ActionType, ComputerState, UINode,
+    )
 
     state = ComputerState(
         viewport=(1920, 1080),
