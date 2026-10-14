@@ -1,6 +1,6 @@
 [project]
 name = "openadapt-tray"
-version = "0.3.6"
+version = "0.3.7"
 description = "Menu-bar and system-tray controls and status for OpenAdapt Desktop"
 readme = "README.md"
 requires-python = ">=3.10"
