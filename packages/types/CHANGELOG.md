@@ -1,6 +1,195 @@
 # CHANGELOG
 
 
+## v0.19.0 (2026-10-14)
+
+### Features
+
+- Add plain run results and a shared vocabulary lint
+  ([#41](https://github.com/OpenAdaptAI/openadapt-types/pull/41),
+  [`0658f95`](https://github.com/OpenAdaptAI/openadapt-types/commit/0658f95d0a7c7f6673de64b17a1e433c743c3788))
+
+* wip: snapshot of interrupted build track
+
+Partial work saved after the session limit interrupted the agent. A follow-up commit on this branch
+  completes and cleans it up before review.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+* feat(vocabulary): finish the registry files and the lint
+
+Turns the partial vocabulary directory into a package and checks the two registry files against each
+  other.
+
+- outcomes.json lists every emitter it was checked against (Flow origin/main 6e4e4ed0, Agent
+  88b1dbd, this repo 07b8b0c), the run states it deliberately leaves out, and the Flow program
+  graph's end state as one more coarse source. - The REJECTED_POLICY result reads "Blocked before
+  saving" in both files. - Every engine status code in capitals is an error on a business surface. -
+  The lint takes Literal aliases and Pydantic fields for coverage, keeps one finding per stretch of
+  text, and refuses a registry whose labels disagree or whose may-have-changed rows claim nothing
+  changed. - python -m openadapt_types.vocabulary runs the lint.
+
+* feat: map every run outcome to a plain result
+
+plain_outcome() turns whatever outcome values a surface has into one result a person can act on:
+  done, stopped_before_change, check_the_record, finished_not_checked, did_not_finish, or refused.
+  It also says whether anything may have changed, whether a retry is safe, what backs the result
+  (sealed, local, or none), the next step in plain words, and the exact code it came from.
+
+The precise transaction_outcome or Execute terminal_outcome decides. A coarse HALTED alone always
+  reads "Check the record", and so do unknown values, disagreeing inputs, missing outcomes, and
+  uncertain delivery. PlainOutcomeV1 refuses any hand-built result that breaks that rule.
+
+Helpers cover a Flow report.json, an Execute status, an Execute receipt, and a terminal Execute
+  webhook (sealed only after its HMAC checks).
+
+outcome-vectors.json holds 46 hand-written cases for ports to other languages. The tests check every
+  enum this package owns, every emitter snapshot in outcomes.json, and about 35,000 input
+  combinations against the safety rule. JSON Schemas ship as plain-outcome-v1.json and
+  plain-progress-v1.json.
+
+* feat(vocabulary): ship the lint as openadapt-vocab-lint and test it
+
+- Console script openadapt-vocab-lint, next to python -m openadapt_types.vocabulary and running a
+  copied lint.py directly. - The registry validator now accepts a "nothing changed" row only for the
+  eleven engine values that prove no effect by their own contract. Any other row that says so is
+  refused, so a copy edit can't weaken the safety rule. - Tests cover the brief's vocabulary term by
+  term, every word the brief keeps off first screens, the registry's own sentences against the
+  business check and the writing rules, the old "nothing changed" sentences from the Agent, Cloud,
+  Desktop, and website, Literal and Pydantic coverage, .vocab.json configs, exit codes, and a copied
+  registry running with no site-packages.
+
+* fix(vocabulary): find claims inside joined Python strings
+
+Python joins adjacent string literals into one constant that starts on the first line. The claim
+  check looked only around that first line, so it missed the Agent's MCP server instructions, where
+  "the record did not change" sits fifteen lines down. Fragments now carry their end line, and
+  findings point at the line that holds the matched words.
+
+Run against openadapt-agent origin/main 88b1dbd, the claims check now reports all eight places the
+  concept-model review listed, plus two more (README.md:181 and the "stopped safely" message in
+  runner.py:65).
+
+coverage also takes --partial for an emitter that sends only some of a source's values, such as
+  Flow's production receipt.
+
+* docs: explain plain results and the vocabulary lint
+
+docs/VOCABULARY.md covers the surface levels, the vocabulary, the six run results and the safety
+  rule, how to call plain_outcome() from Python, how to port the table to another language, how to
+  run the lint, and the CI commands Flow and the Agent need to keep their outcome values covered. It
+  also records the 2026-10-09 checks against Flow and Agent origin/main.
+
+The README gains a short example and a row for PlainOutcomeV1, and CONTRACTS.md says what a plain
+  result may carry. A test keeps the doc's terms, labels, and counts in step with the registry.
+
+* docs(vocabulary): keep the registry and docs clean under their own lint
+
+The claims check flagged three places in this repository that quote the phrases it looks for. The
+  docs now carry reasoned vocab-allow comments, and one test vector has a name that no longer reads
+  as a claim. vocabulary.json also says outright that a plain term may appear at every level.
+
+* docs(vocabulary): note that patterns match words, not senses
+
+A hospital admission is plain English on a healthcare page, but the admission pattern can't tell it
+  from workflow admission. The doc says to mark that use with a reasoned vocab-allow comment. The
+  writing-rule test now spells the dash characters as escapes.
+
+* fix(vocabulary): import the module entry point without running the lint
+
+Walking the package with pkgutil imported vocabulary/__main__.py, which ran the CLI and exited with
+  status 2. The entry point now runs only under python -m.
+
+* feat(vocabulary): map control overlay phases to plain results
+
+The overlay frame is what a person sees on screen while a run goes, and it carries only a phase.
+  Flow sets its end phase straight from the coarse execution_outcome, so a halted overlay says
+  nothing about whether a save went through. Without a row, a surface had to invent its own words
+  for it, which is how "stopped safely" reached people.
+
+overlay_phase is now a coarse source in the third tier. Its end phases read the same as the
+  execution_outcome they mirror, so halted reads "Check the record". Mid-run phases read as the
+  Execute progress states (observing through stopping as Running, paused as Waiting for a person),
+  and idle and recording aren't runs. An in-progress entry for a source other than execute_state
+  names the Execute state it reads as, so every surface shares three progress labels.
+
+Tests check ControlOverlayPhase coverage, that each end phase reads like its execution_outcome, and
+  the safety rule across coarse and overlay combinations. Five new vectors cover it for other
+  languages.
+
+* fix(vocabulary): don't read code that mentions the pragma as a pragma
+
+The claims check flagged lint.py's own pragma pattern as a malformed vocab-allow. The docs tell
+  other repositories to copy the vocabulary directory into their tree, so `claims src` over that
+  tree always failed. Pragma names now hold only the characters a term or rule uses.
+
+* test(vocabulary): fail when an outcome enum here is neither mapped nor set aside
+
+The coverage tests only checked the enums someone remembered to list. A new enum in this package
+  that holds run outcome values (verified, halted, and the rest of the transaction, Execute, and
+  coarse outcome values) now fails until outcomes.json maps it as an emitter or lists it under
+  not_run_outcomes with a reason. A second test checks that each emitter read from this package
+  lists exactly its enum's values.
+
+The scan found seven enums that weren't accounted for. None is a run result, so each is now set
+  aside with its reason: the reward oracle's episode verdict, a person's answer on a paused run or a
+  business decision, authoring command status, sign-in outcomes, and artifact verification.
+
+* fix(vocabulary): stop suggesting "Stopped before saving" for a bare HALTED
+
+HALTED was filed under the Stopped before saving term, so the terms check told writers to replace
+  "Status: HALTED" with "Say: Stopped before saving". A coarse HALTED alone reads "Check the record"
+  in the outcome table, so the lint was steering copy toward the overclaim the safety rule forbids.
+
+HALTED now has its own entry. Its suggestion is "Check the record", with Stopped before saving only
+  when transaction_outcome is HALTED_BEFORE_EFFECT. The registry pair check also refuses any
+  technical term that is itself an outcome value but sits under a result that value doesn't read as
+  on its own.
+
+* docs(vocabulary): say how the coarse outcome can still add caution
+
+The tier description said a lower tier never overrides the first one. Merge rule 4 lets
+  execution_outcome turn a disagreeing transaction outcome into Check the record, so the doc now
+  names that exception.
+
+* docs(vocabulary): say exactly what the schema and coarse tiers promise
+
+CONTRACTS.md said the JSON Schema refuses a result that breaks the safety rule. Only the
+  PlainOutcomeV1 model does; the schema names the rule but doesn't enforce it, so ports check
+  themselves against the vectors. The label and next step can't carry PHI, which is narrower than
+  saying the whole object can't.
+
+VOCABULARY.md now says which coarse values can read as nothing written with dispatched=False (Agent
+  timeout or error, connector failure) instead of implying a coarse halt can. It also says that
+  technical terms stay allowed at the engineering level, and what an idle overlay reads as.
+
+* fix(vocabulary): refuse a plain result the table doesn't give for its inputs
+
+PlainOutcomeV1 claimed that a hand-built or deserialized result can't claim more than the table
+  allows, but it only checked the result against its own flags. A result built by hand could read a
+  bare HALTED as "Stopped before saving" with safe_to_retry=true, or call a coarse connector success
+  "Done and checked", and still validate.
+
+The merge rules now live in a pure _decide() that both plain_outcome() and the model validator use.
+  The validator re-derives the decision from the values in `exact` and refuses a technical_code,
+  result, may_have_changed, or safe_to_retry that differs. A fallback code only adds caution, so it
+  stays valid with any inputs. Every table output and every conformance vector still round-trips.
+
+* docs(vocabulary): keep process receipt outcomes out of the plain table
+
+ProcessEvidenceReceiptV1.outcome reuses ExecuteTerminalOutcomeV1, so the enum coverage test counted
+  it as mapped. Flow's process runtime (runtime/process_v1.py) sets it to the outcome of the step
+  that ended the process, even when an earlier step already saved. Read as an Execute terminal
+  outcome, halted_before_effect there would tell a person nothing was written.
+
+List it under not_run_outcomes with that reason, and tell callers in VOCABULARY.md not to pass it as
+  execute_terminal_outcome.
+
+---------
+
+Co-authored-by: Claude Opus 5.5 <noreply@anthropic.com>
+
+
 ## v0.18.0 (2026-09-03)
 
 ### Bug Fixes
