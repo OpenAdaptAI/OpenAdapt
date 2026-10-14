@@ -119,7 +119,7 @@ GATE_ORDER = (
 
 _GATE_TITLES = {
     GATE_PROFILE: "Execution profile",
-    GATE_CERTIFICATION: "Certification passed",
+    GATE_CERTIFICATION: "Certification",
     GATE_IDENTITY: "Identity coverage",
     GATE_EFFECT: "Effect coverage",
     GATE_APPROVAL: "Approval fallback",
@@ -558,13 +558,16 @@ def _result(
     *,
     warning: bool = False,
 ) -> GateResult:
+    # One step can raise several violations; list each offender once, in the
+    # order first seen, so the refusal names every step exactly once.
+    unique_offenders = list(dict.fromkeys(offenders or []))
     return GateResult(
         gate=gate,
         title=_GATE_TITLES[gate],
         passed=passed,
         warning=warning,
         detail=detail,
-        offenders=offenders or [],
+        offenders=unique_offenders,
     )
 
 
@@ -869,6 +872,26 @@ def _gate_approval(
         )
     # No verifier: every declared write is unverifiable in this deployment.
     if not writes:
+        # Nothing here to approve. A consequential write that declares no
+        # effect at all is refused by the effect-coverage gate, so don't
+        # claim that no write needs verification.
+        undeclared = [
+            step
+            for step in steps
+            if is_consequential(
+                step,
+                workflow,
+                require_current_risk_certification=require_current_risk_certification,
+                certifying_policy=certifying_policy,
+            )
+        ]
+        if undeclared:
+            return _result(
+                GATE_APPROVAL,
+                True,
+                f"nothing to approve: none of the {len(undeclared)} consequential "
+                "write(s) declares a system-of-record effect (see Effect coverage)",
+            )
         return _result(
             GATE_APPROVAL,
             True,

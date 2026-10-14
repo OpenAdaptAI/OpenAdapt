@@ -5,10 +5,37 @@ complete free path against the bundled MockMed application, a synthetic
 practice-management fixture served through its real transactional backend.
 
 ```bash
+openadapt-flow demo                                      # both runs, one proof page
 openadapt-flow tutorial                                  # the whole loop, VERIFIED
 openadapt-flow tutorial --break-it                       # then watch it catch a lie
 openadapt-flow tutorial --guided                         # perform the demo yourself
 ```
+
+## What `demo` does
+
+`demo` runs `tutorial --break-it` without the stage-by-stage output, then
+writes one self-contained page, `openadapt-demo/index.html`, and opens it when
+a display is available (`--no-open` skips that). The page puts the two final
+screens side by side, shows the record check under each run (1 note, then 0),
+lists the choices a person gets when the second run stops, and folds the
+engine's exact terms under "Technical details". When the demo goes as
+expected, the terminal shows 8 lines. If the first run doesn't end "Done and
+checked", its next step adds a ninth.
+
+Each plain result on the page comes from the run's `transaction_outcome`.
+The second run ends `RECONCILIATION_REQUIRED`, so the page says "Check the
+record", not "Stopped before saving": the store really is empty, but the
+engine says nothing was written only when it has proved that for every
+declared effect. "Identical, pixel for pixel" appears only when the two final
+frames have the same SHA-256 digest.
+
+`demo` exits 0 when the first run is done and checked and the second run
+stopped, 1 when the pair didn't show that difference (the page still reports
+each run as it ended), and 2 when the demo couldn't start or a stage lacked
+the evidence it needs. It never overwrites an earlier demo folder. With no
+`--out`, it uses `openadapt-demo`, then `openadapt-demo-2`, and so on. The
+engine never reuses a run folder, even after you delete it, so the demo also
+skips a name that an earlier demo used.
 
 ## What `tutorial` does
 

@@ -833,6 +833,7 @@ def _replay_outcome_epilogue(
     Fail-closed semantics are untouched: this only explains an ending that
     already happened.
     """
+    from openadapt_flow.cli_hints import command
     from openadapt_flow.tutorial import outcome_epilogue_lines
 
     halt = getattr(report, "halt", None)
@@ -864,7 +865,7 @@ def _replay_outcome_epilogue(
             outcome_epilogue_lines(
                 what=what,
                 why_safe=why_safe,
-                next_command=f"openadapt-flow explain {run_dir}",
+                next_command=command(f"explain {run_dir}"),
             )
         )
     if outcome == "COMPLETED_UNVERIFIED":
@@ -876,8 +877,8 @@ def _replay_outcome_epilogue(
                 ),
                 why_safe=("screen-only completion can never claim success under Flow"),
                 next_command=(
-                    "openadapt-flow scaffold-verifier <recording-or-bundle>  "
-                    "# draft an oracle, wire effects:, re-run"
+                    command("scaffold-verifier <recording-or-bundle>")
+                    + "  # draft an oracle, wire effects:, re-run"
                 ),
             )
         )
@@ -885,7 +886,7 @@ def _replay_outcome_epilogue(
         outcome_epilogue_lines(
             what=f"the run ended {outcome} and reported the failure loudly",
             why_safe="a failure is never guessed into a success",
-            next_command=f"openadapt-flow explain {run_dir}",
+            next_command=command(f"explain {run_dir}"),
         )
     )
 
@@ -897,13 +898,24 @@ def _finish_replay(
     *,
     backend_kind: Optional[str] = None,
 ) -> int:
-    """Render the run report, print the outcome, and map it to an exit code."""
+    """Render the run report, print the outcome, and map it to an exit code.
+
+    Exit codes are unchanged and documented in the README: under the Demo
+    profile a completed run exits 0 even when it ends ``COMPLETED_UNVERIFIED``
+    (finished, not checked). The printed result line says so, so a person
+    never reads exit 0 as a confirmed save; scripts that need a checked result
+    read ``transaction_outcome`` from ``report.json`` or use ``run`` under the
+    Standard profile.
+    """
+    from openadapt_flow.plain_outcome import plain_result
     from openadapt_flow.report import render_run_report
 
     report_md = render_run_report(run_dir)
     outcome = getattr(report, "execution_outcome", None) or (
         "success" if report.success else "FAILED"
     )
+    plain = plain_result(getattr(report, "transaction_outcome", None), outcome)
+    print(f"Result: {plain.label}. {plain.meaning}")
     print(f"Replay {outcome}: {report_md}")
     if report.screenshots_may_leave_box:
         print(
@@ -919,6 +931,12 @@ def _finish_replay(
     _maybe_attest_run(run_dir, report, args)
     if getattr(report, "execution_profile", None) in {"standard", "regulated"}:
         return 0 if outcome == "VERIFIED" else 1
+    if report.success and outcome != "VERIFIED":
+        print(
+            "\nExit code 0 here means the steps finished, not that the save was "
+            "checked.\nFor a checked result, read transaction_outcome in "
+            "report.json or use run under the standard profile."
+        )
     return 0 if report.success else 1
 
 
@@ -1312,10 +1330,12 @@ def _cmd_record_desktop(args: argparse.Namespace, backend: str) -> int:
             + ", ".join(f"{k}={v!r}" for k, v in params.items())
             + ". Override at replay with --param NAME=VALUE."
         )
+    from openadapt_flow.cli_hints import command
+
     print(
-        "Compile it:  openadapt-flow compile "
+        f"Compile it:  {command('compile')} "
         f"{out} --out <bundle> --name <workflow>\n"
-        f"Then replay: openadapt-flow replay <bundle> --backend {backend} …"
+        f"Then replay: {command('replay')} <bundle> --backend {backend} …"
     )
     return 0
 
@@ -1387,9 +1407,14 @@ def _cmd_tutorial(args: argparse.Namespace) -> int:
         print(f"\nTutorial REFUSED: {e}")
         return 2
 
+    from openadapt_flow.cli_hints import command
+    from openadapt_flow.plain_outcome import plain_result
+
     if result.break_it is not None:
         print("\n--- clean run: the certified bundle, against an honest backend ---")
-    print(f"\n{result.execution_outcome}: {result.run_dir / 'REPORT.md'}")
+    plain = plain_result(result.transaction_outcome, result.execution_outcome)
+    print(f"\nResult: {plain.label}. {plain.meaning}")
+    print(f"{result.execution_outcome}: {result.run_dir / 'REPORT.md'}")
     print(f"  transaction     {result.transaction_outcome}")
     metering_class = "billable" if result.transaction_billable else "not billable"
     local_charge = (
@@ -1425,7 +1450,9 @@ def _cmd_tutorial(args: argparse.Namespace) -> int:
     elif result.execution_outcome == "VERIFIED":
         print(
             "\nNext: rerun this same bundle against a backend that lies -- and "
-            "watch the engine halt:\n  openadapt-flow tutorial --break-it"
+            f"watch the engine halt:\n  {command('tutorial --break-it')}\n"
+            "Or see both runs side by side on one page:\n"
+            f"  {command('demo')}"
         )
         print(f"\n{_next_steps_block()}")
     else:
@@ -1467,6 +1494,10 @@ def _print_break_it_narrative(broken: "BreakItResult") -> None:
         f"                       success (transaction: {broken.transaction_outcome}, "
         f"billable: {'yes' if broken.transaction_billable else 'no'})"
     )
+    from openadapt_flow.plain_outcome import plain_result
+
+    plain = plain_result(broken.transaction_outcome, broken.execution_outcome)
+    print(f"  Result:              {plain.label}. {plain.meaning}")
     print(
         "\n  The screen said success. The system of record said otherwise. "
         "The engine\n  believed the system of record."
@@ -1480,10 +1511,92 @@ def _print_break_it_narrative(broken: "BreakItResult") -> None:
         "\nNo shareable receipt for the halted run: only VERIFIED runs may use "
         "the\nsuccess rail. The halt itself is the demonstration."
     )
+    from openadapt_flow.cli_hints import command
+
     print(
+        "\nSee both runs side by side on one page:\n"
+        f"  {command('demo')}\n"
         "\nNext: record your own workflow:\n"
-        "  openadapt-flow record --backend web --url <your app>"
+        f"  {command('record --backend web --url https://your-test-app.example --out my-task')}"
     )
+
+
+def _cmd_demo(args: argparse.Namespace) -> int:
+    """Run the checked run and the lying-app run, then write one proof page.
+
+    Composes the unchanged tutorial path (``run_tutorial(..., break_it=True)``):
+    the same record, compile, certify, and Standard-profile run, then the same
+    bundle against the ``optimistic`` fault. Presentation only: the page and
+    the short summary read each run's ``transaction_outcome`` and artifacts.
+
+    Exit codes: 0 when the pair showed the difference (the first run ended
+    Done and checked, the second stopped); 1 when both runs finished but the
+    pair didn't show it (the page still reports each run as it ended); 2 when
+    the demo refused to start or a stage lacked the evidence it needs.
+    """
+    import os
+
+    from openadapt_flow import demo_proof
+    from openadapt_flow.runtime.durable.authority import DurableAuthorityBusy
+    from openadapt_flow.tutorial import TutorialError, run_tutorial
+
+    try:
+        out_dir = demo_proof.choose_output_dir(args.out)
+    except demo_proof.DemoError as exc:
+        print(f"Demo not started: {exc}")
+        return 2
+
+    print(
+        "OpenAdapt demo: one task, run twice on a fake clinic app on this "
+        "computer. No AI calls."
+    )
+    print("The first run can take a few minutes while the browser downloads.")
+
+    # The bundled demo app holds only fixed synthetic data. Keep an installed
+    # but unconfigured privacy provider from blocking it, exactly as the
+    # launcher's quickstart does, then restore the operator's setting.
+    scrub = os.environ.get("OPENADAPT_FLOW_SCRUB")
+    if scrub in (None, "auto"):
+        os.environ["OPENADAPT_FLOW_SCRUB"] = "off"
+    try:
+        result = run_tutorial(
+            out_dir,
+            headed=bool(args.headed),
+            echo=print if args.verbose else None,
+            break_it=True,
+        )
+    except TutorialError as exc:
+        print(f"\nThe demo stopped before it could show a fair result: {exc}")
+        print(f"Anything it wrote is in {out_dir}")
+        return 2
+    except DurableAuthorityBusy as exc:
+        # The engine reserves each run path for good. choose_output_dir skips
+        # reserved names it can see; this covers a registry it couldn't read.
+        print(f"\nThe demo didn't run: the engine refused {out_dir} ({exc}).")
+        print(
+            "OpenAdapt never reuses a run folder, even after it's deleted. Run "
+            "it again with --out and a new folder."
+        )
+        return 2
+    finally:
+        if scrub is None:
+            os.environ.pop("OPENADAPT_FLOW_SCRUB", None)
+        elif scrub == "auto":
+            os.environ["OPENADAPT_FLOW_SCRUB"] = scrub
+
+    try:
+        evidence = demo_proof.collect_evidence(result, out_dir)
+    except demo_proof.DemoError as exc:
+        print(f"\nThe demo couldn't build its proof page: {exc}")
+        print(f"Both runs' evidence is in {out_dir}")
+        return 2
+    page = demo_proof.write_demo_page(evidence)
+    opened = False
+    if not args.no_open and demo_proof.display_available():
+        opened = demo_proof.open_page(page)
+    for line in demo_proof.summary_lines(evidence, page, opened):
+        print(line)
+    return 0 if evidence.showed_the_difference else 1
 
 
 def _cmd_compile(args: argparse.Namespace) -> int:
@@ -2809,10 +2922,12 @@ def _cmd_approve(args: argparse.Namespace) -> int:
         approval=approval,
         target_status="approved",
     )
+    from openadapt_flow.cli_hints import command
+
     print(
         f"Approved pending escalation at {run_dir} by {approver!r} "
         f"(step {pending.step_index} '{pending.step_id}': {pending.category}).\n"
-        f"Resume it with:  openadapt-flow resume {run_dir}"
+        f"Resume it with:  {command('resume')} {run_dir}"
     )
     return 0
 
@@ -2900,13 +3015,20 @@ def _cmd_lint(args: argparse.Namespace) -> int:
     threshold = "warn" if args.strict else "error"
     fail = SEVERITY_ORDER[report.max_severity] >= SEVERITY_ORDER[threshold]
     if report.findings and fail:
-        _print_lint_epilogue(args.bundle, threshold)
+        _print_lint_epilogue(
+            args.bundle,
+            threshold,
+            warnings_only=SEVERITY_ORDER[report.max_severity] < SEVERITY_ORDER["error"],
+        )
         return 1
     return 0
 
 
-def _print_lint_epilogue(bundle: str, threshold: str) -> None:
+def _print_lint_epilogue(
+    bundle: str, threshold: str, *, warnings_only: bool = False
+) -> None:
     """Three-line epilogue after a failing lint (presentation only)."""
+    from openadapt_flow.cli_hints import command
     from openadapt_flow.tutorial import outcome_epilogue_lines
 
     lines = outcome_epilogue_lines(
@@ -2918,9 +3040,16 @@ def _print_lint_epilogue(bundle: str, threshold: str) -> None:
             "gaps are reported instead of silently running unguarded or "
             "unverifiable steps"
         ),
-        next_command=f"openadapt-flow certify {bundle} --policy <policy>",
+        next_command=command(f"certify {bundle} --policy clinical-write"),
     )
     print("\n" + "\n".join(lines))
+    if warnings_only:
+        # --strict is a CI gate: a fresh recording usually carries warnings,
+        # so say plainly why this exited 1 and what the default does.
+        print(
+            "Only warnings were found. --strict fails on warnings; without it, "
+            "lint exits 0 unless a finding reaches 'error'."
+        )
 
 
 def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
@@ -3637,8 +3766,10 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
         save_qualified_workflow(workflow, args.bundle)
         print(workflow.qualification.model_dump_json(indent=2))
         if changed:
+            from openadapt_flow.cli_hints import command
+
             print(
-                "Certification invalidated. Run `openadapt-flow qualify certify "
+                f"Certification invalidated. Run `{command('qualify certify')} "
                 "<bundle> --evidence-root <path>` before production V2 tasks.",
                 file=sys.stderr,
             )
@@ -4670,8 +4801,10 @@ def _cmd_push(args: argparse.Namespace) -> int:
         )
         print(f"Review original: {result['original_path']}")
         print(f"Sanitized derivative: {result['sanitized_path']}")
+        from openadapt_flow.cli_hints import command
+
         print(
-            "Review locally: openadapt-flow review-sanitized "
+            f"Review locally: {command('review-sanitized')} "
             f"{result['sanitized_path']} --original {result['original_path']}"
         )
         return 0
@@ -4760,8 +4893,10 @@ def _cmd_sanitize(args: argparse.Namespace) -> int:
         f"Sanitized {manifest['processed_file_count']} file(s) into {args.out}; "
         f"execution semantics: {manifest['execution_semantics']}."
     )
+    from openadapt_flow.cli_hints import command
+
     print(
-        "Review locally: openadapt-flow review-sanitized "
+        f"Review locally: {command('review-sanitized')} "
         f"{args.out} --original {args.path}"
     )
     return 0
@@ -4944,10 +5079,12 @@ def _emit_local_receipt(args: argparse.Namespace) -> int:
         return 0
 
     if not args.production:
+        from openadapt_flow.cli_hints import command
+
         print(
             "report-run REFUSED: --production is required because a saved "
-            "report cannot prove synthetic provenance. Run `openadapt-flow "
-            "tutorial` to emit the bundled reference receipt directly."
+            f"report cannot prove synthetic provenance. Run `{command('tutorial')}` "
+            "to emit the bundled reference receipt directly."
         )
         return 2
     try:
@@ -5113,9 +5250,11 @@ def _cmd_teach(args: argparse.Namespace) -> int:
 
     print(result.summary())
     if result.promoted:
+        from openadapt_flow.cli_hints import command
+
         print(
             "\nLEARNED. Re-run the updated bundle and the workflow no longer "
-            f"halts on this situation:\n    openadapt-flow replay {args.out}"
+            f"halts on this situation:\n    {command('replay')} {args.out}"
         )
         return 0
     print(
@@ -5447,12 +5586,21 @@ def _package_version() -> str:
 
 def build_parser() -> argparse.ArgumentParser:
     """Build the top-level argument parser."""
+    from openadapt_flow.cli_hints import command
+
     parser = argparse.ArgumentParser(
         prog="openadapt-flow",
         description=(
-            "Record a workflow once, compile it into a deterministic "
-            "vision-anchored script, replay it locally, and use bounded "
-            "re-resolution or governed repair when the interface drifts."
+            "Record a task once and compile it into a program that runs on "
+            "this computer. With a record check configured, a governed run "
+            "confirms each save by reading the record back, and a run that "
+            "can't confirm a save stops and asks a person. When the screen "
+            "changes, it finds the same field again or stops, and a lasting fix "
+            "needs a person's approval."
+        ),
+        epilog=(
+            f"New here? Run '{command('demo')}' to see a checked run and a "
+            "stopped run side by side on one page."
         ),
     )
     parser.add_argument(
@@ -5461,6 +5609,49 @@ def build_parser() -> argparse.ArgumentParser:
         version=f"%(prog)s {_package_version()}",
     )
     sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser(
+        "demo",
+        help=(
+            "See the proof in one command: a checked run and a run where the "
+            "app lies, side by side on one page (fake clinic data, no AI calls)"
+        ),
+        description=(
+            "Run the bundled tutorial twice on a fake clinic app: once against "
+            "an honest app, and once against an app that shows its success "
+            "message and then drops the save. Writes one self-contained HTML "
+            "page with both final screens, the record check for each run, and "
+            "what a person sees when a run stops, and opens it when a display "
+            "is available. Exit 0 when the first run is Done and checked and "
+            "the second stopped; 1 when the pair didn't show that; 2 when the "
+            "demo refused to start or lacked evidence."
+        ),
+    )
+    p.add_argument(
+        "--out",
+        default=None,
+        help=(
+            "Folder for the page and both runs' evidence (default: "
+            "./openadapt-demo, then -2, -3, ... so an earlier demo is never "
+            "overwritten). An existing non-empty folder is refused, and so is "
+            "a folder an earlier demo used, even after it was deleted."
+        ),
+    )
+    p.add_argument(
+        "--no-open",
+        action="store_true",
+        help="Write the page but don't open it in a browser",
+    )
+    p.add_argument(
+        "--headed", action="store_true", help="Show the browser while the runs happen"
+    )
+    p.add_argument(
+        "--verbose",
+        "-v",
+        action="store_true",
+        help="Also print each engine stage as it runs",
+    )
+    p.set_defaults(func=_cmd_demo)
 
     p = sub.add_parser(
         "record",
@@ -6512,7 +6703,8 @@ def build_parser() -> argparse.ArgumentParser:
         "certify",
         help=(
             "Enforce a policy on a bundle (exits nonzero + reports if it "
-            "fails); makes 'runnable' distinct from 'certified safe'"
+            "fails); passing means the bundle meets that policy's rules, "
+            "not that it is safe to run"
         ),
     )
     p.add_argument("bundle", help="Workflow bundle directory")

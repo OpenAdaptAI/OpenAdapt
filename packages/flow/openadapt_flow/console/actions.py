@@ -161,7 +161,8 @@ def actions_for_bundle(bundle_dir: Path, policy: Optional[str]) -> list[ActionSp
             title="Certify against policy",
             description=(
                 "Enforce a policy on this bundle (exit nonzero + report on "
-                "failure) -- makes 'runnable' distinct from 'certified safe'. "
+                "failure). Passing means the bundle meets that policy's "
+                "rules, not that it is safe to run. "
                 "Read-only with respect to the bundle."
             ),
             command=_cli("certify", bundle, "--policy", pol),

@@ -80,10 +80,12 @@ def cmd_register(args: argparse.Namespace) -> int:
             "without a new qualification revision); it can never advance."
         )
         return 1
+    from openadapt_flow.cli_hints import command
+
     print(
         "\nNext: review the diff, run both campaigns, then approve:\n"
-        f"  openadapt-flow repair show {candidate.candidate_id} --store {store.root}\n"
-        f"  openadapt-flow repair review {candidate.candidate_id} "
+        f"  {command('repair show')} {candidate.candidate_id} --store {store.root}\n"
+        f"  {command('repair review')} {candidate.candidate_id} "
         f"--reviewed-by <you> --store {store.root}"
     )
     return 0

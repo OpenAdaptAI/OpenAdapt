@@ -29,6 +29,7 @@ Neither helper executes a workflow, contacts a network, or weakens any gate.
 
 from __future__ import annotations
 
+import shlex
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Optional
@@ -492,9 +493,51 @@ def _halt_check_line(report: Any) -> str:
     return "a governed check refused to let an unproven step claim success"
 
 
+def _pending_decision(run_dir: Path) -> tuple[Optional[Path], Optional[str]]:
+    """The run's durable pause file and its status, when one exists.
+
+    Read-only. An encrypted pause that can't be opened here still counts as a
+    pause; its status is then unknown (``None``).
+    """
+    from openadapt_flow.runtime.durable.checkpoint import (
+        ENC_SUFFIX,
+        PENDING_FILENAME,
+    )
+
+    plain_path = run_dir / PENDING_FILENAME
+    encrypted_path = run_dir / (PENDING_FILENAME + ENC_SUFFIX)
+    path = (
+        plain_path
+        if plain_path.is_file()
+        else encrypted_path
+        if encrypted_path.is_file()
+        else None
+    )
+    if path is None:
+        return None, None
+    try:
+        from openadapt_flow import crypto
+        from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
+
+        pending = CheckpointStore(run_dir, key=crypto.resolve_key(None)).read_pending()
+    except Exception:  # noqa: BLE001 - an unreadable pause only hides its status
+        return path, None
+    return path, (pending.status if pending is not None else None)
+
+
 def explain_run(run_dir: Path) -> str:
-    """Read-only plain-language summary of one completed run directory."""
+    """Read-only plain-language summary of one completed run directory.
+
+    The first line is the plain result, and the next step follows the run's
+    ``transaction_outcome``, never the coarse ``HALTED`` label alone: only an
+    outcome that proves no business effect suggests re-running the same
+    command. A run that may have written (``RECONCILIATION_REQUIRED``, a
+    rollback, or a legacy report with no transaction outcome) asks a person to
+    check the record first.
+    """
+    from openadapt_flow.cli_hints import command
     from openadapt_flow.ir import RunReport
+    from openadapt_flow.plain_outcome import plain_result
 
     report_path = run_dir / "report.json"
     if not report_path.is_file():
@@ -509,14 +552,21 @@ def explain_run(run_dir: Path) -> str:
             f"explain: {report_path} could not be read as a run report: {exc}"
         ) from exc
     outcome = report.execution_outcome or ("success" if report.success else "FAILED")
+    plain = plain_result(report.transaction_outcome, outcome)
     executed = sum(1 for result in report.results if not result.skipped)
     ok_steps = sum(1 for result in report.results if result.ok)
+    transaction = report.transaction_outcome or "not recorded"
+    report_md = run_dir / "REPORT.md"
 
     lines = [
-        f"What happened: run '{report.workflow_name}' finished {outcome}: "
+        f"Result: {plain.label}. {plain.meaning}",
+        f"What happened: run '{report.workflow_name}' finished {outcome} "
+        f"(transaction: {transaction}): "
         f"{ok_steps}/{len(report.results)} steps ok ({executed} executed), "
-        f"{report.heal_count} heal(s), model calls {report.model_calls}."
+        f"{report.heal_count} heal(s), model calls {report.model_calls}.",
     ]
+
+    # Why: what the engine's own evidence says about this ending.
     receipt = run_dir / "receipt.json"
     if outcome == "VERIFIED":
         lines.append(
@@ -525,19 +575,11 @@ def explain_run(run_dir: Path) -> str:
         )
         if receipt.is_file():
             lines.append(f"Shareable receipt: {receipt}")
-        lines.append(
-            "Next: qualify this workflow for your environment -- "
-            "openadapt-flow qualify init <bundle-dir> --target <surface> ..."
-        )
     elif outcome == "HALTED":
         lines.append(f"Why this is safe: {_halt_check_line(report)}.")
         lines.append(
             "The engine stopped instead of acting on unproven state -- that is "
             "the fail-closed contract working, not a defect."
-        )
-        lines.append(
-            f"Next: read {run_dir / 'REPORT.md'} for the halt evidence, fix the "
-            "cause, then re-run the same command."
         )
     elif outcome == "COMPLETED_UNVERIFIED":
         lines.append(
@@ -545,20 +587,58 @@ def explain_run(run_dir: Path) -> str:
             "independently proved the writes reached a system of record, so "
             "this outcome must never be reported as success."
         )
-        lines.append(
-            "Next: pair an oracle -- openadapt-flow scaffold-verifier "
-            "<recording-or-bundle> drafts one; wire deployment.yaml effects:, "
-            "then re-run under the standard profile."
-        )
     else:
         lines.append(
             "Why this is safe: the run failed loudly and reported failure "
             "instead of guessing."
         )
+
+    # Next: derived from the transaction outcome (through the plain result).
+    if plain.key == "done_and_checked":
         lines.append(
-            f"Next: read {run_dir / 'REPORT.md'}, then re-run the same command "
-            "once the cause is fixed."
+            "Next: qualify this workflow for your environment -- "
+            + command("qualify init <bundle-dir> --target <surface> ...")
         )
-    if (run_dir / "REPORT.md").is_file():
-        lines.append(f"Plain-language evidence: {run_dir / 'REPORT.md'}")
+    elif plain.key == "finished_not_checked":
+        lines.append(
+            "Next: pair an oracle -- "
+            + command("scaffold-verifier <recording-or-bundle>")
+            + " drafts one; wire deployment.yaml effects:, then re-run under "
+            "the standard profile."
+        )
+    elif plain.nothing_written:
+        # HALTED_BEFORE_EFFECT, REJECTED_POLICY, CANCELED, FAILED_PLATFORM: the
+        # engine proved no business effect, so re-running is safe once fixed.
+        if outcome == "HALTED":
+            lines.append(
+                f"Next: read {report_md} for the halt evidence, fix the cause, "
+                "then re-run the same command."
+            )
+        else:
+            lines.append(
+                f"Next: read {report_md}, then re-run the same command once the "
+                "cause is fixed."
+            )
+    else:
+        # A write may have landed, or this report can't say. Never suggest a
+        # blind re-run.
+        lines.append(
+            "Next: check the record in the application before anyone runs this "
+            f"again, and read {report_md} for the evidence. Don't re-run the "
+            "same command until the record is checked."
+        )
+        pending_path, status = _pending_decision(run_dir)
+        if pending_path is not None and status == "rejected":
+            lines.append(
+                f"A person rejected this run ({pending_path}); it won't continue."
+            )
+        elif pending_path is not None:
+            quoted = shlex.quote(str(run_dir))
+            lines.append(
+                f"A decision is waiting for a person: {pending_path}. After the "
+                f"record is checked, approve with {command('approve ' + quoted)}, "
+                f"then continue with {command('resume ' + quoted)}."
+            )
+    if report_md.is_file():
+        lines.append(f"Plain-language evidence: {report_md}")
     return "\n".join(lines)

@@ -697,7 +697,20 @@ class CertifyReport(BaseModel):
             f"({self.n_steps} steps)"
         )
         if self.passed:
-            return head + "\n  no violations — certified safe under this policy."
+            name = self.policy_name
+            lines = [head, f"  no violations: passes the {name!r} policy."]
+            if name == "permissive":
+                lines.append(
+                    "  'permissive' is a minimal smoke check. It doesn't require a "
+                    "record check, so a governed run under 'clinical-write' may "
+                    "still refuse this program."
+                )
+            else:
+                lines.append(
+                    "  That covers this policy's rules only. A governed run checks "
+                    "the program again before it acts."
+                )
+            return "\n".join(lines)
         lines = [head, f"  {len(self.violations)} violation(s):"]
         for v in self.violations:
             where = f"[{v.step_id}] " if v.step_id else ""
@@ -714,8 +727,8 @@ def evaluate_policy(
     """Certify ``workflow`` against ``policy`` → a structured pass/fail report.
 
     Pure function of the compiled bundle and the policy; runs nothing. A report
-    with an empty ``violations`` list (``passed=True``) means the bundle is
-    certified safe UNDER THIS POLICY — not that it is safe in the absolute
+    with an empty ``violations`` list (``passed=True``) means the bundle
+    passes THIS POLICY, not that it is safe in the absolute
     (``docs/LIMITS.md`` still governs the residual runtime risks).
     """
     violations: list[Violation] = []

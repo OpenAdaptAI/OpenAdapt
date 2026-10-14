@@ -194,6 +194,8 @@ def tutorial_epilogue(result: "TutorialResult") -> list[str]:
     exact next command instead of leaving the operator at a dead end.
     """
 
+    from openadapt_flow.cli_hints import command
+
     outcome = result.execution_outcome
     if outcome == "COMPLETED_UNVERIFIED":
         what = (
@@ -205,9 +207,9 @@ def tutorial_epilogue(result: "TutorialResult") -> list[str]:
             "only independently confirmed writes earn VERIFIED"
         )
         next_command = (
-            "openadapt-flow scaffold-verifier "
-            f"{result.recording_dir}   # draft an oracle, wire deployment.yaml "
-            "effects:, re-run under the standard profile"
+            command(f"scaffold-verifier {result.recording_dir}")
+            + "   # draft an oracle, wire deployment.yaml effects:, re-run under "
+            "the standard profile"
         )
     else:  # HALTED / FAILED / ROLLED_BACK
         what = (
@@ -218,7 +220,7 @@ def tutorial_epilogue(result: "TutorialResult") -> list[str]:
             "the engine reports only what independent evidence proves; halting "
             "on a failed check is the fail-closed contract working"
         )
-        next_command = f"openadapt-flow explain {result.run_dir}"
+        next_command = command(f"explain {result.run_dir}")
     return outcome_epilogue_lines(
         what=what, why_safe=why_safe, next_command=next_command
     )

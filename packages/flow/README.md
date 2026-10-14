@@ -5,6 +5,97 @@
 [![Python](https://img.shields.io/pypi/pyversions/openadapt-flow)](https://pypi.org/project/openadapt-flow/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
+openadapt-flow takes the last manual step off your team. It enters approved
+information into the apps you already use, such as an EMR, a payer portal, or
+a desktop app, and reads the saved record back before it reports the job done.
+When the screen and the record don't match, it stops and asks a person instead
+of guessing.
+
+You show it the task once. It builds an automation that runs on your own
+computer, and a normal run makes no AI model calls.
+
+[Docs](https://docs.openadapt.ai) ·
+[Try it in your browser](https://app.openadapt.ai/demo) ·
+[Website](https://openadapt.ai) ·
+[Discussions](https://github.com/OpenAdaptAI/openadapt-flow/discussions)
+
+## See it in one command
+
+```bash
+pip install 'openadapt-flow[browser]'
+openadapt-flow demo
+```
+
+The demo runs one task twice on a fake clinic app on your computer. The first
+run uses an honest app. The second uses an app that shows "Encounter saved"
+and then drops the note. When both runs finish, the demo opens one page with
+the two results side by side. The first run can take a few minutes while the
+browser downloads. With the
+[OpenAdapt launcher](https://github.com/OpenAdaptAI/OpenAdapt) installed,
+`openadapt flow demo` runs the same command.
+
+![Two runs of the same automation on a fake clinic app. Both final screens show "Encounter saved". The record check found 1 note after run 1, which is marked Done and checked, and 0 notes after run 2, which stopped and asked a person.](docs/showcase/demo-proof.png)
+
+*Synthetic recording. A screenshot of the page that `openadapt-flow demo`
+wrote on 2026-10-09 against the bundled fake clinic app; regenerate it with
+[`scripts/make_demo_proof_image.py`](scripts/make_demo_proof_image.py).*
+
+The proof in three lines:
+
+| | Run 1: honest app | Run 2: app drops the note |
+|---|---|---|
+| The screen said | Encounter saved | Encounter saved |
+| The record check found | 1 note | 0 notes |
+| OpenAdapt | Done and checked | Stopped and asked a person to check the record, with no retry |
+
+The two final screens are identical, pixel for pixel. Only the record check
+tells the runs apart.
+
+## What changes for your team
+
+Here's one example task: entering a faxed referral into an EMR.
+
+| | Today | With OpenAdapt |
+|---|---|---|
+| Entering it | A person keys each referral by hand. Two hospital time studies put this at about 10 to 12 minutes per referral. | OpenAdapt enters the approved fields in the same EMR screens, the way a person showed it once. |
+| Knowing it saved | Someone sees "Saved" and moves on. | OpenAdapt reads the record back through a separate path, such as a report, an API, or a read-only login, and compares it with what it entered. |
+| When something is off | Nothing checks the record, so a missing or wrong entry stays until someone notices it. | The run stops before it reports done, and a person decides what happens next. |
+
+The 10-to-12-minute figure comes from a time-and-motion study at the UCSF
+Pediatric Access Center
+([JAMIA Open, 2020](https://pmc.ncbi.nlm.nih.gov/articles/PMC7660949/), 719
+seconds on average) and a 2024 HFMA case study at Calderdale and Huddersfield
+NHS Foundation Trust (10 minutes per referral).
+
+The record check needs a second way to read the record, such as a report, an
+API, or a read-only login. You set that up once for each workflow. Nothing
+changes in the app itself.
+
+No OpenAdapt deployment has measured an "after" time for this task yet, so
+this page doesn't claim one. We have measured what a screen-only check misses.
+In our fault test, 72 of 90 runs left the record wrong, and a check that
+trusted the success message passed 54 of those 72. With one record check
+through an API read, 9 of the 72 still got through. That's a fixed set of
+injected faults, not a field rate
+([`benchmark/effect_e2e/EFFECT_E2E.md`](benchmark/effect_e2e/EFFECT_E2E.md),
+July 2026).
+
+## Next steps
+
+- To try it on a test copy of your own web app, record the task once:
+
+  ```bash
+  openadapt-flow record --backend web --url https://your-test-app.example --out my-task
+  ```
+
+  Then follow [Record and rehearse your workflow](#record-and-rehearse-your-workflow).
+- To have OpenAdapt set up a workflow with your team, start at
+  [openadapt.ai](https://openadapt.ai).
+
+---
+
+## How it works
+
 Record yourself doing a task in a browser or a desktop app. openadapt-flow
 compiles the recording into a script that runs on your machine. The default
 healthy path makes no generative-model API call. Before a governed run reports
@@ -18,20 +109,9 @@ It's for work you do the same way every week and have to be able to prove
 afterwards: claims entry, referrals, eligibility checks, invoice posting. If
 you're automating something once, use an agent instead.
 
-[Docs](https://docs.openadapt.ai) ·
-[Try it in your browser](https://app.openadapt.ai/demo) ·
-[Website](https://openadapt.ai) ·
-[Discussions](https://github.com/OpenAdaptAI/openadapt-flow/discussions)
+## The tutorial, step by step
 
-![One demonstration, two UIs, same compiled script. The right side re-resolves under a theme it has never seen](docs/showcase/demo.gif)
-
-Left: the UI the demo was recorded on. Right: a theme it had never seen, where
-each step re-resolves through OCR or geometry and each proposed repair appears
-in the run evidence as a diff you can read. Neither run makes a generative-model
-API call. Both runs are real and their artifacts are in
-[`docs/showcase/`](docs/showcase).
-
-## Try it
+`demo` is built on the bundled tutorial. To see each stage in the terminal:
 
 ```bash
 pip install 'openadapt-flow[browser]'
@@ -85,13 +165,18 @@ screen still passes:
                        read of the system of record, which holds 0 record(s)
   The engine did:      HALTED at the consequential step instead of claiming
                        success (transaction: RECONCILIATION_REQUIRED, billable: no)
+  Result:              Check the record. A save may have gone through. A person checks the record before anything is retried.
 ```
 
 The halted run writes a local report and no shareable receipt, because only a
 `VERIFIED` run may use the success rail. It doesn't retry the write either:
 delivery is uncertain, so the transaction ends in `RECONCILIATION_REQUIRED` for
-a person to settle. Longer walkthrough, including the `--guided` presentation
-mode and the hand-driven stages: [docs/TUTORIAL.md](docs/TUTORIAL.md).
+a person to settle. That's why the plain result is "Check the record" and not
+"Stopped before saving": the store really is empty, but the engine says nothing
+was written only when it can prove that for every declared effect. `demo` runs
+this same pair and shows it on one page. Longer walkthrough, including the
+`--guided` presentation mode and the hand-driven stages:
+[docs/TUTORIAL.md](docs/TUTORIAL.md).
 
 ## Reference Execute server
 
@@ -134,9 +219,13 @@ openadapt-flow record --backend web --url https://your.app --out rec
 openadapt-flow compile rec --out bundle --name my-task
 openadapt-flow qualify propose bundle --recording rec --out proposal.json
 openadapt-flow qualify accept bundle --proposal proposal.json
-openadapt-flow lint bundle --strict
+openadapt-flow lint bundle
 openadapt-flow replay bundle --backend web --url https://your.app
 ```
+
+`lint` exits 1 only when a gap reaches `error`. In CI, add `--strict` to fail
+on warnings too. A fresh recording usually has a few warnings, so
+`lint --strict` exits 1 on it until those gaps are closed.
 
 Demo once, get a checked program. `qualify propose` fills the production-shaped
 pins from the recording: application identity, environment fingerprint,
@@ -169,8 +258,12 @@ openadapt-flow induce rec1 rec2 --out program
 `induce` emits a program when the traces agree, and a `record-next:` worklist of missing demonstrations when a consequential branch or loop stays underdetermined. The healthy replay path still makes no model call.
 
 `replay` is the permissive rehearsal path. It stays available while a bundle has
-certification gaps. For governed execution, complete the remaining idempotency
-and postcondition contracts, then use the gated path:
+certification gaps. A rehearsal never checks the record, so it ends
+`COMPLETED_UNVERIFIED` (finished, not checked) and still exits 0. Exit 0 from
+`replay` means the steps finished, not that the save was confirmed; the output
+says so, and `transaction_outcome` in `report.json` records it. For governed
+execution, complete the remaining idempotency and postcondition contracts, then
+use the gated path:
 
 ```bash
 openadapt-flow certify bundle --config deploy.yaml
@@ -180,7 +273,22 @@ openadapt-flow run bundle --profile standard --config deploy.yaml
 `run --profile standard` enforces the policy again. It still refuses the bundle
 if the standalone `certify` command failed. A new recording will usually fail
 `clinical-write` until its contracts are complete. Two built-in policies ship:
-`permissive` and `clinical-write`.
+`permissive` and `clinical-write`. `permissive` is a minimal smoke check: a
+bundle that passes it can still be refused by a governed `clinical-write` run.
+
+| Command | Exit 0 | Exit 1 | Exit 2 |
+|---|---|---|---|
+| `demo` | Run 1 was done and checked, and run 2 stopped | The pair didn't show that difference | The demo couldn't start, a stage lacked evidence, or a usage error |
+| `replay` (Demo profile) | The steps finished, not checked | The run didn't finish, or an input couldn't be used | Refused before acting (for example, a program recorded on another surface), or a usage error |
+| `run --profile standard` | `VERIFIED`: done and checked | Any other ending | Refused before acting, or a usage error |
+| `certify` | Passes the policy | No policy given, or it couldn't load | Fails the policy, or a usage error |
+| `lint` | No `error` gap (with `--strict`, no warnings either) | A gap at the threshold | Usage error |
+
+For anything a script acts on, read `transaction_outcome` in `report.json`.
+Only `VERIFIED` is a checked save, and only `HALTED_BEFORE_EFFECT`,
+`REJECTED_POLICY`, `CANCELED`, and `FAILED_PLATFORM` prove nothing was
+written. `RECONCILIATION_REQUIRED` means a person checks the record before
+anything is retried.
 
 For a native Windows app, Capture records one local window and an in-guest agent
 drives it at replay:
@@ -315,6 +423,20 @@ halt. The [V1 design](docs/design/PROCESS_CONTRACT_V1.md) records the execution,
 authentication, portability, and isolation boundaries.
 
 ## How a step finds its target
+
+<!-- TODO(readme-visual): re-cut docs/showcase/demo.gif with
+scripts/make_demo_gif.py. Its first frame is a black title card (what a still
+preview shows), four frames show the login, the captions are engine telemetry
+(step ids, coordinates, rungs, milliseconds), and the end card says "Both runs
+succeeded". Keep it here, next to the resolution ladder it illustrates, not at
+the top of the README. -->
+![One demonstration, two UIs, same compiled script. The right side re-resolves under a theme it has never seen](docs/showcase/demo.gif)
+
+Left: the UI the demo was recorded on. Right: a theme it had never seen, where
+each step re-resolves through OCR or geometry and each proposed repair appears
+in the run evidence as a diff you can read. Neither run makes a generative-model
+API call. Both runs are real and their artifacts are in
+[`docs/showcase/`](docs/showcase).
 
 An anchored step keeps the evidence available on its execution surface. A
 browser or native step can carry a structural locator alongside template, OCR,
@@ -509,7 +631,8 @@ burn-down list (`[[tool.mypy.overrides]]` in `pyproject.toml`), tighten its
 annotations, and delete it from the list.
 
 The demo GIF is generated from real run artifacts by
-`scripts/make_demo_gif.py`.
+`scripts/make_demo_gif.py`. The proof image at the top of this page comes from
+a real `openadapt-flow demo` run through `scripts/make_demo_proof_image.py`.
 
 ## License
 

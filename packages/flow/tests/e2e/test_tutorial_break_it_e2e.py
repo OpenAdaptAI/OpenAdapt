@@ -132,3 +132,26 @@ def test_the_broken_run_is_separate_from_the_clean_evidence(
     assert broken.run_dir.name == "run-broken"
     clean = _report(break_it_path.run_dir)
     assert clean.execution_outcome == "VERIFIED"
+
+
+def test_the_demo_proof_page_reads_this_pair(break_it_path: TutorialResult) -> None:
+    """``openadapt-flow demo`` renders this same pair from its own evidence.
+
+    Reuses the module's one real browser run: the final frames really are
+    byte-identical, the stopped run's plain result comes from its transaction
+    outcome, and the person's choices come from the retained pending decision.
+    """
+
+    from openadapt_flow import demo_proof
+
+    root = Path(break_it_path.run_dir).parent
+    evidence = demo_proof.collect_evidence(break_it_path, root)
+    assert evidence.showed_the_difference
+    assert evidence.screens_identical
+    assert evidence.clean.plain.key == "done_and_checked"
+    assert evidence.broken.plain.key == "check_the_record"
+    assert not evidence.broken.plain.nothing_written
+    assert len(evidence.choices) == 3
+    page = demo_proof.render_demo_page(evidence)
+    assert "identical, pixel for pixel" in page
+    assert "Stopped: the screen said saved, the record says no" in page
