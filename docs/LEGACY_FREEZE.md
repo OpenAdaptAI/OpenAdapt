@@ -29,17 +29,31 @@ The monolithic OpenAdapt codebase in this repository has been **frozen** as of v
 | **Release Date** | February 2025 |
 | **Repository** | https://github.com/OpenAdaptAI/OpenAdapt |
 
-**To install the legacy version:**
-```bash
-pip install openadapt==0.46.0
-```
+**To install the legacy version** (Python 3.10 or 3.11):
 
-**Or clone and install from this repository:**
+A plain `pip install openadapt==0.46.0` fails. Its `openai-whisper` dependency
+ships only as source and imports `pkg_resources`, which setuptools 81 and later
+no longer include. Cap setuptools for the build:
+
+<!-- legacy-install:start -->
 ```bash
-git clone https://github.com/OpenAdaptAI/OpenAdapt.git
-cd OpenAdapt
-pip install poetry
-poetry install
+python3.11 -m venv .venv
+.venv/bin/python -m pip install --upgrade pip
+echo 'setuptools<81' > build-constraints.txt
+.venv/bin/python -m pip install --build-constraint build-constraints.txt openadapt==0.46.0
+```
+<!-- legacy-install:end -->
+
+`--build-constraint` needs pip 25.3 or later, which the second line installs.
+On 2026-10-14 these steps installed v0.46.0 with Python 3.11 on macOS (Apple
+silicon). A dry run (`--dry-run`) also succeeded with Python 3.10. PyPI doesn't
+offer v0.46.0 on Python 3.12 or later. The runs are recorded in
+[legacy-install-evidence.md](legacy-install-evidence.md).
+
+**To read the source**, check out the `v0.46.0` tag. The `main` branch now
+holds the 1.x launcher, and `legacy/` keeps a frozen copy of the old source:
+```bash
+git clone --branch v0.46.0 https://github.com/OpenAdaptAI/OpenAdapt.git
 ```
 
 ---
@@ -101,18 +115,16 @@ from openadapt import PageBuilder
 
 The legacy PySide6-based tray application is **not included** in the new packages. Options:
 
-1. **Continue using legacy**: Pin to `openadapt==0.46.0`
+1. **Continue using legacy**: Pin to `openadapt==0.46.0` and install it as
+   shown above
 2. **Use CLI**: The new `openadapt` CLI provides all core functionality
 3. **Future**: A new cross-platform application is planned
 
 ### For Contributors
 
-**Legacy development setup:**
-```bash
-git clone https://github.com/OpenAdaptAI/OpenAdapt
-cd OpenAdapt
-poetry install
-```
+**Legacy code:** the legacy codebase takes no new features. Read it at the
+`v0.46.0` tag (`git clone --branch v0.46.0
+https://github.com/OpenAdaptAI/OpenAdapt.git`) or under `legacy/`.
 
 **New development setup:**
 ```bash

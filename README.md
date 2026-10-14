@@ -483,9 +483,11 @@ has the methodology, results, and limits.
 `openadapt-consilium`, `openadapt-telemetry`, and `openadapt-viewer` support
 development and operations. The runtime doesn't need any of them.
 
-The pre-1.0 monolith (v0.46.0) is frozen under [`legacy/`](legacy/) and still
-installable with `pip install openadapt==0.46.0`. Migration guide:
-[docs/LEGACY_FREEZE.md](docs/LEGACY_FREEZE.md). Early demonstrations are on
+The pre-1.0 monolith (v0.46.0) is frozen under [`legacy/`](legacy/) and
+published on PyPI as `openadapt==0.46.0` for Python 3.10 and 3.11. A plain
+`pip install` of it fails today.
+[docs/LEGACY_FREEZE.md](docs/LEGACY_FREEZE.md) has install steps that work and
+the migration guide. Early demonstrations are on
 [Twitter](https://twitter.com/abrichr/status/1784307190062342237) and
 [Loom](https://www.loom.com/share/9d77eb7028f34f7f87c6661fb758d1c0).
 
