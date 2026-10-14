@@ -278,7 +278,7 @@
         "skipped": 1
       },
       "workspace_final": {
-        "passed": 356,
+        "passed": 358,
         "failed": 0,
         "errors": 0,
         "skipped": 1
@@ -372,5 +372,25 @@
         ]
       }
     }
+  },
+  "tests_final_run_commit": "b6ddcae2c624bc635be3bee82994e91554b1f09b",
+  "tests_note": "standalone: each repository's own CI test command in a fresh clone at the imported commit (launcher: dependencies installed from PyPI as its CI does). workspace_first_run: at b5c30cca, before the SQLAlchemy pin and the policy-copy rule. workspace_final: at tests_final_run_commit.",
+  "evals_skew_check": {
+    "files": [
+      "tests/test_extradup_kill_scan.py",
+      "tests/test_reward_certificate_narrowing.py",
+      "tests/test_reward_proof.py",
+      "tests/test_reward_trl.py",
+      "tests/test_reward_verl.py"
+    ],
+    "with_openadapt_types_0.17.1": "61 passed",
+    "with_openadapt_types_0.19.0_in_tree": "31 failed or errored, all TypeError: score() missing 'contract'"
+  },
+  "checks_before_push": {
+    "name_guard": "CLEAN on the net diff",
+    "name_pattern_in_new_history": "87 matches, all inside base64 data in three evals HTML pages; 0 elsewhere; 0 in commit messages and paths",
+    "gitleaks_new_commits": 0,
+    "copyleft_license_text_in_packages_tree": 0,
+    "source_boundary_tree": "OK"
   }
 }
