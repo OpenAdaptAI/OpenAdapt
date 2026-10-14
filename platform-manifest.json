@@ -1,7 +1,7 @@
 {
   "manifest_kind": "openadapt-platform-release-manifest",
   "schema_version": "2.0.0",
-  "generated_at": "2026-10-14T06:53:51+00:00",
+  "generated_at": "2026-10-14T16:56:40+00:00",
   "generation": {
     "files": [
       {
@@ -17,7 +17,6 @@
   "release_selection": {
     "mode": "explicit-published",
     "component_versions": {
-      "flow": "1.35.1",
       "types": "0.17.0"
     }
   },
@@ -423,30 +422,30 @@
     },
     "privacy": {
       "package": "openadapt-privacy",
-      "version": "1.1.1",
+      "version": "1.1.2",
       "source": "pypi",
       "requires_python": ">=3.10",
       "requires": {},
       "dependency_constraints": [],
       "provenance": {
         "repository": "OpenAdaptAI/openadapt-privacy",
-        "release_ref": "v1.1.1",
-        "commit": "c9c3e2e65b960cfcd9dd0f081e423723b599fced",
-        "tree": "0e5c660c4990dc0aa8a6173db29562f4d106dccd",
-        "url": "https://github.com/OpenAdaptAI/openadapt-privacy/tree/v1.1.1"
+        "release_ref": "v1.1.2",
+        "commit": "52bfbba842c44e26a5a986a68ead3b09cd91f5cb",
+        "tree": "b32df21e02c9b70b4c33fc28a8ea7293de130f55",
+        "url": "https://github.com/OpenAdaptAI/openadapt-privacy/tree/v1.1.2"
       },
       "artifacts": [
         {
           "type": "bdist_wheel",
-          "filename": "openadapt_privacy-1.1.1-py3-none-any.whl",
-          "url": "https://files.pythonhosted.org/packages/9b/45/997931912bc2952047885ce19f5b10705ec7cbc9560cc939db3e832316a2/openadapt_privacy-1.1.1-py3-none-any.whl",
-          "sha256": "76678ae6393aebfa0e857e7c3f326e178b1b4199574086ae7bda9e6932cfe241"
+          "filename": "openadapt_privacy-1.1.2-py3-none-any.whl",
+          "url": "https://files.pythonhosted.org/packages/27/ee/8ee2ae415bd5364268252ebfdcf672a32f68078f94df70b15bf77d7766c3/openadapt_privacy-1.1.2-py3-none-any.whl",
+          "sha256": "6e542b2fea44bdf8872430687946ec805fef22dc7d228a56a1e65871beebe47a"
         },
         {
           "type": "sdist",
-          "filename": "openadapt_privacy-1.1.1.tar.gz",
-          "url": "https://files.pythonhosted.org/packages/3a/23/45e4e860faf1a18b5202f953d330793e4c94ed4dcfada53cb8405cf815e1/openadapt_privacy-1.1.1.tar.gz",
-          "sha256": "877560cfecea4c9d92a759423fa930e35216a997b81153c2b0301280bef84b64"
+          "filename": "openadapt_privacy-1.1.2.tar.gz",
+          "url": "https://files.pythonhosted.org/packages/2c/67/c5ab780dd460b2830b35ac5ed763f5b3e565ba63d3fcbb5fc2e1a260e256/openadapt_privacy-1.1.2.tar.gz",
+          "sha256": "d90287edaa13470955f15d5f6eeb37b075678aeb55de324f8b8207682009bcc2"
         }
       ]
     },
@@ -741,7 +740,7 @@
       "target_role": "privacy",
       "target_package": "openadapt-privacy",
       "requires": ">=0.1.0",
-      "resolved": "1.1.1",
+      "resolved": "1.1.2",
       "activations": [
         {
           "extras": null,
@@ -777,7 +776,7 @@
       "target_role": "privacy",
       "target_package": "openadapt-privacy",
       "requires": ">=1.0.0",
-      "resolved": "1.1.1",
+      "resolved": "1.1.2",
       "activations": [
         {
           "extras": "presidio",
