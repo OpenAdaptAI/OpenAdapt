@@ -509,7 +509,7 @@ requires-dist = [
     { name = "jsonschema", specifier = ">=4.20.0" },
     { name = "mcp", specifier = ">=1.28,<3" },
     { name = "openadapt-flow", specifier = ">=1.26.0,<2" },
-    { name = "openadapt-flow", extras = ["browser"], marker = "extra == 'tutorial'", specifier = ">=1.26.0,<2" },
+    { name = "openadapt-flow", extras = ["browser"], marker = "extra == 'tutorial'", specifier = ">=1.29.0,<2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4.0" },
 ]

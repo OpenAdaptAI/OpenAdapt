@@ -77,12 +77,89 @@ def test_tutorial_flag_does_not_require_bundles(tmp_path):
     assert args.allow_run is False
 
 
-def test_serve_requires_tutorial_or_bundles(capsys):
-    result = main(["serve"])
-    assert result == 2
+def _capture_serve(monkeypatch):
+    captured: dict = {}
+
+    def fake_serve(bridge, authoring=None):
+        captured["bridge"] = bridge
+        captured["tools"] = [spec.name for spec in bridge.list_tool_specs()]
+        captured["listing"] = bridge.dispatch("list_workflows", {})
+
+    monkeypatch.setattr("openadapt_agent.mcp.serve", fake_serve)
+    return captured
+
+
+def test_serve_with_no_flags_starts_the_sandbox(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("OPENADAPT_AGENT_SANDBOX_DIR", str(tmp_path / "sandbox"))
+    captured = _capture_serve(monkeypatch)
+    assert main(["serve", "--sandbox-engine", "simulated"]) == 0
+    bridge = captured["bridge"]
+    assert bridge.mode == "sandbox"
+    assert captured["tools"] == ["list_workflows", "run_workflow", "get_run"]
+    assert captured["listing"]["workflows"][0]["name"] == "add_triage_note"
+    assert bridge.runner_config.runs_dir == tmp_path / "sandbox"
     err = capsys.readouterr().err
-    assert "provide --bundles, --tutorial, or --authoring" in err
-    assert "--allow-run" in err
+    assert "sandbox mode" in err
+    assert "Nothing real changes" in err
+
+
+@pytest.mark.parametrize(
+    "argv",
+    [
+        ["serve", "--tutorial"],
+        ["serve", "--allow-run"],
+        ["serve", "--mode", "sandbox"],
+    ],
+)
+def test_older_sandbox_flags_are_aliases(monkeypatch, tmp_path, argv):
+    captured = _capture_serve(monkeypatch)
+    argv = [*argv, "--sandbox-engine", "simulated", "--runs-dir", str(tmp_path / "runs")]
+    assert main(argv) == 0
+    assert captured["bridge"].mode == "sandbox"
+
+
+@pytest.mark.parametrize(
+    "argv, message",
+    [
+        (["serve", "--mode", "production"], "--mode production needs --bundles"),
+        (["serve", "--mode", "attended"], "--mode attended needs --bundles"),
+        (["serve", "--mode", "sandbox", "--bundles", "b"], "cannot be combined with --bundles"),
+        (["serve", "--url", "https://app.example"], "--url and --config need"),
+    ],
+)
+def test_mode_conflicts_fail_closed(argv, message, capsys):
+    assert main(argv) == 2
+    assert message in capsys.readouterr().err
+
+
+def test_mode_production_enables_runs_and_attended_adds_decisions(
+    monkeypatch, bundles_root, tmp_path
+):
+    from contextlib import contextmanager
+
+    @contextmanager
+    def fake_attended(**kwargs):
+        yield None
+
+    monkeypatch.setattr("openadapt_agent.flow_service.open_attended_service", fake_attended)
+    captured = _capture_serve(monkeypatch)
+    runs = str(tmp_path / "runs")
+    assert main(["serve", "--mode", "production", "--bundles", str(bundles_root), "--runs-dir", runs]) == 0
+    assert captured["bridge"].mode == "production"
+    assert "run_workflow" in captured["tools"]
+    assert "reject_attention" not in captured["tools"]
+    assert main(["serve", "--mode", "attended", "--bundles", str(bundles_root), "--runs-dir", runs]) == 0
+    assert captured["bridge"].mode == "attended"
+    assert "reject_attention" in captured["tools"]
+    assert main(["serve", "--bundles", str(bundles_root), "--runs-dir", runs]) == 0
+    assert "run_workflow" not in captured["tools"]
+    assert captured["listing"]["run_tools_enabled"] is False
+    # Older flags: decisions on paused runs without runs still label as attended.
+    argv = ["serve", "--bundles", str(bundles_root), "--runs-dir", runs, "--allow-attended-actions"]
+    assert main(argv) == 0
+    assert captured["bridge"].mode == "attended"
+    assert "run_workflow" not in captured["tools"]
+    assert "reject_attention" in captured["tools"]
 
 
 def test_authoring_flag_does_not_require_bundles_or_imply_allow_run(tmp_path):
@@ -223,130 +300,3 @@ def test_tutorial_rejects_private_bundle_path(tmp_path, capsys):
     )
     assert result == 2
     assert "cannot be combined" in capsys.readouterr().err
-
-
-def test_tutorial_serve_uses_slug_tool_and_standard_profile(monkeypatch, tmp_path, capsys):
-    from contextlib import contextmanager
-    from pathlib import Path
-
-    from openadapt_agent.tutorial import TutorialSession
-    from openadapt_flow.ir import ActionKind, Step, Workflow
-
-    captured: dict = {}
-    work = tmp_path / "runs" / "synthetic-tutorial"
-    bundle = work / "bundle"
-    bundle.mkdir(parents=True)
-    Workflow(
-        name="local-quickstart",
-        params={"note": "Synthetic follow-up in two weeks"},
-        steps=[Step(id="s1", intent="Save the synthetic note", action=ActionKind.CLICK)],
-    ).save(bundle)
-    config = work / "deployment.yaml"
-    config.write_text("name: synthetic-tutorial\n", encoding="utf-8")
-
-    def fake_prepare(work_dir, *, headed=False, reuse_bundle=True):
-        def close():
-            captured["closed"] = True
-
-        return TutorialSession(
-            bundle_dir=bundle,
-            url="http://127.0.0.1:9/?fault=ok&idempotency=demo#tasks",
-            deployment_config=config,
-            work_dir=Path(work_dir),
-            close=close,
-        )
-
-    def fake_serve(bridge):
-        captured["bridge"] = bridge
-
-    @contextmanager
-    def fake_attended(**kwargs):
-        captured["attended"] = kwargs
-        yield None
-
-    monkeypatch.setattr("openadapt_agent.tutorial.prepare_tutorial_session", fake_prepare)
-    monkeypatch.setattr("openadapt_agent.mcp.serve", fake_serve)
-    monkeypatch.setattr("openadapt_agent.flow_service.open_attended_service", fake_attended)
-
-    result = main(
-        [
-            "serve",
-            "--tutorial",
-            "--allow-run",
-            "--runs-dir",
-            str(tmp_path / "runs"),
-        ]
-    )
-    assert result == 0
-    bridge = captured["bridge"]
-    assert bridge.public_synthetic is True
-    names = [spec.name for spec in bridge.list_tool_specs() if spec.name.startswith("run_")]
-    assert names == ["run_local_quickstart"]
-    assert "--profile" in bridge.runner_config.extra_run_args
-    assert "standard" in bridge.runner_config.extra_run_args
-    assert "--approve-unverified-writes" not in bridge.runner_config.extra_run_args
-    assert captured.get("closed") is True
-    assert "tutorial enabled" in capsys.readouterr().err
-
-
-def test_serve_allow_run_without_bundles_starts_the_synthetic_tutorial(
-    monkeypatch, tmp_path, capsys
-):
-    from contextlib import contextmanager
-    from pathlib import Path
-
-    from openadapt_agent.tutorial import TutorialSession
-    from openadapt_flow.ir import ActionKind, Step, Workflow
-
-    captured: dict = {}
-    work = tmp_path / "runs" / "synthetic-tutorial"
-    bundle = work / "bundle"
-    bundle.mkdir(parents=True)
-    Workflow(
-        name="local-quickstart",
-        params={"note": "Synthetic follow-up in two weeks"},
-        steps=[Step(id="s1", intent="Save the synthetic note", action=ActionKind.CLICK)],
-    ).save(bundle)
-    config = work / "deployment.yaml"
-    config.write_text("name: synthetic-tutorial\n", encoding="utf-8")
-
-    def fake_prepare(work_dir, *, headed=False, reuse_bundle=True):
-        def close():
-            captured["closed"] = True
-
-        return TutorialSession(
-            bundle_dir=bundle,
-            url="http://127.0.0.1:9/?fault=ok&idempotency=demo#tasks",
-            deployment_config=config,
-            work_dir=Path(work_dir),
-            close=close,
-        )
-
-    def fake_serve(bridge):
-        captured["bridge"] = bridge
-
-    @contextmanager
-    def fake_attended(**kwargs):
-        captured["attended"] = kwargs
-        yield None
-
-    monkeypatch.setattr("openadapt_agent.tutorial.prepare_tutorial_session", fake_prepare)
-    monkeypatch.setattr("openadapt_agent.mcp.serve", fake_serve)
-    monkeypatch.setattr("openadapt_agent.flow_service.open_attended_service", fake_attended)
-
-    result = main(
-        [
-            "serve",
-            "--allow-run",
-            "--runs-dir",
-            str(tmp_path / "runs"),
-        ]
-    )
-    assert result == 0
-    bridge = captured["bridge"]
-    assert bridge.public_synthetic is True
-    names = [spec.name for spec in bridge.list_tool_specs() if spec.name.startswith("run_")]
-    assert names == ["run_local_quickstart"]
-    assert "--approve-unverified-writes" not in bridge.runner_config.extra_run_args
-    assert captured.get("closed") is True
-    assert "tutorial enabled" in capsys.readouterr().err

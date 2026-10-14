@@ -44,7 +44,11 @@ def test_public_synthetic_run_tool_uses_slug(bundles_root, runner_config):
         allow_run=True,
         public_synthetic=True,
     )
-    names = [spec.name for spec in bridge.list_tool_specs() if spec.name.startswith("run_")]
+    names = [
+        spec.name
+        for spec in bridge.list_tool_specs()
+        if spec.name.startswith("run_") and spec.name != "run_workflow"
+    ]
     assert names == ["run_demo_triage"]
 
 
@@ -56,8 +60,9 @@ def test_schema_uses_opaque_id_requires_params_and_exports_no_examples(
     workflow = workflow_id(bridge)
     assert re.fullmatch(r"workflow_[0-9a-f]{24}", workflow)
     spec = {item.name: item for item in bridge.list_tool_specs()}[f"run_{workflow}"]
-    assert spec.meta == {"requires_seal": True}
-    assert "requires_seal: true" in spec.description
+    assert spec.meta == {"deprecated": True, "use_instead": "run_workflow"}
+    assert "Deprecated: use run_workflow" in spec.description
+    assert "unsigned success" not in spec.description
     schema = spec.input_schema
     assert schema["type"] == "object"
     assert schema["additionalProperties"] is False
@@ -89,12 +94,14 @@ def test_read_only_tools_and_workflow_listing_are_phi_safe(
     names = [spec.name for spec in bridge.list_tool_specs()]
     assert names == [
         "list_workflows",
+        "get_run",
         "get_workflow",
         "get_run_report",
         "list_needs_attention",
         "get_attention_item",
     ]
     listing = bridge.dispatch("list_workflows", {})
+    assert listing["mode"] == "production"
     assert listing["lifecycle"] == "admission-derived"
     assert listing["run_tools_enabled"] is False
     assert listing["protected_export_enabled"] is False
@@ -175,6 +182,7 @@ def test_get_run_report_never_turns_demo_completion_into_verified_success(
         {
             "execution_profile": "demo",
             "execution_outcome": "COMPLETED_UNVERIFIED",
+            "transaction_outcome": "COMPLETED_UNVERIFIED",
             "production_eligible": False,
         }
     )
@@ -186,7 +194,7 @@ def test_get_run_report_never_turns_demo_completion_into_verified_success(
     assert fetched["status"] == "halt"
     assert fetched["success"] is False
     assert fetched["execution_outcome"] == "COMPLETED_UNVERIFIED"
-    assert "completed" in fetched["message"]
+    assert "finished the steps" in fetched["message"]
     assert "did not complete" not in fetched["message"]
     assert str(runner_config.runs_dir) not in json.dumps(fetched)
 
@@ -201,6 +209,7 @@ def test_run_and_report_lookup_use_the_same_public_outcome_message(
         {
             "execution_profile": "demo",
             "execution_outcome": "COMPLETED_UNVERIFIED",
+            "transaction_outcome": "COMPLETED_UNVERIFIED",
             "production_eligible": False,
         }
     )
@@ -400,7 +409,14 @@ def test_unloadable_bundle_is_safe_by_default_and_not_runnable(
     assert secret not in json.dumps(listing)
     assert str(bad) not in json.dumps(listing)
     names = [spec.name for spec in bridge.list_tool_specs()]
-    assert not any(name.startswith("run_") for name in names)
+    assert [name for name in names if name.startswith("run_")] == ["run_workflow"]
+    result = bridge.dispatch(
+        "run_workflow",
+        {"workflow": listing["workflows"][0]["name"], "inputs": {}, "request_id": "req-0001"},
+    )
+    assert result["outcome"] == "did_not_run"
+    assert result["reason"] == "workflow_unavailable"
+    assert secret not in json.dumps(result)
 
 
 def test_tool_result_is_json_serializable(

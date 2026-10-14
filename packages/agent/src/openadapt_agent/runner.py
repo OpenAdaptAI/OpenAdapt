@@ -1,10 +1,11 @@
 """Shell out to the governed ``openadapt-flow run`` CLI and map the outcome.
 
-This module is the only new-run path in openadapt-agent. It NEVER
-reimplements replay: every ``run_*`` call is a subprocess invocation of
-``openadapt-flow run`` (the fail-closed deployment verb), so flow's
-admission gates (certification, identity arming, effect contracts,
-encryption, integrity pinning) apply exactly as they would from a terminal.
+This module is the run path for operator bundles. It NEVER reimplements
+replay: every bundle run is a subprocess invocation of ``openadapt-flow run``
+(the fail-closed deployment verb), so Flow's admission gates (certification,
+identity arming, effect contracts, encryption, integrity pinning) apply
+exactly as they would from a terminal. The synthetic sandbox calls the same
+Flow run gate in-process (see :mod:`openadapt_agent.sandbox`).
 
 Exit-code contract of ``openadapt-flow run``:
 
@@ -16,7 +17,9 @@ Exit-code contract of ``openadapt-flow run``:
 - ``2``  — **governed refusal**: an admission gate refused the bundle (or
   the bundle could not be loaded safely). Nothing was executed.
 
-A halt or refusal is always surfaced as such — never as success. Even an
+Results are derived by :mod:`openadapt_agent.contract` from Flow's
+``transaction_outcome``. A halt or refusal is never success, a verified run
+is never an error, and an uncertain save is never "nothing changed". Even an
 exit code of 0 is cross-checked against the persisted ``report.json``.
 """
 
@@ -32,7 +35,15 @@ import tempfile
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Optional
+from typing import Any, Mapping, Optional
+
+from openadapt_agent.contract import (
+    REASONS,
+    TRANSACTION_REASONS,
+    build_result,
+    parse_failed_checks,
+    reason_for_run,
+)
 
 __all__ = [
     "FlowRunner",
@@ -42,8 +53,11 @@ __all__ = [
     "classify_report_status",
     "default_flow_cli",
     "is_safe_run_id",
+    "legacy_reason",
+    "new_run_id",
     "public_outcome_message",
     "public_report_summary",
+    "status_for_reason",
 ]
 
 _PRECISE_EXECUTION_OUTCOMES = frozenset(
@@ -59,47 +73,56 @@ _PRECISE_EXECUTION_OUTCOMES = frozenset(
 _RUN_ID_RE = re.compile(r"^[A-Za-z0-9._-]+$")
 _TAIL_CHARS = 4000
 _LOG = logging.getLogger(__name__)
-_PUBLIC_MESSAGES = {
-    "success": ("The governed run completed and its persisted report confirms success."),
-    "halt": (
-        "The governed run stopped safely instead of guessing. Review the local "
-        "Needs Attention experience for protected evidence."
-    ),
-    "refused": ("A governed admission check refused the run. The target workflow did not start."),
-    "timeout": (
-        "The run exceeded its deadline. Its live effect is uncertain; inspect "
-        "the protected local run before retrying."
-    ),
-    "error": (
-        "The run could not produce a trustworthy terminal result. Inspect the "
-        "protected local logs and run evidence."
-    ),
+# Legacy ``status`` values a caller may still hold, mapped to the contract
+# reason that makes no claim beyond what the status itself proves.
+_STATUS_FALLBACK_REASONS = {
+    "success": "saved_and_checked",
+    "halt": "result_unreadable",
+    "refused": "not_ready_to_run",
+    "timeout": "timed_out",
+    "error": "result_unreadable",
 }
+def legacy_reason(
+    status: str,
+    execution_outcome: Optional[str] = None,
+    transaction_outcome: Optional[str] = None,
+) -> str:
+    """Contract reason for a legacy status when no fuller evidence is at hand.
+
+    The coarse ``HALTED`` label never selects "nothing was written": without a
+    transaction outcome a halt is reported as uncertain.
+    """
+    if status == "halt":
+        if transaction_outcome in TRANSACTION_REASONS:
+            return TRANSACTION_REASONS[transaction_outcome]
+        if execution_outcome == "COMPLETED_UNVERIFIED":
+            return "not_checked"
+        if execution_outcome == "ROLLED_BACK":
+            return "change_reversed"
+    return _STATUS_FALLBACK_REASONS.get(status, "result_unreadable")
 
 
-def public_outcome_message(status: str, execution_outcome: Optional[str]) -> str:
+def public_outcome_message(
+    status: str,
+    execution_outcome: Optional[str],
+    transaction_outcome: Optional[str] = None,
+) -> str:
     """Return fixed public copy for one classified terminal result."""
-    if status == "error" and execution_outcome == "VERIFIED":
-        return (
-            "Unsigned production success is failure. A Seal is required "
-            "before this write can be treated as complete."
-        )
-    if status == "halt" and execution_outcome == "HALTED":
-        return (
-            "HALTED. The independent check did not confirm the write. "
-            "Tell the user the record did not change."
-        )
-    if status == "halt" and execution_outcome == "COMPLETED_UNVERIFIED":
-        return (
-            "The run completed, but its persisted evidence did not prove "
-            "verified success. Review it locally before any retry."
-        )
-    if status == "halt" and execution_outcome == "ROLLED_BACK":
-        return (
-            "The configured compensating action completed. Review the local "
-            "evidence before further action."
-        )
-    return _PUBLIC_MESSAGES.get(status, _PUBLIC_MESSAGES["error"])
+    reason = legacy_reason(status, execution_outcome, transaction_outcome)
+    return REASONS[reason].what_happened
+
+
+def status_for_reason(reason: str, *, refused: bool = False, timed_out: bool = False) -> str:
+    """Legacy ``status`` that agrees with a contract reason."""
+    if refused:
+        return "refused"
+    if timed_out:
+        return "timeout"
+    if reason == "saved_and_checked":
+        return "success"
+    if reason in {"result_unreadable", "platform_error", "app_unreachable"}:
+        return "error"
+    return "halt"
 
 
 def default_flow_cli() -> tuple[str, ...]:
@@ -144,23 +167,107 @@ class RunOutcome:
     stdout_tail: str = ""
     stderr_tail: str = ""
     execution_outcome: Optional[str] = None
+    transaction_outcome: Optional[str] = None
+    #: Closed contract reason (``openadapt_agent.contract.REASONS``).
+    reason: Optional[str] = None
+    #: Closed refusal check codes, never Flow's own text.
+    failed_checks: list[str] = field(default_factory=list)
+    #: The persisted report, kept so a later attention lookup can refine the
+    #: reason. Never exported unless protected export is enabled.
+    report: Optional[dict] = field(default=None, repr=False)
+    refused_before_start: bool = False
+    timed_out: bool = False
+    process_started: Optional[bool] = True
+
+    def contract_reason(self) -> str:
+        """The contract reason for this outcome, falling back to the status."""
+        if self.reason in REASONS:
+            return self.reason
+        return legacy_reason(self.status, self.execution_outcome, self.transaction_outcome)
+
+    def apply_attention(self, attention: Optional[Mapping[str, Any]]) -> None:
+        """Refine the reason with Flow's Needs Attention state for this run."""
+        if attention is None or self.refused_before_start or self.timed_out:
+            return
+        if not isinstance(self.report, dict):
+            return
+        self.reason = reason_for_run(
+            exit_code=self.exit_code,
+            report=self.report,
+            process_started=self.process_started,
+            attention=attention,
+        )
+
+    def contract(
+        self,
+        *,
+        mode: str = "production",
+        request_id: Optional[str] = None,
+        workflow: Optional[str] = None,
+        needs_attention_id: Optional[str] = None,
+    ) -> dict:
+        """Project the partner contract result for this outcome."""
+        model_calls = self.summary.get("model_calls") if isinstance(self.summary, dict) else None
+        total_ms = self.summary.get("total_ms") if isinstance(self.summary, dict) else None
+        return build_result(
+            self.contract_reason(),
+            workflow=workflow if workflow is not None else self.workflow,
+            run_id=self.run_id,
+            request_id=request_id,
+            mode=mode,
+            execution_outcome=self.execution_outcome,
+            transaction_outcome=self.transaction_outcome,
+            failed_checks=self.failed_checks,
+            needs_attention_id=needs_attention_id,
+            model_calls=model_calls if isinstance(model_calls, int) else None,
+            seconds=(
+                total_ms / 1000.0
+                if isinstance(total_ms, (int, float)) and not isinstance(total_ms, bool)
+                else None
+            ),
+        )
 
     def to_dict(self, *, include_protected: bool = False) -> dict:
-        """Project an MCP-safe result; raw local evidence is explicit opt-in."""
+        """Project an MCP-safe legacy result; raw local evidence is explicit opt-in.
+
+        The legacy keys stay for existing callers. The partner contract fields
+        (``outcome``, ``safe_to_retry``, ``what_happened``, ...) are added
+        alongside them, and ``message`` is the contract's plain sentence.
+        """
+        contract = self.contract()
         result = {
             "schema_version": 1,
             "status": self.status,
             "success": self.status == "success",
             "sealed": False,
-            "requires_seal": True,
+            # Kept for older callers. A verified local run is reported as done
+            # with ``proof: "local"``; it is never turned into a failure.
+            "requires_seal": False,
             "frames_included": False,
             "workflow_id": self.workflow,
             "run_id": self.run_id,
-            "message": public_outcome_message(self.status, self.execution_outcome),
+            "message": contract["what_happened"],
             "summary": _sanitize_public_summary(self.summary),
         }
+        for key in (
+            "outcome",
+            "label",
+            "safe_to_retry",
+            "what_happened",
+            "next_action",
+            "next_step",
+            "reason",
+            "record_changed",
+            "proof",
+            "contract_version",
+            "failed_checks",
+        ):
+            if key in contract:
+                result[key] = contract[key]
         if self.execution_outcome is not None:
             result["execution_outcome"] = self.execution_outcome
+        if self.transaction_outcome is not None:
+            result["transaction_outcome"] = self.transaction_outcome
         if include_protected:
             result["protected"] = {
                 "workflow": self.workflow,
@@ -306,11 +413,9 @@ def classify_report_status(report: object) -> tuple[str, Optional[str]]:
                 return "error", precise
 
     if precise == "VERIFIED":
-        if production_eligible is True:
-            # Local MCP never mints a Seal. Production-eligible VERIFIED
-            # without one is unsigned success, which this adapter treats
-            # as failure.
-            return "error", precise
+        # A production-eligible VERIFIED run saved the change and read it back.
+        # Local MCP mints no Seal, so the proof is local; the run is still a
+        # success. Reporting it as an error would invite a duplicate write.
         return ("success" if success is True else "error"), precise
     if precise in {"HALTED", "FAILED", "ROLLED_BACK"} and success is True:
         return "error", precise
@@ -332,12 +437,11 @@ def classify_outcome(
 ) -> RunOutcome:
     """Map a finished ``openadapt-flow run`` process to a :class:`RunOutcome`.
 
-    Pure function (no I/O) so the mapping is unit-testable. The invariant:
-    ``status == "success"`` requires BOTH exit code 0 AND a persisted
-    report that has a verified terminal outcome. Legacy reports require a true
-    ``success`` flag. Precise reports require ``execution_outcome=VERIFIED``
-    and a consistent true legacy flag. Anything else surfaces as a halt,
-    refusal, or error while protected evidence remains local.
+    Pure function (no I/O) so the mapping is unit-testable. The contract
+    reason comes from :func:`openadapt_agent.contract.reason_for_run`, which
+    reads Flow's ``transaction_outcome``; the legacy ``status`` is derived from
+    that reason so the two never disagree. ``status == "success"`` requires
+    exit code 0 AND a consistent persisted ``VERIFIED`` report.
     """
     outcome = RunOutcome(
         status="error",
@@ -348,9 +452,24 @@ def classify_outcome(
         exit_code=exit_code,
         stdout_tail=_tail(stdout),
         stderr_tail=_tail(stderr),
+        report=report if isinstance(report, dict) else None,
     )
+    if isinstance(report, dict):
+        _status, outcome.execution_outcome = classify_report_status(report)
+        transaction = report.get("transaction_outcome")
+        if isinstance(transaction, str):
+            outcome.transaction_outcome = transaction
 
+    refused = exit_code == 2 and not isinstance(report, dict)
+    outcome.refused_before_start = refused
+    outcome.reason = reason_for_run(
+        exit_code=exit_code,
+        report=report if isinstance(report, dict) else None,
+        refused_before_start=refused,
+    )
     if exit_code == 2:
+        outcome.failed_checks = parse_failed_checks(f"{stdout}\n{stderr}")
+    if refused:
         outcome.status = "refused"
         outcome.detail = (
             "Governed refusal: an openadapt-flow admission gate refused this "
@@ -360,78 +479,45 @@ def classify_outcome(
         )
         return outcome
 
-    if exit_code == 0:
-        if report is None:
-            outcome.status = "error"
-            outcome.detail = (
-                "openadapt-flow run exited 0 but no report.json was found in "
-                "the run directory; refusing to report success without "
-                "evidence."
-            )
-            return outcome
-        report_status, precise_outcome = classify_report_status(report)
-        outcome.execution_outcome = precise_outcome
-        if report_status == "success":
-            outcome.status = "success"
-            outcome.summary = _report_summary(report)
-            outcome.detail = "Run completed; every executed step verified."
-            return outcome
-        # Exit 0 with a non-success report: trust the report, not the code. A
-        # Demo completion can carry the legacy success flag while its precise
-        # evidence outcome is explicitly COMPLETED_UNVERIFIED.
-        outcome.status = report_status
-        outcome.summary = _report_summary(report)
-        outcome.halt = report.get("halt") if isinstance(report, dict) else None
-        if precise_outcome == "COMPLETED_UNVERIFIED":
-            outcome.detail = (
-                "Execution completed, but the persisted evidence did not prove "
-                "VERIFIED success; review the local run before any retry."
-            )
-        elif report_status == "error":
-            outcome.detail = (
-                "Process exited 0, but the persisted report has no consistent "
-                "verified terminal outcome."
-            )
-        else:
-            outcome.detail = (
-                "Process exited 0 but the persisted run report does not mark the "
-                "run as VERIFIED; treating it as a halt."
-            )
-        return outcome
-
-    # Any other nonzero exit (canonically 1): the run executed and stopped.
-    if report is not None:
-        report_status, precise_outcome = classify_report_status(report)
-        outcome.execution_outcome = precise_outcome
-        outcome.status = "error" if report_status in {"success", "error"} else "halt"
-    else:
-        outcome.status = "halt"
+    outcome.status = status_for_reason(outcome.reason)
     if isinstance(report, dict):
         outcome.summary = _report_summary(report)
-        outcome.halt = report.get("halt")
-        failing = _failing_step(report)
-        if outcome.halt:
-            outcome.detail = (
-                f"Run halted at state {outcome.halt.get('state_id')!r} "
-                f"({outcome.halt.get('intent')!r}): "
-                f"{outcome.halt.get('reason')!r}. Evidence: report.json / "
-                "REPORT.md in run_dir."
-            )
-        elif failing is not None:
-            outcome.detail = (
-                f"Run failed at step {failing.get('step_id')!r} "
-                f"({failing.get('intent')!r}): {failing.get('error')!r}. "
-                "Evidence: report.json / REPORT.md in run_dir."
-            )
-            outcome.halt = failing
-        else:
-            outcome.detail = (
-                "Run did not complete successfully; see report.json in "
-                "run_dir for step-level evidence."
-            )
+        outcome.halt = report.get("halt") if outcome.status != "success" else None
+    if outcome.status == "success":
+        outcome.detail = "Run completed; every executed step verified."
+        return outcome
+    if report is None:
+        outcome.detail = (
+            "openadapt-flow run exited without a report.json in the run "
+            "directory; refusing to report success without evidence. See "
+            "stdout_tail / stderr_tail."
+        )
+        return outcome
+    if outcome.execution_outcome == "COMPLETED_UNVERIFIED":
+        outcome.detail = (
+            "Execution completed, but the persisted evidence did not prove "
+            "VERIFIED success; review the local run before any retry."
+        )
+        return outcome
+    failing = _failing_step(report) if isinstance(report, dict) else None
+    if outcome.halt:
+        outcome.detail = (
+            f"Run halted at state {outcome.halt.get('state_id')!r} "
+            f"({outcome.halt.get('intent')!r}): "
+            f"{outcome.halt.get('reason')!r}. Evidence: report.json / "
+            "REPORT.md in run_dir."
+        )
+    elif failing is not None:
+        outcome.detail = (
+            f"Run failed at step {failing.get('step_id')!r} "
+            f"({failing.get('intent')!r}): {failing.get('error')!r}. "
+            "Evidence: report.json / REPORT.md in run_dir."
+        )
+        outcome.halt = failing
     else:
         outcome.detail = (
-            "Run exited nonzero before a report.json was written; see stdout_tail / stderr_tail."
+            "The persisted report has no consistent verified terminal outcome; "
+            "see report.json in run_dir for step-level evidence."
         )
     return outcome
 
@@ -470,14 +556,26 @@ class FlowRunner:
         bundle_dir: Path,
         params: dict[str, str],
         url_override: Optional[str] = None,
+        run_id: Optional[str] = None,
     ) -> RunOutcome:
-        """Run the bundle once. Params travel via ``--params-file`` (never argv)."""
+        """Run the bundle once. Params travel via ``--params-file`` (never argv).
+
+        ``run_id`` lets a caller hand out the id before the run finishes. It
+        must be a single safe path component; a fresh one is made otherwise.
+        """
         url = self.config.url
+        if run_id is None or not is_safe_run_id(run_id):
+            run_id = new_run_id()
         if url_override:
             if not self.config.allow_url_override:
                 return RunOutcome(
                     status="refused",
                     workflow=workflow,
+                    run_id=run_id,
+                    reason="not_ready_to_run",
+                    failed_checks=["url_override_not_allowed"],
+                    refused_before_start=True,
+                    process_started=False,
                     detail=(
                         "URL override rejected: the server was not started "
                         "with --allow-url-override. The target URL is fixed "
@@ -488,7 +586,6 @@ class FlowRunner:
 
         runs_root = Path(self.config.runs_dir)
         runs_root.mkdir(parents=True, exist_ok=True)
-        run_id = f"run-{uuid.uuid4().hex[:24]}"
         run_dir = runs_root / run_id
         report_path = run_dir / "report.json"
 
@@ -499,10 +596,14 @@ class FlowRunner:
                 json.dump({k: str(v) for k, v in (params or {}).items()}, fh)
             cmd = self._build_command(Path(bundle_dir), run_dir, params_file, url)
             try:
+                # Decode with replacement: a strict decode error would surface
+                # after Flow already ran and read as a launch failure.
                 proc = subprocess.run(
                     cmd,
                     capture_output=True,
                     text=True,
+                    encoding="utf-8",
+                    errors="replace",
                     timeout=self.config.timeout_s,
                 )
             except subprocess.TimeoutExpired as exc:
@@ -512,36 +613,43 @@ class FlowRunner:
                     run_id=run_id,
                     run_dir=str(run_dir),
                     report_path=str(report_path) if report_path.exists() else None,
+                    reason="timed_out",
+                    timed_out=True,
                     detail=(
                         f"Run exceeded the per-call timeout of "
                         f"{self.config.timeout_s:.0f}s and was killed. The "
                         "target system may be in a partially-executed state; "
                         "inspect the run directory before retrying."
                     ),
-                    stdout_tail=_tail(
-                        exc.stdout.decode() if isinstance(exc.stdout, bytes) else (exc.stdout or "")
-                    ),
-                    stderr_tail=_tail(
-                        exc.stderr.decode() if isinstance(exc.stderr, bytes) else (exc.stderr or "")
-                    ),
+                    stdout_tail=_tail(_text(exc.stdout)),
+                    stderr_tail=_tail(_text(exc.stderr)),
                 )
             except FileNotFoundError:
                 return RunOutcome(
                     status="error",
                     workflow=workflow,
+                    run_id=run_id,
+                    reason="platform_error",
+                    process_started=False,
                     detail=(
                         f"openadapt-flow CLI not found ({self.config.flow_cli[0]!r}); "
                         "install openadapt-flow in the server's environment."
                     ),
                 )
             except (OSError, subprocess.SubprocessError, ValueError) as exc:
+                # subprocess.run raises these while creating the child, so
+                # the governed run normally never started. If Flow already
+                # made its run directory, it did start and may have acted.
                 _LOG.exception("governed Flow subprocess failed locally")
+                started = run_dir.exists()
                 return RunOutcome(
                     status="error",
                     workflow=workflow,
                     run_id=run_id,
                     run_dir=str(run_dir),
                     report_path=(str(report_path) if report_path.exists() else None),
+                    reason="result_unreadable" if started else "platform_error",
+                    process_started=None if started else False,
                     detail=f"{type(exc).__name__}: {exc}",
                 )
         finally:
@@ -610,6 +718,23 @@ class FlowRunner:
         }
 
 
+def _text(value: object) -> str:
+    """Captured process output as text, never raising on odd bytes."""
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return value if isinstance(value, str) else ""
+
+
 def is_safe_run_id(run_id: str) -> bool:
     """Run ids are single path components — no separators or traversal."""
-    return bool(_RUN_ID_RE.match(run_id)) and ".." not in run_id
+    return (
+        isinstance(run_id, str)
+        and len(run_id) <= 128
+        and bool(_RUN_ID_RE.match(run_id))
+        and ".." not in run_id
+    )
+
+
+def new_run_id() -> str:
+    """A fresh opaque run id (``run-`` plus 24 hex characters)."""
+    return f"run-{uuid.uuid4().hex[:24]}"

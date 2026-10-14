@@ -55,3 +55,24 @@ jobs:
           python scripts/check_release_artifacts.py dist
           python scripts/check_dist.py dist/*
           python scripts/check_source_boundary.py --require-dist
+
+  sandbox-e2e:
+    # The zero-flag sandbox with real openadapt-flow, a real browser, and the
+    # synthetic MockMed app: no fakes. Unit jobs above stub Flow's CLI.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install with the browser extra
+        run: pip install -e ".[dev,tutorial]"
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+      - name: Run every sandbox case through openadapt-flow
+        env:
+          OPENADAPT_AGENT_E2E: "1"
+          DO_NOT_TRACK: "1"
+          OPENADAPT_TELEMETRY: "0"
+        run: pytest -q tests/test_sandbox_flow.py

@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "openadapt-agent"
 version = "2.0.2"
-description = "Local agent bridge for governed OpenAdapt workflows, attended actions, MCP, and Agent Skills"
+description = "Let your AI agent enter information in apps with no API and get back whether it saved (MCP and Agent Skills)"
 readme = "README.md"
 # openadapt-flow pins <3.13 (rapidocr-onnxruntime); this package inherits it.
 requires-python = ">=3.10,<3.13"
@@ -26,7 +26,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Artificial Intelligence",
     "Topic :: Software Development :: Libraries :: Python Modules",
 ]
-keywords = ["mcp", "agent-skills", "gui", "automation", "workflow", "openadapt", "governed"]
+keywords = ["mcp", "agent-skills", "gui", "automation", "workflow", "openadapt", "ai-agents", "ehr", "rpa"]
 
 dependencies = [
     # Governed workflow compiler/runtime this package bridges. Execution
@@ -58,7 +58,10 @@ dev = [
     "ruff>=0.4.0",
 ]
 tutorial = [
-    "openadapt-flow[browser]>=1.26.0,<2",
+    # The sandbox's real engine drives MockMed through Flow's tutorial entry
+    # query, added in openadapt-flow 1.29.0. Older Flow falls back to the
+    # simulated engine.
+    "openadapt-flow[browser]>=1.29.0,<2",
 ]
 
 [project.scripts]

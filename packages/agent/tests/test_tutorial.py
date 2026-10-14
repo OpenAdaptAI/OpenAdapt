@@ -55,3 +55,40 @@ def test_prepare_tutorial_session_records_then_keeps_mockmed(
     assert "phi" not in yaml_text.lower()
     session.close()
     assert stopped["n"] == 1
+
+
+def test_bind_param_effects_reads_the_callers_value(tmp_path: Path) -> None:
+    import pytest
+
+    effect_module = pytest.importorskip("openadapt_flow.runtime.effects.effect")
+    from openadapt_agent.tutorial import bind_param_effects
+
+    try:
+        effect = effect_module.Effect(
+            kind=effect_module.EffectKind.FIELD_EQUALS,
+            match={"type": effect_module.ValueExpr(literal="Triage")},
+            field="note",
+            value=effect_module.ValueExpr(literal="Synthetic follow-up in two weeks"),
+            risk="irreversible",
+        )
+    except Exception as exc:  # older Flow effect model
+        pytest.skip(f"effect model differs on this Flow: {type(exc).__name__}")
+    bundle = tmp_path / "bundle"
+    Workflow(
+        name="local-quickstart",
+        params={"note": "Synthetic follow-up in two weeks"},
+        steps=[
+            Step(
+                id="save",
+                intent="Save the synthetic note",
+                action=ActionKind.CLICK,
+                effects=[effect],
+            )
+        ],
+    ).save(bundle)
+    workflow = bind_param_effects(bundle)
+    bound = workflow.steps[0].effects[0].value
+    assert bound.param == "note"
+    assert bound.literal is None
+    # The re-sealed bundle still loads, and binding twice changes nothing.
+    assert bind_param_effects(bundle).steps[0].effects[0].value.param == "note"

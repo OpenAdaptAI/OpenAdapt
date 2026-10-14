@@ -1,163 +1,171 @@
-"""Agent Skills emitter — WRAPS ``openadapt_flow.emit.skill.emit_skill``.
+"""Agent Skill export: what a workflow does and how to call it, nothing more.
 
-openadapt-flow already generates a portable skill folder
-(``<slug>/SKILL.md`` + ``<slug>/bundle/``). This module does not
-regenerate any of that; it calls flow's emitter and then APPENDS two
-agent-facing sections the flow emitter does not cover:
+``openadapt-agent emit-skill BUNDLE --out DIR`` writes ``DIR/<name>/SKILL.md``
+from the workflow card (see :mod:`openadapt_agent.cards`): its name, purpose,
+what done means, typed inputs, and how to read the four outcomes. A skill is
+loaded into model context, which for most clients means a hosted model, so the
+file never carries recorded example values, step intents, observed text,
+secrets, or local paths. Each skill's description names its own workflow and
+inputs, so an agent with several skills can tell them apart.
 
-1. how to invoke the workflow through this package's MCP server
-   (``openadapt-agent serve``) instead of the raw CLI, and
-2. the halt and attended-action semantics an agent must respect.
+The compiled bundle stays with the operator's server. ``--include-bundle``
+copies it next to ``SKILL.md`` for an operator who wants one portable folder;
+that copy is protected workflow data and SKILL.md tells the agent not to read
+it. Flow's own ``openadapt-flow emit-skill`` remains available for replay
+demos.
 """
 
 from __future__ import annotations
 
 import json
-import re
+import shutil
 from pathlib import Path
+from typing import Any
 
 from openadapt_agent.bundles import load_workflow_info
-from openadapt_agent.copy import (
-    IDENTITY_SENTENCE,
-    SKILL_HONESTY,
-    SKILL_NAME,
-    SKILL_WHEN_TO_USE,
-)
+from openadapt_agent.cards import WorkflowCard, card_for_bundle, inputs_schema
+from openadapt_agent.copy import OUTCOME_RULES, SKILL_NAME
 
-__all__ = ["emit_agent_skill"]
+__all__ = ["emit_agent_skill", "render_skill"]
 
-_FRONTMATTER = re.compile(r"\A---\n(.*?)\n---\n", re.DOTALL)
 _FORBIDDEN_SKILL_NAMES = frozenset({"computer-use", "computer_use", "computeruse"})
+_DESCRIPTION_LIMIT = 1024
 
-_APPENDIX_TEMPLATE = """\
 
-## Invoking via MCP (openadapt-agent)
+def _skill_name(card_name: str) -> str:
+    name = card_name.replace("_", "-").lower()[:64].strip("-")
+    if name in _FORBIDDEN_SKILL_NAMES or name.replace("-", "") == "computeruse":
+        return SKILL_NAME
+    return name or SKILL_NAME
 
-{when_to_use}
 
-{honesty}
+def _input_line(name: str, schema: dict[str, Any], required: bool) -> str:
+    kind = schema.get("type", "string")
+    shape = {"string": "text", "number": "number", "boolean": "true or false"}.get(kind, kind)
+    if schema.get("format") == "date":
+        shape = "date, YYYY-MM-DD"
+    elif schema.get("format") == "date-time":
+        shape = "date and time, ISO 8601"
+    if schema.get("enum"):
+        shape = "one of " + ", ".join(f"`{value}`" for value in schema["enum"])
+    details = [shape]
+    if "maxLength" in schema:
+        details.append(f"up to {schema['maxLength']} characters")
+    if "pattern" in schema:
+        details.append(f"matches `{schema['pattern']}`")
+    if not required:
+        details.append("optional")
+    description = schema.get("description", "")
+    return f"- `{name}` ({'; '.join(details)}): {description}".rstrip(": ")
 
-If the operator runs the local `openadapt-agent` MCP server over this
-skill's bundle directory:
+
+def _description(card: WorkflowCard) -> str:
+    inputs = ", ".join(sorted(card.inputs)) or "none"
+    text = (
+        f"{card.purpose} Runs the OpenAdapt workflow {card.name} through the "
+        f"run_workflow tool and reports done, needs_review, not_sure_if_saved, "
+        f"or did_not_run. Inputs: {inputs}."
+    )
+    return text[:_DESCRIPTION_LIMIT]
+
+
+def render_skill(card: WorkflowCard, *, include_bundle: bool = False) -> str:
+    """Render SKILL.md for one workflow card. Pure: no I/O."""
+    schema = inputs_schema(card)
+    required = set(schema["required"])
+    inputs = "\n".join(
+        _input_line(name, prop, name in required) for name, prop in schema["properties"].items()
+    ) or "- This workflow takes no inputs. Send an empty object."
+    example_inputs = {name: f"<{name}>" for name in sorted(required)}
+    call = json.dumps(
+        {
+            "workflow": card.name,
+            "inputs": example_inputs,
+            "request_id": "<your id for this piece of work>",
+        },
+        indent=2,
+    )
+    bundle_note = ""
+    if include_bundle:
+        bundle_note = (
+            "\nThe `bundle` folder next to this file is the compiled workflow for the "
+            "operator's server. It is protected workflow data. Don't open or quote it.\n"
+        )
+    return f"""---
+name: {_skill_name(card.name)}
+description: {json.dumps(_description(card))}
+---
+
+# {card.name}
+
+{card.purpose}
+
+Done means: {card.done_means}
+
+## When to use it
+
+Use this skill when you have decided what to enter and the user wants it entered
+with the `{card.name}` workflow. OpenAdapt does the entry in the app on the
+computer that runs it, then reads the record back to check that it saved.
+
+## How to run it
+
+1. Call `run_workflow` on the OpenAdapt MCP server:
+
+   ```json
+{_indent(call, 3)}
+   ```
+
+   Inputs:
+
+{_indent(inputs, 3)}
+
+   `request_id` is your own id for this piece of work, such as the referral id.
+   Send the same id if you retry; the same id never writes twice. Don't put
+   patient details in it.
+2. If the outcome is `running`, call `get_run` with the `run_id` until it isn't.
+3. Tell the user `what_happened` and follow `next_action`.
+
+## What the outcome means
+
+| outcome | What happened | What to do |
+| --- | --- | --- |
+| `done` | Saved and checked. | Nothing more for this request. |
+| `needs_review` | Stopped before saving. Nothing was written. A person decides. | Don't start the same work again. Check back with `get_run`. |
+| `not_sure_if_saved` | It may or may not have saved. | Never retry. A person checks the record. |
+| `did_not_run` | Nothing was written. | Fix the problem in `what_happened`, then retry with the same `request_id` if `safe_to_retry` is true. |
+
+{OUTCOME_RULES}
+
+## Setup for the operator
+
+The operator serves this workflow on the computer that can open the app:
 
 ```bash
-openadapt-agent serve --bundles {bundle_ref} --allow-run
+openadapt-agent serve --mode production --bundles <bundles-dir>
 ```
-
-this workflow appears as the opaque MCP tool `run_{workflow_id}`
-(required parameters: {param_list}). Recorded demonstration values are
-never placed in the tool schema and every declared parameter is required
-by default. Prefer the MCP tool when it is available: it executes
-through the governed `openadapt-flow run` path (fail-closed admission
-gates) rather than the permissive `replay` demo path, and it returns a
-PHI-safe structured outcome instead of raw CLI output. Inspection and
-PHI-safe Needs Attention tools are always available; `run_{workflow_id}` exists only
-when the operator started the server with `--allow-run`. The public
-synthetic tutorial is `openadapt-agent serve --allow-run`.
-
-## Halt semantics (IMPORTANT)
-
-A run has exactly one of these outcomes — report it faithfully:
-
-- **success** — exit code 0 AND a precise `report.json` records
-  `execution_outcome: VERIFIED` with a consistent success flag. A legacy
-  report without the precise field must record `success: true`. Only then may
-  you tell the user the workflow completed.
-- **halt** (MCP status `halt`, `execution_outcome: HALTED`) — If the tool
-  returns HALTED, tell the user the record did not change.
-  `execution_outcome` says whether the run halted, completed without
-  sufficient verification, or completed a rollback. None is a verified success.
-  Protected evidence remains in the local OpenAdapt operator
-  experience; default MCP results contain only opaque IDs, fixed messages,
-  and count/boolean metrics. Surface the exact outcome to the user; do not
-  infer the business effect or retry blindly.
-- **governed refusal** (exit code 2 / MCP status `refused`, `openadapt-flow
-  run` only) — an admission gate refused the bundle before execution;
-  NOTHING was executed. The printed coverage report names the failing
-  gate.
-
-{honesty}
-
-## Needs Attention
-
-When a run halts, `list_needs_attention` and `get_attention_item` return
-an opaque, PHI-safe queue card. Do not ask for or place credentials,
-challenge answers, screenshots, observed text, or other protected values
-in an attended-action payload.
-
-If the operator enabled attended actions, use only the exact action tool
-that matches their explicit decision:
-
-- `continue_attention` only after the local operator says they completed
-  the paused task in the live application. Flow revalidates the outcome
-  and resumes after it; it never performs that completed action again.
-- `skip_attention` only for an allowed, declared skip.
-- `reject_attention` to terminate this run without dispatching a new
-  action. Earlier run actions may have effects. Review the protected local
-  report and transaction outcome. Use escalation if a qualified operator
-  can still continue the run.
-- `teach_attention` to request a corrective demonstration.
-- `escalate_attention` to preserve the pause for qualified assistance.
-
-Reload the item immediately before acting, pass its exact capability
-digest, and use one stable idempotency key for retries of that same
-request. The MCP server will separately elicit the person's confirmation;
-a client without form elicitation must direct the operator to Flow's
-attended console/CLI instead. Elicitation is host-mediated explicit
-confirmation, not cryptographic human-presence or identity proof. Never
-infer or answer that elicitation yourself, auto-retry an uncertain
-delivery, or substitute one action for another.
-"""
+{bundle_note}"""
 
 
-def _format_params(params: dict[str, str]) -> str:
-    if not params:
-        return "none"
-    return ", ".join(f"`{name}`" for name in sorted(params))
+def _indent(text: str, spaces: int) -> str:
+    pad = " " * spaces
+    return "\n".join(pad + line if line else line for line in text.splitlines())
 
 
-def _skill_name(slug: str) -> str:
-    compact = slug.replace("_", "-").replace(" ", "-").lower()
-    if compact in _FORBIDDEN_SKILL_NAMES:
-        return SKILL_NAME
-    return slug
-
-
-def apply_skill_frontmatter(text: str, *, name: str, description: str) -> str:
-    """Replace Flow's frontmatter description with the shared identity sentence."""
-    match = _FRONTMATTER.match(text)
-    if match is None:
-        raise ValueError("emitted skill is missing YAML frontmatter")
-    body = text[match.end() :]
-    front = (
-        f"---\nname: {_skill_name(name)}\n"
-        f"description: {json.dumps(description)}\n---\n"
+def emit_agent_skill(
+    bundle_dir: Path | str, out_dir: Path | str, *, include_bundle: bool = False
+) -> Path:
+    """Write a PHI-safe skill folder for one bundle and return its path."""
+    bundle_dir = Path(bundle_dir)
+    info = load_workflow_info(bundle_dir)
+    if not info.ok:
+        raise ValueError("the workflow bundle could not be loaded safely")
+    card = card_for_bundle(info, default_name=info.public_id)
+    skill_dir = Path(out_dir) / _skill_name(card.name)
+    skill_dir.mkdir(parents=True, exist_ok=True)
+    (skill_dir / "SKILL.md").write_text(
+        render_skill(card, include_bundle=include_bundle), encoding="utf-8"
     )
-    return front + body
-
-
-def emit_agent_skill(bundle_dir: Path | str, out_dir: Path | str) -> Path:
-    """Emit flow's skill folder for *bundle_dir*, then append MCP guidance.
-
-    Returns the skill folder path (containing ``SKILL.md`` and
-    ``bundle/``), exactly as flow's emitter lays it out.
-    """
-    from openadapt_flow.emit import emit_skill  # WRAP, don't duplicate
-
-    skill_dir = emit_skill(bundle_dir, out_dir)
-    info = load_workflow_info(Path(bundle_dir))
-    appendix = _APPENDIX_TEMPLATE.format(
-        workflow_id=info.public_id,
-        bundle_ref="<path-to-this-skill-folder>/bundle",
-        param_list=_format_params(info.params),
-        when_to_use=SKILL_WHEN_TO_USE,
-        honesty=SKILL_HONESTY,
-    )
-    skill_md = skill_dir / "SKILL.md"
-    rewritten = apply_skill_frontmatter(
-        skill_md.read_text(encoding="utf-8"),
-        name=skill_dir.name,
-        description=IDENTITY_SENTENCE,
-    )
-    skill_md.write_text(rewritten + appendix, encoding="utf-8")
+    if include_bundle:
+        shutil.copytree(bundle_dir, skill_dir / "bundle", dirs_exist_ok=True)
     return skill_dir

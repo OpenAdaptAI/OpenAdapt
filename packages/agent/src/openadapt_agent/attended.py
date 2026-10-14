@@ -305,7 +305,10 @@ class AttendedBridge:
             return None
         from openadapt_flow.console.attention import attention_item
 
-        item = attention_item(self.runs_dir, path)
+        # Flow derives the queue id from the path relative to the root, so
+        # both must be resolved the same way (a runs directory under a
+        # symlink, such as /var on macOS, otherwise fails).
+        item = attention_item(root, path)
         return item.model_dump(mode="json") if item is not None else None
 
     def act(self, tool_name: str, arguments: dict[str, Any]) -> dict[str, Any]:
