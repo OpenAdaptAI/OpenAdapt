@@ -47,6 +47,7 @@ from urllib.request import Request, urlopen
 
 from openadapt_agent.cards import WorkflowCard
 from openadapt_agent.contract import parse_failed_checks, reason_for_run
+from openadapt_agent.copy import TUTORIAL_REQUIREMENT, TUTORIAL_SERVE_COMMAND
 from openadapt_agent.service import (
     CatalogEntry,
     EngineResult,
@@ -237,7 +238,7 @@ class SandboxEngine:
             elif engine == "flow":
                 raise RuntimeError(
                     "the flow sandbox engine needs the tutorial extra: "
-                    "pip install 'openadapt-agent[tutorial]'"
+                    f"pip install '{TUTORIAL_REQUIREMENT}'"
                 )
             else:
                 self.engine = "simulated"
@@ -285,7 +286,7 @@ class SandboxEngine:
             info["engine_detail"] = (
                 "Results are simulated without opening the app. To drive the "
                 "synthetic app in a hidden browser, install the tutorial extra: "
-                "uvx --python 3.12 --from 'openadapt-agent[tutorial]' openadapt-agent serve"
+                + TUTORIAL_SERVE_COMMAND
             )
         return info
 

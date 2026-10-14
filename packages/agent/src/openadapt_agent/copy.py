@@ -21,8 +21,10 @@ OUTCOME_RULES = (
     "Only outcome done means the change was saved and checked. needs_review means "
     "it stopped before saving and a person decides, so don't start the same work "
     "again. not_sure_if_saved means a person must check the record, so never retry "
-    "it. did_not_run means nothing was written: fix the problem and retry with the "
-    "same request_id when safe_to_retry is true."
+    "it. did_not_run means this call wrote nothing: fix the problem and retry with "
+    "the same request_id when safe_to_retry is true. After request_id_conflict, an "
+    "earlier request with the same request_id may have saved, so call get_run with "
+    "first_run_id to see it."
 )
 #: Older name for ``OUTCOME_RULES``.
 SKILL_HONESTY = OUTCOME_RULES
@@ -38,3 +40,14 @@ PREVIEW_COMMAND = (
 )
 #: Older name for ``FIRST_COMMAND``.
 THREE_LINE_INSTALL = FIRST_COMMAND
+
+#: The tutorial extra from the GitHub source. PyPI has 2.0.1, which has no
+#: sandbox, so ``openadapt-agent[tutorial]`` from PyPI starts a server that
+#: exits. Drop the ``@ git+...`` part once 2.0.2 is on PyPI.
+TUTORIAL_REQUIREMENT = (
+    "openadapt-agent[tutorial] @ git+https://github.com/OpenAdaptAI/openadapt-agent"
+)
+#: Starts the sandbox with the real engine. The README shows the same command.
+TUTORIAL_SERVE_COMMAND = (
+    f"uvx --python 3.12 --from '{TUTORIAL_REQUIREMENT}' openadapt-agent serve"
+)

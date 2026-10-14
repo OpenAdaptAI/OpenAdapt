@@ -29,6 +29,7 @@ from jsonschema import ValidationError, validate
 from mcp.server.lowlevel import Server
 from mcp.server.stdio import stdio_server
 
+from openadapt_agent import __version__
 from openadapt_agent.attended import ATTENDED_TOOLS
 from openadapt_agent.authoring import AuthoringBridge
 from openadapt_agent.bridge import AgentBridge, BridgeError
@@ -116,11 +117,13 @@ def _server_instructions(
             "saved and checked; needs_review means it stopped before saving and "
             "a person decides, so don't start the same work again; "
             "not_sure_if_saved means a person must check the record, so never "
-            "retry it; did_not_run means nothing was written, so fix the problem "
-            "and retry only when safe_to_retry is true. Reuse the same request_id "
-            "when you retry: the same id never writes twice. If the outcome is "
-            "running, call get_run with the run_id. Tell the user what_happened "
-            "in your own words and never call anything but done a success."
+            "retry it; did_not_run means this call wrote nothing, so fix the "
+            "problem and retry only when safe_to_retry is true, and after "
+            "request_id_conflict an earlier request with the same request_id may "
+            "have saved. Reuse the same request_id when you retry: the same id "
+            "never writes twice. If the outcome is running, call get_run with "
+            "the run_id. Tell the user what_happened in your own words and "
+            "never call anything but done a success."
         )
         if bridge.mode == "sandbox":
             text += (
@@ -253,7 +256,11 @@ def build_server(
         return types.CallToolResult(content=text)
 
     if hasattr(Server, "list_tools"):
-        server = Server(SERVER_NAME, instructions=_server_instructions(authoring, bridge))
+        server = Server(
+            SERVER_NAME,
+            version=__version__,
+            instructions=_server_instructions(authoring, bridge),
+        )
         server.list_tools()(_list_tools)
 
         async def _call_v1(name: str, arguments: dict[str, Any] | None):
@@ -271,6 +278,7 @@ def build_server(
 
         server = Server(
             SERVER_NAME,
+            version=__version__,
             instructions=_server_instructions(authoring, bridge),
             on_list_tools=_list_v2,
             on_call_tool=_call_v2,

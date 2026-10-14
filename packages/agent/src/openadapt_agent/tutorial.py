@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+from openadapt_agent.copy import TUTORIAL_REQUIREMENT, TUTORIAL_SERVE_COMMAND
+
 __all__ = [
     "TutorialError",
     "TutorialSession",
@@ -127,9 +129,8 @@ def prepare_tutorial_session(
     except ImportError as exc:
         raise TutorialError(
             "serve --tutorial needs the browser extra. Install with "
-            "pip install 'openadapt-agent[tutorial]' or "
-            "uvx --from 'openadapt-agent[tutorial]' openadapt-agent "
-            "serve --allow-run"
+            f"pip install '{TUTORIAL_REQUIREMENT}' or start the server with "
+            f"{TUTORIAL_SERVE_COMMAND}"
         ) from exc
 
     root = Path(work_dir)

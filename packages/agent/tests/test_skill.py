@@ -5,10 +5,15 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from openadapt_agent.cards import CARD_FILENAME
+import pytest
+
+from openadapt_agent.bundles import load_workflow_info
+from openadapt_agent.cards import CARD_FILENAME, card_for_bundle
 from openadapt_agent.cli import main
-from openadapt_agent.copy import OUTCOME_RULES
-from openadapt_agent.skill import emit_agent_skill
+from openadapt_agent.copy import OUTCOME_RULES, SKILL_NAME
+from openadapt_agent.skill import emit_agent_skill, render_skill
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 SECRET_VALUES = ("Follow-up in 2 weeks", "Open the patient chart", "Type the triage note")
 
@@ -116,3 +121,44 @@ def test_skill_folder_is_valid_markdown_with_frontmatter(bundle_dir, tmp_path):
     assert len(fields["name"]) <= 64
     assert len(json.loads(fields["description"])) <= 1024
     assert Path(tmp_path / "s").is_dir()
+
+
+def _name_card(bundle_dir, name):
+    (bundle_dir / CARD_FILENAME).write_text(
+        json.dumps({"name": name, "purpose": "Add a triage note to a chart."})
+    )
+
+
+@pytest.mark.parametrize("reserved", ["computer_use", "openadapt_gui_write"])
+def test_reserved_names_fall_back_to_the_workflow_id(bundle_dir, tmp_path, reserved):
+    _name_card(bundle_dir, reserved)
+    workflow_id = load_workflow_info(bundle_dir).public_id
+    skill_dir = emit_agent_skill(bundle_dir, tmp_path / "skills")
+    expected = "openadapt-" + workflow_id.replace("_", "-")
+    assert skill_dir.name == expected
+    text = (skill_dir / "SKILL.md").read_text()
+    assert frontmatter(text)["name"] == expected
+    assert "name: computer-use" not in text.lower()
+    assert f"name: {SKILL_NAME}\n" not in text
+
+
+def test_emitting_never_replaces_the_shipped_general_skill(bundle_dir, tmp_path):
+    shipped = (REPO_ROOT / "skills" / SKILL_NAME / "SKILL.md").read_text()
+    skills = tmp_path / "skills"
+    (skills / SKILL_NAME).mkdir(parents=True)
+    (skills / SKILL_NAME / "SKILL.md").write_text(shipped)
+    for name in ("computer_use", "openadapt_gui_write"):
+        _name_card(bundle_dir, name)
+        skill_dir = emit_agent_skill(bundle_dir, skills, include_bundle=True)
+        assert skill_dir.name != SKILL_NAME
+    assert (skills / SKILL_NAME / "SKILL.md").read_text() == shipped
+    assert not (skills / SKILL_NAME / "bundle").exists()
+
+
+def test_render_skill_needs_a_workflow_id_for_a_reserved_name(bundle_dir):
+    _name_card(bundle_dir, "computer_use")
+    info = load_workflow_info(bundle_dir)
+    card = card_for_bundle(info, default_name=info.public_id)
+    with pytest.raises(ValueError):
+        render_skill(card)
+    assert "name: openadapt-workflow-" in render_skill(card, workflow_id=info.public_id)

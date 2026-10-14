@@ -157,6 +157,9 @@ def test_reused_request_id_with_new_inputs_is_refused(
     assert conflict["reason"] == "request_id_conflict"
     assert conflict["first_run_id"] == first["run_id"]
     assert conflict["safe_to_retry"] is False
+    # The first request saved, so the conflict can't say nothing was written.
+    assert conflict["record_changed"] == "unknown"
+    assert "nothing was written" not in conflict["what_happened"].lower()
 
 
 def test_slow_run_returns_running_then_get_run_waits_for_it(

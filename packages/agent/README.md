@@ -115,7 +115,7 @@ claude mcp add openadapt -- uvx --python 3.12 --from 'openadapt-agent[tutorial] 
 
 When the server starts, Flow records the workflow once and, if needed, downloads a browser (about 300 MB). The first request waits for that. In our test on a Mac, the first request took about 80 seconds. The call returned `running` after 60 seconds, and the agent called `get_run` for the result. If setup takes more than 15 minutes, the request ends `did_not_run`. With Flow, a `done` result has `proof: "local"` instead of `"simulated"`.
 
-Until 2.0.2 is on PyPI, use the command above even if your agent suggests a shorter one. The shorter command installs 2.0.1, which has no sandbox.
+Until 2.0.2 is on PyPI, use the command above. The simulated sandbox suggests the same command in its `list_workflows` result. A command that installs `openadapt-agent[tutorial]` from PyPI gets 2.0.1, which has no sandbox: the server exits with an error that `--bundles` is required.
 
 ## What your agent gets back
 
@@ -150,7 +150,7 @@ The check that stops a second entry covers one runs folder. See `--runs-dir` und
 - `what_happened` and `next_action`: fixed sentences you can show a person. They never contain input values or screen text.
 - `proof`: `local` for a `done` that was checked on your customer's computer, `simulated` for a sandbox run that didn't open the app, and `none` for every other outcome.
 - `model_calls`: on runs that reached Flow, how many AI model calls the run made. It's 0 unless model grounding, a fallback that asks an AI model where to click, is turned on (see [Security](#security)).
-- `record_changed`: `yes`, `no`, or `unknown`. With `request_id_conflict`, its `no` describes this call only. The earlier request may have saved.
+- `record_changed`: `yes`, `no`, or `unknown`. It's `no` only when OpenAdapt can show that nothing was written. `request_id_conflict` gives `unknown`, because the earlier request may have saved.
 
 ## Three tools
 
@@ -311,9 +311,12 @@ Card text reaches your agent's model, so keep patient details out of it. The ser
 
 `openadapt-agent emit-skill BUNDLE --out ~/.claude/skills` writes a `SKILL.md` for one workflow: what it does, its inputs, how to call `run_workflow`, and what to do after each outcome. The skill holds no recorded values or secrets, and you still add the server separately. `--include-bundle` also copies the bundle next to the skill. That copy can contain values from the recording, so keep it as private as the recording.
 
-Each skill is named after its workflow, so `enter_referral` becomes `enter-referral`. If the name would come out as `computer-use`, emit-skill uses `openadapt-gui-write` instead, so an assistant doesn't load the skill for every request to control the screen.
+Each skill is named after its workflow, so `enter_referral` becomes `enter-referral`. Two names are reserved:
 
-This repository also ships a general skill for any workflow, [skills/openadapt-gui-write/SKILL.md](skills/openadapt-gui-write/SKILL.md). A skill emitted under the `openadapt-gui-write` name into the same folder replaces it.
+- `computer-use`, because an assistant would load that skill for every request to control the screen.
+- `openadapt-gui-write`, the general skill for any workflow that this repository ships at [skills/openadapt-gui-write/SKILL.md](skills/openadapt-gui-write/SKILL.md).
+
+If a workflow's name would come out as either one, emit-skill names the skill `openadapt-` plus the workflow's id, such as `openadapt-workflow-1a2b3c4d5e6f7a8b9c0d1e2f`. An emitted skill never replaces the general skill in the same folder.
 
 ### Record a first workflow
 

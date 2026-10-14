@@ -19,7 +19,9 @@ Safety rules this module enforces by construction:
 - ``record_changed: "no"`` and ``safe_to_retry: true`` appear only for results
   whose evidence proves nothing was written. Uncertain delivery (including a
   timeout after Flow started) is ``not_sure_if_saved`` with
-  ``safe_to_retry: false``.
+  ``safe_to_retry: false``. A ``request_id_conflict`` starts nothing, but an
+  earlier attempt under that ``request_id`` may have saved, so it reports
+  ``record_changed: "unknown"``.
 - A run with an open durable pause is ``needs_review``: a person holds the
   decision, so the caller must not start the same work again.
 - Every sentence is fixed copy keyed by a closed reason code. No observed screen
@@ -246,7 +248,7 @@ REASONS: dict[str, Reason] = {
         "the server closed. The change may or may not be saved.",
         _CHECK_RECORD,
     ),
-    # -- did_not_run: proven nothing written -------------------------------
+    # -- did_not_run: this call wrote nothing --------------------------------
     "invalid_input": Reason(
         "did_not_run",
         True,
@@ -341,13 +343,16 @@ REASONS: dict[str, Reason] = {
         "Don't retry this request. If the work is still needed, a person "
         "decides how, and a new attempt uses a new request_id.",
     ),
+    # The earlier request under this request_id may have saved, so this
+    # result never says nothing was written.
     "request_id_conflict": Reason(
         "did_not_run",
         False,
-        "no",
+        "unknown",
         "fix_inputs",
         "Didn't start because this request_id was already used for a "
-        "different request. Nothing new ran.",
+        "different request. Nothing new ran, but the earlier request may "
+        "have saved.",
         "Use a new request_id for new work. To see the earlier result, call "
         "get_run with first_run_id.",
     ),
@@ -729,8 +734,10 @@ RUN_RESULT_SCHEMA: dict[str, Any] = {
             "description": (
                 "done: saved and checked. needs_review: stopped before saving; a "
                 "person decides. not_sure_if_saved: a person must check the record "
-                "before anything runs again; never retry. did_not_run: nothing was "
-                "written. running: call get_run later."
+                "before anything runs again; never retry. did_not_run: this call "
+                "wrote nothing; after request_id_conflict an earlier request "
+                "with the same request_id may have saved. running: call get_run "
+                "later."
             ),
         },
         "label": {"type": "string"},

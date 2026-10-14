@@ -7,7 +7,7 @@ Use this when an AI agent has decided what to enter in an app with no usable API
 ## The contract: three tools
 
 - `list_workflows`: each workflow's `name`, `purpose`, `done_means`, and typed `inputs` (types, enums, formats).
-- `run_workflow(workflow, inputs, request_id, wait_seconds?)`: one piece of work. `request_id` is the caller's own id and is required. The same `request_id` returns the first result and never writes twice.
+- `run_workflow(workflow, inputs, request_id, wait_seconds?)`: one piece of work. `request_id` is the caller's own id and is required. The same `request_id` returns the latest result and never writes twice.
 - `get_run(run_id, wait_seconds?)`: the result of a run that returned `outcome: running`.
 
 Every result has `outcome`, `safe_to_retry`, `what_happened` (one plain sentence), `next_action`, `proof`, `run_id`, and `request_id`. Tools publish an MCP `outputSchema` and return `structuredContent`.
@@ -17,7 +17,7 @@ Every result has `outcome`, `safe_to_retry`, `what_happened` (one plain sentence
 - `done`: saved and checked by reading the record back. `proof` is `local` (checked on the customer's computer), `sealed` (signed receipt), or `simulated` (sandbox, no app opened). A verified local run is done; it is never reported as an error.
 - `needs_review`: stopped before saving; nothing was written; a person decides. Don't start the same work again.
 - `not_sure_if_saved`: a save may have gone through. Never retry. A person checks the record. Never tell the user nothing changed.
-- `did_not_run`: nothing was written. Fix the cause and retry with the same `request_id` when `safe_to_retry` is true.
+- `did_not_run`: this call wrote nothing. Fix the cause and retry with the same `request_id` when `safe_to_retry` is true. After `request_id_conflict`, an earlier request with the same `request_id` may have saved; call `get_run` with `first_run_id` to see it.
 
 Only `done` is a success. Results come from openadapt-flow's `transaction_outcome`, never from the coarse halt label alone.
 

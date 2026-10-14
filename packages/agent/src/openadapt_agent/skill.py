@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 import shutil
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
 from openadapt_agent.bundles import load_workflow_info
 from openadapt_agent.cards import WorkflowCard, card_for_bundle, inputs_schema
@@ -28,15 +28,23 @@ from openadapt_agent.copy import OUTCOME_RULES, SKILL_NAME
 
 __all__ = ["emit_agent_skill", "render_skill"]
 
-_FORBIDDEN_SKILL_NAMES = frozenset({"computer-use", "computer_use", "computeruse"})
 _DESCRIPTION_LIMIT = 1024
 
 
-def _skill_name(card_name: str) -> str:
+def _skill_name(card_name: str, workflow_id: Optional[str]) -> str:
+    """Name a workflow's skill after its card, avoiding two reserved names.
+
+    A skill named ``computer-use`` would load for every request to control the
+    screen, and ``SKILL_NAME`` is the general skill this package ships, which
+    an emitted skill in the same folder would replace. A workflow whose name
+    maps to either one gets ``openadapt-<workflow-id>`` instead.
+    """
     name = card_name.replace("_", "-").lower()[:64].strip("-")
-    if name in _FORBIDDEN_SKILL_NAMES or name.replace("-", "") == "computeruse":
-        return SKILL_NAME
-    return name or SKILL_NAME
+    if name and name.replace("-", "") != "computeruse" and name != SKILL_NAME:
+        return name
+    if not workflow_id:
+        raise ValueError("this workflow's skill name is reserved; pass its workflow_id")
+    return f"openadapt-{workflow_id}".replace("_", "-").lower()[:64].strip("-")
 
 
 def _input_line(name: str, schema: dict[str, Any], required: bool) -> str:
@@ -69,8 +77,16 @@ def _description(card: WorkflowCard) -> str:
     return text[:_DESCRIPTION_LIMIT]
 
 
-def render_skill(card: WorkflowCard, *, include_bundle: bool = False) -> str:
-    """Render SKILL.md for one workflow card. Pure: no I/O."""
+def render_skill(
+    card: WorkflowCard,
+    *,
+    include_bundle: bool = False,
+    workflow_id: Optional[str] = None,
+) -> str:
+    """Render SKILL.md for one workflow card. Pure: no I/O.
+
+    ``workflow_id`` names the skill when the card's name is reserved.
+    """
     schema = inputs_schema(card)
     required = set(schema["required"])
     inputs = "\n".join(
@@ -92,7 +108,7 @@ def render_skill(card: WorkflowCard, *, include_bundle: bool = False) -> str:
             "operator's server. It is protected workflow data. Don't open or quote it.\n"
         )
     return f"""---
-name: {_skill_name(card.name)}
+name: {_skill_name(card.name, workflow_id)}
 description: {json.dumps(_description(card))}
 ---
 
@@ -133,7 +149,7 @@ computer that runs it, then reads the record back to check that it saved.
 | `done` | Saved and checked. | Nothing more for this request. |
 | `needs_review` | Stopped before saving. Nothing was written. A person decides. | Don't start the same work again. Check back with `get_run`. |
 | `not_sure_if_saved` | It may or may not have saved. | Never retry. A person checks the record. |
-| `did_not_run` | Nothing was written. | Fix the problem in `what_happened`, then retry with the same `request_id` if `safe_to_retry` is true. |
+| `did_not_run` | This call wrote nothing. After `request_id_conflict`, an earlier request with the same `request_id` may have saved. | Fix the problem in `what_happened`, then retry with the same `request_id` if `safe_to_retry` is true. |
 
 {OUTCOME_RULES}
 
@@ -161,10 +177,11 @@ def emit_agent_skill(
     if not info.ok:
         raise ValueError("the workflow bundle could not be loaded safely")
     card = card_for_bundle(info, default_name=info.public_id)
-    skill_dir = Path(out_dir) / _skill_name(card.name)
+    skill_dir = Path(out_dir) / _skill_name(card.name, info.public_id)
     skill_dir.mkdir(parents=True, exist_ok=True)
     (skill_dir / "SKILL.md").write_text(
-        render_skill(card, include_bundle=include_bundle), encoding="utf-8"
+        render_skill(card, include_bundle=include_bundle, workflow_id=info.public_id),
+        encoding="utf-8",
     )
     if include_bundle:
         shutil.copytree(bundle_dir, skill_dir / "bundle", dirs_exist_ok=True)

@@ -131,10 +131,11 @@ _RUN_WORKFLOW_DESCRIPTION = (
     "list_workflows, its inputs, and your own request_id for this piece of "
     "work. The outcome is done (saved and checked), needs_review (stopped "
     "before saving; a person decides), not_sure_if_saved (a person must check "
-    "the record; never retry), or did_not_run (nothing was written; fix it "
-    "and retry when safe_to_retry is true). Reuse the same request_id when "
-    "you retry: the same id never writes twice. If the outcome is running, "
-    "call get_run with the run_id."
+    "the record; never retry), or did_not_run (this call wrote nothing; fix "
+    "it and retry when safe_to_retry is true; after request_id_conflict, an "
+    "earlier request with the same request_id may have saved). Reuse the same "
+    "request_id when you retry: the same id never writes twice. If the "
+    "outcome is running, call get_run with the run_id."
 )
 _RUN_WORKFLOW_USAGE = (
     "run_workflow needs workflow (a name from list_workflows), inputs (an "

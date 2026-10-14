@@ -26,6 +26,7 @@ from openadapt_agent.copy import (
     OUTCOME_RULES,
     PREVIEW_COMMAND,
     SKILL_WHEN_TO_USE,
+    TUTORIAL_SERVE_COMMAND,
 )
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -34,6 +35,7 @@ MCPB_MANIFEST = REPO_ROOT / "manifest.json"
 LLMS_TXT = REPO_ROOT / "llms.txt"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 README = REPO_ROOT / "README.md"
+DESIGN = REPO_ROOT / "docs" / "DESIGN.md"
 RELEASE_WORKFLOW = REPO_ROOT / ".github" / "workflows" / "release.yml"
 WORKFLOWS_DIR = REPO_ROOT / ".github" / "workflows"
 UV_LOCK = REPO_ROOT / "uv.lock"
@@ -331,6 +333,7 @@ def test_retired_unsafe_claims_never_come_back() -> None:
             encoding="utf-8"
         ),
         "server.json": SERVER_JSON.read_text(encoding="utf-8"),
+        "DESIGN.md": DESIGN.read_text(encoding="utf-8"),
     }
     for name, text in surfaces.items():
         for retired in (
@@ -338,8 +341,21 @@ def test_retired_unsafe_claims_never_come_back() -> None:
             "record did not change",
             "Production success without a Seal is failure",
             "Unsigned production success is failure",
+            # did_not_run includes request_id_conflict, where an earlier
+            # request under the same request_id may have saved.
+            "did_not_run means nothing was written",
+            "`did_not_run`: nothing was written",
+            "| `did_not_run` | Nothing was written",
         ):
             assert retired not in text, (name, retired)
+    assert "nothing was written" not in OUTCOME_RULES.split("did_not_run", 1)[1]
+
+
+def test_tutorial_command_installs_a_version_with_the_sandbox() -> None:
+    """Until 2.0.2 is on PyPI, the tutorial extra comes from GitHub."""
+    readme = README.read_text(encoding="utf-8")
+    assert TUTORIAL_SERVE_COMMAND in readme
+    assert "--from 'openadapt-agent[tutorial]' " not in readme
 
 
 def _without_code(text: str) -> str:

@@ -12,6 +12,7 @@ import pytest
 
 from openadapt_agent.bridge import AgentBridge
 from openadapt_agent.contract import RUN_RESULT_SCHEMA
+from openadapt_agent.copy import TUTORIAL_SERVE_COMMAND
 from openadapt_agent.runner import RunnerConfig
 from openadapt_agent.sandbox import CASES, SANDBOX_WORKFLOW, SandboxEngine
 
@@ -68,6 +69,15 @@ def test_each_case_returns_its_outcome(sandbox_bridge, case):
         assert "did not change" not in result["what_happened"]
 
 
+def test_simulated_engine_hint_installs_a_version_with_the_sandbox(sandbox_bridge):
+    # PyPI 2.0.1 has no sandbox, so a hint that installs the tutorial extra
+    # from PyPI starts a server that exits. Point at the GitHub source.
+    detail = sandbox_bridge.dispatch("list_workflows", {})["sandbox"]["engine_detail"]
+    assert TUTORIAL_SERVE_COMMAND in detail
+    assert "git+https://github.com/OpenAdaptAI/openadapt-agent" in detail
+    assert "--from 'openadapt-agent[tutorial]' " not in detail
+
+
 def test_app_offline_says_the_app_is_unreachable(sandbox_bridge):
     result = run(sandbox_bridge, case="app_offline", request_id="demo-offline")
     assert result["reason"] == "app_unreachable"
@@ -94,6 +104,8 @@ def test_same_request_id_replays(sandbox_bridge):
     assert again["replayed"] is True
     changed = run(sandbox_bridge, case="normal")
     assert changed["reason"] == "request_id_conflict"
+    assert changed["record_changed"] == "unknown"
+    assert "nothing was written" not in changed["what_happened"].lower()
 
 
 def test_get_run_returns_the_stored_result(sandbox_bridge):

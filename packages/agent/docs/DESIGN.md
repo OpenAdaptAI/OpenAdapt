@@ -117,7 +117,7 @@ makes:
 | `done` | Saved and checked by reading the record back | false |
 | `needs_review` | Stopped before saving; nothing written; a person decides | false |
 | `not_sure_if_saved` | A save may have gone through; a person checks the record | false |
-| `did_not_run` | Nothing was written | true when a retry may succeed |
+| `did_not_run` | This call wrote nothing. After `request_id_conflict`, an earlier request with the same `request_id` may have saved | true when a retry may succeed |
 
 `running` is the one non-terminal value. The plain result is a pure
 function of Flow's `transaction_outcome`, the process facts (did Flow
@@ -140,15 +140,19 @@ pause, and a consistency check of the persisted report:
 | Flow could not be launched | `platform_error` | `did_not_run` |
 | the app isn't reachable, checked before anything is sent (sandbox) | `app_unreachable` | `did_not_run` |
 | invalid inputs, unknown workflow, runs disabled | `invalid_input`, `unknown_workflow`, `runs_disabled` | `did_not_run` |
+| a used `request_id` with a different workflow or inputs | `request_id_conflict`, with `record_changed: "unknown"` | `did_not_run` (no retry) |
+| a `request_id` whose five attempts each proved nothing was written | `retry_limit` | `did_not_run` (no retry) |
 
 Only `done` says the change was saved. `record_changed: "no"` and
 `safe_to_retry: true` appear only when the evidence proves nothing was
-written. A coarse `HALTED` without a transaction outcome is uncertain,
-never "nothing changed". A failed Needs Attention lookup counts as an open
-pause, so the run waits for a person. `proof` (`local`, `sealed`,
-`simulated`, or `none`) is separate from the outcome: a verified local run
-is `done` with `proof: "local"`, never an error. A partner whose policy
-requires a signed receipt checks `proof`.
+written. `request_id_conflict` starts nothing, but an earlier attempt
+under that `request_id` may have saved, so it reports
+`record_changed: "unknown"`. A coarse `HALTED` without a transaction
+outcome is uncertain, never "nothing changed". A failed Needs Attention
+lookup counts as an open pause, so the run waits for a person. `proof`
+(`local`, `sealed`, `simulated`, or `none`) is separate from the outcome:
+a verified local run is `done` with `proof: "local"`, never an error. A
+partner whose policy requires a signed receipt checks `proof`.
 
 Every sentence in `what_happened` and `next_action` is fixed copy keyed by
 a closed reason code. No observed screen text, recorded value, input value,
@@ -164,7 +168,8 @@ the winner. The same `request_id` returns the latest attempt's result with
 `replayed: true`. A new attempt starts only when the latest one ended in a
 reason from `RETRYABLE_REASONS`, each of which proves nothing was written,
 and at most five times. A `request_id` reused with different inputs is
-refused as `request_id_conflict`. If Flow's ledger can't be opened, local
+refused as `request_id_conflict`, with `record_changed: "unknown"` because
+the earlier attempt may have saved. If Flow's ledger can't be opened, local
 exclusive-create claim files give the same at-most-once guarantee for that
 runs directory.
 

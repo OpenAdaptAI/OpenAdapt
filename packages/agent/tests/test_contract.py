@@ -195,6 +195,21 @@ def test_every_result_validates_against_the_output_schema():
         jsonschema.validate(result, RUN_RESULT_SCHEMA)
 
 
+def test_request_id_conflict_never_says_nothing_was_written():
+    # An earlier attempt under the same request_id may have saved.
+    spec = REASONS["request_id_conflict"]
+    assert spec.outcome == "did_not_run"
+    assert spec.safe_to_retry is False
+    assert spec.record_changed == "unknown"
+    assert "nothing was written" not in spec.what_happened.lower()
+
+
+def test_only_proven_no_write_results_say_nothing_was_written():
+    for name, spec in REASONS.items():
+        if "nothing was written" in spec.what_happened.lower():
+            assert spec.record_changed == "no", name
+
+
 def test_only_done_claims_a_save_and_only_proven_cases_allow_retry():
     for name, spec in REASONS.items():
         if spec.record_changed == "yes":

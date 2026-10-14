@@ -20,9 +20,9 @@ Use this when your agent has decided what to enter and the app has no usable API
 | `done` | Saved and checked. | Nothing more for this request. |
 | `needs_review` | Stopped before saving. Nothing was written. A person decides. | Don't start the same work again. Check back with `get_run`. |
 | `not_sure_if_saved` | It may or may not have saved. | Never retry. A person checks the record. |
-| `did_not_run` | Nothing was written. | Fix the problem in `what_happened`, then retry with the same `request_id` if `safe_to_retry` is true. |
+| `did_not_run` | This call wrote nothing. After `request_id_conflict`, an earlier request with the same `request_id` may have saved. | Fix the problem in `what_happened`, then retry with the same `request_id` if `safe_to_retry` is true. |
 
-Only outcome done means the change was saved and checked. needs_review means it stopped before saving and a person decides, so don't start the same work again. not_sure_if_saved means a person must check the record, so never retry it. did_not_run means nothing was written: fix the problem and retry with the same request_id when safe_to_retry is true.
+Only outcome done means the change was saved and checked. needs_review means it stopped before saving and a person decides, so don't start the same work again. not_sure_if_saved means a person must check the record, so never retry it. did_not_run means this call wrote nothing: fix the problem and retry with the same request_id when safe_to_retry is true. After request_id_conflict, an earlier request with the same request_id may have saved, so call get_run with first_run_id to see it.
 
 `proof` says how strong the evidence behind `done` is: `local` means the record check ran on the computer that ran the workflow, `sealed` means a signed receipt exists, and `simulated` means a sandbox result that opened no app.
 

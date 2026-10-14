@@ -12,6 +12,7 @@ from mcp.client.stdio import stdio_client
 import mcp.types as types
 import pytest
 
+from openadapt_agent import __version__
 from openadapt_agent.attended import ATTENDED_TOOLS
 from openadapt_agent.bridge import AgentBridge
 from openadapt_agent.mcp import build_server
@@ -59,6 +60,12 @@ def test_server_builds_and_lists_bridge_tools(bundles_root, runner_config, mcp_c
     list_tool = next(t for t in tools if t["name"] == "list_needs_attention")
     assert list_tool["annotations"]["readOnlyHint"] is True
     assert list_tool.get("_meta") is None
+
+
+def test_initialize_reports_the_package_version(bundles_root, runner_config):
+    """serverInfo.version comes from these options; the SDK default is empty."""
+    server = build_server(AgentBridge(bundles_root, runner_config))
+    assert server.create_initialization_options().server_version == __version__
 
 
 def test_server_read_only_when_run_not_allowed(bundles_root, runner_config, mcp_client):
@@ -304,6 +311,7 @@ def test_cli_stdio_discovers_and_calls_without_protocol_contamination(bundles_ro
 
     initialized, names, result, refused = anyio.run(probe)
     assert initialized["serverInfo"]["name"] == "openadapt-agent"
+    assert initialized["serverInfo"]["version"] == __version__
     assert "list_workflows" in names
     assert result["isError"] is False
     assert json.loads(result["content"][0]["text"])["run_tools_enabled"] is False
