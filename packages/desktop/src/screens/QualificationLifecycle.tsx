@@ -57,6 +57,23 @@ function secretEnvironmentReference(name: string): string {
   return `OPENADAPT_FLOW_SECRET_${name.replace(/[^a-zA-Z0-9]/g, "_").toUpperCase()}`;
 }
 
+// The first unmet condition the engine checks before it will deploy, in the
+// order an author meets them: seal, run cases, certify. Sign-in is left to the
+// engine, because an operator token in the environment can authorize a deploy
+// that this screen cannot see.
+function deployBlocker(project: QualificationProject): string {
+  if (!project.graph.bundle.encrypted) {
+    return "Seal and encrypt this version before you deploy it.";
+  }
+  if (!project.capability_coverage?.satisfied) {
+    return "Run cases that cover every required runner capability before you deploy.";
+  }
+  if (!project.certification_current) {
+    return "Certify this exact version before you deploy it.";
+  }
+  return "";
+}
+
 function targetForProject(project: QualificationProject): ExecutionTarget {
   const backend = project.project?.environment.target_kind || "web";
   return backend === "rdp" ? { backend, rdp_host: "" } : { backend };
@@ -96,6 +113,7 @@ export function QualificationLifecycle({
   );
   const [deploymentConfig, setDeploymentConfig] = useState("");
   const importInput = useRef<HTMLInputElement>(null);
+  const blockedDeploy = deployBlocker(project);
 
   const cases = project.project?.cases || [];
   const selectedCase = useMemo(
@@ -780,8 +798,9 @@ export function QualificationLifecycle({
             Export qualified artifact
           </Button>
           <Button
-            variant="primary"
-            disabled={Boolean(busy)}
+            variant={blockedDeploy ? "ghost" : "primary"}
+            disabled={Boolean(busy) || Boolean(blockedDeploy)}
+            aria-describedby={blockedDeploy ? "qualification-deploy-blocker" : undefined}
             onClick={() =>
               void artifactAction(CMD.DEPLOY_QUALIFICATION_WORKFLOW, "deploy")
             }
@@ -789,6 +808,11 @@ export function QualificationLifecycle({
             Deploy qualified artifact
           </Button>
         </div>
+        {blockedDeploy && (
+          <p className="page-sub" id="qualification-deploy-blocker">
+            {blockedDeploy}
+          </p>
+        )}
       </Card>
     </>
   );

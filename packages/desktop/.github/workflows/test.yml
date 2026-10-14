@@ -95,3 +95,9 @@ jobs:
           tests/test_capture_runtime_contract.py
           tests/test_build_frozen_engine.py::test_bundled_capture_floor_comes_from_the_frozen_flow_runtime
           -v
+
+      # Desktop must accept the same openadapt-types range as the bundled
+      # Flow, or installing Desktop next to the launcher downgrades one of
+      # them. Flow's range is only readable where Flow is installed.
+      - name: Check the shared types range against the bundled Flow
+        run: uv run pytest tests/test_dependency_compat.py -v

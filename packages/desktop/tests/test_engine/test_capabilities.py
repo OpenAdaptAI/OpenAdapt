@@ -211,6 +211,34 @@ class TestRdpSurface:
         assert cap.state == "available"
         assert "pip install 'openadapt-flow[rdp]'" in cap.detail
 
+    def test_darwin_ready_without_aardwolf_reports_the_quartz_driver(self, monkeypatch) -> None:
+        # The local client-window path runs on Quartz. Naming aardwolf here
+        # reported an optional, uninstalled network client as the driver.
+        _platform(monkeypatch, "darwin")
+        _specs(monkeypatch, {"Quartz"})
+        _versions(monkeypatch, {"pyobjc-framework-Quartz": "10.3"})
+        monkeypatch.setattr(capabilities, "_mac_screen_recording_granted", lambda: True)
+        cap = capabilities._check_rdp()
+        assert cap.state == "available"
+        assert cap.to_dict()["driver"] == {"name": "pyobjc-framework-quartz", "version": "10.3"}
+
+    def test_darwin_permission_required_reports_the_quartz_driver(self, monkeypatch) -> None:
+        _platform(monkeypatch, "darwin")
+        _specs(monkeypatch, {"Quartz"})
+        _versions(monkeypatch, {"pyobjc-framework-Quartz": "10.3"})
+        monkeypatch.setattr(capabilities, "_mac_screen_recording_granted", lambda: False)
+        cap = capabilities._check_rdp()
+        assert cap.state == "permission_required"
+        assert cap.to_dict()["driver"] == {"name": "pyobjc-framework-quartz", "version": "10.3"}
+
+    def test_win32_ready_does_not_report_aardwolf_as_its_driver(self, monkeypatch) -> None:
+        _platform(monkeypatch, "win32")
+        _specs(monkeypatch, set())
+        _versions(monkeypatch, {})
+        cap = capabilities._check_rdp()
+        assert cap.state == "available"
+        assert cap.to_dict()["driver"] is None
+
     def test_linux_needs_aardwolf_for_network_rdp(self, monkeypatch) -> None:
         _platform(monkeypatch, "linux")
         _specs(monkeypatch, set())

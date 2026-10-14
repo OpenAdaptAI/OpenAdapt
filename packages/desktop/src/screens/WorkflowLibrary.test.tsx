@@ -10,7 +10,7 @@ vi.mock("../lib/engine", async (importOriginal) => {
 
 afterEach(cleanup);
 
-it("routes deployment preparation through qualification", async () => {
+it("routes deployment preparation through one Qualify action", async () => {
   vi.mocked(engineTry).mockResolvedValue([
     { id: "workflow-1", name: "Example", steps: 2, synced: false },
   ]);
@@ -25,11 +25,34 @@ it("routes deployment preparation through qualification", async () => {
   );
 
   await waitFor(() =>
-    expect(
-      screen.getByRole("button", { name: "Prepare to deploy" }),
-    ).toBeTruthy(),
+    expect(screen.getByRole("button", { name: "Qualify" })).toBeTruthy(),
   );
-  fireEvent.click(screen.getByRole("button", { name: "Prepare to deploy" }));
+  // A second label for the same handler would offer two different-looking
+  // choices that do the same thing.
+  expect(screen.queryByRole("button", { name: "Prepare to deploy" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "Qualify" }));
 
+  expect(onQualify).toHaveBeenCalledTimes(1);
   expect(onQualify).toHaveBeenCalledWith("workflow-1");
+});
+
+it("offers Teach fix instead for a workflow with an open halt", async () => {
+  vi.mocked(engineTry).mockResolvedValue([
+    { id: "workflow-2", name: "Halted", steps: 2, synced: false, open_halts: 1 },
+  ]);
+  const onTeach = vi.fn();
+  render(
+    <WorkflowLibrary
+      onQualify={() => {}}
+      onWatch={() => {}}
+      onTeach={onTeach}
+      onRecord={() => {}}
+    />,
+  );
+
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Teach fix" })).toBeTruthy(),
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Teach fix" }));
+  expect(onTeach).toHaveBeenCalledWith("workflow-2");
 });

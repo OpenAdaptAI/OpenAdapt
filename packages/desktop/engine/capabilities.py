@@ -463,8 +463,11 @@ def _rdp_network_note() -> str:
 
 
 def _check_rdp() -> SurfaceCapability:
-    aardwolf_version = _dist_version("aardwolf")
+    # On macOS and Windows the ready path captures the local client window, so
+    # the driver is the window-capture layer. aardwolf is only the driver of
+    # the network path that other hosts use.
     if sys.platform == "darwin":
+        quartz_version = _dist_version("pyobjc-framework-Quartz")
         if not _find_spec("Quartz"):
             return SurfaceCapability(
                 surface="rdp",
@@ -489,8 +492,8 @@ def _check_rdp() -> SurfaceCapability:
                 ),
                 remediation=_MAC_SCREEN_RECORDING_REMEDIATION,
                 requirement="the macOS Screen Recording permission",
-                driver_name="aardwolf",
-                driver_version=aardwolf_version,
+                driver_name="pyobjc-framework-quartz",
+                driver_version=quartz_version,
             )
         return SurfaceCapability(
             surface="rdp",
@@ -498,18 +501,17 @@ def _check_rdp() -> SurfaceCapability:
             detail=(
                 "Local client-window capture (Quartz) is ready. " + _rdp_network_note()
             ),
-            driver_name="aardwolf",
-            driver_version=aardwolf_version,
+            driver_name="pyobjc-framework-quartz",
+            driver_version=quartz_version,
         )
     if sys.platform == "win32":
+        # Flow captures Win32 windows through ctypes, so no package is the driver.
         return SurfaceCapability(
             surface="rdp",
             state="available",
             detail=(
                 "Local client-window capture (Win32) is ready. " + _rdp_network_note()
             ),
-            driver_name="aardwolf",
-            driver_version=aardwolf_version,
         )
     if not _find_spec("aardwolf"):
         return SurfaceCapability(
@@ -533,7 +535,7 @@ def _check_rdp() -> SurfaceCapability:
             "runs on macOS and Windows hosts only."
         ),
         driver_name="aardwolf",
-        driver_version=aardwolf_version,
+        driver_version=_dist_version("aardwolf"),
     )
 
 

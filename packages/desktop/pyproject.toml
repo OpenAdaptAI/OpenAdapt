@@ -38,11 +38,17 @@ dependencies = [
     # bundled Flow distribution's own declared extra, so it cannot drift back.
     "openadapt-capture>=1.2.1",
     "openadapt-privacy>=1.0.0",
-    # Exact cross-surface status/target contract used by the presentation
-    # exporter and by the generated TypeScript projection checked into src/.
-    # 0.17.0 retains the portable business-decision V2 contract used by the
-    # Desktop phone portal and Flow's governed runner.
-    "openadapt-types==0.17.0",
+    # Cross-surface status/target contract used by the presentation exporter
+    # and by the generated TypeScript projection checked into src/. 0.17.0
+    # retains the portable business-decision V2 contract used by the Desktop
+    # phone portal and Flow's governed runner. Keep the same bounded range as
+    # the Flow release pinned in the ``build`` extra, never an exact pin: an
+    # exact pin makes ``pip install openadapt openadapt-desktop`` downgrade
+    # the shared types package or fall back to an older Flow. The generated
+    # projection is still checked against the exact locked version
+    # (scripts/sync_control_overlay_contract.py), and
+    # tests/test_dependency_compat.py keeps this range equal to Flow's.
+    "openadapt-types>=0.17.0,<0.18.0",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
     "PyYAML>=6.0,<7",

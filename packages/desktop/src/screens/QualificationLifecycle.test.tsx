@@ -246,4 +246,85 @@ describe("Qualification lifecycle", () => {
       ),
     );
   });
+
+  function deployProject(
+    overrides: {
+      certified?: boolean;
+      encrypted?: boolean;
+      covered?: boolean;
+    } = {},
+  ): QualificationProject {
+    const value = project();
+    value.certification_current = overrides.certified ?? true;
+    value.graph.bundle.encrypted = overrides.encrypted ?? true;
+    value.capability_coverage = {
+      required: ["web"],
+      observed: overrides.covered === false ? [] : ["web"],
+      missing: overrides.covered === false ? ["web"] : [],
+      satisfied: overrides.covered ?? true,
+      cases: [],
+    };
+    return value;
+  }
+
+  function renderDeploy(value: QualificationProject) {
+    render(
+      <QualificationLifecycle
+        workflowId="wf-1"
+        project={value}
+        onProject={() => {}}
+        onOpenWorkflow={() => {}}
+      />,
+    );
+    return screen.getByRole("button", {
+      name: "Deploy qualified artifact",
+    }) as HTMLButtonElement;
+  }
+
+  it.each([
+    [
+      "the version is not sealed",
+      { encrypted: false },
+      "Seal and encrypt this version before you deploy it.",
+    ],
+    [
+      "required capabilities are not covered",
+      { covered: false },
+      "Run cases that cover every required runner capability before you deploy.",
+    ],
+    [
+      "the exact version is not certified",
+      { certified: false },
+      "Certify this exact version before you deploy it.",
+    ],
+  ])("disables deploy and says why when %s", (_label, overrides, reason) => {
+    const deploy = renderDeploy(deployProject(overrides));
+
+    expect(deploy.disabled).toBe(true);
+    expect(deploy.className).not.toContain("btn-primary");
+    expect(screen.getByText(reason)).toBeTruthy();
+    expect(deploy.getAttribute("aria-describedby")).toBe(
+      screen.getByText(reason).id,
+    );
+    fireEvent.click(deploy);
+    expect(mockedEngineInvoke).not.toHaveBeenCalledWith(
+      CMD.DEPLOY_QUALIFICATION_WORKFLOW,
+      expect.anything(),
+    );
+  });
+
+  it("offers deploy as the primary action once the sealed version is certified", async () => {
+    const deploy = renderDeploy(deployProject());
+
+    expect(deploy.disabled).toBe(false);
+    expect(deploy.className).toContain("btn-primary");
+    expect(deploy.getAttribute("aria-describedby")).toBeNull();
+    fireEvent.click(deploy);
+    await waitFor(() =>
+      expect(mockedEngineInvoke).toHaveBeenCalledWith(
+        CMD.DEPLOY_QUALIFICATION_WORKFLOW,
+        { workflow_id: "wf-1" },
+      ),
+    );
+  });
 });

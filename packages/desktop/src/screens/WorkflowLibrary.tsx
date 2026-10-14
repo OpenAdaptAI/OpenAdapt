@@ -113,11 +113,7 @@ export function WorkflowLibrary({
                         <Button size="sm" onClick={() => onTeach(w.id)}>
                           Teach fix
                         </Button>
-                      ) : (
-                        <Button size="sm" onClick={() => onQualify(w.id)}>
-                          Prepare to deploy
-                        </Button>
-                      )}
+                      ) : null}
                     </div>
                   </td>
                 </tr>
