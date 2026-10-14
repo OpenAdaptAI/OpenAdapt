@@ -5805,7 +5805,7 @@
     },
     {
       "path": "source-policy.public.json",
-      "sha256": "b03b1f9bb0d3b4631c84db1c7e1dd7f26f1cd04e9b4d4d18f6cab2776eed7eb6"
+      "sha256": "7b16bdc1800a0585c8f966dbce5be6d6d9b2abce4327b1a32d631c2de3c8ef29"
     },
     {
       "path": "tests/fixtures/flow_v1_34_0_terminal_verified.json",
