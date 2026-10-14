@@ -1,294 +1,259 @@
 # OpenAdapt Desktop
 
 [![Tests](https://github.com/OpenAdaptAI/openadapt-desktop/actions/workflows/test.yml/badge.svg)](https://github.com/OpenAdaptAI/openadapt-desktop/actions/workflows/test.yml)
-[![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Python 3.11 | 3.12](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/LICENSE)
 
-OpenAdapt Desktop takes the last manual step off your team: entering approved
-information into the systems you already use, like EMRs, payer portals, and
-desktop or Citrix apps, and checking that it saved. When something doesn't
-match, it stops and asks a person instead of guessing.
+OpenAdapt Desktop automates repeated data entry in the apps your team already
+uses: web apps, electronic medical records (EMRs), insurance portals, desktop
+apps, and apps reached over RDP or Citrix. You do a task once while OpenAdapt
+records it. It compiles the recording into a program that runs on your computer
+and repeats the task for each item on a list. Before it types, it checks that
+the screen shows the right record. After it saves, it reads the record back to
+confirm the save, once you've told it how. When something doesn't match, it
+stops and asks a person. A healthy run makes no calls to a generative AI model.
 
-<p align="center">
-  <img src="docs/assets/operator/tasks.png" width="860" alt="OpenAdapt Desktop Tasks screen with synthetic data: three tasks, each with one status and one next step">
-</p>
+It's for teams that type the same fields into the same systems every day, and
+for the developers and IT staff who set it up for them. This repository holds
+the desktop app (Tauri and React) and the Python engine it runs locally. The
+compiler and runtime are in
+[openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow).
 
-## What changes in your team's day
+## Quick start
 
-| | Today | With OpenAdapt Desktop |
-| --- | --- | --- |
-| The repeated entry | A person keys the same fields into the app for every item on the list | OpenAdapt enters them in the same app, one item after another |
-| The right record | The person rereads the screen before saving | OpenAdapt checks that the record on screen matches the item before it types |
-| Did it save? | Found out later, if at all | OpenAdapt reads the saved record back and marks the item done and checked |
-| Something doesn't match | Someone notices downstream | OpenAdapt stops before saving and asks one question in Needs you |
-| The app's screen changes | Staff work around it | OpenAdapt finds the same field again, or stops at that step so a person can show it the right way once |
+To see it work without building the app, run the same sample as the app's
+**See it work on a sample app** button. It takes about two minutes and needs
+Python 3.10, 3.11, or 3.12.
+
+```bash
+pip install openadapt
+openadapt flow tutorial --break-it
+```
+
+It starts a made-up clinic app in a hidden browser, records a task, compiles
+it, and runs it twice. The first run saves a note and confirms the save by
+reading the record back. The second run uses a backend that drops the save
+after the screen says "saved", and OpenAdapt stops instead of reporting
+success. The reports are written under `tutorials/`. The first run downloads
+Chromium (about 300 MB).
+
+In the output, *system of record* means the sample app's database, `VERIFIED`
+means the save was read back, and `HALTED` means it stopped. A warning that
+patient data isn't scrubbed is expected, because the sample's patients are
+made up.
+
+There's no signed installer yet, so the desktop app runs from source. Install
+[uv](https://docs.astral.sh/uv/), [Rust](https://rustup.rs), Node.js 22, and
+the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your
+operating system. Then:
+
+```bash
+git clone https://github.com/OpenAdaptAI/openadapt-desktop.git
+cd openadapt-desktop
+uv sync --python 3.12 --extra dev --extra build
+npm ci
+uv run python scripts/dev_sidecar.py
+npm run tauri dev
+```
+
+`scripts/dev_sidecar.py` connects the app to the engine in your checkout. On
+Windows, run it with `--frozen` to build the packaged engine instead; that
+takes several minutes.
 
 ## How it works
 
 1. **Show it.** Do the task once, on a test record, in the app where you
    already do it.
 2. **Check it.** Confirm what the task changes, how OpenAdapt makes sure it's
-   the right record, and how it confirms the save. Run one practice item, then
-   approve.
-3. **Run it.** Paste a list, open a spreadsheet saved as CSV, or type one item.
-   OpenAdapt works through the list and checks each record.
+   on the right record, and how it confirms the save. Run one practice item,
+   then approve the task.
+3. **Run it.** Paste a list, open a spreadsheet saved as CSV, or type one
+   item. OpenAdapt works through the list and checks each record.
 
-Three tabs cover the rest of the day. **Tasks** shows each task's next step.
+<p align="center">
+  <img src="https://raw.githubusercontent.com/OpenAdaptAI/openadapt-desktop/main/docs/assets/operator/tasks.png" width="860" alt="OpenAdapt Desktop Tasks screen with synthetic data: three tasks, each with one status and one next step">
+</p>
+
+The app has three main tabs. **Tasks** shows each task's next step.
 **Needs you** holds every item OpenAdapt stopped on, each with one question to
 answer. **Results** shows what got done and checked, what needed a person, the
 wrong-record saves it prevented, and an estimate of time saved that shows its
-own baseline. Settings and the expert tools sit behind the gear.
+own baseline. Settings and the advanced tools are behind the gear menu.
 
 <p align="center">
-  <img src="docs/assets/operator/needs-you.png" width="430" alt="Needs you with synthetic data: OpenAdapt was given member M-4821, the screen showed M-4822, and it stopped before saving">
-  <img src="docs/assets/operator/results.png" width="430" alt="Results with synthetic data: items done and checked, items that needed a person, one wrong-record save prevented, and a labeled time estimate">
+  <img src="https://raw.githubusercontent.com/OpenAdaptAI/openadapt-desktop/main/docs/assets/operator/needs-you.png" width="430" alt="Needs you with synthetic data: OpenAdapt was given member M-4821, the screen showed M-4822, and it stopped before saving">
+  <img src="https://raw.githubusercontent.com/OpenAdaptAI/openadapt-desktop/main/docs/assets/operator/results.png" width="430" alt="Results with synthetic data: items done and checked, items that needed a person, one wrong-record save prevented, and a labeled time estimate">
 </p>
 
-Every result comes from the engine's own outcome for that run:
+Each item ends with one of these results, taken from the engine's outcome for
+that run:
 
 | Result | What it means |
 | --- | --- |
 | Done and checked | It saved the entry and read the record back to confirm it. |
 | Stopped before saving | Something didn't match, so it stopped before changing anything. Nothing was written. |
-| Check the record | A save may have gone through. A person checks the record before anything is retried, and OpenAdapt never retries it on its own. |
+| Check the record | A save may have gone through. A person checks the record before anything is retried. OpenAdapt never retries it on its own. |
 | Finished, not checked | It did the steps but didn't confirm the saved result. |
 | Didn't finish | It couldn't complete the task. The result says whether anything could have been written. |
+| Didn't start | It refused before it touched the app. Nothing was written. |
 
-"Nothing was written" appears only when the engine proved it. The screenshots
-use synthetic data from the app's own fixture harness
-([provenance](docs/assets/operator/provenance.json)).
+The app shows "Nothing was written" only when the engine's outcome proves it.
+The screenshots use synthetic data from the app's fixture harness.
 
-## Try it
+## When the app's screen changes
 
-In the app, **See it work on a sample app** runs a built-in sample clinic app
-with made-up patients in a hidden browser on your computer. It needs no account
-and no operating-system permission. You see one run that saves and checks, and
-one where the app says "saved" but the record disagrees.
+A recorded browser script, such as one from Playwright codegen, finds each
+target with one locator and fails when that locator stops matching. OpenAdapt
+keeps several ways to find each target: the app's structure (the web page's
+elements or the accessibility tree) when there is one, then the target's
+appearance, its text, and its position on screen. When a layout, label, or
+theme changes, the run tries them in that order and continues on a valid
+match. If nothing matches, it stops at that step instead of clicking something
+that looks close, and a person can show OpenAdapt the right way once from
+**Needs you**. OpenAdapt records each fallback as a proposed repair and never
+changes the task on its own.
 
-**There is no trusted signed build to download right now.** The next native
-release is blocked until macOS has Developer ID plus notarization, Windows has
-Authenticode, and the exact Linux bytes verify under GitHub OIDC attestation.
-The latest engine wheel is `v0.16.0`. Native is still `desktop-v0.15.0`; skip
-those installers. They keep their original ad-hoc and unsigned labels. To try
-the same sample without the app, use the launcher:
+In Flow's [drift benchmark](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/benchmark/structural_action/STRUCTURAL_ACTION.md),
+a synthetic page of 21 buttons was redrawn with 15 of them moved, relabeled,
+and re-themed. Every button kept its element ID. Lookup by structure found
+all 21. Matching on the screen alone found only the 6 that didn't change. On
+apps with no structure to read, such as a Citrix window, OpenAdapt has only the
+screen to go on, so a redesign is more likely to stop a run.
 
-```bash
-python -m pip install --upgrade openadapt
-openadapt flow tutorial
-```
+<p align="center">
+  <img src="https://raw.githubusercontent.com/OpenAdaptAI/openadapt-flow/main/docs/showcase/demo.gif" width="860" alt="One recording replayed by openadapt-flow on the interface it was recorded on and, side by side, under a theme it had never seen">
+</p>
 
-To watch a run catch a bad save and stop:
+The recording above comes from openadapt-flow, the runtime this app runs.
+Every frame is a screenshot the replayer saved.
 
-```bash
-openadapt quickstart --break-it
-```
+## How it confirms a save
 
-[Documentation](https://docs.openadapt.ai) ·
-[openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) ·
-[Which release to download](RELEASES.md) ·
-[The operator screens](docs/OPERATOR_SCREENS.md) ·
-[Implementation status](docs/IMPLEMENTATION_STATUS.md)
+The right-record check before typing reads the screen, so it needs no other
+access. Confirming the save afterwards needs a way to read the record back.
+**Check it** asks how for each step that saves:
 
-## For engineers and IT
+- From the system's records: an API or database read (REST, GraphQL, FHIR, or
+  SQL), a file, or a document hash. This checks the record from outside the
+  app. IT connects it once per system in the deployment settings file that
+  **Run it** takes.
+- By opening the saved record again on screen, for systems where you have no
+  API or database access. This is a weaker check than an outside read, because
+  it shows only what the app displays.
 
-> **Role: installed authoring and operation companion.** The compiler and the
-> governed runtime are `openadapt-flow`; this repository publishes release
-> candidates around them. A release becomes the
-> active Production default only while the canonical signed lifecycle ledger
-> holds a current admission for its exact artifacts. Absent, inactive, expired,
-> or revoked, and that release is **not actively admitted**.
-
-Start without an account, or connect a Cloud workspace with system-browser PKCE
-or a one-time token held in the OS keychain. The shell has three tabs and a
-gear menu over the live engine:
-
-| Screen | What it does |
-| --- | --- |
-| Tasks | One card per recorded task with one status and one next step: Check it, Run it, Show it, or Needs you |
-| Needs you | Every stopped item, with the plain question, what was prevented, the stopped screen, and only the choices the transaction outcome allows |
-| Results | Items done and checked, items that needed a person, wrong-record saves prevented, and a labeled time estimate |
-| Check it | The short readiness test, built on the same qualification commands as the exact checks |
-| Run it | Runs a checked task on a pasted list, a CSV, or one typed item through a private params file per item |
-| Gear: Settings | Account, where data stays, PHI mode, how OpenAdapt finds fields on screen, the overlay, updates |
-| Gear: Advanced | Exact checks (the full qualification contract), every task version with replay and governed run, recording with all options, the Cloud runner, phone pairing, and recording setup |
-
-Teach opens from a task or a stopped item: resolve a stopped step and write a
-governed repair back toward the task. What each screen calls in the engine,
-the safety rules it keeps, and the engine gaps it depends on are in
-[docs/OPERATOR_SCREENS.md](docs/OPERATOR_SCREENS.md).
-
-In a plain dev checkout the shell shows an engine-stopped state, because the
-frozen sidecar is built only in CI.
+Without one of these, a completed run shows **Finished, not checked** and
+doesn't count as done.
 
 ## Answering a stop from your phone
 
-When a governed run needs a person, Desktop pairs a phone with a one-use QR
-code and a matching code. The phone gets one signed task, whatever evidence the
-customer-controlled runner is allowed to show, and only the actions Flow
-permits at that pause.
+When a run stops and needs a person, you can answer from your phone. The app
+pairs the phone with a one-time QR code and a matching code. The phone shows
+what the run stopped on, as far as your settings allow, and only the choices
+allowed at that point. Your answer goes back to the computer running the task,
+which checks the live app again before it acts. If that check fails, the run
+stays paused.
 
 <p align="center">
-  <img src="docs/assets/mobile-decision/request.png" width="260" alt="OpenAdapt Desktop phone portal showing an identity check, a retained synthetic OpenEMR frame, and four permitted actions">
+  <img src="https://raw.githubusercontent.com/OpenAdaptAI/openadapt-desktop/main/docs/assets/mobile-decision/request.png" width="260" alt="OpenAdapt Desktop phone page with synthetic data: an identity check, the stopped screen, and four allowed actions">
 </p>
 
-The screen is a request, not an approval. Tapping it doesn't bless a stale
-screenshot and doesn't prove a business effect. The runner goes back to the
-live application, repeats the state, identity, and target checks, and returns a
-typed result; a refusal leaves the run paused where it was.
+[docs/DECISION_PORTAL.md](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/docs/DECISION_PORTAL.md)
+covers pairing, what the phone can see, and how a decision is applied.
 
-The local portal can serve an approved retained raster frame over the
-customer's own HTTPS origin behind a reverse proxy or VPN. The hosted outbound
-lane carries a signed, remote-safe task with no pixels in it. One limit worth
-knowing before you design a policy around this: pairing authenticates the
-device session, not the named operator principal that a qualification contract
-may require for attribution.
+## Engine command line
 
-The screenshot is the real phone shell with synthetic data. Its
-[capture provenance](docs/assets/mobile-decision/provenance.json) is recorded,
-and the full contract, including pairing, evidence handling, reconciliation,
-escalation, and terminal receipts, is in
-[docs/DECISION_PORTAL.md](docs/DECISION_PORTAL.md).
-
-## How the two processes fit together
-
-```text
-Desktop authoring/teaching cockpit (Tauri + React)
-        |
-        | local IPC (JSON lines over sidecar stdio)
-        v
-Frozen Python engine sidecar (capture, review, auth, sync, FlowBridge,
-                              pinned openadapt-flow runtime)
-        |     ^
-        |     | token-authenticated loopback socket (openadapt-tray)
-        |
-        | isolated subprocess mode in the same signed executable
-        v
-openadapt-flow
-  record -> compile -> qualify propose/accept -> lint/certify -> replay -> halt/repair/teach
-```
-
-The engine owns consent, OS permissions, recording and review, hosted
-authentication and push, and a `FlowBridge` that runs the pinned Flow build as
-an isolated subprocess. The engine also runs a token-authenticated loopback
-socket so [`openadapt-tray`](https://github.com/OpenAdaptAI/openadapt-tray) can
-mirror status and send local commands.
-
-None of the compiler or the runtime lives here. That's all `openadapt-flow`,
-and this repository is the cockpit and the local wiring around it.
-
-## The engine CLI
-
-The Python engine runs from a plain checkout, without the shell. A source
-checkout resolves Flow from the locked build extra; native packages embed the
-exact runtime.
-
-| Command | Purpose |
-|---|---|
-| `record`, `list`, `info` | Capture a session and inspect its metadata |
-| `scrub`, `review`, `approve`, `dismiss` | Drive the local review state machine; a dismissal keeps the raw data local |
-| `compile`, `qualify`, `replay`, `run` | Call the bundled Flow runtime on a capture or a bundle. `qualify --recording` fills application, environment, identity, and effect pins from the demo; missing pins HALT. |
-| `login`, `credential`, `rotate`, `push`, `report-break` | Authenticate to the control plane, check or renew the stored credential, push a bundle, report a halted run |
-| `backends`, `upload` | Inspect the legacy customer-owned storage adapters. Hosted uses governed `push`; customer-owned upload is paused behind a fail-closed gate. |
-| `storage`, `health`, `cleanup` | Inspect and maintain local storage |
-| `config`, `capabilities`, `doctor` | Local configuration, execution-surface availability, and dependency checks |
-
-Recordings are local by default. Any egress path still needs you to look at the
-selected adapter, the configuration, the logs, and your data-classification
-policy. Nothing in this repository by itself makes a deployment HIPAA-compliant.
-
-`push` delegates to Flow's exact-hash sanitized derivative contract and never
-falls back to a direct upload when Flow is missing or errors. The old direct
-hosted-ingest backend refuses every upload. Full semantics:
-[docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).
-
-## Build it
+The engine also runs without the app. In a source checkout, put `uv run` in
+front of each command. From PyPI, with Python 3.11 or 3.12, install Flow
+alongside it:
 
 ```bash
-git clone https://github.com/OpenAdaptAI/openadapt-desktop.git
-cd openadapt-desktop
-uv sync --extra dev --extra build
-
-uv run openadapt-desktop doctor
-uv run openadapt-desktop list
-uv run pytest tests -q
-uv run ruff check engine tests
+pip install openadapt-desktop "openadapt-flow[browser]"
+openadapt-desktop doctor
 ```
 
-Recording needs the OS permissions and runtime that
-[`openadapt-capture`](https://github.com/OpenAdaptAI/openadapt-capture)
-requires:
+| Command | What it does |
+| --- | --- |
+| `doctor`, `capabilities` | Check dependencies, and which app types (browser, Windows, macOS, Linux, RDP, Citrix) this computer can drive |
+| `record`, `list`, `info` | Record a task and inspect recordings |
+| `compile`, `qualify`, `replay`, `run` | Compile a recording, fill in its checks from the recording, replay it, or run it with a deployment settings file |
+| `scrub`, `review`, `approve`, `dismiss` | Remove personal data from a recording and review it before anything leaves the computer |
+| `login`, `credential`, `rotate`, `push`, `report-break` | Sign in to OpenAdapt Cloud, manage the stored sign-in, send a recording or task, or report a stopped run |
+| `storage`, `health`, `cleanup`, `config` | Inspect and maintain local storage and settings |
+| `upload`, `backends` | Older upload commands. `upload --backend hosted_ingest` runs `push`; upload to your own S3 storage is turned off in this release. |
+
+Recordings stay on your computer unless you choose to send one to OpenAdapt
+Cloud with `push`.
+
+## Develop
+
+```bash
+uv sync --python 3.12 --extra dev --extra build
+uv run pytest tests -q
+uv run ruff check engine tests scripts
+npm run test:ui
+```
+
+Recording needs the operating-system permissions that
+[openadapt-capture](https://github.com/OpenAdaptAI/openadapt-capture) asks
+for:
 
 ```bash
 uv run openadapt-desktop record --task "Inspect capture path"
 ```
 
-For the shell you also need Rust, Node.js, and the Tauri CLI. A dev shell runs
-frontend-only and reports the engine as offline until a CI-built sidecar binary
-is present.
+The app and the engine are two processes:
 
 ```text
-engine/       Python capture, review, auth, sync, and FlowBridge code
-src-tauri/    Rust/Tauri shell, sidecar lifecycle, tray socket wiring
-src/          React cockpit (screens, engine client, primitives)
-tests/        Python unit and end-to-end tests, largely mocked at the boundaries
+Desktop app (Tauri + React)
+        |
+        | JSON lines over the engine's stdin and stdout
+        v
+Python engine (recording, review, sign-in, sync)
+        |  ^
+        |  | token-protected local socket for openadapt-tray
+        |
+        | separate process
+        v
+openadapt-flow: record -> compile -> check -> run -> stop or repair
 ```
 
-[DESIGN.md](DESIGN.md) is a historical reference. Where it disagrees with this
-file or with `openadapt-flow`, this file wins.
+```text
+engine/       Python engine: recording, review, sign-in, sync, and the Flow bridge
+src-tauri/    Rust shell: starts and restarts the engine, tray socket wiring
+src/          React screens and the engine client
+scripts/      Build, release, screenshot, and development scripts
+tests/        Python unit and end-to-end tests
+```
 
-## What isn't proven yet
+[DESIGN.md](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/DESIGN.md)
+is a historical design record. Where it disagrees with this file or with
+openadapt-flow, this file and openadapt-flow are current.
 
-- The frozen `openadapt-engine` binary comes only from CI. A dev checkout runs
-  frontend-only.
-- CI proves the frozen binary's browser record, compile, and replay loop on
-  Windows, macOS, and Linux, and it installs, launches, and uninstalls every
-  package on clean runners. That's packaging evidence. It isn't workflow
-  qualification, which stays specific to the workflow and the environment.
-- Native packages are unadmitted release candidates until the central
-  Production lifecycle activates an exact release.
-- Signing credentials have to be provisioned before the next native release. A
-  partial set stops it. The updater and rollback stay disabled until there's an
-  independent signing-key lifecycle.
-- This repository serves the tray's loopback IPC contract, but Desktop and the
-  shipped tray client have never been validated together end to end.
-- Desktop starts without downloading a browser. The first browser workflow
-  pulls the Chromium revision pinned by the bundled Playwright runtime into
-  `~/.openadapt/browser-runtime`, showing progress and a retryable failure, and
-  no workflow action starts until it's ready. Air-gapped packages point
-  `PLAYWRIGHT_BROWSERS_PATH` at a version-matched prebundle. Native, RDP, and
-  Citrix workflows never touch that path.
+## Limits
 
-Area-by-area detail, including the substrate evidence boundaries:
-[docs/IMPLEMENTATION_STATUS.md](docs/IMPLEMENTATION_STATUS.md).
+- There's no signed installer yet. The next macOS and Windows packages wait on
+  code-signing certificates, so run the app from source for now.
+- Lists run one item at a time, as one Flow process per item.
+- Each app type needs its own driver. Windows apps run through an agent from
+  openadapt-flow on the Windows computer, and Citrix needs the Citrix Workspace
+  app. `openadapt-desktop capabilities` says what's missing on your computer.
+- **Run it** reads CSV and TSV files, not `.xlsx`.
+- The practice run in **Check it** saves for real, so use a test record.
+- Phone pairing identifies the device, not a named person.
 
-## Native installers
+Release status, signing, CI evidence, and data handling for security and IT
+reviewers are in
+[docs/COMPLIANCE.md](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/docs/COMPLIANCE.md).
 
-Native packages ship under a `desktop-vX.Y.Z` prerelease channel, separate from
-the engine's `vX.Y.Z` PyPI and GitHub releases. CI keeps the native version
-synchronized to each engine release, so a native prerelease mirrors the engine
-it was built from. It's packaging evidence, and
-not a separate supported desktop release. Every filename encodes its platform,
-architecture, and signing state. New release filenames require
-`developer-id-notarized` on macOS, `authenticode` on Windows, and
-`github-attested` for the exact Linux bytes.
+## More documentation
 
-On macOS, ad-hoc CI uses a non-hardened overlay, because an identity-less
-hardened launcher can't load PyInstaller's identity-less embedded libraries.
-Developer ID builds keep the hardened runtime and pass the same Apple identity
-into both PyInstaller and Tauri, and the installed-app smoke test runs bundled
-Flow after the final signing pass, so a structurally valid but unloadable app
-can't get out.
-
-Third-party licenses sit beside the components they cover and are verified
-against the actual frozen archive; pinned sources, hashes, and modification
-status are in [`third_party/README.md`](third_party/README.md).
-
-- [RELEASES.md](RELEASES.md): which release to download, and the two-lane policy.
-- [docs/RELEASE_CANDIDATE_INSTALLERS.md](docs/RELEASE_CANDIDATE_INSTALLERS.md):
-  artifact names, verification scope, provenance.
-- [docs/CODE_SIGNING.md](docs/CODE_SIGNING.md): the activation runbook, what to
-  buy, which secrets to add, and what each surface may then truthfully claim.
+- [The operator screens](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/docs/OPERATOR_SCREENS.md):
+  what each screen calls in the engine and the safety rules it keeps
+- [Implementation status](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/docs/IMPLEMENTATION_STATUS.md),
+  area by area
+- [Which release to download](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/RELEASES.md)
+- [OpenAdapt documentation](https://docs.openadapt.ai)
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/LICENSE)

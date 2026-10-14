@@ -661,6 +661,26 @@ def capture_contract_status(installed: str) -> tuple[bool, str]:
     return True, detail
 
 
+#: Doctor items a local install doesn't need: S3 storage and a Cloud sign-in.
+OPTIONAL_DOCTOR_CHECKS = frozenset({"boto3 (S3 backend)", "Hosted credential"})
+
+
+def _installed_version(module: types.ModuleType) -> str:
+    """The installed distribution's version, falling back to ``__version__``.
+
+    A frozen build may not carry distribution metadata, so the module
+    attribute is the fallback rather than the source.
+    """
+
+    from importlib.metadata import PackageNotFoundError, version
+
+    name = module.__name__.replace("_", "-")
+    try:
+        return version(name)
+    except PackageNotFoundError:
+        return str(getattr(module, "__version__", "installed"))
+
+
 def cmd_doctor(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
     """Check system dependencies and configuration."""
     from engine import __version__
@@ -720,8 +740,9 @@ def cmd_doctor(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
     try:
         import openadapt_privacy
 
-        ver = getattr(openadapt_privacy, "__version__", "installed")
-        checks.append(("openadapt-privacy", True, ver))
+        # The installed distribution's metadata, not the module attribute:
+        # openadapt-privacy 1.0.0 still says ``__version__ = "0.1.0"``.
+        checks.append(("openadapt-privacy", True, _installed_version(openadapt_privacy)))
     except ImportError:
         checks.append(("openadapt-privacy", False, "not installed (advanced scrubbing disabled)"))
 
@@ -799,20 +820,20 @@ def cmd_doctor(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
         detail = f"bucket={engine.config.s3_bucket}" if has_creds else "bucket set but keys missing"
         checks.append(("S3 credentials", has_creds, detail))
 
-    # Print results
+    # Print results. Optional items (S3 storage, a Cloud sign-in) are shown
+    # but don't count: a fresh local install is healthy without them.
     print("OpenAdapt Doctor")
     print("=" * 60)
-    ok_count = sum(1 for _, ok, _ in checks if ok)
+    required = [(name, ok) for name, ok, _ in checks if name not in OPTIONAL_DOCTOR_CHECKS]
     for name, ok, detail in checks:
-        marker = "OK" if ok else "!!"
+        marker = "OK" if ok else ("--" if name in OPTIONAL_DOCTOR_CHECKS else "!!")
         print(f"  [{marker}] {name}: {detail}")
 
     print("=" * 60)
-    total = len(checks)
-    print(f"{ok_count}/{total} checks passed")
-
-    if ok_count < total:
-        print("\nRun 'pip install openadapt-desktop[full]' to install all optional dependencies.")
+    ok_count = sum(1 for _, ok in required if ok)
+    print(f"{ok_count}/{len(required)} required checks passed")
+    if any(not ok and name in OPTIONAL_DOCTOR_CHECKS for name, ok, _ in checks):
+        print("[--] marks an optional item that isn't set up.")
 
 
 _COMMANDS = {

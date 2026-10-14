@@ -398,10 +398,13 @@ def flow_available(flow_bin: str = FLOW_BIN) -> bool:
     return _flow_command(flow_bin) is not None
 
 
-def flow_runtime_source() -> str:
+def flow_runtime_source(flow_bin: str = FLOW_BIN) -> str:
     """Human-readable source of the Flow runtime for diagnostics."""
 
-    return "bundled with OpenAdapt Desktop" if _is_frozen() else "development PATH"
+    if _is_frozen():
+        return "bundled with OpenAdapt Desktop"
+    command = _flow_command(flow_bin)
+    return f"on PATH at {command[0]}" if command else "not on PATH"
 
 
 def _subprocess_env() -> dict[str, str]:

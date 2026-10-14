@@ -872,3 +872,14 @@ def test_tutorial_runs_the_local_sample_with_optional_signals_off(tmp_path, monk
     assert "--break-it" in seen["cmd"] and "--no-receipt" in seen["cmd"]
     assert seen["env"]["DO_NOT_TRACK"] == "1"
     assert seen["env"]["OPENADAPT_TELEMETRY"] == "0"
+
+
+def test_flow_runtime_source_names_the_flow_it_found(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Doctor says which openadapt-flow it found, not "development PATH"."""
+    from engine.flow_bridge import flow_runtime_source
+
+    monkeypatch.setattr("engine.flow_bridge._is_frozen", lambda: False)
+    monkeypatch.setattr("engine.flow_bridge.shutil.which", lambda _bin: "/venv/bin/openadapt-flow")
+    assert flow_runtime_source() == "on PATH at /venv/bin/openadapt-flow"
+    monkeypatch.setattr("engine.flow_bridge._is_frozen", lambda: True)
+    assert flow_runtime_source() == "bundled with OpenAdapt Desktop"

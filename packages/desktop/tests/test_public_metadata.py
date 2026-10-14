@@ -12,15 +12,34 @@ from scripts.verify_build_artifact import bundled_flow_banner
 ROOT = Path(__file__).resolve().parents[1]
 
 
+# Release-governance vocabulary belongs in docs/COMPLIANCE.md. To a developer
+# reading the README for the first time, it reads as "this doesn't work".
+README_INTERNAL_TERMS = (
+    "admission",
+    "admitted",
+    "signed ledger",
+    "lifecycle",
+    "evidence authority",
+    "product target",
+    "governed",
+    "Production default",
+)
+COMPLIANCE_URL = "https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/docs/COMPLIANCE.md"
+
+
 def test_public_metadata_identifies_component_role_and_admission_boundary() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    compliance = (ROOT / "docs" / "COMPLIANCE.md").read_text(encoding="utf-8")
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     package = json.loads((ROOT / "package.json").read_text(encoding="utf-8"))
     cargo = tomllib.loads((ROOT / "src-tauri" / "Cargo.toml").read_text(encoding="utf-8"))
 
-    assert "Role: installed authoring and operation companion" in readme
-    assert "active Production default" in readme
-    assert "not actively admitted" in readme
+    assert "Role: installed authoring and operation companion" in compliance
+    assert "active Production default" in compliance
+    assert "not actively admitted" in compliance
+    assert readme.count(COMPLIANCE_URL) == 1
+    for term in README_INTERNAL_TERMS:
+        assert term.lower() not in readme.lower(), f"README uses internal term {term!r}"
     assert "Experimental" not in readme
     assert "Beta" not in readme
     assert "openadapt-flow" in readme
@@ -109,15 +128,17 @@ def test_record_lifecycle_uses_workflow_command_timeout() -> None:
 
 def test_readme_does_not_publish_hard_coded_package_version_claims() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
-    normalized = " ".join(readme.split())
+    compliance = (ROOT / "docs" / "COMPLIANCE.md").read_text(encoding="utf-8")
     hard_coded_version_claim = re.compile(
         r"\b(?:Python|JavaScript|Tauri)\b.{0,120}\bversions?\b.{0,120}" r"`?v?\d+\.\d+\.\d+`?",
         flags=re.IGNORECASE,
     )
 
-    assert "synchronized to each engine release" in readme
-    assert "not a separate supported desktop release" in readme
-    assert hard_coded_version_claim.search(normalized) is None
+    normalized_compliance = " ".join(compliance.split())
+    assert "synchronized to each engine release" in normalized_compliance
+    assert "not a separate supported desktop release" in normalized_compliance
+    for text in (readme, compliance):
+        assert hard_coded_version_claim.search(" ".join(text.split())) is None
 
 
 def test_release_docs_do_not_claim_installers_before_native_release() -> None:
@@ -307,12 +328,36 @@ def test_candidate_release_notes_describe_the_bundled_flow_runtime() -> None:
     assert "not frozen into these installers" not in notes
 
 
+# The README is also the PyPI page, where relative links and images break, so
+# it links to this repository by absolute URL. Those URLs must still name files
+# that exist in this checkout.
+OWN_BLOB = "https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/"
+OWN_RAW = "https://raw.githubusercontent.com/OpenAdaptAI/openadapt-desktop/main/"
+
+
 def test_readme_local_links_exist() -> None:
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
     links = re.findall(r"\[[^]]*\]\(([^)]+)\)", readme)
+    links += re.findall(r'<img[^>]*\ssrc="([^"]+)"', readme)
 
+    checked = 0
     for link in links:
         target = link.split("#", 1)[0]
+        for prefix in (OWN_BLOB, OWN_RAW):
+            if target.startswith(prefix):
+                target = target.removeprefix(prefix)
+                break
         if not target or "://" in target or target.startswith("mailto:"):
             continue
         assert (ROOT / target).exists(), f"README link does not exist: {link}"
+        checked += 1
+    assert checked >= 5
+
+
+def test_readme_works_on_pypi_without_relative_links() -> None:
+    readme = (ROOT / "README.md").read_text(encoding="utf-8")
+    links = re.findall(r"\[[^]]*\]\(([^)]+)\)", readme)
+    links += re.findall(r'<img[^>]*\ssrc="([^"]+)"', readme)
+
+    relative = [link for link in links if not link.startswith(("https://", "#", "mailto:"))]
+    assert relative == []

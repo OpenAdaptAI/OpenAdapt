@@ -121,6 +121,33 @@ class TestCLI:
         captured = capsys.readouterr()
         assert "openadapt-flow (loop engine)" in captured.out
 
+    def test_doctor_reports_the_installed_privacy_distribution(
+        self, cli_config: EngineConfig, capsys
+    ) -> None:
+        """The privacy line shows the installed release, not a stale module attribute."""
+        from importlib.metadata import version
+
+        with patch("engine.cli.EngineConfig", return_value=cli_config):
+            main(["doctor"])
+        captured = capsys.readouterr()
+        assert f"[OK] openadapt-privacy: {version('openadapt-privacy')}" in captured.out
+
+    def test_doctor_does_not_fail_a_local_install_on_optional_items(
+        self, cli_config: EngineConfig, capsys
+    ) -> None:
+        """S3 storage and a Cloud sign-in are optional, so they never read as failures."""
+        with (
+            patch("engine.cli.EngineConfig", return_value=cli_config),
+            patch("engine.auth.store.auth_header", return_value={}),
+        ):
+            main(["doctor"])
+        out = capsys.readouterr().out
+        assert "[--] Hosted credential: not logged in" in out
+        assert "[!!] Hosted credential" not in out
+        assert "[!!] boto3" not in out
+        assert "required checks passed" in out
+        assert "openadapt-desktop[full]" not in out
+
     def test_qualify_propose_calls_flow(
         self, cli_config: EngineConfig, tmp_path: Path, capsys
     ) -> None:
