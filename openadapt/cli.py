@@ -1564,30 +1564,45 @@ def doctor(backend: str | None):
                 f"`pip install openadapt[{extra}]`)"
             )
 
-    # Check GPU
-    click.echo("\nGPU:")
-    try:
-        import torch
+    # A GPU and model API keys matter only to the research extras (`openadapt
+    # train`, `openadapt eval`). Healthy runs of compiled workflows make no
+    # model calls, so a base install doesn't list them as missing.
+    research = ("openadapt_ml", "openadapt_evals")
+    if all(find_spec(name) is None for name in research):
+        click.echo(
+            "\nModel access: not required. Healthy runs of compiled workflows "
+            "make no model calls."
+        )
+    else:
+        click.echo("\nResearch extras (not used by compiled workflows):")
+        try:
+            import torch
 
-        if torch.cuda.is_available():
-            click.echo(f"  [OK] CUDA available: {torch.cuda.get_device_name(0)}")
-        elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
-            click.echo("  [OK] MPS available (Apple Silicon)")
-        else:
-            click.echo("  [--] No GPU detected (CPU mode)")
-    except ImportError:
-        click.echo("  [--] PyTorch not installed")
+            if torch.cuda.is_available():
+                click.echo(f"  [OK] CUDA available: {torch.cuda.get_device_name(0)}")
+            elif hasattr(torch.backends, "mps") and torch.backends.mps.is_available():
+                click.echo("  [OK] MPS available (Apple Silicon)")
+            else:
+                click.echo("  [--] No GPU detected (CPU mode)")
+        except ImportError:
+            click.echo(
+                "  [--] PyTorch not installed (needed only for `openadapt train` "
+                "and `openadapt eval run --checkpoint`)"
+            )
 
-    # Check API keys
-    click.echo("\nAPI Keys:")
-    import os
+        import os
 
-    keys = ["ANTHROPIC_API_KEY", "OPENAI_API_KEY"]
-    for key in keys:
-        if os.environ.get(key):
-            click.echo(f"  [OK] {key} is set")
-        else:
-            click.echo(f"  [--] {key} not set")
+        for key, agent in (
+            ("ANTHROPIC_API_KEY", "api-claude"),
+            ("OPENAI_API_KEY", "api-openai"),
+        ):
+            if os.environ.get(key):
+                click.echo(f"  [OK] {key} is set")
+            else:
+                click.echo(
+                    f"  [--] {key} not set (needed only for "
+                    f"`openadapt eval run --agent {agent}`)"
+                )
 
     if failures:
         raise click.ClickException(
