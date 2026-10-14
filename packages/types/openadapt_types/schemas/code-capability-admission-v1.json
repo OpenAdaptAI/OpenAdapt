@@ -1,0 +1,158 @@
+{
+  "$defs": {
+    "CodeCapabilityAdmissionPayloadV1": {
+      "additionalProperties": false,
+      "description": "Expiring authority for one exact code capability manifest.",
+      "properties": {
+        "admission_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+          "title": "Admission Id",
+          "type": "string"
+        },
+        "capability_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+          "title": "Capability Id",
+          "type": "string"
+        },
+        "capability_version_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+          "title": "Capability Version Id",
+          "type": "string"
+        },
+        "effect_contract_digest": {
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "title": "Effect Contract Digest",
+          "type": "string"
+        },
+        "expires_at": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$",
+          "title": "Expires At",
+          "type": "string"
+        },
+        "input_schema_digest": {
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "title": "Input Schema Digest",
+          "type": "string"
+        },
+        "issued_at": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$",
+          "title": "Issued At",
+          "type": "string"
+        },
+        "issuer_key_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+          "title": "Issuer Key Id",
+          "type": "string"
+        },
+        "issuer_ref": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+          "title": "Issuer Ref",
+          "type": "string"
+        },
+        "issuer_workflow": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+          "title": "Issuer Workflow",
+          "type": "string"
+        },
+        "manifest_digest": {
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "title": "Manifest Digest",
+          "type": "string"
+        },
+        "not_before": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$",
+          "title": "Not Before",
+          "type": "string"
+        },
+        "operator_contract_digest": {
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "title": "Operator Contract Digest",
+          "type": "string"
+        },
+        "oracle_contract_digest": {
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "title": "Oracle Contract Digest",
+          "type": "string"
+        },
+        "output_schema_digest": {
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "title": "Output Schema Digest",
+          "type": "string"
+        },
+        "permission_contract_digest": {
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "title": "Permission Contract Digest",
+          "type": "string"
+        },
+        "qualification_campaign_digest": {
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "title": "Qualification Campaign Digest",
+          "type": "string"
+        },
+        "runtime_environment_digest": {
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "title": "Runtime Environment Digest",
+          "type": "string"
+        },
+        "schema_version": {
+          "const": "openadapt.code-capability-admission/v1",
+          "default": "openadapt.code-capability-admission/v1",
+          "title": "Schema Version",
+          "type": "string"
+        },
+        "tenant_id": {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+          "title": "Tenant Id",
+          "type": "string"
+        }
+      },
+      "required": [
+        "admission_id",
+        "tenant_id",
+        "capability_id",
+        "capability_version_id",
+        "manifest_digest",
+        "runtime_environment_digest",
+        "permission_contract_digest",
+        "input_schema_digest",
+        "output_schema_digest",
+        "effect_contract_digest",
+        "oracle_contract_digest",
+        "operator_contract_digest",
+        "qualification_campaign_digest",
+        "issuer_key_id",
+        "issuer_workflow",
+        "issuer_ref",
+        "issued_at",
+        "not_before",
+        "expires_at"
+      ],
+      "title": "CodeCapabilityAdmissionPayloadV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "properties": {
+    "algorithm": {
+      "const": "ed25519",
+      "default": "ed25519",
+      "title": "Algorithm",
+      "type": "string"
+    },
+    "payload": {
+      "$ref": "#/$defs/CodeCapabilityAdmissionPayloadV1"
+    },
+    "signature": {
+      "maxLength": 88,
+      "minLength": 88,
+      "title": "Signature",
+      "type": "string"
+    }
+  },
+  "required": [
+    "payload",
+    "signature"
+  ],
+  "title": "CodeCapabilityAdmissionEnvelopeV1",
+  "type": "object"
+}

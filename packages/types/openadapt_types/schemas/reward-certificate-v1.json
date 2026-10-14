@@ -1,0 +1,124 @@
+{
+  "$defs": {
+    "RewardCalibrationScopeV1": {
+      "description": "What corpus the certificate was calibrated against.\n\n``synthetic`` is the only member.  A production scope would assert that\nthe bound came from the Phase-1 calibration on a real corpus, and nothing\nin this package can check that assertion, so the value does not exist\nhere.  Widening the enum later is backward compatible; a consumer must\nshow the scope beside the word certified either way.",
+      "enum": [
+        "synthetic"
+      ],
+      "title": "RewardCalibrationScopeV1",
+      "type": "string"
+    },
+    "RewardCertificateIssuerV1": {
+      "description": "Who signed the certificate.\n\n``self_signed`` is the only member: a certificate the holder computed for\nitself.  An organization issuer would assert an identity, and there is no\nissuer key registry to resolve ``issuer_key_id`` against, so that value\ndoes not exist here.  The enum keeps its shape so a registry can add a\nmember without changing the field.",
+      "enum": [
+        "self_signed"
+      ],
+      "title": "RewardCertificateIssuerV1",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "An expiring bound on one reward contract's false-accept rate.\n\nExpiry counts policy updates, not wall-clock time.  A certificate issued\nat update ``i`` with expiry ``n`` is current for updates ``i`` through\n``i + n - 1``.  Expiry is the only withdrawal mechanism in this version.\nThere is no revocation list and nothing here checks one.\n\n``signature`` is validated for base64 encoding and ed25519 length only.\nThis package holds no issuer key registry, so it cannot say whether\n``issuer_key_id`` names a key anyone trusts.  A consumer that needs issuer\nidentity verifies the signature itself against a key it already holds.\nUntil such a registry exists, ``issuer`` and ``calibration_scope`` each\ncarry exactly one admissible value.",
+  "properties": {
+    "calibration_corpus_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Calibration Corpus Digest",
+      "type": "string"
+    },
+    "calibration_scope": {
+      "$ref": "#/$defs/RewardCalibrationScopeV1"
+    },
+    "certificate_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Certificate Id",
+      "type": "string"
+    },
+    "checker_configuration_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Checker Configuration Digest",
+      "type": "string"
+    },
+    "delta": {
+      "exclusiveMaximum": 1.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Delta",
+      "type": "number"
+    },
+    "epsilon": {
+      "exclusiveMaximum": 1.0,
+      "exclusiveMinimum": 0.0,
+      "title": "Epsilon",
+      "type": "number"
+    },
+    "expiry_policy_updates": {
+      "maximum": 9007199254740991,
+      "minimum": 1,
+      "title": "Expiry Policy Updates",
+      "type": "integer"
+    },
+    "issued_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(Z|[+-]\\d{2}:\\d{2})$",
+      "title": "Issued At",
+      "type": "string"
+    },
+    "issued_at_policy_update": {
+      "maximum": 9007199254740991,
+      "minimum": 0,
+      "title": "Issued At Policy Update",
+      "type": "integer"
+    },
+    "issuer": {
+      "$ref": "#/$defs/RewardCertificateIssuerV1"
+    },
+    "issuer_key_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Issuer Key Id",
+      "type": "string"
+    },
+    "reward_contract_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Reward Contract Digest",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "openadapt.reward-certificate/v1",
+      "default": "openadapt.reward-certificate/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "signature": {
+      "maxLength": 88,
+      "minLength": 88,
+      "title": "Signature",
+      "type": "string"
+    },
+    "signature_algorithm": {
+      "const": "ed25519",
+      "default": "ed25519",
+      "title": "Signature Algorithm",
+      "type": "string"
+    },
+    "threshold": {
+      "title": "Threshold",
+      "type": "number"
+    }
+  },
+  "required": [
+    "certificate_id",
+    "reward_contract_digest",
+    "checker_configuration_digest",
+    "epsilon",
+    "delta",
+    "threshold",
+    "calibration_corpus_digest",
+    "calibration_scope",
+    "issued_at_policy_update",
+    "expiry_policy_updates",
+    "issued_at",
+    "issuer",
+    "issuer_key_id",
+    "signature"
+  ],
+  "title": "RewardCertificateV1",
+  "type": "object"
+}

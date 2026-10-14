@@ -1,0 +1,242 @@
+{
+  "$defs": {
+    "AuthenticationMethod": {
+      "enum": [
+        "existing_session",
+        "saved_account_selection",
+        "password_manager_autofill",
+        "passkey",
+        "federated_identity",
+        "smart_card",
+        "device_broker",
+        "manual_secret_entry"
+      ],
+      "title": "AuthenticationMethod",
+      "type": "string"
+    },
+    "AuthenticationMfaOutcome": {
+      "enum": [
+        "verified",
+        "not_challenged",
+        "not_required"
+      ],
+      "title": "AuthenticationMfaOutcome",
+      "type": "string"
+    },
+    "AuthenticationOutcome": {
+      "enum": [
+        "verified",
+        "refuted",
+        "indeterminate"
+      ],
+      "title": "AuthenticationOutcome",
+      "type": "string"
+    },
+    "AuthenticationPrincipalClass": {
+      "enum": [
+        "named_user",
+        "shared_service_account",
+        "workforce_identity",
+        "device_identity"
+      ],
+      "title": "AuthenticationPrincipalClass",
+      "type": "string"
+    },
+    "HumanDecisionSubstrate": {
+      "enum": [
+        "browser",
+        "windows",
+        "macos",
+        "linux",
+        "rdp",
+        "citrix",
+        "mixed",
+        "unknown"
+      ],
+      "title": "HumanDecisionSubstrate",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A self-digesting attempt receipt anchored by the process ledger.",
+  "properties": {
+    "account_label_retained": {
+      "const": false,
+      "default": false,
+      "title": "Account Label Retained",
+      "type": "boolean"
+    },
+    "app_version_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "App Version Digest",
+      "type": "string"
+    },
+    "authenticated_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "title": "Authenticated At",
+      "type": "string"
+    },
+    "broker_binding_digest": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Broker Binding Digest"
+    },
+    "capture_exclusion_receipt_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Capture Exclusion Receipt Digest",
+      "type": "string"
+    },
+    "challenge_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Challenge Digest",
+      "type": "string"
+    },
+    "credential_value_retained": {
+      "const": false,
+      "default": false,
+      "title": "Credential Value Retained",
+      "type": "boolean"
+    },
+    "fresh_until": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "title": "Fresh Until",
+      "type": "string"
+    },
+    "human_decision_task_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Human Decision Task Digest",
+      "type": "string"
+    },
+    "method": {
+      "$ref": "#/$defs/AuthenticationMethod"
+    },
+    "mfa_outcome": {
+      "$ref": "#/$defs/AuthenticationMfaOutcome"
+    },
+    "operator_authority_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Operator Authority Digest",
+      "type": "string"
+    },
+    "outcome": {
+      "$ref": "#/$defs/AuthenticationOutcome"
+    },
+    "principal_binding_contract_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Principal Binding Contract Digest",
+      "type": "string"
+    },
+    "principal_binding_hmac": {
+      "pattern": "^hmac-sha256:[a-f0-9]{64}$",
+      "title": "Principal Binding Hmac",
+      "type": "string"
+    },
+    "principal_class": {
+      "$ref": "#/$defs/AuthenticationPrincipalClass"
+    },
+    "process_execution_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Process Execution Id",
+      "type": "string"
+    },
+    "receipt_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Receipt Digest",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "openadapt.authentication-receipt/v1",
+      "default": "openadapt.authentication-receipt/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "session_binding_hmac": {
+      "pattern": "^hmac-sha256:[a-f0-9]{64}$",
+      "title": "Session Binding Hmac",
+      "type": "string"
+    },
+    "step_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Step Id",
+      "type": "string"
+    },
+    "substrate": {
+      "$ref": "#/$defs/HumanDecisionSubstrate"
+    },
+    "task_contract_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Task Contract Digest",
+      "type": "string"
+    },
+    "task_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Task Id",
+      "type": "string"
+    },
+    "user_presence_outcome": {
+      "enum": [
+        "verified",
+        "not_required"
+      ],
+      "title": "User Presence Outcome",
+      "type": "string"
+    },
+    "verified_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+      "title": "Verified At",
+      "type": "string"
+    },
+    "verifier_contract_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Verifier Contract Digest",
+      "type": "string"
+    },
+    "verifier_evidence_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Verifier Evidence Digest",
+      "type": "string"
+    },
+    "verifier_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Verifier Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "task_contract_digest",
+    "task_id",
+    "human_decision_task_digest",
+    "app_version_digest",
+    "process_execution_id",
+    "step_id",
+    "challenge_digest",
+    "method",
+    "substrate",
+    "principal_class",
+    "principal_binding_contract_digest",
+    "principal_binding_hmac",
+    "session_binding_hmac",
+    "operator_authority_digest",
+    "authenticated_at",
+    "verified_at",
+    "fresh_until",
+    "user_presence_outcome",
+    "mfa_outcome",
+    "verifier_id",
+    "verifier_contract_digest",
+    "verifier_evidence_digest",
+    "capture_exclusion_receipt_digest",
+    "outcome",
+    "receipt_digest"
+  ],
+  "title": "AuthenticationReceiptV1",
+  "type": "object"
+}
