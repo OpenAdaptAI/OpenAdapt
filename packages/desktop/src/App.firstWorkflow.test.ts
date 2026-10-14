@@ -22,14 +22,17 @@ it("resumes the durable first workflow at its exact user stage", () => {
     target: { backend: "web", url: "https://example.test" },
     task: "Read one test record",
   });
-  expect(routeForFirstWorkflow(state("review"))).toEqual({
-    name: "watch",
-    id: "workflow-1",
-    target: { backend: "web", url: "https://example.test" },
-    firstWorkflow: true,
-    firstRunComplete: false,
-    firstRunLocked: false,
-  });
+  // Nothing has run yet: the short Check it path replaces the read-only
+  // first run and the review-only loop.
+  for (const stage of ["review", "qualification", "qualification_after_result"] as const) {
+    expect(routeForFirstWorkflow(state(stage))).toEqual({
+      name: "check",
+      id: "workflow-1",
+      firstWorkflow: true,
+    });
+  }
+  // A run that started stays on its own screen until a person has checked
+  // the target.
   expect(routeForFirstWorkflow(state("executing"))).toEqual({
     name: "watch",
     id: "workflow-1",
@@ -53,20 +56,6 @@ it("resumes the durable first workflow at its exact user stage", () => {
     firstWorkflow: true,
     firstRunComplete: true,
     firstRunLocked: false,
-  });
-  expect(routeForFirstWorkflow(state("qualification"))).toEqual({
-    name: "qualify",
-    id: "workflow-1",
-    firstWorkflow: true,
-    firstRunComplete: false,
-    target: { backend: "web", url: "https://example.test" },
-  });
-  expect(routeForFirstWorkflow(state("qualification_after_result"))).toEqual({
-    name: "qualify",
-    id: "workflow-1",
-    firstWorkflow: true,
-    firstRunComplete: true,
-    target: { backend: "web", url: "https://example.test" },
   });
   expect(routeForFirstWorkflow(state("complete"))).toBeNull();
 });

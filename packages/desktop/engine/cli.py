@@ -789,7 +789,7 @@ def cmd_doctor(args: argparse.Namespace, engine: types.SimpleNamespace) -> None:
         (
             "Hosted credential",
             logged_in,
-            "present" if logged_in else "not logged in (run 'openadapt login')",
+            "present" if logged_in else "not logged in (run 'openadapt-desktop login')",
         )
     )
 

@@ -832,3 +832,28 @@ class TestBrowserRuntime:
             bridge.ensure_browser_runtime(lambda state, _detail: states.append(state))
 
         assert states == ["checking", "installing", "error"]
+
+
+def test_tutorial_runs_the_local_sample_with_optional_signals_off(tmp_path, monkeypatch) -> None:
+    import engine.flow_bridge as module
+    from engine.flow_bridge import FlowBridge
+
+    seen: dict = {}
+
+    class _Proc:
+        returncode = 0
+        stdout = ""
+        stderr = ""
+
+    def runner(cmd, **kwargs):
+        seen["cmd"] = cmd
+        seen["env"] = kwargs.get("env") or {}
+        return _Proc()
+
+    monkeypatch.setattr(module, "_flow_command", lambda _bin: ["openadapt-flow"])
+    FlowBridge(flow_bin="openadapt-flow", runner=runner).tutorial(tmp_path / "sample")
+
+    assert seen["cmd"][:2] == ["openadapt-flow", "tutorial"]
+    assert "--break-it" in seen["cmd"] and "--no-receipt" in seen["cmd"]
+    assert seen["env"]["DO_NOT_TRACK"] == "1"
+    assert seen["env"]["OPENADAPT_TELEMETRY"] == "0"

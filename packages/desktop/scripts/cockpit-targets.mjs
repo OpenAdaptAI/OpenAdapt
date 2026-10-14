@@ -21,12 +21,25 @@
 //                  it became a target here: it was shot by hand from a
 //                  throwaway script, which is the failure this file prevents.
 
-import { WORKFLOWS, IDS } from './cockpit-fixtures.mjs';
+import { WORKFLOWS, IDS, NEW_TASK } from './cockpit-fixtures.mjs';
 
 export const CONSUMERS = {
   WEB: 'openadapt-web',
   OPS: 'openadapt-ops',
+  // This repository's own README, under docs/assets/operator/.
+  README: 'openadapt-desktop',
 };
+
+// The README shots use the README's own geometry: a typical laptop window.
+export const README_VIEWPORT = { width: 1280, height: 860 };
+// Run it keeps its action bar in view; a taller window shows the whole list.
+export const README_TALL_VIEWPORT = { width: 1280, height: 1060 };
+
+// Every expert surface is behind the gear menu now. These are the clicks an
+// operator makes to reach them.
+const GEAR = { role: 'button', name: 'Settings and advanced tools' };
+const ADVANCED = [GEAR, { role: 'menuitem', name: 'Advanced', exact: false }];
+const ALL_VERSIONS = [...ADVANCED, { name: 'Open all versions' }];
 
 // The published cockpit geometry, with no device-scale multiplier. It is what
 // openadapt-web's MANIFEST.json records for every cockpit capture, and it is
@@ -60,21 +73,22 @@ export const TARGETS = [
     file: '01_login.png',
     consumer: CONSUMERS.WEB,
     surface: 'Sign in',
-    shows: 'Synthetic connection screen with a local-first entry and optional Cloud sign-in controls.',
+    shows: 'Synthetic Cloud sign-in screen, reached from the welcome screen, with the option to continue without an account.',
     session: { localSession: false, authenticated: false, workflows: [], permissions: DENIED },
+    steps: [{ name: 'Connect to OpenAdapt Cloud' }],
   },
   {
     file: '05_onboarding.png',
     consumer: CONSUMERS.WEB,
-    surface: 'First-run onboarding',
-    shows: 'Synthetic first-run workflow recording setup with permission and local video-engine status.',
+    surface: 'First-run welcome',
+    shows: 'Synthetic welcome screen: what OpenAdapt does, the three steps, and a sample run that needs no permission.',
     session: { localSession: true, authenticated: false, workflows: [], permissions: GRANTED },
   },
   {
     file: '10_dashboard_workflows.png',
     consumer: CONSUMERS.WEB,
-    surface: 'Home / Workflows library',
-    shows: 'Synthetic local workflow library with one halted workflow and one verified workflow.',
+    surface: 'Home / Tasks',
+    shows: 'Synthetic task list: one task ready to run with an item waiting for a person, and one task still being checked.',
     session: { localSession: true, authenticated: true, workflows: WORKFLOWS, permissions: GRANTED },
   },
   {
@@ -83,15 +97,15 @@ export const TARGETS = [
     surface: 'Settings / policy',
     shows: 'Synthetic settings view for the execution lane, privacy mode, grounding controls, and overlay.',
     session: { localSession: true, authenticated: true, workflows: WORKFLOWS, permissions: GRANTED },
-    nav: 'Settings',
+    steps: [GEAR, { role: 'menuitem', name: 'Settings', exact: false }],
   },
   {
     file: '30_record.png',
     consumer: CONSUMERS.WEB,
     surface: 'Record & review',
-    shows: 'Synthetic idle record-and-review view for a new demonstration.',
+    shows: 'Synthetic idle record-and-review view for a new demonstration (Advanced, Record with all options).',
     session: { localSession: true, authenticated: true, workflows: WORKFLOWS, permissions: GRANTED },
-    nav: 'Record',
+    steps: [...ADVANCED, { name: 'Open recording' }],
   },
   {
     file: '40_watchrun_halted.png',
@@ -99,6 +113,7 @@ export const TARGETS = [
     surface: 'Run detail — halted with effect-verification evidence',
     shows: 'Synthetic six-step workflow halted because identity and postcondition evidence were insufficient.',
     session: { localSession: true, authenticated: true, workflows: WORKFLOWS, permissions: GRANTED },
+    steps: ALL_VERSIONS,
     openRow: { workflow: IDS.HALTED_WORKFLOW, action: 'Watch run' },
   },
   {
@@ -107,6 +122,7 @@ export const TARGETS = [
     surface: 'Run detail — fully verified with metrics',
     shows: 'Synthetic six-step workflow with a verified outcome and its evidence contract.',
     session: { localSession: true, authenticated: true, workflows: WORKFLOWS, permissions: GRANTED },
+    steps: ALL_VERSIONS,
     openRow: { workflow: IDS.VERIFIED_WORKFLOW, action: 'Watch run' },
   },
   {
@@ -115,6 +131,7 @@ export const TARGETS = [
     surface: 'Teach the fix',
     shows: 'Synthetic local correction view for the safely halted workflow.',
     session: { localSession: true, authenticated: true, workflows: WORKFLOWS, permissions: GRANTED },
+    steps: ALL_VERSIONS,
     openRow: { workflow: IDS.HALTED_WORKFLOW, action: 'Teach fix' },
   },
   {
@@ -127,6 +144,7 @@ export const TARGETS = [
     surface: 'Qualification — program workbench',
     shows: 'Synthetic compiled program map for the halted workflow, with its identity gates, effect checks, and stop rules.',
     session: { localSession: true, authenticated: true, workflows: WORKFLOWS, permissions: GRANTED },
+    steps: ALL_VERSIONS,
     openRow: { workflow: IDS.HALTED_WORKFLOW, action: 'Qualify' },
     journey: 'Inspect workflow',
   },
@@ -142,6 +160,78 @@ export const TARGETS = [
     viewport: DOCS_PREVIEW_VIEWPORT,
     query: '?surface=program-workbench-preview',
     session: null,
+  },
+
+  // This repository's README shows the operator screens. Every value is the
+  // synthetic fixture; the session's `operator` flag adds the Needs-you items
+  // and results that a team would have after running a list.
+  {
+    file: 'tasks.png',
+    consumer: CONSUMERS.README,
+    surface: 'Tasks',
+    shows: 'Synthetic task list: each task with one status and one next step.',
+    viewport: README_VIEWPORT,
+    session: {
+      localSession: true, authenticated: false, permissions: GRANTED, operator: true,
+      workflows: [...WORKFLOWS, NEW_TASK],
+    },
+  },
+  {
+    file: 'needs-you.png',
+    consumer: CONSUMERS.README,
+    surface: 'Needs you',
+    shows: 'Synthetic stop on the wrong record: the question, what was prevented, the screen, and the allowed choices.',
+    viewport: { width: 1280, height: 1200 },
+    session: { localSession: true, authenticated: false, permissions: GRANTED, operator: true, workflows: WORKFLOWS },
+    steps: [{ name: 'Needs you', exact: false }],
+  },
+  {
+    file: 'results.png',
+    consumer: CONSUMERS.README,
+    surface: 'Results',
+    shows: 'Synthetic results: items done and checked, items that needed a person, a prevented wrong-record save, and a labeled time estimate.',
+    viewport: README_VIEWPORT,
+    session: { localSession: true, authenticated: false, permissions: GRANTED, operator: true, workflows: WORKFLOWS },
+    steps: [{ name: 'Results' }],
+  },
+  {
+    file: 'check-it.png',
+    consumer: CONSUMERS.README,
+    surface: 'Check it',
+    shows: 'Synthetic short readiness test: what it changes, the right-record check, the record check, practice run, drills, approval.',
+    viewport: README_VIEWPORT,
+    session: {
+      localSession: true, authenticated: false, permissions: GRANTED, operator: false,
+      workflows: [{ ...WORKFLOWS[0], readiness: 'checking', certified: false, encrypted: false, open_items: 0, open_halts: 0 }],
+    },
+    steps: [{ name: 'Continue checking', within: 'Claims review handoff' }],
+  },
+  {
+    file: 'run-it.png',
+    consumer: CONSUMERS.README,
+    surface: 'Run it',
+    shows: 'Synthetic list of member IDs and notes pasted into Run it, checked against the inputs the task needs.',
+    viewport: README_TALL_VIEWPORT,
+    session: {
+      localSession: true, authenticated: false, permissions: GRANTED, operator: false,
+      workflows: [{ ...WORKFLOWS[0], open_items: 0, open_halts: 0 }],
+    },
+    steps: [
+      { name: 'Run it', within: 'Claims review handoff' },
+      {
+        fill: 'Paste rows from a spreadsheet or a list',
+        text: 'member_id, status_note\nM-5601, Reviewed\nM-5602, Reviewed\nM-5603, Sent to billing\nM-5604,',
+      },
+    ],
+  },
+  {
+    file: 'sample.png',
+    consumer: CONSUMERS.README,
+    surface: 'Sample run',
+    shows: 'Synthetic sample results: one run done and checked, and one where the app showed saved but the record check disagreed.',
+    viewport: README_VIEWPORT,
+    session: { localSession: false, authenticated: false, permissions: DENIED, workflows: [] },
+    steps: [{ name: 'See it work on a sample app', exact: false }, { name: 'Run the sample', wait: 900 }],
   },
 ];
 

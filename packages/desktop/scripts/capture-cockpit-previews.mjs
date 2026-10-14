@@ -185,6 +185,24 @@ for (const target of TARGETS) {
     await page.waitForTimeout(500);
   }
 
+  // A surface behind the gear menu or a card is reached by the same clicks an
+  // operator makes. Each step names an accessible role and name, or fills a
+  // labeled field with synthetic text.
+  for (const step of target.steps || []) {
+    if (step.fill) {
+      await page.getByLabel(step.fill, { exact: true }).fill(step.text);
+    } else {
+      const scope = step.within
+        ? page.getByRole('article', { name: step.within })
+        : page;
+      await scope
+        .getByRole(step.role || 'button', { name: step.name, exact: step.exact !== false })
+        .first()
+        .click();
+    }
+    await page.waitForTimeout(step.wait || 500);
+  }
+
   if (target.openRow) {
     const workflow = target.session.workflows.find((w) => w.id === target.openRow.workflow);
     if (!workflow) throw new Error(`no fixture workflow ${target.openRow.workflow}`);

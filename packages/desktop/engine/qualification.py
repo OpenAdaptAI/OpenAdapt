@@ -346,10 +346,8 @@ def _effect_view(index: int, effect, verification_policy) -> dict[str, Any]:
     }
 
 
-def _qualification_controls(workflow, graph: dict[str, Any]) -> dict[str, Any]:
-    """Project writable controls from the executable workflow and canonical project."""
-
-    from openadapt_flow.policy import executable_actuation_paths
+def declared_parameters(workflow) -> list[dict[str, Any]]:
+    """The task's declared inputs, without any secret value or secret choice."""
 
     parameter_names = sorted(
         set(workflow.params) | set(workflow.param_specs) | set(workflow.secret_params)
@@ -372,6 +370,21 @@ def _qualification_controls(workflow, graph: dict[str, Any]) -> dict[str, Any]:
                 "choices": [] if secret or spec is None else list(spec.choices),
             }
         )
+    return parameters
+
+
+def task_parameters(bundle_dir: Path, *, bundle_key: str | None = None) -> list[dict[str, Any]]:
+    """Load one bundle and return only its declared inputs."""
+
+    return declared_parameters(_load(bundle_dir, key=bundle_key))
+
+
+def _qualification_controls(workflow, graph: dict[str, Any]) -> dict[str, Any]:
+    """Project writable controls from the executable workflow and canonical project."""
+
+    from openadapt_flow.policy import executable_actuation_paths
+
+    parameters = declared_parameters(workflow)
 
     project = workflow.qualification
     effect_policies = (

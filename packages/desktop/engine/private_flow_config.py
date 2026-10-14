@@ -310,10 +310,33 @@ def stage_private_yaml(
 ) -> Iterator[Path]:
     """Stage one prepared serialization privately without rereading a source."""
 
+    with stage_private_text(
+        directory,
+        payload=prepared.payload,
+        prefix=prefix,
+        suffix=".yaml",
+    ) as path:
+        yield path
+
+
+@contextmanager
+def stage_private_text(
+    directory: Path,
+    *,
+    payload: str,
+    prefix: str,
+    suffix: str,
+) -> Iterator[Path]:
+    """Write one owner-only file for the length of a Flow call, then remove it.
+
+    Values in the file (selectors, run inputs) never enter a process argument
+    list; Flow receives only the file path.
+    """
+
     directory.mkdir(parents=True, exist_ok=True)
     fd, raw_path = tempfile.mkstemp(
         prefix=prefix,
-        suffix=".yaml",
+        suffix=suffix,
         dir=directory,
         text=True,
     )
@@ -325,7 +348,7 @@ def stage_private_yaml(
             os.chmod(path, 0o600)
         with os.fdopen(fd, "w", encoding="utf-8") as handle:
             fd = -1
-            handle.write(prepared.payload)
+            handle.write(payload)
             handle.flush()
             os.fsync(handle.fileno())
         yield path

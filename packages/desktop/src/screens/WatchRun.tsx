@@ -23,48 +23,34 @@ import {
 } from "../ui/primitives";
 import { ExecutionTargetForm } from "../ui/ExecutionTargetForm";
 import { ReplayMonitor } from "../ui/ReplayMonitor";
+import { plainResultForReport, resultCopy } from "../lib/outcomes";
 
 type ExecuteMode = "replay" | "run";
 type RunIssue = {
   title: string;
   message: string;
   preActionRefusal: boolean;
+  nothingWritten?: boolean;
 };
 
+// The plain result comes from the transaction outcome (see lib/outcomes.ts).
+// Only a result that proves no effect may say nothing was written; every
+// other stop tells the person to check the record before anything runs again.
 function issueForReport(report: RunReport): RunIssue | null {
-  if (report.outcome === "COMPLETED_UNVERIFIED") {
-    return {
-      title: "Execution completed without sufficient verification",
-      message:
-        "The workflow finished, but its required evidence did not prove the intended business effect.",
-      preActionRefusal: false,
-    };
-  }
-  if (report.outcome === "FAILED") {
-    return {
-      title: "Execution failed",
-      message:
-        "A runtime or infrastructure failure prevented a verified outcome.",
-      preActionRefusal: false,
-    };
-  }
-  if (report.outcome === "ROLLED_BACK") {
-    return {
-      title: "Execution was rolled back",
-      message:
-        "The configured compensating action completed, so the requested effect was not reported as verified.",
-      preActionRefusal: false,
-    };
-  }
-  if (report.outcome === "unknown") {
-    return {
-      title: "Execution outcome needs verification",
-      message:
-        report.error || "Desktop could not classify the execution outcome.",
-      preActionRefusal: false,
-    };
-  }
-  return null;
+  const plain = plainResultForReport(report);
+  if (plain.key === "done_checked") return null;
+  const copy = resultCopy(plain);
+  return {
+    title: copy.label,
+    // "Check the record" already says what to do; its Needs-you next step
+    // doesn't apply on this screen.
+    message:
+      plain.key === "check_record"
+        ? copy.sentence
+        : [copy.sentence, copy.next].filter(Boolean).join(" "),
+    preActionRefusal: false,
+    nothingWritten: plain.nothingWritten,
+  };
 }
 
 const CONTRACT_LABELS = {
@@ -296,7 +282,7 @@ export function WatchRun({
       );
       if (response.outcome === "refused") {
         setRunIssue({
-          title: "Execution was refused before action",
+          title: "OpenAdapt didn't start this run",
           message: response.error,
           preActionRefusal: response.pre_action_refusal,
         });
@@ -314,7 +300,7 @@ export function WatchRun({
       }
     } catch (error) {
       setRunIssue({
-        title: "Engine connection ended unexpectedly",
+        title: "Check the record",
         message:
           error instanceof Error
             ? error.message
@@ -645,8 +631,12 @@ export function WatchRun({
           >
             {runIssue.message}{" "}
             {runIssue.preActionRefusal
-              ? "Correct the configuration before trying again; Flow was not invoked."
-              : "Do not retry until you verify the target application or system of record and inspect the retained run evidence; the prior dispatch may have delivered an action."}
+              ? "Correct the configuration before trying again. OpenAdapt didn't start the run."
+              : runIssue.nothingWritten === false
+                ? "Look at the record and the run evidence below before you run it again."
+                : runIssue.nothingWritten
+                  ? ""
+                  : "The run may have saved something. Look at the record before you run it again."}
           </Callout>
         )}
         {report?.persistence && report.persistence.state !== "persisted" && (
@@ -678,7 +668,10 @@ export function WatchRun({
 
       {report?.halt && (
         <Card>
-          <CardHead eyebrow="Halted" title="This run stopped safely" />
+          <CardHead
+            title="Where it stopped"
+            sub={resultCopy(plainResultForReport(report)).label}
+          />
           <Callout tone="warn" title={report.halt.step_intent}>
             {report.halt.reason}
             {report.halt.resolver_rung
@@ -693,7 +686,7 @@ export function WatchRun({
               }
               onClick={() => onTeach(workflowId)}
             >
-              Teach the fix
+              Show OpenAdapt the right way
             </Button>
           </div>
         </Card>

@@ -79,8 +79,8 @@ it("shows automatic compile progress and retries a retained recording", async ()
   act(() => {
     eventMocks.handlers.get(EVT.RECORDING_STOPPED)?.({ capture_id: "cap-1" });
   });
-  expect(await screen.findByText("Building your workflow")).toBeTruthy();
-  expect(screen.getByText(/raw recording stays unchanged/i)).toBeTruthy();
+  expect(await screen.findByText("Building the task from your recording")).toBeTruthy();
+  expect(screen.getByText(/recording stays as it was/i)).toBeTruthy();
 
   act(() => {
     eventMocks.handlers.get(EVT.COMPILE_PROGRESS)?.({
@@ -90,7 +90,7 @@ it("shows automatic compile progress and retries a retained recording", async ()
       recording_retained: true,
     });
   });
-  expect(await screen.findByText("Compilation needs attention")).toBeTruthy();
+  expect(await screen.findByText("OpenAdapt couldn't build the task")).toBeTruthy();
   expect(screen.getByText(/raw recording was retained/i)).toBeTruthy();
 
   vi.mocked(engineInvoke).mockResolvedValue({
@@ -98,7 +98,7 @@ it("shows automatic compile progress and retries a retained recording", async ()
     workflow_id: "workflow-1",
     recording_retained: true,
   });
-  fireEvent.click(screen.getByRole("button", { name: "Retry compilation" }));
+  fireEvent.click(screen.getByRole("button", { name: "Try building again" }));
 
   await waitFor(() => {
     expect(engineInvoke).toHaveBeenCalledWith("compile_recording", {
@@ -188,7 +188,7 @@ it("requires a real target and a named task for the first workflow", async () =>
   expect(recordButton.disabled).toBe(true);
   expect(screen.getByText("Describe the task you want to record.")).toBeTruthy();
 
-  fireEvent.change(screen.getByLabelText("Task to record"), {
+  fireEvent.change(screen.getByLabelText("What does this task do?"), {
     target: { value: "Save one test value" },
   });
   expect(
@@ -230,7 +230,7 @@ it("keeps an invalid or unavailable target out of recording and rechecks it", as
   });
 
   render(<RecordReview firstWorkflow onCompiled={() => {}} />);
-  fireEvent.change(screen.getByLabelText("Task to record"), {
+  fireEvent.change(screen.getByLabelText("What does this task do?"), {
     target: { value: "Read one test record" },
   });
   fireEvent.change(screen.getByLabelText("Page URL"), {
@@ -277,7 +277,7 @@ it("shows a recording failure and lets the user retry", async () => {
   });
 
   render(<RecordReview firstWorkflow onCompiled={() => {}} />);
-  fireEvent.change(screen.getByLabelText("Task to record"), {
+  fireEvent.change(screen.getByLabelText("What does this task do?"), {
     target: { value: "Read one test record" },
   });
   fireEvent.change(screen.getByLabelText("Page URL"), {

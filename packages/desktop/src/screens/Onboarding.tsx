@@ -1,6 +1,7 @@
-// First-run onboarding (spec §5): empty-state hero "Record your first workflow",
-// OS permission gate and the honest "get past the OS warning" copy. Mirrors
-// the cloud seamless flow.
+// Recording setup: operating-system permissions and the local video engine
+// that desktop-app recordings need. It is no longer a first-run gate: the
+// sample and browser tasks need neither, and the recording screen checks each
+// app type just in time. It stays reachable under Advanced for IT.
 import { useEffect, useState } from "react";
 import {
   CMD,
@@ -12,7 +13,6 @@ import {
 } from "../lib/engine";
 import type { FfmpegRuntimeStatus, PermissionStatus } from "../lib/types";
 import { Button, Card, CardHead, Callout, Pill } from "../ui/primitives";
-import { OsWarning } from "../ui/OsWarning";
 
 const MAC =
   typeof navigator !== "undefined" && /Mac/i.test(navigator.platform);
@@ -25,7 +25,7 @@ const AX_PANE =
 const INPUT_PANE =
   "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent";
 
-export function Onboarding({ onStart }: { onStart: () => void }) {
+export function Onboarding({ onStart }: { onStart?: () => void }) {
   const [perms, setPerms] = useState<PermissionStatus>({
     screen_recording: false,
     accessibility: false,
@@ -92,25 +92,24 @@ export function Onboarding({ onStart }: { onStart: () => void }) {
   return (
     <div className="content">
       <div className="hero">
-        <div className="ladder" aria-hidden>
-          ▁▂▄▆█
-        </div>
-        <p className="eyebrow">Welcome to OpenAdapt</p>
-        <h1>Choose your first task</h1>
+        <h1>Recording setup</h1>
         <p>
-          Start with a small task in a real app. Use test data and choose a
-          result you can check at a glance. You'll show the task once.
+          Recording a desktop app, a remote desktop, or Citrix needs these
+          permissions and the local video engine. Browser tasks and the sample
+          app don't need either.
         </p>
         <div className="row" style={{ justifyContent: "center" }}>
-          <Button variant="primary" disabled={!ready} onClick={onStart}>
-            Choose an app and task
-          </Button>
+          {onStart && (
+            <Button variant="primary" disabled={!ready} onClick={onStart}>
+              Choose an app and task
+            </Button>
+          )}
           <Button variant="ghost" onClick={refresh}>
             Re-check permissions
           </Button>
         </div>
         {!permissionsReady && checked && (
-          <p className="hint">Grant the permissions below to begin.</p>
+          <p className="hint">Grant the permissions below to record desktop apps.</p>
         )}
         {permissionsReady && !videoReady && (
           <p className="hint">
@@ -125,9 +124,8 @@ export function Onboarding({ onStart }: { onStart: () => void }) {
         {MAC && (
           <Card>
             <CardHead
-              eyebrow="Required"
-              title="Screen &amp; input permissions"
-              sub="macOS blocks capture until these are granted."
+              title="Screen and input permissions"
+              sub="macOS blocks desktop-app recording until these are granted."
             />
             <div className="stack">
               <div className="row">
@@ -175,9 +173,8 @@ export function Onboarding({ onStart }: { onStart: () => void }) {
 
         <Card>
           <CardHead
-            eyebrow="Automatic"
             title="Local video engine"
-            sub="Downloaded once, verified, and cached on this machine."
+            sub="OpenAdapt downloads its video recorder once and checks it before use."
           />
           <div className="stack">
             <div className="row">
@@ -226,16 +223,6 @@ export function Onboarding({ onStart }: { onStart: () => void }) {
           </div>
         </Card>
 
-        <Card>
-          <CardHead eyebrow="Heads up" title="First launch" />
-          <OsWarning />
-          <div style={{ marginTop: "var(--space-4)" }}>
-            <Callout tone="info">
-              Nothing leaves this machine unless you push it. On the regulated
-              (BYOC) lane, recordings and corrections stay entirely local.
-            </Callout>
-          </div>
-        </Card>
       </div>
     </div>
   );

@@ -204,11 +204,11 @@ def _plain_status(phase: str) -> str:
         "resuming": "Resuming safely",
         "stopping": "Stopping safely",
         "verifying": "Verifying result",
-        "verified": "Outcome verified",
-        "completed_unverified": "Needs verification",
-        "halted": "Stopped safely",
-        "failed": "Run failed",
-        "rolled_back": "Change rolled back",
+        "verified": "Done and checked",
+        "completed_unverified": "Finished, not checked",
+        "halted": "Stopped for review",
+        "failed": "Didn't finish",
+        "rolled_back": "Check the record",
     }[phase]
 
 

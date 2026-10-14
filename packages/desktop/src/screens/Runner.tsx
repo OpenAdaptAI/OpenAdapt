@@ -1,6 +1,7 @@
 // Hosted runner status, operator control, and recent terminal outcomes.
 import { useEffect, useState } from "react";
 import { CMD, EVT, engineInvoke, engineTry, onEngineEvent } from "../lib/engine";
+import { plainResultForTransaction, resultCopy } from "../lib/outcomes";
 import type { RunnerRun, RunnerStatus } from "../lib/types";
 import {
   Button,
@@ -50,15 +51,18 @@ function stateLabel(state: RunnerStatus["state"]): string {
   }
 }
 
-function outcomeTone(outcome?: string | null): "ok" | "warn" | "neutral" {
-  if (outcome === "VERIFIED") return "ok";
-  if (
-    outcome === "HALTED_BEFORE_EFFECT" ||
-    outcome === "RECONCILIATION_REQUIRED"
-  )
-    return "warn";
-  if (outcome === "FAILED_PLATFORM" || outcome === "REJECTED_POLICY") return "warn";
-  return "neutral";
+// Cloud runs carry Flow's transaction outcome. The plain label derives from
+// it, so only a proven no-effect stop can read as "Stopped before saving".
+function outcomeView(outcome?: string | null): {
+  label: string;
+  tone: "ok" | "warn" | "neutral" | "crit";
+} {
+  if (!outcome) return { label: "In progress", tone: "neutral" };
+  const copy = resultCopy(plainResultForTransaction(outcome));
+  return {
+    label: copy.label,
+    tone: copy.tone === "crit" ? "crit" : copy.tone,
+  };
 }
 
 export function Runner() {
@@ -92,22 +96,21 @@ export function Runner() {
     <div className="content">
       <div className="page-head">
         <div className="titles">
-          <p className="eyebrow">Execute</p>
-          <h1>Runner</h1>
+          <h1>Let Cloud send runs to this computer</h1>
         </div>
       </div>
 
-      <Callout tone="info" title="Hosted execution">
-        OpenAdapt Cloud sends admitted workflows to this computer over outbound
-        HTTPS. Flow checks the exact product and workflow admissions here before
-        it runs. Only approved, PHI-free evidence returns to Cloud.
+      <Callout tone="info" title="How this works">
+        When you turn this on, OpenAdapt Cloud can send approved tasks here.
+        This computer reaches out to Cloud, and Cloud can't reach in. Each
+        task's approval is checked here before it runs, and only results with
+        no PHI go back.
       </Callout>
 
       <Card>
         <CardHead
-          eyebrow="Connection"
-          title="This machine as a runner"
-          sub="Connects through outbound HTTPS. It doesn't open an inbound port."
+          title="This computer"
+          sub="Connects out over HTTPS. It doesn't open an inbound port."
         />
         <div className="row">
           <StatusDot tone={stateTone(status.state)} />
@@ -117,19 +120,19 @@ export function Runner() {
           )}
           <span className="spacer" />
           <Button onClick={toggle} disabled={busy || status.state === "stopping"}>
-            {status.enabled ? "Disable runner" : "Enable runner"}
+            {status.enabled ? "Stop accepting runs" : "Accept runs from Cloud"}
           </Button>
         </div>
         {status.state === "reauth_required" && (
           <Callout tone="warn" title="Sign-in required">
-            The control plane rejected this runner's credentials. Sign in again
-            from Settings, then re-enable the runner.
+            OpenAdapt Cloud didn't accept this computer's sign-in. Sign in
+            again from Settings, then accept runs again.
           </Callout>
         )}
         {status.state === "incompatible" && (
           <Callout tone="warn" title="Update required">
-            Install an admitted Desktop release that includes the current Flow
-            hosted runner. The runner will resume after Desktop restarts.
+            Install a current, approved Desktop release. Runs resume after
+            Desktop restarts.
           </Callout>
         )}
         {status.last_error &&
@@ -141,9 +144,8 @@ export function Runner() {
 
       <Card>
         <CardHead
-          eyebrow="History"
           title="Last runs"
-          sub="Hosted runs handled by this computer."
+          sub="Runs from Cloud that this computer handled."
         />
         {status.last_runs.length === 0 ? (
           <EmptyState
@@ -155,9 +157,11 @@ export function Runner() {
             {status.last_runs.map((run: RunnerRun) => (
               <div className="row" key={run.run_id}>
                 <span className="mono">{run.run_id}</span>
-                <Pill tone={outcomeTone(run.outcome)}>
-                  {run.outcome ?? run.phase ?? "pending"}
-                </Pill>
+                <span title={run.outcome ?? run.phase ?? "pending"}>
+                  <Pill tone={outcomeView(run.outcome).tone}>
+                    {run.outcome ? outcomeView(run.outcome).label : (run.phase ?? "In progress")}
+                  </Pill>
+                </span>
                 {run.updated_at && (
                   <span className="page-sub">
                     {new Date(run.updated_at).toLocaleString()}

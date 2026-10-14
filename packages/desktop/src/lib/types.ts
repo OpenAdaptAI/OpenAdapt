@@ -1,5 +1,7 @@
 // Shared frontend types mirroring the engine's IPC payloads (spec §3).
 
+import type { PlainResultKey } from "./outcomes";
+
 export type DeploymentLane = "cloud" | "byoc";
 export type PhiMode = "off" | "on";
 export type TargetBackend =
@@ -96,6 +98,146 @@ export interface Workflow {
   last_run_state?: StepState;
   open_halts?: number;
   synced?: boolean;
+  /** Plain result key of the last run, derived from its transaction outcome. */
+  last_result?: PlainResultKey | null;
+  /** Items of this task waiting for a person. */
+  open_items?: number;
+  /** Waiting items a person chose to fix by showing the step again. */
+  teaching_items?: number;
+  /** An open item's save may have gone through; more items wait for a check. */
+  blocked?: boolean;
+  /** new: not checked yet; checking: readiness test under way; ready: certified and sealed. */
+  readiness?: "new" | "checking" | "ready";
+  certified?: boolean;
+  encrypted?: boolean;
+  version?: number;
+  capture_id?: string | null;
+  /** What the person said the task does when they recorded it. */
+  task?: string;
+  /** Length of the person's own recording, the default manual baseline. */
+  demo_seconds?: number | null;
+}
+
+/** One row of input values a task ran on, and what happened. Local only. */
+export interface WorkItem {
+  item_id: string;
+  batch_id: string;
+  workflow_id: string;
+  position: number;
+  /** Short local label from the item's first input. Can identify a record. */
+  label: string;
+  run_id?: string | null;
+  status:
+    | "queued"
+    | "done"
+    | "open"
+    | "skipped"
+    | "declined"
+    | "done_by_person"
+    | "confirmed_saved"
+    | "retried"
+    | "teaching";
+  result: PlainResultKey | null;
+  nothing_written: boolean;
+  execution_outcome?: string | null;
+  transaction_outcome?: string | null;
+  halt_kind?: "wrong_record" | "screen_changed" | "save_not_confirmed" | "other" | null;
+  halt_step?: string;
+  halt_reason?: string;
+  expected?: string;
+  observed?: string;
+  duration_s?: number | null;
+  created_at?: string | null;
+  finished_at?: string | null;
+  resolved_at?: string | null;
+  retry_of?: string | null;
+  actions: AttentionAction[];
+}
+
+export type AttentionAction =
+  | "retry"
+  | "skip"
+  | "decline"
+  | "teach"
+  | "confirmed_saved"
+  | "retry_after_check"
+  | "done_by_person"
+  | "handled";
+
+/** An inbox entry: a stopped item, or a stopped run that Cloud sent here. */
+export interface AttentionItem extends Omit<WorkItem, "batch_id" | "position"> {
+  source: "item" | "hosted";
+  task_name: string;
+  batch_id?: string;
+  position?: number;
+}
+
+export interface AttentionScreenshot {
+  ok: boolean;
+  data_url?: string;
+  width?: number;
+  height?: number;
+  focus?: { x: number; y: number } | null;
+  step?: string;
+}
+
+export interface ResultCounts {
+  done_checked: number;
+  needed_person: number;
+  waiting: number;
+  wrong_record_prevented: number;
+  done_by_person: number;
+  skipped: number;
+  declined: number;
+  items: number;
+  baseline_seconds?: number | null;
+  estimated_seconds_saved?: number | null;
+}
+
+export interface ResultsSummary {
+  ok: boolean;
+  total: ResultCounts;
+  tasks: Record<string, ResultCounts>;
+  names: Record<string, string>;
+  recent: (WorkItem & { task_name: string })[];
+}
+
+export interface TaskInputs {
+  ok: boolean;
+  workflow_id: string;
+  inputs?: QualificationParameter[];
+  target?: ExecutionTarget | null;
+  error?: string;
+}
+
+export interface RunItemResponse {
+  ok: boolean;
+  item?: WorkItem;
+  report?: RunReport;
+  pre_action_refusal?: boolean;
+  error?: string;
+}
+
+export interface SampleRun {
+  kind: "normal" | "save_dropped";
+  result: PlainResultKey;
+  nothing_written: boolean;
+  execution_outcome?: string | null;
+  transaction_outcome?: string | null;
+  steps: { index: number; intent: string; ok: boolean; saves: boolean }[];
+  right_record_checks: number;
+  record_checks_confirmed: number;
+  record_checks_failed: number;
+  model_calls?: number | null;
+  inputs: Record<string, string>;
+  screen: AttentionScreenshot | null;
+}
+
+export interface SampleResponse {
+  ok: boolean;
+  seconds?: number;
+  runs?: SampleRun[];
+  error?: string;
 }
 
 export interface FirstWorkflowState {
@@ -581,6 +723,9 @@ export interface RunStep {
 export interface RunReport {
   ok: boolean;
   outcome: ExecutionOutcome;
+  /** Flow's transaction outcome, forwarded only when consistent with `outcome`. */
+  transaction_outcome?: string | null;
+  stop_kind?: WorkItem["halt_kind"];
   pre_action_refusal: false;
   error?: string;
   run_id: string;
@@ -686,6 +831,7 @@ export interface SyncState {
 export interface NeedsAttention {
   count: number;
   open_halts: number;
+  open_items?: number;
   failed_runs: number;
 }
 

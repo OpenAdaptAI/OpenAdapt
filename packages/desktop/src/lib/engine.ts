@@ -37,6 +37,14 @@ export const CMD = {
   GET_RUN_REPORT: "get_run_report",
   RETRY_RUN_PERSISTENCE: "retry_run_persistence",
   TEACH_FIX: "teach_fix",
+  // simple operator surface: items, the Needs-you inbox, Results, the sample
+  GET_TASK_INPUTS: "get_task_inputs",
+  RUN_ITEM: "run_item",
+  LIST_ATTENTION_ITEMS: "list_attention_items",
+  RESOLVE_ATTENTION_ITEM: "resolve_attention_item",
+  GET_ATTENTION_SCREENSHOT: "get_attention_screenshot",
+  GET_RESULTS_SUMMARY: "get_results_summary",
+  RUN_SAMPLE: "run_sample",
   GET_QUALIFICATION: "get_qualification",
   INITIALIZE_QUALIFICATION: "initialize_qualification",
   PROPOSE_QUALIFICATION_FROM_DEMO: "propose_qualification_from_demo",
@@ -135,6 +143,8 @@ export const EVT = {
   ATTENTION_NOTIFICATION: "attention_notification",
   // Local-only coach channel. Never persist this payload into evidence.
   COACH: "coach",
+  // {state: "browser" | "running" | "done" | "failed", detail}
+  SAMPLE_PROGRESS: "sample_progress",
 } as const;
 
 export type EngineEvent = (typeof EVT)[keyof typeof EVT];

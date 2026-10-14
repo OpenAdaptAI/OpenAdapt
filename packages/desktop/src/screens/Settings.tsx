@@ -114,43 +114,104 @@ export function Settings({
   }
 
   return (
-    <div className="content">
-      <div className="page-head">
-        <div className="titles">
-          <p className="eyebrow">Configure</p>
+    <div className="content simple">
+      <div className="simple-head">
+        <div>
           <h1>Settings</h1>
+          <p className="simple-sub">
+            Your account, where your data stays, and how OpenAdapt works on
+            this computer.
+          </p>
         </div>
       </div>
 
       <Card>
         <CardHead
-          eyebrow="Routing"
-          title="Deployment lane"
-          sub="Where compile, replay, and teach run — and whether recordings may leave this machine."
+          title="Account"
+          sub={
+            auth.authenticated
+              ? "Connected to OpenAdapt Cloud."
+              : "Local only. OpenAdapt works on this computer without an account."
+          }
         />
-        <Field label="Lane">
-          <SegControl<DeploymentLane>
-            value={cfg.deployment_lane}
-            onChange={(v) => save("deployment_lane", v)}
-            options={[
-              { value: "cloud", label: "Cloud (non-PHI)" },
-              { value: "byoc", label: "BYOC / self-hosted (PHI)" },
-            ]}
-          />
-        </Field>
-        {cfg.deployment_lane === "byoc" && (
-          <Callout tone="warn" title="PHI boundary active">
-            Recordings, bundles, and corrections stay on this machine. Only
-            PHI-free break descriptors sync to the dashboard for triage.
+        <div className="row">
+          {auth.authenticated && auth.org_id && (
+            <span className="page-sub mono">{auth.org_id}</span>
+          )}
+          {auth.authenticated && (
+            <Button
+              variant="ghost"
+              onClick={() => openExternal(`${cfg.host}/dashboard`)}
+            >
+              Open Cloud dashboard
+            </Button>
+          )}
+          {auth.authenticated ? (
+            <Button
+              variant="danger"
+              onClick={async () => {
+                await engineInvoke(CMD.LOGOUT, {}).catch(() => {});
+                onSignedOut();
+              }}
+            >
+              Sign out
+            </Button>
+          ) : (
+            <Button variant="primary" onClick={onConnectCloud}>
+              Connect to OpenAdapt Cloud
+            </Button>
+          )}
+        </div>
+        <details className="technical">
+          <summary>Cloud address (for IT)</summary>
+          <div className="technical-body">
+            <Field label="Host">
+              <input
+                className="input"
+                value={cfg.host}
+                onChange={(e) => setCfg((current) => ({ ...current, host: e.target.value }))}
+                onBlur={(e) => void save("host", e.target.value)}
+                spellCheck={false}
+              />
+            </Field>
+            {auth.kind && <span className="page-sub mono">{auth.kind}</span>}
+          </div>
+        </details>
+        {configError && (
+          <Callout tone="warn" title="That setting didn't change">
+            {configError}
           </Callout>
         )}
       </Card>
 
       <Card>
-        <CardHead eyebrow="Privacy" title="PHI mode" />
+        <CardHead
+          title="Where your data stays"
+          sub="Choose where recordings and tasks live, and whether they can leave this computer."
+        />
+        <Field label="Data location">
+          <SegControl<DeploymentLane>
+            value={cfg.deployment_lane}
+            onChange={(v) => save("deployment_lane", v)}
+            options={[
+              { value: "cloud", label: "OpenAdapt Cloud (no PHI)" },
+              { value: "byoc", label: "Your own environment (PHI allowed)" },
+            ]}
+          />
+        </Field>
+        {cfg.deployment_lane === "byoc" && (
+          <Callout tone="info" title="Patient data stays here">
+            Recordings, tasks, and fixes stay on this computer. Only a short
+            note about each stopped run, with no PHI, goes to your dashboard.
+          </Callout>
+        )}
+      </Card>
+
+      <Card>
+        <CardHead title="Sensitive data" />
         <Field
           label="PHI mode"
-          hint="On enforces fail-closed scrubbing and disables cloud push of raw recordings."
+          hint="When on, OpenAdapt removes sensitive data before any upload and blocks the upload if it can't. Raw recordings never go to Cloud."
         >
           <SegControl<PhiMode>
             value={cfg.phi_mode}
@@ -167,9 +228,8 @@ export function Settings({
 
       <Card>
         <CardHead
-          eyebrow="On-screen controls"
-          title="Control overlay"
-          sub="A compact always-on-top status and control surface appears while OpenAdapt records or executes. It never displays screenshots, typed values, or identity evidence."
+          title="On-screen controls"
+          sub="A small status panel stays on top while OpenAdapt records or runs. It never shows screenshots, typed values, or patient details."
         />
         <label className="check-row">
           <input
@@ -196,54 +256,10 @@ export function Settings({
       </Card>
 
       <Card>
-        <CardHead eyebrow="Connection" title="Hosted organization" />
-        <Field label="Host">
-          <input
-            className="input"
-            value={cfg.host}
-            onChange={(e) => setCfg((current) => ({ ...current, host: e.target.value }))}
-            onBlur={(e) => void save("host", e.target.value)}
-            spellCheck={false}
-          />
-        </Field>
-        {configError && (
-          <Callout tone="warn" title="Hosted setting unchanged">
-            {configError}
-          </Callout>
-        )}
-        <div className="row">
-          <Pill tone={auth.authenticated ? "ok" : "neutral"}>
-            {auth.authenticated ? "signed in" : "not signed in"}
-          </Pill>
-          {auth.kind && <span className="page-sub mono">{auth.kind}</span>}
-          {auth.org_id && <span className="page-sub mono">{auth.org_id}</span>}
-          <span className="spacer" />
-          <Button
-            variant="ghost"
-            onClick={() => openExternal(`${cfg.host}/dashboard`)}
-          >
-            Open cloud dashboard
-          </Button>
-          {auth.authenticated ? (
-            <Button
-              variant="danger"
-              onClick={async () => {
-                await engineInvoke(CMD.LOGOUT, {}).catch(() => {});
-                onSignedOut();
-              }}
-            >
-              Sign out
-            </Button>
-          ) : (
-            <Button variant="primary" onClick={onConnectCloud}>
-              Connect Cloud
-            </Button>
-          )}
-        </div>
-      </Card>
-
-      <Card>
-        <CardHead eyebrow="Maintenance" title="Updates" />
+        <CardHead
+          title="Version and updates"
+          sub="Automatic updates stay off until signed releases ship. Each new release has to be installed by hand."
+        />
         <div className="row">
           <Button variant="ghost" onClick={checkUpdate}>
             Check for updates
@@ -285,25 +301,29 @@ function GroundingModelCard({
   return (
     <Card>
       <CardHead
-        eyebrow="Grounding"
-        title="Grounding model"
-        sub="How OpenAdapt locates on-screen targets. Fully local by default; the model rung is a last-resort fallback for surfaces with no usable text."
+        title="How OpenAdapt finds buttons and fields"
+        sub="It works on this computer by default. An AI model is used only as a last resort, and only if your admin turns it on."
       />
 
-      <Callout tone="info" title="Grounding is local by default">
-        Targets are located with a local ladder (structural / OCR) that makes zero
-        outbound calls. The grounding-<em>model</em> rung is consulted only when the
-        local rungs cannot locate a target on a text-less surface. Enabling the rung
-        does not by itself send pixels off this machine — model-grounding egress is a
-        separate opt-in. In PHI mode, egress is permitted only to attested
-        allowlisted endpoints; public aggregators (e.g. OpenRouter) are blocked
-        unless a signed BAA is attested.
-      </Callout>
+      <details className="technical">
+        <summary>Technical details</summary>
+        <div className="technical-body">
+          <p className="technical-text">
+            Targets are located with a local ladder (structural and OCR) that
+            makes no outbound calls. The grounding-model rung is consulted only
+            when the local rungs can't locate a target on a surface with no
+            usable text. Turning the rung on doesn't by itself send pixels off
+            this computer; model-grounding egress is a separate opt-in. In PHI
+            mode, egress is allowed only to attested allowlisted endpoints, and
+            public aggregators are blocked unless a signed BAA is attested.
+          </p>
+        </div>
+      </details>
 
       {gm === null ? (
         <p className="page-sub" style={{ marginTop: "var(--space-3)" }}>
-          Managed by your organization. This governed setting is resolved by the
-          cloud control plane; sign in and open the dashboard to view or change it.
+          Your organization manages this setting in OpenAdapt Cloud. Sign in
+          and open the dashboard to see or change it.
         </p>
       ) : (
         <>

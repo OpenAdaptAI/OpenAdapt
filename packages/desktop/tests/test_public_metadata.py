@@ -96,6 +96,15 @@ def test_record_lifecycle_uses_workflow_command_timeout() -> None:
     assert '"stop_recording"' in workflow_match
     assert '"replay_first_workflow"' in workflow_match
     assert '"export_presentation_video"' in workflow_match
+    # Commands that drive the target app through Flow must not time out
+    # while the run is still going; the UI would report a lost result.
+    for long_running in (
+        '"run_item"',
+        '"resolve_attention_item"',
+        '"run_sample"',
+        '"run_qualification_case"',
+    ):
+        assert long_running in workflow_match
 
 
 def test_readme_does_not_publish_hard_coded_package_version_claims() -> None:

@@ -11,7 +11,10 @@
 
 const HALTED_WORKFLOW = 'wf-claims-review-handoff';
 const VERIFIED_WORKFLOW = 'wf-invoice-review-handoff';
+const NEW_WORKFLOW = 'wf-referral-intake';
 
+// Fields the operator screens read (readiness, open items, the task text, the
+// recording length) are part of the same projection the engine sends.
 export const WORKFLOWS = [
   {
     id: HALTED_WORKFLOW,
@@ -21,6 +24,16 @@ export const WORKFLOWS = [
     last_run_state: 'halted',
     open_halts: 1,
     synced: true,
+    last_result: 'stopped_before_saving',
+    open_items: 1,
+    blocked: false,
+    readiness: 'ready',
+    certified: true,
+    encrypted: true,
+    version: 2,
+    capture_id: 'cap-claims',
+    task: 'Add a claim status note to a member record',
+    demo_seconds: 74,
   },
   {
     id: VERIFIED_WORKFLOW,
@@ -30,8 +43,240 @@ export const WORKFLOWS = [
     last_run_state: 'verified',
     open_halts: 0,
     synced: true,
+    last_result: 'done_checked',
+    open_items: 0,
+    blocked: false,
+    readiness: 'checking',
+    certified: false,
+    encrypted: false,
+    version: 1,
+    capture_id: 'cap-invoice',
+    task: 'Mark an invoice as reviewed and hand it to billing',
+    demo_seconds: 52,
   },
 ];
+
+// A third task, only in the operator-screen captures: shown, not yet checked.
+export const NEW_TASK = {
+  id: NEW_WORKFLOW,
+  name: 'Referral intake entry',
+  steps: 9,
+  updated_at: '2026-08-26T15:02:00Z',
+  last_run_state: null,
+  open_halts: 0,
+  synced: false,
+  last_result: null,
+  open_items: 0,
+  blocked: false,
+  readiness: 'new',
+  certified: false,
+  encrypted: false,
+  version: 1,
+  capture_id: 'cap-referral',
+  task: 'Enter a faxed referral into the EMR',
+  demo_seconds: 640,
+};
+
+// A generic, synthetic application screen. No vendor's layout, name, or
+// trade dress; every value is invented.
+function syntheticScreen({ banner, member, note, saved }) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="800" viewBox="0 0 1280 800">
+<rect width="1280" height="800" fill="#f4f6f8"/>
+<rect width="1280" height="56" fill="#2f4858"/>
+<text x="28" y="35" font-family="Helvetica, Arial, sans-serif" font-size="20" fill="#ffffff" font-weight="700">Sample practice portal</text>
+<text x="300" y="35" font-family="Helvetica, Arial, sans-serif" font-size="14" fill="#d7e1e8">Synthetic data for screenshots</text>
+<rect x="28" y="84" width="880" height="52" fill="#e6edf3" stroke="#9fb3c4"/>
+<text x="46" y="117" font-family="Helvetica, Arial, sans-serif" font-size="18" fill="#1d2a33">${member}</text>
+${banner ? `<rect x="28" y="152" width="880" height="44" fill="#dff3e6" stroke="#5aa874"/><text x="46" y="180" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#1e5b33">${banner}</text>` : ''}
+<text x="28" y="246" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#3b4a55">Claim status note</text>
+<rect x="28" y="258" width="560" height="44" fill="#ffffff" stroke="#9fb3c4"/>
+<text x="42" y="286" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#1d2a33">${note}</text>
+<rect x="28" y="330" width="150" height="42" rx="4" fill="${saved ? '#8aa0b1' : '#2f6fa3'}"/>
+<text x="76" y="357" font-family="Helvetica, Arial, sans-serif" font-size="16" fill="#ffffff">Save</text>
+<text x="28" y="430" font-family="Helvetica, Arial, sans-serif" font-size="18" fill="#1d2a33" font-weight="700">Notes on this claim</text>
+<text x="40" y="462" font-family="Helvetica, Arial, sans-serif" font-size="15" fill="#3b4a55">${saved ? 'Reviewed (today)' : 'No notes yet'}</text>
+</svg>`;
+  return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
+}
+
+const STOPPED_SCREEN = syntheticScreen({
+  banner: '',
+  member: 'Member M-4822   Alex Sample   DOB 1980-01-01',
+  note: 'Reviewed',
+  saved: false,
+});
+
+export const ATTENTION_ITEMS = [
+  {
+    item_id: 'item-0001',
+    source: 'item',
+    workflow_id: HALTED_WORKFLOW,
+    task_name: 'Claims review handoff',
+    batch_id: 'batch-1',
+    position: 3,
+    label: 'M-4821',
+    run_id: 'run-0004',
+    status: 'open',
+    result: 'stopped_before_saving',
+    nothing_written: true,
+    execution_outcome: 'HALTED',
+    transaction_outcome: 'HALTED_BEFORE_EFFECT',
+    halt_kind: 'wrong_record',
+    halt_step: "click 'Save'",
+    halt_reason: 'Identity mismatch on the record banner before the save.',
+    expected: 'M-4821',
+    observed: 'M-4822',
+    created_at: '2026-08-26T14:12:00Z',
+    actions: ['retry', 'skip', 'decline', 'teach'],
+  },
+  {
+    item_id: 'item-0002',
+    source: 'item',
+    workflow_id: HALTED_WORKFLOW,
+    task_name: 'Claims review handoff',
+    batch_id: 'batch-1',
+    position: 7,
+    label: 'M-5530',
+    run_id: 'run-0008',
+    status: 'open',
+    result: 'check_record',
+    nothing_written: false,
+    execution_outcome: 'HALTED',
+    transaction_outcome: 'RECONCILIATION_REQUIRED',
+    halt_kind: 'save_not_confirmed',
+    halt_step: "click 'Save'",
+    halt_reason: 'The record check could not confirm the saved note.',
+    expected: '',
+    observed: '',
+    created_at: '2026-08-26T14:31:00Z',
+    actions: ['confirmed_saved', 'retry_after_check', 'done_by_person'],
+  },
+];
+
+export const ATTENTION_SCREENSHOT = {
+  ok: true,
+  data_url: STOPPED_SCREEN,
+  width: 1280,
+  height: 800,
+  focus: { x: 300, y: 110 },
+  step: "click 'Save'",
+};
+
+export const RESULTS_SUMMARY = {
+  ok: true,
+  total: {
+    done_checked: 38, needed_person: 4, waiting: 2, wrong_record_prevented: 1,
+    done_by_person: 1, skipped: 1, declined: 0, items: 42,
+  },
+  tasks: {
+    [HALTED_WORKFLOW]: {
+      done_checked: 31, needed_person: 3, waiting: 2, wrong_record_prevented: 1,
+      done_by_person: 1, skipped: 0, declined: 0, items: 34,
+      baseline_seconds: 74, estimated_seconds_saved: 2294,
+    },
+    [VERIFIED_WORKFLOW]: {
+      done_checked: 7, needed_person: 1, waiting: 0, wrong_record_prevented: 0,
+      done_by_person: 0, skipped: 1, declined: 0, items: 8,
+      baseline_seconds: 52, estimated_seconds_saved: 364,
+    },
+  },
+  names: {
+    [HALTED_WORKFLOW]: 'Claims review handoff',
+    [VERIFIED_WORKFLOW]: 'Invoice review handoff',
+  },
+  recent: [
+    { item_id: 'r1', batch_id: 'b', workflow_id: HALTED_WORKFLOW, position: 7, label: 'M-5530', status: 'open', result: 'check_record', nothing_written: false, execution_outcome: 'HALTED', transaction_outcome: 'RECONCILIATION_REQUIRED', finished_at: '2026-08-26T14:31:00Z', actions: [], task_name: 'Claims review handoff' },
+    { item_id: 'r2', batch_id: 'b', workflow_id: HALTED_WORKFLOW, position: 6, label: 'M-5529', status: 'done', result: 'done_checked', nothing_written: false, execution_outcome: 'VERIFIED', transaction_outcome: 'VERIFIED', finished_at: '2026-08-26T14:29:00Z', actions: [], task_name: 'Claims review handoff' },
+    { item_id: 'r3', batch_id: 'b', workflow_id: HALTED_WORKFLOW, position: 5, label: 'M-5528', status: 'done', result: 'done_checked', nothing_written: false, execution_outcome: 'VERIFIED', transaction_outcome: 'VERIFIED', finished_at: '2026-08-26T14:27:00Z', actions: [], task_name: 'Claims review handoff' },
+    { item_id: 'r4', batch_id: 'b', workflow_id: HALTED_WORKFLOW, position: 3, label: 'M-4821', status: 'open', result: 'stopped_before_saving', nothing_written: true, execution_outcome: 'HALTED', transaction_outcome: 'HALTED_BEFORE_EFFECT', finished_at: '2026-08-26T14:12:00Z', actions: [], task_name: 'Claims review handoff' },
+    { item_id: 'r5', batch_id: 'c', workflow_id: VERIFIED_WORKFLOW, position: 1, label: 'INV-2207', status: 'done', result: 'done_checked', nothing_written: false, execution_outcome: 'VERIFIED', transaction_outcome: 'VERIFIED', finished_at: '2026-08-26T13:48:00Z', actions: [], task_name: 'Invoice review handoff' },
+  ],
+};
+
+export const TASK_INPUTS = {
+  [HALTED_WORKFLOW]: {
+    ok: true,
+    workflow_id: HALTED_WORKFLOW,
+    inputs: [
+      { name: 'member_id', type: 'string', secret: false, required: true, example: 'M-4821', choices: [] },
+      { name: 'status_note', type: 'string', secret: false, required: true, example: 'Reviewed', choices: [] },
+    ],
+    target: { backend: 'web', url: 'https://portal.example.test/claims' },
+  },
+  [VERIFIED_WORKFLOW]: {
+    ok: true,
+    workflow_id: VERIFIED_WORKFLOW,
+    inputs: [
+      { name: 'invoice_id', type: 'string', secret: false, required: true, example: 'INV-2207', choices: [] },
+    ],
+    target: { backend: 'web', url: 'https://billing.example.test' },
+  },
+  [NEW_WORKFLOW]: {
+    ok: true,
+    workflow_id: NEW_WORKFLOW,
+    inputs: [],
+    target: { backend: 'citrix', rdp_readiness_text: 'Referrals' },
+  },
+};
+
+export const SAMPLE_RESPONSE = {
+  ok: true,
+  seconds: 71.4,
+  runs: [
+    {
+      kind: 'normal',
+      result: 'done_checked',
+      nothing_written: false,
+      execution_outcome: 'VERIFIED',
+      transaction_outcome: 'VERIFIED',
+      steps: [
+        { index: 0, intent: "click 'Open'", ok: true, saves: false },
+        { index: 1, intent: "click 'New Encounter'", ok: true, saves: false },
+        { index: 2, intent: "click 'Triage'", ok: true, saves: false },
+        { index: 3, intent: 'type <note>', ok: true, saves: false },
+        { index: 4, intent: "click 'Save Encounter'", ok: true, saves: true },
+      ],
+      right_record_checks: 4,
+      record_checks_confirmed: 2,
+      record_checks_failed: 0,
+      model_calls: 0,
+      inputs: { note: 'Synthetic follow-up in two weeks' },
+      screen: {
+        ok: true,
+        data_url: syntheticScreen({ banner: 'Saved: Synthetic follow-up in two weeks', member: 'Jane Sample   MRN P1   DOB 1980-01-01', note: 'Synthetic follow-up in two weeks', saved: true }),
+        width: 1280,
+        height: 800,
+        focus: null,
+      },
+    },
+    {
+      kind: 'save_dropped',
+      result: 'check_record',
+      nothing_written: false,
+      execution_outcome: 'HALTED',
+      transaction_outcome: 'RECONCILIATION_REQUIRED',
+      steps: [
+        { index: 0, intent: "click 'Open'", ok: true, saves: false },
+        { index: 1, intent: "click 'New Encounter'", ok: true, saves: false },
+        { index: 2, intent: "click 'Triage'", ok: true, saves: false },
+        { index: 3, intent: 'type <note>', ok: true, saves: false },
+        { index: 4, intent: "click 'Save Encounter'", ok: false, saves: true },
+      ],
+      right_record_checks: 4,
+      record_checks_confirmed: 0,
+      record_checks_failed: 1,
+      model_calls: 0,
+      inputs: { note: 'Synthetic follow-up in two weeks' },
+      screen: {
+        ok: true,
+        data_url: syntheticScreen({ banner: 'Saved: Synthetic follow-up in two weeks', member: 'Jane Sample   MRN P1   DOB 1980-01-01', note: 'Synthetic follow-up in two weeks', saved: false }),
+        width: 1280,
+        height: 800,
+        focus: null,
+      },
+    },
+  ],
+};
 
 const STEPS = [
   { index: 0, action: 'open', target: 'Practice portal', state: 'verified', latency_ms: 412, effect: null },
@@ -558,16 +803,27 @@ const QUALIFICATIONS = {
 };
 
 // The IPC surface, as a plain table so it serializes into the page.
-export function ipcTable({ authenticated, workflows, permissions }) {
+export function ipcTable({ authenticated, workflows, permissions, operator = false }) {
+  const attention = operator ? ATTENTION_ITEMS : [];
   return {
+    get_task_inputs: TASK_INPUTS,
+    list_attention_items: { ok: true, items: attention },
+    get_attention_screenshot: ATTENTION_SCREENSHOT,
+    get_results_summary: operator
+      ? RESULTS_SUMMARY
+      : { ok: true, total: { ...RESULTS_SUMMARY.total, done_checked: 0, needed_person: 0, waiting: 0, wrong_record_prevented: 0, done_by_person: 0, skipped: 0, items: 0 }, tasks: {}, names: {}, recent: [] },
+    run_sample: SAMPLE_RESPONSE,
+    propose_qualification_from_demo: { ok: false, error: 'Fixture: proposal not shown.' },
     get_auth_status: authenticated
       ? { authenticated: true, kind: 'ingest_token', host: 'app.openadapt.ai', org_id: 'org_demo' }
       : { authenticated: false },
     get_workflows: workflows,
     get_first_workflow_state: { ok: true, state: null },
     get_needs_attention: {
-      count: workflows.some((w) => w.open_halts) ? 1 : 0,
+      // One count for the badge, the task cards, and the inbox.
+      count: workflows.reduce((sum, w) => sum + (w.open_items || 0) + (w.open_halts || 0), 0),
       open_halts: workflows.some((w) => w.open_halts) ? 1 : 0,
+      open_items: attention.length,
       failed_runs: 0,
     },
     get_sync_state: { state: 'synced', queued: 0 },
@@ -581,7 +837,7 @@ export function ipcTable({ authenticated, workflows, permissions }) {
     get_effective_policy: null,
     get_presentation_export_status: { ready: false, reason: 'Nothing is recorded yet.' },
     get_config: {
-      lane: 'byoc',
+      deployment_lane: 'byoc',
       phi_mode: 'on',
       host: 'app.openadapt.ai',
       grounding: 'managed',
@@ -596,4 +852,4 @@ export function ipcTable({ authenticated, workflows, permissions }) {
   };
 }
 
-export const IDS = { HALTED_WORKFLOW, VERIFIED_WORKFLOW };
+export const IDS = { HALTED_WORKFLOW, VERIFIED_WORKFLOW, NEW_WORKFLOW };

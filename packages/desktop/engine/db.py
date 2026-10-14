@@ -43,6 +43,14 @@ _HALT_COLUMNS = frozenset({
     "drift_signature", "status", "teach_url", "resolved_at",
 })
 
+# One input row a task ran on, and the person decision that followed a stop.
+# Input values stay in this local database inside the customer boundary.
+_WORK_ITEM_COLUMNS = frozenset({
+    "run_id", "execution_outcome", "transaction_outcome", "halt_kind",
+    "halt_step", "halt_reason", "expected", "observed", "status",
+    "duration_s", "finished_at", "resolved_at",
+})
+
 _SCHEMA = """\
 CREATE TABLE IF NOT EXISTS captures (
     capture_id TEXT PRIMARY KEY,
@@ -125,7 +133,40 @@ CREATE TABLE IF NOT EXISTS first_workflow_state (
     updated_at TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS work_items (
+    item_id TEXT PRIMARY KEY,
+    batch_id TEXT NOT NULL,
+    workflow_id TEXT NOT NULL,
+    position INTEGER NOT NULL DEFAULT 0,
+    label TEXT DEFAULT '',
+    inputs_json TEXT NOT NULL DEFAULT '{}',
+    inputs_digest TEXT NOT NULL,
+    run_id TEXT,
+    execution_outcome TEXT,
+    transaction_outcome TEXT,
+    halt_kind TEXT,
+    halt_step TEXT DEFAULT '',
+    halt_reason TEXT DEFAULT '',
+    expected TEXT DEFAULT '',
+    observed TEXT DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'queued',
+    duration_s REAL,
+    retry_of TEXT,
+    created_at TEXT NOT NULL,
+    finished_at TEXT,
+    resolved_at TEXT
+);
+
+-- Where a task was recorded, so Check it and Run it start from the same app.
+-- Local only: a target can name an internal host or window.
+CREATE TABLE IF NOT EXISTS task_targets (
+    capture_id TEXT PRIMARY KEY,
+    target_json TEXT NOT NULL,
+    updated_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_captures_review ON captures(review_status);
+CREATE INDEX IF NOT EXISTS idx_work_items_workflow ON work_items(workflow_id, status);
 CREATE INDEX IF NOT EXISTS idx_captures_tier ON captures(tier);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON upload_jobs(status);
 CREATE INDEX IF NOT EXISTS idx_jobs_capture ON upload_jobs(capture_id);
@@ -406,6 +447,37 @@ class IndexDB:
         )
         self.conn.commit()
 
+    # --- Where each task was recorded ---
+
+    def set_task_target(self, capture_id: str, target: dict) -> None:
+        """Remember the application target one recording used."""
+
+        self.conn.execute(
+            "INSERT INTO task_targets (capture_id, target_json, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(capture_id) DO UPDATE SET "
+            "target_json = excluded.target_json, updated_at = excluded.updated_at",
+            (
+                capture_id,
+                json.dumps(target, sort_keys=True, separators=(",", ":")),
+                _now(),
+            ),
+        )
+        self.conn.commit()
+
+    def get_task_target(self, capture_id: str) -> dict | None:
+        """The application target a recording used, if Desktop knows it."""
+
+        row = self.conn.execute(
+            "SELECT target_json FROM task_targets WHERE capture_id = ?", (capture_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        try:
+            target = json.loads(row["target_json"])
+        except (TypeError, json.JSONDecodeError):
+            return None
+        return target if isinstance(target, dict) else None
+
     # --- Run operations (local replay/run executions) ---
 
     def insert_run(
@@ -482,6 +554,70 @@ class IndexDB:
     def update_halt(self, halt_id: str, **fields: object) -> None:
         """Update fields on a halt record."""
         _update(self.conn, "halts", "halt_id", halt_id, fields, _HALT_COLUMNS)
+
+    # --- Work items (one input row of a task run) ---
+
+    def insert_work_item(
+        self,
+        item_id: str,
+        *,
+        batch_id: str,
+        workflow_id: str,
+        position: int,
+        label: str,
+        inputs_json: str,
+        inputs_digest: str,
+        retry_of: str | None = None,
+    ) -> None:
+        """Record one queued item before its run starts."""
+        self.conn.execute(
+            "INSERT INTO work_items (item_id, batch_id, workflow_id, position, label,"
+            " inputs_json, inputs_digest, status, retry_of, created_at)"
+            " VALUES (?, ?, ?, ?, ?, ?, ?, 'queued', ?, ?)",
+            (
+                item_id,
+                batch_id,
+                workflow_id,
+                position,
+                label,
+                inputs_json,
+                inputs_digest,
+                retry_of,
+                _now(),
+            ),
+        )
+        self.conn.commit()
+
+    def get_work_item(self, item_id: str) -> dict | None:
+        """Get one work item by ID."""
+        row = self.conn.execute(
+            "SELECT * FROM work_items WHERE item_id = ?", (item_id,)
+        ).fetchone()
+        return dict(row) if row else None
+
+    def list_work_items(
+        self,
+        *,
+        workflow_id: str | None = None,
+        statuses: tuple[str, ...] | None = None,
+        limit: int = 1000,
+    ) -> list[dict]:
+        """List work items, newest first, optionally by task and status."""
+        query = "SELECT * FROM work_items WHERE 1=1"
+        params: list[object] = []
+        if workflow_id is not None:
+            query += " AND workflow_id = ?"
+            params.append(workflow_id)
+        if statuses:
+            query += f" AND status IN ({', '.join('?' for _ in statuses)})"
+            params.extend(statuses)
+        query += " ORDER BY created_at DESC, position DESC LIMIT ?"
+        params.append(limit)
+        return [dict(r) for r in self.conn.execute(query, params).fetchall()]
+
+    def update_work_item(self, item_id: str, **fields: object) -> None:
+        """Update fields on one work item."""
+        _update(self.conn, "work_items", "item_id", item_id, fields, _WORK_ITEM_COLUMNS)
 
 
 def _update(

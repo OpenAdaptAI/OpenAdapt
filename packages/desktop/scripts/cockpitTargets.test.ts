@@ -47,6 +47,16 @@ const PUBLISHED_WEB = [
 
 const PUBLISHED_DOCS = ["program-workbench-desktop.png"];
 
+// This repository's README, docs/assets/operator/.
+const PUBLISHED_README = [
+  "tasks.png",
+  "needs-you.png",
+  "results.png",
+  "check-it.png",
+  "run-it.png",
+  "sample.png",
+];
+
 const names = (consumer: string) =>
   targetsFor(consumer)
     .map((target) => target.file)
@@ -61,12 +71,18 @@ describe("cockpit capture contract", () => {
     expect(names(CONSUMERS.OPS)).toEqual([...PUBLISHED_DOCS].sort());
   });
 
+  it("covers every operator screen this README publishes, and shoots nothing extra", () => {
+    expect(names(CONSUMERS.README)).toEqual([...PUBLISHED_README].sort());
+  });
+
   it("gives every target a consumer, so none escapes both published lists", () => {
     const known = new Set(Object.values(CONSUMERS));
     for (const target of TARGETS) {
       expect(known.has(target.consumer), `${target.file} needs a known consumer`).toBe(true);
     }
-    expect(TARGETS).toHaveLength(PUBLISHED_WEB.length + PUBLISHED_DOCS.length);
+    expect(TARGETS).toHaveLength(
+      PUBLISHED_WEB.length + PUBLISHED_DOCS.length + PUBLISHED_README.length,
+    );
   });
 
   it("shoots every cockpit image at the geometry the published manifest records", () => {

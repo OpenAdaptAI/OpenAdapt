@@ -4,24 +4,80 @@
 [![Python 3.11+](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 
-The desktop app you record workflows in, watch them run, and teach when they
-halt. It's a Tauri shell driving a frozen Python engine, and the engine embeds
-the exact `openadapt-flow` runtime it was built against, so there's no separate
-Python to install.
+OpenAdapt Desktop takes the last manual step off your team: entering approved
+information into the systems you already use, like EMRs, payer portals, and
+desktop or Citrix apps, and checking that it saved. When something doesn't
+match, it stops and asks a person instead of guessing.
+
+<p align="center">
+  <img src="docs/assets/operator/tasks.png" width="860" alt="OpenAdapt Desktop Tasks screen with synthetic data: three tasks, each with one status and one next step">
+</p>
+
+## What changes in your team's day
+
+| | Today | With OpenAdapt Desktop |
+| --- | --- | --- |
+| The repeated entry | A person keys the same fields into the app for every item on the list | OpenAdapt enters them in the same app, one item after another |
+| The right record | The person rereads the screen before saving | OpenAdapt checks that the record on screen matches the item before it types |
+| Did it save? | Found out later, if at all | OpenAdapt reads the saved record back and marks the item done and checked |
+| Something doesn't match | Someone notices downstream | OpenAdapt stops before saving and asks one question in Needs you |
+| The app's screen changes | Staff work around it | OpenAdapt finds the same field again, or stops at that step so a person can show it the right way once |
+
+## How it works
+
+1. **Show it.** Do the task once, on a test record, in the app where you
+   already do it.
+2. **Check it.** Confirm what the task changes, how OpenAdapt makes sure it's
+   the right record, and how it confirms the save. Run one practice item, then
+   approve.
+3. **Run it.** Paste a list, open a spreadsheet saved as CSV, or type one item.
+   OpenAdapt works through the list and checks each record.
+
+Three tabs cover the rest of the day. **Tasks** shows each task's next step.
+**Needs you** holds every item OpenAdapt stopped on, each with one question to
+answer. **Results** shows what got done and checked, what needed a person, the
+wrong-record saves it prevented, and an estimate of time saved that shows its
+own baseline. Settings and the expert tools sit behind the gear.
+
+<p align="center">
+  <img src="docs/assets/operator/needs-you.png" width="430" alt="Needs you with synthetic data: OpenAdapt was given member M-4821, the screen showed M-4822, and it stopped before saving">
+  <img src="docs/assets/operator/results.png" width="430" alt="Results with synthetic data: items done and checked, items that needed a person, one wrong-record save prevented, and a labeled time estimate">
+</p>
+
+Every result comes from the engine's own outcome for that run:
+
+| Result | What it means |
+| --- | --- |
+| Done and checked | It saved the entry and read the record back to confirm it. |
+| Stopped before saving | Something didn't match, so it stopped before changing anything. Nothing was written. |
+| Check the record | A save may have gone through. A person checks the record before anything is retried, and OpenAdapt never retries it on its own. |
+| Finished, not checked | It did the steps but didn't confirm the saved result. |
+| Didn't finish | It couldn't complete the task. The result says whether anything could have been written. |
+
+"Nothing was written" appears only when the engine proved it. The screenshots
+use synthetic data from the app's own fixture harness
+([provenance](docs/assets/operator/provenance.json)).
+
+## Try it
+
+In the app, **See it work on a sample app** runs a built-in sample clinic app
+with made-up patients in a hidden browser on your computer. It needs no account
+and no operating-system permission. You see one run that saves and checks, and
+one where the app says "saved" but the record disagrees.
 
 **There is no trusted signed build to download right now.** The next native
 release is blocked until macOS has Developer ID plus notarization, Windows has
 Authenticode, and the exact Linux bytes verify under GitHub OIDC attestation.
 The latest engine wheel is `v0.16.0`. Native is still `desktop-v0.15.0`; skip
-those installers. They keep their original ad-hoc and unsigned labels. If you
-want to run an OpenAdapt workflow today, use the launcher:
+those installers. They keep their original ad-hoc and unsigned labels. To try
+the same sample without the app, use the launcher:
 
 ```bash
 python -m pip install --upgrade openadapt
 openadapt flow tutorial
 ```
 
-To see a governed halt on the same certified bundle:
+To watch a run catch a bad save and stop:
 
 ```bash
 openadapt quickstart --break-it
@@ -30,7 +86,10 @@ openadapt quickstart --break-it
 [Documentation](https://docs.openadapt.ai) ·
 [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) ·
 [Which release to download](RELEASES.md) ·
+[The operator screens](docs/OPERATOR_SCREENS.md) ·
 [Implementation status](docs/IMPLEMENTATION_STATUS.md)
+
+## For engineers and IT
 
 > **Role: installed authoring and operation companion.** The compiler and the
 > governed runtime are `openadapt-flow`; this repository publishes release
@@ -39,28 +98,29 @@ openadapt quickstart --break-it
 > holds a current admission for its exact artifacts. Absent, inactive, expired,
 > or revoked, and that release is **not actively admitted**.
 
-## What the cockpit does
-
 Start without an account, or connect a Cloud workspace with system-browser PKCE
-or a one-time token held in the OS keychain. Then the shell renders a left-rail
-cockpit over the live engine:
+or a one-time token held in the OS keychain. The shell has three tabs and a
+gear menu over the live engine:
 
 | Screen | What it does |
 | --- | --- |
-| Workflows | The library: what you recorded, what compiled, where each one stands |
-| Record & review | Start and stop a capture, then step through the local review gate before anything leaves the machine |
-| Runner | Pick Browser, Windows, macOS, Linux, RDP, or Citrix, give it only that target's connection details, and watch the live rail, the step log, and the halt evidence |
-| Phone | Pair a phone with a QR code and answer a halted step from it |
-| Settings | Host, deployment lane, credentials, local preferences |
+| Tasks | One card per recorded task with one status and one next step: Check it, Run it, Show it, or Needs you |
+| Needs you | Every stopped item, with the plain question, what was prevented, the stopped screen, and only the choices the transaction outcome allows |
+| Results | Items done and checked, items that needed a person, wrong-record saves prevented, and a labeled time estimate |
+| Check it | The short readiness test, built on the same qualification commands as the exact checks |
+| Run it | Runs a checked task on a pasted list, a CSV, or one typed item through a private params file per item |
+| Gear: Settings | Account, where data stays, PHI mode, how OpenAdapt finds fields on screen, the overlay, updates |
+| Gear: Advanced | Exact checks (the full qualification contract), every task version with replay and governed run, recording with all options, the Cloud runner, phone pairing, and recording setup |
 
-Teach is not on the rail. It opens from a workflow in the library: resolve a
-halted step and write a governed repair back toward the workflow.
+Teach opens from a task or a stopped item: resolve a stopped step and write a
+governed repair back toward the task. What each screen calls in the engine,
+the safety rules it keeps, and the engine gaps it depends on are in
+[docs/OPERATOR_SCREENS.md](docs/OPERATOR_SCREENS.md).
 
-Recording and sync are two independent status channels on the rail, alongside
-the needs-attention break count. In a plain dev checkout the shell shows an
-engine-offline state, because the frozen sidecar is built only in CI.
+In a plain dev checkout the shell shows an engine-stopped state, because the
+frozen sidecar is built only in CI.
 
-## Answering a halt from your phone
+## Answering a stop from your phone
 
 When a governed run needs a person, Desktop pairs a phone with a one-use QR
 code and a matching code. The phone gets one signed task, whatever evidence the

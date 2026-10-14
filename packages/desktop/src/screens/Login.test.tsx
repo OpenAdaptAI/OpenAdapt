@@ -12,7 +12,9 @@ it("opens the local cockpit without requiring Cloud authentication", () => {
   const onLocal = vi.fn();
   render(<Login onAuthed={() => {}} onLocal={onLocal} />);
 
-  fireEvent.click(screen.getByRole("button", { name: "Continue locally" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Continue without an account" }),
+  );
 
   expect(onLocal).toHaveBeenCalledOnce();
 });

@@ -226,6 +226,9 @@ class EngineDispatcher:
         self._sync_paused = False
         self._flow_recording: _ActiveFlowRecording | None = None
         self._pending_run_memory: dict[tuple[str, str], tuple[Path, str, bool]] = {}
+        # Work items whose run this engine process started and hasn't
+        # finished. A queued item that isn't here was interrupted.
+        self._running_items: set[str] = set()
         self._coach: dict[str, Any] = {}
         self._handlers: dict[str, Callable[..., dict | None]] = {}
         self._register()
@@ -262,6 +265,14 @@ class EngineDispatcher:
             "run_workflow": self.run_workflow,
             "get_run_report": self.get_run_report,
             "retry_run_persistence": self.retry_run_persistence,
+            # simple operator surface: inputs, items, the inbox, results
+            "get_task_inputs": self.get_task_inputs,
+            "run_item": self.run_item,
+            "list_attention_items": self.list_attention_items,
+            "resolve_attention_item": self.resolve_attention_item,
+            "get_attention_screenshot": self.get_attention_screenshot,
+            "get_results_summary": self.get_results_summary,
+            "run_sample": self.run_sample,
             "teach_fix": self.teach_fix,
             # qualification cockpit (canonical Flow graph/policy/manifests)
             "get_qualification": self.get_qualification,
@@ -566,6 +577,16 @@ class EngineDispatcher:
         target: Any | None,
         task: str,
     ) -> None:
+        if target is not None:
+            try:
+                # Check it and Run it start from the app the task was shown
+                # in. The target stays in the local database.
+                self.services.db.set_task_target(
+                    capture_id,
+                    target.model_dump(mode="json", exclude_none=True),
+                )
+            except Exception:
+                logger.warning("Could not remember where this task was recorded")
         if params.get("first_workflow") is not True:
             return
         self.services.db.set_first_workflow_state(
@@ -648,6 +669,16 @@ class EngineDispatcher:
                 task_description=str(meta.get("task_description") or ""),
             )
         duration = max(0.0, time.monotonic() - active.started_monotonic)
+        try:
+            # The recording's length is the manual baseline Results uses for
+            # its labeled time-saved estimate.
+            self.services.db.update_capture(
+                active.capture_id,
+                duration_secs=round(duration, 1),
+                stopped_at=datetime.now(timezone.utc).isoformat(),
+            )
+        except Exception:
+            logger.warning("Could not store the recording length")
         metadata = {
             "capture_id": active.capture_id,
             "id": active.capture_id,
@@ -771,6 +802,14 @@ class EngineDispatcher:
         }:
             raise ValueError("Invalid first workflow stage")
         if stage == "record":
+            current = self.services.db.get_first_workflow_state()
+            if current is not None and current.get("stage") in {"executing", "reconciliation"}:
+                # A first run that started and hasn't been checked keeps its
+                # lock. Recording another task would replace this record and
+                # drop the lock that stops the run from repeating.
+                raise ValueError(
+                    "Check the target of the last run before you record another task."
+                )
             self.services.db.set_first_workflow_state(stage="record")
             return {"ok": True, "state": self.services.db.get_first_workflow_state()}
 
@@ -778,9 +817,14 @@ class EngineDispatcher:
         workflow_id = str(params.get("workflow_id") or "")
         current_workflow_id = str((current or {}).get("workflow_id") or "")
         same_workflow = bool(workflow_id and workflow_id == current_workflow_id)
+        # ``complete`` from review/qualification leaves the read-only first-run
+        # path before anything ran, so a task that saves data can go to the
+        # guided readiness test instead of looping between two screens.
+        # Executing and reconciliation stages still require a person to
+        # check the target first.
         allowed_from = {
-            "review": {"qualification"},
-            "qualification": {"review", "qualification"},
+            "review": {"qualification", "complete"},
+            "qualification": {"review", "qualification", "complete"},
             "executing": {"review"},
             "reconciliation": {"review"},
             "result": {"qualification_after_result"},
@@ -849,13 +893,67 @@ class EngineDispatcher:
                 last_run_state = "attention"
             elif states:
                 last_run_state = "verified"
+        from engine.outcomes import plain_result
+        from engine.work_items import (
+            OPEN,
+            TEACHING,
+            blocks_more_runs,
+            public_item,
+        )
+
+        last_result = None
+        if rep:
+            last_result = plain_result(
+                rep.get("outcome"),
+                rep.get("transaction_outcome"),
+            )["key"]
+        open_items = [
+            public_item(row)
+            for row in self.services.db.list_work_items(
+                workflow_id=str(bid),
+                statuses=(OPEN, TEACHING),
+            )
+        ]
+        capture = (
+            self.services.db.get_capture(str(b.get("capture_id")))
+            if b.get("capture_id")
+            else None
+        )
+        task = str((capture or {}).get("task_description") or "")
+        # The bundle status is set by the readiness-test commands: "certified"
+        # only after Flow certified the current revision. Flow's governed run
+        # also refuses a plaintext bundle, so a certified version is ready to
+        # run only once it is sealed (encrypted at rest).
+        bundle_path = Path(str(b.get("bundle_path") or ""))
+        encrypted = bool(b.get("bundle_path")) and (
+            bundle_path / "workflow.json.enc"
+        ).is_file()
+        status = str(b.get("status") or "")
+        if status == "certified":
+            readiness = "ready" if encrypted else "checking"
+        elif status in {"qualification_pending", "qualification_failed"}:
+            readiness = "checking"
+        else:
+            readiness = "new"
         return {
             "id": bid,
             "name": b.get("workflow_name") or b.get("capture_id") or bid,
             "steps": b.get("steps") or 0,
             "updated_at": b.get("compiled_at") or b.get("created_at"),
             "last_run_state": last_run_state,
+            "last_result": last_result,
             "open_halts": open_halts,
+            "open_items": len(open_items),
+            # Items a person chose to fix by showing the step again.
+            "teaching_items": sum(1 for item in open_items if item["status"] == TEACHING),
+            "blocked": any(blocks_more_runs(item) for item in open_items),
+            "readiness": readiness,
+            "certified": status == "certified",
+            "encrypted": encrypted,
+            "version": int(b.get("version") or 1),
+            "capture_id": b.get("capture_id"),
+            "task": task if task != "teach_fix" else "",
+            "demo_seconds": self._demonstration_seconds(b),
             "synced": bool(b.get("workflow_id")),
             "workflow_id": b.get("workflow_id"),
         }
@@ -1171,6 +1269,16 @@ class EngineDispatcher:
         params_file = None
         qualification_case_id = params.get("_qualification_case_id")
         qualification_case_execution = params.get("_qualification_case_execution")
+        # One work item's validated input values (see ``run_item``). They reach
+        # Flow only through a private params file that exists for the length of
+        # the call; the values never enter argv, events, or logs.
+        item_inputs = params.get("_item_inputs")
+        if item_inputs is not None and (
+            qualification_case_id is not None or qualification_case_execution is not None
+        ):
+            return self._pre_action_refusal(
+                "Item inputs and qualification case inputs cannot be combined"
+            )
         if qualification_case_id is not None:
             from engine.qualification_lifecycle import case_parameters_path
 
@@ -1197,6 +1305,7 @@ class EngineDispatcher:
         try:
             from engine.private_flow_config import (
                 prepare_flow_config,
+                stage_private_text,
                 stage_private_yaml,
             )
 
@@ -1206,8 +1315,24 @@ class EngineDispatcher:
                 staged_context = nullcontext(None)
             else:
                 staged_context = stage_private_yaml(run_dir, prepared=prepared)
+            if isinstance(item_inputs, dict):
+                log_redactions = tuple(log_redactions) + tuple(
+                    str(value)
+                    for value in item_inputs.values()
+                    if isinstance(value, (str, int, float)) and len(str(value)) >= 3
+                )
+                inputs_context: Any = stage_private_text(
+                    run_dir,
+                    payload=json.dumps(item_inputs, sort_keys=True),
+                    prefix=".item-inputs-",
+                    suffix=".json",
+                )
+            else:
+                inputs_context = nullcontext(None)
 
-            with staged_context as staged_config:
+            with staged_context as staged_config, inputs_context as inputs_path:
+                if inputs_path is not None:
+                    params_file = inputs_path
                 # Native/remote Flow backends do not import or launch
                 # Playwright. Config-only execution delegates backend setup to
                 # Flow, preserving a native/remote backend without injecting
@@ -1866,9 +1991,31 @@ class EngineDispatcher:
                     "compensation_actions": envelope.get("compensation_actions"),
                 }
 
+        from engine.outcomes import consistent_transaction_outcome, halt_kind
+
+        # Flow's transaction outcome states what is known about the business
+        # effect. Desktop forwards it only when it agrees with the validated
+        # execution outcome; every plain label derives from it.
+        transaction_outcome = (
+            consistent_transaction_outcome(outcome, report.get("transaction_outcome"))
+            if outcome in PRECISE_FLOW_OUTCOMES
+            else None
+        )
+        kind = halt_kind(report) if outcome not in {"VERIFIED", "success"} else None
+        mismatch = self._identity_mismatch(results) if kind == "wrong_record" else None
+        if halt_block is not None:
+            halt_block["kind"] = kind or "other"
+            if mismatch is not None:
+                # Local only: these values can identify a record. They render
+                # in the local cockpit and never leave this computer.
+                halt_block["expected"] = mismatch[0]
+                halt_block["observed"] = mismatch[1]
+
         mapped = {
             "ok": outcome in {"VERIFIED", "success"},
             "outcome": outcome,
+            "transaction_outcome": transaction_outcome,
+            "stop_kind": kind,
             "pre_action_refusal": False,
             "run_id": report.get("run_id") or run_id,
             "workflow_id": workflow_id or report.get("workflow_id") or "",
@@ -1882,6 +2029,24 @@ class EngineDispatcher:
         if error:
             mapped["error"] = error
         return mapped
+
+    @staticmethod
+    def _identity_mismatch(results: Any) -> tuple[str, str, str] | None:
+        """Expected and observed record text from a right-record check stop."""
+
+        if not isinstance(results, list):
+            return None
+        for result in results:
+            if not isinstance(result, dict):
+                continue
+            identity = result.get("identity")
+            if isinstance(identity, dict) and identity.get("status") == "mismatch":
+                return (
+                    str(identity.get("expected") or "")[:120],
+                    str(identity.get("observed") or "")[:120],
+                    str(result.get("intent") or ""),
+                )
+        return None
 
     @staticmethod
     def _step_index(step_id: Any) -> int:
@@ -3249,9 +3414,578 @@ class EngineDispatcher:
     def get_needs_attention(self, **params: Any) -> dict:
         """Return the local break count as a ``NeedsAttention`` dict + emit badge."""
         open_halts = self.services.db.count_open_halts()
-        payload = {"count": open_halts, "open_halts": open_halts, "failed_runs": 0}
-        self.emit("break_count", {"count": open_halts})
+        open_items = self._open_item_count()
+        count = open_halts + open_items
+        payload = {
+            "count": count,
+            "open_halts": open_halts,
+            "open_items": open_items,
+            "failed_runs": 0,
+        }
+        self.emit("break_count", {"count": count})
         return payload
+
+    def _open_item_count(self) -> int:
+        from engine.work_items import OPEN, TEACHING
+
+        self._reconcile_interrupted_items()
+        try:
+            return len(self.services.db.list_work_items(statuses=(OPEN, TEACHING)))
+        except Exception:
+            logger.exception("Could not count open work items")
+            return 0
+
+    # ------------------------------------------------- simple operator surface
+
+    def _reconcile_interrupted_items(self) -> None:
+        """Turn items whose run was interrupted into records to check.
+
+        An item is inserted as queued before its run starts. If Desktop or the
+        engine stopped during that run, nothing recorded how it ended, and the
+        save may have gone through. Such an item becomes an open item with an
+        unknown outcome: it waits in Needs you, blocks more items of its task,
+        and is never retried until a person checks the record.
+        """
+
+        from engine.work_items import OPEN, QUEUED
+
+        try:
+            rows = self.services.db.list_work_items(statuses=(QUEUED,))
+        except Exception:
+            logger.exception("Could not read queued work items")
+            return
+        now = datetime.now(timezone.utc).isoformat()
+        for row in rows:
+            if row["item_id"] in self._running_items:
+                continue
+            self.services.db.update_work_item(
+                row["item_id"],
+                status=OPEN,
+                execution_outcome="unknown",
+                halt_reason=(
+                    "OpenAdapt stopped while this item was running. "
+                    "The save may have gone through."
+                ),
+                finished_at=now,
+            )
+
+
+    def _task_inputs(self, workflow_id: str) -> list[dict]:
+        from engine.qualification import task_parameters
+
+        bundle = self._qualification_bundle_dir(workflow_id)
+        return task_parameters(
+            bundle,
+            bundle_key=self._qualification_bundle_key(workflow_id),
+        )
+
+    def get_task_inputs(self, **params: Any) -> dict:
+        """Return the inputs one run of a task needs and where it was recorded.
+
+        No secret value is returned. The recorded target is local data: it can
+        name an internal host or window, and it never leaves this computer.
+        """
+
+        workflow_id = str(params.get("workflow_id") or "")
+        try:
+            return {
+                "ok": True,
+                "workflow_id": workflow_id,
+                "inputs": self._task_inputs(workflow_id),
+                "target": self._task_target(workflow_id),
+            }
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def _task_target(self, workflow_id: str) -> dict | None:
+        """The application target the task's recording used, if known."""
+
+        bundle = self.services.db.get_bundle(workflow_id)
+        capture_id = (bundle or {}).get("capture_id")
+        if not capture_id:
+            return None
+        try:
+            target = self.services.db.get_task_target(str(capture_id))
+        except Exception:
+            return None
+        if target is None:
+            first = self.services.db.get_first_workflow_state() or {}
+            if first.get("capture_id") == capture_id and isinstance(first.get("target"), dict):
+                target = first["target"]
+        return target
+
+    def run_item(self, **params: Any) -> dict:
+        """Run a task once on one item's input values and record the outcome.
+
+        Refuses before Flow is invoked when the values don't match the task's
+        inputs, when an earlier item of this task may have saved and nobody
+        has checked the record yet, or when the same item is already done.
+        """
+
+        from engine.work_items import (
+            COMPLETED_STATUSES,
+            OPEN,
+            TEACHING,
+            WorkItemError,
+            blocks_more_runs,
+            inputs_digest,
+            item_label,
+            new_id,
+            public_item,
+            result_for_run,
+            status_after_run,
+            validate_inputs,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        if self._bundle_dir(workflow_id) is None:
+            return self._pre_action_refusal(f"Unknown workflow {workflow_id}")
+        try:
+            declared = self._task_inputs(workflow_id)
+        except Exception:
+            logger.exception("Could not read task inputs")
+            return self._pre_action_refusal(
+                "Desktop couldn't read the inputs this task needs."
+            )
+        try:
+            values = validate_inputs(params.get("inputs"), declared)
+        except WorkItemError as exc:
+            return self._pre_action_refusal(str(exc))
+
+        retry_of = params.get("_retry_of")
+        self._reconcile_interrupted_items()
+        open_items = self.services.db.list_work_items(
+            workflow_id=workflow_id,
+            statuses=(OPEN, TEACHING),
+        )
+        for row in open_items:
+            if blocks_more_runs(public_item(row)):
+                label = row.get("label") or f"item {int(row.get('position') or 0) + 1}"
+                return self._pre_action_refusal(
+                    f"The save for {label} may have gone through. Check that "
+                    "record in Needs you before you run more items."
+                )
+        digest = inputs_digest(workflow_id, values)
+        if not params.get("allow_repeat") and retry_of is None:
+            for row in self.services.db.list_work_items(
+                workflow_id=workflow_id,
+                statuses=tuple(COMPLETED_STATUSES),
+            ):
+                if row.get("inputs_digest") == digest:
+                    return self._pre_action_refusal(
+                        "This item is already done, so OpenAdapt didn't enter "
+                        "it again."
+                    )
+
+        batch_id = str(params.get("batch_id") or new_id("batch"))
+        try:
+            position = max(0, int(params.get("position") or 0))
+        except (TypeError, ValueError):
+            position = 0
+        item_id = new_id("item")
+        self.services.db.insert_work_item(
+            item_id,
+            batch_id=batch_id,
+            workflow_id=workflow_id,
+            position=position,
+            label=item_label(values, declared),
+            inputs_json=json.dumps(values, sort_keys=True),
+            inputs_digest=digest,
+            retry_of=str(retry_of) if retry_of else None,
+        )
+        execution: dict[str, Any] = {
+            "workflow_id": workflow_id,
+            "_item_inputs": values,
+        }
+        if params.get("target") is not None:
+            execution["target"] = params["target"]
+        if params.get("deployment_config") is not None:
+            execution["deployment_config"] = params["deployment_config"]
+        self._running_items.add(item_id)
+        try:
+            report = self._replay_or_run(execution, run=True)
+        except Exception:
+            # The run may have reached the application before it failed.
+            logger.exception("An item run ended without a report")
+            report = {
+                "ok": False,
+                "outcome": "unknown",
+                "transaction_outcome": None,
+                "pre_action_refusal": False,
+                "run_id": "",
+                "error": "The run ended without a result. The save may have gone through.",
+            }
+        finally:
+            self._running_items.discard(item_id)
+        finished = datetime.now(timezone.utc).isoformat()
+        if report.get("pre_action_refusal"):
+            self.services.db.update_work_item(
+                item_id,
+                execution_outcome="refused",
+                status=OPEN,
+                halt_reason=str(report.get("error") or "")[:500],
+                finished_at=finished,
+            )
+        else:
+            result = result_for_run(report)
+            halt = report.get("halt") if isinstance(report.get("halt"), dict) else {}
+            self.services.db.update_work_item(
+                item_id,
+                run_id=str(report.get("run_id") or ""),
+                execution_outcome=str(report.get("outcome") or "unknown"),
+                transaction_outcome=report.get("transaction_outcome"),
+                halt_kind=report.get("stop_kind"),
+                halt_step=str((halt or {}).get("step_intent") or "")[:300],
+                halt_reason=str((halt or {}).get("reason") or report.get("error") or "")[:500],
+                expected=str((halt or {}).get("expected") or ""),
+                observed=str((halt or {}).get("observed") or ""),
+                duration_s=(report.get("metrics") or {}).get("duration_s"),
+                status=status_after_run(result["key"]),
+                finished_at=finished,
+            )
+        self.get_needs_attention()
+        row = self.services.db.get_work_item(item_id)
+        return {
+            "ok": True,
+            "item": public_item(row or {}),
+            "report": report,
+        }
+
+    def list_attention_items(self, **params: Any) -> dict:
+        """Every item and hosted run that waits for a person, newest first."""
+
+        from engine.outcomes import plain_result_for_transaction
+        from engine.work_items import OPEN, TEACHING, public_item
+
+        self._reconcile_interrupted_items()
+        names = {
+            row.get("bundle_id"): row.get("workflow_name") or row.get("capture_id") or ""
+            for row in self.services.db.list_bundles(limit=500)
+        }
+        items: list[dict[str, Any]] = []
+        for row in self.services.db.list_work_items(statuses=(OPEN, TEACHING)):
+            item = public_item(row)
+            item["source"] = "item"
+            item["task_name"] = names.get(row["workflow_id"]) or row["workflow_id"]
+            items.append(item)
+        for halt in self.services.db.list_open_halts():
+            run = self.services.db.get_run(str(halt.get("run_id") or "")) or {}
+            result = plain_result_for_transaction(run.get("status"))
+            items.append(
+                {
+                    "item_id": str(halt["halt_id"]),
+                    "source": "hosted",
+                    "workflow_id": halt.get("workflow_id") or "",
+                    "task_name": names.get(halt.get("workflow_id")) or "",
+                    "label": "",
+                    "run_id": halt.get("run_id"),
+                    "status": "open",
+                    "result": result["key"],
+                    "nothing_written": result["nothing_written"],
+                    "execution_outcome": None,
+                    "transaction_outcome": run.get("status"),
+                    "halt_kind": None,
+                    "halt_step": halt.get("step_intent") or "",
+                    "halt_reason": halt.get("reason") or "",
+                    "expected": "",
+                    "observed": "",
+                    "created_at": halt.get("created_at"),
+                    "actions": ["handled"],
+                }
+            )
+        items.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
+        return {"ok": True, "items": items}
+
+    def resolve_attention_item(self, **params: Any) -> dict:
+        """Record a person's decision on one stopped item.
+
+        "retry" is allowed only when the run proved nothing was written.
+        "retry_after_check" is allowed only after the person confirms that
+        they looked at the record and nothing was saved.
+        """
+
+        from engine.work_items import (
+            TEACHING,
+            WorkItemError,
+            check_action,
+            public_item,
+            resolution_status,
+        )
+
+        item_id = str(params.get("item_id") or "")
+        action = str(params.get("action") or "")
+        now = datetime.now(timezone.utc).isoformat()
+        if item_id.startswith("halt-"):
+            halt = self.services.db.get_halt(item_id)
+            if halt is None or action != "handled":
+                return {"ok": False, "error": "That choice isn't available for this run."}
+            self.services.db.update_halt(item_id, status="resolved", resolved_at=now)
+            self.get_needs_attention()
+            return {"ok": True}
+        row = self.services.db.get_work_item(item_id)
+        if row is None:
+            return {"ok": False, "error": "This item is no longer waiting for you."}
+        item = public_item(row, include_values=True)
+        try:
+            check_action(item, action, record_checked=params.get("record_checked") is True)
+        except WorkItemError as exc:
+            return {"ok": False, "error": str(exc)}
+        status = resolution_status(action)
+        self.services.db.update_work_item(
+            item_id,
+            status=status,
+            resolved_at=None if status == TEACHING else now,
+        )
+        resolved = public_item(self.services.db.get_work_item(item_id) or row)
+        if action not in {"retry", "retry_after_check"}:
+            self.get_needs_attention()
+            return {"ok": True, "resolved": resolved}
+        rerun_params: dict[str, Any] = {
+            "workflow_id": row["workflow_id"],
+            "inputs": item.get("inputs") or {},
+            "batch_id": row["batch_id"],
+            "position": row["position"],
+            "_retry_of": item_id,
+        }
+        for key in ("target", "deployment_config"):
+            if params.get(key) is not None:
+                rerun_params[key] = params[key]
+        rerun = self.run_item(**rerun_params)
+        if rerun.get("pre_action_refusal"):
+            # Nothing ran. Put the item back so the person can choose again.
+            self.services.db.update_work_item(item_id, status=row["status"], resolved_at=None)
+            self.get_needs_attention()
+            return {
+                "ok": False,
+                "error": rerun.get("error") or "OpenAdapt didn't start the new run.",
+            }
+        return {"ok": True, "resolved": resolved, **rerun}
+
+    def get_attention_screenshot(self, **params: Any) -> dict:
+        """The retained screen where an item's run stopped, for its inbox card.
+
+        Local only: the frame can show a patient record. It is read from the
+        item's own run directory and returned to the local cockpit.
+        """
+
+        item_id = str(params.get("item_id") or "")
+        row = self.services.db.get_work_item(item_id)
+        run = self.services.db.get_run(str((row or {}).get("run_id") or "")) if row else None
+        if not run or not run.get("run_path"):
+            return {"ok": False}
+        run_dir = Path(str(run["run_path"]))
+        from engine.flow_bridge import FlowBridge
+
+        report = FlowBridge.read_report(run_dir)
+        results = report.get("results") if isinstance(report.get("results"), list) else []
+        stopped = next(
+            (r for r in results if isinstance(r, dict) and not r.get("ok")),
+            results[-1] if results else None,
+        )
+        if not isinstance(stopped, dict):
+            return {"ok": False}
+        frame = self._step_frame(run_dir, stopped, prefer="before")
+        if frame is None:
+            return {"ok": False}
+        return {"ok": True, **frame}
+
+    @staticmethod
+    def _step_frame(run_dir: Path, step: dict, *, prefer: str) -> dict | None:
+        """One retained step frame as a data URL, plus the point it acted on.
+
+        The frame must be a PNG inside ``run_dir``; a symlink or a path that
+        leaves the run directory is refused.
+        """
+
+        import base64
+
+        order = ("before_png", "after_png") if prefer == "before" else ("after_png", "before_png")
+        relative = next(
+            (step.get(key) for key in order if isinstance(step.get(key), str) and step.get(key)),
+            None,
+        )
+        if not relative:
+            return None
+        try:
+            root = run_dir.resolve(strict=True)
+            frame = run_dir / relative
+            if frame.is_symlink():
+                return None
+            frame = frame.resolve(strict=True)
+            frame.relative_to(root)
+            data = frame.read_bytes()
+        except (OSError, ValueError):
+            return None
+        if len(data) > 12_000_000 or not data.startswith(b"\x89PNG\r\n\x1a\n"):
+            return None
+        width = int.from_bytes(data[16:20], "big")
+        height = int.from_bytes(data[20:24], "big")
+        focus = None
+        resolution = step.get("resolution")
+        point = resolution.get("point") if isinstance(resolution, dict) else None
+        if isinstance(point, dict) and isinstance(point.get("x"), (int, float)):
+            focus = {"x": point["x"], "y": point.get("y", 0)}
+        elif isinstance(point, (list, tuple)) and len(point) >= 2:
+            focus = {"x": point[0], "y": point[1]}
+        return {
+            "data_url": "data:image/png;base64," + base64.b64encode(data).decode("ascii"),
+            "width": width,
+            "height": height,
+            "focus": focus,
+            "step": str(step.get("intent") or ""),
+        }
+
+    def get_results_summary(self, **params: Any) -> dict:
+        """Counts of what got done, what needed a person, and what was prevented."""
+
+        from engine.work_items import public_item, summarize
+
+        self._reconcile_interrupted_items()
+        rows = self.services.db.list_work_items(limit=5000)
+        bundles = {row.get("bundle_id"): row for row in self.services.db.list_bundles(limit=500)}
+        baselines: dict[str, float | None] = {}
+        names: dict[str, str] = {}
+        for workflow_id, bundle in bundles.items():
+            names[str(workflow_id)] = str(
+                bundle.get("workflow_name") or bundle.get("capture_id") or workflow_id
+            )
+            baselines[str(workflow_id)] = self._demonstration_seconds(bundle)
+        summary = summarize(rows, baselines=baselines)
+        recent = []
+        for row in rows[:50]:
+            item = public_item(row)
+            item["task_name"] = names.get(row["workflow_id"], row["workflow_id"])
+            recent.append(item)
+        return {"ok": True, **summary, "names": names, "recent": recent}
+
+    def _demonstration_seconds(self, bundle: dict) -> float | None:
+        """How long the person's own recording of the task took, if known."""
+
+        capture_id = bundle.get("capture_id")
+        capture = self.services.db.get_capture(str(capture_id)) if capture_id else None
+        duration = (capture or {}).get("duration_secs")
+        if isinstance(duration, (int, float)) and 1 <= duration <= 6 * 3600:
+            return float(duration)
+        return None
+
+    # ------------------------------------------------------------ sample
+
+    def run_sample(self, **params: Any) -> dict:
+        """Run Flow's built-in sample task so a new user sees it work first.
+
+        Flow serves a synthetic clinic app with made-up patients on this
+        computer and drives it in a headless browser, so this needs no
+        operating-system permission, no account, and none of the user's apps.
+        It runs the sample twice: once normally, and once against a backend
+        that drops the save after the screen says "saved". Each result is
+        derived from Flow's transaction outcome like every other run.
+        """
+
+        from engine.flow_bridge import FlowBridge
+        from engine.outcomes import consistent_transaction_outcome, plain_result
+
+        ensure_browser = getattr(self.services.flow_bridge, "ensure_browser_runtime", None)
+        if ensure_browser is not None:
+            try:
+                ensure_browser(
+                    lambda state, detail: self.emit(
+                        "sample_progress", {"state": "browser", "detail": detail}
+                    )
+                )
+            except Exception:
+                return {
+                    "ok": False,
+                    "error": (
+                        "OpenAdapt couldn't prepare its browser. Check your "
+                        "internet connection, then try again."
+                    ),
+                }
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        sample_dir = self.config.data_dir / "samples" / f"sample-{stamp}-{uuid.uuid4().hex[:6]}"
+        sample_dir.parent.mkdir(parents=True, exist_ok=True)
+        self.emit("sample_progress", {"state": "running", "detail": ""})
+        started = time.monotonic()
+        try:
+            self.services.flow_bridge.tutorial(sample_dir, break_it=True)
+        except Exception:
+            logger.exception("The sample task did not run")
+            self.emit("sample_progress", {"state": "failed", "detail": ""})
+            return {
+                "ok": False,
+                "error": "The sample didn't run. Check that the OpenAdapt engine is ready.",
+            }
+        runs: list[dict[str, Any]] = []
+        for kind, folder in (("normal", "run"), ("save_dropped", "run-broken")):
+            run_dir = sample_dir / folder
+            report = FlowBridge.read_report(run_dir)
+            if not report:
+                continue
+            execution = report.get("execution_outcome")
+            transaction = consistent_transaction_outcome(
+                execution, report.get("transaction_outcome")
+            )
+            result = plain_result(execution, transaction)
+            results = [r for r in report.get("results") or [] if isinstance(r, dict)]
+            steps = []
+            save_step: dict | None = None
+            right_record = 0
+            confirmed = 0
+            refuted = 0
+            for index, step in enumerate(results):
+                evidence = [e for e in step.get("effect_evidence") or [] if isinstance(e, dict)]
+                saves = bool(evidence) or step.get("effect_verified") is not None
+                identity = step.get("identity")
+                if isinstance(identity, dict) and identity.get("status") == "verified":
+                    right_record += 1
+                confirmed += sum(1 for e in evidence if e.get("final_verdict") == "confirmed")
+                refuted += sum(1 for e in evidence if e.get("final_verdict") != "confirmed")
+                steps.append(
+                    {
+                        "index": index,
+                        "intent": str(step.get("intent") or ""),
+                        "ok": bool(step.get("ok")),
+                        "saves": saves,
+                    }
+                )
+                if saves:
+                    save_step = step
+            frame = (
+                self._step_frame(run_dir, save_step, prefer="after")
+                if save_step is not None
+                else None
+            )
+            params_used = report.get("params") if isinstance(report.get("params"), dict) else {}
+            runs.append(
+                {
+                    "kind": kind,
+                    "result": result["key"],
+                    "nothing_written": result["nothing_written"],
+                    "execution_outcome": execution,
+                    "transaction_outcome": transaction,
+                    "steps": steps,
+                    "right_record_checks": right_record,
+                    "record_checks_confirmed": confirmed,
+                    "record_checks_failed": refuted,
+                    "model_calls": report.get("model_calls"),
+                    "inputs": {
+                        str(key): str(value)
+                        for key, value in params_used.items()
+                        if isinstance(value, (str, int, float))
+                    },
+                    "screen": frame,
+                }
+            )
+        self.emit("sample_progress", {"state": "done" if runs else "failed", "detail": ""})
+        if not runs:
+            return {
+                "ok": False,
+                "error": "The sample finished without a result to show.",
+            }
+        return {
+            "ok": True,
+            "seconds": round(time.monotonic() - started, 1),
+            "runs": runs,
+        }
 
     # ------------------------------------------------------- auth
 

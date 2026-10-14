@@ -130,7 +130,17 @@ impl SidecarInner {
             | "replay_first_workflow"
             | "run_workflow"
             | "teach_fix"
-            | "export_presentation_video" => WORKFLOW_COMMAND_TIMEOUT,
+            | "export_presentation_video"
+            // Each of these drives the target app through Flow (or Flow's
+            // sample app). A short timeout would report a lost result while
+            // the run is still going, so they share the workflow timeout.
+            | "run_item"
+            | "resolve_attention_item"
+            | "run_sample"
+            | "propose_qualification_from_demo"
+            | "run_qualification_case"
+            | "certify_qualification"
+            | "seal_qualification_workflow" => WORKFLOW_COMMAND_TIMEOUT,
             _ => COMMAND_TIMEOUT,
         };
         match tokio::time::timeout(timeout, rx).await {

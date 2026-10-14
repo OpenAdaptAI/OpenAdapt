@@ -1,5 +1,6 @@
-// Start screen: the full local cockpit needs no account. Cloud connection stays
-// optional through browser PKCE or a one-time token stored in the OS keychain.
+// Cloud sign-in, reached from the welcome screen or Settings. OpenAdapt works
+// on this computer without an account; Cloud connection stays optional through
+// browser sign-in or a one-time token stored in the OS keychain.
 import { useState } from "react";
 import { CMD, engineInvoke, openExternal } from "../lib/engine";
 import type { AuthStatus } from "../lib/types";
@@ -28,7 +29,7 @@ export function Login({
       onAuthed(s);
     } catch (e) {
       setError(
-        `${String(e)} — the engine opens your browser to sign in. If it isn't running, use "Paste a token".`,
+        `${String(e)}. The engine opens your browser to sign in. If it isn't running, paste a Cloud access token instead.`,
       );
     } finally {
       setBusy(null);
@@ -37,7 +38,7 @@ export function Login({
 
   async function loginPaste() {
     if (!token.trim()) {
-      setError("Paste an ingest token first.");
+      setError("Paste a Cloud access token first.");
       return;
     }
     setBusy("paste");
@@ -59,25 +60,9 @@ export function Login({
     <div className="center-stage">
       <Card className="auth-card">
         <CardHead
-          eyebrow="OpenAdapt Desktop"
-          title="Start locally for free"
-          sub="Record, compile, qualify, and run on this computer without a Cloud account. Connect a workspace whenever you want hosted coordination."
+          title="Connect to OpenAdapt Cloud"
+          sub="Sign in to share tasks and run history with your team. You can keep using OpenAdapt on this computer without an account."
         />
-
-        <Button variant="primary" block disabled={busy !== null} onClick={onLocal}>
-          Continue locally
-        </Button>
-
-        <div className="divider">or connect OpenAdapt Cloud</div>
-
-        <Field label="Host">
-          <input
-            className="input"
-            value={host}
-            onChange={(e) => setHost(e.target.value)}
-            spellCheck={false}
-          />
-        </Field>
 
         <Button
           variant="primary"
@@ -88,14 +73,14 @@ export function Login({
           {busy === "browser" ? "Waiting for browser…" : "Sign in with browser"}
         </Button>
         <p className="hint" style={{ marginTop: "var(--space-2)" }}>
-          Opens your system browser — Google and magic-link sign-in just work.
+          Opens your browser to sign in with Google or an email link.
         </p>
 
-        <div className="divider">or paste a Cloud token</div>
+        <div className="divider">or paste a Cloud access token</div>
 
         <Field
-          label="Ingest token"
-          hint="Mint one in cloud Settings → Ingest tokens. It is shown once."
+          label="Cloud access token"
+          hint="Create one in Cloud settings. You'll only see it once."
         >
           <input
             className="input mono"
@@ -115,9 +100,29 @@ export function Login({
             {busy === "paste" ? "Validating…" : "Use token"}
           </Button>
           <Button variant="ghost" onClick={() => openExternal(INGEST_SETTINGS_URL)}>
-            Open Settings → Ingest tokens
+            Open Cloud settings
           </Button>
         </div>
+
+        <details className="technical">
+          <summary>Cloud address (for IT)</summary>
+          <div className="technical-body">
+            <Field label="Host">
+              <input
+                className="input"
+                value={host}
+                onChange={(e) => setHost(e.target.value)}
+                spellCheck={false}
+              />
+            </Field>
+          </div>
+        </details>
+
+        <div className="divider">or</div>
+
+        <Button variant="ghost" block disabled={busy !== null} onClick={onLocal}>
+          Continue without an account
+        </Button>
 
         {error && (
           <div style={{ marginTop: "var(--space-4)" }}>

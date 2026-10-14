@@ -21,11 +21,16 @@ vi.mock("./lib/engine", async (importOriginal) => {
   };
 });
 
-vi.mock("./screens/Onboarding", () => ({
-  Onboarding: ({ onStart }: { onStart: () => void }) => (
-    <button type="button" onClick={onStart}>
-      Start first workflow
-    </button>
+vi.mock("./screens/Welcome", () => ({
+  Welcome: ({ onShow, onSample }: { onShow: () => void; onSample: () => void }) => (
+    <div>
+      <button type="button" onClick={onShow}>
+        Show OpenAdapt your task
+      </button>
+      <button type="button" onClick={onSample}>
+        See it work on a sample app
+      </button>
+    </div>
   ),
 }));
 
@@ -33,34 +38,37 @@ vi.mock("./screens/RecordReview", () => ({
   RecordReview: () => <div>First workflow recording</div>,
 }));
 
+vi.mock("./screens/Sample", () => ({
+  Sample: () => <div>Sample screen</div>,
+}));
+
+vi.mock("./screens/CheckIt", () => ({
+  CheckIt: ({ workflowId }: { workflowId: string }) => (
+    <div>Check it screen for {workflowId}</div>
+  ),
+}));
+
 vi.mock("./screens/WatchRun", () => ({
   WatchRun: ({
     firstWorkflow,
+    workflowId,
     onRunningChange,
+    onQualify,
   }: {
     firstWorkflow?: boolean;
+    workflowId: string;
     onRunningChange?: (running: boolean) => void;
+    onQualify: (id: string) => void;
   }) => (
     <div>
       <span>{firstWorkflow ? "First supervised replay" : "Normal replay"}</span>
       <button type="button" onClick={() => onRunningChange?.(true)}>
         Start supervised execution
       </button>
+      <button type="button" onClick={() => onQualify(workflowId)}>
+        Go to the next step
+      </button>
     </div>
-  ),
-}));
-
-vi.mock("./screens/Qualification", () => ({
-  Qualification: ({
-    onBack,
-    backLabel,
-  }: {
-    onBack: () => void;
-    backLabel?: string;
-  }) => (
-    <button type="button" onClick={onBack}>
-      {backLabel || "Back to workflows"}
-    </button>
   ),
 }));
 
@@ -78,13 +86,24 @@ function bootDefaults(command: string): unknown {
   return undefined;
 }
 
+function first(stage: FirstWorkflowState["stage"]): FirstWorkflowState {
+  return {
+    stage,
+    capture_id: "capture-1",
+    workflow_id: "workflow-1",
+    target: { backend: "web", url: "https://example.test" },
+    task: "Read one test record",
+    updated_at: "2026-08-27T00:00:00Z",
+  };
+}
+
 afterEach(() => {
   cleanup();
   appEventMocks.handlers.clear();
   vi.clearAllMocks();
 });
 
-it("stays in onboarding when its durable stage cannot be saved", async () => {
+it("stays on the welcome screen when its durable stage cannot be saved", async () => {
   let stageAttempts = 0;
   vi.mocked(engineTry).mockImplementation(async (command, _params, fallback) => {
     const boot = bootDefaults(command);
@@ -102,7 +121,7 @@ it("stays in onboarding when its durable stage cannot be saved", async () => {
 
   render(<App />);
   const start = await screen.findByRole("button", {
-    name: "Start first workflow",
+    name: "Show OpenAdapt your task",
   });
   fireEvent.click(start);
 
@@ -110,24 +129,40 @@ it("stays in onboarding when its durable stage cannot be saved", async () => {
   expect(alert.textContent).toContain(
     "Desktop couldn't save your place in setup. Check the local engine, then try again.",
   );
-  expect(screen.getByRole("button", { name: "Start first workflow" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Show OpenAdapt your task" })).toBeTruthy();
   expect(screen.queryByText("First workflow recording")).toBeNull();
 
-  fireEvent.click(screen.getByRole("button", { name: "Start first workflow" }));
+  fireEvent.click(screen.getByRole("button", { name: "Show OpenAdapt your task" }));
   await waitFor(() =>
     expect(screen.getByText("First workflow recording")).toBeTruthy(),
   );
 });
 
-it("returns the pre-run action review to the supervised replay", async () => {
-  const state = {
-    stage: "qualification" as const,
-    capture_id: "capture-1",
-    workflow_id: "workflow-1",
-    target: { backend: "web" as const, url: "https://example.test" },
-    task: "Read one test record",
-    updated_at: "2026-08-27T00:00:00Z",
-  };
+it("opens the sample without an account, a recording, or a saved stage", async () => {
+  vi.mocked(engineTry).mockImplementation(async (command, _params, fallback) => {
+    if (command === CMD.GET_AUTH_STATUS) return { authenticated: false };
+    const boot = bootDefaults(command);
+    if (boot !== undefined) return boot;
+    if (command === CMD.GET_WORKFLOWS) return [];
+    if (command === CMD.GET_FIRST_WORKFLOW_STATE) return { ok: true, state: null };
+    return fallback ?? null;
+  });
+
+  render(<App />);
+  fireEvent.click(
+    await screen.findByRole("button", { name: "See it work on a sample app" }),
+  );
+
+  expect(await screen.findByText("Sample screen")).toBeTruthy();
+  expect(engineTry).not.toHaveBeenCalledWith(
+    CMD.SET_FIRST_WORKFLOW_STAGE,
+    expect.anything(),
+    expect.anything(),
+  );
+});
+
+it("opens Check it and leaves the read-only first-run path before anything ran", async () => {
+  const stages: unknown[] = [];
   vi.mocked(engineTry).mockImplementation(async (command, params, fallback) => {
     const boot = bootDefaults(command);
     if (boot !== undefined) return boot;
@@ -135,32 +170,76 @@ it("returns the pre-run action review to the supervised replay", async () => {
       return [{ id: "workflow-1", name: "Test", steps: 1 }];
     }
     if (command === CMD.GET_FIRST_WORKFLOW_STATE) {
-      return { ok: true, state };
+      return { ok: true, state: first("review") };
     }
     if (command === CMD.SET_FIRST_WORKFLOW_STAGE) {
-      expect(params).toEqual({ stage: "review", workflow_id: "workflow-1" });
-      return { ok: true, state: { ...state, stage: "review" } };
+      stages.push(params);
+      return { ok: true, state: first("complete") };
     }
     return fallback ?? null;
   });
 
   render(<App />);
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Back to supervised run" }),
-  );
 
-  expect(await screen.findByText("First supervised replay")).toBeTruthy();
+  expect(await screen.findByText("Check it screen for workflow-1")).toBeTruthy();
+  expect(stages).toEqual([{ stage: "complete", workflow_id: "workflow-1" }]);
 });
 
-it("keeps the first-workflow context after a library visit", async () => {
-  const state = {
-    stage: "review" as const,
-    capture_id: "capture-1",
-    workflow_id: "workflow-1",
-    target: { backend: "web" as const, url: "https://example.test" },
-    task: "Read one test record",
-    updated_at: "2026-08-27T00:00:00Z",
-  };
+it("takes a saved first result to Check it through the allowed stages", async () => {
+  const stages: unknown[] = [];
+  let current = first("result");
+  vi.mocked(engineTry).mockImplementation(async (command, params, fallback) => {
+    const boot = bootDefaults(command);
+    if (boot !== undefined) return boot;
+    if (command === CMD.GET_WORKFLOWS) {
+      return [{ id: "workflow-1", name: "Test", steps: 1 }];
+    }
+    if (command === CMD.GET_FIRST_WORKFLOW_STATE) return { ok: true, state: current };
+    if (command === CMD.SET_FIRST_WORKFLOW_STAGE) {
+      stages.push(params);
+      current = {
+        ...current,
+        stage: (params as { stage: FirstWorkflowState["stage"] }).stage,
+      };
+      return { ok: true, state: current };
+    }
+    return fallback ?? null;
+  });
+
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "Go to the next step" }));
+
+  expect(await screen.findByText("Check it screen for workflow-1")).toBeTruthy();
+  expect(stages).toEqual([
+    { stage: "qualification_after_result", workflow_id: "workflow-1" },
+    { stage: "complete", workflow_id: "workflow-1" },
+  ]);
+});
+
+it("keeps an uncertain first run on its run screen until the target is checked", async () => {
+  vi.mocked(engineTry).mockImplementation(async (command, _params, fallback) => {
+    const boot = bootDefaults(command);
+    if (boot !== undefined) return boot;
+    if (command === CMD.GET_WORKFLOWS) {
+      return [{ id: "workflow-1", name: "Test", steps: 1 }];
+    }
+    if (command === CMD.GET_FIRST_WORKFLOW_STATE) {
+      return { ok: true, state: first("reconciliation") };
+    }
+    if (command === CMD.SET_FIRST_WORKFLOW_STAGE) {
+      throw new Error("an uncertain first run must not change stage here");
+    }
+    return fallback ?? null;
+  });
+
+  render(<App />);
+  fireEvent.click(await screen.findByRole("button", { name: "Go to the next step" }));
+
+  expect(await screen.findByText("First supervised replay")).toBeTruthy();
+  expect(screen.queryByText(/Check it screen/)).toBeNull();
+});
+
+it("keeps navigation locked while the supervised run is running", async () => {
   vi.mocked(engineTry).mockImplementation(async (command, _params, fallback) => {
     const boot = bootDefaults(command);
     if (boot !== undefined) return boot;
@@ -168,39 +247,7 @@ it("keeps the first-workflow context after a library visit", async () => {
       return [{ id: "workflow-1", name: "Test workflow", steps: 1 }];
     }
     if (command === CMD.GET_FIRST_WORKFLOW_STATE) {
-      return { ok: true, state };
-    }
-    return fallback ?? null;
-  });
-
-  render(<App />);
-  expect(await screen.findByText("First supervised replay")).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "Workflows" }));
-  fireEvent.click(
-    await screen.findByRole("button", { name: "Watch run" }),
-  );
-
-  expect(await screen.findByText("First supervised replay")).toBeTruthy();
-  expect(screen.queryByText("Normal replay")).toBeNull();
-});
-
-it("keeps navigation locked while the supervised replay is running", async () => {
-  const state = {
-    stage: "review" as const,
-    capture_id: "capture-1",
-    workflow_id: "workflow-1",
-    target: { backend: "web" as const, url: "https://example.test" },
-    task: "Read one test record",
-    updated_at: "2026-08-27T00:00:00Z",
-  };
-  vi.mocked(engineTry).mockImplementation(async (command, _params, fallback) => {
-    const boot = bootDefaults(command);
-    if (boot !== undefined) return boot;
-    if (command === CMD.GET_WORKFLOWS) {
-      return [{ id: "workflow-1", name: "Test workflow", steps: 1 }];
-    }
-    if (command === CMD.GET_FIRST_WORKFLOW_STATE) {
-      return { ok: true, state };
+      return { ok: true, state: first("result") };
     }
     return fallback ?? null;
   });
@@ -212,26 +259,33 @@ it("keeps navigation locked while the supervised replay is running", async () =>
 
   await waitFor(() =>
     expect(
-      (screen.getByRole("button", { name: "Workflows" }) as HTMLButtonElement)
+      (screen.getByRole("button", { name: "Tasks" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true),
   );
+  expect(
+    (
+      screen.getByRole("button", {
+        name: "Settings and advanced tools",
+      }) as HTMLButtonElement
+    ).disabled,
+  ).toBe(true);
 });
 
-it("keeps navigation locked from recording stop through review initialization", async () => {
-  let firstState: FirstWorkflowState = {
-    stage: "record",
-    capture_id: "capture-1",
-    workflow_id: null,
-    target: { backend: "web", url: "https://example.test" },
-    task: "Read one test record",
-    updated_at: "2026-08-27T00:00:00Z",
-  };
-  vi.mocked(engineTry).mockImplementation(async (command, _params, fallback) => {
+it("keeps navigation locked from recording stop until Check it opens", async () => {
+  let firstState: FirstWorkflowState = { ...first("record"), workflow_id: null };
+  vi.mocked(engineTry).mockImplementation(async (command, params, fallback) => {
     const boot = bootDefaults(command);
     if (boot !== undefined) return boot;
     if (command === CMD.GET_WORKFLOWS) return [];
     if (command === CMD.GET_FIRST_WORKFLOW_STATE) {
+      return { ok: true, state: firstState };
+    }
+    if (command === CMD.SET_FIRST_WORKFLOW_STAGE) {
+      firstState = {
+        ...firstState,
+        stage: (params as { stage: FirstWorkflowState["stage"] }).stage,
+      };
       return { ok: true, state: firstState };
     }
     return fallback ?? null;
@@ -249,14 +303,10 @@ it("keeps navigation locked from recording stop through review initialization", 
       capture_id: "capture-1",
     });
   });
-  const workflows = screen.getByRole("button", { name: "Workflows" });
-  expect((workflows as HTMLButtonElement).disabled).toBe(true);
+  const tasks = screen.getByRole("button", { name: "Tasks" });
+  expect((tasks as HTMLButtonElement).disabled).toBe(true);
 
-  firstState = {
-    ...firstState,
-    stage: "review",
-    workflow_id: "workflow-1",
-  };
+  firstState = { ...firstState, stage: "review", workflow_id: "workflow-1" };
   act(() => {
     appEventMocks.handlers.get(EVT.COMPILE_PROGRESS)?.({
       capture_id: "capture-1",
@@ -265,10 +315,43 @@ it("keeps navigation locked from recording stop through review initialization", 
     });
   });
 
-  expect(await screen.findByText("First supervised replay")).toBeTruthy();
+  expect(await screen.findByText("Check it screen for workflow-1")).toBeTruthy();
   await waitFor(() =>
-    expect((workflows as HTMLButtonElement).disabled).toBe(false),
+    expect((tasks as HTMLButtonElement).disabled).toBe(false),
   );
+});
+
+it("puts Settings and every expert tool behind the gear", async () => {
+  vi.mocked(engineTry).mockImplementation(async (command, _params, fallback) => {
+    const boot = bootDefaults(command);
+    if (boot !== undefined) return boot;
+    if (command === CMD.GET_WORKFLOWS) {
+      return [{ id: "workflow-1", name: "Test workflow", steps: 1 }];
+    }
+    if (command === CMD.GET_FIRST_WORKFLOW_STATE) return { ok: true, state: null };
+    return fallback ?? null;
+  });
+
+  render(<App />);
+  expect(await screen.findByRole("heading", { name: "Tasks" })).toBeTruthy();
+  const nav = screen.getByRole("navigation", { name: "Desktop navigation" });
+  expect(nav.textContent).toBe("TasksNeeds youResults");
+
+  fireEvent.click(screen.getByRole("button", { name: "Settings and advanced tools" }));
+  expect(screen.getByRole("menuitem", { name: /^Settings/ })).toBeTruthy();
+  fireEvent.click(screen.getByRole("menuitem", { name: /^Advanced/ }));
+
+  expect(await screen.findByRole("heading", { name: "Advanced" })).toBeTruthy();
+  for (const tool of [
+    "Open exact checks",
+    "Open all versions",
+    "Open recording",
+    "Open runner",
+    "Open phone pairing",
+    "Open setup",
+  ]) {
+    expect(screen.getByRole("button", { name: tool })).toBeTruthy();
+  }
 });
 
 it("leaves loading when authoring status is missing", async () => {
@@ -288,7 +371,37 @@ it("leaves loading when authoring status is missing", async () => {
 
   render(<App />);
   expect(
-    await screen.findByRole("button", { name: "Start first workflow" }),
+    await screen.findByRole("button", { name: "Show OpenAdapt your task" }),
   ).toBeTruthy();
   expect(screen.queryByText("Loading…")).toBeNull();
+});
+
+it("won't start another task while an uncertain first run is unchecked", async () => {
+  vi.mocked(engineTry).mockImplementation(async (command, _params, fallback) => {
+    const boot = bootDefaults(command);
+    if (boot !== undefined) return boot;
+    if (command === CMD.GET_WORKFLOWS) {
+      return [{ id: "workflow-1", name: "Test", steps: 1 }];
+    }
+    if (command === CMD.GET_FIRST_WORKFLOW_STATE) {
+      return { ok: true, state: first("reconciliation") };
+    }
+    if (command === CMD.SET_FIRST_WORKFLOW_STAGE) {
+      throw new Error("the uncertain first run must keep its lock");
+    }
+    return fallback ?? null;
+  });
+
+  render(<App />);
+  expect(await screen.findByText("First supervised replay")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Tasks" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Show OpenAdapt a new task" }),
+  );
+
+  expect((await screen.findByRole("alert")).textContent).toContain(
+    "Check the target of your last run before you record another task.",
+  );
+  expect(await screen.findByText("First supervised replay")).toBeTruthy();
+  expect(screen.queryByText("First workflow recording")).toBeNull();
 });

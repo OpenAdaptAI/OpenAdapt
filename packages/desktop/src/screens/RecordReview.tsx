@@ -355,36 +355,33 @@ export function RecordReview({
     <div className="content">
       <div className="page-head">
         <div className="titles">
-          <p className="eyebrow">
-            {firstWorkflow ? "First workflow" : "Author"}
-          </p>
           <h1>
             {firstWorkflow
-              ? "Show OpenAdapt one small task"
-              : "Record & review"}
+              ? "Show OpenAdapt a task"
+              : "Record with all options"}
           </h1>
         </div>
       </div>
 
       {firstWorkflow && (
-        <Callout title="Pick a task you can verify yourself">
-          A good first task takes less than a minute. Use test data and choose
-          a result that is easy to see.
+        <Callout title="Pick a task you can check yourself">
+          Do the task once, on a test record, the way you normally would. A
+          good task takes a minute or two and ends with a save you can see.
+          Everything stays on this computer.
         </Callout>
       )}
 
       <Card>
         <CardHead
-          eyebrow="Target"
           title={
             firstWorkflow
-              ? "Choose the app and task"
-              : "What are you demonstrating?"
+              ? "Which app, and what's the task?"
+              : "What are you recording?"
           }
           sub={
             firstWorkflow
-              ? "Open the app first. Select its surface here, then describe the result you want."
-              : "The same target contract follows this recording into compile and execution."
+              ? "Open the app first. Choose its type here, then say in a few words what the task does."
+              : "OpenAdapt will run this task in the same place you record it."
           }
         />
         <ExecutionTargetForm
@@ -404,11 +401,11 @@ export function RecordReview({
           </Button>
         )}
         <Field
-          label={firstWorkflow ? "Task to record" : "Task description"}
+          label={firstWorkflow ? "What does this task do?" : "Task description"}
           hint={
             firstWorkflow
-              ? "Required for your first workflow. Keep it short and specific."
-              : "Optional local description stored with this recording."
+              ? "For example: Add a claim status note. This name shows on the task's card."
+              : "Optional. Stays on this computer with the recording."
           }
           htmlFor={`${fieldPrefix}-record-task`}
           hintId={`${fieldPrefix}-record-task-hint`}
@@ -422,7 +419,7 @@ export function RecordReview({
             onChange={(event) => setTask(event.target.value)}
             placeholder={
               firstWorkflow
-                ? "Find a test record and check one value"
+                ? "Add a claim status note"
                 : undefined
             }
           />
@@ -449,9 +446,8 @@ export function RecordReview({
           </div>
         )}
         <p className="page-sub">
-          Target selectors are handed to OpenAdapt Flow through a short-lived
-          private file; they never appear in the process command line or
-          Desktop logs.
+          What you enter here stays on this computer and out of OpenAdapt's
+          logs.
         </p>
         {target.backend === "web" && runtime && runtime.state !== "ready" && (
           <Callout
@@ -539,21 +535,20 @@ export function RecordReview({
       {lastCapture && !recording && (
         <Card>
           <CardHead
-            eyebrow="Build"
             title={
               phase === "compiling"
-                ? "Building your workflow"
+                ? "Building the task from your recording"
                 : phase === "failed"
-                  ? "Compilation needs attention"
-                  : "Preparing your workflow"
+                  ? "OpenAdapt couldn't build the task"
+                  : "Your recording is saved"
             }
             sub={`capture ${lastCapture}`}
           />
           <div role="status" aria-live="polite">
             {phase === "compiling" && (
-              <Callout tone="info" title="Compilation is in progress">
-                OpenAdapt is converting the completed demonstration into a
-                deterministic workflow. The raw recording stays unchanged.
+              <Callout tone="info" title="Building the task">
+                OpenAdapt is turning your recording into steps it can repeat
+                exactly. Your recording stays as it was.
               </Callout>
             )}
             {phase === "failed" && (
@@ -562,10 +557,10 @@ export function RecordReview({
               </Callout>
             )}
           </div>
-          <Callout tone="info" title="PHI stays local until you push">
-            OpenAdapt scrubs the recording (fail-closed) before any upload. On
-            the BYOC lane it is never uploaded — compile, replay, and teach all
-            run here.
+          <Callout tone="info" title="Patient data stays on this computer">
+            Before any upload, OpenAdapt removes sensitive data, and it blocks
+            the upload if it can't. In a self-hosted setup nothing is uploaded
+            at all.
           </Callout>
           <div className="row" style={{ marginTop: "var(--space-4)" }}>
             <Button
@@ -574,10 +569,10 @@ export function RecordReview({
               onClick={retryCompile}
             >
               {phase === "compiling"
-                ? "Compiling…"
+                ? "Building…"
                 : phase === "failed"
-                  ? "Retry compilation"
-                  : "Compile to workflow"}
+                  ? "Try building again"
+                  : "Build the task"}
             </Button>
             <Button
               variant="ghost"
@@ -585,7 +580,7 @@ export function RecordReview({
                 engineInvoke(CMD.SCRUB_CAPTURE, { capture_id: lastCapture })
               }
             >
-              Scrub &amp; inspect PHI
+              Remove patient data and review
             </Button>
             {presentationStatus?.ready && (
               <Button
@@ -612,7 +607,7 @@ export function RecordReview({
             </Callout>
           )}
           {presentationError && (
-            <Callout tone="warn" title="Presentation export stopped safely">
+            <Callout tone="warn" title="Presentation export didn't finish">
               {presentationError}
             </Callout>
           )}

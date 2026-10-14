@@ -1,6 +1,6 @@
-// Honest "get past the OS warning" copy for first-run (spec §4c).
-// Verbatim wording from the desktop-tray architecture spec — the installers are
-// unsigned for v1, so this appears on the download page AND here on first run.
+// What the operating system says the first time an unsigned build opens, and
+// how to get past it. It states the current state only: these builds aren't
+// signed, and no date is promised here. RELEASES.md tracks the signed release.
 import { Callout } from "./primitives";
 
 const MAC =
@@ -10,19 +10,17 @@ export function OsWarning() {
   if (MAC) {
     return (
       <Callout tone="info" title="First launch on macOS">
-        macOS will say the app is from an unidentified developer. To open it the
-        first time: right-click (or Control-click) OpenAdapt in Applications →
-        Open → Open. macOS remembers your choice; you won&rsquo;t see this again.
-        We&rsquo;re rolling out Apple notarization shortly.
+        This build isn&rsquo;t notarized by Apple, so macOS says it&rsquo;s from
+        an unidentified developer. To open it the first time, Control-click
+        OpenAdapt in Applications, choose Open, then choose Open again. macOS
+        remembers your choice.
       </Callout>
     );
   }
   return (
     <Callout tone="info" title="First launch on Windows">
-      Windows SmartScreen may show a blue &ldquo;Windows protected your
-      PC&rdquo; banner. Click More info → Run anyway to install. This appears
-      because the installer isn&rsquo;t code-signed yet — signing is on our
-      roadmap.
+      This build isn&rsquo;t code-signed, so Windows SmartScreen may show
+      &ldquo;Windows protected your PC&rdquo;. Choose More info, then Run anyway.
     </Callout>
   );
 }

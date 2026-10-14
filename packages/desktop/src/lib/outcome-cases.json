@@ -1,0 +1,28 @@
+{
+  "_comment": "Shared cases for engine/outcomes.py and src/lib/outcomes.ts. A label may claim that nothing was written only when the transaction outcome proves it.",
+  "cases": [
+    { "execution": "VERIFIED", "transaction": "VERIFIED", "key": "done_checked", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "VERIFIED", "transaction": null, "key": "done_checked", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "HALTED", "transaction": "HALTED_BEFORE_EFFECT", "key": "stopped_before_saving", "nothing_written": true, "safe_to_retry": true },
+    { "execution": "HALTED", "transaction": "REJECTED_POLICY", "key": "stopped_before_saving", "nothing_written": true, "safe_to_retry": true },
+    { "execution": "FAILED", "transaction": "CANCELED", "key": "stopped_before_saving", "nothing_written": true, "safe_to_retry": true },
+    { "execution": "FAILED", "transaction": "FAILED_PLATFORM", "key": "did_not_finish", "nothing_written": true, "safe_to_retry": true },
+    { "execution": "HALTED", "transaction": "RECONCILIATION_REQUIRED", "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "COMPLETED_UNVERIFIED", "transaction": "RECONCILIATION_REQUIRED", "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "ROLLED_BACK", "transaction": "ROLLED_BACK", "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "COMPLETED_UNVERIFIED", "transaction": "COMPLETED_UNVERIFIED", "key": "finished_unchecked", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "HALTED", "transaction": null, "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "halt", "transaction": null, "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "FAILED", "transaction": null, "key": "did_not_finish", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "ROLLED_BACK", "transaction": null, "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "COMPLETED_UNVERIFIED", "transaction": null, "key": "finished_unchecked", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "success", "transaction": null, "key": "finished_unchecked", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "unknown", "transaction": null, "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "VERIFIED", "transaction": "HALTED_BEFORE_EFFECT", "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "FAILED", "transaction": "HALTED_BEFORE_EFFECT", "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "HALTED", "transaction": "VERIFIED", "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "unknown", "transaction": "HALTED_BEFORE_EFFECT", "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "HALTED", "transaction": "NOT_A_REAL_OUTCOME", "key": "check_record", "nothing_written": false, "safe_to_retry": false },
+    { "execution": "refused", "transaction": null, "pre_action_refusal": true, "key": "did_not_start", "nothing_written": true, "safe_to_retry": true }
+  ]
+}

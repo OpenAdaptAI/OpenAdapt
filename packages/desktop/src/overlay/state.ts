@@ -421,15 +421,15 @@ export function overlayPlainStatus(phase: OverlayPhase): string {
     case "verifying":
       return "Verifying result";
     case "verified":
-      return "Outcome verified";
+      return "Done and checked";
     case "completed_unverified":
-      return "Needs verification";
+      return "Finished, not checked";
     case "halted":
-      return "Stopped safely";
+      return "Stopped for review";
     case "failed":
-      return "Run failed";
+      return "Didn't finish";
     case "rolled_back":
-      return "Change rolled back";
+      return "Check the record";
   }
 }
 

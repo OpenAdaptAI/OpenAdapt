@@ -118,7 +118,7 @@ export function DecisionPortal() {
   const published = ingress.reachable_from_phone === true;
 
   return (
-    <div className="screen">
+    <div className="content">
       <header className="page-head">
         <h2>Decisions on a phone</h2>
         <span className="page-sub">
