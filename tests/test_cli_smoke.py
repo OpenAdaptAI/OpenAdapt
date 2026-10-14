@@ -93,8 +93,7 @@ def test_quickstart_runs_one_local_lifecycle_without_overwriting(monkeypatch):
     assert calls[0][0] == "tutorial"
     assert calls[0][1] == "--out"
     assert calls[0][3:] == ["--name", "local-quickstart"]
-    assert "openadapt-agent serve --allow-run" in result.output
-    assert "Frames stay here" in result.output
+    assert "openadapt quickstart --break-it" in result.output
 
 
 def test_quickstart_forwards_the_headed_tutorial_option(monkeypatch):
@@ -117,13 +116,31 @@ def test_quickstart_forwards_the_headed_tutorial_option(monkeypatch):
     assert calls[0][-1] == "--headed"
 
 
+def _engine_writing_broken_report(calls, report_text):
+    """Fake engine that records argv and writes the halted rerun's report."""
+
+    def invoke(argv):
+        calls.append(list(argv))
+        if report_text is not None:
+            broken = Path(argv[argv.index("--out") + 1]) / "run-broken"
+            broken.mkdir(parents=True)
+            (broken / "report.json").write_text(report_text, encoding="utf-8")
+        return 0
+
+    return invoke
+
+
 def test_quickstart_forwards_the_break_it_option_and_names_the_evidence(
     monkeypatch,
 ):
     calls = []
     monkeypatch.setattr(
         "openadapt.cli._invoke_flow",
-        lambda argv: calls.append(list(argv)) or 0,
+        _engine_writing_broken_report(
+            calls,
+            '{"execution_outcome": "HALTED", '
+            '"transaction_outcome": "RECONCILIATION_REQUIRED"}',
+        ),
     )
 
     runner = CliRunner()
@@ -139,8 +156,66 @@ def test_quickstart_forwards_the_break_it_option_and_names_the_evidence(
     assert calls[0][-1] == "--break-it"
     assert "run-broken" in result.output
     assert "HALTED" in result.output
-    assert "store unchanged" in result.output
-    assert "openadapt-agent serve --allow-run" in result.output
+    # The halted rerun ends RECONCILIATION_REQUIRED. Nothing may claim the
+    # store is unchanged or that a retry is safe.
+    assert "unchanged" not in result.output
+    # vocab-allow: no-change-claim -- asserts that the claim is absent
+    assert "nothing was written" not in result.output
+    assert (
+        "Result: check the record (transaction outcome RECONCILIATION_REQUIRED)"
+        in result.output
+    )
+    assert "nothing is retried until a person checks the record" in result.output
+
+
+@pytest.mark.parametrize(
+    ("report_text", "expected"),
+    [
+        (
+            '{"transaction_outcome": "HALTED_BEFORE_EFFECT"}',
+            "Result: stopped before saving (transaction outcome "
+            "HALTED_BEFORE_EFFECT). The engine proved nothing was written.",
+        ),
+        (
+            '{"transaction_outcome": "RECONCILIATION_REQUIRED"}',
+            "Result: check the record (transaction outcome RECONCILIATION_REQUIRED)",
+        ),
+        # A value this launcher doesn't know, a coarse HALTED with no
+        # transaction outcome, an unreadable report, or no report at all
+        # can't prove that nothing was written.
+        (
+            '{"transaction_outcome": "SOMETHING_NEW"}',
+            "Result: check the record (transaction outcome SOMETHING_NEW)",
+        ),
+        (
+            '{"execution_outcome": "HALTED"}',
+            "Result: check the record (transaction outcome unknown)",
+        ),
+        ("not json", "Result: check the record (transaction outcome unknown)"),
+        ("[]", "Result: check the record (transaction outcome unknown)"),
+        (None, "Result: check the record (transaction outcome unknown)"),
+    ],
+)
+def test_quickstart_derives_the_halted_rerun_result_from_its_report(
+    monkeypatch, report_text, expected
+):
+    calls = []
+    monkeypatch.setattr(
+        "openadapt.cli._invoke_flow",
+        _engine_writing_broken_report(calls, report_text),
+    )
+
+    runner = CliRunner()
+    with runner.isolated_filesystem():
+        result = runner.invoke(
+            cli_main, ["quickstart", "--break-it", "--out", "break-run"]
+        )
+
+    assert result.exit_code == 0, result.output
+    assert expected in result.output
+    if "HALTED_BEFORE_EFFECT" not in expected:
+        assert "nothing was written" not in result.output
+        assert "A save may have gone through" in result.output
 
 
 def test_quickstart_restores_the_operator_scrub_setting(monkeypatch):
@@ -219,12 +294,16 @@ def test_distribution_metadata_does_not_publish_a_static_lifecycle():
     assert lifecycle == []
 
 
-def test_distribution_metadata_matches_engine_python_range():
-    """The launcher must fail before resolution on unsupported Python versions."""
+def test_distribution_metadata_installs_the_launcher_on_newer_python():
+    """An upper Requires-Python bound made pip on 3.13+ backtrack to 1.3.0.
+
+    The launcher installs on any Python >=3.10; the engine dependencies carry
+    the version marker instead (tests/test_python_support.py).
+    """
     from importlib.metadata import metadata
 
     actual = metadata("openadapt")["Requires-Python"]
-    assert {term.strip() for term in actual.split(",")} == {">=3.10", "<3.13"}
+    assert {term.strip() for term in actual.split(",")} == {">=3.10"}
 
 
 def test_doctor_lists_quickstart_dependencies_as_core_not_extras(monkeypatch):
@@ -278,33 +357,43 @@ def test_doctor_lists_quickstart_dependencies_as_core_not_extras(monkeypatch):
 
 def test_launcher_flow_and_substrate_extras_metadata():
     """Install routes resolve the Flow release whose replay parser exposes
-    every native/remote backend, without installing OS bindings elsewhere."""
+    every native/remote backend, without installing OS bindings elsewhere.
+
+    Every engine requirement also carries the supported-Python marker, so pip
+    on Python 3.13+ installs this launcher (which prints the remedy) instead
+    of backtracking to an unrelated old release."""
     metadata = tomllib.loads(
         (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text()
     )["project"]
     extras = metadata["optional-dependencies"]
+    supported = "python_version < '3.13'"
 
     assert (
-        metadata["dependencies"].count("openadapt-flow[browser,hosted]>=1.29.0,<2.0.0")
+        metadata["dependencies"].count(
+            f"openadapt-flow[browser,hosted]>=1.29.0,<2.0.0; {supported}"
+        )
         == 1
     )
-    assert metadata["dependencies"].count("openadapt-agent>=2.0.1,<3") == 1
-    assert extras["flow"] == ["openadapt-flow>=1.29.0,<2.0.0"]
-    assert extras["agent"] == ["openadapt-agent>=2.0.1,<3"]
-    assert extras["browser"] == ["openadapt-flow[browser]>=1.29.0,<2.0.0"]
-    assert extras["privacy"] == ["openadapt-flow[privacy]>=1.29.0,<2.0.0"]
+    assert (
+        metadata["dependencies"].count(f"openadapt-agent>=2.0.1,<3; {supported}") == 1
+    )
+    assert extras["flow"] == [f"openadapt-flow>=1.29.0,<2.0.0; {supported}"]
+    assert extras["agent"] == [f"openadapt-agent>=2.0.1,<3; {supported}"]
+    assert extras["browser"] == [f"openadapt-flow[browser]>=1.29.0,<2.0.0; {supported}"]
+    assert extras["privacy"] == [f"openadapt-flow[privacy]>=1.29.0,<2.0.0; {supported}"]
     assert extras["capture"] == [
         "openadapt-capture>=1.2.0,<2.0.0",
-        "openadapt-flow[capture]>=1.29.0,<2.0.0",
+        f"openadapt-flow[capture]>=1.29.0,<2.0.0; {supported}",
     ]
-    assert extras["windows"] == ["openadapt-flow[windows]>=1.29.0,<2.0.0"]
+    assert extras["windows"] == [f"openadapt-flow[windows]>=1.29.0,<2.0.0; {supported}"]
     assert extras["macos"] == [
-        "openadapt-flow[macos]>=1.29.0,<2.0.0; sys_platform == 'darwin'"
+        "openadapt-flow[macos]>=1.29.0,<2.0.0; "
+        f"sys_platform == 'darwin' and {supported}"
     ]
     assert extras["linux"] == [
-        "openadapt-flow[linux]>=1.29.0,<2.0.0; sys_platform == 'linux'"
+        f"openadapt-flow[linux]>=1.29.0,<2.0.0; sys_platform == 'linux' and {supported}"
     ]
-    assert extras["rdp"] == ["openadapt-flow[rdp]>=1.29.0,<2.0.0"]
+    assert extras["rdp"] == [f"openadapt-flow[rdp]>=1.29.0,<2.0.0; {supported}"]
     assert extras["all"] == [
         "openadapt[browser,core,grounding,retrieval,privacy,flow,windows,rdp,agent]",
         "openadapt[macos]; sys_platform == 'darwin'",
@@ -610,7 +699,10 @@ def test_top_level_help_leads_with_flow():
     assert "openadapt flow demo-record" in result.output
     assert "openadapt flow tutorial" in result.output
     assert "openadapt quickstart --break-it" in result.output
-    assert "openadapt-agent serve --allow-run" in result.output
+    # openadapt-agent 2.0.1 requires --bundles; the help names a command that
+    # works with every released agent.
+    assert "openadapt-agent serve --bundles DIR --allow-run" in result.output
+    assert "openadapt-agent serve --allow-run" not in result.output
     assert "effect-verified first run" in result.output
     assert "Standalone local human GUI capture" in result.output
     assert "Research: evaluate" in result.output

@@ -7,7 +7,6 @@ version / PEP 668 remedy.
 
 from __future__ import annotations
 
-import sys
 from pathlib import Path
 
 import pytest
@@ -63,10 +62,11 @@ def test_explicit_out_is_honored_verbatim(engine_calls):
     assert engine_calls[0][2] == str(expected)
 
 
-def test_python_313_preflight_prints_remedy_before_delegation(
-    monkeypatch, engine_calls
+@pytest.mark.parametrize("version_info", [(3, 13), (3, 14)])
+def test_unsupported_python_preflight_prints_remedy_before_delegation(
+    monkeypatch, engine_calls, version_info
 ):
-    monkeypatch.setattr(sys, "version_info", (3, 13, 1))
+    monkeypatch.setattr("openadapt.cli._python_minor", lambda: version_info)
 
     runner = CliRunner()
     with runner.isolated_filesystem():
@@ -74,7 +74,8 @@ def test_python_313_preflight_prints_remedy_before_delegation(
 
     assert result.exit_code != 0
     assert "OpenAdapt needs Python 3.10\u20133.12" in result.output
-    assert "uv venv --python 3.12" in result.output
+    assert f"This is Python {version_info[0]}.{version_info[1]}" in result.output
+    assert "uv tool install --python 3.12 openadapt" in result.output
     assert (
         "https://raw.githubusercontent.com/OpenAdaptAI/openadapt-flow/"
         "main/scripts/install.sh" in result.output
@@ -97,7 +98,8 @@ def test_pep668_error_prints_the_same_remedy(monkeypatch):
 
     assert result.exit_code != 0
     assert "OpenAdapt needs Python 3.10\u20133.12" in result.output
-    assert "uv pip install openadapt" in result.output
+    assert "managed by your operating system" in result.output
+    assert "uv tool install --python 3.12 openadapt" in result.output
 
 
 @pytest.mark.parametrize(
