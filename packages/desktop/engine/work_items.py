@@ -7,7 +7,9 @@ local index database so that three things stay true:
 * The Needs-you inbox lists each item that a person must decide on, with the
   plain question and the actions that its outcome allows.
 * Results counts only what the evidence proves: an item is "done and checked"
-  only when its run's transaction outcome is VERIFIED.
+  only when its run's transaction outcome is VERIFIED, and "saved without a
+  person" only when Flow's approval block says so and both post-run checks
+  passed (``engine/approval_mode.py``).
 * No item is retried blindly. While an item's save may have gone through,
   Desktop refuses to run more items of that task until a person checks the
   record. An item whose run proved that nothing was written may run again.
@@ -24,6 +26,7 @@ import json
 import uuid
 from typing import Any
 
+from engine.approval_mode import parse_stored, saved_without_person
 from engine.outcomes import (
     CHECK_RECORD,
     DID_NOT_FINISH,
@@ -31,6 +34,7 @@ from engine.outcomes import (
     DONE_CHECKED,
     FINISHED_UNCHECKED,
     STOPPED_BEFORE_SAVING,
+    consistent_transaction_outcome,
     plain_result,
 )
 
@@ -58,6 +62,9 @@ COMPLETED_STATUSES = frozenset({DONE, DONE_BY_PERSON, CONFIRMED_SAVED})
 # The actions a person may take, by what the evidence proves about the save.
 NO_EFFECT_ACTIONS = frozenset({"retry", "skip", "decline", "teach"})
 UNCERTAIN_ACTIONS = frozenset({"confirmed_saved", "retry_after_check", "done_by_person"})
+# A save the record check confirmed that still went to a person (the whole
+# run wasn't clean). Running it again would enter it twice.
+CONFIRMED_SAVE_ACTIONS = frozenset({"confirmed_saved", "done_by_person"})
 
 
 class WorkItemError(ValueError):
@@ -102,13 +109,14 @@ def validate_inputs(raw: Any, declared: list[dict]) -> dict[str, Any]:
         values[key] = value
     # A missing input never falls back to the value from the recording: Flow
     # would otherwise fill it with the demonstration's record, and the item
-    # would act on the wrong record.
+    # would act on the wrong record. That holds for optional inputs too: an
+    # omitted optional value would type the demonstration's value on every
+    # item, and the record check would confirm it. An empty value is an
+    # explicit empty value (design 7.2).
     missing = [
         str(spec.get("name"))
         for spec in declared
-        if spec.get("required")
-        and not spec.get("secret")
-        and str(spec.get("name")) not in values
+        if not spec.get("secret") and str(spec.get("name")) not in values
     ]
     if missing:
         raise WorkItemError("This item is missing: " + ", ".join(sorted(missing)) + ".")
@@ -156,10 +164,35 @@ def result_for_run(report: dict) -> dict[str, Any]:
     )
 
 
-def status_after_run(result_key: str) -> str:
-    """Item status right after its run ends."""
+def status_after_run(
+    result_key: str,
+    approval: dict | None = None,
+    transaction_outcome: str | None = None,
+) -> str:
+    """Item status right after its run ends.
 
-    return DONE if result_key == DONE_CHECKED else OPEN
+    Done only when the result is done and checked and, for an item run under
+    an approval mode, Flow didn't send it to a person. A save that was
+    confirmed but needed a workaround keeps its result word and still waits
+    for a person. An item Flow decided to save without a person also needs a
+    consistent ``VERIFIED`` transaction outcome (design R1): a ``VERIFIED``
+    execution outcome alone, which reads "Done and checked", isn't enough to
+    close it without anyone looking.
+    """
+
+    if result_key != DONE_CHECKED:
+        return OPEN
+    if approval is None:
+        return DONE
+    if approval.get("needs_person") is not False:
+        return OPEN
+    if approval.get("decision") == "no_person" and transaction_outcome != "VERIFIED":
+        return OPEN
+    # ``approved``: a person approved every save of the item before it was
+    # made (``each_item``), and the record check confirmed it.
+    if approval.get("decision") not in {"no_person", "not_gated", "approved"}:
+        return OPEN
+    return DONE
 
 
 def blocks_more_runs(item: dict) -> bool:
@@ -175,8 +208,21 @@ def allowed_actions(item: dict) -> list[str]:
 
     if item.get("status") not in {OPEN, TEACHING}:
         return []
+    approval = item.get("approval") or {}
+    if (
+        item.get("nothing_written")
+        and approval.get("decision") == "approval_required"
+        and approval.get("mode") != "each_item"
+    ):
+        # "Only ask a person about problems" held the save for a person.
+        # Running it again would stop at the same check, so the person skips
+        # it or enters it by hand. (Under ``each_item`` nobody answered in
+        # time; running it again asks again.)
+        return ["skip", "decline", "done_by_person"]
     if item.get("nothing_written"):
         return ["retry", "skip", "decline", "teach"]
+    if item.get("result") == DONE_CHECKED:
+        return ["confirmed_saved", "done_by_person"]
     return ["confirmed_saved", "retry_after_check", "done_by_person"]
 
 
@@ -242,6 +288,18 @@ def public_item(row: dict, *, include_values: bool = False) -> dict[str, Any]:
         "resolved_at": row.get("resolved_at"),
         "retry_of": row.get("retry_of"),
     }
+    approval = parse_stored(row.get("approval_json"))
+    item["approval"] = approval
+    item["saved_without_person"] = bool(
+        result
+        and result["key"] == DONE_CHECKED
+        and saved_without_person(
+            approval,
+            consistent_transaction_outcome(
+                row.get("execution_outcome"), row.get("transaction_outcome")
+            ),
+        )
+    )
     item["actions"] = allowed_actions(item)
     if include_values:
         try:
@@ -257,6 +315,9 @@ def summarize(rows: list[dict], *, baselines: dict[str, float | None]) -> dict[s
     def empty() -> dict[str, Any]:
         return {
             "done_checked": 0,
+            # Done and checked items Flow saved with every check passed and no
+            # person. Never an item a person approved, closed, or finished.
+            "saved_without_person": 0,
             "needed_person": 0,
             "waiting": 0,
             "wrong_record_prevented": 0,
@@ -281,11 +342,15 @@ def summarize(rows: list[dict], *, baselines: dict[str, float | None]) -> dict[s
                 and item["halt_kind"] == "wrong_record"
             ):
                 target["wrong_record_prevented"] += 1
+            approval = item.get("approval") or {}
             if item["result"] == DONE_CHECKED:
                 target["done_checked"] += 1
-            else:
+                if item["saved_without_person"]:
+                    target["saved_without_person"] += 1
+            if item["result"] != DONE_CHECKED or approval.get("needs_person") is True:
                 # Every item that stopped needed a person, including one that a
-                # person later ran again (the new run is its own item).
+                # person later ran again (the new run is its own item). A save
+                # that was confirmed but still went to a person counts in both.
                 target["needed_person"] += 1
             if item["status"] in {OPEN, TEACHING}:
                 target["waiting"] += 1

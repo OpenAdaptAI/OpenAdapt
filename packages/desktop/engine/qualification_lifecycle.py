@@ -189,6 +189,87 @@ def retain_run_evidence(
     ]
 
 
+#: The largest drill receipt or mutation record Desktop keeps.
+_DRILL_EVIDENCE_MAX_BYTES = 1_000_000
+
+
+def _drill_file(folder: Path, name: str) -> bytes | None:
+    path = folder / name
+    try:
+        if path.is_symlink() or not path.is_file():
+            return None
+        if path.stat().st_size > _DRILL_EVIDENCE_MAX_BYTES:
+            return None
+        return path.read_bytes()
+    except OSError:
+        return None
+
+
+def retain_drill_evidence(
+    bundle_dir: Path,
+    *,
+    case_id: str,
+    run_id: str,
+    run_dir: Path,
+) -> tuple[list[dict[str, str]], str | None]:
+    """Keep a drill's signed receipt and mutation record with its result.
+
+    Flow leaves them in ``RUN_DIR/qualification-fault/`` with a
+    ``status.json`` that says whether the drill made its change
+    (``staged``). They become the ``fault_receipt`` and ``fault_mutation``
+    evidence of the case result; Flow checks both against the run report and
+    the project's trusted drill key when the task is approved.
+
+    Returns ``(evidence, None)``, or ``([], problem)`` in plain words when
+    the drill hasn't passed. Nothing is kept then.
+    """
+
+    case_id = validate_case_id(case_id)
+    run_id = validate_path_token(run_id, label="Run id")
+    folder = run_dir / "qualification-fault"
+    status_bytes = _drill_file(folder, "status.json")
+    try:
+        status = json.loads(status_bytes) if status_bytes is not None else None
+    except ValueError:
+        status = None
+    if not isinstance(status, dict):
+        return [], (
+            "The drill didn't leave its record of what it changed, so it "
+            "hasn't passed."
+        )
+    if status.get("staged") is not True:
+        declined = status.get("declined")
+        detail = f" ({declined})" if isinstance(declined, str) and declined else ""
+        return [], (
+            "The drill couldn't make its change on this screen"
+            f"{detail}, so it hasn't passed. Open the screen where the task "
+            "starts, then run it again."
+        )
+    receipt = _drill_file(folder, "receipt.json")
+    mutation = _drill_file(folder, "mutation.json")
+    if receipt is None or mutation is None:
+        return [], (
+            "The drill's signed record is missing, so it hasn't passed."
+        )
+    evidence: list[dict[str, str]] = []
+    for kind, payload, name in (
+        ("fault_receipt", receipt, "fault-receipt.json"),
+        ("fault_mutation", mutation, "fault-mutation.json"),
+    ):
+        relative = Path(case_id) / run_id / name
+        destination = bundle_dir / "qualification-evidence" / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_bytes(payload)
+        evidence.append(
+            {
+                "kind": kind,
+                "sha256": hashlib.sha256(payload).hexdigest(),
+                "relative_path": relative.as_posix(),
+            }
+        )
+    return evidence, None
+
+
 def retain_capability_observation(
     bundle_dir: Path,
     *,

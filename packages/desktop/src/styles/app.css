@@ -1976,6 +1976,136 @@ select.input:focus {
   gap: var(--space-2);
   margin-top: var(--space-3);
 }
+/* "Only ask a person about problems" on a task card. */
+.switch-panel {
+  margin-top: var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-1);
+  background: var(--panel-sunk);
+}
+.switch-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+.switch-head h3 {
+  margin: 0;
+  font-size: var(--fs-md);
+  font-weight: var(--fw-semibold);
+}
+.switch-body,
+.switch-note {
+  max-width: 72ch;
+  margin: var(--space-2) 0 0;
+  font-size: var(--fs-sm);
+}
+.switch-body {
+  color: var(--text);
+}
+.switch-note {
+  color: var(--text-muted);
+}
+.switch-actions,
+.switch-confirm {
+  margin-top: var(--space-3);
+}
+.switch-confirm p {
+  max-width: 64ch;
+  margin: 0 0 var(--space-2);
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+.switch-evidence {
+  margin-top: var(--space-3);
+}
+.switch-evidence .technical-body {
+  background: var(--panel);
+}
+.switch-sentence {
+  max-width: 72ch;
+  margin: 0 0 var(--space-3);
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+.switch-subhead {
+  margin: var(--space-4) 0 var(--space-2);
+  font-size: var(--fs-sm);
+  font-weight: var(--fw-semibold);
+}
+.switch-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0 0 0 var(--space-4);
+  font-size: var(--fs-sm);
+}
+.switch-requirements {
+  padding: 0;
+  list-style: none;
+}
+.switch-requirements li {
+  display: grid;
+  grid-template-columns: 9.5rem minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: baseline;
+}
+.recent-list.with-tags li {
+  grid-template-columns: minmax(0, 1.3fr) minmax(0, 1fr) minmax(0, 1.2fr) 8rem auto;
+}
+.mode-tag {
+  display: inline-flex;
+  align-items: center;
+  margin-left: var(--space-2);
+  padding: 1px var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-1);
+  color: var(--text-muted);
+  font-size: var(--fs-caption);
+  white-space: nowrap;
+}
+.attention-banner.switch-banner {
+  flex-wrap: nowrap;
+  align-items: flex-start;
+}
+.attention-banner.switch-banner > svg {
+  flex: 0 0 auto;
+  margin-top: 3px;
+  color: var(--attention);
+}
+.attention-why {
+  max-width: 64ch;
+  margin: var(--space-2) 0 0;
+  color: var(--text);
+  font-size: var(--fs-sm);
+}
+.switch-summary {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.switch-summary li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-2) var(--space-4);
+  font-size: var(--fs-sm);
+}
+.switch-summary .switch-summary-task {
+  min-width: 14rem;
+  color: var(--text);
+  font-weight: var(--fw-medium);
+}
+.stat-sub {
+  color: var(--text-muted);
+  font-size: var(--fs-caption);
+}
 .attention-banner {
   display: flex;
   flex-wrap: wrap;
@@ -2789,6 +2919,13 @@ select.input:focus {
   .recent-label {
     display: none;
   }
+  .switch-requirements li {
+    grid-template-columns: 1fr;
+    gap: var(--space-1);
+  }
+  .recent-list.with-tags li {
+    grid-template-columns: 1fr auto;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -2834,4 +2971,88 @@ select.input:focus {
   display: block;
   color: var(--text-muted);
   font-size: var(--fs-caption);
+}
+
+/* -----------------------------------------------------------------------------
+   Approve each save: a run waits before a save for a person (ItemApproval.tsx)
+----------------------------------------------------------------------------- */
+.approval-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: var(--space-6) var(--space-4);
+  overflow-y: auto;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+}
+.approval-panel {
+  width: min(1040px, 100%);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-2);
+  padding: var(--space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.approval-head h2 {
+  margin: 0 0 var(--space-1);
+}
+.approval-body {
+  display: grid;
+  grid-template-columns: minmax(220px, 1fr) minmax(0, 2fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+@media (max-width: 760px) {
+  .approval-body {
+    grid-template-columns: 1fr;
+  }
+}
+.approval-body h3 {
+  margin: 0 0 var(--space-2);
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.approval-values dl {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.approval-values dt {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.approval-values dd {
+  margin: 0;
+  color: var(--text-strong);
+  overflow-wrap: anywhere;
+}
+.approval-step {
+  margin-top: var(--space-3);
+}
+.approval-form {
+  margin: 0;
+}
+.approval-form img {
+  display: block;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-1);
+}
+.approval-decline {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.approval-decline legend {
+  font-weight: var(--fw-semibold);
+  color: var(--text-strong);
+  margin-bottom: var(--space-2);
 }

@@ -56,3 +56,36 @@ it("shows a calm empty state before anything ran", async () => {
   render(<Results onNeedsYou={() => {}} />);
   expect(await screen.findByText("No results yet")).toBeTruthy();
 });
+
+it("counts items saved without a person inside Done and checked, and never calls them approved", async () => {
+  const counts = { ...COUNTS, saved_without_person: 26 };
+  vi.mocked(engineTry).mockImplementation(async (command, _params, fallback) => {
+    if (command === CMD.GET_RESULTS_SUMMARY) {
+      return {
+        ok: true,
+        total: counts,
+        tasks: { "wf-1": counts },
+        names: { "wf-1": "Claim note" },
+        recent: [
+          { item_id: "r1", batch_id: "b", workflow_id: "wf-1", position: 0, label: "M-1", status: "done", result: "done_checked", nothing_written: false, execution_outcome: "VERIFIED", transaction_outcome: "VERIFIED", actions: [], task_name: "Claim note", saved_without_person: true },
+          { item_id: "r2", batch_id: "b", workflow_id: "wf-1", position: 1, label: "M-2", status: "done", result: "done_checked", nothing_written: false, execution_outcome: "VERIFIED", transaction_outcome: "VERIFIED", actions: [], task_name: "Claim note", saved_without_person: false },
+        ],
+        switches: [
+          { workflow_id: "wf-1", task_name: "Claim note", state: "on", off_reason: null, off_at: null, off_by_this_computer: false, turned_on: { name: "Sam Ortiz", role: "admin", at: "2026-10-04T15:02:00Z" }, off_step: "" },
+        ],
+      };
+    }
+    if (command === CMD.GET_WORKFLOWS) {
+      return [{ id: "wf-1", name: "Claim note", steps: 4, capture_id: "cap-1", demo_seconds: 90 }];
+    }
+    return fallback;
+  });
+  render(<Results onNeedsYou={() => {}} />);
+
+  expect(await screen.findByText("26 of them without a person: every check passed.")).toBeTruthy();
+  expect(screen.getByText(/\(26 without a person\)/)).toBeTruthy();
+  expect(screen.getAllByText("No person")).toHaveLength(1);
+  expect(screen.getByText("Since Oct 4.")).toBeTruthy();
+  // Nobody approved these items, so no label says they were approved.
+  expect(screen.queryByText(/approved by a person/i)).toBeNull();
+});

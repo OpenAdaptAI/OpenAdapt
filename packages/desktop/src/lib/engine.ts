@@ -44,6 +44,14 @@ export const CMD = {
   RESOLVE_ATTENTION_ITEM: "resolve_attention_item",
   GET_ATTENTION_SCREENSHOT: "get_attention_screenshot",
   GET_RESULTS_SUMMARY: "get_results_summary",
+  // A person approves each save. While a run waits before a save, these read
+  // and answer it (they're served while the run is still going).
+  GET_ITEM_APPROVAL: "get_item_approval",
+  ANSWER_ITEM_APPROVAL: "answer_item_approval",
+  // "Only ask a person about problems": read the switch and turn it off.
+  // Turning it on happens in OpenAdapt Cloud, never here.
+  GET_APPROVAL_MODE: "get_approval_mode",
+  TURN_OFF_APPROVAL_MODE: "turn_off_approval_mode",
   RUN_SAMPLE: "run_sample",
   GET_QUALIFICATION: "get_qualification",
   INITIALIZE_QUALIFICATION: "initialize_qualification",
@@ -145,6 +153,9 @@ export const EVT = {
   COACH: "coach",
   // {state: "browser" | "running" | "done" | "failed", detail}
   SAMPLE_PROGRESS: "sample_progress",
+  // {workflow_id, state: "watching" | "closed"}: a run that may stop before a
+  // save for a person's approval started or ended. Never carries a value.
+  ITEM_APPROVAL: "item_approval",
 } as const;
 
 export type EngineEvent = (typeof EVT)[keyof typeof EVT];

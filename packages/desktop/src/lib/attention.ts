@@ -5,6 +5,11 @@
 // only when the run proved nothing was written. This file only words them.
 // A card may say "Nothing was written" only when `nothing_written` is true.
 
+import {
+  confirmedButNeedsLook,
+  confirmedButNeedsLookSentence,
+  whyItCameToYou,
+} from "./approvalMode";
 import { humanizeInput, plainStep, sentenceCase } from "./outcomes";
 import type { AttentionAction, AttentionItem } from "./types";
 
@@ -114,6 +119,57 @@ export function attentionCopy(item: AttentionItem): AttentionCopy {
         };
   }
 
+  // Saved, and the record check confirmed it, but "Only ask a person about
+  // problems" sent it here (for example, the run had to work around a changed
+  // screen). The result stays "Done and checked"; a person looks first.
+  if (confirmedButNeedsLook(item)) {
+    return {
+      question: `Is the record for ${who} right?`,
+      sentence: confirmedButNeedsLookSentence(item.approval),
+      prevented: "The record check confirmed the save. OpenAdapt won't enter this item again.",
+      preventedTone: "warn",
+      choices: choices.map((choice) =>
+        choice.action === "confirmed_saved"
+          ? { ...choice, title: "It's right. Close it", sub: "You looked, and the record is right." }
+          : choice.action === "done_by_person"
+            ? { ...choice, title: "I fixed it by hand", sub: "The record needed a change, and you made it." }
+            : choice,
+      ),
+    };
+  }
+
+  // A person approves each save. Nobody answered in time, or the person
+  // chose Don't save. Nothing was written.
+  if (
+    item.nothing_written &&
+    item.approval &&
+    ((item.approval.mode === "each_item" && item.approval.decision === "approval_required") ||
+      item.approval.decision === "declined")
+  ) {
+    return {
+      question:
+        item.approval.decision === "declined"
+          ? `${sentenceCase(who)} wasn't saved`
+          : `${sentenceCase(who)} waited for your approval`,
+      sentence: whyItCameToYou(item) ?? "OpenAdapt stopped before saving.",
+      prevented: "It stopped before saving. Nothing was written.",
+      preventedTone: "ok",
+      choices,
+    };
+  }
+
+  // "Only ask a person about problems" held the save for a person. Nothing
+  // was written; the sentence says which check sent it here.
+  if (item.nothing_written && item.approval?.decision === "approval_required") {
+    return {
+      question: `${sentenceCase(who)} is waiting for a person before saving`,
+      sentence: whyItCameToYou(item) ?? "This item waits for a person before saving.",
+      prevented: "It stopped before saving. Nothing was written.",
+      preventedTone: "ok",
+      choices,
+    };
+  }
+
   // Anything the evidence doesn't prove effect-free is a record to check.
   if (!item.nothing_written) {
     return {
@@ -182,9 +238,12 @@ export function attentionCopy(item: AttentionItem): AttentionCopy {
         question: stepCaption(item)
           ? `OpenAdapt stopped at this step: ${stepCaption(item)}`
           : "OpenAdapt stopped before finishing",
-        sentence: item.halt_reason
-          ? sentenceCase(item.halt_reason)
-          : "Something didn't match, so it stopped instead of guessing.",
+        // An approval-mode stop names its check in words, not engine codes.
+        sentence:
+          whyItCameToYou(item) ??
+          (item.halt_reason
+            ? sentenceCase(item.halt_reason)
+            : "Something didn't match, so it stopped instead of guessing."),
         prevented: "It stopped before saving. Nothing was written.",
         preventedTone: "ok",
         choices,

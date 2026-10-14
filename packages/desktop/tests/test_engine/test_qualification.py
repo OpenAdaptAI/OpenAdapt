@@ -564,6 +564,21 @@ def test_dispatcher_forwards_dual_path_fault_target_to_flow_scope(
     db.insert_bundle("wf-1", str(bundle))
     dispatcher = EngineDispatcher(config, services=EngineServices(config, db=db))
 
+    class DrillsReady:
+        """A Flow whose drill campaign leaves this unscoped case to Desktop."""
+
+        drill_setups = 0
+
+        def supports_local_drills(self) -> bool:
+            return True
+
+        def qualify_drills(self, bundle_dir, *, env_overrides=None) -> dict:
+            self.drill_setups += 1
+            return {"ok": True, "campaign": {"drills": [], "skipped": []}}
+
+    flow = DrillsReady()
+    dispatcher.services._flow_bridge = flow
+
     def stop_after_scope(*_args, **_kwargs) -> None:
         raise RuntimeError("stop after retained scope")
 
@@ -590,6 +605,8 @@ def test_dispatcher_forwards_dual_path_fault_target_to_flow_scope(
         "workflow_id": "wf-1",
         "error": "stop after retained scope",
     }
+    # The drill campaign was set up before Desktop scoped the drill.
+    assert flow.drill_setups == 1
     assert retained is not None
     case = next(item for item in retained.cases if item.id == fault_case["id"])
     assert [(target.step_id, target.actuation_path) for target in case.action_targets] == [

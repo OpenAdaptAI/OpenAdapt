@@ -128,6 +128,20 @@ _POSTCONDITION_ACTION_KINDS = frozenset(
 _SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 _INGEST_TOKEN_ENV = "OPENADAPT_INGEST_TOKEN"
 
+#: How long a Desktop run waits for a person to approve a save, in seconds.
+#: The shell gives a run command 15 minutes (``src-tauri/src/sidecar.rs``), so
+#: the wait leaves time for the steps before and after the save.
+APPROVAL_WAIT_S = 600
+#: The only approval mode Desktop asks Flow for. "Only ask a person about
+#: problems" (``problems_only``) isn't passed until Flow can check every field
+#: a save changes (see ``engine.approval_mode.NOT_BUILT``).
+DESKTOP_APPROVAL_MODE = "each_item"
+#: The one route Flow accepts an item approval from.
+ITEM_APPROVAL_ROUTE = "desktop_run_it"
+DECLINE_REASONS = frozenset({"wrong_values", "wrong_record", "screen_problem"})
+_REQUEST_ID_RE = re.compile(r"^[0-9a-f]{32}$")
+_REQUEST_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+
 
 def _contract_counts(value: object) -> dict[str, int] | None:
     if not isinstance(value, dict) or set(value) != _OUTCOME_CONTRACT_KEYS:
@@ -482,6 +496,8 @@ class FlowBridge:
         self._run_auth_support: bool | None = None
         self._attached_browser_support: bool | None = None
         self._push_json_support: bool | None = None
+        self._approval_gate_support: bool | None = None
+        self._local_drill_support: bool | None = None
 
     @staticmethod
     def hosted_runner_contract() -> ModuleType:
@@ -831,6 +847,8 @@ class FlowBridge:
         authorization_file: Path | None = None,
         params_file: Path | None = None,
         env_overrides: dict[str, str] | None = None,
+        approval_mode: str | None = None,
+        approval_wait_s: int | None = None,
     ) -> FlowResult:
         """Run a bundle under a deployment config.
 
@@ -838,6 +856,12 @@ class FlowBridge:
         JSON to ``openadapt-flow run --authorization-file`` -- pass it only when
         :meth:`run_supports_authorization` is True (the flag is a PROPOSED flow
         follow-up in the 2026-07-17 runner-platform spec).
+
+        ``approval_mode`` is passed to Flow as ``--approval-mode``. Under
+        ``each_item`` the run stops before each save and waits up to
+        ``approval_wait_s`` seconds for a person (:meth:`item_approval_show`,
+        :meth:`item_approval_answer`). A run without a profile is not gated
+        unless the caller passes the mode, so Desktop always passes it.
         """
         args = ["run", str(bundle_dir), "--config", str(config)]
         if out_dir:
@@ -846,6 +870,10 @@ class FlowBridge:
             args += ["--authorization-file", str(authorization_file)]
         if params_file:
             args += ["--params-file", str(params_file)]
+        if approval_mode is not None:
+            args += ["--approval-mode", approval_mode]
+            if approval_wait_s is not None:
+                args += ["--approval-wait", str(int(approval_wait_s))]
         return self._run(
             args,
             out_dir=out_dir,
@@ -865,11 +893,15 @@ class FlowBridge:
         out_dir: Path,
         url: str | None = None,
         env_overrides: dict[str, str] | None = None,
+        approval_wait_s: int | None = None,
     ) -> FlowResult:
         """Run one qualification case through Flow-owned authorization.
 
         Desktop supplies only private canonical inputs and stable local ids.
         Flow builds and consumes the Standard authorization in the same process.
+        Flow gates the practice case like a Standard run (``each_item``): it
+        waits up to ``approval_wait_s`` seconds for a person before the save.
+        A drill never asks.
         """
 
         args = [
@@ -891,7 +923,170 @@ class FlowBridge:
         ]
         if url:
             args += ["--url", url]
+        if approval_wait_s is not None:
+            args += ["--approval-wait", str(int(approval_wait_s))]
         return self._run(args, out_dir=out_dir, env_overrides=env_overrides)
+
+    def qualify_drills(
+        self,
+        bundle_dir: Path,
+        *,
+        env_overrides: dict[str, str] | None = None,
+    ) -> dict:
+        """Set up this computer's local readiness-drill campaign (B276).
+
+        ``openadapt-flow qualify drills BUNDLE --json`` adds the five drills
+        for the practice case's first save, gives each the practice case's
+        inputs and trusts this computer's drill key. It changes the project,
+        so call it before recording any case result. It's safe to repeat.
+
+        Returns ``{"ok": True, "campaign": {...}}`` or
+        ``{"ok": False, "error": ...}`` with Flow's own refusal.
+        """
+
+        result = self._run(
+            ["qualify", "drills", str(bundle_dir), "--json"],
+            out_dir=bundle_dir,
+            timeout=120,
+            env_overrides=env_overrides,
+        )
+        if result.returncode != 0:
+            reason = (result.stdout or result.stderr or "").strip().splitlines()
+            return {
+                "ok": False,
+                "error": (reason[-1] if reason else "Flow refused the drills")[:500],
+            }
+        try:
+            campaign = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            return {"ok": False, "error": "Flow's drill setup didn't print a campaign"}
+        if (
+            not isinstance(campaign, dict)
+            or campaign.get("schema") != "openadapt.local-drill-campaign/v1"
+            or not isinstance(campaign.get("drills"), list)
+        ):
+            return {"ok": False, "error": "Flow's drill setup printed an unknown campaign"}
+        return {"ok": True, "campaign": campaign}
+
+    def item_approval_show(self, run_dir: Path) -> list[dict]:
+        """The run's approval requests (``openadapt.item-approval-list/v1``).
+
+        Raises :class:`ValueError` when Flow's answer isn't the list it
+        promises. Each row has ``request_id``, ``request_sha256``, ``status``,
+        ``step_id``, ``step_intent``, ``screenshot`` (an absolute path),
+        ``screenshot_sha256`` and ``expires_at``.
+        """
+
+        result = self._run(["item-approval", "show", str(run_dir)], timeout=60)
+        if result.returncode != 0:
+            raise ValueError("Flow couldn't list this run's approval requests")
+        try:
+            payload = json.loads(result.stdout)
+        except json.JSONDecodeError as exc:
+            raise ValueError("Flow's approval list isn't JSON") from exc
+        if (
+            not isinstance(payload, dict)
+            or payload.get("schema") != "openadapt.item-approval-list/v1"
+            or not isinstance(payload.get("requests"), list)
+        ):
+            raise ValueError("Flow's approval list has an unknown shape")
+        return [row for row in payload["requests"] if isinstance(row, dict)]
+
+    def item_approval_answer(
+        self,
+        run_dir: Path,
+        *,
+        decision: Literal["approve", "decline"],
+        request_id: str,
+        request_sha256: str,
+        reason: str | None = None,
+    ) -> dict:
+        """Answer one waiting request as the person at this computer.
+
+        Desktop has no person-level sign-in (its Cloud credential belongs to
+        the organization), so every answer is recorded as ``--unauthenticated``:
+        Flow keeps it without anyone's name. Returns Flow's answer
+        (``{"ok": True, "decision", "answer_sha256", "resume_required"}``) or
+        its refusal (``{"ok": False, "code", "message"}``).
+        """
+
+        if decision not in {"approve", "decline"}:
+            raise ValueError("An answer is approve or decline")
+        if not _REQUEST_ID_RE.fullmatch(str(request_id or "")):
+            raise ValueError("That approval request has an unexpected id")
+        if not _REQUEST_DIGEST_RE.fullmatch(str(request_sha256 or "")):
+            raise ValueError("That approval request has an unexpected digest")
+        args = [
+            "item-approval",
+            decision,
+            str(run_dir),
+            "--request-id",
+            request_id,
+            "--request-sha256",
+            request_sha256,
+            "--decided-by",
+            "human",
+            "--route",
+            ITEM_APPROVAL_ROUTE,
+            "--unauthenticated",
+        ]
+        if decision == "decline":
+            if reason not in DECLINE_REASONS:
+                raise ValueError("Pick why it shouldn't save")
+            args += ["--reason", str(reason)]
+        elif reason is not None:
+            raise ValueError("An approval has no reason")
+        result = self._run(args, timeout=60)
+        try:
+            answer = json.loads(result.stdout)
+        except json.JSONDecodeError:
+            answer = None
+        if not isinstance(answer, dict) or not isinstance(answer.get("ok"), bool):
+            return {
+                "ok": False,
+                "code": "unreadable",
+                "message": "Flow's answer couldn't be read, so nothing was approved.",
+            }
+        if answer["ok"] and result.returncode != 0:
+            return {
+                "ok": False,
+                "code": "inconsistent",
+                "message": "Flow's answer and exit code disagree.",
+            }
+        return answer
+
+    def supports_approval_gate(self) -> bool:
+        """Probe (once) whether Flow can stop before each save for a person.
+
+        Needs ``run --approval-mode`` and the ``item-approval`` command
+        (openadapt-flow PR 486). Without them a run never asks before saving.
+        """
+
+        if self._approval_gate_support is None:
+            try:
+                run_help = self._run(["run", "--help"], timeout=30)
+                case_help = self._run(["qualify", "run-case", "--help"], timeout=30)
+                answer_help = self._run(["item-approval", "--help"], timeout=30)
+                self._approval_gate_support = (
+                    "--approval-mode" in (run_help.stdout or "")
+                    and "--approval-wait" in (case_help.stdout or "")
+                    and answer_help.ok
+                )
+            except Exception:
+                self._approval_gate_support = False
+        return self._approval_gate_support
+
+    def supports_local_drills(self) -> bool:
+        """Probe (once) whether Flow can set up this computer's drill campaign."""
+
+        if self._local_drill_support is None:
+            try:
+                self._local_drill_support = self._run(
+                    ["qualify", "drills", "--help"], timeout=30
+                ).ok
+            except Exception:
+                self._local_drill_support = False
+        return self._local_drill_support
 
     def supports_attached_browser_runs(self) -> bool:
         """Probe (once) whether Flow can run in an attached signed-in browser.
@@ -1069,6 +1264,17 @@ class FlowBridge:
                 return "unknown"
             if precise == "VERIFIED":
                 if returncode != 0 or report.get("success") is not True or explicit_halt:
+                    return "unknown"
+            transaction = report.get("transaction_outcome")
+            if transaction is not None:
+                from engine.outcomes import consistent_transaction_outcome
+
+                if consistent_transaction_outcome(precise, transaction) is None:
+                    # A transaction outcome that disagrees with the execution
+                    # outcome proves nothing. Dropping it would leave a bare
+                    # VERIFIED, which reads "Done and checked" and closes the
+                    # item without a person, even when Flow said the record
+                    # needs reconciling.
                     return "unknown"
             return cast(FlowOutcome, precise)
 

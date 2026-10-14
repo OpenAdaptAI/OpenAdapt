@@ -48,7 +48,7 @@ _HALT_COLUMNS = frozenset({
 _WORK_ITEM_COLUMNS = frozenset({
     "run_id", "execution_outcome", "transaction_outcome", "halt_kind",
     "halt_step", "halt_reason", "expected", "observed", "status",
-    "duration_s", "finished_at", "resolved_at",
+    "duration_s", "finished_at", "resolved_at", "approval_json",
 })
 
 _SCHEMA = """\
@@ -154,7 +154,9 @@ CREATE TABLE IF NOT EXISTS work_items (
     retry_of TEXT,
     created_at TEXT NOT NULL,
     finished_at TEXT,
-    resolved_at TEXT
+    resolved_at TEXT,
+    -- Flow's PHI-free approval-mode block for the item (closed codes only).
+    approval_json TEXT
 );
 
 -- Where a task was recorded, so Check it and Run it start from the same app.
@@ -208,6 +210,12 @@ class IndexDB:
         ):
             if col not in existing:
                 self._conn.execute(ddl)
+        work_item_columns = {
+            r["name"]
+            for r in self._conn.execute("PRAGMA table_info(work_items)").fetchall()
+        }
+        if "approval_json" not in work_item_columns:
+            self._conn.execute("ALTER TABLE work_items ADD COLUMN approval_json TEXT")
         self._conn.commit()
 
     def close(self) -> None:

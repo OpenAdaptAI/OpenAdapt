@@ -16,8 +16,11 @@ afterEach(() => {
 
 const TARGET = { backend: "web", url: "https://emr.example.test" };
 
-function engine(readiness: "ready" | "checking" = "ready") {
+function engine(readiness: "ready" | "checking" = "ready", switchState?: string) {
   vi.mocked(engineTry).mockImplementation(async (command, _params, fallback) => {
+    if (command === CMD.GET_APPROVAL_MODE && switchState) {
+      return { ok: true, workflow_id: "wf-1", state: switchState, blockers: [] };
+    }
     if (command === CMD.GET_WORKFLOWS) {
       return [{ id: "wf-1", name: "Add a claim note", steps: 4, readiness, blocked: false }];
     }
@@ -141,4 +144,94 @@ it("never runs a finished list again; the next step is a new list", async () => 
   expect(box.value).toBe("");
   expect(box.disabled).toBe(false);
   expect(engineInvoke).toHaveBeenCalledTimes(2);
+});
+
+it("with the switch on, stops the list at the first item that needs a person", async () => {
+  engine("ready", "on");
+  vi.mocked(engineInvoke)
+    .mockResolvedValueOnce(item(0, "VERIFIED", "VERIFIED", "done_checked", false))
+    .mockResolvedValueOnce(item(1, "HALTED", "HALTED_BEFORE_EFFECT", "stopped_before_saving", true))
+    .mockResolvedValue(item(2, "VERIFIED", "VERIFIED", "done_checked", false));
+  render(<RunIt workflowId="wf-1" onCheck={() => {}} onNeedsYou={() => {}} onResults={() => {}} />);
+
+  expect(await screen.findByText(/^Only problems come to you\./)).toBeTruthy();
+  await paste("member_id,note\nM-1,Reviewed\nM-2,Reviewed\nM-3,Called");
+  fireEvent.click(await screen.findByRole("button", { name: "Run 3 items" }));
+
+  expect(await screen.findByText(/Item 2 needs you, so OpenAdapt stopped the list there/)).toBeTruthy();
+  // Even a stop that wrote nothing stops the list in this mode.
+  expect(engineInvoke).toHaveBeenCalledTimes(2);
+  expect(screen.getByText("Not run")).toBeTruthy();
+});
+
+it("with the switch on in Cloud but not used here, runs the list as before", async () => {
+  engine("ready", "not_used_here");
+  vi.mocked(engineInvoke)
+    .mockResolvedValueOnce(item(0, "HALTED", "HALTED_BEFORE_EFFECT", "stopped_before_saving", true))
+    .mockResolvedValueOnce(item(1, "VERIFIED", "VERIFIED", "done_checked", false));
+  render(<RunIt workflowId="wf-1" onCheck={() => {}} onNeedsYou={() => {}} onResults={() => {}} />);
+
+  await paste("member_id,note\nM-1,Reviewed\nM-2,Reviewed");
+  fireEvent.click(await screen.findByRole("button", { name: "Run 2 items" }));
+
+  expect(await screen.findByText("Finished this list")).toBeTruthy();
+  expect(engineInvoke).toHaveBeenCalledTimes(2);
+  expect(screen.queryByText(/Only problems come to you/)).toBeNull();
+});
+
+it("sends an empty optional field as an empty value, never leaving it to the recording", async () => {
+  vi.mocked(engineTry).mockImplementation(async (command, _params, fallback) => {
+    if (command === CMD.GET_WORKFLOWS) {
+      return [{ id: "wf-1", name: "Add a claim note", steps: 4, readiness: "ready", blocked: false }];
+    }
+    if (command === CMD.GET_TASK_INPUTS) {
+      return {
+        ok: true,
+        workflow_id: "wf-1",
+        inputs: [
+          { name: "member_id", type: "string", secret: false, required: true, example: "M-1", choices: [] },
+          { name: "note", type: "string", secret: false, required: false, example: "Reviewed", choices: [] },
+        ],
+        target: TARGET,
+      };
+    }
+    return fallback;
+  });
+  vi.mocked(engineInvoke).mockResolvedValueOnce(item(0, "VERIFIED", "VERIFIED", "done_checked", false));
+  render(<RunIt workflowId="wf-1" onCheck={() => {}} onNeedsYou={() => {}} onResults={() => {}} />);
+
+  fireEvent.click(await screen.findByRole("button", { name: "Type one" }));
+  fireEvent.change(await screen.findByLabelText("Member ID"), { target: { value: "M-7" } });
+  fireEvent.click(await screen.findByRole("button", { name: "Run 1 item" }));
+
+  await waitFor(() => expect(engineInvoke).toHaveBeenCalledTimes(1));
+  expect(vi.mocked(engineInvoke).mock.calls[0][1]).toEqual(
+    expect.objectContaining({ inputs: { member_id: "M-7", note: "" } }),
+  );
+});
+
+it("stops the list when nobody approved a save in time", async () => {
+  engine();
+  const waited = item(0, "HALTED", "HALTED_BEFORE_EFFECT", "stopped_before_saving", true);
+  (waited.item as Record<string, unknown>).approval = {
+    validated: true,
+    mode: "each_item",
+    decision: "approval_required",
+    reason: null,
+    needs_person: true,
+    counts_toward_problems: false,
+    switch_off_reason: null,
+    failed_check: null,
+    post_checks: { verified: false, whole_run_clean: false },
+    saves_without_person: 0,
+  };
+  vi.mocked(engineInvoke).mockResolvedValueOnce(waited);
+  render(<RunIt workflowId="wf-1" onCheck={() => {}} onNeedsYou={() => {}} onResults={() => {}} />);
+
+  expect(await screen.findByText(/Before each save, it shows you the filled form/)).toBeTruthy();
+  await paste("member_id,note\nM-1,Reviewed\nM-2,Reviewed");
+  fireEvent.click(await screen.findByRole("button", { name: "Run 2 items" }));
+
+  expect(await screen.findByText(/Nobody approved the save for item 1 in time/)).toBeTruthy();
+  expect(engineInvoke).toHaveBeenCalledTimes(1);
 });

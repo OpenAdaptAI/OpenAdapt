@@ -99,6 +99,9 @@ function matchInput(
  * A first row that names the inputs is a header. Without one, a task with a
  * single input takes one value per line, and a row with exactly one cell per
  * input maps in the order the task lists its inputs.
+ *
+ * A row with more values than columns, or one that is missing a cell, gets a
+ * problem and doesn't run: no value is cut or dropped on the way to the task.
  */
 export function parseItems(
   text: string,
@@ -127,6 +130,21 @@ export function parseItems(
     first.forEach((cell, index) => {
       if (!headerMatches[index] && cell) ignored.push(cell);
     });
+    // An optional input without a column would take the value from the
+    // recording on every row. Ask for the column; empty cells are fine.
+    const unnamed = inputs.filter(
+      (input) => !input.required && !headerMatches.includes(input),
+    );
+    if (unnamed.length) {
+      return {
+        ...empty,
+        header,
+        error:
+          "Add a column for " +
+          unnamed.map((input) => humanizeInput(input.name)).join(", ") +
+          ". Leave its cells empty to enter nothing.",
+      };
+    }
   } else if (inputs.length === 1) {
     columns = [inputs[0]];
     body = rows;
@@ -158,6 +176,21 @@ export function parseItems(
     const problems = inputs
       .filter((input) => input.required && !(values[input.name] ?? "").trim())
       .map((input) => `No ${humanizeInput(input.name)}`);
+    // A row never loses a value silently. Cells beyond the columns would be
+    // dropped, so "Smith, Jane" in a one-column list would run as "Smith" and
+    // the record check would confirm "Smith". Such a row doesn't run.
+    if (row.slice(columns.length).some((cell) => cell !== "")) {
+      problems.push(
+        "This row has more values than columns. If a value has a comma, put it in quotes",
+      );
+    }
+    // A short row is missing a cell for a column the list names. Without the
+    // cell, an optional input would take the value from the recording.
+    columns.forEach((input, index) => {
+      if (input && !input.required && row[index] === undefined) {
+        problems.push(`No ${humanizeInput(input.name)}`);
+      }
+    });
     for (const input of inputs) {
       if (values[input.name] === undefined && !input.required) {
         delete values[input.name];

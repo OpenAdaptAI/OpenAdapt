@@ -47,9 +47,9 @@ const UNCERTAIN: AttentionItem = {
   actions: ["confirmed_saved", "retry_after_check", "done_by_person"],
 };
 
-function engine(items: AttentionItem[]) {
+function engine(items: AttentionItem[], switches: unknown[] = []) {
   vi.mocked(engineTry).mockImplementation(async (command, _params, fallback) => {
-    if (command === CMD.LIST_ATTENTION_ITEMS) return { ok: true, items };
+    if (command === CMD.LIST_ATTENTION_ITEMS) return { ok: true, items, switches };
     if (command === CMD.GET_ATTENTION_SCREENSHOT) return { ok: false };
     if (command === CMD.GET_TASK_INPUTS) {
       return { ok: true, workflow_id: "wf-1", inputs: [], target: { backend: "web", url: "https://emr.example.test" } };
@@ -144,4 +144,125 @@ it("shows a calm empty inbox", async () => {
   engine([]);
   render(<NeedsYou onTeach={() => {}} onChanged={() => {}} />);
   expect(await screen.findByText("Nothing needs you right now")).toBeTruthy();
+});
+
+const WORKAROUND: AttentionItem = {
+  ...WRONG_RECORD,
+  item_id: "item-3",
+  workflow_id: "wf-ref",
+  task_name: "Referral intake",
+  label: "M-4822",
+  result: "done_checked",
+  nothing_written: false,
+  execution_outcome: "VERIFIED",
+  transaction_outcome: "VERIFIED",
+  halt_kind: null,
+  halt_step: "",
+  expected: "",
+  observed: "",
+  actions: ["confirmed_saved", "done_by_person"],
+  approval: {
+    validated: true,
+    mode: "problems_only",
+    decision: "problem",
+    reason: "screen_changed",
+    needs_person: true,
+    counts_toward_problems: true,
+    switch_off_reason: "screen_changed",
+    failed_check: { code: "whole_run_clean", passed: false, detail: "repair_applied" },
+    post_checks: { verified: true, whole_run_clean: false },
+    saves_without_person: 1,
+  },
+};
+
+it("says only problems come here while a switch is on", async () => {
+  engine([WRONG_RECORD], [
+    { workflow_id: "wf-1", task_name: "Add a claim note", state: "on", off_reason: null, off_at: null, off_by_this_computer: false, turned_on: null, off_step: "" },
+  ]);
+  render(<NeedsYou onTeach={() => {}} onChanged={() => {}} />);
+  expect(await screen.findByText(/only problems come here/)).toBeTruthy();
+});
+
+it("keeps today's words when no switch is on here", async () => {
+  engine([WRONG_RECORD], [
+    { workflow_id: "wf-1", task_name: "Add a claim note", state: "not_used_here", off_reason: null, off_at: null, off_by_this_computer: false, turned_on: null, off_step: "" },
+  ]);
+  render(<NeedsYou onTeach={() => {}} onChanged={() => {}} />);
+  expect(await screen.findByText(/OpenAdapt stopped on these items/)).toBeTruthy();
+  expect(screen.queryByText(/only problems come here/)).toBeNull();
+});
+
+it("explains an automatic switch-off once, above the items", async () => {
+  engine([WORKAROUND], [
+    { workflow_id: "wf-ref", task_name: "Referral intake", state: "off", off_reason: "screen_changed", off_at: "2026-10-09T10:00:00Z", off_by_this_computer: false, turned_on: null, off_step: "click 'Save referral'" },
+    { workflow_id: "wf-1", task_name: "Add a claim note", state: "off", off_reason: "turned_off", off_at: "2026-10-09T10:00:00Z", off_by_this_computer: true, turned_on: null, off_step: "" },
+  ]);
+  render(<NeedsYou onTeach={() => {}} onChanged={() => {}} />);
+  const banners = await screen.findAllByText(/Only ask a person about problems turned off/);
+  // A person's own switch-off needs no banner.
+  expect(banners).toHaveLength(1);
+  expect(screen.getByText(/The screen changed at “Save referral”. An admin can turn it on again/)).toBeTruthy();
+});
+
+it("keeps Done and checked for a confirmed save that still needs a look, with no retry", async () => {
+  engine([WORKAROUND]);
+  vi.mocked(engineInvoke).mockResolvedValue({ ok: true });
+  render(<NeedsYou onTeach={() => {}} onChanged={() => {}} />);
+
+  expect(await screen.findByText("Is the record for M-4822 right?")).toBeTruthy();
+  expect(screen.getByText(/Done and checked. Look at the record/)).toBeTruthy();
+  expect(
+    screen.getByText(
+      "Saved and checked, but OpenAdapt had to work around a changed screen. Look at the record.",
+    ),
+  ).toBeTruthy();
+  expect(screen.getByText(/From a list with “Only ask a person about problems” on/)).toBeTruthy();
+  expect(screen.queryByRole("button", { name: /Run it again/ })).toBeNull();
+  const close = screen.getByRole("button", { name: /It's right. Close it/ }) as HTMLButtonElement;
+  expect(close.disabled).toBe(true);
+  fireEvent.click(screen.getByLabelText("I looked at the record in the app."));
+  expect(close.disabled).toBe(false);
+  fireEvent.click(close);
+  await waitFor(() =>
+    expect(engineInvoke).toHaveBeenCalledWith(
+      CMD.RESOLVE_ATTENTION_ITEM,
+      expect.objectContaining({ item_id: "item-3", action: "confirmed_saved", record_checked: true }),
+    ),
+  );
+});
+
+it("says which check held an item for a person, in words, and offers no re-run", async () => {
+  const held: AttentionItem = {
+    ...WRONG_RECORD,
+    item_id: "item-4",
+    label: "M-4851",
+    halt_kind: "other",
+    halt_reason:
+      "Approval mode: this item is waiting for a person to approve it before saving (record_key_not_recent: seen_recently). Nothing was retried.",
+    expected: "",
+    observed: "",
+    actions: ["skip", "decline", "done_by_person"],
+    approval: {
+      validated: true,
+      mode: "problems_only",
+      decision: "approval_required",
+      reason: "record_key_not_recent",
+      needs_person: true,
+      counts_toward_problems: false,
+      switch_off_reason: null,
+      failed_check: { code: "record_key_not_recent", passed: false, detail: "seen_recently" },
+      post_checks: { verified: false, whole_run_clean: false },
+      saves_without_person: 0,
+    },
+  };
+  engine([held]);
+  render(<NeedsYou onTeach={() => {}} onChanged={() => {}} />);
+
+  expect(await screen.findByText("M-4851 is waiting for a person before saving")).toBeTruthy();
+  const sentence = screen.getByText(/because this record was entered through this task recently/);
+  // Engine codes stay in Technical details, out of the sentence a person reads.
+  expect(sentence.className).toBe("attention-sentence");
+  expect(sentence.textContent).not.toMatch(/record_key_not_recent/);
+  expect(screen.queryByRole("button", { name: /Check and continue/ })).toBeNull();
+  expect(screen.getByText("It stopped before saving. Nothing was written.")).toBeTruthy();
 });

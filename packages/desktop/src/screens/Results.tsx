@@ -5,10 +5,17 @@
 // count as done. The time estimate uses minutes per item that the reader can
 // change; the default is the length of their own recording of the task.
 import { useEffect, useMemo, useState } from "react";
+import {
+  SWITCH_LABEL,
+  confirmedButNeedsLook,
+  offReasonSentence,
+  shortDate,
+  switchStatus,
+} from "../lib/approvalMode";
 import { CMD, engineTry } from "../lib/engine";
 import { plainResult, resultCopy } from "../lib/outcomes";
 import { groupTasks, taskCounts } from "../lib/tasks";
-import type { ResultsSummary, Workflow } from "../lib/types";
+import type { ResultsSummary, SwitchSummary, Workflow } from "../lib/types";
 import {
   PageHead,
   StatTile,
@@ -77,6 +84,18 @@ export function Results({ onNeedsYou }: { onNeedsYou: () => void }) {
   );
 
   const total = summary?.total;
+  const withoutPerson = total?.saved_without_person ?? 0;
+  const recentItems = (summary?.recent ?? []).slice(0, 20);
+  // "No person" marks an item Flow saved with every check passed; "Went to a
+  // person" a confirmed save that still waits for one. Nothing else is tagged.
+  const recentTags = recentItems.map((item) => {
+    const closedByPerson =
+      item.status === "confirmed_saved" || item.status === "done_by_person";
+    if (item.saved_without_person) return "No person";
+    if (confirmedButNeedsLook(item) && !closedByPerson) return "Went to a person";
+    return null;
+  });
+  const switches = summary?.switches ?? [];
   const savedSeconds = rows.reduce((sum, row) => sum + (row.saved ?? 0), 0);
   const anyEstimate = rows.some((row) => row.saved !== null && row.counts.done_checked > 0);
 
@@ -131,7 +150,18 @@ export function Results({ onNeedsYou }: { onNeedsYou: () => void }) {
           icon="check"
           tone="ok"
           value={total.done_checked}
-          note="Saved, then read back from the record"
+          note={
+            withoutPerson > 0 ? (
+              <>
+                Saved, then read back from the record.{" "}
+                <span className="stat-sub">
+                  {withoutPerson} of them without a person: every check passed.
+                </span>
+              </>
+            ) : (
+              "Saved, then read back from the record"
+            )
+          }
         />
         <StatTile
           label="Needed a person"
@@ -164,6 +194,8 @@ export function Results({ onNeedsYou }: { onNeedsYou: () => void }) {
         />
       </div>
 
+      {switches.length > 0 && <SwitchSection switches={switches} />}
+
       <section className="results-section" aria-labelledby="by-task">
         <h2 id="by-task">By task</h2>
         <div className="table-scroll">
@@ -182,7 +214,15 @@ export function Results({ onNeedsYou }: { onNeedsYou: () => void }) {
               {rows.map((row) => (
                 <tr key={row.task.key}>
                   <td>{row.task.current.name}</td>
-                  <td className="num tnum">{row.counts.done_checked}</td>
+                  <td className="num tnum">
+                    {row.counts.done_checked}
+                    {(row.counts.saved_without_person ?? 0) > 0 && (
+                      <span className="stat-sub">
+                        {" "}
+                        ({row.counts.saved_without_person} without a person)
+                      </span>
+                    )}
+                  </td>
                   <td className="num tnum">{row.counts.needed_person}</td>
                   <td className="num tnum">{row.counts.wrong_record_prevented}</td>
                   <td>
@@ -232,8 +272,8 @@ export function Results({ onNeedsYou }: { onNeedsYou: () => void }) {
 
       <section className="results-section" aria-labelledby="recent">
         <h2 id="recent">Recent items</h2>
-        <ul className="recent-list">
-          {(summary?.recent ?? []).slice(0, 20).map((item) => {
+        <ul className={`recent-list${recentTags.some(Boolean) ? " with-tags" : ""}`}>
+          {recentItems.map((item, index) => {
             const plain = item.result
               ? plainResult(item.execution_outcome, item.transaction_outcome ?? null, {
                   preActionRefusal: item.result === "did_not_start",
@@ -242,6 +282,7 @@ export function Results({ onNeedsYou }: { onNeedsYou: () => void }) {
             const copy = plain ? resultCopy(plain) : null;
             const closedByPerson =
               item.status === "confirmed_saved" || item.status === "done_by_person";
+            const tag = recentTags[index];
             return (
               <li key={item.item_id}>
                 <span className="recent-task">{item.task_name}</span>
@@ -255,6 +296,8 @@ export function Results({ onNeedsYou }: { onNeedsYou: () => void }) {
                     Waiting to run
                   </Status>
                 )}
+                {recentTags.some(Boolean) &&
+                  (tag ? <span className="mode-tag">{tag}</span> : <span />)}
                 <span className="recent-time">
                   {relativeTime(item.finished_at || item.created_at)}
                 </span>
@@ -265,9 +308,52 @@ export function Results({ onNeedsYou }: { onNeedsYou: () => void }) {
         <p className="fine-print">
           Only items that OpenAdapt saved and then read back from the record
           count as done and checked. Items a person finished or confirmed count
-          under Needed a person.
+          under Needed a person. “No person” marks an item saved with every
+          check passed while “{SWITCH_LABEL}” was on.
         </p>
       </section>
     </div>
+  );
+}
+
+function switchDetail(entry: SwitchSummary): string {
+  switch (entry.state) {
+    case "on":
+      return entry.turned_on ? `Since ${shortDate(entry.turned_on.at)}.` : "";
+    case "waiting_for_cloud":
+      return "Items wait for a person until OpenAdapt Cloud confirms it.";
+    case "not_used_here":
+      return "On in OpenAdapt Cloud. This computer doesn't use it yet.";
+    case "off": {
+      const since = entry.off_at ? `Since ${shortDate(entry.off_at)}. ` : "";
+      return `${since}${offReasonSentence(entry.off_reason, {
+        step: entry.off_step,
+        byThisComputer: entry.off_by_this_computer,
+      })}`;
+    }
+    default:
+      return "";
+  }
+}
+
+function SwitchSection({ switches }: { switches: SwitchSummary[] }) {
+  return (
+    <section className="results-section" aria-labelledby="switches">
+      <h2 id="switches">{SWITCH_LABEL}</h2>
+      <ul className="switch-summary">
+        {switches.map((entry) => {
+          const status = switchStatus(entry.state);
+          return (
+            <li key={entry.workflow_id}>
+              <span className="switch-summary-task">{entry.task_name || "A task"}</span>
+              <Status tone={status.tone} icon={status.icon}>
+                {status.word}
+              </Status>
+              <span className="faint">{switchDetail(entry)}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </section>
   );
 }

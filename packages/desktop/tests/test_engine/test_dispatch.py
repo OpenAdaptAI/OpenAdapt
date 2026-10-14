@@ -1127,6 +1127,9 @@ class TestLibraryCommands:
             def supports_attached_browser_runs(self) -> bool:
                 return False
 
+            def supports_approval_gate(self) -> bool:
+                return True
+
             def replay(self, *_args, **_kwargs):
                 self.called = True
                 raise AssertionError("must not reach Flow")
@@ -1193,6 +1196,9 @@ class TestLibraryCommands:
 
             def supports_attached_browser_runs(self) -> bool:
                 return False
+
+            def supports_approval_gate(self) -> bool:
+                return True
 
             def replay(self, *_args, **_kwargs):
                 self.called = True
@@ -1501,9 +1507,14 @@ class TestLibraryCommands:
         staged_configs: list[dict] = []
 
         class Bridge:
-            def run(self, target_bundle, config, out_dir):
+            def supports_approval_gate(self) -> bool:
+                return True
+
+            def run(self, target_bundle, config, out_dir, approval_mode, approval_wait_s):
                 from engine.flow_bridge import FlowResult
 
+                # Every Desktop run asks Flow to stop before each save.
+                assert (approval_mode, approval_wait_s) == ("each_item", 600)
                 calls.append((target_bundle, config, out_dir))
                 staged_configs.append(yaml.safe_load(config.read_text()))
                 (out_dir / "report.json").write_text('{"success": true}')

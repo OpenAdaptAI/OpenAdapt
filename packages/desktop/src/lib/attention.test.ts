@@ -87,3 +87,56 @@ describe("Needs-you card words", () => {
     expect(copy.choices[0].action).toBe("teach");
   });
 });
+
+describe("A person approves each save", () => {
+  const block = {
+    validated: true,
+    mode: "each_item" as const,
+    reason: null,
+    needs_person: true,
+    counts_toward_problems: false,
+    switch_off_reason: null,
+    failed_check: null,
+    post_checks: { verified: false, whole_run_clean: false },
+    saves_without_person: 0,
+  };
+
+  it("says nobody approved in time and offers to run it again", () => {
+    const copy = attentionCopy(
+      item({
+        halt_kind: "other",
+        approval: { ...block, decision: "approval_required" },
+        actions: ["retry", "skip", "decline", "teach"],
+      }),
+    );
+    expect(copy.question).toBe("M-1 waited for your approval");
+    expect(copy.sentence).toContain("Nobody approved the save in time");
+    expect(copy.prevented).toBe("It stopped before saving. Nothing was written.");
+    expect(copy.choices[0].action).toBe("retry");
+  });
+
+  it("repeats the reason a person gave for Don't save", () => {
+    const copy = attentionCopy(
+      item({
+        halt_kind: "other",
+        approval: { ...block, decision: "declined", reason: "wrong_values", needs_person: false },
+      }),
+    );
+    expect(copy.question).toBe("M-1 wasn't saved");
+    expect(copy.sentence).toBe(
+      "You chose Don't save because the values are wrong. OpenAdapt didn't save it.",
+    );
+  });
+
+  it("never says nothing was written when the item may have saved", () => {
+    const copy = attentionCopy(
+      item({
+        nothing_written: false,
+        result: "check_record",
+        transaction_outcome: "RECONCILIATION_REQUIRED",
+        approval: { ...block, decision: "declined", reason: "wrong_record" },
+      }),
+    );
+    expect(text(copy)).not.toMatch(NO_WRITE_CLAIM);
+  });
+});

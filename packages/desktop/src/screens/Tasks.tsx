@@ -2,10 +2,12 @@
 // one next step (Show it, Check it, or Run it). Everything else for a task is
 // one click deeper under "More".
 import { useEffect, useState } from "react";
-import { CMD, engineTry } from "../lib/engine";
+import { onlyProblemsComeToYou } from "../lib/approvalMode";
+import { CMD, engineInvoke, engineTry, openExternal } from "../lib/engine";
 import { resultCopy } from "../lib/outcomes";
 import { groupTasks, taskCounts, taskStatus, type Task } from "../lib/tasks";
-import type { ResultsSummary, Workflow } from "../lib/types";
+import type { ApprovalModeState, ResultsSummary, Workflow } from "../lib/types";
+import { ApprovalSwitch } from "../ui/ApprovalSwitch";
 import { Button } from "../ui/primitives";
 import {
   ChoiceButton,
@@ -41,12 +43,18 @@ function TaskCard({
   task,
   summary,
   actions,
+  mode,
+  modeBusy,
+  onTurnOff,
 }: {
   task: Task;
   summary: ResultsSummary | null;
   actions: TaskActions;
+  mode: ApprovalModeState | null;
+  modeBusy: boolean;
+  onTurnOff: () => void;
 }) {
-  const status = taskStatus(task);
+  const status = taskStatus(task, { onlyProblems: onlyProblemsComeToYou(mode) });
   const counts = taskCounts(task, summary);
   const id = task.current.id;
   const description = task.current.task?.trim();
@@ -82,6 +90,16 @@ function TaskCard({
             </span>
           )}
         </div>
+        {mode && (
+          <ApprovalSwitch
+            mode={mode}
+            busy={modeBusy}
+            onTurnOff={onTurnOff}
+            onOpenCloud={() => {
+              if (mode.cloud_url) void openExternal(mode.cloud_url);
+            }}
+          />
+        )}
         <details className="task-more">
           <summary>More</summary>
           <div className="task-more-body">
@@ -120,6 +138,9 @@ export function Tasks({
 }: TaskActions & { attention: number }) {
   const [workflows, setWorkflows] = useState<Workflow[] | null>(null);
   const [summary, setSummary] = useState<ResultsSummary | null>(null);
+  const [modes, setModes] = useState<Record<string, ApprovalModeState>>({});
+  const [modeBusy, setModeBusy] = useState<string | null>(null);
+  const [modeError, setModeError] = useState("");
 
   useEffect(() => {
     void (async () => {
@@ -127,10 +148,55 @@ export function Tasks({
         engineTry<Workflow[]>(CMD.GET_WORKFLOWS, {}, []),
         engineTry<ResultsSummary | null>(CMD.GET_RESULTS_SUMMARY, {}, null),
       ]);
-      setWorkflows(Array.isArray(list) ? list : []);
+      const next = Array.isArray(list) ? list : [];
+      setWorkflows(next);
       setSummary(results && results.ok ? results : null);
+      // The switch belongs to one checked version, so only a task that is
+      // ready to run shows it.
+      const ready = groupTasks(next).filter((task) => task.current.readiness === "ready");
+      const answers = await Promise.all(
+        ready.map((task) =>
+          engineTry<ApprovalModeState | null>(
+            CMD.GET_APPROVAL_MODE,
+            { workflow_id: task.current.id, requirements: true },
+            null,
+          ),
+        ),
+      );
+      const found: Record<string, ApprovalModeState> = {};
+      for (const answer of answers) {
+        if (answer && answer.ok && answer.visible) found[answer.workflow_id] = answer;
+      }
+      setModes(found);
     })();
   }, [attention]);
+
+  async function turnOff(workflowId: string) {
+    setModeBusy(workflowId);
+    setModeError("");
+    try {
+      const response = await engineInvoke<{
+        ok: boolean;
+        error?: string;
+        mode?: ApprovalModeState;
+      }>(CMD.TURN_OFF_APPROVAL_MODE, { workflow_id: workflowId });
+      if (!response.ok) {
+        setModeError(response.error || "OpenAdapt couldn't turn the switch off.");
+        return;
+      }
+      const mode = response.mode;
+      if (mode && mode.ok) {
+        setModes((current) => ({
+          ...current,
+          [workflowId]: { ...mode, requirements: current[workflowId]?.requirements },
+        }));
+      }
+    } catch (error) {
+      setModeError(String(error));
+    } finally {
+      setModeBusy(null);
+    }
+  }
 
   const tasks = groupTasks(workflows ?? []);
 
@@ -174,8 +240,21 @@ export function Tasks({
         </section>
       ) : (
         <div className="task-list">
+          {modeError && (
+            <div className="notice warn" role="status">
+              <span>{modeError}</span>
+            </div>
+          )}
           {tasks.map((task) => (
-            <TaskCard key={task.key} task={task} summary={summary} actions={actions} />
+            <TaskCard
+              key={task.key}
+              task={task}
+              summary={summary}
+              actions={actions}
+              mode={modes[task.current.id] ?? null}
+              modeBusy={modeBusy === task.current.id}
+              onTurnOff={() => void turnOff(task.current.id)}
+            />
           ))}
         </div>
       )}

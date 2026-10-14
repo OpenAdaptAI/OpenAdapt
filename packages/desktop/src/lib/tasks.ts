@@ -69,8 +69,16 @@ function priority(task: Task): number {
   return readiness === "ready" ? 1 : readiness === "checking" ? 2 : 3;
 }
 
-/** One status word and one next step for a task card. */
-export function taskStatus(task: Task): TaskStatus {
+/**
+ * One status word and one next step for a task card.
+ *
+ * `onlyProblems` is true only when this computer applies "Only ask a person
+ * about problems" to the task (the engine reports the switch as "on").
+ */
+export function taskStatus(
+  task: Task,
+  { onlyProblems = false }: { onlyProblems?: boolean } = {},
+): TaskStatus {
   if (task.blocked) {
     return {
       word: "Check the record",
@@ -114,7 +122,9 @@ export function taskStatus(task: Task): TaskStatus {
       icon: "play",
       next: "run",
       nextLabel: "Run it",
-      detail: "Checked and approved. Give it a list of items to work through.",
+      detail: onlyProblems
+        ? "Checked and approved. Only problems come to you."
+        : "Checked and approved. Give it a list of items to work through.",
     };
   }
   if (readiness === "checking") {
@@ -137,8 +147,9 @@ export function taskStatus(task: Task): TaskStatus {
   };
 }
 
-const EMPTY: ResultCounts = {
+const EMPTY: Required<Pick<ResultCounts, "saved_without_person">> & ResultCounts = {
   done_checked: 0,
+  saved_without_person: 0,
   needed_person: 0,
   waiting: 0,
   wrong_record_prevented: 0,

@@ -24,6 +24,9 @@
 //   npm run dev                                          # in one shell
 //   node scripts/capture-cockpit-previews.mjs --out ./captures
 //
+// `--set approval-mode` shoots the unpublished design-review set in
+// scripts/approval-mode-targets.mjs instead of the published one.
+//
 // `npm run dev` and not a preview build: the program-workbench route is gated
 // on import.meta.env.DEV in src/main.tsx, so a production build cannot reach it.
 //
@@ -42,7 +45,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import { ipcTable } from './cockpit-fixtures.mjs';
-import { TARGETS, VIEWPORT, viewportFor } from './cockpit-targets.mjs';
+import { TARGETS as PUBLISHED_TARGETS, VIEWPORT, viewportFor } from './cockpit-targets.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
@@ -54,6 +57,10 @@ const argValue = (flag, fallback) => {
 const base = argValue('--base', 'http://127.0.0.1:1420').replace(/\/$/, '');
 const outDir = path.resolve(argValue('--out', path.join(repo, 'captures')));
 const only = argValue('--only', '');
+const set = argValue('--set', 'published');
+const TARGETS = set === 'approval-mode'
+  ? (await import('./approval-mode-targets.mjs')).APPROVAL_TARGETS
+  : PUBLISHED_TARGETS;
 
 // The harness stands in for the Tauri host. `invoke` is the only thing the
 // frontend uses to reach the engine (src/lib/engine.ts), so answering it from a
@@ -69,6 +76,16 @@ function installTauriHost(table, localSessionKey, localSession) {
   } catch {
     /* a storage-restricted context still renders */
   }
+
+  // A `{ __sequence: [...] }` fixture answers each call with the next value,
+  // so a list run can show items that end differently.
+  const calls = new Map();
+  const answer = (name, value) => {
+    if (!value || typeof value !== 'object' || !Array.isArray(value.__sequence)) return value;
+    const index = calls.get(name) ?? 0;
+    calls.set(name, index + 1);
+    return value.__sequence[Math.min(index, value.__sequence.length - 1)];
+  };
 
   window.__TAURI_INTERNALS__ = {
     transformCallback(callback, once) {
@@ -87,7 +104,7 @@ function installTauriHost(table, localSessionKey, localSession) {
       if (cmd === 'plugin:event|unlisten') return undefined;
       if (cmd === 'engine_invoke') {
         const name = args?.cmd;
-        const value = table[name];
+        const value = answer(name, table[name]);
         if (value === undefined) throw new Error(`no fixture for engine command ${name}`);
         // A per-workflow table is keyed by workflow_id; anything else answers flat.
         const workflowId = args?.params?.workflow_id;
@@ -167,7 +184,8 @@ for (const target of TARGETS) {
         );
       },
       {
-        table: ipcTable(target.session),
+        // A design-review session may add or replace engine answers.
+        table: { ...ipcTable(target.session), ...(target.session.table || {}) },
         key: 'openadapt.desktop.local-session.v1',
         localSession: target.session.localSession,
         source: installTauriHost.toString(),
@@ -191,6 +209,9 @@ for (const target of TARGETS) {
   for (const step of target.steps || []) {
     if (step.fill) {
       await page.getByLabel(step.fill, { exact: true }).fill(step.text);
+    } else if (step.text) {
+      // A disclosure's summary has no button role; reach it by its words.
+      await page.getByText(step.text, { exact: true }).first().click();
     } else {
       const scope = step.within
         ? page.getByRole('article', { name: step.within })
@@ -247,6 +268,7 @@ fs.writeFileSync(
     base,
     captured_at: new Date().toISOString(),
     synthetic_fixture: true,
+    set,
     // The cockpit geometry. A target that overrides it records its own width
     // and height in its result below.
     viewport: VIEWPORT,

@@ -26,6 +26,8 @@ export interface WriteStep {
   identityText: string;
   checked: boolean;
   checkText: string;
+  /** The program already says what this step saves (it has record checks). */
+  hasRecordChecks: boolean;
 }
 
 export interface CaseView {
@@ -104,31 +106,33 @@ export function describeEffect(effect: QualificationEditableEffect): string {
     : `Saves an entry on ${record}.`;
 }
 
+// What each drill changes, as Flow's local drill campaign makes it (B276):
+// right before the save, in the page or in the record check it's handed.
 const CASE_COPY: Record<string, { label: string; explanation: string }> = {
   wrong_identity: {
     label: "Wrong record",
     explanation:
-      "OpenAdapt is given a record that doesn't match the screen. It must stop before saving.",
-  },
-  missing_effect: {
-    label: "Save didn't land",
-    explanation:
-      "The app says it saved, but the record stays empty. OpenAdapt must notice and stop.",
+      "The record shown on screen is swapped for a different one. OpenAdapt must stop before saving.",
   },
   ambiguity: {
     label: "Two possible matches",
     explanation:
-      "The screen offers more than one match. OpenAdapt must stop instead of guessing.",
+      "A second copy of the save button appears on the page. OpenAdapt must stop instead of guessing.",
   },
   stale_identity: {
     label: "Record changed mid-task",
     explanation:
-      "The record changes after OpenAdapt finds it. It must find it again or stop.",
+      "The record on screen changes after OpenAdapt checked it. OpenAdapt must stop before saving.",
+  },
+  missing_effect: {
+    label: "No record check",
+    explanation:
+      "The record check is taken away. OpenAdapt must refuse to save without it.",
   },
   weak_effect: {
     label: "Weak record check",
     explanation:
-      "The record check is weaker than agreed. OpenAdapt must refuse to call the item done.",
+      "The record check is swapped for one that only looks at the screen. OpenAdapt must refuse to save with it.",
   },
 };
 
@@ -223,6 +227,7 @@ export function checkPlan(response: QualificationProject): CheckPlan {
         ? `Before saving, it checks that the record on screen matches the ${params.join(" and ")} you give it. If they differ, it stops and asks you.`
         : "Before saving, it checks the record on screen against the details it saw when you showed the task. If they differ, it stops and asks you.",
       checked: effects.length > 0 && tiers.length === effects.length,
+      hasRecordChecks: effects.length > 0 || node.effects.length > 0,
       checkText: effects.length
         ? `After saving, it ${tierText(Math.min(...(tiers.length ? tiers : [0])))} to confirm the entry.`
         : "OpenAdapt doesn't know yet how to confirm this save.",
@@ -290,11 +295,14 @@ export function checkPlan(response: QualificationProject): CheckPlan {
         : "missing";
   const practiceState: StepState =
     practice?.status === "passed" ? "done" : "todo";
+  // Drills are needed whenever a step may save. Flow sets them up from the
+  // practice item (``qualify drills``), so a task with a save has none until
+  // then: that is "to do", never "not needed".
   const drillsState: StepState =
     drills.length === 0
-      ? unknownWrites
-        ? "todo"
-        : "not_needed"
+      ? provenReadOnly
+        ? "not_needed"
+        : "todo"
       : drills.every((item) => item.status === "passed")
         ? "done"
         : "todo";

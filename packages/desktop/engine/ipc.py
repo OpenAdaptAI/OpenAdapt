@@ -19,6 +19,7 @@ See Appendix B of DESIGN.md for the full protocol specification.
 from __future__ import annotations
 
 import json
+import queue
 import sys
 import threading
 from typing import Any
@@ -27,6 +28,12 @@ from loguru import logger
 
 from engine.config import EngineConfig
 from engine.dispatch import EngineDispatcher, EngineServices
+
+#: Commands served while another command runs. A run can stop before a save
+#: and wait for a person; these two read and answer that wait, so they never
+#: queue behind the run and never take the dispatch lock. They touch only the
+#: dispatcher's approval watches and Flow's approval files.
+CONCURRENT_COMMANDS = frozenset({"get_item_approval", "answer_item_approval"})
 
 
 class IPCHandler:
@@ -64,24 +71,59 @@ class IPCHandler:
         }
 
     def _dispatch_command(self, cmd: str, params: dict) -> dict | None:
-        """Serialize commands from the two local IPC wires."""
+        """Serialize commands from the two local IPC wires.
+
+        The approval commands are the exception: they answer a run that holds
+        the lock while it waits for a person.
+        """
+        if cmd in CONCURRENT_COMMANDS:
+            return self.dispatcher.dispatch(cmd, params)
         with self.dispatch_lock:
             return self.dispatcher.dispatch(cmd, params)
 
     def run(self) -> None:
-        """Start the IPC message loop. Blocks until stdin is closed."""
+        """Start the IPC message loop. Blocks until stdin is closed.
+
+        Commands run one at a time, in the order they arrive, on one worker
+        thread. Reading stdin never waits for them, so an approval command
+        (:data:`CONCURRENT_COMMANDS`) is answered while a run waits for it.
+        Once stdin closes, the commands already received finish first.
+        """
         logger.info("IPC handler ready, listening on stdin")
-        for line in sys.stdin:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                message = json.loads(line)
-                self._dispatch(message)
-            except json.JSONDecodeError:
-                logger.error("Invalid JSON received: {line}", line=line)
-            except Exception:
-                logger.exception("Error processing message: {line}", line=line)
+        pending: queue.Queue[dict | None] = queue.Queue()
+
+        def work() -> None:
+            while True:
+                message = pending.get()
+                if message is None:
+                    return
+                try:
+                    self._dispatch(message)
+                except Exception:
+                    logger.exception("Error processing a command")
+
+        worker = threading.Thread(target=work, name="engine-commands", daemon=True)
+        worker.start()
+        try:
+            for line in sys.stdin:
+                line = line.strip()
+                if not line:
+                    continue
+                try:
+                    message = json.loads(line)
+                except json.JSONDecodeError:
+                    logger.error("Invalid JSON received: {line}", line=line)
+                    continue
+                try:
+                    if isinstance(message, dict) and message.get("cmd") in CONCURRENT_COMMANDS:
+                        self._dispatch(message)
+                    else:
+                        pending.put(message)
+                except Exception:
+                    logger.exception("Error processing message: {line}", line=line)
+        finally:
+            pending.put(None)
+            worker.join()
 
     def _dispatch(self, message: dict) -> None:
         """Dispatch a command message to the appropriate handler.

@@ -54,6 +54,65 @@ describe("parseItems", () => {
     expect(parsed.items).toEqual([]);
   });
 
+  // Attack attempts: a value that parsing changes would be saved, and the
+  // record check would confirm the changed value. Made-up records only.
+  it("never cuts a one-input line at a comma", () => {
+    const parsed = parseItems("Smith, Jane\nRivera, Ana", [input("full_name")]);
+    // Neither row runs as "Smith" or "Rivera": each waits for quotes or a fix.
+    expect(parsed.items.map((item) => item.problems)).toEqual([
+      ["This row has more values than columns. If a value has a comma, put it in quotes"],
+      ["This row has more values than columns. If a value has a comma, put it in quotes"],
+    ]);
+  });
+
+  it("keeps a quoted value with a comma whole", () => {
+    const parsed = parseItems('"Smith, Jane"\n"Rivera, Ana"', [input("full_name")]);
+    expect(parsed.items.map((item) => item.values.full_name)).toEqual([
+      "Smith, Jane",
+      "Rivera, Ana",
+    ]);
+    expect(parsed.items.every((item) => item.problems.length === 0)).toBe(true);
+  });
+
+  it("refuses a row with more values than the header names", () => {
+    const parsed = parseItems("member_id,note\nM-1,Called, left a message", INPUTS);
+    expect(parsed.items[0].problems).toEqual([
+      "This row has more values than columns. If a value has a comma, put it in quotes",
+    ]);
+  });
+
+  it("allows empty trailing cells", () => {
+    const parsed = parseItems("member_id,note\nM-1,Called,,", INPUTS);
+    expect(parsed.items[0]).toEqual({
+      position: 0,
+      values: { member_id: "M-1", note: "Called" },
+      problems: [],
+    });
+  });
+
+  it("refuses a short row instead of letting an optional input take the recorded value", () => {
+    const parsed = parseItems("member_id,note\nM-1\nM-2,", [
+      input("member_id"),
+      input("note", { required: false }),
+    ]);
+    expect(parsed.items[0].problems).toEqual(["No note"]);
+    // An empty cell is an explicit empty value.
+    expect(parsed.items[1]).toEqual({
+      position: 1,
+      values: { member_id: "M-2", note: "" },
+      problems: [],
+    });
+  });
+
+  it("asks for a column for every optional input instead of using the recorded value", () => {
+    const parsed = parseItems("member_id\nM-1\nM-2", [
+      input("member_id"),
+      input("note", { required: false }),
+    ]);
+    expect(parsed.items).toEqual([]);
+    expect(parsed.error).toBe("Add a column for note. Leave its cells empty to enter nothing.");
+  });
+
   it("never asks for a protected input", () => {
     const parsed = parseItems("member_id\nM-1", [
       input("member_id"),

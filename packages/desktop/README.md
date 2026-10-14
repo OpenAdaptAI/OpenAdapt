@@ -68,7 +68,9 @@ takes several minutes.
    on the right record, and how it confirms the save. Run one practice item,
    then approve the task.
 3. **Run it.** Paste a list, open a spreadsheet saved as CSV, or type one
-   item. OpenAdapt works through the list and checks each record.
+   item. OpenAdapt works through the list. Before each save, it shows you the
+   filled form and waits for you to approve. After each save, it checks the
+   record.
 
 <p align="center">
   <img src="https://raw.githubusercontent.com/OpenAdaptAI/openadapt-desktop/main/docs/assets/operator/tasks.png" width="860" alt="OpenAdapt Desktop Tasks screen with synthetic data: three tasks, each with one status and one next step">

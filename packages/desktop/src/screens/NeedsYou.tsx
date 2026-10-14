@@ -7,12 +7,20 @@
 import { useEffect, useState } from "react";
 import { CMD, engineInvoke, engineTry } from "../lib/engine";
 import { attentionCopy } from "../lib/attention";
+import {
+  SWITCH_LABEL,
+  confirmedButNeedsLook,
+  offAutomatically,
+  offReasonSentence,
+  whyItCameToYou,
+} from "../lib/approvalMode";
 import { plainResult, resultCopy } from "../lib/outcomes";
 import type {
   AttentionAction,
   AttentionItem,
   AttentionScreenshot,
   RunItemResponse,
+  SwitchSummary,
   TaskInputs,
 } from "../lib/types";
 import { Callout } from "../ui/primitives";
@@ -42,6 +50,7 @@ function ItemRow({
   onSelect: () => void;
 }) {
   const uncertain = !item.nothing_written;
+  const looked = confirmedButNeedsLook(item);
   return (
     <button
       type="button"
@@ -56,7 +65,11 @@ function ItemRow({
         <strong>{item.task_name || "A task"}</strong>
         <span>
           {item.label ? `${item.label}. ` : ""}
-          {uncertain ? "Check the record" : "Stopped before saving"}
+          {looked
+            ? "Done and checked. Look at the record"
+            : uncertain
+              ? "Check the record"
+              : "Stopped before saving"}
         </span>
       </span>
       <span className="inbox-row-age">{relativeTime(item.created_at)}</span>
@@ -74,6 +87,7 @@ function AttentionCard({
   onResolve: (action: AttentionAction, recordChecked: boolean) => void;
 }) {
   const copy = attentionCopy(item);
+  const why = whyItCameToYou(item);
   const [screen, setScreen] = useState<AttentionScreenshot | null>(null);
   const [recordChecked, setRecordChecked] = useState(false);
 
@@ -100,9 +114,13 @@ function AttentionCard({
       <p className="attention-context">
         {item.task_name || "A task"}
         {item.label ? <span className="attention-label">{item.label}</span> : null}
+        {item.approval?.mode === "problems_only" && (
+          <span className="mode-tag">From a list with “{SWITCH_LABEL}” on</span>
+        )}
       </p>
       <h2 id={`q-${item.item_id}`}>{copy.question}</h2>
       <p className="attention-sentence">{copy.sentence}</p>
+      {why && why !== copy.sentence && <p className="attention-why">{why}</p>}
       <p className={`attention-prevented ${copy.preventedTone}`}>
         <Icon name={copy.preventedTone === "ok" ? "shield" : "search"} />
         <span>{copy.prevented}</span>
@@ -164,6 +182,26 @@ function AttentionCard({
           <dd className="mono">{item.execution_outcome || "none"}</dd>
           <dt>Transaction outcome</dt>
           <dd className="mono">{item.transaction_outcome || "none"}</dd>
+          {item.approval && (
+            <>
+              <dt>Approval mode</dt>
+              <dd className="mono">
+                {[
+                  item.approval.mode ?? "unknown",
+                  item.approval.decision ?? "unknown",
+                  item.approval.reason,
+                  item.approval.failed_check
+                    ? `${item.approval.failed_check.code}:${item.approval.failed_check.detail}`
+                    : null,
+                  item.approval.switch_off_reason
+                    ? `switch_off:${item.approval.switch_off_reason}`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </dd>
+            </>
+          )}
           {item.halt_step && (
             <>
               <dt>Stopped at</dt>
@@ -196,18 +234,20 @@ export function NeedsYou({
   onChanged: () => void;
 }) {
   const [items, setItems] = useState<AttentionItem[] | null>(null);
+  const [switches, setSwitches] = useState<SwitchSummary[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [busy, setBusy] = useState<AttentionAction | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
 
   async function refresh(): Promise<AttentionItem[]> {
-    const response = await engineTry<{ ok: boolean; items: AttentionItem[] }>(
-      CMD.LIST_ATTENTION_ITEMS,
-      {},
-      { ok: false, items: [] },
-    );
+    const response = await engineTry<{
+      ok: boolean;
+      items: AttentionItem[];
+      switches?: SwitchSummary[];
+    }>(CMD.LIST_ATTENTION_ITEMS, {}, { ok: false, items: [] });
     const next = response.items ?? [];
     setItems(next);
+    setSwitches(response.switches ?? []);
     setSelectedId((current) =>
       current && next.some((item) => item.item_id === current)
         ? current
@@ -278,12 +318,33 @@ export function NeedsYou({
     }
   }
 
+  const onlyProblems = switches.some((entry) => entry.state === "on");
+  const switchedOff = switches.filter(
+    (entry) => entry.state === "off" && offAutomatically(entry.off_reason),
+  );
+
   return (
     <div className="content simple wide">
       <PageHead
         title="Needs you"
-        sub="OpenAdapt stopped on these items and is waiting for a person. None of them runs again until you decide."
+        sub={
+          onlyProblems
+            ? `With “${SWITCH_LABEL}” on, only problems come here. Items that passed every check were saved and read back from the record without you.`
+            : "OpenAdapt stopped on these items and is waiting for a person. None of them runs again until you decide."
+        }
       />
+      {switchedOff.map((entry) => (
+        <div className="attention-banner switch-banner" role="status" key={entry.workflow_id}>
+          <Icon name="attention" />
+          <span>
+            <strong>
+              {SWITCH_LABEL} turned off{entry.task_name ? ` for ${entry.task_name}` : ""}.
+            </strong>{" "}
+            {offReasonSentence(entry.off_reason, { step: entry.off_step })} An admin
+            can turn it on again in OpenAdapt Cloud once the requirements are met.
+          </span>
+        </div>
+      ))}
       {notice && (
         <div className={`notice ${notice.tone}`} role="status">
           <Icon name={notice.tone === "warn" ? "attention" : "check"} />

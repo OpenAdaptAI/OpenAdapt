@@ -43,6 +43,7 @@ import { DecisionPortal } from "./screens/DecisionPortal";
 import { deliverAttentionNotification } from "./lib/attentionNotification";
 import { Qualification } from "./screens/Qualification";
 import { clearLocalSession, rememberLocalSession } from "./localSession";
+import { ItemApprovalDialog } from "./ui/ItemApproval";
 
 type Route =
   | { name: "tasks" }
@@ -733,6 +734,7 @@ export default function App() {
       {pairingNotice}
       {authoringNotice}
       {firstWorkflowStageNotice}
+      <ItemApprovalDialog />
       <div className="app">
         <header className="desktop-shell">
           <div className="desktop-shell-inner">
