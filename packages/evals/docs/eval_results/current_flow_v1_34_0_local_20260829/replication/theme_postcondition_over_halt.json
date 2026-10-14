@@ -1,0 +1,30 @@
+{
+  "condition": {
+    "kind": "cosmetic theme drift",
+    "query": "?drift=theme"
+  },
+  "expected": "if the independently verified effect succeeded, the runtime must not leave the run in an unresumable false-incomplete state",
+  "flow": {
+    "artifact": {
+      "filename": "openadapt_flow-1.34.0-py3-none-any.whl",
+      "import_mode": "locally extracted published wheel",
+      "sha256": "56d32818989cb3a92830080ead39e10b08718c55e00988117f22cbfeaac98854"
+    },
+    "commit": "30fc60e55778a0e0f92b9776117cafcfe2512249",
+    "release_tag": "v1.34.0",
+    "tags": [
+      "v1.34.0"
+    ],
+    "tracked_clean": true,
+    "version": "1.34.0"
+  },
+  "observations": [],
+  "observed_count": 0,
+  "oracle": "arm-independent screenshot/OCR final-state check: exact note and saved banner, Triage row, intended patient, no wrong-type write",
+  "reproduce": "python scripts/run_current_flow_local_benchmark.py --flow-source <v1.34.0-checkout> --flow-wheel <openadapt_flow-1.34.0-py3-none-any.whl> --out <new-output-directory>",
+  "required_trials": 3,
+  "runner_sha256": "fe49e0d9fc9ebf6d66120fc8f16683390071b96af6d252b82afbb94bb7449119",
+  "schema_version": 1,
+  "task": "MockMed triage: sign in, open intended referral, create Triage encounter, enter a trial-unique note, save",
+  "title": "theme effect succeeds but region_stable reports halt"
+}

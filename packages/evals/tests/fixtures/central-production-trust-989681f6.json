@@ -1,0 +1,69 @@
+{
+  "source_commit": "989681f6f475616b7e2cb72360c716db0927f7ad",
+  "schemas": {
+    "qualification_release": "openadapt.qualification-release/v2",
+    "qualification_admission": "openadapt.qualification-admission/v4",
+    "decision_receipt": "openadapt.qualification-evidence-decision-receipt/v2",
+    "acceptance_manifest": "openadapt.production-acceptance/v3",
+    "acceptance_summary": "openadapt.production-lifecycle-evidence-summary/v3",
+    "flow_release_verification": "openadapt.qualification-release-verification-receipt/v1"
+  },
+  "decision_campaign": {
+    "minimum_trials_per_task_condition": 3,
+    "classes": [
+      "declared_attended",
+      "governed_repair",
+      "healthy",
+      "idempotency_replay",
+      "safe_halt",
+      "uncertain_delivery"
+    ]
+  },
+  "release_candidate": {
+    "required": [
+      "artifacts",
+      "deployment_id",
+      "deployment_sha256",
+      "kind",
+      "schema_version",
+      "source_commit",
+      "source_repository",
+      "source_repository_id",
+      "tag",
+      "version"
+    ],
+    "profiles": {
+      "package": {
+        "version": "string",
+        "tag": "string",
+        "deployment_id": "null",
+        "deployment_sha256": "null"
+      },
+      "deployment": {
+        "version": "null",
+        "tag": "null",
+        "deployment_id": "decimal_id",
+        "deployment_sha256": "digest"
+      },
+      "hybrid": {
+        "version": "string",
+        "tag": "string",
+        "deployment_id": "decimal_id",
+        "deployment_sha256": "digest"
+      }
+    }
+  },
+  "flow_artifacts": {
+    "python-sdist": ["application/gzip", ["github-release", "pypi"]],
+    "python-wheel": ["application/zip", ["github-release", "pypi"]]
+  },
+  "targets": {
+    "agent": ["production_agent", "OpenAdaptAI/openadapt-agent", "1136136670", "package"],
+    "capture": ["production_capture", "OpenAdaptAI/openadapt-capture", "1115283835", "package"],
+    "cloud": ["production_cloud", "OpenAdaptAI/openadapt-cloud", "1300570990", "deployment"],
+    "desktop": ["production_desktop", "OpenAdaptAI/openadapt-desktop", "1171291730", "package"],
+    "docs": ["production_docs", "OpenAdaptAI/openadapt-ops", "1172011294", "deployment"],
+    "flow": ["production_flow", "OpenAdaptAI/openadapt-flow", "1291376938", "package"],
+    "openadapt": ["production_openadapt", "OpenAdaptAI/OpenAdapt", "627024850", "package"]
+  }
+}

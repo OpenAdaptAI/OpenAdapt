@@ -1,0 +1,43 @@
+TASK: Edit text in Notepad using find and replace
+DOMAIN: notepad
+
+PRECONDITIONS: Notepad is open with text content containing the word "hello"
+
+STEPS:
+1. Open the Edit menu
+   REASONING: Find and Replace is located in the Edit menu
+   ACTION: CLICK(x=0.08, y=0.05)
+
+2. Click on "Replace" option
+   REASONING: Replace allows finding and substituting text
+   ACTION: CLICK(x=0.10, y=0.20)
+
+3. Wait for Replace dialog to appear
+   REASONING: Dialog needs time to load
+   ACTION: WAIT(0.5)
+
+4. Type the text to find in the "Find what" field
+   REASONING: Specifying the text we want to replace
+   ACTION: TYPE("hello")
+
+5. Click in the "Replace with" field
+   REASONING: Move focus to the replacement text field
+   ACTION: CLICK(x=0.5, y=0.45)
+
+6. Type the replacement text
+   REASONING: Specifying what to replace the found text with
+   ACTION: TYPE("world")
+
+7. Click "Replace All" button
+   REASONING: Replace all occurrences at once
+   ACTION: CLICK(x=0.7, y=0.6)
+
+8. Close the Replace dialog
+   REASONING: Finished with the replace operation
+   ACTION: CLICK(x=0.95, y=0.1)
+
+9. Verify replacement was successful
+   REASONING: Check that text has been replaced
+   ACTION: DONE()
+
+EXPECTED_OUTCOME: All instances of "hello" are replaced with "world" in the document

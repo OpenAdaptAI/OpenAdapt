@@ -1,0 +1,31 @@
+TASK: Perform multiplication in Calculator (8 x 7)
+DOMAIN: calculator
+
+PRECONDITIONS: Calculator application is open
+
+STEPS:
+1. Click the Clear button to reset
+   REASONING: Ensure calculator starts fresh
+   ACTION: CLICK(x=0.5, y=0.35)
+
+2. Click the "8" button
+   REASONING: First number for multiplication
+   ACTION: CLICK(x=0.5, y=0.5)
+
+3. Click the multiplication button (x)
+   REASONING: Multiplication operator
+   ACTION: CLICK(x=0.7, y=0.5)
+
+4. Click the "7" button
+   REASONING: Second number for multiplication
+   ACTION: CLICK(x=0.5, y=0.6)
+
+5. Click the "=" button
+   REASONING: Calculate the result
+   ACTION: CLICK(x=0.7, y=0.85)
+
+6. Verify result shows 56
+   REASONING: 8 x 7 = 56
+   ACTION: DONE()
+
+EXPECTED_OUTCOME: Calculator displays the result 56

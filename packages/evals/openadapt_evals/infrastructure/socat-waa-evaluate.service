@@ -1,0 +1,13 @@
+[Unit]
+Description=socat proxy for WAA /evaluate endpoint (VM:5051 -> container:5050)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/socat TCP-LISTEN:5051,fork,reuseaddr EXEC:"docker exec -i winarena socat STDIO TCP:localhost:5050"
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

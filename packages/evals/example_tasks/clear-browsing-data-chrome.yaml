@@ -1,0 +1,68 @@
+# Clear browsing data in Google Chrome
+# This is a WAA benchmark staple — tests navigation through Settings UI
+name: "Clear browsing data in Google Chrome"
+id: custom-clear-chrome-data
+
+setup:
+  # Kill any existing Chrome processes
+  - execute: "powershell -c 'Stop-Process -Name chrome -Force -ErrorAction SilentlyContinue'"
+  - sleep: 1
+
+  # Disable "Make Chrome faster" and other popups via Chrome policies
+  - execute: "powershell -c \"New-Item -Path 'HKLM:\\SOFTWARE\\Policies\\Google\\Chrome' -Force | Out-Null; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Google\\Chrome' -Name 'SpeedComparisonEnabled' -Value 0 -Type DWord; Set-ItemProperty -Path 'HKLM:\\SOFTWARE\\Policies\\Google\\Chrome' -Name 'PromotionalTabsEnabled' -Value 0 -Type DWord\""
+  - sleep: 1
+
+  # Create Chrome "First Run" sentinel to prevent first-run UI
+  - execute: "powershell -c \"$p = \\\"$env:LOCALAPPDATA\\Google\\Chrome\\User Data\\First Run\\\"; if (-not (Test-Path $p)) { New-Item -ItemType File -Path $p -Force | Out-Null }\""
+  - sleep: 1
+
+  # Populate Chrome with browsing history (launch with popup-suppression flags)
+  - execute: "powershell -c \"Start-Process chrome @('https://example.com', '--no-first-run', '--disable-popup-blocking', '--disable-default-apps', '--disable-features=SpeedComparison,ChromeWhatsNewUI', '--disable-component-update')\""
+  - sleep: 4
+  - execute: "powershell -c \"Start-Process chrome 'https://wikipedia.org'\""
+  - sleep: 2
+  # Dismiss any remaining popups with Escape
+  - execute: "powershell -c \"Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('{ESCAPE}')\""
+  - sleep: 1
+  # Close Chrome so the agent starts fresh
+  - execute: "powershell -c 'Stop-Process -Name chrome -Force -ErrorAction SilentlyContinue'"
+  - sleep: 2
+
+evaluate:
+  # Check 1: Chrome history is empty after clearing
+  - check: command
+    run: "powershell -c \"$h = \\\"$env:LOCALAPPDATA\\Google\\Chrome\\User Data\\Default\\History\\\"; if (Test-Path $h) { if ((Get-Item $h).Length -lt 50000) { Write-Output 'cleared' } else { Write-Output 'not_cleared' } } else { Write-Output 'no_history_file' }\""
+    expect: "cleared"
+    match: contains
+
+  # Check 2: VLM confirms the "Clear browsing data" dialog was used
+  - check: screenshot
+    description: "Chrome shows a confirmation that browsing data has been cleared, or the Settings page for clearing data is visible with completed state"
+
+combine: or
+max_steps: 20
+
+milestones:
+  # Milestone 1: Chrome is running
+  - name: "Chrome is open"
+    check: command
+    run: "powershell -c \"if (Get-Process chrome -ErrorAction SilentlyContinue) { Write-Output 'running' } else { Write-Output 'not_running' }\""
+    expect: "running"
+    match: contains
+
+  # Milestone 2: Settings or clear-data page is visible (transient — captured per-step)
+  - name: "Clear browsing data UI is visible"
+    check: screenshot
+    description: "Chrome Settings page OR the 'Clear browsing data' dialog/panel is visible in Chrome. The address bar may show chrome://settings or the Clear Browsing Data dialog may be open."
+
+  # Milestone 3: Evidence that clear data was initiated
+  - name: "Clear data action initiated"
+    check: screenshot
+    description: "Chrome shows evidence that browsing data clearing was initiated: either a 'Clearing browsing data...' spinner, a confirmation message, or the settings page AFTER the clear dialog was dismissed (no dialog visible, clean settings page)."
+
+  # Milestone 4: History file is actually smaller (ground truth)
+  - name: "Data is cleared"
+    check: command
+    run: "powershell -c \"$h = \\\"$env:LOCALAPPDATA\\Google\\Chrome\\User Data\\Default\\History\\\"; if (Test-Path $h) { if ((Get-Item $h).Length -lt 50000) { Write-Output 'cleared' } else { Write-Output 'not_cleared' } } else { Write-Output 'no_history_file' }\""
+    expect: "cleared"
+    match: contains

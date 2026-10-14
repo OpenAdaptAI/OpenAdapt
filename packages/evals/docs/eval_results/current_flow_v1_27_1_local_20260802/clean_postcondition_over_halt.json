@@ -1,0 +1,31 @@
+{
+  "arm": "compiled",
+  "condition": {
+    "kind": "clean",
+    "query": ""
+  },
+  "counted_trials": 3,
+  "expected": "if the independently verified effect succeeded, the runtime must not leave the run in an unresumable false-incomplete state",
+  "flow": {
+    "artifact": {
+      "filename": "openadapt_flow-1.27.1-py3-none-any.whl",
+      "import_mode": "locally extracted published wheel",
+      "sha256": "99d8f3ef014481356f4bcfc65f694ed2fd47a75e2025c5ddfdae4bfab2194094"
+    },
+    "commit": "ee52def4190fc08bc3ecdee8ea28a4aae205f1d7",
+    "release_tag": "v1.27.1",
+    "tags": [
+      "v1.27.1"
+    ],
+    "tracked_clean": true,
+    "version": "1.27.1"
+  },
+  "observations": [],
+  "observed_count": 0,
+  "oracle": "arm-independent screenshot/OCR final-state check: exact note and saved banner, Triage row, intended patient, no wrong-type write",
+  "reproduce": "python scripts/run_current_flow_local_benchmark.py --flow-source <v1.27.1-checkout> --flow-wheel <openadapt_flow-1.27.1-py3-none-any.whl> --out <new-output-directory>; python scripts/extract_over_halt_regression.py --results <new-output-directory>/results.json --condition clean",
+  "runner_sha256": "68f9e5a27f4f04d831574167ebd6b362bf05184e81708a315d9896969b48a126",
+  "schema_version": 1,
+  "task": "MockMed triage: sign in, open intended referral, create Triage encounter, enter a trial-unique note, save",
+  "title": "clean effect succeeds but the runtime reports halt (compiled arm)"
+}

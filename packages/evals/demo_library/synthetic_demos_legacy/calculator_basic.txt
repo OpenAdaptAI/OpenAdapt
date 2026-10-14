@@ -1,0 +1,53 @@
+TASK: Perform basic addition in Calculator (25 + 17)
+DOMAIN: calculator
+
+STEPS:
+1. Click on the Start menu button in the taskbar
+   REASONING: Need to access the Start menu to find Calculator
+   ACTION: CLICK(x=0.02, y=0.98)
+
+2. Type "calculator" in the search box
+   REASONING: Searching is faster than navigating through menus
+   ACTION: TYPE("calculator")
+
+3. Wait for search results to appear
+   REASONING: Windows needs time to index and display results
+   ACTION: WAIT(1.0)
+
+4. Click on the Calculator app in search results
+   REASONING: Calculator should appear as the first result
+   ACTION: CLICK(x=0.15, y=0.3)
+
+5. Wait for Calculator to open
+   REASONING: Application needs time to launch
+   ACTION: WAIT(0.5)
+
+6. Click the "2" button
+   REASONING: First digit of first number
+   ACTION: CLICK(x=0.3, y=0.6)
+
+7. Click the "5" button
+   REASONING: Second digit of first number
+   ACTION: CLICK(x=0.5, y=0.5)
+
+8. Click the "+" button
+   REASONING: Addition operator
+   ACTION: CLICK(x=0.7, y=0.6)
+
+9. Click the "1" button
+   REASONING: First digit of second number
+   ACTION: CLICK(x=0.3, y=0.7)
+
+10. Click the "7" button
+    REASONING: Second digit of second number
+    ACTION: CLICK(x=0.5, y=0.6)
+
+11. Click the "=" button
+    REASONING: Calculate the result
+    ACTION: CLICK(x=0.7, y=0.85)
+
+12. Verify result shows 42
+    REASONING: 25 + 17 = 42
+    ACTION: DONE()
+
+EXPECTED_OUTCOME: Calculator displays the result 42

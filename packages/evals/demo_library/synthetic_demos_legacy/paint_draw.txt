@@ -1,0 +1,41 @@
+TASK: Open Paint and draw a simple shape
+DOMAIN: paint
+
+STEPS:
+1. Click on the Start menu button in the taskbar
+   REASONING: Need to access the Start menu to find Paint
+   ACTION: CLICK(x=0.02, y=0.98)
+
+2. Type "paint" in the search box
+   REASONING: Searching is faster than navigating through menus
+   ACTION: TYPE("paint")
+
+3. Wait for search results to appear
+   REASONING: Windows needs time to index and display results
+   ACTION: WAIT(1.0)
+
+4. Click on the Paint app in search results
+   REASONING: Paint should appear in the search results
+   ACTION: CLICK(x=0.15, y=0.3)
+
+5. Wait for Paint to open
+   REASONING: Application needs time to launch
+   ACTION: WAIT(1.0)
+
+6. Click on the Rectangle shape tool
+   REASONING: Select a shape to draw
+   ACTION: CLICK(x=0.35, y=0.08)
+
+7. Select a color from the color palette
+   REASONING: Choose the color for the shape
+   ACTION: CLICK(x=0.55, y=0.08)
+
+8. Click and drag to draw a rectangle on the canvas
+   REASONING: Drawing the shape by defining start and end points
+   ACTION: DRAG(start_x=0.3, start_y=0.4, end_x=0.6, end_y=0.7)
+
+9. Verify rectangle is drawn
+   REASONING: Shape should appear on the canvas
+   ACTION: DONE()
+
+EXPECTED_OUTCOME: A colored rectangle is drawn on the Paint canvas

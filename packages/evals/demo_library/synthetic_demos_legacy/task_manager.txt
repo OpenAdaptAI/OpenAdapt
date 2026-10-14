@@ -1,0 +1,51 @@
+TASK: Open Task Manager and end a process
+DOMAIN: task_manager
+
+PRECONDITIONS: At least one background application is running (e.g., Notepad)
+
+STEPS:
+1. Open Task Manager using keyboard shortcut
+   REASONING: Ctrl+Shift+Esc is the direct shortcut to open Task Manager
+   ACTION: HOTKEY("ctrl", "shift", "esc")
+
+2. Wait for Task Manager to open
+   REASONING: Application needs time to launch and populate process list
+   ACTION: WAIT(1.5)
+
+3. Click on "More details" if Task Manager opens in compact view
+   REASONING: Full view is needed to see all processes
+   ACTION: CLICK(x=0.1, y=0.9)
+
+4. Wait for expanded view to load
+   REASONING: Process list needs time to populate
+   ACTION: WAIT(1.0)
+
+5. Click on the "Processes" tab
+   REASONING: Processes tab shows running applications
+   ACTION: CLICK(x=0.08, y=0.12)
+
+6. Scroll down to find the target process
+   REASONING: The process may not be visible in the initial view
+   ACTION: SCROLL(direction="down")
+
+7. Click on the target process to select it
+   REASONING: Need to select a process before ending it
+   ACTION: CLICK(x=0.3, y=0.4)
+
+8. Click the "End task" button
+   REASONING: End task button terminates the selected process
+   ACTION: CLICK(x=0.9, y=0.95)
+
+9. Wait for confirmation dialog if it appears
+   REASONING: Some processes may show a confirmation prompt
+   ACTION: WAIT(0.5)
+
+10. Click "End process" if confirmation dialog appears
+    REASONING: Confirm the termination of the process
+    ACTION: CLICK(x=0.6, y=0.6)
+
+11. Verify process is no longer in the list
+    REASONING: Successfully terminated process should disappear
+    ACTION: DONE()
+
+EXPECTED_OUTCOME: The selected process is terminated and no longer appears in Task Manager

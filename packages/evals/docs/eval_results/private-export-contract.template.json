@@ -1,0 +1,27 @@
+{
+  "_README": [
+    "TEMPLATE. This file is not an approval and the importer will refuse it.",
+    "Copy it into openadapt-internal, replace every FILL_ value, delete this",
+    "_README key, and approve the result there.",
+    "",
+    "The evidence is encrypted to an age recipient before it is committed, so",
+    "the repository holds ciphertext. The private half lives in the founder's",
+    "keychain and never reaches CI: the writer only encrypts, so nothing in any",
+    "workflow can read the evidence back.",
+    "",
+    "retention_commitment_days is a commitment this mechanism records and does",
+    "not enforce. A git commit carries no expiry."
+  ],
+  "schema_version": "openadapt.private-export-contract/v1",
+  "destination": {
+    "repository": "OpenAdaptAI/openadapt-evidence",
+    "ref": "refs/heads/main",
+    "path_prefix": "production-acceptance",
+    "encryption_recipient": "age19gxzh0n7d6r8hdwpdfvuwxgc46gtcq0fd298nq2v8puqprtphetsg7sdh2",
+    "retention_commitment_days": 2555
+  },
+  "importer_workflow_ref": "OpenAdaptAI/openadapt-evals/.github/workflows/import-production-acceptance.yml@refs/heads/main",
+  "approval_authority": "FILL_APPROVAL_AUTHORITY",
+  "approved_at": "FILL_APPROVED_AT",
+  "uploader_identity": "FILL_PUSHING_IDENTITY"
+}

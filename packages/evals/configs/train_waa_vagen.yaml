@@ -1,0 +1,89 @@
+# VAGEN training config for WAA desktop automation
+#
+# This trains a VLM (e.g., Qwen2.5-VL-3B) to automate Windows desktop tasks
+# using GRPO/GiGPO via the VAGEN framework (verl-agent).
+#
+# Prerequisites:
+#   1. WAA server reachable (via SSH tunnel if needed):
+#        ssh -N -L 5000:localhost:5000 -L 5001:localhost:5051 azureuser@<VM_IP>
+#      Port 5000: WAA Flask API (/screenshot, /execute_windows)
+#      Port 5001: evaluate_server (/setup, /evaluate) via socat bridge from container :5050
+#   2. VAGEN installed on GPU VM (see scripts/setup_gpu_training.sh)
+#   3. openadapt-evals installed on GPU VM (pip install openadapt-evals)
+#   4. Register env in VAGEN's env_registry.yaml:
+#        WAADesktop: openadapt_evals.adapters.verl_env.WAADesktopEnv
+#      (automated by: scripts/train_verl_e2e.py or oa-vm gpu-train)
+#
+# Architecture:
+#   GPU VM                              CPU VM
+#   ┌──────────────────────┐            ┌──────────────────┐
+#   │ VAGEN / verl         │            │ Docker           │
+#   │  GymAgentLoop        │  HTTP      │  QEMU (Win 11)   │
+#   │   WAADesktopEnv ─────│───────────>│   WAA Flask API  │
+#   │  GiGPO/GRPO trainer  │            │                  │
+#   │  vLLM inference      │            │                  │
+#   └──────────────────────┘            └──────────────────┘
+#
+# Usage:
+#   # Via orchestration script (recommended):
+#   python scripts/train_verl_e2e.py --cloud aws --task-id <UUID>
+#
+#   # Via CLI:
+#   oa-vm gpu-train --cloud aws --task-id <UUID>
+#
+# For mock testing (no VM):
+#   Set server_url to "mock" in env config
+
+# --- Model ---
+model:
+  name: Qwen/Qwen2.5-VL-3B-Instruct
+  # For larger models with LoRA:
+  # name: Qwen/Qwen2.5-VL-7B-Instruct
+  # lora:
+  #   r: 16
+  #   alpha: 32
+  #   target_modules: [q_proj, k_proj, v_proj, o_proj]
+
+# --- Environment ---
+# VAGEN loads envs from env_registry.yaml using these specs.
+# WAADesktopEnv implements GymImageEnv (async reset/step/close/system_prompt).
+# Each env instance connects to the WAA server independently via HTTP.
+envs:
+  - name: WAADesktop
+    n_envs: 1                    # Must be 1 (single WAA VM; use rollout.n for GRPO group size)
+    data_source: waa
+    seed: [1, 100, 1]            # [start, end, step] for deterministic seeding
+    max_turns: 15                # Max actions per episode
+    response_length_per_turn: 512
+    config:
+      server_url: "http://localhost:5000"       # WAA Flask API (screenshots, actions)
+      evaluate_url: "http://localhost:5001"     # evaluate_server (setup, evaluate)
+      task_id: "REPLACE_WITH_WAA_TASK_UUID"
+      max_steps: 15
+      evaluate_at_done: true
+      action_type: fractional    # VLM outputs normalized 0-1 coordinates
+
+# --- Training (GRPO/GiGPO) ---
+algorithm:
+  name: grpo                     # or "gigpo" for step-level advantages
+  kl_coef: 0.0                   # No KL penalty (DAPO/Open-Reasoner-Zero style)
+  epsilon: 0.2                   # PPO clip range
+  gamma: 1.0                     # No discounting for episodic tasks (use 0.95 for gigpo)
+
+trainer:
+  total_epochs: 100
+  n_gpus_per_node: 1             # 1 for g5.xlarge; use 4 for g5.12xlarge
+  micro_batch_size: 4
+  gradient_accumulation_steps: 2
+  test_freq: 5                   # Evaluate every N epochs
+  experiment_name: grpo_waa_desktop
+  project_name: openadapt-waa-rl
+  logger:
+    - console
+    - wandb
+
+# --- Rollout ---
+rollout:
+  temperature: 0.7
+  top_p: 0.95
+  mode: async                    # Async sglang rollout for throughput

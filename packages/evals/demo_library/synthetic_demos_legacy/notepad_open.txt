@@ -1,0 +1,25 @@
+TASK: Open Notepad application
+DOMAIN: notepad
+
+STEPS:
+1. Click on the Start menu button in the taskbar
+   REASONING: Need to access the Start menu to find Notepad
+   ACTION: CLICK(x=0.02, y=0.98)
+
+2. Type "notepad" in the search box
+   REASONING: Searching is faster than navigating through menus
+   ACTION: TYPE("notepad")
+
+3. Wait for search results to appear
+   REASONING: Windows needs time to index and display results
+   ACTION: WAIT(1.0)
+
+4. Click on the Notepad app in search results
+   REASONING: Notepad should appear as the first result
+   ACTION: CLICK(x=0.15, y=0.3)
+
+5. Verify Notepad window is open
+   REASONING: Confirm the application launched successfully
+   ACTION: DONE()
+
+EXPECTED_OUTCOME: Notepad application is open with an empty untitled document

@@ -1,0 +1,73 @@
+{
+  "condition": {
+    "kind": "cosmetic theme drift",
+    "query": "?drift=theme"
+  },
+  "expected": "if the independently verified effect succeeded, the runtime must not leave the run in an unresumable false-incomplete state",
+  "flow": {
+    "artifact": {
+      "filename": "openadapt_flow-1.16.1-py3-none-any.whl",
+      "import_mode": "locally extracted published wheel",
+      "sha256": "c7073283475e7ae722db2478b499d962364851104e09edb71f254ba21c1310cd"
+    },
+    "commit": "113ce992b491576d77236f495b983165ce7a63bd",
+    "release_tag": "v1.16.1",
+    "tags": [
+      "v1.16.1"
+    ],
+    "tracked_clean": true,
+    "version": "1.16.1"
+  },
+  "observations": [
+    {
+      "end_to_end_wall_s": 13.24499462498352,
+      "final_screenshot_sha256": "0a5030645fdd40ab9b765f9dd02f3dc1d28a5e9dc35393f729a20c444a89a48d",
+      "first_failure": {
+        "error": "Postconditions failed for step 'step_010' (click 'Save Encounter'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(0, 43, 968, 169) \u2014 run aborted",
+        "step": "step_010"
+      },
+      "note_sha256": "cd8f603f0405cf4e119d36cb53864e88c769b27b4ac791f97b063f51e5b035c2",
+      "oracle_success": true,
+      "primary_outcome": "over_halt",
+      "replayer_success": false,
+      "steady_wall_s": 12.660771957947873,
+      "trial": 1
+    },
+    {
+      "end_to_end_wall_s": 13.24434537498746,
+      "final_screenshot_sha256": "1c36ee628955e5a7ec06d847bef8ce3fce8c59a0fd2296c20a77bd932af9ce0b",
+      "first_failure": {
+        "error": "Postconditions failed for step 'step_010' (click 'Save Encounter'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(0, 43, 968, 169) \u2014 run aborted",
+        "step": "step_010"
+      },
+      "note_sha256": "853b125d6a17c00943f386979192028cdefc5d9e494e89a85254abf4dc048493",
+      "oracle_success": true,
+      "primary_outcome": "over_halt",
+      "replayer_success": false,
+      "steady_wall_s": 12.649677417008206,
+      "trial": 2
+    },
+    {
+      "end_to_end_wall_s": 13.722865749965422,
+      "final_screenshot_sha256": "5daea16d284fa53e764ad01caa187fd589711c2f35a4dc3cebb536a5b13c2f94",
+      "first_failure": {
+        "error": "Postconditions failed for step 'step_010' (click 'Save Encounter'): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(0, 43, 968, 169) \u2014 run aborted",
+        "step": "step_010"
+      },
+      "note_sha256": "859c554a8f0a16f1be8d62fc23b55bef0f1531fcf26544ea26e08aa2eb686b94",
+      "oracle_success": true,
+      "primary_outcome": "over_halt",
+      "replayer_success": false,
+      "steady_wall_s": 13.141616875072941,
+      "trial": 3
+    }
+  ],
+  "observed_count": 3,
+  "oracle": "arm-independent screenshot/OCR final-state check: exact note and saved banner, Triage row, intended patient, no wrong-type write",
+  "reproduce": "python scripts/run_current_flow_local_benchmark.py --flow-source <v1.16.1-checkout> --flow-wheel <openadapt_flow-1.16.1-py3-none-any.whl> --out <new-output-directory>",
+  "required_trials": 3,
+  "runner_sha256": "ac58c0b9a02cfc991144a1f5c7a2814c6b6b748bcba27b87f8e1027ee575970f",
+  "schema_version": 1,
+  "task": "MockMed triage: sign in, open intended referral, create Triage encounter, enter a trial-unique note, save",
+  "title": "theme effect succeeds but region_stable reports halt"
+}

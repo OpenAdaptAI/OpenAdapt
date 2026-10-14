@@ -1,0 +1,37 @@
+# Medium task: enter values and a SUM formula in LibreOffice Calc
+name: "Enter values in A1:A3 and a SUM formula in A4 in LibreOffice Calc"
+id: custom-calc-formula
+
+setup:
+  - execute: "powershell -c 'Stop-Process -Name soffice* -Force -ErrorAction SilentlyContinue'"
+  - sleep: 2
+  - launch: "soffice --calc"
+  - sleep: 5
+
+evaluate:
+  - check: command
+    run: |
+      powershell -c "Get-Process soffice* -ErrorAction SilentlyContinue | Measure | Select -ExpandProperty Count"
+    expect: "1"
+    match: exact
+
+  - check: screenshot
+    description: "LibreOffice Calc is open with values in cells A1, A2, A3 and a SUM formula result in A4"
+
+combine: and
+max_steps: 20
+
+milestones:
+  - name: "Calc is open"
+    check: command
+    run: "powershell -c \"Get-Process soffice* -ErrorAction SilentlyContinue | Measure | Select -ExpandProperty Count\""
+    expect: "1"
+    match: exact
+
+  - name: "Values entered"
+    check: screenshot
+    description: "Cells A1, A2, and A3 contain numeric values"
+
+  - name: "Formula entered"
+    check: screenshot
+    description: "Cell A4 contains a formula result (a number)"

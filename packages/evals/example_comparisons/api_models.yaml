@@ -1,0 +1,26 @@
+# Example comparison config: API models on WAA tasks
+# Usage:
+#   python scripts/compare_models.py --config example_comparisons/api_models.yaml
+#   python scripts/compare_models.py --config example_comparisons/api_models.yaml --manage-vm --setup-tunnels
+
+name: "API Model Comparison"
+description: "Compare GPT-5.4-mini vs GPT-4o-mini as unified desktop agents"
+
+tasks:
+  - example_tasks/notepad-hello.yaml
+  - example_tasks/clear-browsing-data-chrome.yaml
+
+models:
+  - name: gpt-5.4-mini
+    provider: openai
+    type: unified
+
+  - name: gpt-4o-mini
+    provider: openai
+    type: unified
+
+server_url: http://localhost:5001
+max_steps: 10
+runs_per_config: 1
+save_screenshots: true
+output_dir: comparison_results/

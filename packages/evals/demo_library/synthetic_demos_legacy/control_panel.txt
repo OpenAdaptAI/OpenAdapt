@@ -1,0 +1,61 @@
+TASK: Navigate to Control Panel and change mouse pointer speed
+DOMAIN: control_panel
+
+STEPS:
+1. Click on the Start menu button in the taskbar
+   REASONING: Need to access the Start menu to find Control Panel
+   ACTION: CLICK(x=0.02, y=0.98)
+
+2. Type "control panel" in the search box
+   REASONING: Searching is faster than navigating through menus
+   ACTION: TYPE("control panel")
+
+3. Wait for search results to appear
+   REASONING: Windows needs time to index and display results
+   ACTION: WAIT(1.0)
+
+4. Click on the Control Panel app in search results
+   REASONING: Control Panel should appear as a result
+   ACTION: CLICK(x=0.15, y=0.3)
+
+5. Wait for Control Panel to open
+   REASONING: Application needs time to launch
+   ACTION: WAIT(1.5)
+
+6. Click on "Hardware and Sound"
+   REASONING: Mouse settings are located under Hardware and Sound
+   ACTION: CLICK(x=0.3, y=0.45)
+
+7. Wait for Hardware and Sound page to load
+   REASONING: Page needs time to render
+   ACTION: WAIT(0.5)
+
+8. Click on "Mouse" under Devices and Printers
+   REASONING: Direct link to mouse properties
+   ACTION: CLICK(x=0.25, y=0.6)
+
+9. Wait for Mouse Properties dialog to open
+   REASONING: Dialog needs time to load
+   ACTION: WAIT(0.5)
+
+10. Click on the "Pointer Options" tab
+    REASONING: Pointer speed setting is on this tab
+    ACTION: CLICK(x=0.5, y=0.08)
+
+11. Click and drag the pointer speed slider
+    REASONING: Adjust the pointer speed to desired level
+    ACTION: DRAG(start_x=0.4, start_y=0.25, end_x=0.55, end_y=0.25)
+
+12. Click the "Apply" button
+    REASONING: Apply the changes without closing the dialog
+    ACTION: CLICK(x=0.6, y=0.9)
+
+13. Click the "OK" button
+    REASONING: Confirm changes and close the dialog
+    ACTION: CLICK(x=0.75, y=0.9)
+
+14. Verify mouse speed has changed
+    REASONING: Mouse pointer should move at the new speed
+    ACTION: DONE()
+
+EXPECTED_OUTCOME: Mouse pointer speed is adjusted to the new setting

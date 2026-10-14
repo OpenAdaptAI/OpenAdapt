@@ -1,0 +1,275 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openadapt-evals"
+version = "0.97.1"
+description = "Evaluation infrastructure for GUI agent benchmarks"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+license-files = ["LICENSE", "NOTICE"]
+authors = [
+    {name = "Richard Abrich", email = "richard@openadapt.ai"}
+]
+maintainers = [
+    {name = "OpenAdaptAI", email = "contact@openadapt.ai"}
+]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Science/Research",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Testing",
+]
+keywords = ["gui", "automation", "evaluation", "benchmark", "agent", "ai"]
+
+dependencies = [
+    "cryptography>=41.0.0",
+    "jsonschema>=4.20.0",
+    "pillow>=10.0.0",
+    "pydantic-settings>=2.0.0",
+    "python-dotenv>=1.2.1",
+    "tenacity>=8.2.0",
+    "requests>=2.28.0",
+    "referencing>=0.31.0",
+    "httpx>=0.25.0",
+    "openai>=1.0.0",
+    "anthropic>=0.76.0",
+    "pyyaml>=6.0",
+    "openadapt-consilium>=0.3.2",
+    "openadapt-telemetry>=0.2.0",
+    # Requires openadapt_types.reward (RewardEvidenceReceiptV1, RewardCertificateV1, score).
+    # Bounded pin, same as openadapt-flow uses. openadapt-types is 0-based semver
+    # with major_on_zero=false, so a breaking change lands as a minor bump and an
+    # unbounded floor would take it silently. openadapt-types#40 narrows the
+    # certificate contracts and changes score() to require the reward contract;
+    # widening this bound and updating assess_receipt go in one PR after that
+    # release, not before.
+    "openadapt-types>=0.17.0,<0.18.0",
+]
+
+[project.optional-dependencies]
+ml = [
+    # VLM adapters, schema, baselines from openadapt-ml
+    # Required for: PolicyAgent, BaselineAgent, trace_export, Qwen3VLAgent
+    "openadapt-ml>=0.11.0",
+]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-mock>=3.12.0",
+    # Bounded on purpose. `ruff>=0.1.0` let any resolver pick any future ruff,
+    # and ruff 0.16.0 grew its DEFAULT rule set from 59 rules to 413. This
+    # project selected no rules explicitly, so it silently inherited 354 new
+    # ones: `ruff check .` went from 0 configured rules to 1653 findings
+    # without a line of code changing. Raise this ceiling deliberately, with
+    # the new findings triaged in the same change.
+    "ruff>=0.16,<0.17",
+    "flask>=3.0.0",
+    "requests-toolbelt>=1.0.0",
+    "fire>=0.5.0",
+    # Constrained decoding tests need outlines
+    "outlines>=0.1.0",
+    # Required by test_workflow_models and workflow pipeline
+    "numpy>=1.24.0",
+]
+waa = [
+    # Windows Agent Arena dependencies
+    "requests>=2.28.0",
+]
+flow = [
+    # openadapt-flow: the demonstration compiler. Provides WindowsBackend
+    # (WAA /screenshot + /execute_windows contract), Replayer, Workflow, and
+    # run_bench. Only needed to actually replay/compile against a live WAA
+    # server -- the cost model + dry-run are stdlib-only and need no extra.
+    "openadapt-flow>=0.19.1",
+]
+azure = [
+    # Azure ML dependencies for distributed WAA evaluation
+    "azure-ai-ml>=1.12.0",
+    "azure-identity>=1.15.0",
+    # Azure VM management (SDK path)
+    "azure-mgmt-compute>=33.0.0",
+    "azure-mgmt-network>=27.0.0",
+    "azure-mgmt-resource>=23.2.0",
+]
+aws = [
+    # AWS EC2 management for VM pool operations
+    "boto3>=1.34.0",
+]
+ocr = [
+    # OCR for Tier 1.5a text anchoring in grounding cascade
+    # GLM-OCR (VLM-based, better accuracy): pip install glmocr
+    "glmocr>=0.1.0",
+]
+retrieval = [
+    # For RetrievalAugmentedAgent with automatic demo selection
+    "openadapt-retrieval>=0.1.0",
+]
+viewer = [
+    # For live benchmark viewer API server
+    "flask>=3.0.0",
+    "flask-cors>=4.0.0",
+]
+wandb = [
+    # Weights & Biases for experiment tracking + Weave agent tracing
+    "wandb>=0.16.0",
+    # Weave: LLM/agent tracing with auto-patched OpenAI/Anthropic clients
+    "weave>=0.50.0",
+]
+training = [
+    # TRL for GRPO/PPO training with rollout_func
+    "trl>=0.17.0",
+    # Unsloth: 90% VRAM reduction for VLM RL training
+    "unsloth",
+    # HF datasets for TRL training dataset
+    "datasets>=2.14.0",
+    # Constrained decoding for GRPO (forces valid action format output)
+    "outlines>=0.1.0",
+    # Perceptual hashing for planner cache (falls back to MD5 if not installed)
+    "imagehash>=4.3.0",
+    # CLIP embeddings for visual similarity
+    "open-clip-torch>=2.20.0",
+    # Heavy ML deps for openadapt-ml training
+    "openadapt-ml[training]>=0.11.0",
+]
+verl = [
+    # veRL: Volcano Engine Reinforcement Learning for LLMs
+    # https://github.com/volcengine/verl
+    "verl>=0.3.0",
+    # NOTE: VAGEN (Visual Agent with Environment Grounding) is not published
+    # on PyPI. Install from source: https://github.com/RAGEN-AI/VAGEN
+]
+all = [
+    "openadapt-evals[dev,waa,flow,azure,aws,retrieval,viewer,wandb]",
+]
+test = [
+    "anthropic>=0.76.0",
+    "flask>=3.0.0",
+]
+
+[project.scripts]
+oa = "openadapt_evals.cli.main:main"
+# Legacy entry point (kept for backward compatibility)
+openadapt-evals = "openadapt_evals.benchmarks.cli:main"
+# VM/pool infrastructure CLI (migrated from openadapt-ml)
+oa-vm = "openadapt_evals.benchmarks.vm_cli:main"
+# Training, evaluation, collection, and analysis
+openadapt-train-grpo = "scripts.train_trl_grpo:main"
+openadapt-eval = "scripts.run_full_eval:main"
+openadapt-collect = "scripts.collect_distillation_data:main"
+# Evaluate openadapt-flow on WAA (demonstrate-then-replay + hybrid, dry-run)
+openadapt-eval-flow = "scripts.eval_flow_on_waa:main"
+openadapt-analyze = "openadapt_evals.analysis.cli:main"
+# GPU instance lifecycle (launch, serve, terminate)
+openadapt-gpu = "scripts.gpu_cli:main"
+
+[project.urls]
+Homepage = "https://github.com/OpenAdaptAI/openadapt-evals"
+Repository = "https://github.com/OpenAdaptAI/openadapt-evals"
+Documentation = "https://github.com/OpenAdaptAI/openadapt-evals#readme"
+"Bug Tracker" = "https://github.com/OpenAdaptAI/openadapt-evals/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["openadapt_evals", "scripts"]
+
+# The Prime Intellect Environments Hub package under environments/ is
+# published on its own with `prime env push`. It is not part of this
+# distribution, so the sdist excludes it and the wheel never listed it.
+[tool.hatch.build.targets.sdist]
+exclude = ["environments/"]
+
+[tool.pytest.ini_options]
+markers = [
+    "heavy: requires ML deps (torch, transformers, trl, openadapt-ml) — skipped in light CI",
+    "gpu: requires GPU hardware",
+    "vm: requires a running WAA VM",
+]
+
+[tool.ruff]
+line-length = 100
+# Pinned so a future ruff cannot change which syntax rewrites are considered
+# valid. Matches `requires-python = ">=3.10"`.
+target-version = "py310"
+
+[tool.ruff.lint]
+# Explicit and bounded on purpose.
+#
+# Before this change there was no `select` at all, so the rule set was
+# whatever the installed ruff happened to default to. Under ruff 0.16.0 that
+# is 413 rules and 1653 findings here. A findings list that large cannot be
+# reviewed honestly, and it would keep moving with every ruff release, so the
+# rule set is now stated rather than inherited.
+#
+# E/F/I/W with E501 ignored is the house set already used by
+# openadapt-capture, openadapt-privacy, openadapt-telemetry, openadapt-crier,
+# openadapt-herald, openadapt-desktop and OpenAdapt. This repo did not pass it
+# (478 findings, including three F821 undefined names); those are fixed in
+# this same change, so the declaration is true rather than aspirational.
+#
+# Expanding beyond this set is a deliberate future decision with its own
+# review, not something a version bump does on our behalf.
+select = ["E", "F", "I", "W"]
+
+# E501 line-too-long: the formatter owns line length. `line-length = 100`
+# above still governs formatting; enforcing it as a lint error only produces
+# noise on long URLs, pinned hashes and embedded PowerShell/SQL literals that
+# cannot be wrapped. Consistent with every other repo in this workspace.
+ignore = ["E501"]
+
+[tool.ruff.lint.per-file-ignores]
+# E402 (import not at top of file) is ignored ONLY where the ordering is
+# load-bearing, listed file by file so a new accidental one still fails.
+# Every entry below was read; none is a style accident.
+#
+# `sys.path` must be extended before the package it makes importable:
+"openadapt_evals/waa_deploy/evaluate_server.py" = ["E402"]
+"scripts/enrich_demo_targets.py" = ["E402"]
+"scripts/update_weekly_north_star.py" = ["E402"]
+# `load_dotenv()` must run before `openadapt_evals.vlm`, which reads provider
+# credentials from the environment at import time:
+"scripts/convert_recording_to_demo.py" = ["E402"]
+"scripts/refine_demo.py" = ["E402"]
+"scripts/record_waa_demos.py" = ["E402"]
+# `logging.basicConfig()` must run before the imported module installs its own
+# handlers, or the E2E script emits nothing:
+"scripts/test_verl_env_e2e.py" = ["E402"]
+# `pytest.importorskip()` must run before the import it guards. This is the
+# same contract the CI "bare heavy imports in tests" guard enforces; moving
+# the import above the skip would make the light CI job try to load
+# openadapt_ml:
+"tests/test_api_agent_ml.py" = ["E402"]
+
+# This generator's SHA-256 is embedded in the published evidence report
+# docs/eval_results/openadapt_performance_20260717.json, and
+# tests/test_report_openadapt_performance.py regenerates that report byte for
+# byte. Reformatting the file changes the hash and invalidates a pinned
+# provenance record, so its import block stays exactly as published. Removing
+# a single blank line here was enough to fail that test.
+"scripts/report_openadapt_performance.py" = ["I001"]
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+commit_message = "chore: release {version}"
+major_on_zero = false
+allow_zero_version = true
+# Semantic Release changes only project metadata. Stamp that version into the
+# existing editable lock entry without resolving dependencies, stage it in the
+# generated release commit, and build exactly those reviewed inputs. The PSR
+# action is a Docker action, so uv must be installed inside its container.
+build_command = "python -m pip install uv==0.11.29 && python scripts/verify_release_lock.py --write && git add uv.lock && uv build"
+
+[tool.semantic_release.branches.main]
+match = "main"
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "style", "test"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]

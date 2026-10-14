@@ -1,0 +1,590 @@
+{
+  "aggregate": {
+    "governed_lease": {
+      "actuation_tiers": [
+        "None"
+      ],
+      "delivered_count": 0,
+      "delivery_receipt_count": 0,
+      "model_calls_total": 0,
+      "model_cost_usd_total": 0.0,
+      "n": 3,
+      "refused_count": 3,
+      "replayer_success_count": 0,
+      "transaction_outcomes": {
+        "demo": [
+          "HALTED_BEFORE_EFFECT"
+        ],
+        "regulated": [
+          "HALTED_BEFORE_EFFECT"
+        ],
+        "standard": [
+          "HALTED_BEFORE_EFFECT"
+        ]
+      }
+    },
+    "lease_frame_changed": {
+      "actuation_tiers": [
+        "None"
+      ],
+      "delivered_count": 0,
+      "delivery_receipt_count": 0,
+      "model_calls_total": 0,
+      "model_cost_usd_total": 0.0,
+      "n": 3,
+      "refused_count": 3,
+      "replayer_success_count": 0,
+      "transaction_outcomes": {
+        "demo": [
+          "RECONCILIATION_REQUIRED"
+        ],
+        "regulated": [
+          "RECONCILIATION_REQUIRED"
+        ],
+        "standard": [
+          "RECONCILIATION_REQUIRED"
+        ]
+      }
+    },
+    "ungoverned_lease": {
+      "actuation_tiers": [
+        "None"
+      ],
+      "delivered_count": 3,
+      "delivery_receipt_count": 0,
+      "model_calls_total": 0,
+      "model_cost_usd_total": 0.0,
+      "n": 3,
+      "refused_count": 0,
+      "replayer_success_count": 3,
+      "transaction_outcomes": {
+        "demo": [
+          "COMPLETED_UNVERIFIED"
+        ],
+        "regulated": [
+          "COMPLETED_UNVERIFIED"
+        ],
+        "standard": [
+          "COMPLETED_UNVERIFIED"
+        ]
+      }
+    }
+  },
+  "caveats": [
+    "The backend is a fake implementing only the two-phase remote actuation lease; this measures a runtime contract, not a real remote session.",
+    "One synthetic single-step workflow; resolution is scripted so the delivery decision is the only variable.",
+    "No wrong-target immunity, identity coverage, or hosted lifecycle claim is made here."
+  ],
+  "cells": [
+    "ungoverned_lease",
+    "governed_lease",
+    "lease_frame_changed"
+  ],
+  "environment": {
+    "platform": "macOS-15.7.3-arm64-arm-64bit",
+    "python": "3.12.13"
+  },
+  "generated_at": "2026-08-18T15:59:20.153848+00:00",
+  "invariants": [
+    {
+      "applicable_count": 3,
+      "holds": true,
+      "id": "governed_run_refuses_receiptless_remote_write",
+      "statement": "A governed run must refuse a consequential remote click on a backend that cannot bind its exact fresh frame and target to delivery, before the first input edge.",
+      "vacuous": false,
+      "violation_count": 0,
+      "violations": []
+    },
+    {
+      "applicable_count": 9,
+      "holds": true,
+      "id": "lease_delivery_is_never_a_production_success",
+      "statement": "A remote write delivered through the frame lease alone carries no typed receipt, so no execution profile may classify it VERIFIED or production-eligible.",
+      "vacuous": false,
+      "violation_count": 0,
+      "violations": []
+    },
+    {
+      "applicable_count": 3,
+      "holds": true,
+      "id": "lease_delivery_carries_no_receipt_or_actuation_tier",
+      "statement": "A lease-only delivery must leave the result unlabeled: no typed delivery receipt and no recorded actuation tier.",
+      "vacuous": false,
+      "violation_count": 0,
+      "violations": []
+    },
+    {
+      "applicable_count": 3,
+      "holds": true,
+      "id": "changed_frame_aborts_delivery",
+      "statement": "The lease is the safety property: a remote frame that changed between the lease and the input edge must stop delivery.",
+      "vacuous": false,
+      "violation_count": 0,
+      "violations": []
+    },
+    {
+      "applicable_count": 9,
+      "holds": true,
+      "id": "zero_model_calls_and_cost",
+      "statement": "A compiled remote replay makes no model calls and costs $0.",
+      "vacuous": false,
+      "violation_count": 0,
+      "violations": []
+    }
+  ],
+  "paid_or_remote_mutations": [],
+  "profiles": [
+    "demo",
+    "standard",
+    "regulated"
+  ],
+  "reproduce": "python scripts/probe_remote_lease_safety.py --flow-source <v1.31.0-checkout> --flow-wheel <openadapt_flow-1.31.0-py3-none-any.whl> --out <new-output-directory>",
+  "runs": [
+    {
+      "actuation_tier": null,
+      "backend_actions": [
+        [
+          "click",
+          110,
+          105,
+          false
+        ]
+      ],
+      "cell": "ungoverned_lease",
+      "delivery_receipt_present": false,
+      "governed": false,
+      "input_edges_delivered": 1,
+      "lease_acquisitions": 1,
+      "model_calls": 0,
+      "model_cost_usd": 0.0,
+      "prepared_pointer_points": [
+        [
+          110,
+          105
+        ]
+      ],
+      "profiles": {
+        "demo": {
+          "execution_outcome": "COMPLETED_UNVERIFIED",
+          "production_eligible": false,
+          "reported_success": true,
+          "transaction_billable": false,
+          "transaction_outcome": "COMPLETED_UNVERIFIED"
+        },
+        "regulated": {
+          "execution_outcome": "COMPLETED_UNVERIFIED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "COMPLETED_UNVERIFIED"
+        },
+        "standard": {
+          "execution_outcome": "COMPLETED_UNVERIFIED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "COMPLETED_UNVERIFIED"
+        }
+      },
+      "replayer_success": true,
+      "safety_halt": false,
+      "step_error": null,
+      "trial": 1
+    },
+    {
+      "actuation_tier": null,
+      "backend_actions": [
+        [
+          "click",
+          110,
+          105,
+          false
+        ]
+      ],
+      "cell": "ungoverned_lease",
+      "delivery_receipt_present": false,
+      "governed": false,
+      "input_edges_delivered": 1,
+      "lease_acquisitions": 1,
+      "model_calls": 0,
+      "model_cost_usd": 0.0,
+      "prepared_pointer_points": [
+        [
+          110,
+          105
+        ]
+      ],
+      "profiles": {
+        "demo": {
+          "execution_outcome": "COMPLETED_UNVERIFIED",
+          "production_eligible": false,
+          "reported_success": true,
+          "transaction_billable": false,
+          "transaction_outcome": "COMPLETED_UNVERIFIED"
+        },
+        "regulated": {
+          "execution_outcome": "COMPLETED_UNVERIFIED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "COMPLETED_UNVERIFIED"
+        },
+        "standard": {
+          "execution_outcome": "COMPLETED_UNVERIFIED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "COMPLETED_UNVERIFIED"
+        }
+      },
+      "replayer_success": true,
+      "safety_halt": false,
+      "step_error": null,
+      "trial": 2
+    },
+    {
+      "actuation_tier": null,
+      "backend_actions": [
+        [
+          "click",
+          110,
+          105,
+          false
+        ]
+      ],
+      "cell": "ungoverned_lease",
+      "delivery_receipt_present": false,
+      "governed": false,
+      "input_edges_delivered": 1,
+      "lease_acquisitions": 1,
+      "model_calls": 0,
+      "model_cost_usd": 0.0,
+      "prepared_pointer_points": [
+        [
+          110,
+          105
+        ]
+      ],
+      "profiles": {
+        "demo": {
+          "execution_outcome": "COMPLETED_UNVERIFIED",
+          "production_eligible": false,
+          "reported_success": true,
+          "transaction_billable": false,
+          "transaction_outcome": "COMPLETED_UNVERIFIED"
+        },
+        "regulated": {
+          "execution_outcome": "COMPLETED_UNVERIFIED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "COMPLETED_UNVERIFIED"
+        },
+        "standard": {
+          "execution_outcome": "COMPLETED_UNVERIFIED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "COMPLETED_UNVERIFIED"
+        }
+      },
+      "replayer_success": true,
+      "safety_halt": false,
+      "step_error": null,
+      "trial": 3
+    },
+    {
+      "actuation_tier": null,
+      "backend_actions": [],
+      "cell": "governed_lease",
+      "delivery_receipt_present": false,
+      "governed": true,
+      "input_edges_delivered": 0,
+      "lease_acquisitions": 1,
+      "model_calls": 0,
+      "model_cost_usd": 0.0,
+      "prepared_pointer_points": [
+        [
+          110,
+          105
+        ]
+      ],
+      "profiles": {
+        "demo": {
+          "execution_outcome": "HALTED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "HALTED_BEFORE_EFFECT"
+        },
+        "regulated": {
+          "execution_outcome": "HALTED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "HALTED_BEFORE_EFFECT"
+        },
+        "standard": {
+          "execution_outcome": "HALTED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "HALTED_BEFORE_EFFECT"
+        }
+      },
+      "replayer_success": false,
+      "safety_halt": true,
+      "step_error": "Step 's1' (click 'Save') is a consequential remote click, but this backend cannot bind its exact fresh frame and target to delivery; run aborted",
+      "trial": 1
+    },
+    {
+      "actuation_tier": null,
+      "backend_actions": [],
+      "cell": "governed_lease",
+      "delivery_receipt_present": false,
+      "governed": true,
+      "input_edges_delivered": 0,
+      "lease_acquisitions": 1,
+      "model_calls": 0,
+      "model_cost_usd": 0.0,
+      "prepared_pointer_points": [
+        [
+          110,
+          105
+        ]
+      ],
+      "profiles": {
+        "demo": {
+          "execution_outcome": "HALTED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "HALTED_BEFORE_EFFECT"
+        },
+        "regulated": {
+          "execution_outcome": "HALTED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "HALTED_BEFORE_EFFECT"
+        },
+        "standard": {
+          "execution_outcome": "HALTED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "HALTED_BEFORE_EFFECT"
+        }
+      },
+      "replayer_success": false,
+      "safety_halt": true,
+      "step_error": "Step 's1' (click 'Save') is a consequential remote click, but this backend cannot bind its exact fresh frame and target to delivery; run aborted",
+      "trial": 2
+    },
+    {
+      "actuation_tier": null,
+      "backend_actions": [],
+      "cell": "governed_lease",
+      "delivery_receipt_present": false,
+      "governed": true,
+      "input_edges_delivered": 0,
+      "lease_acquisitions": 1,
+      "model_calls": 0,
+      "model_cost_usd": 0.0,
+      "prepared_pointer_points": [
+        [
+          110,
+          105
+        ]
+      ],
+      "profiles": {
+        "demo": {
+          "execution_outcome": "HALTED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "HALTED_BEFORE_EFFECT"
+        },
+        "regulated": {
+          "execution_outcome": "HALTED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "HALTED_BEFORE_EFFECT"
+        },
+        "standard": {
+          "execution_outcome": "HALTED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "HALTED_BEFORE_EFFECT"
+        }
+      },
+      "replayer_success": false,
+      "safety_halt": true,
+      "step_error": "Step 's1' (click 'Save') is a consequential remote click, but this backend cannot bind its exact fresh frame and target to delivery; run aborted",
+      "trial": 3
+    },
+    {
+      "actuation_tier": null,
+      "backend_actions": [],
+      "cell": "lease_frame_changed",
+      "delivery_receipt_present": false,
+      "governed": false,
+      "input_edges_delivered": 0,
+      "lease_acquisitions": 1,
+      "model_calls": 0,
+      "model_cost_usd": 0.0,
+      "prepared_pointer_points": [
+        [
+          110,
+          105
+        ]
+      ],
+      "profiles": {
+        "demo": {
+          "execution_outcome": "HALTED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "RECONCILIATION_REQUIRED"
+        },
+        "regulated": {
+          "execution_outcome": "HALTED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "RECONCILIATION_REQUIRED"
+        },
+        "standard": {
+          "execution_outcome": "HALTED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "RECONCILIATION_REQUIRED"
+        }
+      },
+      "replayer_success": false,
+      "safety_halt": true,
+      "step_error": "Action delivery was uncertain and was not retried; the complete postcondition and independent effect contract did not confirm the intended outcome",
+      "trial": 1
+    },
+    {
+      "actuation_tier": null,
+      "backend_actions": [],
+      "cell": "lease_frame_changed",
+      "delivery_receipt_present": false,
+      "governed": false,
+      "input_edges_delivered": 0,
+      "lease_acquisitions": 1,
+      "model_calls": 0,
+      "model_cost_usd": 0.0,
+      "prepared_pointer_points": [
+        [
+          110,
+          105
+        ]
+      ],
+      "profiles": {
+        "demo": {
+          "execution_outcome": "HALTED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "RECONCILIATION_REQUIRED"
+        },
+        "regulated": {
+          "execution_outcome": "HALTED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "RECONCILIATION_REQUIRED"
+        },
+        "standard": {
+          "execution_outcome": "HALTED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "RECONCILIATION_REQUIRED"
+        }
+      },
+      "replayer_success": false,
+      "safety_halt": true,
+      "step_error": "Action delivery was uncertain and was not retried; the complete postcondition and independent effect contract did not confirm the intended outcome",
+      "trial": 2
+    },
+    {
+      "actuation_tier": null,
+      "backend_actions": [],
+      "cell": "lease_frame_changed",
+      "delivery_receipt_present": false,
+      "governed": false,
+      "input_edges_delivered": 0,
+      "lease_acquisitions": 1,
+      "model_calls": 0,
+      "model_cost_usd": 0.0,
+      "prepared_pointer_points": [
+        [
+          110,
+          105
+        ]
+      ],
+      "profiles": {
+        "demo": {
+          "execution_outcome": "HALTED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "RECONCILIATION_REQUIRED"
+        },
+        "regulated": {
+          "execution_outcome": "HALTED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "RECONCILIATION_REQUIRED"
+        },
+        "standard": {
+          "execution_outcome": "HALTED",
+          "production_eligible": false,
+          "reported_success": false,
+          "transaction_billable": false,
+          "transaction_outcome": "RECONCILIATION_REQUIRED"
+        }
+      },
+      "replayer_success": false,
+      "safety_halt": true,
+      "step_error": "Action delivery was uncertain and was not retried; the complete postcondition and independent effect contract did not confirm the intended outcome",
+      "trial": 3
+    }
+  ],
+  "runtime": {
+    "dependency_snapshot_filename": "dependency-freeze.txt",
+    "dependency_snapshot_sha256": "215571cdf516e7806338348ad72b387730c629e071abb78817d70b147f554b9b",
+    "openadapt_types_version": "0.9.0",
+    "python_version": "3.12.13"
+  },
+  "schema_version": 1,
+  "scope": "remote frame-lease delivery safety properties (runtime contract)",
+  "source": {
+    "evals": {
+      "commit": "1082192e9c2ec299d31330608c1016a939d3b88d"
+    },
+    "flow": {
+      "artifact": {
+        "filename": "openadapt_flow-1.31.0-py3-none-any.whl",
+        "import_mode": "locally extracted published wheel",
+        "sha256": "81133db1528ad1bb1f26e3fcb6aea61b0651db6d905cf2e4943e8383c1f3d29c"
+      },
+      "commit": "2d225dea9a0ad29ca84ce1b037cc0ac671367e28",
+      "release_tag": "v1.31.0",
+      "tags": [
+        "v1.31.0"
+      ],
+      "tracked_clean": true,
+      "version": "1.31.0"
+    },
+    "runner_sha256": "d75c1c62248818d937705e3a7b3170b09ea211b54591f37a57520018b25a7388"
+  },
+  "trials_per_cell": 3
+}

@@ -1,0 +1,132 @@
+{
+  "claim_scope": "single_authenticated_qualified_browser_transaction",
+  "contracts": {
+    "authenticated_submission": true,
+    "entitlement_and_metering_verified": true,
+    "exact_source_attested": true,
+    "idempotency_verified": true,
+    "independent_effect_verified": true,
+    "observer_evidence_signature_verified": true,
+    "qualification_bound": true,
+    "quiet_period_stable": true,
+    "receipt_contract_verified": true,
+    "runner_signature_verified": true,
+    "runner_transaction_identity_verified": true,
+    "signed_webhook_verified": true,
+    "single_delivery_verified": true,
+    "single_permit_consumption_verified": true,
+    "target_attestation_signature_verified": true,
+    "zero_model_healthy_path": true
+  },
+  "identities": {
+    "evidence_runner_signer_sha256": "sha256:7300c0ae1429cd153252736a781b78f404f4738f17db195dbef533b74a45ec86",
+    "organization_id_sha256": "sha256:0ecd004dcbed992e16d1f90fbb2b2ae5433e32ed62e563f6fc53caa277516648",
+    "producer": {
+      "kind": "github_oidc_attested_workflow",
+      "repository": "OpenAdaptAI/openadapt-cloud",
+      "run_attempt": "1",
+      "run_id": "123456789",
+      "source_ref": "refs/heads/main",
+      "workflow": ".github/workflows/execute-live-acceptance.yml"
+    },
+    "signer_fingerprint_scheme": "sha256-ed25519-public-key-raw-v1",
+    "target_attestation_signer_sha256": "sha256:efefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefef",
+    "target_observer_signer_sha256": "sha256:dededededededededededededededededededededededededededededededede",
+    "verifier": {
+      "certificate_identity": "https://github.com/OpenAdaptAI/openadapt-cloud/.github/workflows/execute-live-acceptance.yml@refs/heads/main",
+      "hosted_runner_required": true,
+      "kind": "github_artifact_attestation",
+      "oidc_issuer": "https://token.actions.githubusercontent.com",
+      "repository": "OpenAdaptAI/openadapt-cloud",
+      "workflow": ".github/workflows/execute-live-acceptance.yml"
+    },
+    "workflow_id_sha256": "sha256:696a6bcc1d534cbe03cedadf2ba48ce5b854f5e1b4d3154925a09085d5025199"
+  },
+  "outcomes": {
+    "entitlement_and_metering": "verified",
+    "independent_effect": "verified",
+    "transaction": "verified",
+    "webhook_delivery": "verified"
+  },
+  "product": {
+    "cloud": {
+      "source_commit": "ffffffffffffffffffffffffffffffffffffffff",
+      "target_build_sha256": "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+    },
+    "flow": {
+      "release_commit": "0123456789abcdef0123456789abcdef01234567",
+      "version": "1.31.0",
+      "wheel_sha256": "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+    },
+    "managed_runtime": {
+      "browser_base_image": "python:3.11-slim@sha256:4444444444444444444444444444444444444444444444444444444444444444",
+      "manifest_sha256": "sha256:3333333333333333333333333333333333333333333333333333333333333333",
+      "playwright_version": "1.62.0",
+      "runner_artifact_sha256": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+      "runner_build": "report-v4",
+      "substrate": "web"
+    }
+  },
+  "qualification": {
+    "admission_id_sha256": "sha256:58103c7a3d1c967ff5cfb397e30c4d1563d3767e07f8476021e955c16b59c515",
+    "admission_signer": {
+      "algorithm": "ed25519",
+      "issuer_ref": "refs/heads/main@aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "issuer_workflow": "OpenAdaptAI/openadapt-internal/.github/workflows/production-qualification-admission.yml",
+      "key_id": "qa-ed25519-34750f98bd59fcfc"
+    },
+    "campaign_artifact_sha256": "sha256:792a675ba485a1fb8cc36d43a16bf04d90828ef3ebda9514abbbcc79cadc85b3",
+    "campaign_contract_sha256": "sha256:02b706e8251719c9ed4c62e3c9807074952f5ffe350a382fa61bb7d3832cfe41",
+    "campaign_id_sha256": "sha256:0c72b77f9c560be2306048462f681f01dbe27db818243d8e792c56afccca0a38",
+    "campaign_outcomes_sha256": "sha256:3dd11000b63392f09f8105fd83f0fb7d68d526bb2e083e297dde05b05100aaae",
+    "condition_count": 9,
+    "environment_digest": "sha256:eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+    "evidence_identity_sha256": "sha256:58fddafe3b4d2c459e4d4b0422c9e8ee77bd87c4c218a50d0d9071d33c7b175c",
+    "minimum_trials_per_condition": 3,
+    "observed_trial_count": 27,
+    "oracle_contract_sha256": "sha256:a9d87b5deaa24c553e65aa0237136398fe7821ae7d226fc20d48c500765bc1e0",
+    "qualification_admission_sha256": "sha256:9481e6de04bac906d55fb11df4434df96c8cb44beb88407bac11c37ef0914a93",
+    "required_trial_count": 27,
+    "runtime_validation_id_sha256": "sha256:4b0c7cd12b36f177beb4e28ab9fb4fa4da0d4d033274233d654bd5615758908f",
+    "task_count": 1,
+    "workflow_digest": "sha256:dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+    "workflow_version_id_sha256": "sha256:f705eb4fa57e6196028a81b0a2c1b4208fe25f1dff56cebee2548f8d1aea0fe8"
+  },
+  "retention": {
+    "acceptance_verified_at": "2026-08-18T12:00:00.000Z",
+    "candidate_sha256": "sha256:6262626262626262626262626262626262626262626262626262626262626262",
+    "ciphertext_sha256": "sha256:6161616161616161616161616161616161616161616161616161616161616161",
+    "encryption_recipient_sha256": "sha256:6868686868686868686868686868686868686868686868686868686868686868",
+    "private_envelope_sha256": "sha256:6363636363636363636363636363636363636363636363636363636363636363",
+    "private_locator_recorded": true,
+    "private_locator_version_sha256": "sha256:6767676767676767676767676767676767676767676767676767676767676767",
+    "provenance_attestation": "sigstore-public-good-slsa-provenance-v1",
+    "receipt_id": "retention:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "retained_at": "2026-08-18T12:01:00.000Z",
+    "storage_identity_sha256": "sha256:6565656565656565656565656565656565656565656565656565656565656565",
+    "store_attestation_sha256": "sha256:6464646464646464646464646464646464646464646464646464646464646464",
+    "uploader_identity_sha256": "sha256:6969696969696969696969696969696969696969696969696969696969696969",
+    "visibility_verified": true
+  },
+  "schema_version": "openadapt.execute-live-acceptance-record/v2",
+  "transaction": {
+    "acceptance_challenge_sha256": "sha256:7373737373737373737373737373737373737373737373737373737373737373",
+    "acceptance_envelope_sha256": "sha256:5555555555555555555555555555555555555555555555555555555555555555",
+    "accepted_response_sha256": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+    "duplicate_response_sha256": "sha256:6666666666666666666666666666666666666666666666666666666666666666",
+    "execution_id_sha256": "sha256:7474747474747474747474747474747474747474747474747474747474747474",
+    "idempotency_key_sha256": "sha256:7676767676767676767676767676767676767676767676767676767676767676",
+    "observer_evidence_sha256": "sha256:1000000000000000000000000000000000000000000000000000000000000001",
+    "receipt_evidence_digest": "sha256:8888888888888888888888888888888888888888888888888888888888888888",
+    "receipt_id_sha256": "sha256:7575757575757575757575757575757575757575757575757575757575757575",
+    "receipt_sha256": "sha256:0000000000000000000000000000000000000000000000000000000000000001",
+    "request_sha256": "sha256:7777777777777777777777777777777777777777777777777777777777777777",
+    "runner_permit_sha256": "sha256:7878787878787878787878787878787878787878787878787878787878787878",
+    "runner_report_sha256": "sha256:7171717171717171717171717171717171717171717171717171717171717171",
+    "runner_result_sha256": "sha256:7272727272727272727272727272727272727272727272727272727272727272",
+    "runner_transaction_identity_sha256": "sha256:7070707070707070707070707070707070707070707070707070707070707070",
+    "target_attestation_sha256": "sha256:9999999999999999999999999999999999999999999999999999999999999999",
+    "webhook_event_sha256": "sha256:2000000000000000000000000000000000000000000000000000000000000001"
+  },
+  "verdict": "passed"
+}

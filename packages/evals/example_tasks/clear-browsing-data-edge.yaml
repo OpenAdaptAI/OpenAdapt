@@ -1,0 +1,63 @@
+# Clear browsing data in Microsoft Edge
+# Edge is the default browser on Windows 11 WAA VMs
+name: "Clear browsing data in Microsoft Edge"
+id: custom-clear-edge-data
+
+setup:
+  # Populate Edge with browsing history
+  - execute: "powershell -c \"Start-Process msedge 'https://example.com' -WindowStyle Normal\""
+  - sleep: 3
+  - execute: "powershell -c \"Start-Process msedge 'https://wikipedia.org'\""
+  - sleep: 2
+  # Close Edge so the agent starts fresh
+  - execute: "powershell -c 'Stop-Process -Name msedge -Force -ErrorAction SilentlyContinue'"
+  - sleep: 2
+
+evaluate:
+  # Check 1: Edge history is empty after clearing
+  - check: command
+    run: |
+      powershell -c "
+        $histPath = \"$env:LOCALAPPDATA\\Microsoft\\Edge\\User Data\\Default\\History\"
+        if (Test-Path $histPath) {
+          $size = (Get-Item $histPath).Length
+          if ($size -lt 50000) { Write-Output 'cleared' } else { Write-Output 'not_cleared' }
+        } else { Write-Output 'no_history_file' }
+      "
+    expect: "cleared"
+    match: contains
+
+  # Check 2: VLM confirms clearing
+  - check: screenshot
+    description: "Microsoft Edge shows a confirmation that browsing data has been cleared, or the Settings page shows completed clearing state"
+
+combine: or
+max_steps: 20
+
+milestones:
+  - name: "Edge is open"
+    check: command
+    run: "powershell -c \"Get-Process msedge -ErrorAction SilentlyContinue | Measure | Select -ExpandProperty Count\""
+    expect: "1"
+    match: contains
+
+  - name: "Settings page is open"
+    check: screenshot
+    description: "Edge Settings page is visible, or edge://settings is in the address bar"
+
+  - name: "Clear browsing data dialog is open"
+    check: screenshot
+    description: "The 'Clear browsing data' dialog or panel is visible in Edge"
+
+  - name: "Data is cleared"
+    check: command
+    run: |
+      powershell -c "
+        $histPath = \"$env:LOCALAPPDATA\\Microsoft\\Edge\\User Data\\Default\\History\"
+        if (Test-Path $histPath) {
+          $size = (Get-Item $histPath).Length
+          if ($size -lt 50000) { Write-Output 'cleared' } else { Write-Output 'not_cleared' }
+        } else { Write-Output 'no_history_file' }
+      "
+    expect: "cleared"
+    match: contains

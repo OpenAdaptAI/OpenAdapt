@@ -1,0 +1,384 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Azure VM Usage Dashboard - waa-eval-vm</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+        }
+
+        .header h1 {
+            color: #0078d4;
+            margin-bottom: 10px;
+        }
+
+        .header .subtitle {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+
+        .card {
+            background: white;
+            padding: 25px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        .card h2 {
+            color: #0078d4;
+            font-size: 18px;
+            margin-bottom: 15px;
+            border-bottom: 2px solid #0078d4;
+            padding-bottom: 8px;
+        }
+
+        .status-badge {
+            display: inline-block;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: 600;
+            margin: 5px 0;
+        }
+
+        .status-running {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-stopped {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .status-idle {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .metric {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #eee;
+        }
+
+        .metric:last-child {
+            border-bottom: none;
+        }
+
+        .metric-label {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .metric-value {
+            font-weight: 600;
+            color: #333;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 15px;
+        }
+
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        th {
+            background: #f8f9fa;
+            color: #0078d4;
+            font-weight: 600;
+            font-size: 14px;
+        }
+
+        td {
+            font-size: 13px;
+        }
+
+        tr:hover {
+            background: #f8f9fa;
+        }
+
+        .job-failed {
+            color: #dc3545;
+            font-weight: 600;
+        }
+
+        .job-success {
+            color: #28a745;
+            font-weight: 600;
+        }
+
+        .job-running {
+            color: #007bff;
+            font-weight: 600;
+        }
+
+        .actions {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            margin-top: 15px;
+        }
+
+        .action-btn {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #0078d4;
+            color: white;
+            text-decoration: none;
+            border-radius: 5px;
+            text-align: center;
+            font-size: 14px;
+            font-weight: 500;
+            transition: background 0.3s;
+        }
+
+        .action-btn:hover {
+            background: #005a9e;
+        }
+
+        .action-btn.danger {
+            background: #dc3545;
+        }
+
+        .action-btn.danger:hover {
+            background: #c82333;
+        }
+
+        .action-btn.success {
+            background: #28a745;
+        }
+
+        .action-btn.success:hover {
+            background: #218838;
+        }
+
+        .refresh-info {
+            text-align: center;
+            color: white;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+
+        .code-block {
+            background: #f4f4f4;
+            padding: 15px;
+            border-radius: 5px;
+            font-family: 'Courier New', monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            margin-top: 10px;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .loading {
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Azure VM Usage Dashboard</h1>
+            <div class="subtitle">
+                VM: <strong>waa-eval-vm</strong> |
+                Resource Group: <strong>openadapt-agents</strong> |
+                Last Updated: <span id="lastUpdated">Loading...</span>
+            </div>
+        </div>
+
+        <div class="grid">
+            <div class="card">
+                <h2>Current Status</h2>
+                <div id="vmStatus" class="loading">
+                    <div class="metric">
+                        <span class="metric-label">Power State</span>
+                        <span class="metric-value" id="powerState">Loading...</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Public IP</span>
+                        <span class="metric-value" id="publicIp">Loading...</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">VM Size</span>
+                        <span class="metric-value" id="vmSize">Loading...</span>
+                    </div>
+                    <div class="metric">
+                        <span class="metric-label">Location</span>
+                        <span class="metric-value" id="location">Loading...</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Cost Estimates</h2>
+                <div class="metric">
+                    <span class="metric-label">Hourly Rate</span>
+                    <span class="metric-value">$0.20/hour</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Daily (24h)</span>
+                    <span class="metric-value">$4.80</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Weekly (168h)</span>
+                    <span class="metric-value">$33.60</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label">Monthly (720h)</span>
+                    <span class="metric-value">$144.00</span>
+                </div>
+                <div style="margin-top: 15px; padding: 10px; background: #fff3cd; border-radius: 5px; font-size: 12px; color: #856404;">
+                    <strong>Note:</strong> Costs only accrue when VM is running. Storage costs are additional.
+                </div>
+            </div>
+
+            <div class="card">
+                <h2>Quick Actions</h2>
+                <div class="actions">
+                    <button class="action-btn success" onclick="runCommand('vm-status')">Check Status</button>
+                    <button class="action-btn success" onclick="runCommand('vm-start')">Start VM</button>
+                    <button class="action-btn danger" onclick="runCommand('vm-stop')">Stop VM</button>
+                    <button class="action-btn" onclick="runCommand('up')">Start + Server</button>
+                    <button class="action-btn" onclick="refreshDashboard()">Refresh Data</button>
+                </div>
+                <div class="code-block" id="commandOutput" style="display: none; margin-top: 15px;">
+                    Command output will appear here...
+                </div>
+            </div>
+        </div>
+
+        <div class="card">
+            <h2>Recent Azure ML Jobs</h2>
+            <table id="jobsTable">
+                <thead>
+                    <tr>
+                        <th>Job Name</th>
+                        <th>Status</th>
+                        <th>Experiment</th>
+                        <th>Created</th>
+                    </tr>
+                </thead>
+                <tbody id="jobsBody">
+                    <tr>
+                        <td colspan="4" style="text-align: center; color: #999;">Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>Recent Activity (Last 7 Days)</h2>
+            <table id="activityTable">
+                <thead>
+                    <tr>
+                        <th>Time</th>
+                        <th>Operation</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody id="activityBody">
+                    <tr>
+                        <td colspan="3" style="text-align: center; color: #999;">Loading...</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <div class="refresh-info">
+            Dashboard auto-refreshes every 60 seconds |
+            <a href="#" onclick="refreshDashboard(); return false;" style="color: white; text-decoration: underline;">
+                Refresh Now
+            </a>
+        </div>
+    </div>
+
+    <script>
+        // This is a static HTML dashboard
+        // For live updates, you would need a backend service
+        // For now, it displays static data from the markdown dashboard
+
+        function loadDashboardData() {
+            // In a real implementation, this would fetch from an API
+            // For now, show instructions
+            document.getElementById('lastUpdated').textContent = new Date().toLocaleString();
+
+            // Example static data (would come from API in production)
+            document.getElementById('powerState').innerHTML =
+                '<span class="status-badge status-idle">Check CLI for status</span>';
+            document.getElementById('publicIp').textContent = '172.171.112.41';
+            document.getElementById('vmSize').textContent = 'Standard_D4ds_v5';
+            document.getElementById('location').textContent = 'westus2';
+
+            document.getElementById('vmStatus').classList.remove('loading');
+        }
+
+        function runCommand(command) {
+            const output = document.getElementById('commandOutput');
+            output.style.display = 'block';
+            output.innerHTML = `To run this command, use:<br><br>` +
+                `<code>cd /Users/abrichr/oa/src/openadapt-evals<br>` +
+                `uv run python -m openadapt_evals.benchmarks.cli ${command}</code>`;
+        }
+
+        function refreshDashboard() {
+            const output = document.getElementById('commandOutput');
+            output.style.display = 'block';
+            output.innerHTML = `To refresh the dashboard, run:<br><br>` +
+                `<code>cd /Users/abrichr/oa/src/openadapt-evals<br>` +
+                `python refresh_vm_dashboard.py</code><br><br>` +
+                `Or use the CLI command:<br>` +
+                `<code>uv run python -m openadapt_evals.benchmarks.cli dashboard --open</code>`;
+        }
+
+        // Load initial data
+        loadDashboardData();
+
+        // Auto-refresh (would poll API in production)
+        setInterval(() => {
+            document.getElementById('lastUpdated').textContent = new Date().toLocaleString();
+        }, 60000);
+    </script>
+</body>
+</html>

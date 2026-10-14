@@ -1,0 +1,35 @@
+TASK: Save a document in Notepad with a specific filename
+DOMAIN: notepad
+
+PRECONDITIONS: Notepad is open with text content
+
+STEPS:
+1. Open the File menu
+   REASONING: Save option is located in the File menu
+   ACTION: CLICK(x=0.03, y=0.05)
+
+2. Click on "Save As" option
+   REASONING: Save As allows us to specify filename and location
+   ACTION: CLICK(x=0.05, y=0.12)
+
+3. Wait for Save As dialog to appear
+   REASONING: Dialog needs time to load
+   ACTION: WAIT(0.5)
+
+4. Clear the filename field if needed
+   REASONING: Ensure we start with empty filename field
+   ACTION: HOTKEY("ctrl", "a")
+
+5. Type the desired filename
+   REASONING: Entering the name for the new file
+   ACTION: TYPE("my_document.txt")
+
+6. Click the Save button
+   REASONING: Confirm the save operation
+   ACTION: CLICK(x=0.85, y=0.95)
+
+7. Verify file is saved
+   REASONING: Title bar should now show the filename
+   ACTION: DONE()
+
+EXPECTED_OUTCOME: Document is saved with the filename "my_document.txt" in the default location

@@ -1,0 +1,41 @@
+TASK: Open Windows Settings and adjust system volume
+DOMAIN: settings
+
+STEPS:
+1. Open Windows Settings using keyboard shortcut
+   REASONING: Windows+I is the fastest way to open Settings
+   ACTION: HOTKEY("win", "i")
+
+2. Wait for Settings window to open
+   REASONING: Application needs time to launch
+   ACTION: WAIT(1.0)
+
+3. Click on "System" category
+   REASONING: Sound settings are under System
+   ACTION: CLICK(x=0.2, y=0.25)
+
+4. Wait for System settings to load
+   REASONING: Page needs time to render
+   ACTION: WAIT(0.5)
+
+5. Click on "Sound" in the left sidebar
+   REASONING: Navigate to sound-specific settings
+   ACTION: CLICK(x=0.15, y=0.3)
+
+6. Wait for Sound settings to load
+   REASONING: Page needs time to render
+   ACTION: WAIT(0.5)
+
+7. Locate the master volume slider
+   REASONING: Volume control is typically at the top of sound settings
+   ACTION: SCROLL(direction="up")
+
+8. Click and drag the volume slider to 50%
+   REASONING: Setting volume to moderate level
+   ACTION: DRAG(start_x=0.3, start_y=0.3, end_x=0.45, end_y=0.3)
+
+9. Verify volume has changed
+   REASONING: Volume indicator should show new level
+   ACTION: DONE()
+
+EXPECTED_OUTCOME: System volume is set to approximately 50%

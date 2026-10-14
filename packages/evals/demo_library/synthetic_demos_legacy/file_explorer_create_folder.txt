@@ -1,0 +1,43 @@
+TASK: Create a new folder in File Explorer
+DOMAIN: file_explorer
+
+PRECONDITIONS: File Explorer is open in the desired location
+
+STEPS:
+1. Right-click in an empty area of the folder view
+   REASONING: Context menu provides option to create new items
+   ACTION: RIGHT_CLICK(x=0.5, y=0.5)
+
+2. Wait for context menu to appear
+   REASONING: Menu needs time to render
+   ACTION: WAIT(0.3)
+
+3. Hover over "New" option
+   REASONING: New folder option is in the New submenu
+   ACTION: HOVER(x=0.55, y=0.4)
+
+4. Wait for submenu to appear
+   REASONING: Submenu needs time to expand
+   ACTION: WAIT(0.3)
+
+5. Click on "Folder" option
+   REASONING: Select the folder creation option
+   ACTION: CLICK(x=0.7, y=0.35)
+
+6. Wait for new folder to be created
+   REASONING: Folder appears with name ready for editing
+   ACTION: WAIT(0.5)
+
+7. Type the folder name
+   REASONING: Name field is already active for typing
+   ACTION: TYPE("My New Folder")
+
+8. Press Enter to confirm the name
+   REASONING: Finalize the folder creation
+   ACTION: HOTKEY("enter")
+
+9. Verify folder was created
+   REASONING: New folder should appear in the directory listing
+   ACTION: DONE()
+
+EXPECTED_OUTCOME: A new folder named "My New Folder" is created in the current directory

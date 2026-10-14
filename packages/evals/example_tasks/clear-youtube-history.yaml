@@ -1,0 +1,38 @@
+# WAA Task: Remove all YouTube browsing history from Chrome
+# UUID: 44ee5668-ecd5-4366-a6ce-c1c9b8d4e938-wos
+name: "Remove all YouTube browsing history from Chrome"
+id: "44ee5668-ecd5-4366-a6ce-c1c9b8d4e938-wos"
+
+setup:
+  # Dismiss Chrome sign-in dialog and suppress first-run experience
+  - execute: "powershell -c 'Start-Process chrome -ArgumentList \"--no-first-run\",\"--disable-sync\" -WindowStyle Normal'"
+  - sleep: 3
+  - execute: "python -c \"import pyautogui; pyautogui.press('escape'); import time; time.sleep(0.5); pyautogui.press('escape')\""
+  - sleep: 2
+  # Navigate to YouTube to create browsing history
+  - execute: "python -c \"import pyautogui; pyautogui.hotkey('ctrl', 'l'); import time; time.sleep(0.3); pyautogui.typewrite('https://www.youtube.com', interval=0.02); pyautogui.press('enter')\""
+  - sleep: 5
+
+evaluate:
+  - check: screenshot
+    description: "Chrome history shows YouTube entries have been removed, or the history page shows no YouTube results"
+
+combine: or
+max_steps: 20
+
+milestones:
+  - name: "Chrome is open"
+    check: screenshot
+    description: "Google Chrome browser window is visible"
+
+  - name: "History page is open"
+    check: screenshot
+    description: "Chrome history page (chrome://history) is visible"
+
+  - name: "YouTube history found"
+    check: screenshot
+    description: "YouTube entries are visible in the browsing history"
+
+  - name: "YouTube history removed"
+    check: screenshot
+    description: "YouTube entries have been removed from browsing history or a deletion confirmation is visible"

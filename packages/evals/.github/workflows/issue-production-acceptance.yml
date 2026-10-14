@@ -1,0 +1,68 @@
+name: Production acceptance issuer
+
+# The central production-acceptance schemas name this exact path as the only
+# issuer. This workflow exists so that name is not a fiction.
+#
+# Every run refuses. The central signer registry pointer is still inactive, the
+# production-acceptance environment is not armed, and this repository does not
+# hold signing keys. The job checks the issuer identity, then exits 1. It never
+# writes a manifest, a summary, an attestation, or a GitHub Release.
+
+on:
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  reject-lifecycle-app:
+    permissions: {}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Reject the lifecycle App
+        env:
+          ACTOR: ${{ github.actor }}
+          TRIGGERING_ACTOR: ${{ github.triggering_actor }}
+        run: |
+          test "$ACTOR" != 'openadapt-lifecycle[bot]'
+          test "$TRIGGERING_ACTOR" != 'openadapt-lifecycle[bot]'
+
+  refuse-inactive-issuer:
+    needs: reject-lifecycle-app
+    permissions:
+      contents: read
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout the exact requested source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Verify the inactive issuer interface and refuse issuance
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          REPOSITORY: ${{ github.repository }}
+          SOURCE_COMMIT: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$REPOSITORY" = 'OpenAdaptAI/openadapt-evals'
+          test "$REF" = 'refs/heads/main'
+          test "$EVENT_NAME" = 'workflow_dispatch'
+          test "$(git rev-parse HEAD)" = "$SOURCE_COMMIT"
+          python3 - <<'PY'
+          from pathlib import Path
+
+          workflow = Path(".github/workflows/issue-production-acceptance.yml").read_text(
+              encoding="utf-8"
+          )
+          if "The production acceptance issuer is installed but inactive." not in workflow:
+              raise SystemExit("inactive issuer refusal text is missing")
+          PY
+          echo '::error::The production acceptance issuer is installed but inactive.' >&2
+          echo 'The central signer registry, authority state, revocation state, and protected vectors must exist before activation.' >&2
+          exit 1

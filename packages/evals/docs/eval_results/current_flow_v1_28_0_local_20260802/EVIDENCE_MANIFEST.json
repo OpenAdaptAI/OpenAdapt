@@ -1,0 +1,84 @@
+{
+  "schema_version": 2,
+  "flow": {
+    "version": "1.28.0",
+    "wheel_sha256": "4d156035ea411e3cbdbc40978d653d50727a7d8664646be62f7f9e95ba0c7202"
+  },
+  "verifiers": [
+    {"path": "scripts/run_current_flow_local_benchmark.py", "sha256": "68f9e5a27f4f04d831574167ebd6b362bf05184e81708a315d9896969b48a126"},
+    {"path": "scripts/run_flow_transaction_probe.py", "sha256": "097cc900b44872712ebd7a5bfbdb53f87c85bf5bd8dcbef88fa893743d240ce8"},
+    {"path": "scripts/probe_remote_lease_safety.py", "sha256": "2d0cf696df9779446469f0e94eb2f22e3e7634ac924998ebd93735b8d5a6791d"},
+    {"path": "scripts/extract_over_halt_regression.py", "sha256": "7712798260fbf8ff50b96b00b71c7dbd5a509f7dd7553a63a0e6c791635b2554"}
+  ],
+  "campaigns": [
+    {
+      "name": "comparison",
+      "results_path": "docs/eval_results/current_flow_v1_28_0_local_20260802/results.json",
+      "verifier_path": "scripts/run_current_flow_local_benchmark.py",
+      "environment": {"chromium": "Playwright-managed headless Chromium", "platform": "macOS-15.7.3-arm64-arm-64bit", "playwright": "1.61.0", "python": "3.12.13"},
+      "runtime": {"python_version": "3.12.13", "openadapt_types_version": "not_recorded", "browser_version": "not_recorded", "browser_revision": "not_recorded", "dependency_snapshot_filename": "not_recorded", "dependency_snapshot_sha256": "not_recorded"}
+    },
+    {
+      "name": "replication",
+      "results_path": "docs/eval_results/current_flow_v1_28_0_local_20260802/replication/results.json",
+      "verifier_path": "scripts/run_current_flow_local_benchmark.py",
+      "environment": {"chromium": "Playwright-managed headless Chromium", "platform": "macOS-15.7.3-arm64-arm-64bit", "playwright": "1.61.0", "python": "3.12.13"},
+      "runtime": {"python_version": "3.12.13", "openadapt_types_version": "not_recorded", "browser_version": "not_recorded", "browser_revision": "not_recorded", "dependency_snapshot_filename": "not_recorded", "dependency_snapshot_sha256": "not_recorded"}
+    },
+    {
+      "name": "transaction_probe",
+      "results_path": "docs/eval_results/current_flow_v1_28_0_local_20260802/transaction_probe/results.json",
+      "verifier_path": "scripts/run_flow_transaction_probe.py",
+      "environment": {"chromium": "Playwright-managed headless Chromium", "platform": "macOS-15.7.3-arm64-arm-64bit", "playwright": "1.61.0", "python": "3.12.13"},
+      "runtime": {"python_version": "3.12.13", "openadapt_types_version": "not_recorded", "browser_version": "not_recorded", "browser_revision": "not_recorded", "dependency_snapshot_filename": "not_recorded", "dependency_snapshot_sha256": "not_recorded"}
+    },
+    {
+      "name": "remote_lease_safety",
+      "results_path": "docs/eval_results/current_flow_v1_28_0_local_20260802/remote_lease_safety/results.json",
+      "verifier_path": "scripts/probe_remote_lease_safety.py",
+      "environment": {"platform": "macOS-15.7.3-arm64-arm-64bit", "python": "3.12.13"},
+      "runtime": {"python_version": "3.12.13", "openadapt_types_version": "not_recorded", "dependency_snapshot_filename": "not_recorded", "dependency_snapshot_sha256": "not_recorded"}
+    }
+  ],
+  "task_contracts": [
+    {
+      "results_path": "docs/eval_results/current_flow_v1_28_0_local_20260802/results.json",
+      "value": {"arms": ["compiled", "dom", "dom_named"], "conditions": ["clean", "theme", "rename"], "oracle": "arm-independent screenshot/OCR final-state check: exact note and saved banner, Triage row, intended patient, no wrong-type write", "outcome_definitions": {"correct": "arm reported completion and independent oracle confirmed effect", "halt_or_error": "arm reported halt/incomplete and independent oracle found effect absent", "over_halt": "arm reported halt/incomplete but independent oracle confirmed effect", "silent_incorrect_success": "arm reported completion but independent oracle did not confirm effect", "wrong_action": "independent oracle observed a wrong-patient or wrong-type write"}, "task": "MockMed triage: sign in, open intended referral, create Triage encounter, enter a trial-unique note, save", "trials_per_arm_condition": 3},
+      "sha256": "65d7f2d9a8ae998d58bc2b95628de0da8bf939aa57aea142fd0fb498268a36f6"
+    },
+    {
+      "results_path": "docs/eval_results/current_flow_v1_28_0_local_20260802/replication/results.json",
+      "value": {"arms": ["compiled", "dom", "dom_named"], "conditions": ["clean", "theme", "rename"], "oracle": "arm-independent screenshot/OCR final-state check: exact note and saved banner, Triage row, intended patient, no wrong-type write", "outcome_definitions": {"correct": "arm reported completion and independent oracle confirmed effect", "halt_or_error": "arm reported halt/incomplete and independent oracle found effect absent", "over_halt": "arm reported halt/incomplete but independent oracle confirmed effect", "silent_incorrect_success": "arm reported completion but independent oracle did not confirm effect", "wrong_action": "independent oracle observed a wrong-patient or wrong-type write"}, "task": "MockMed triage: sign in, open intended referral, create Triage encounter, enter a trial-unique note, save", "trials_per_arm_condition": 3},
+      "sha256": "65d7f2d9a8ae998d58bc2b95628de0da8bf939aa57aea142fd0fb498268a36f6"
+    },
+    {
+      "results_path": "docs/eval_results/current_flow_v1_28_0_local_20260802/transaction_probe/results.json",
+      "value": {"fault_modes": ["ok", "timeout", "optimistic", "session", "duplicate"], "oracle": "system-of-record snapshot delta at GET /api/db: exactly one new Triage encounter for the intended patient carrying this run's note, with no pre-existing row destroyed", "task": "MockMed triage against the fault-injection persistence boundary: sign in, open intended referral, create Triage encounter, enter a trial-unique note, save", "verification_modes": ["unverified", "effect_verified"]},
+      "sha256": "2e11a2f0c43fdfd828a15e73311ba647c02829b9bf9f820698bb7f192ce7a63d"
+    },
+    {
+      "results_path": "docs/eval_results/current_flow_v1_28_0_local_20260802/remote_lease_safety/results.json",
+      "value": {"cells": ["ungoverned_lease", "governed_lease", "lease_frame_changed"], "profiles": ["demo", "standard", "regulated"]},
+      "sha256": "39828d04f8c9481d51d2f863896825c3b70a44185c465c8160b2b2fea1948983"
+    }
+  ],
+  "artifacts": [
+    {"path": "docs/eval_results/current_flow_v1_28_0_local_20260802/results.json", "sha256": "85ae338237c685ac70018e2df42da417bb019eebf3622ab19ba2f900ce9fa72f"},
+    {"path": "docs/eval_results/current_flow_v1_28_0_local_20260802/replication/results.json", "sha256": "0c959f3082a2c44d50aa97c7b99a5618deb0f7415192da852c5d3f077b6b93d7"},
+    {"path": "docs/eval_results/current_flow_v1_28_0_local_20260802/transaction_probe/results.json", "sha256": "6584f0a9a8e3d960ed1926b3431e19be6261fc0a91c70528fdbdd399b3a75d60"},
+    {"path": "docs/eval_results/current_flow_v1_28_0_local_20260802/remote_lease_safety/results.json", "sha256": "87928d9cef95328f7f3f4b1ea2f0d0cd9c6b1acb8ab60467f7fec60830987e29"},
+    {"path": "docs/eval_results/current_flow_v1_28_0_local_20260802/clean_postcondition_over_halt.json", "sha256": "4f3ad35a83dbdf49770506e38009212c7cde8fec452d4921b84dfdfef4d41e55"},
+    {"path": "docs/eval_results/current_flow_v1_28_0_local_20260802/theme_postcondition_over_halt.json", "sha256": "c1b1d1a3428848475045315d1a198b46f4a603a385471f730fe7a64c7aadc43b"},
+    {"path": "docs/eval_results/current_flow_v1_28_0_local_20260802/replication/clean_postcondition_over_halt.json", "sha256": "4f3ad35a83dbdf49770506e38009212c7cde8fec452d4921b84dfdfef4d41e55"},
+    {"path": "docs/eval_results/current_flow_v1_28_0_local_20260802/replication/theme_postcondition_over_halt.json", "sha256": "c1b1d1a3428848475045315d1a198b46f4a603a385471f730fe7a64c7aadc43b"}
+  ],
+  "public_reports": [
+    {"path": "docs/eval_results/current_flow_v1_28_0_local_20260802/README.md", "sha256": "e46142d7fbe74b03f255ccaa001b9939770163592974f2fd939da18312bb0188"},
+    {"path": "docs/eval_results/current_flow_v1_28_0_local_20260802/REPORT.md", "sha256": "e1a686be9c760ad62281f7731fbbe6e6b846a94dd9a50d121ffbdbde7c88ff44"},
+    {"path": "docs/eval_results/current_flow_v1_28_0_local_20260802/REPRODUCE.md", "sha256": "65da2e481b276c58d089c83665fc8d7b26e0103f24f7f10ff3a361bf19deffab"},
+    {"path": "docs/eval_results/current_flow_v1_28_0_local_20260802/COMPARISON_TO_v1_27_1.md", "sha256": "d79e2d746b7fb1c5e9cc9cc484dd18647f37565f69f6180985e98cce22ceae45"},
+    {"path": "docs/eval_results/current_flow_v1_28_0_local_20260802/replication/REPORT.md", "sha256": "1e92966a6277f5a030b717f7b582c74d77bf8999d4ff4d220c918beb3661c109"},
+    {"path": "docs/eval_results/current_flow_v1_28_0_local_20260802/transaction_probe/REPORT.md", "sha256": "ea01fb5680e8b8e05a0b142d4dd13546de4aeb662ec57ade41c5f03f8d468904"},
+    {"path": "docs/eval_results/current_flow_v1_28_0_local_20260802/remote_lease_safety/REPORT.md", "sha256": "76eaf9df34db0379f290b569dd13363449af076ee2a832ef638161fda082d5cf"}
+  ]
+}

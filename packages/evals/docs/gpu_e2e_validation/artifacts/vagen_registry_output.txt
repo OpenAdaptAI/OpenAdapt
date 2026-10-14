@@ -1,0 +1,56 @@
+================================================================================
+VAGEN Installation and Environment Registration
+Date: 2026-03-04
+================================================================================
+
+--- VAGEN Installation ---
+
+Source: https://github.com/RAGEN-AI/VAGEN.git
+Reason: VAGEN provides verl-agent submodule + GymImageEnv protocol,
+        environment registry, and GymAgentLoop for integration with
+        OpenAdapt RLEnvironment.
+
+pip install output:
+
+Created wheel for gym: filename=gym-0.26.2-py3-none-any.whl size=827727
+sha256=fdd199d728a2579e07275f29b702184a2e01c3d4ee0a274ad7c6692d960603d4
+Stored in directory: /home/ubuntu/.cache/pip/wheels/95/51/6c/9bb05ebbe7c5cb8171dfaa3611f32622ca4658d53f31c79077
+Successfully built vagen gym
+Installing collected packages: gym_notices, farama-notifications, uvicorn,
+                               pygame, imageio, gymnasium, gym, gym-sokoban, vagen
+  Attempting uninstall: uvicorn
+    Found existing installation: uvicorn 0.41.0
+    Uninstalling uvicorn-0.41.0:
+      Successfully uninstalled uvicorn-0.41.0
+
+Successfully installed farama-notifications-0.0.4 gym-0.26.2 gym-sokoban-0.0.6
+gym_notices-0.1.0 gymnasium-1.2.3 imageio-2.37.2 pygame-2.6.1 uvicorn-0.40.0
+vagen-26.2.5
+
+--- Environment Registration ---
+
+GymImageEnv protocol:
+  Location: openadapt_evals/adapters/_vendored/ (~150 lines, Pillow only)
+  Source: Vendored from VAGEN (not on PyPI — name squatted by unrelated package)
+
+WAADesktopEnv adapter:
+  Location: openadapt_evals/adapters/
+  Protocol: Implements VAGEN GymImageEnv interface
+  Size: ~250 lines
+
+Integration method: VAGEN registry-based environment loading
+  - WAADesktopEnv registered in VAGEN env registry
+  - Loaded by GymAgentLoop during training rollouts
+  - Connects to WAA Flask API via WAALiveAdapter
+
+--- VAGEN Package Details ---
+
+Package:     vagen
+Version:     26.2.5
+Dependencies:
+  - gymnasium >= 1.2.3
+  - gym == 0.26.2
+  - gym-sokoban == 0.0.6
+  - pygame >= 2.6.1
+  - imageio >= 2.37.2
+  - uvicorn >= 0.40.0

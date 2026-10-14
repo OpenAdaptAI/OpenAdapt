@@ -1,0 +1,1319 @@
+{
+  "calibration": {
+    "calibration_corpus_digest": "sha256:dc44b8ca94145916f0c36a69765d370fb6e702bdbad42ae91349ac15f3a0470d",
+    "clopper_pearson_upper_95": {
+      "certified_sor": 0.181036,
+      "visual_only": 1.0
+    },
+    "false_accepts": {
+      "certified_sor": 0,
+      "visual_only": 15
+    },
+    "gold_fail_trials": 15
+  },
+  "certificate": {
+    "calibration_scope": "synthetic",
+    "certificate_id": "reward.certificate.proof-synthetic",
+    "delta": 0.05,
+    "digest": "sha256:7e98d24947d6511a2e354f2f1d0e656e3a1604ac57331439f6bc3a96c2995be9",
+    "epsilon": 0.181036,
+    "expiry_policy_updates": 100,
+    "issued_at_policy_update": 0,
+    "issuer": "self_signed",
+    "issuer_key_id": "dev.key.synthetic-proof",
+    "issuer_public_key_ed25519_b64": "fPWkNmYi+TRIHZ8wF4qfk1prCUKorlEqTzuWcTL9EnM=",
+    "threshold": 1.0
+  },
+  "conditions": [
+    "control",
+    "dup",
+    "extra",
+    "omit",
+    "unsubmit",
+    "claim",
+    "oracle_outage"
+  ],
+  "contract": {
+    "certificate_policy": {
+      "calibration_corpus_digest": "sha256:dc44b8ca94145916f0c36a69765d370fb6e702bdbad42ae91349ac15f3a0470d",
+      "delta": 0.05,
+      "epsilon": 0.181036,
+      "expiry_policy_updates": 100,
+      "threshold": 1.0
+    },
+    "digest": "sha256:ae0422185b8b2fa6c25ee8427457726d3348ce4caa837bc9dcf30b347d3a2923"
+  },
+  "expiry_check": {
+    "certified_after_expiry": 0,
+    "expiry_warnings_logged": 3,
+    "policy_update": 100,
+    "receipts_checked": 3
+  },
+  "policy_update": 7,
+  "proof": "reward-proof-mockmed-extradup",
+  "rollouts": [
+    {
+      "banner_text": "Saved to chart",
+      "condition": "control",
+      "episode_id": "proof.control.t0.s101",
+      "evidence_digest": "sha256:48e80adb41d7ee2d09c32c2acd25f2b8fb99eb652f897f24ba36d1655381e5a9",
+      "gold": "PASS",
+      "new_count": 1,
+      "operator": "control",
+      "oracle_available": true,
+      "rewards": {
+        "certified_sor": {
+          "receipt_id": "receipt.proof.control.t0.s101.certified_sor",
+          "reward_calibration_scope": "synthetic",
+          "reward_certificate_id": "reward.certificate.proof-synthetic",
+          "reward_certificate_state": "current",
+          "reward_certified": true,
+          "reward_development_only": false,
+          "reward_episode_id": "proof.control.t0.s101",
+          "reward_oracle_tier": 2,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.control.t0.s101.certified_sor",
+          "reward_unscored": false,
+          "scalar": 1.0
+        },
+        "visual_only": {
+          "receipt_id": "receipt.proof.control.t0.s101.visual_only",
+          "reward_calibration_scope": null,
+          "reward_certificate_id": null,
+          "reward_certificate_state": "absent",
+          "reward_certified": false,
+          "reward_development_only": true,
+          "reward_episode_id": "proof.control.t0.s101",
+          "reward_oracle_tier": 0,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.control.t0.s101.visual_only",
+          "reward_unscored": false,
+          "scalar": 1.0
+        }
+      },
+      "screen": {
+        "banner_saved": true,
+        "claimed_success": false,
+        "form_looks_complete": false
+      },
+      "seed": 101,
+      "sor_reasons": [],
+      "spec_count": 1,
+      "trial": 0
+    },
+    {
+      "banner_text": "Saved",
+      "condition": "control",
+      "episode_id": "proof.control.t1.s202",
+      "evidence_digest": "sha256:d86b12be8fa98776558575e5491a7d8718a3947b184d521b6ba74ca94b0a3180",
+      "gold": "PASS",
+      "new_count": 1,
+      "operator": "control",
+      "oracle_available": true,
+      "rewards": {
+        "certified_sor": {
+          "receipt_id": "receipt.proof.control.t1.s202.certified_sor",
+          "reward_calibration_scope": "synthetic",
+          "reward_certificate_id": "reward.certificate.proof-synthetic",
+          "reward_certificate_state": "current",
+          "reward_certified": true,
+          "reward_development_only": false,
+          "reward_episode_id": "proof.control.t1.s202",
+          "reward_oracle_tier": 2,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.control.t1.s202.certified_sor",
+          "reward_unscored": false,
+          "scalar": 1.0
+        },
+        "visual_only": {
+          "receipt_id": "receipt.proof.control.t1.s202.visual_only",
+          "reward_calibration_scope": null,
+          "reward_certificate_id": null,
+          "reward_certificate_state": "absent",
+          "reward_certified": false,
+          "reward_development_only": true,
+          "reward_episode_id": "proof.control.t1.s202",
+          "reward_oracle_tier": 0,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.control.t1.s202.visual_only",
+          "reward_unscored": false,
+          "scalar": 1.0
+        }
+      },
+      "screen": {
+        "banner_saved": true,
+        "claimed_success": false,
+        "form_looks_complete": false
+      },
+      "seed": 202,
+      "sor_reasons": [],
+      "spec_count": 1,
+      "trial": 1
+    },
+    {
+      "banner_text": "Record saved successfully",
+      "condition": "control",
+      "episode_id": "proof.control.t2.s303",
+      "evidence_digest": "sha256:a72870b17e169a4cf9c6191e88eea5c515ac958d204de54e625bb820401bf533",
+      "gold": "PASS",
+      "new_count": 1,
+      "operator": "control",
+      "oracle_available": true,
+      "rewards": {
+        "certified_sor": {
+          "receipt_id": "receipt.proof.control.t2.s303.certified_sor",
+          "reward_calibration_scope": "synthetic",
+          "reward_certificate_id": "reward.certificate.proof-synthetic",
+          "reward_certificate_state": "current",
+          "reward_certified": true,
+          "reward_development_only": false,
+          "reward_episode_id": "proof.control.t2.s303",
+          "reward_oracle_tier": 2,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.control.t2.s303.certified_sor",
+          "reward_unscored": false,
+          "scalar": 1.0
+        },
+        "visual_only": {
+          "receipt_id": "receipt.proof.control.t2.s303.visual_only",
+          "reward_calibration_scope": null,
+          "reward_certificate_id": null,
+          "reward_certificate_state": "absent",
+          "reward_certified": false,
+          "reward_development_only": true,
+          "reward_episode_id": "proof.control.t2.s303",
+          "reward_oracle_tier": 0,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.control.t2.s303.visual_only",
+          "reward_unscored": false,
+          "scalar": 1.0
+        }
+      },
+      "screen": {
+        "banner_saved": true,
+        "claimed_success": false,
+        "form_looks_complete": false
+      },
+      "seed": 303,
+      "sor_reasons": [],
+      "spec_count": 1,
+      "trial": 2
+    },
+    {
+      "banner_text": "Saved",
+      "condition": "dup",
+      "episode_id": "proof.dup.t0.s101",
+      "evidence_digest": "sha256:d36d73490511b75e197c5612b70bf9c653c024f13bb85ec2c1dd0bedaf90fd31",
+      "gold": "FAIL",
+      "new_count": 2,
+      "operator": "dup",
+      "oracle_available": true,
+      "rewards": {
+        "certified_sor": {
+          "receipt_id": "receipt.proof.dup.t0.s101.certified_sor",
+          "reward_calibration_scope": "synthetic",
+          "reward_certificate_id": "reward.certificate.proof-synthetic",
+          "reward_certificate_state": "current",
+          "reward_certified": true,
+          "reward_development_only": false,
+          "reward_episode_id": "proof.dup.t0.s101",
+          "reward_oracle_tier": 2,
+          "reward_outcome": "wrong_effect",
+          "reward_receipt_id": "receipt.proof.dup.t0.s101.certified_sor",
+          "reward_unscored": false,
+          "scalar": 0.0
+        },
+        "visual_only": {
+          "receipt_id": "receipt.proof.dup.t0.s101.visual_only",
+          "reward_calibration_scope": null,
+          "reward_certificate_id": null,
+          "reward_certificate_state": "absent",
+          "reward_certified": false,
+          "reward_development_only": true,
+          "reward_episode_id": "proof.dup.t0.s101",
+          "reward_oracle_tier": 0,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.dup.t0.s101.visual_only",
+          "reward_unscored": false,
+          "scalar": 1.0
+        }
+      },
+      "screen": {
+        "banner_saved": true,
+        "claimed_success": false,
+        "form_looks_complete": false
+      },
+      "seed": 101,
+      "sor_reasons": [
+        "|new(M)|=2 != |spec(M)|=1"
+      ],
+      "spec_count": 1,
+      "trial": 0
+    },
+    {
+      "banner_text": "Saved to chart",
+      "condition": "dup",
+      "episode_id": "proof.dup.t1.s202",
+      "evidence_digest": "sha256:a6fb465b7ebf4b2663b4ee8253b39d41bcc15950bde2db5c9b5efd02a0298781",
+      "gold": "FAIL",
+      "new_count": 2,
+      "operator": "dup",
+      "oracle_available": true,
+      "rewards": {
+        "certified_sor": {
+          "receipt_id": "receipt.proof.dup.t1.s202.certified_sor",
+          "reward_calibration_scope": "synthetic",
+          "reward_certificate_id": "reward.certificate.proof-synthetic",
+          "reward_certificate_state": "current",
+          "reward_certified": true,
+          "reward_development_only": false,
+          "reward_episode_id": "proof.dup.t1.s202",
+          "reward_oracle_tier": 2,
+          "reward_outcome": "wrong_effect",
+          "reward_receipt_id": "receipt.proof.dup.t1.s202.certified_sor",
+          "reward_unscored": false,
+          "scalar": 0.0
+        },
+        "visual_only": {
+          "receipt_id": "receipt.proof.dup.t1.s202.visual_only",
+          "reward_calibration_scope": null,
+          "reward_certificate_id": null,
+          "reward_certificate_state": "absent",
+          "reward_certified": false,
+          "reward_development_only": true,
+          "reward_episode_id": "proof.dup.t1.s202",
+          "reward_oracle_tier": 0,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.dup.t1.s202.visual_only",
+          "reward_unscored": false,
+          "scalar": 1.0
+        }
+      },
+      "screen": {
+        "banner_saved": true,
+        "claimed_success": false,
+        "form_looks_complete": false
+      },
+      "seed": 202,
+      "sor_reasons": [
+        "|new(M)|=2 != |spec(M)|=1"
+      ],
+      "spec_count": 1,
+      "trial": 1
+    },
+    {
+      "banner_text": "Record saved successfully",
+      "condition": "dup",
+      "episode_id": "proof.dup.t2.s303",
+      "evidence_digest": "sha256:1da8b6e9ca4505ed6c34705da4175610906d81042db537d8ed0062b1d1503c14",
+      "gold": "FAIL",
+      "new_count": 2,
+      "operator": "dup",
+      "oracle_available": true,
+      "rewards": {
+        "certified_sor": {
+          "receipt_id": "receipt.proof.dup.t2.s303.certified_sor",
+          "reward_calibration_scope": "synthetic",
+          "reward_certificate_id": "reward.certificate.proof-synthetic",
+          "reward_certificate_state": "current",
+          "reward_certified": true,
+          "reward_development_only": false,
+          "reward_episode_id": "proof.dup.t2.s303",
+          "reward_oracle_tier": 2,
+          "reward_outcome": "wrong_effect",
+          "reward_receipt_id": "receipt.proof.dup.t2.s303.certified_sor",
+          "reward_unscored": false,
+          "scalar": 0.0
+        },
+        "visual_only": {
+          "receipt_id": "receipt.proof.dup.t2.s303.visual_only",
+          "reward_calibration_scope": null,
+          "reward_certificate_id": null,
+          "reward_certificate_state": "absent",
+          "reward_certified": false,
+          "reward_development_only": true,
+          "reward_episode_id": "proof.dup.t2.s303",
+          "reward_oracle_tier": 0,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.dup.t2.s303.visual_only",
+          "reward_unscored": false,
+          "scalar": 1.0
+        }
+      },
+      "screen": {
+        "banner_saved": true,
+        "claimed_success": false,
+        "form_looks_complete": false
+      },
+      "seed": 303,
+      "sor_reasons": [
+        "|new(M)|=2 != |spec(M)|=1"
+      ],
+      "spec_count": 1,
+      "trial": 2
+    },
+    {
+      "banner_text": "Saved",
+      "condition": "extra",
+      "episode_id": "proof.extra.t0.s101",
+      "evidence_digest": "sha256:6e93e550e3e9975747979ebb0d42ce60ff1ab3128b2d38f973c89e4f568a8736",
+      "gold": "FAIL",
+      "new_count": 1,
+      "operator": "extra",
+      "oracle_available": true,
+      "rewards": {
+        "certified_sor": {
+          "receipt_id": "receipt.proof.extra.t0.s101.certified_sor",
+          "reward_calibration_scope": "synthetic",
+          "reward_certificate_id": "reward.certificate.proof-synthetic",
+          "reward_certificate_state": "current",
+          "reward_certified": true,
+          "reward_development_only": false,
+          "reward_episode_id": "proof.extra.t0.s101",
+          "reward_oracle_tier": 2,
+          "reward_outcome": "wrong_effect",
+          "reward_receipt_id": "receipt.proof.extra.t0.s101.certified_sor",
+          "reward_unscored": false,
+          "scalar": 0.0
+        },
+        "visual_only": {
+          "receipt_id": "receipt.proof.extra.t0.s101.visual_only",
+          "reward_calibration_scope": null,
+          "reward_certificate_id": null,
+          "reward_certificate_state": "absent",
+          "reward_certified": false,
+          "reward_development_only": true,
+          "reward_episode_id": "proof.extra.t0.s101",
+          "reward_oracle_tier": 0,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.extra.t0.s101.visual_only",
+          "reward_unscored": false,
+          "scalar": 1.0
+        }
+      },
+      "screen": {
+        "banner_saved": true,
+        "claimed_success": false,
+        "form_looks_complete": false
+      },
+      "seed": 101,
+      "sor_reasons": [
+        "extra field(s): priority"
+      ],
+      "spec_count": 1,
+      "trial": 0
+    },
+    {
+      "banner_text": "Record saved successfully",
+      "condition": "extra",
+      "episode_id": "proof.extra.t1.s202",
+      "evidence_digest": "sha256:116432eacd2a5b9fb63086c5868fc5cca211a993e526e5bed27597d81c8df033",
+      "gold": "FAIL",
+      "new_count": 1,
+      "operator": "extra",
+      "oracle_available": true,
+      "rewards": {
+        "certified_sor": {
+          "receipt_id": "receipt.proof.extra.t1.s202.certified_sor",
+          "reward_calibration_scope": "synthetic",
+          "reward_certificate_id": "reward.certificate.proof-synthetic",
+          "reward_certificate_state": "current",
+          "reward_certified": true,
+          "reward_development_only": false,
+          "reward_episode_id": "proof.extra.t1.s202",
+          "reward_oracle_tier": 2,
+          "reward_outcome": "wrong_effect",
+          "reward_receipt_id": "receipt.proof.extra.t1.s202.certified_sor",
+          "reward_unscored": false,
+          "scalar": 0.0
+        },
+        "visual_only": {
+          "receipt_id": "receipt.proof.extra.t1.s202.visual_only",
+          "reward_calibration_scope": null,
+          "reward_certificate_id": null,
+          "reward_certificate_state": "absent",
+          "reward_certified": false,
+          "reward_development_only": true,
+          "reward_episode_id": "proof.extra.t1.s202",
+          "reward_oracle_tier": 0,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.extra.t1.s202.visual_only",
+          "reward_unscored": false,
+          "scalar": 1.0
+        }
+      },
+      "screen": {
+        "banner_saved": true,
+        "claimed_success": false,
+        "form_looks_complete": false
+      },
+      "seed": 202,
+      "sor_reasons": [
+        "extra field(s): priority"
+      ],
+      "spec_count": 1,
+      "trial": 1
+    },
+    {
+      "banner_text": "Saved to chart",
+      "condition": "extra",
+      "episode_id": "proof.extra.t2.s303",
+      "evidence_digest": "sha256:ac392a0d0546718a3637997161a881abd8a2ec7e3f9b6486fb8734e879b55355",
+      "gold": "FAIL",
+      "new_count": 1,
+      "operator": "extra",
+      "oracle_available": true,
+      "rewards": {
+        "certified_sor": {
+          "receipt_id": "receipt.proof.extra.t2.s303.certified_sor",
+          "reward_calibration_scope": "synthetic",
+          "reward_certificate_id": "reward.certificate.proof-synthetic",
+          "reward_certificate_state": "current",
+          "reward_certified": true,
+          "reward_development_only": false,
+          "reward_episode_id": "proof.extra.t2.s303",
+          "reward_oracle_tier": 2,
+          "reward_outcome": "wrong_effect",
+          "reward_receipt_id": "receipt.proof.extra.t2.s303.certified_sor",
+          "reward_unscored": false,
+          "scalar": 0.0
+        },
+        "visual_only": {
+          "receipt_id": "receipt.proof.extra.t2.s303.visual_only",
+          "reward_calibration_scope": null,
+          "reward_certificate_id": null,
+          "reward_certificate_state": "absent",
+          "reward_certified": false,
+          "reward_development_only": true,
+          "reward_episode_id": "proof.extra.t2.s303",
+          "reward_oracle_tier": 0,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.extra.t2.s303.visual_only",
+          "reward_unscored": false,
+          "scalar": 1.0
+        }
+      },
+      "screen": {
+        "banner_saved": true,
+        "claimed_success": false,
+        "form_looks_complete": false
+      },
+      "seed": 303,
+      "sor_reasons": [
+        "extra field(s): priority"
+      ],
+      "spec_count": 1,
+      "trial": 2
+    },
+    {
+      "banner_text": "Saved to chart",
+      "condition": "omit",
+      "episode_id": "proof.omit.t0.s101",
+      "evidence_digest": "sha256:0644298e70c27943433db84c08da46a5267696dc82e1f34e5503395670edb317",
+      "gold": "FAIL",
+      "new_count": 1,
+      "operator": "omit",
+      "oracle_available": true,
+      "rewards": {
+        "certified_sor": {
+          "receipt_id": "receipt.proof.omit.t0.s101.certified_sor",
+          "reward_calibration_scope": "synthetic",
+          "reward_certificate_id": "reward.certificate.proof-synthetic",
+          "reward_certificate_state": "current",
+          "reward_certified": true,
+          "reward_development_only": false,
+          "reward_episode_id": "proof.omit.t0.s101",
+          "reward_oracle_tier": 2,
+          "reward_outcome": "wrong_effect",
+          "reward_receipt_id": "receipt.proof.omit.t0.s101.certified_sor",
+          "reward_unscored": false,
+          "scalar": 0.0
+        },
+        "visual_only": {
+          "receipt_id": "receipt.proof.omit.t0.s101.visual_only",
+          "reward_calibration_scope": null,
+          "reward_certificate_id": null,
+          "reward_certificate_state": "absent",
+          "reward_certified": false,
+          "reward_development_only": true,
+          "reward_episode_id": "proof.omit.t0.s101",
+          "reward_oracle_tier": 0,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.omit.t0.s101.visual_only",
+          "reward_unscored": false,
+          "scalar": 1.0
+        }
+      },
+      "screen": {
+        "banner_saved": true,
+        "claimed_success": false,
+        "form_looks_complete": false
+      },
+      "seed": 101,
+      "sor_reasons": [
+        "missing or wrong note='Follow-up in 2 weeks; BP recheck.'"
+      ],
+      "spec_count": 1,
+      "trial": 0
+    },
+    {
+      "banner_text": "Saved",
+      "condition": "omit",
+      "episode_id": "proof.omit.t1.s202",
+      "evidence_digest": "sha256:d7f5c629be1f4cdb820fa12111145d52509214f91600242bd51174d081733446",
+      "gold": "FAIL",
+      "new_count": 1,
+      "operator": "omit",
+      "oracle_available": true,
+      "rewards": {
+        "certified_sor": {
+          "receipt_id": "receipt.proof.omit.t1.s202.certified_sor",
+          "reward_calibration_scope": "synthetic",
+          "reward_certificate_id": "reward.certificate.proof-synthetic",
+          "reward_certificate_state": "current",
+          "reward_certified": true,
+          "reward_development_only": false,
+          "reward_episode_id": "proof.omit.t1.s202",
+          "reward_oracle_tier": 2,
+          "reward_outcome": "wrong_effect",
+          "reward_receipt_id": "receipt.proof.omit.t1.s202.certified_sor",
+          "reward_unscored": false,
+          "scalar": 0.0
+        },
+        "visual_only": {
+          "receipt_id": "receipt.proof.omit.t1.s202.visual_only",
+          "reward_calibration_scope": null,
+          "reward_certificate_id": null,
+          "reward_certificate_state": "absent",
+          "reward_certified": false,
+          "reward_development_only": true,
+          "reward_episode_id": "proof.omit.t1.s202",
+          "reward_oracle_tier": 0,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.omit.t1.s202.visual_only",
+          "reward_unscored": false,
+          "scalar": 1.0
+        }
+      },
+      "screen": {
+        "banner_saved": true,
+        "claimed_success": false,
+        "form_looks_complete": false
+      },
+      "seed": 202,
+      "sor_reasons": [
+        "missing or wrong note='Follow-up in 2 weeks; BP recheck.'"
+      ],
+      "spec_count": 1,
+      "trial": 1
+    },
+    {
+      "banner_text": "Encounter saved",
+      "condition": "omit",
+      "episode_id": "proof.omit.t2.s303",
+      "evidence_digest": "sha256:7048426983045e691734367db1adcb0b568f216e987b49bcbc24fef89e13d953",
+      "gold": "FAIL",
+      "new_count": 1,
+      "operator": "omit",
+      "oracle_available": true,
+      "rewards": {
+        "certified_sor": {
+          "receipt_id": "receipt.proof.omit.t2.s303.certified_sor",
+          "reward_calibration_scope": "synthetic",
+          "reward_certificate_id": "reward.certificate.proof-synthetic",
+          "reward_certificate_state": "current",
+          "reward_certified": true,
+          "reward_development_only": false,
+          "reward_episode_id": "proof.omit.t2.s303",
+          "reward_oracle_tier": 2,
+          "reward_outcome": "wrong_effect",
+          "reward_receipt_id": "receipt.proof.omit.t2.s303.certified_sor",
+          "reward_unscored": false,
+          "scalar": 0.0
+        },
+        "visual_only": {
+          "receipt_id": "receipt.proof.omit.t2.s303.visual_only",
+          "reward_calibration_scope": null,
+          "reward_certificate_id": null,
+          "reward_certificate_state": "absent",
+          "reward_certified": false,
+          "reward_development_only": true,
+          "reward_episode_id": "proof.omit.t2.s303",
+          "reward_oracle_tier": 0,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.omit.t2.s303.visual_only",
+          "reward_unscored": false,
+          "scalar": 1.0
+        }
+      },
+      "screen": {
+        "banner_saved": true,
+        "claimed_success": false,
+        "form_looks_complete": false
+      },
+      "seed": 303,
+      "sor_reasons": [
+        "missing or wrong note='Follow-up in 2 weeks; BP recheck.'"
+      ],
+      "spec_count": 1,
+      "trial": 2
+    },
+    {
+      "banner_text": "",
+      "condition": "unsubmit",
+      "episode_id": "proof.unsubmit.t0.s101",
+      "evidence_digest": "sha256:e9ad0c874acda9045c5678105d76fc4bbc76f06cb8adf8abbe9f890cff0856b7",
+      "gold": "FAIL",
+      "new_count": 0,
+      "operator": "unsubmit",
+      "oracle_available": true,
+      "rewards": {
+        "certified_sor": {
+          "receipt_id": "receipt.proof.unsubmit.t0.s101.certified_sor",
+          "reward_calibration_scope": "synthetic",
+          "reward_certificate_id": "reward.certificate.proof-synthetic",
+          "reward_certificate_state": "current",
+          "reward_certified": true,
+          "reward_development_only": false,
+          "reward_episode_id": "proof.unsubmit.t0.s101",
+          "reward_oracle_tier": 2,
+          "reward_outcome": "wrong_effect",
+          "reward_receipt_id": "receipt.proof.unsubmit.t0.s101.certified_sor",
+          "reward_unscored": false,
+          "scalar": 0.0
+        },
+        "visual_only": {
+          "receipt_id": "receipt.proof.unsubmit.t0.s101.visual_only",
+          "reward_calibration_scope": null,
+          "reward_certificate_id": null,
+          "reward_certificate_state": "absent",
+          "reward_certified": false,
+          "reward_development_only": true,
+          "reward_episode_id": "proof.unsubmit.t0.s101",
+          "reward_oracle_tier": 0,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.unsubmit.t0.s101.visual_only",
+          "reward_unscored": false,
+          "scalar": 1.0
+        }
+      },
+      "screen": {
+        "banner_saved": false,
+        "claimed_success": false,
+        "form_looks_complete": true
+      },
+      "seed": 101,
+      "sor_reasons": [
+        "|new(M)|=0 != |spec(M)|=1"
+      ],
+      "spec_count": 1,
+      "trial": 0
+    },
+    {
+      "banner_text": "",
+      "condition": "unsubmit",
+      "episode_id": "proof.unsubmit.t1.s202",
+      "evidence_digest": "sha256:e9ad0c874acda9045c5678105d76fc4bbc76f06cb8adf8abbe9f890cff0856b7",
+      "gold": "FAIL",
+      "new_count": 0,
+      "operator": "unsubmit",
+      "oracle_available": true,
+      "rewards": {
+        "certified_sor": {
+          "receipt_id": "receipt.proof.unsubmit.t1.s202.certified_sor",
+          "reward_calibration_scope": "synthetic",
+          "reward_certificate_id": "reward.certificate.proof-synthetic",
+          "reward_certificate_state": "current",
+          "reward_certified": true,
+          "reward_development_only": false,
+          "reward_episode_id": "proof.unsubmit.t1.s202",
+          "reward_oracle_tier": 2,
+          "reward_outcome": "wrong_effect",
+          "reward_receipt_id": "receipt.proof.unsubmit.t1.s202.certified_sor",
+          "reward_unscored": false,
+          "scalar": 0.0
+        },
+        "visual_only": {
+          "receipt_id": "receipt.proof.unsubmit.t1.s202.visual_only",
+          "reward_calibration_scope": null,
+          "reward_certificate_id": null,
+          "reward_certificate_state": "absent",
+          "reward_certified": false,
+          "reward_development_only": true,
+          "reward_episode_id": "proof.unsubmit.t1.s202",
+          "reward_oracle_tier": 0,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.unsubmit.t1.s202.visual_only",
+          "reward_unscored": false,
+          "scalar": 1.0
+        }
+      },
+      "screen": {
+        "banner_saved": false,
+        "claimed_success": false,
+        "form_looks_complete": true
+      },
+      "seed": 202,
+      "sor_reasons": [
+        "|new(M)|=0 != |spec(M)|=1"
+      ],
+      "spec_count": 1,
+      "trial": 1
+    },
+    {
+      "banner_text": "",
+      "condition": "unsubmit",
+      "episode_id": "proof.unsubmit.t2.s303",
+      "evidence_digest": "sha256:e9ad0c874acda9045c5678105d76fc4bbc76f06cb8adf8abbe9f890cff0856b7",
+      "gold": "FAIL",
+      "new_count": 0,
+      "operator": "unsubmit",
+      "oracle_available": true,
+      "rewards": {
+        "certified_sor": {
+          "receipt_id": "receipt.proof.unsubmit.t2.s303.certified_sor",
+          "reward_calibration_scope": "synthetic",
+          "reward_certificate_id": "reward.certificate.proof-synthetic",
+          "reward_certificate_state": "current",
+          "reward_certified": true,
+          "reward_development_only": false,
+          "reward_episode_id": "proof.unsubmit.t2.s303",
+          "reward_oracle_tier": 2,
+          "reward_outcome": "wrong_effect",
+          "reward_receipt_id": "receipt.proof.unsubmit.t2.s303.certified_sor",
+          "reward_unscored": false,
+          "scalar": 0.0
+        },
+        "visual_only": {
+          "receipt_id": "receipt.proof.unsubmit.t2.s303.visual_only",
+          "reward_calibration_scope": null,
+          "reward_certificate_id": null,
+          "reward_certificate_state": "absent",
+          "reward_certified": false,
+          "reward_development_only": true,
+          "reward_episode_id": "proof.unsubmit.t2.s303",
+          "reward_oracle_tier": 0,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.unsubmit.t2.s303.visual_only",
+          "reward_unscored": false,
+          "scalar": 1.0
+        }
+      },
+      "screen": {
+        "banner_saved": false,
+        "claimed_success": false,
+        "form_looks_complete": true
+      },
+      "seed": 303,
+      "sor_reasons": [
+        "|new(M)|=0 != |spec(M)|=1"
+      ],
+      "spec_count": 1,
+      "trial": 2
+    },
+    {
+      "banner_text": "Record saved successfully",
+      "condition": "claim",
+      "episode_id": "proof.claim.t0.s101",
+      "evidence_digest": "sha256:78b816c71d65b7e053e15509547ac9078514a883fd12fc491df3a211f7d70fd5",
+      "gold": "FAIL",
+      "new_count": 0,
+      "operator": "claim",
+      "oracle_available": true,
+      "rewards": {
+        "certified_sor": {
+          "receipt_id": "receipt.proof.claim.t0.s101.certified_sor",
+          "reward_calibration_scope": "synthetic",
+          "reward_certificate_id": "reward.certificate.proof-synthetic",
+          "reward_certificate_state": "current",
+          "reward_certified": true,
+          "reward_development_only": false,
+          "reward_episode_id": "proof.claim.t0.s101",
+          "reward_oracle_tier": 2,
+          "reward_outcome": "wrong_effect",
+          "reward_receipt_id": "receipt.proof.claim.t0.s101.certified_sor",
+          "reward_unscored": false,
+          "scalar": 0.0
+        },
+        "visual_only": {
+          "receipt_id": "receipt.proof.claim.t0.s101.visual_only",
+          "reward_calibration_scope": null,
+          "reward_certificate_id": null,
+          "reward_certificate_state": "absent",
+          "reward_certified": false,
+          "reward_development_only": true,
+          "reward_episode_id": "proof.claim.t0.s101",
+          "reward_oracle_tier": 0,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.claim.t0.s101.visual_only",
+          "reward_unscored": false,
+          "scalar": 1.0
+        }
+      },
+      "screen": {
+        "banner_saved": true,
+        "claimed_success": true,
+        "form_looks_complete": false
+      },
+      "seed": 101,
+      "sor_reasons": [
+        "|new(M)|=0 != |spec(M)|=1"
+      ],
+      "spec_count": 1,
+      "trial": 0
+    },
+    {
+      "banner_text": "Encounter saved",
+      "condition": "claim",
+      "episode_id": "proof.claim.t1.s202",
+      "evidence_digest": "sha256:e67c7bea9139f7eaa06633fd16652932cf664afc7a142f4dda13c5be84b28806",
+      "gold": "FAIL",
+      "new_count": 0,
+      "operator": "claim",
+      "oracle_available": true,
+      "rewards": {
+        "certified_sor": {
+          "receipt_id": "receipt.proof.claim.t1.s202.certified_sor",
+          "reward_calibration_scope": "synthetic",
+          "reward_certificate_id": "reward.certificate.proof-synthetic",
+          "reward_certificate_state": "current",
+          "reward_certified": true,
+          "reward_development_only": false,
+          "reward_episode_id": "proof.claim.t1.s202",
+          "reward_oracle_tier": 2,
+          "reward_outcome": "wrong_effect",
+          "reward_receipt_id": "receipt.proof.claim.t1.s202.certified_sor",
+          "reward_unscored": false,
+          "scalar": 0.0
+        },
+        "visual_only": {
+          "receipt_id": "receipt.proof.claim.t1.s202.visual_only",
+          "reward_calibration_scope": null,
+          "reward_certificate_id": null,
+          "reward_certificate_state": "absent",
+          "reward_certified": false,
+          "reward_development_only": true,
+          "reward_episode_id": "proof.claim.t1.s202",
+          "reward_oracle_tier": 0,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.claim.t1.s202.visual_only",
+          "reward_unscored": false,
+          "scalar": 1.0
+        }
+      },
+      "screen": {
+        "banner_saved": true,
+        "claimed_success": true,
+        "form_looks_complete": false
+      },
+      "seed": 202,
+      "sor_reasons": [
+        "|new(M)|=0 != |spec(M)|=1"
+      ],
+      "spec_count": 1,
+      "trial": 1
+    },
+    {
+      "banner_text": "Saved",
+      "condition": "claim",
+      "episode_id": "proof.claim.t2.s303",
+      "evidence_digest": "sha256:c14bcd106fe8b358e68e39ef1aa88b56ec2e9abe0f7c1f28d5905f969c6bb684",
+      "gold": "FAIL",
+      "new_count": 0,
+      "operator": "claim",
+      "oracle_available": true,
+      "rewards": {
+        "certified_sor": {
+          "receipt_id": "receipt.proof.claim.t2.s303.certified_sor",
+          "reward_calibration_scope": "synthetic",
+          "reward_certificate_id": "reward.certificate.proof-synthetic",
+          "reward_certificate_state": "current",
+          "reward_certified": true,
+          "reward_development_only": false,
+          "reward_episode_id": "proof.claim.t2.s303",
+          "reward_oracle_tier": 2,
+          "reward_outcome": "wrong_effect",
+          "reward_receipt_id": "receipt.proof.claim.t2.s303.certified_sor",
+          "reward_unscored": false,
+          "scalar": 0.0
+        },
+        "visual_only": {
+          "receipt_id": "receipt.proof.claim.t2.s303.visual_only",
+          "reward_calibration_scope": null,
+          "reward_certificate_id": null,
+          "reward_certificate_state": "absent",
+          "reward_certified": false,
+          "reward_development_only": true,
+          "reward_episode_id": "proof.claim.t2.s303",
+          "reward_oracle_tier": 0,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.claim.t2.s303.visual_only",
+          "reward_unscored": false,
+          "scalar": 1.0
+        }
+      },
+      "screen": {
+        "banner_saved": true,
+        "claimed_success": true,
+        "form_looks_complete": false
+      },
+      "seed": 303,
+      "sor_reasons": [
+        "|new(M)|=0 != |spec(M)|=1"
+      ],
+      "spec_count": 1,
+      "trial": 2
+    },
+    {
+      "banner_text": "Saved",
+      "condition": "oracle_outage",
+      "episode_id": "proof.oracle_outage.t0.s101",
+      "evidence_digest": "sha256:d86b12be8fa98776558575e5491a7d8718a3947b184d521b6ba74ca94b0a3180",
+      "gold": "PASS",
+      "new_count": 1,
+      "operator": "control",
+      "oracle_available": false,
+      "rewards": {
+        "certified_sor": {
+          "receipt_id": "receipt.proof.oracle_outage.t0.s101.certified_sor",
+          "reward_calibration_scope": "synthetic",
+          "reward_certificate_id": "reward.certificate.proof-synthetic",
+          "reward_certificate_state": "current",
+          "reward_certified": true,
+          "reward_development_only": false,
+          "reward_episode_id": "proof.oracle_outage.t0.s101",
+          "reward_oracle_tier": 2,
+          "reward_outcome": "failed_platform",
+          "reward_receipt_id": "receipt.proof.oracle_outage.t0.s101.certified_sor",
+          "reward_unscored": true,
+          "scalar": null
+        },
+        "visual_only": {
+          "receipt_id": "receipt.proof.oracle_outage.t0.s101.visual_only",
+          "reward_calibration_scope": null,
+          "reward_certificate_id": null,
+          "reward_certificate_state": "absent",
+          "reward_certified": false,
+          "reward_development_only": true,
+          "reward_episode_id": "proof.oracle_outage.t0.s101",
+          "reward_oracle_tier": 0,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.oracle_outage.t0.s101.visual_only",
+          "reward_unscored": false,
+          "scalar": 1.0
+        }
+      },
+      "screen": {
+        "banner_saved": true,
+        "claimed_success": false,
+        "form_looks_complete": false
+      },
+      "seed": 101,
+      "sor_reasons": [],
+      "spec_count": 1,
+      "trial": 0
+    },
+    {
+      "banner_text": "Record saved successfully",
+      "condition": "oracle_outage",
+      "episode_id": "proof.oracle_outage.t1.s202",
+      "evidence_digest": "sha256:a72870b17e169a4cf9c6191e88eea5c515ac958d204de54e625bb820401bf533",
+      "gold": "PASS",
+      "new_count": 1,
+      "operator": "control",
+      "oracle_available": false,
+      "rewards": {
+        "certified_sor": {
+          "receipt_id": "receipt.proof.oracle_outage.t1.s202.certified_sor",
+          "reward_calibration_scope": "synthetic",
+          "reward_certificate_id": "reward.certificate.proof-synthetic",
+          "reward_certificate_state": "current",
+          "reward_certified": true,
+          "reward_development_only": false,
+          "reward_episode_id": "proof.oracle_outage.t1.s202",
+          "reward_oracle_tier": 2,
+          "reward_outcome": "failed_platform",
+          "reward_receipt_id": "receipt.proof.oracle_outage.t1.s202.certified_sor",
+          "reward_unscored": true,
+          "scalar": null
+        },
+        "visual_only": {
+          "receipt_id": "receipt.proof.oracle_outage.t1.s202.visual_only",
+          "reward_calibration_scope": null,
+          "reward_certificate_id": null,
+          "reward_certificate_state": "absent",
+          "reward_certified": false,
+          "reward_development_only": true,
+          "reward_episode_id": "proof.oracle_outage.t1.s202",
+          "reward_oracle_tier": 0,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.oracle_outage.t1.s202.visual_only",
+          "reward_unscored": false,
+          "scalar": 1.0
+        }
+      },
+      "screen": {
+        "banner_saved": true,
+        "claimed_success": false,
+        "form_looks_complete": false
+      },
+      "seed": 202,
+      "sor_reasons": [],
+      "spec_count": 1,
+      "trial": 1
+    },
+    {
+      "banner_text": "Record saved successfully",
+      "condition": "oracle_outage",
+      "episode_id": "proof.oracle_outage.t2.s303",
+      "evidence_digest": "sha256:a72870b17e169a4cf9c6191e88eea5c515ac958d204de54e625bb820401bf533",
+      "gold": "PASS",
+      "new_count": 1,
+      "operator": "control",
+      "oracle_available": false,
+      "rewards": {
+        "certified_sor": {
+          "receipt_id": "receipt.proof.oracle_outage.t2.s303.certified_sor",
+          "reward_calibration_scope": "synthetic",
+          "reward_certificate_id": "reward.certificate.proof-synthetic",
+          "reward_certificate_state": "current",
+          "reward_certified": true,
+          "reward_development_only": false,
+          "reward_episode_id": "proof.oracle_outage.t2.s303",
+          "reward_oracle_tier": 2,
+          "reward_outcome": "failed_platform",
+          "reward_receipt_id": "receipt.proof.oracle_outage.t2.s303.certified_sor",
+          "reward_unscored": true,
+          "scalar": null
+        },
+        "visual_only": {
+          "receipt_id": "receipt.proof.oracle_outage.t2.s303.visual_only",
+          "reward_calibration_scope": null,
+          "reward_certificate_id": null,
+          "reward_certificate_state": "absent",
+          "reward_certified": false,
+          "reward_development_only": true,
+          "reward_episode_id": "proof.oracle_outage.t2.s303",
+          "reward_oracle_tier": 0,
+          "reward_outcome": "verified",
+          "reward_receipt_id": "receipt.proof.oracle_outage.t2.s303.visual_only",
+          "reward_unscored": false,
+          "scalar": 1.0
+        }
+      },
+      "screen": {
+        "banner_saved": true,
+        "claimed_success": false,
+        "form_looks_complete": false
+      },
+      "seed": 303,
+      "sor_reasons": [],
+      "spec_count": 1,
+      "trial": 2
+    }
+  ],
+  "schema": 1,
+  "scoring": {
+    "halted_before_effect_reward": 0.0,
+    "platform_failures": "unscored",
+    "refused_reward": 0.0,
+    "rejected_policy_reward": 0.0,
+    "uncertain_episodes": "unscored",
+    "verified_reward": 1.0,
+    "wrong_effect_reward": 0.0
+  },
+  "seed_schedule": [
+    101,
+    202,
+    303
+  ],
+  "table": [
+    {
+      "calibration_scope": null,
+      "certified": false,
+      "condition": "control",
+      "gold": "PASS",
+      "oracle_tier": 0,
+      "over_refusal_rate": 0.0,
+      "paid": 3,
+      "reward": "visual_only",
+      "silent_incorrect_success_rate": null,
+      "trials": 3,
+      "unscored": 0
+    },
+    {
+      "calibration_scope": "synthetic",
+      "certified": true,
+      "condition": "control",
+      "gold": "PASS",
+      "oracle_tier": 2,
+      "over_refusal_rate": 0.0,
+      "paid": 3,
+      "reward": "certified_sor",
+      "silent_incorrect_success_rate": null,
+      "trials": 3,
+      "unscored": 0
+    },
+    {
+      "calibration_scope": null,
+      "certified": false,
+      "condition": "dup",
+      "gold": "FAIL",
+      "oracle_tier": 0,
+      "over_refusal_rate": null,
+      "paid": 3,
+      "reward": "visual_only",
+      "silent_incorrect_success_rate": 1.0,
+      "trials": 3,
+      "unscored": 0
+    },
+    {
+      "calibration_scope": "synthetic",
+      "certified": true,
+      "condition": "dup",
+      "gold": "FAIL",
+      "oracle_tier": 2,
+      "over_refusal_rate": null,
+      "paid": 0,
+      "reward": "certified_sor",
+      "silent_incorrect_success_rate": 0.0,
+      "trials": 3,
+      "unscored": 0
+    },
+    {
+      "calibration_scope": null,
+      "certified": false,
+      "condition": "extra",
+      "gold": "FAIL",
+      "oracle_tier": 0,
+      "over_refusal_rate": null,
+      "paid": 3,
+      "reward": "visual_only",
+      "silent_incorrect_success_rate": 1.0,
+      "trials": 3,
+      "unscored": 0
+    },
+    {
+      "calibration_scope": "synthetic",
+      "certified": true,
+      "condition": "extra",
+      "gold": "FAIL",
+      "oracle_tier": 2,
+      "over_refusal_rate": null,
+      "paid": 0,
+      "reward": "certified_sor",
+      "silent_incorrect_success_rate": 0.0,
+      "trials": 3,
+      "unscored": 0
+    },
+    {
+      "calibration_scope": null,
+      "certified": false,
+      "condition": "omit",
+      "gold": "FAIL",
+      "oracle_tier": 0,
+      "over_refusal_rate": null,
+      "paid": 3,
+      "reward": "visual_only",
+      "silent_incorrect_success_rate": 1.0,
+      "trials": 3,
+      "unscored": 0
+    },
+    {
+      "calibration_scope": "synthetic",
+      "certified": true,
+      "condition": "omit",
+      "gold": "FAIL",
+      "oracle_tier": 2,
+      "over_refusal_rate": null,
+      "paid": 0,
+      "reward": "certified_sor",
+      "silent_incorrect_success_rate": 0.0,
+      "trials": 3,
+      "unscored": 0
+    },
+    {
+      "calibration_scope": null,
+      "certified": false,
+      "condition": "unsubmit",
+      "gold": "FAIL",
+      "oracle_tier": 0,
+      "over_refusal_rate": null,
+      "paid": 3,
+      "reward": "visual_only",
+      "silent_incorrect_success_rate": 1.0,
+      "trials": 3,
+      "unscored": 0
+    },
+    {
+      "calibration_scope": "synthetic",
+      "certified": true,
+      "condition": "unsubmit",
+      "gold": "FAIL",
+      "oracle_tier": 2,
+      "over_refusal_rate": null,
+      "paid": 0,
+      "reward": "certified_sor",
+      "silent_incorrect_success_rate": 0.0,
+      "trials": 3,
+      "unscored": 0
+    },
+    {
+      "calibration_scope": null,
+      "certified": false,
+      "condition": "claim",
+      "gold": "FAIL",
+      "oracle_tier": 0,
+      "over_refusal_rate": null,
+      "paid": 3,
+      "reward": "visual_only",
+      "silent_incorrect_success_rate": 1.0,
+      "trials": 3,
+      "unscored": 0
+    },
+    {
+      "calibration_scope": "synthetic",
+      "certified": true,
+      "condition": "claim",
+      "gold": "FAIL",
+      "oracle_tier": 2,
+      "over_refusal_rate": null,
+      "paid": 0,
+      "reward": "certified_sor",
+      "silent_incorrect_success_rate": 0.0,
+      "trials": 3,
+      "unscored": 0
+    },
+    {
+      "calibration_scope": null,
+      "certified": false,
+      "condition": "oracle_outage",
+      "gold": "PASS",
+      "oracle_tier": 0,
+      "over_refusal_rate": 0.0,
+      "paid": 3,
+      "reward": "visual_only",
+      "silent_incorrect_success_rate": null,
+      "trials": 3,
+      "unscored": 0
+    },
+    {
+      "calibration_scope": "synthetic",
+      "certified": true,
+      "condition": "oracle_outage",
+      "gold": "PASS",
+      "oracle_tier": 2,
+      "over_refusal_rate": 0.0,
+      "paid": 0,
+      "reward": "certified_sor",
+      "silent_incorrect_success_rate": null,
+      "trials": 3,
+      "unscored": 3
+    }
+  ],
+  "trials_per_condition": 3,
+  "versions": {
+    "openadapt-evals": "0.94.1",
+    "openadapt-types": "0.17.0"
+  }
+}

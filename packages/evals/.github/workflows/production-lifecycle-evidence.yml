@@ -1,0 +1,191 @@
+name: Propose production lifecycle evidence
+
+on:
+  workflow_dispatch:
+    inputs:
+      candidate_ref:
+        description: Exact same-repository evidence-candidate branch ref
+        required: true
+        type: string
+      candidate_commit:
+        description: Exact 40-character evidence-candidate commit
+        required: true
+        type: string
+      idempotency_key:
+        description: Domain-bound SHA-256 proposal key
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  propose-evidence:
+    if: >-
+      github.repository == 'OpenAdaptAI/openadapt-evals' &&
+      github.ref == 'refs/heads/main' &&
+      github.event_name == 'workflow_dispatch' &&
+      github.actor == 'openadapt-lifecycle[bot]' &&
+      github.triggering_actor == 'openadapt-lifecycle[bot]' &&
+      github.actor_id == vars.OPENADAPT_LIFECYCLE_ACTOR_ID
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production-lifecycle-evidence
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout exact main
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          token: ${{ github.token }}
+
+      - name: Create the lifecycle App pull-request token
+        id: lifecycle-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.OPENADAPT_LIFECYCLE_APP_ID }}
+          private-key: ${{ secrets.OPENADAPT_LIFECYCLE_APP_PRIVATE_KEY }}
+          owner: OpenAdaptAI
+          repositories: openadapt-evals
+          permission-pull-requests: write
+
+      - name: Verify the lifecycle App installation
+        env:
+          ACTUAL_APP_SLUG: ${{ steps.lifecycle-app.outputs.app-slug }}
+          ACTUAL_INSTALLATION_ID: ${{ steps.lifecycle-app.outputs.installation-id }}
+          EXPECTED_APP_ID: ${{ vars.OPENADAPT_LIFECYCLE_APP_ID }}
+          EXPECTED_INSTALLATION_ID: ${{ vars.OPENADAPT_LIFECYCLE_INSTALLATION_ID }}
+        run: |
+          set -euo pipefail
+          test "$ACTUAL_APP_SLUG" = 'openadapt-lifecycle'
+          test "$ACTUAL_INSTALLATION_ID" = "$EXPECTED_INSTALLATION_ID"
+          case "$EXPECTED_APP_ID:$EXPECTED_INSTALLATION_ID" in
+            *[!0-9:]*|:*|*:)
+              echo '::error::The lifecycle App and installation IDs must be positive integers.'
+              exit 1
+              ;;
+          esac
+          test "$EXPECTED_APP_ID" -gt 0
+          test "$EXPECTED_INSTALLATION_ID" -gt 0
+
+      - name: Bind the candidate to exact main
+        id: candidate
+        env:
+          CANDIDATE_REF: ${{ inputs.candidate_ref }}
+          CANDIDATE_COMMIT: ${{ inputs.candidate_commit }}
+          IDEMPOTENCY_KEY: ${{ inputs.idempotency_key }}
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          if ! printf '%s' "$CANDIDATE_REF" | \
+            grep -Eq '^refs/heads/production-lifecycle-candidates/[0-9a-f]{64}$'; then
+            echo '::error::The candidate ref is outside the production lifecycle namespace.'
+            exit 1
+          fi
+          if ! printf '%s' "$CANDIDATE_COMMIT" | grep -Eq '^[0-9a-f]{40}$'; then
+            echo '::error::The candidate commit is not a full commit ID.'
+            exit 1
+          fi
+          if ! printf '%s' "$IDEMPOTENCY_KEY" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
+            echo '::error::The idempotency key is not a SHA-256 digest.'
+            exit 1
+          fi
+
+          expected=$(python - \
+            "$GITHUB_REPOSITORY" "$GITHUB_SHA" "$CANDIDATE_REF" "$CANDIDATE_COMMIT" <<'PY'
+          import hashlib
+          import sys
+
+          domain = b"OpenAdapt production lifecycle evidence proposal v1\0"
+          fields = [value.encode("utf-8") for value in sys.argv[1:]]
+          print("sha256:" + hashlib.sha256(domain + b"\0".join(fields)).hexdigest())
+          PY
+          )
+          test "$IDEMPOTENCY_KEY" = "$expected"
+
+          remote_commit=$(git ls-remote origin "$CANDIDATE_REF" | cut -f1)
+          test "$remote_commit" = "$CANDIDATE_COMMIT"
+          git fetch --no-tags origin "$CANDIDATE_REF"
+          test "$(git rev-parse FETCH_HEAD)" = "$CANDIDATE_COMMIT"
+          test "$(git rev-parse "${CANDIDATE_COMMIT}^")" = "$GITHUB_SHA"
+
+          invalid_status=$(git diff --name-status "$GITHUB_SHA" "$CANDIDATE_COMMIT" | \
+            awk '$1 !~ /^(A|M)$/ {print}')
+          if [ -n "$invalid_status" ]; then
+            echo '::error::The candidate deletes, renames, or changes a file type.'
+            printf '%s\n' "$invalid_status"
+            exit 1
+          fi
+          invalid_path=$(git diff --name-only "$GITHUB_SHA" "$CANDIDATE_COMMIT" | \
+            grep -Ev '^(docs/eval_results/production_acceptance/[^/].*|docs/eval_results/PUBLISHED_EVIDENCE\.json|docs/eval_results/PRODUCTION_READINESS\.md)$' || true)
+          if [ -n "$invalid_path" ]; then
+            echo '::error::The candidate changes files outside the reviewed evidence paths.'
+            printf '%s\n' "$invalid_path"
+            exit 1
+          fi
+          test -n "$(git diff --name-only "$GITHUB_SHA" "$CANDIDATE_COMMIT")"
+
+          key_hex=${IDEMPOTENCY_KEY#sha256:}
+          echo "review_branch=automation/production-lifecycle-evidence-${key_hex}" >> "$GITHUB_OUTPUT"
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@11f9893b081a58869d3b5fccaea48c9e9e46f990 # v8.3.2
+        with:
+          version: "0.11.29"
+
+      - name: Verify the candidate evidence
+        env:
+          CANDIDATE_COMMIT: ${{ inputs.candidate_commit }}
+        run: |
+          set -euo pipefail
+          git checkout --detach "$CANDIDATE_COMMIT"
+          uv sync --locked --extra dev --no-sources
+          uv run --no-sources pytest -q \
+            tests/test_import_production_acceptance.py \
+            tests/test_published_evidence_freshness.py
+          uv run --no-sources python scripts/check_source_boundary.py
+
+      - name: Push the review branch with the workflow token
+        env:
+          CANDIDATE_COMMIT: ${{ inputs.candidate_commit }}
+          REVIEW_BRANCH: ${{ steps.candidate.outputs.review_branch }}
+        run: |
+          set -euo pipefail
+          existing=$(git ls-remote --heads origin "refs/heads/$REVIEW_BRANCH" | cut -f1)
+          if [ -n "$existing" ]; then
+            git fetch --no-tags origin "refs/heads/$REVIEW_BRANCH"
+            test "$(git rev-parse "FETCH_HEAD^{tree}")" = \
+              "$(git rev-parse "$CANDIDATE_COMMIT^{tree}")"
+          else
+            git push origin "$CANDIDATE_COMMIT:refs/heads/$REVIEW_BRANCH"
+          fi
+
+      - name: Open the evidence pull request with the lifecycle App
+        env:
+          CANDIDATE_COMMIT: ${{ inputs.candidate_commit }}
+          GH_TOKEN: ${{ steps.lifecycle-app.outputs.token }}
+          REVIEW_BRANCH: ${{ steps.candidate.outputs.review_branch }}
+        run: |
+          set -euo pipefail
+          number=$(gh pr list \
+            --repo "$GITHUB_REPOSITORY" \
+            --base main \
+            --head "$REVIEW_BRANCH" \
+            --state open \
+            --json number \
+            --jq '.[0].number // empty')
+          if [ -n "$number" ]; then
+            echo "Evidence pull request #$number already exists."
+            exit 0
+          fi
+          gh pr create \
+            --repo "$GITHUB_REPOSITORY" \
+            --base main \
+            --head "$REVIEW_BRANCH" \
+            --title 'docs(evidence): review production lifecycle candidate' \
+            --body "This PR carries the production lifecycle evidence candidate at ${CANDIDATE_COMMIT}. The workflow accepted only the reviewed evidence paths and ran the focused checks. It didn't admit a release or change main."

@@ -1,0 +1,25 @@
+TASK: Open File Explorer and navigate to Documents folder
+DOMAIN: file_explorer
+
+STEPS:
+1. Open File Explorer using keyboard shortcut
+   REASONING: Windows+E is the fastest way to open File Explorer
+   ACTION: HOTKEY("win", "e")
+
+2. Wait for File Explorer to open
+   REASONING: Application needs time to launch
+   ACTION: WAIT(1.0)
+
+3. Click on "Documents" in the left navigation pane
+   REASONING: Documents is a quick access location in the sidebar
+   ACTION: CLICK(x=0.1, y=0.4)
+
+4. Wait for Documents folder to load
+   REASONING: Folder contents need time to display
+   ACTION: WAIT(0.5)
+
+5. Verify Documents folder is displayed
+   REASONING: Address bar should show Documents path
+   ACTION: DONE()
+
+EXPECTED_OUTCOME: File Explorer is showing the contents of the Documents folder

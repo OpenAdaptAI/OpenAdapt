@@ -1,0 +1,128 @@
+{
+  "schema_version": 1,
+  "package": "openadapt-flow",
+  "comment": [
+    "Every published evidence set in docs/eval_results and the engine release it",
+    "was measured against. scripts/check_published_evidence_freshness.py fails",
+    "when a set marked current no longer pins the current published release, or",
+    "when a pinned wheel digest does not match that release on PyPI.",
+    "The current label means release-fresh, not production-accepted. Every",
+    "current entry and campaign states its production_acceptance value.",
+    "Mark a set superseded (never delete it) when a newer set replaces it: the",
+    "old numbers stay reproducible against the wheel they were measured on.",
+    "accepted_drift on the current set records a newer release that has not been",
+    "re-measured yet. It covers that one version, needs a reason, and expires at",
+    "most 31 days ahead; the README must say the newer release was not measured.",
+    "Remove it when the new set is published."
+  ],
+  "evidence": [
+    {
+      "path": "docs/eval_results/current_flow_v1_16_1_local_20260718",
+      "status": "superseded",
+      "superseded_by": "docs/eval_results/current_flow_v1_24_0_local_20260727",
+      "flow_version": "1.16.1",
+      "wheel_sha256": "c7073283475e7ae722db2478b499d962364851104e09edb71f254ba21c1310cd",
+      "measured_on": "2026-07-18"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_24_0_local_20260727",
+      "status": "superseded",
+      "superseded_by": "docs/eval_results/current_flow_v1_27_1_local_20260802",
+      "flow_version": "1.24.0",
+      "wheel_sha256": "170fdac154794292c99dc6eea6486e7a2c3fdf321bcd87976d924bccd3db4aef",
+      "sdist_sha256": "2d4702e5ccbdfed0f78063ca510dc82894a2833edbed71d77edffbd0ffebd67d",
+      "measured_on": "2026-07-27"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_27_1_local_20260802",
+      "status": "superseded",
+      "superseded_by": "docs/eval_results/current_flow_v1_28_0_local_20260802",
+      "flow_version": "1.27.1",
+      "wheel_sha256": "99d8f3ef014481356f4bcfc65f694ed2fd47a75e2025c5ddfdae4bfab2194094",
+      "sdist_sha256": "aeabf2b11ae6151fe76c02ee783e8368d10ee984465f858f9d37429b17a15468",
+      "measured_on": "2026-08-02"
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_28_0_local_20260802",
+      "status": "superseded",
+      "superseded_by": "docs/eval_results/current_flow_v1_30_0_local_20260806",
+      "flow_version": "1.28.0",
+      "wheel_sha256": "4d156035ea411e3cbdbc40978d653d50727a7d8664646be62f7f9e95ba0c7202",
+      "sdist_sha256": "6e108f3469da20226427fee7a11378e067ca08c1fbbfcdbb4018ab9c3d142a8b",
+      "evidence_manifest": "docs/eval_results/current_flow_v1_28_0_local_20260802/EVIDENCE_MANIFEST.json",
+      "measured_on": "2026-08-02",
+      "stale_reason": "These retained results measured Flow 1.28.0 and did not retain an exact browser revision or installed dependency snapshot. They were not relabeled. A governed Flow 1.30.0 campaign replaced them."
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_30_0_local_20260806",
+      "status": "superseded",
+      "superseded_by": "docs/eval_results/current_flow_v1_31_0_local_20260818",
+      "flow_version": "1.30.0",
+      "wheel_sha256": "7bf1a7b00388172a79bda666def182688c296ffb5bc9be2fd3281169fc36ae63",
+      "sdist_sha256": "3a402610e35f47fd54daaf066b8c3a6006c13483cb4c778740014abea1854ea4",
+      "evidence_manifest": "docs/eval_results/current_flow_v1_30_0_local_20260806/EVIDENCE_MANIFEST.json",
+      "measured_on": "2026-08-06",
+      "production_acceptance": false,
+      "stale_reason": "These retained results measured Flow 1.30.0. They were not relabeled. A complete Flow 1.31.0 rerun replaced them after the published release changed."
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_31_0_local_20260818",
+      "status": "superseded",
+      "flow_version": "1.31.0",
+      "flow_source_commit": "2d225dea9a0ad29ca84ce1b037cc0ac671367e28",
+      "flow_release_tag": "v1.31.0",
+      "wheel_sha256": "81133db1528ad1bb1f26e3fcb6aea61b0651db6d905cf2e4943e8383c1f3d29c",
+      "sdist_sha256": "cf1fc356d14d267df82be188de3e9a3575734f18f46ef91ac8075438cc731540",
+      "evidence_manifest": "docs/eval_results/current_flow_v1_31_0_local_20260818/EVIDENCE_MANIFEST.json",
+      "measured_on": "2026-08-18",
+      "production_acceptance": false,
+      "superseded_by": "docs/eval_results/current_flow_v1_32_0_local_20260821",
+      "stale_reason": "These retained results measured Flow 1.31.0. They were not relabeled. A complete Flow 1.32.0 rerun replaced them after the published release changed."
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_32_0_local_20260821",
+      "status": "superseded",
+      "flow_version": "1.32.0",
+      "flow_source_commit": "d1b054c718d60465fb8a2e1853e6a84c7f26dec2",
+      "flow_release_tag": "v1.32.0",
+      "wheel_sha256": "d58dcf8b7e54c8a45199db4390a588dc261bb754c5ab2af0fdb540e44cb6bb8a",
+      "sdist_sha256": "c3125f16c1b12420dff4a3af4c3d676e1d267cd961cb9e5f4825beb372b7f97e",
+      "evidence_manifest": "docs/eval_results/current_flow_v1_32_0_local_20260821/EVIDENCE_MANIFEST.json",
+      "measured_on": "2026-08-21",
+      "production_acceptance": false,
+      "superseded_by": "docs/eval_results/current_flow_v1_33_0_local_20260826",
+      "stale_reason": "These retained results measured Flow 1.32.0. They were not relabeled. A complete Flow 1.33.0 rerun replaced them after the published release changed."
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_33_0_local_20260826",
+      "status": "superseded",
+      "flow_version": "1.33.0",
+      "flow_source_commit": "80dc49b7296e5e6999b04124f26a647047a14b95",
+      "flow_release_tag": "v1.33.0",
+      "wheel_sha256": "1d54ccffe3a554ecff82f69917f63f55233bd54ac1cb737058e096e4582aa494",
+      "sdist_sha256": "8f85bc5a9e3a8eb1c1d69178e7cfd03fc9de4d0d31832f117eacc0cc2052fd1c",
+      "evidence_manifest": "docs/eval_results/current_flow_v1_33_0_local_20260826/EVIDENCE_MANIFEST.json",
+      "measured_on": "2026-08-26",
+      "production_acceptance": false,
+      "superseded_by": "docs/eval_results/current_flow_v1_34_0_local_20260829",
+      "stale_reason": "These retained results measured Flow 1.33.0. They were not relabeled. A complete Flow 1.34.0 rerun replaced them after the published release changed."
+    },
+    {
+      "path": "docs/eval_results/current_flow_v1_34_0_local_20260829",
+      "status": "current",
+      "flow_version": "1.34.0",
+      "flow_source_commit": "30fc60e55778a0e0f92b9776117cafcfe2512249",
+      "flow_release_tag": "v1.34.0",
+      "wheel_sha256": "56d32818989cb3a92830080ead39e10b08718c55e00988117f22cbfeaac98854",
+      "sdist_sha256": "a941a70015fe91897e655bfc9bf83e6cf8fbcf8bd4e4c7206ffb133c505203f8",
+      "evidence_manifest": "docs/eval_results/current_flow_v1_34_0_local_20260829/EVIDENCE_MANIFEST.json",
+      "measured_on": "2026-08-29",
+      "production_acceptance": false,
+      "accepted_drift": {
+        "version": "1.35.1",
+        "reason": "Flow 1.35.0 and 1.35.1 shipped after this set was measured and the comparison has not been re-run, so these numbers describe Flow 1.34.0 only. The README says so.",
+        "expires": "2026-10-31"
+      }
+    }
+  ]
+}

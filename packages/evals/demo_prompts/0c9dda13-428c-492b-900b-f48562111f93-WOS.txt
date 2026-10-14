@@ -1,0 +1,58 @@
+DEMONSTRATION:
+Task: Create a new folder named 'Archive' in the Documents folder and move all .docx files into it.
+
+Step 1:
+  Observation: The BEFORE image shows a Windows PowerShell window open with various log entries. The taskbar is visible at the bottom with icons for different applications. The red marker indicates interaction with the 'Search' icon on the taskbar.
+  Intent: The user is attempting to open File Explorer to access the Documents folder.
+  Action: TYPE("e")
+  Result: The AFTER image shows that File Explorer has opened, displaying the Home directory with quick access to folders like Desktop, Documents, and Downloads.
+
+Step 2:
+  Observation: The BEFORE image shows the File Explorer application open to the Home directory. Key visible UI elements include: the 'Quick access' section with folders like Desktop and Documents, the 'Documents' folder in the navigation pane, the 'Search Home' bar at the top, and the 'New' button in the toolbar.
+  Intent: The user is navigating to the Documents folder to create a new folder named 'Archive'.
+  Action: CLICK(0.166, 0.569)
+  Result: The AFTER image shows that the File Explorer window now displays the contents of the Documents folder, including several files and folders.
+
+Step 3:
+  Observation: The application is File Explorer. The current panel displays the contents of the 'Documents' folder. Key visible UI elements include the navigation pane on the left, the 'New' button in the toolbar, the search bar at the top right, and a list of files and folders in the main area. The red marker indicates a right-click action in the main area.
+  Intent: The user is attempting to create a new folder in the 'Documents' directory.
+  Action: CLICK(0.345, 0.649)
+  Result: A context menu has appeared, offering options such as 'View', 'Sort by', 'Group by', 'New', and others.
+
+Step 4:
+  Observation: The application is Windows File Explorer, currently displaying the 'Documents' folder. Key visible UI elements include the navigation pane on the left, the file list in the center, a context menu with options like 'View', 'Sort by', 'Group by', and 'New', and a highlighted 'Folder' option in the context menu.
+  Intent: The user is creating a new folder named 'Archive' in the 'Documents' folder.
+  Action: TYPE("Archive")
+  Result: A new folder named 'Archive' has been created in the 'Documents' folder.
+
+Step 5:
+  Observation: The application is File Explorer, displaying the 'Documents' folder. Key visible UI elements include the navigation pane on the left, the toolbar with options like 'New' and 'Sort' at the top, the file list in the center showing various files and folders, and the search bar at the top right.
+  Intent: The user is preparing to move .docx files into the newly created 'Archive' folder.
+  Action: TYPE("")
+  Result: The file 'meeting_notes' is now selected in the file list.
+
+Step 6:
+  Observation: The application is File Explorer, currently displaying the 'Documents' folder. Key visible UI elements include the navigation pane on the left, the file list in the center, the 'New' button at the top left, and the search bar at the top right. The file 'meeting_notes' is selected.
+  Intent: The user is selecting multiple .docx files to move them into the 'Archive' folder.
+  Action: CLICK(0.284, 0.524)
+  Result: The file 'proposal' is now selected along with 'meeting_notes', indicating multiple selection.
+
+Step 7:
+  Observation: The application is File Explorer, currently displaying the 'Documents' folder. Key visible UI elements include the navigation pane on the left, the toolbar with options like 'New' and 'Sort' at the top, the file list in the center showing files and folders, and the search bar at the top right. The files 'meeting_notes' and 'proposal' are selected.
+  Intent: The user is attempting to select all .docx files to move them to the 'Archive' folder.
+  Action: TYPE("")
+  Result: The file 'report' is now also selected, along with 'meeting_notes' and 'proposal'.
+
+Step 8:
+  Observation: The application is File Explorer, currently displaying the 'Documents' folder. Key visible UI elements include the navigation pane on the left, the toolbar with options like 'New' and 'Sort', the file list showing items such as 'meeting_notes', 'proposal', and 'report', and the 'Archive' folder. The red marker indicates a click on the 'Archive' folder.
+  Intent: The user intends to open the 'Archive' folder to move the selected .docx files into it.
+  Action: DOUBLE_CLICK(0.283, 0.610)
+  Result: The 'Documents' folder view is now empty, indicating that the user has navigated into the 'Archive' folder.
+
+Step 9:
+  Observation: The application is File Explorer. The current panel is the 'Archive' folder within the 'Documents' directory. Key visible UI elements include the navigation bar at the top showing 'Documents > Archive', the 'New' button on the toolbar, the empty file list area, and the sidebar with folder shortcuts.
+  Intent: The user is pasting the previously copied or cut .docx files into the 'Archive' folder.
+  Action: TYPE("")
+  Result: The .docx files should appear in the 'Archive' folder, populating the previously empty file list area.
+
+---
