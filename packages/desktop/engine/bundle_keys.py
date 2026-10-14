@@ -10,7 +10,9 @@ from __future__ import annotations
 
 import secrets
 
-from engine.auth.store import _keyring, _kr_delete, _kr_get, _kr_set
+# Look the keyring helpers up on the module at call time. Binding them by name
+# would bypass the test suite's in-memory keyring and reach the OS keychain.
+from engine.auth import store as _store
 
 _ACCOUNT_PREFIX = "bundle-key|"
 
@@ -28,7 +30,7 @@ def _account(bundle_id: str) -> str:
 def load_bundle_key(bundle_id: str) -> str | None:
     """Return the protected key for ``bundle_id``, if this machine owns it."""
 
-    return _kr_get(_keyring(), _account(bundle_id))
+    return _store._kr_get(_store._keyring(), _account(bundle_id))
 
 
 def store_bundle_key(bundle_id: str, key: str) -> None:
@@ -36,7 +38,7 @@ def store_bundle_key(bundle_id: str, key: str) -> None:
 
     if not key:
         raise BundleKeyError("A non-empty bundle key is required")
-    if not _kr_set(_keyring(), _account(bundle_id), key):
+    if not _store._kr_set(_store._keyring(), _account(bundle_id), key):
         raise BundleKeyError(
             "This computer's protected credential store is unavailable; "
             "the workflow was not sealed."
@@ -65,7 +67,7 @@ def copy_bundle_key(source_bundle_id: str, destination_bundle_id: str) -> None:
 def delete_bundle_key(bundle_id: str) -> None:
     """Remove a key created for a version that failed before publication."""
 
-    _kr_delete(_keyring(), _account(bundle_id))
+    _store._kr_delete(_store._keyring(), _account(bundle_id))
 
 
 def bundle_key_environment(bundle_id: str) -> dict[str, str]:

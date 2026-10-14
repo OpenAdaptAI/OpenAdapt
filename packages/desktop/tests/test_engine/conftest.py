@@ -56,6 +56,16 @@ def fake_keyring(monkeypatch) -> FakeKeyring:
     """
     fake = FakeKeyring()
     monkeypatch.setattr("engine.auth.store._keyring", lambda: fake)
+    # Backstop: a code path that still reaches the real keyring API fails the
+    # test instead of touching the developer's keychain. ``pytest.fail`` raises a
+    # BaseException, so the store's degrade-on-Exception handlers cannot hide it.
+    import keyring
+
+    def _real_keychain(*_args, **_kwargs):
+        pytest.fail("test reached the real OS keychain; call engine.auth.store._keyring()")
+
+    for name in ("get_password", "set_password", "delete_password"):
+        monkeypatch.setattr(keyring, name, _real_keychain)
     # Ensure no ambient ingest token leaks in from the environment.
     monkeypatch.delenv("OPENADAPT_INGEST_TOKEN", raising=False)
     return fake
