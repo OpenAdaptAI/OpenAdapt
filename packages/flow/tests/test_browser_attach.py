@@ -33,6 +33,7 @@ from openadapt_flow.interactive_recorder import (
     select_attached_page,
     validate_browser_cdp_endpoint,
 )
+from tests._attached_chromium import resize_tab_viewport
 
 
 class _Page:
@@ -1456,6 +1457,8 @@ def test_live_cdp_attach_records_compiles_and_leaves_browser_running_three_trial
             "--remote-debugging-port=0",
             f"--user-data-dir={profile}",
             "--window-size=1280,800",
+            # Pin the monitor scale so CSS and device pixels agree on any host.
+            "--force-device-scale-factor=1",
             attach_app_url,
         ],
         stdout=subprocess.DEVNULL,
@@ -2924,6 +2927,18 @@ def test_live_cdp_attach_records_compiles_and_leaves_browser_running_three_trial
         assert not (overlap_recording / "meta.json").exists()
         assert process.poll() is None
 
+        # Start the next recording from a size this test sets on the real
+        # window, as a person would. The 1000x650 override above belonged to
+        # the refused recording's DevTools session: Chromium 153 kept that
+        # size after the session closed, Chromium 156 drops it.
+        with sync_playwright() as sizing_playwright:
+            sizing_browser = sizing_playwright.chromium.connect_over_cdp(endpoint)
+            resize_tab_viewport(
+                select_attached_page(sizing_browser, app_url=attach_app_url),
+                1000,
+                650,
+            )
+
         resized_recording = tmp_path / "recording-resized"
 
         def resize_then_record(page, pump):
@@ -2965,16 +2980,13 @@ def test_live_cdp_attach_records_compiles_and_leaves_browser_running_three_trial
         assert meta["viewport_history"][-1]["viewport"] == [900, 600]
         assert len(meta["viewport_history"]) >= 2
         assert events
-        # The size before the resize is whatever the attached tab shows when
-        # this recording starts. The 1000x650 override set by the refused
-        # recording above belonged to that recording's DevTools session, and
-        # whether Chromium keeps it after that session detaches varies by
-        # platform and timing. Read the starting size from this recording.
-        start = meta["viewport_history"][0]
-        assert start["before_event"] == 0
-        assert tuple(start["viewport"]) != (900, 600)
+        assert meta["viewport_history"][0] == {
+            "before_event": 0,
+            "viewport": [1000, 650],
+            "device_scale_factor": 1.0,
+        }
         assert {tuple(event["viewport_before"]) for event in events} == {
-            tuple(start["viewport"]),
+            (1000, 650),
             (900, 600),
         }
         assert all(

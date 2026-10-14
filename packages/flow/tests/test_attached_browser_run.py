@@ -30,6 +30,7 @@ from openadapt_flow.__main__ import (
 )
 from openadapt_flow.backends.factory import build_backend
 from openadapt_flow.deployment import BackendConfig, DeploymentConfig
+from tests._attached_chromium import resize_tab_viewport
 
 _SESSION_COOKIE = "oa_test_session=signed-in-clerk"
 
@@ -157,6 +158,8 @@ def _start_signed_in_chromium(executable: Path, app: str, profile: Path):
             "--remote-debugging-port=0",
             f"--user-data-dir={profile}",
             "--window-size=1280,800",
+            # Pin the monitor scale so CSS and device pixels agree on any host.
+            "--force-device-scale-factor=1",
             f"{app}/login",
         ],
         stdout=subprocess.DEVNULL,
@@ -179,17 +182,16 @@ def _start_signed_in_chromium(executable: Path, app: str, profile: Path):
     return process, f"http://127.0.0.1:{int(port_line)}"
 
 
-def _match_recorded_viewport(endpoint: str) -> None:
-    """Size the signed-in tab like the demonstration (a person resizing it).
+def _size_signed_in_tab(endpoint: str, width: int, height: int) -> None:
+    """Resize the signed-in browser window, as a person would.
 
-    This resizes the browser window itself, as a person would. An emulation
-    override belongs to the DevTools session that set it, and current Chromium
+    This sizes the real window, not an emulated viewport: an emulation
+    override belongs to the DevTools session that set it, and Chromium 156
     drops it when that session disconnects, before the run attaches.
     """
 
     from playwright.sync_api import sync_playwright
 
-    recorded = [1280, 800]
     with sync_playwright() as playwright:
         browser = playwright.chromium.connect_over_cdp(endpoint)
         page = next(
@@ -199,25 +201,7 @@ def _match_recorded_viewport(endpoint: str) -> None:
             if page.url.endswith("/work")
         )
         page.get_by_text("Signed in as the test clerk").wait_for(timeout=10_000)
-        session = page.context.new_cdp_session(page)
-        window = session.send("Browser.getWindowForTarget")
-        live = page.evaluate("() => [window.innerWidth, window.innerHeight]")
-        session.send(
-            "Browser.setWindowBounds",
-            {
-                "windowId": window["windowId"],
-                "bounds": {
-                    "width": window["bounds"]["width"] + recorded[0] - live[0],
-                    "height": window["bounds"]["height"] + recorded[1] - live[1],
-                },
-            },
-        )
-        page.wait_for_function(
-            "([w, h]) => window.innerWidth === w && window.innerHeight === h",
-            arg=recorded,
-            timeout=10_000,
-        )
-        session.detach()
+        resize_tab_viewport(page, width, height)
 
 
 def _page_text(endpoint: str) -> list[str]:
@@ -243,6 +227,8 @@ def test_practice_run_starts_from_the_signed_in_session_it_was_recorded_in(
     bundle = _signed_in_bundle(signed_in_app, tmp_path)
     workflow = json.loads((bundle / "workflow.json").read_text())
     assert workflow["steps"][0]["action"] == "click"
+    recorded_width, recorded_height = workflow["viewport"]
+    assert (recorded_width, recorded_height) == (1280, 800)
 
     # The old path: a browser Flow launches opens on the sign-in page, so
     # step 1 never matches and the run stops before doing anything.
@@ -271,7 +257,33 @@ def test_practice_run_starts_from_the_signed_in_session_it_was_recorded_in(
         executable, signed_in_app, tmp_path / "profile"
     )
     try:
-        _match_recorded_viewport(endpoint)
+        # A window that shows the application at another size is refused
+        # before any input, so the run never acts on unproven geometry.
+        _size_signed_in_tab(endpoint, recorded_width, recorded_height - 100)
+        with pytest.raises(SystemExit) as refused:
+            main(
+                [
+                    "replay",
+                    str(bundle),
+                    "--url",
+                    f"{signed_in_app}/work",
+                    "--browser-cdp-endpoint",
+                    endpoint,
+                    "--run-dir",
+                    str(tmp_path / "refused-run"),
+                ]
+            )
+        message = str(refused.value)
+        assert message.startswith("REFUSED:")
+        assert (
+            f"{recorded_width}x{recorded_height - 100} CSS pixels, but the task "
+            f"was recorded at {recorded_width}x{recorded_height}"
+        ) in message
+        assert "Nothing was executed" in message
+        assert "Referral opened for review" not in _page_text(endpoint)[0]
+
+        # Resized to the recording's size, as the refusal asks, it runs.
+        _size_signed_in_tab(endpoint, recorded_width, recorded_height)
         attached_run = tmp_path / "attached-run"
         assert (
             main(
