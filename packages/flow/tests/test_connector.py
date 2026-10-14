@@ -732,6 +732,8 @@ def test_governed_run_argv_uses_the_fail_closed_run_verb():
     assert "--params-file" in argv
     assert argv[argv.index("--backend") + 1] == "web"
     assert "replay" not in argv
+    # Cloud-dispatched items have no per-item pause, and the run says so.
+    assert argv[argv.index("--approval-mode") + 1] == "not_gated"
 
 
 def test_native_dispatch_routes_exact_first_class_target_kind():

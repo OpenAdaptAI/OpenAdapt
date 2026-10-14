@@ -209,6 +209,7 @@ _MAX_FRESH_ACTUATION_REACQUISITIONS = 2
 _DURABLE_RESUME_AUTHORITY = object()
 
 if TYPE_CHECKING:
+    from openadapt_flow.approval_mode.gate import ApprovalGate
     from openadapt_flow.production_qualification import ProductionQualificationGuard
     from openadapt_flow.qualification_campaign_authority import (
         QualificationCampaignGuard,
@@ -537,6 +538,13 @@ class Replayer:
             It has no execution authority. Sink/schema errors are retained on
             ``control_overlay_error`` and disable later presentation events;
             they never change actuation or the evidence-qualified run outcome.
+        approval_gate: Optional per-item approval gate
+            (:class:`openadapt_flow.approval_mode.gate.ApprovalGate`). When
+            set, it is asked before every consequential save, at the last
+            point before input delivery, and a refusal stops the item before
+            the save so a person handles it. Its post-run decision is stamped
+            on the report as ``approval``. It can only add refusals; it never
+            changes an outcome word. None (default) leaves replay unchanged.
     """
 
     def __init__(
@@ -574,6 +582,7 @@ class Replayer:
         qualification_environment_observer: Optional[
             QualificationEnvironmentObserver
         ] = None,
+        approval_gate: Optional["ApprovalGate"] = None,
     ) -> None:
         if vision is None:
             import openadapt_flow.vision as vision  # lazy: heavy OCR deps
@@ -837,6 +846,15 @@ class Replayer:
         self.idempotency_ledger = idempotency_ledger
         self.qualification_fault_driver = qualification_fault_driver
         self.qualification_environment_observer = qualification_environment_observer
+        if approval_gate is not None:
+            from openadapt_flow.approval_mode.gate import ApprovalGate
+
+            if not isinstance(approval_gate, ApprovalGate):
+                raise ValueError("approval_gate must be an approval_mode ApprovalGate")
+        self.approval_gate = approval_gate
+        self._approval_report: Optional[RunReport] = None
+        self._approval_run_dir: Optional[Path] = None
+        self._approval_refusal: Optional[str] = None
         self._qualification_fault_mutations: list[FaultMutationReceipt] = []
         self._qualification_fault_public_key: Optional[str] = None
         self._qualification_case_action_paths: dict[str, Literal["gui", "api"]] = {}
@@ -1259,6 +1277,7 @@ class Replayer:
         prior_external_network_calls = self._initial_external_network_calls(
             prior_external_network_calls
         )
+        caller_param_names = frozenset(params or {})
         merged: dict[str, RuntimeParamScalar] = {**workflow.params}
         for pname, spec in workflow.param_specs.items():
             if spec.example is not None:
@@ -1416,6 +1435,13 @@ class Replayer:
                 self._screenshots_may_leave_box or prior_screenshots_may_leave_box
             ),
             idempotency_key=idempotency_key,
+        )
+        self._begin_approval_item(
+            report,
+            run_dir,
+            inputs_from_recording=sorted(set(params) - caller_param_names),
+            durable_resume=durable_resume,
+            prior_screenshots_may_leave_box=prior_screenshots_may_leave_box,
         )
         snapshot_refusal = self._workflow_snapshot_refusal(workflow)
         if snapshot_refusal is None:
@@ -1687,6 +1713,22 @@ class Replayer:
                         + ", ".join(missing)
                         + " — refusing to run; run aborted"
                     ),
+                )
+            )
+            report.success = False
+            report.total_ms = (time.monotonic() - t_run) * 1000.0
+            return self._finalize_report(report, workflow, run_dir)
+
+        if self._approval_refusal is not None:
+            # Approval modes take values only from the caller: an input the
+            # run would fill from the recording is refused before any step.
+            report.results.append(
+                StepResult(
+                    step_id="<params>",
+                    intent="validate approval-mode inputs",
+                    ok=False,
+                    failure_category="governed_refusal",
+                    error=self._approval_refusal,
                 )
             )
             report.success = False
@@ -2051,6 +2093,7 @@ class Replayer:
 
         report.qualification_fault_mutations = list(self._qualification_fault_mutations)
         self._stamp_execution_outcome(report, workflow, run_dir)
+        self._stamp_approval(report)
         if persist:
             persisted_path = report.save(run_dir)
             # The evidence file must exist before the terminal projection.  A
@@ -2162,6 +2205,7 @@ class Replayer:
         report.success = False
         report.execution_completed = False
         self._stamp_execution_outcome(report, workflow, run_dir)
+        self._stamp_approval(report)
 
     def _record_idempotency_outcome(self, report: RunReport) -> None:
         """Commit a terminal outcome only into this run's owned reservation."""
@@ -5452,6 +5496,7 @@ class Replayer:
         before_input_sha256: str,
         effect_verifier: Any,
         effects: tuple[Any, ...] = (),
+        capture_frame: Any = None,
     ) -> Optional[QualificationFaultContext]:
         authorization = self.governed_authorization
         if authorization is None or authorization.qualification_case_kind in {
@@ -5496,6 +5541,7 @@ class Replayer:
             vision=self.vision,
             effect_verifier=effect_verifier,
             effects=effects,
+            capture_frame=capture_frame,
         )
 
     def _require_current_fault_driver_binding(self) -> QualificationFaultDriver:
@@ -5576,15 +5622,21 @@ class Replayer:
         step: Step,
         before_png: bytes,
         effect_verifier: Any,
+        capture: Optional[Callable[[], bytes]] = None,
     ) -> bytes:
         if self._qualification_fault_mutations:
             return before_png
+        # The receipt binds the frame the detector reads. ``capture`` is the
+        # detector's own capture path (see _revalidation_frame_capture): two
+        # paths can encode identical pixels as different PNG bytes.
+        capture_frame = capture or self.backend.screenshot
         context = self._qualification_fault_context(
             gate=gate,
             step=step,
             actuation_path="gui",
             before_input_sha256=sha256_bytes(before_png),
             effect_verifier=effect_verifier,
+            capture_frame=capture_frame,
         )
         if context is None:
             return before_png
@@ -5594,7 +5646,7 @@ class Replayer:
             return before_png
         if mutation.replace_effect_verifier:
             raise RuntimeError("qualification_screen_fault_replaced_verifier")
-        after_png = self.backend.screenshot()
+        after_png = capture_frame()
         self._validate_fault_mutation(
             context,
             mutation.receipt,
@@ -5703,6 +5755,23 @@ class Replayer:
                     "qualification case requires the API actuation path, but its "
                     "binding is unavailable"
                 )
+                result.elapsed_ms = (time.monotonic() - t0) * 1000.0
+                return result
+        if self.approval_gate is not None and self._step_is_consequential(
+            step, workflow
+        ):
+            # Per-item approval happens before the save step resolves, so an
+            # approved step then takes a fresh frame and resolves its target
+            # and right-record check again. The last-point gate still re-reads
+            # the form before the input is delivered.
+            approval_refusal = self._approval_step_refusal(
+                workflow, step, step_index, result
+            )
+            if approval_refusal is not None:
+                result.ok = False
+                result.safety_halt = True
+                result.failure_category = "governed_refusal"
+                result.error = approval_refusal
                 result.elapsed_ms = (time.monotonic() - t0) * 1000.0
                 return result
         if (
@@ -6137,6 +6206,11 @@ class Replayer:
                     step=step,
                     before_png=before_png,
                     effect_verifier=active_verifier,
+                    capture=self._revalidation_frame_capture(
+                        step,
+                        workflow,
+                        arm_keyboard=step.action in (ActionKind.KEY, ActionKind.HOTKEY),
+                    ),
                 )
                 (
                     resolution,
@@ -8602,6 +8676,67 @@ class Replayer:
             )
         return None
 
+    def _guarded_keyboard_revalidation(
+        self, step: Step, workflow: Workflow, *, arm_keyboard: bool
+    ) -> bool:
+        return bool(
+            arm_keyboard
+            and self._requires_atomic_identity_keyboard(step, workflow)
+            and not isinstance(self.backend, RemoteActuationBackend)
+            and isinstance(self.backend, GuardedKeyboardActionBackend)
+        )
+
+    def _guarded_type_pointer_revalidation(
+        self, step: Step, workflow: Workflow
+    ) -> bool:
+        return bool(
+            step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION)
+            and self._requires_atomic_identity_pointer(step, workflow)
+            and not isinstance(self.backend, RemoteActuationBackend)
+            and isinstance(self.backend, GuardedCoordinateActionBackend)
+            and isinstance(self.backend, GuardedKeyboardActionBackend)
+        )
+
+    def _guarded_click_pointer_revalidation(
+        self, step: Step, workflow: Workflow
+    ) -> bool:
+        return bool(
+            step.action
+            in (
+                ActionKind.CLICK,
+                ActionKind.DOUBLE_CLICK,
+                ActionKind.RIGHT_CLICK,
+                ActionKind.DRAG,
+            )
+            and self._requires_atomic_identity_pointer(step, workflow)
+            and not isinstance(self.backend, RemoteActuationBackend)
+            and isinstance(self.backend, GuardedCoordinateActionBackend)
+            and isinstance(self.backend, GuardedKeyboardActionBackend)
+        )
+
+    def _revalidation_frame_capture(
+        self, step: Step, workflow: Workflow, *, arm_keyboard: bool
+    ) -> Optional[Callable[[], bytes]]:
+        """The capture a local revalidation takes its fresh frame with.
+
+        ``None`` means the ordinary screenshot. A remote backend's actuation
+        frame arms a lease, so it is never taken outside the revalidation.
+        """
+
+        if isinstance(self.backend, RemoteActuationBackend):
+            return None
+        if (
+            self._guarded_keyboard_revalidation(
+                step, workflow, arm_keyboard=arm_keyboard
+            )
+            or self._guarded_type_pointer_revalidation(step, workflow)
+            or self._guarded_click_pointer_revalidation(step, workflow)
+        ):
+            return cast(
+                GuardedKeyboardActionBackend, self.backend
+            ).guarded_keyboard_frame
+        return None
+
     def _revalidate_consequential_actuation(
         self,
         step: Step,
@@ -8658,11 +8793,8 @@ class Replayer:
         if callable(cancel_stale_structural):
             cancel_stale_structural()
 
-        guarded_keyboard_backend = (
-            arm_keyboard
-            and self._requires_atomic_identity_keyboard(step, workflow)
-            and not isinstance(self.backend, RemoteActuationBackend)
-            and isinstance(self.backend, GuardedKeyboardActionBackend)
+        guarded_keyboard_backend = self._guarded_keyboard_revalidation(
+            step, workflow, arm_keyboard=arm_keyboard
         )
         focused_element_backend = (
             arm_keyboard
@@ -8673,25 +8805,11 @@ class Replayer:
             and isinstance(self.backend, RemoteActuationBackend)
             and isinstance(self.backend, FocusedElementActuationLeaseBackend)
         )
-        guarded_type_pointer_backend = (
-            step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION)
-            and self._requires_atomic_identity_pointer(step, workflow)
-            and not isinstance(self.backend, RemoteActuationBackend)
-            and isinstance(self.backend, GuardedCoordinateActionBackend)
-            and isinstance(self.backend, GuardedKeyboardActionBackend)
+        guarded_type_pointer_backend = self._guarded_type_pointer_revalidation(
+            step, workflow
         )
-        guarded_click_pointer_backend = (
-            step.action
-            in (
-                ActionKind.CLICK,
-                ActionKind.DOUBLE_CLICK,
-                ActionKind.RIGHT_CLICK,
-                ActionKind.DRAG,
-            )
-            and self._requires_atomic_identity_pointer(step, workflow)
-            and not isinstance(self.backend, RemoteActuationBackend)
-            and isinstance(self.backend, GuardedCoordinateActionBackend)
-            and isinstance(self.backend, GuardedKeyboardActionBackend)
+        guarded_click_pointer_backend = self._guarded_click_pointer_revalidation(
+            step, workflow
         )
         prepared_pointer: Optional[Point] = None
         pointer_edge_pending = step.action in (
@@ -9597,8 +9715,16 @@ class Replayer:
         params: Mapping[str, RuntimeParamScalar],
         step: Step,
         result: StepResult,
+        *,
+        interstitial: bool = False,
     ) -> Optional[str]:
-        """Recheck exact authority at the last point before input delivery."""
+        """Recheck exact authority at the last point before input delivery.
+
+        ``interstitial`` marks a declared, reversible dialog dismissal at step
+        entry. The approval gate is consulted only for the step's own input
+        edges, after its target and right-record check resolved; a dismissal
+        is still audited on the result and judged by the gate's screen check.
+        """
 
         self._active_delivery_acknowledgers = ()
         acknowledgers: list[Any] = []
@@ -9647,6 +9773,26 @@ class Replayer:
             refusal = self._fresh_actuation_authorization_refusal(
                 workflow, params, step
             )
+        if (
+            refusal is None
+            and not interstitial
+            and self._is_qualification_fault_step(step)
+        ):
+            # Every path (screen or API, any approval mode, or none): a drill
+            # whose detector didn't refuse its changed input still saves
+            # nothing. The drill then hasn't passed: its contract requires the
+            # detector's own refusal, never this one.
+            refusal = (
+                "the bound qualification fault case did not produce its "
+                "required detector refusal; refusing to cross the input boundary"
+            )
+        if (
+            refusal is None
+            and not interstitial
+            and self.approval_gate is not None
+            and self._step_is_consequential(step, workflow)
+        ):
+            refusal = self._approval_gate_refusal(workflow, step, result)
         initial_guard = getattr(self, "_durable_initial_delivery_guard", None)
         if refusal is None and initial_guard is not None:
             try:
@@ -9677,6 +9823,208 @@ class Replayer:
         else:
             self._active_delivery_acknowledgers = tuple(acknowledgers)
         return refusal
+
+    def _begin_approval_item(
+        self,
+        report: RunReport,
+        run_dir: Path,
+        *,
+        inputs_from_recording: list[str],
+        durable_resume: bool,
+        prior_screenshots_may_leave_box: bool,
+    ) -> None:
+        """Start the approval gate's item before any check or step runs."""
+
+        self._approval_report = report
+        self._approval_run_dir = Path(run_dir)
+        self._approval_refusal = None
+        gate = self.approval_gate
+        authorization = self.governed_authorization
+        bound_mode = getattr(authorization, "approval_mode", None)
+        if bound_mode is not None and (gate is None or gate.mode.value != bound_mode):
+            # The admitted authorization names the approval mode. A run with
+            # another mode, or with no gate at all, is not that authorization.
+            self._approval_refusal = (
+                "Approval mode: this run's authorization requires the "
+                f"{bound_mode} approval mode, but the run was started "
+                f"{'without an approval gate' if gate is None else 'in ' + gate.mode.value}."
+                " Nothing was typed or saved."
+            )
+            if gate is None:
+                return
+        if gate is None:
+            return
+        try:
+            begin_refusal = gate.begin_item(
+                run_id=self._run_id,
+                bundle_content_digest=report.bundle_content_digest,
+                profile=report.execution_profile,
+                inputs_from_recording=inputs_from_recording,
+                durable_resume=durable_resume,
+                model_egress_possible=(
+                    self.allow_model_grounding
+                    or self._screenshots_may_leave_box
+                    or prior_screenshots_may_leave_box
+                ),
+            )
+        except Exception as exc:  # noqa: BLE001 - a broken gate goes to a person
+            begin_refusal = (
+                "Approval mode: the item could not be started "
+                f"({type(exc).__name__}); nothing was typed or saved."
+            )
+        if self._approval_refusal is None:
+            self._approval_refusal = begin_refusal
+
+    def _approval_gate_refusal(
+        self, workflow: Workflow, step: Step, result: StepResult
+    ) -> Optional[str]:
+        """Ask the approval gate whether this consequential save may proceed."""
+
+        gate = self.approval_gate
+        assert gate is not None
+        report = self._approval_report
+        run_dir = self._approval_run_dir
+
+        def frame() -> Optional[bytes]:
+            if run_dir is None or not result.before_png:
+                return None
+            try:
+                return (run_dir / result.before_png).read_bytes()
+            except OSError:
+                return None
+
+        try:
+            from openadapt_flow.approval_mode.gate import SaveContext
+
+            verdict = gate.before_save(
+                SaveContext(
+                    step=step,
+                    workflow=workflow,
+                    result=result,
+                    prior_results=list(report.results) if report is not None else [],
+                    effect_verifier=self.effect_verifier,
+                    governed_authorization=self.governed_authorization,
+                    model_calls=report.model_calls if report is not None else 0,
+                    frame=frame,
+                    form_state=self._approval_form_state,
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - a broken gate goes to a person
+            return (
+                "Approval mode: the pre-save gate failed "
+                f"({type(exc).__name__}); this item stopped before saving."
+            )
+        if verdict.proceed:
+            return None
+        return verdict.refusal_message() or (
+            "Approval mode: this item stopped before saving."
+        )
+
+    def _approval_form_state(
+        self, frame_png: Optional[bytes]
+    ) -> Optional[tuple[str, str]]:
+        """The form's current field state digest, for the approval gate."""
+
+        from openadapt_flow.approval_mode.form_state import capture_form_state
+
+        try:
+            return capture_form_state(self.backend, self.vision, frame_png)
+        except Exception:  # noqa: BLE001 - unreadable is never "unchanged"
+            return None
+
+    def _is_qualification_fault_step(self, step: Step) -> bool:
+        """Whether ``step`` is the fault step of the fault case this run is.
+
+        A readiness drill (a fault qualification case) passes only when the
+        engine's own detector refuses its changed input before delivery, so
+        nothing is ever delivered at its fault step.
+        """
+
+        authorization = self.governed_authorization
+        return bool(
+            authorization is not None
+            and authorization.qualification_case_kind not in {None, "representative"}
+            and authorization.qualification_fault_step_id_sha256 is not None
+            and authorization.qualification_fault_step_id_sha256
+            == sha256_bytes(step.id.encode("utf-8"))
+        )
+
+    def _approval_step_refusal(
+        self,
+        workflow: Workflow,
+        step: Step,
+        step_index: int,
+        result: StepResult,
+    ) -> Optional[str]:
+        """Ask the approval gate before a save step resolves its target."""
+
+        gate = self.approval_gate
+        assert gate is not None
+        authorization = self.governed_authorization
+        drill_fault_step = self._is_qualification_fault_step(step)
+
+        def frame() -> Optional[bytes]:
+            try:
+                return self.vision.wait_settled(self.backend)
+            except Exception:  # noqa: BLE001 - no frame means no approval
+                return None
+
+        try:
+            from openadapt_flow.approval_mode.gate import StepContext
+
+            verdict = gate.before_step(
+                StepContext(
+                    step=step,
+                    workflow=workflow,
+                    result=result,
+                    step_index=step_index,
+                    run_id=self._run_id or "",
+                    frame=frame,
+                    form_state=self._approval_form_state,
+                    drill_fault_step=drill_fault_step,
+                    qualification_case_kind=(
+                        authorization.qualification_case_kind
+                        if authorization is not None
+                        else None
+                    ),
+                    runtime_inputs_digest=(
+                        authorization.runtime_inputs_digest
+                        if authorization is not None
+                        else None
+                    ),
+                )
+            )
+        except Exception as exc:  # noqa: BLE001 - a broken gate goes to a person
+            return (
+                "Approval mode: the approval step failed "
+                f"({type(exc).__name__}); this item stopped before saving."
+            )
+        if verdict.proceed:
+            return None
+        return verdict.refusal_message() or (
+            "Approval mode: this item stopped before saving."
+        )
+
+    def _stamp_approval(self, report: RunReport) -> None:
+        """Stamp the approval gate's post-run decision on the report."""
+
+        gate = self.approval_gate
+        if gate is None:
+            return
+        try:
+            report.approval = gate.finish_item(report)
+        except Exception:  # noqa: BLE001 - an unknown decision goes to a person
+            from openadapt_flow.approval_mode.model import (
+                ApprovalModeItemEvidence,
+                ItemDecisionKind,
+            )
+
+            report.approval = ApprovalModeItemEvidence(
+                mode=gate.mode,
+                decision=ItemDecisionKind.PROBLEM,
+                decision_reason="gate_error",
+                needs_person=True,
+            )
 
     def _act(
         self,
@@ -11144,7 +11492,7 @@ class Replayer:
             handled_indices.add(active_index)
             if workflow is not None:
                 authorization_error = self._delivery_authorization_refusal(
-                    workflow, params, step, result
+                    workflow, params, step, result, interstitial=True
                 )
                 if authorization_error is not None:
                     event.error = authorization_error

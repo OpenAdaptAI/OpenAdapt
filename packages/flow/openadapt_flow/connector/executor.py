@@ -145,6 +145,11 @@ def build_run_argv(
         argv += ["--url", job.target_url]
     if managed_dispatch_file is not None:
         argv += ["--managed-dispatch-file", str(managed_dispatch_file)]
+    # Cloud-dispatched items have no per-item pause until the founder decides
+    # otherwise (approval-mode design section 11). Say so explicitly, so the
+    # run report records "not_gated" instead of waiting for a person nobody
+    # is asked to be.
+    argv += ["--approval-mode", "not_gated"]
     if settings.allow_unencrypted:
         # Local escape hatch, mirroring the governed run CLI; default OFF.
         argv.append("--allow-unencrypted")

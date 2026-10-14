@@ -64,6 +64,9 @@ def validate_runtime_param_name(name: str) -> str:
 #: v2 permit carries its own admission and authority digests.
 DISPATCH_BINDING_LOCAL_FIELDS = frozenset(
     {
+        # The runner binds its own per-item approval mode; Cloud's dispatch
+        # never carries it (openadapt_flow.approval_mode).
+        "approval_mode",
         "qualification_admission",
         "qualification_admission_sha256",
         "production_qualification_admission_id",

@@ -1104,6 +1104,21 @@ class TestCommandMapping:
         argv = commands.build_resume_argv(tmp_path / "run")
         assert argv[2:4] == ["openadapt_flow", "resume"]
         assert "--require-approval" in argv
+        assert argv[argv.index("--approval-mode") + 1] == "not_gated"
+
+    def test_hosted_run_names_the_not_gated_approval_mode(
+        self, sealed, config, tmp_path
+    ):
+        workflow, _bundle = sealed
+        verdict = verified_or_refusal(workflow, config)
+        assert not isinstance(verdict, Refusal)
+        argv = commands.build_run_argv(
+            verdict,
+            tmp_path / "run",
+            None,
+            managed_dispatch_file=tmp_path / "run" / "managed-dispatch.json",
+        )
+        assert argv[argv.index("--approval-mode") + 1] == "not_gated"
 
     def test_managed_resume_passes_the_private_dispatch_file(self, tmp_path):
         dispatch_file = tmp_path / "managed-dispatch.json"
@@ -1400,10 +1415,21 @@ class TestCommandMapping:
                 str(envelope),
                 "--params-file",
                 str(params_file),
+                # The hosted runner names the mode; it is a runner-local field.
+                "--approval-mode",
+                "not_gated",
             ]
         )
         assert cli._cmd_run(args) == 0
-        assert seen == [standard_authorization]
+        bound = standard_authorization.model_copy(update={"approval_mode": "not_gated"})
+        assert seen == [bound]
+        # Every Cloud-bound field is exactly Cloud's, and so is the digest.
+        assert dispatch_binding_sha256(
+            managed_verdict.payload.run_id, seen[0]
+        ) == dispatch_binding_sha256(
+            managed_verdict.payload.run_id, standard_authorization
+        )
+        assert args._managed_dispatch_binding.authorization == bound
         assert args._remote_delivery_run_id == managed_verdict.payload.run_id
 
         weaker = standard_authorization.model_copy(update={"execution_profile": "demo"})
@@ -1432,7 +1458,7 @@ class TestCommandMapping:
             ]
         )
         assert cli._cmd_run(args) == 2
-        assert seen == [standard_authorization]
+        assert seen == [bound]
 
     @pytest.mark.parametrize("verb", ["pause", "approve", "rollback-to-version"])
     def test_control_verbs_without_honest_mapping_refuse(self, verb, tmp_path):

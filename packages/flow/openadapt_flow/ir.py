@@ -41,6 +41,7 @@ from pydantic import (
     model_validator,
 )
 
+from openadapt_flow.approval_mode.model import ApprovalModeItemEvidence
 from openadapt_flow.qualification_faults import FaultMutationReceipt
 
 if TYPE_CHECKING:
@@ -4044,6 +4045,18 @@ class RunReport(BaseModel):
     # Wiring an egress component requires the operator's explicit opt-in
     # (Replayer(allow_model_grounding=True) / CLI --allow-model-grounding).
     screenshots_may_leave_box: bool = False
+    # Per-item approval-mode block (each_item / problems_only / not_gated):
+    # the pre-save and post-run checks and the decision, as closed codes.
+    # Present only when the caller ran the item under an approval gate, so
+    # every report written without one serializes exactly as before.
+    approval: Optional[ApprovalModeItemEvidence] = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description=(
+            "PHI-free approval-mode evidence for this item. The engine's "
+            "outcome words are unchanged by it."
+        ),
+    )
 
     @model_validator(mode="after")
     def _validate_outcome_envelope_binding(self) -> "RunReport":

@@ -58,6 +58,41 @@ class ManagedDispatchBinding:
         self.binding_sha256 = binding_sha256
 
 
+def with_runner_local_authorization(
+    binding: ManagedDispatchBinding,
+    authorization: GovernedRunAuthorization,
+) -> ManagedDispatchBinding:
+    """The same Cloud binding with runner-local authorization fields set.
+
+    Only fields Cloud never binds (``DISPATCH_BINDING_LOCAL_FIELDS``, such as
+    the runner's approval mode) may differ; the binding digest is unchanged
+    and is re-verified.
+    """
+
+    from openadapt_flow.runner.protocol import DISPATCH_BINDING_LOCAL_FIELDS
+
+    if not isinstance(binding, ManagedDispatchBinding):
+        raise ManagedDispatchEnvelopeError("managed dispatch binding is invalid")
+
+    def bound(value: GovernedRunAuthorization) -> dict[str, object]:
+        return {
+            key: item
+            for key, item in value.model_dump(mode="json").items()
+            if key not in DISPATCH_BINDING_LOCAL_FIELDS
+        }
+
+    if bound(binding.authorization) != bound(authorization):
+        raise ManagedDispatchEnvelopeError(
+            "a runner-local update may not change the Cloud-bound authorization"
+        )
+    return ManagedDispatchBinding(
+        _BINDING_FACTORY,
+        run_id=binding.run_id,
+        authorization=authorization,
+        binding_sha256=binding.binding_sha256,
+    )
+
+
 class ManagedDispatchEnvelope(BaseModel):
     """The exact Cloud authority that one managed child process consumes."""
 

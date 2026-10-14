@@ -578,6 +578,12 @@ class RuntimeSection(BaseModel):
     #: deployments; new production deployments should select a profile.
     #: ``replay`` remains the explicitly non-production Demo path.
     profile: Optional[Literal["demo", "standard", "regulated"]] = None
+    #: Per-item approval for ``openadapt-flow run`` (see
+    #: ``openadapt_flow.approval_mode``): ``each_item`` (a person approves
+    #: every save), ``problems_only`` or ``not_gated``. A direct
+    #: ``--approval-mode`` wins. For the Standard and Regulated profiles a
+    #: missing or unknown value means ``each_item``.
+    approval_mode: Optional[str] = None
     #: Tier-3 durable runtime: checkpoint each verified step, durably pause on
     #: halt, resumable via ``resume``. Off by default.
     durable: bool = False
@@ -967,6 +973,7 @@ def build_replayer(
     checkpoint_key: Optional[str] = None,
     qualification_fault_driver: Any = None,
     qualification_environment_observer: Any = None,
+    approval_gate: Any = None,
 ) -> Any:
     """Wire one deployment-qualified backend into the governed Replayer.
 
@@ -1129,6 +1136,7 @@ def build_replayer(
         require_settled=require_settled,
         qualification_fault_driver=qualification_fault_driver,
         qualification_environment_observer=qualification_environment_observer,
+        approval_gate=approval_gate,
     )
 
 

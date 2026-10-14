@@ -408,6 +408,10 @@ class QualificationFaultContext:
     vision: Any
     effect_verifier: Any
     effects: tuple[Any, ...] = ()
+    #: For a screen gate: the capture the engine's detector reads its input
+    #: with. A driver that signs a frame hash should hash this capture, since
+    #: two capture paths can encode identical pixels as different bytes.
+    capture_frame: Any = None
 
 
 @dataclass(frozen=True)

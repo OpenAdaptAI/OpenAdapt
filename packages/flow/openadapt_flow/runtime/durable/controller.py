@@ -127,6 +127,29 @@ def classify_halt(step: Optional[Step], result: StepResult) -> tuple[str, list[s
     )
     abort = "Abort the run and discard the pending escalation"
 
+    from openadapt_flow.approval_mode.model import (
+        ITEM_APPROVAL_PAUSE_MARKER,
+        ITEM_DECLINED_MARKER,
+    )
+
+    if error.startswith(ITEM_DECLINED_MARKER):
+        # A person answered "Don't save". The pause is terminal: no approval,
+        # resume or attended action can save this item.
+        return "item_declined", [
+            "A person declined this save; the item is over. Start a new item "
+            "if it should be entered again",
+        ]
+    if error.startswith(ITEM_APPROVAL_PAUSE_MARKER):
+        # Per-item approval is answered only through the item-approval
+        # command from Desktop's Run it, never by a generic approve, Continue
+        # or Skip: Continue checks a step a person finished by hand, and this
+        # save hasn't happened.
+        return "item_approval", [
+            "Approve or decline this item in Desktop's Run it "
+            "(openadapt-flow item-approval approve|decline)",
+            abort,
+        ]
+
     if "business decision" in lower:
         return "business_decision", [
             "Answer one declared finite option through the business decision surface",
@@ -571,6 +594,8 @@ class DurableRun:
             resume_from_step_id=(last.step_id if last is not None else None),
             params=dict(params),
             delivery_uncertainty=result.delivery_uncertainty,
+            # A person's "Don't save" ends the item for good.
+            status="rejected" if category == "item_declined" else "pending",
         )
         self.store.cas_pending(self._active_pause_digest, pending)
         self._active_pause_digest = self.store.model_digest(pending)
@@ -682,6 +707,7 @@ class DurableRun:
             program_parent_history_hash=program_parent_history_hash,
             program_history=list(program_history or []),
             delivery_uncertainty=result.delivery_uncertainty,
+            status="rejected" if category == "item_declined" else "pending",
         )
         self.store.cas_pending(self._active_pause_digest, pending)
         self._active_pause_digest = self.store.model_digest(pending)

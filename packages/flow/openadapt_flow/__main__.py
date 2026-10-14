@@ -715,6 +715,8 @@ def _configured_replayer(
     qualification_campaign_guard=None,
     runtime_config=None,
     checkpoint_key: Optional[str] = None,
+    approval_gate=None,
+    qualification_fault_driver=None,
 ):
     """Wire the grounding, verification, and actuation layers into a Replayer.
 
@@ -753,6 +755,8 @@ def _configured_replayer(
         qualification_campaign_guard=qualification_campaign_guard,
         runtime_config=runtime_config,
         checkpoint_key=checkpoint_key,
+        approval_gate=approval_gate,
+        qualification_fault_driver=qualification_fault_driver,
     )
 
 
@@ -785,6 +789,8 @@ def _build_and_run_replayer(
     execution_origin: Optional[str] = None,
     execution_entry_url: Optional[str] = None,
     run_id: Optional[str] = None,
+    approval_gate=None,
+    qualification_fault_driver=None,
 ):
     """Build the shared Replayer configuration and execute one workflow."""
     return _configured_replayer(
@@ -803,6 +809,8 @@ def _build_and_run_replayer(
         production_qualification_guard=production_qualification_guard,
         qualification_campaign_guard=qualification_campaign_guard,
         runtime_config=runtime_config,
+        approval_gate=approval_gate,
+        qualification_fault_driver=qualification_fault_driver,
     ).run(
         workflow,
         params=params,
@@ -964,6 +972,8 @@ def _replay_desktop(
     qualification_campaign_guard=None,
     runtime_config=None,
     run_id: Optional[str] = None,
+    approval_gate=None,
+    qualification_fault_driver=None,
 ) -> int:
     """Replay against a non-browser native/remote backend built by the factory.
 
@@ -1011,6 +1021,8 @@ def _replay_desktop(
             execution_target_kind=_report_backend_kind(backend_cfg.kind),
             surface_override=bool(getattr(args, "_surface_override", False)),
             run_id=run_id,
+            approval_gate=approval_gate,
+            qualification_fault_driver=qualification_fault_driver,
         )
     finally:
         close = getattr(backend, "close", None)
@@ -1967,6 +1979,8 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     # ADMITTED (every gate above passed) and the run directory is final, but
     # NO actuation has begun on either the desktop or the web path below.
     _maybe_attest_pre_state(run_dir, args)
+    approval_gate = _approval_gate_for_run(args, run_dir)
+    fault_driver = getattr(args, "_qualification_fault_driver", None)
     if _normalize_kind(backend_cfg.kind) != "web":
         return _replay_desktop(
             args,
@@ -1995,6 +2009,8 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             ),
             runtime_config=cfg.runtime,
             run_id=getattr(args, "_qualification_run_id", None),
+            approval_gate=approval_gate,
+            qualification_fault_driver=fault_driver,
         )
 
     headed = args.headed or cfg.backend.headed
@@ -2045,6 +2061,8 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             ),
             execution_entry_url=entry_url,
             run_id=getattr(args, "_qualification_run_id", None),
+            approval_gate=approval_gate,
+            qualification_fault_driver=fault_driver,
         )
 
     if backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url:
@@ -2145,6 +2163,99 @@ def _refuse_unverified_managed_qualification_admission(
     return None
 
 
+def _resolve_run_approval_mode(args: argparse.Namespace, cfg, profile_value):
+    """The approval mode a ``run`` uses, or ``None`` for an ungated run.
+
+    A direct ``--approval-mode`` wins over ``runtime.approval_mode``. For the
+    Standard and Regulated profiles a missing or unknown value means
+    ``each_item``: when the software can't tell which mode was meant, a person
+    approves each save. Demo and unprofiled runs stay ungated unless a mode is
+    named.
+    """
+    from openadapt_flow.approval_mode.model import resolve_approval_mode
+
+    requested = getattr(args, "approval_mode", None)
+    if requested is None:
+        requested = getattr(getattr(cfg, "runtime", None), "approval_mode", None)
+    if profile_value in {"standard", "regulated"} or requested is not None:
+        return resolve_approval_mode(requested)
+    return None
+
+
+def _approval_wait_seconds(args: argparse.Namespace) -> float:
+    from openadapt_flow.approval_mode.item_approval import (
+        DEFAULT_APPROVAL_WAIT_S,
+        MAX_APPROVAL_WAIT_S,
+    )
+
+    raw = getattr(args, "approval_wait", None)
+    if raw is None:
+        return DEFAULT_APPROVAL_WAIT_S
+    return max(0.0, min(float(raw), MAX_APPROVAL_WAIT_S))
+
+
+def _approval_gate_for_run(args: argparse.Namespace, run_dir: Path):
+    """Build the run's approval gate from the mode ``run`` resolved, if any."""
+
+    mode = getattr(args, "_approval_mode", None)
+    if mode is None:
+        return None
+    from openadapt_flow.approval_mode.gate import ApprovalGate
+    from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
+
+    return ApprovalGate(
+        mode,
+        approval_store=ItemApprovalStore(run_dir),
+        approval_wait_s=_approval_wait_seconds(args),
+    )
+
+
+def _bind_approval_mode(args: argparse.Namespace) -> Optional[int]:
+    """Bind the resolved approval mode into the run's authorization.
+
+    The mode is then part of the authorization the run checks at every input
+    edge and retains for a resume. A Cloud dispatch keeps its binding digest:
+    the mode is a runner-local field.
+    """
+    mode = getattr(args, "_approval_mode", None)
+    authorization = getattr(args, "_governed_run_authorization", None)
+    if mode is None or authorization is None:
+        return None
+    existing = getattr(authorization, "approval_mode", None)
+    if existing is not None and existing != mode.value:
+        print(
+            f"run REFUSED: this run's authorization names the {existing} approval "
+            f"mode, not {mode.value}. Nothing was executed."
+        )
+        return 2
+    bound = authorization.model_copy(update={"approval_mode": mode.value})
+    binding = getattr(args, "_managed_dispatch_binding", None)
+    if binding is not None:
+        from openadapt_flow.runner.dispatch_envelope import (
+            ManagedDispatchEnvelopeError,
+            with_runner_local_authorization,
+        )
+
+        try:
+            args._managed_dispatch_binding = with_runner_local_authorization(
+                binding, bound
+            )
+        except ManagedDispatchEnvelopeError:
+            print(
+                "run REFUSED: managed dispatch binding is invalid. Nothing was "
+                "executed."
+            )
+            return 2
+    args._governed_run_authorization = bound
+    labels = {
+        "each_item": "a person approves each save",
+        "problems_only": "only problems go to a person",
+        "not_gated": "no per-item pause",
+    }
+    print(f"Approval mode: {mode.value} ({labels[mode.value]}).")
+    return None
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     """Execute a bundle under a named deployment profile -- FAIL-CLOSED.
 
@@ -2228,6 +2339,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
             return 2
         profile = execution_profile_contract(selected_profile)
         args._execution_profile = selected_profile.value
+    args._approval_mode = _resolve_run_approval_mode(
+        args, cfg, selected_profile.value if selected_profile is not None else None
+    )
     if qualification_case is not None and selected_profile is None:
         print(
             "run REFUSED: qualification evidence requires the Standard profile. "
@@ -2497,6 +2611,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 campaign_id=qualification_case["campaign_id"],
                 run_id=qualification_case["run_id"],
                 campaign_permit_binding=campaign_permit_binding,
+                fault_driver=qualification_case.get("fault_driver"),
             )
         except ValueError:
             print(
@@ -2504,6 +2619,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
                 "case. Nothing was executed."
             )
             return 2
+        args._qualification_fault_driver = qualification_case.get("fault_driver")
         args._governed_run_authorization = authorization
         args._delivery_authority_kind = "customer_local"
         args._remote_delivery_run_id = None
@@ -2521,6 +2637,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
         args._delivery_authority_kind = "customer_local"
         args._remote_delivery_run_id = None
 
+    refused = _bind_approval_mode(args)
+    if refused is not None:
+        return refused
+
     if qualification_case is not None and not _claim_qualification_case_attempt(args):
         return 2
 
@@ -2528,6 +2648,75 @@ def _cmd_run(args: argparse.Namespace) -> int:
     # to the shared replay executor (which reads all deployment wiring itself).
     args.drift = None
     return _cmd_replay(args)
+
+
+def _resume_approval_mode(args: argparse.Namespace, authorization):
+    """The approval mode a resume must use, or an exit code when refused.
+
+    A run's retained authorization decides: a resume can never pick another
+    mode. A Standard or Regulated run retained without a mode (it predates
+    approval modes, or Cloud minted it) resumes as ``each_item`` unless the
+    caller names a mode, as the hosted runner names ``not_gated``.
+    """
+    from openadapt_flow.approval_mode.model import resolve_approval_mode
+
+    requested = getattr(args, "approval_mode", None)
+    retained = getattr(authorization, "approval_mode", None)
+    if retained is not None:
+        if requested is not None and requested != retained:
+            print(
+                f"Resume REFUSED: this run was admitted in the {retained} approval "
+                f"mode, not {requested}. Nothing was executed."
+            )
+            return 3
+        return resolve_approval_mode(retained)
+    profile = getattr(authorization, "execution_profile", None)
+    if profile in {"standard", "regulated"} or requested is not None:
+        return resolve_approval_mode(requested)
+    return None
+
+
+def _carry_item_approval_to_pause(run_dir: Path, store, pending):
+    """Answer a waiting ``item_approval`` pause from an unused approval, if any.
+
+    Returns the pause as it now stands (unchanged when there's no approval).
+    """
+    from openadapt_flow.approval_mode.item_approval import (
+        ItemApprovalRefused,
+        ItemApprovalStore,
+    )
+
+    try:
+        manifest = store.read_manifest()
+        found = (
+            ItemApprovalStore(run_dir).find_unused_approval(
+                run_id=manifest.run_id,
+                step_id=pending.step_id,
+                step_index=pending.step_index,
+            )
+            if manifest is not None
+            else None
+        )
+    except (OSError, ValueError, ItemApprovalRefused):
+        found = None
+    if found is None:
+        return pending
+    request, answer = found
+    _answer_durable_item_pause(run_dir, request, answer)
+    return store.read_pending() or pending
+
+
+def _resume_approval_gate(args: argparse.Namespace, mode, run_dir: Path):
+    if mode is None:
+        return None
+    from openadapt_flow.approval_mode.gate import ApprovalGate
+    from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
+
+    return ApprovalGate(
+        mode,
+        approval_store=ItemApprovalStore(run_dir),
+        approval_wait_s=_approval_wait_seconds(args),
+    )
 
 
 def _cmd_resume(args: argparse.Namespace) -> int:
@@ -2548,11 +2737,32 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             "deployment; see --config runtime.durable / --durable)."
         )
         return 1
+    if pending.category == "item_declined" or (
+        pending.category == "item_approval" and pending.status == "rejected"
+    ):
+        print(
+            "Resume REFUSED: a person declined this save; the item is over. "
+            "Nothing was executed."
+        )
+        return 3
+    if pending.category == "item_approval" and pending.status == "pending":
+        # The person may have approved while the run was giving up waiting,
+        # before this pause existed for `item-approval approve` to answer.
+        # Carry that approval to the pause now; the resumed run still checks
+        # the answer itself and uses it once.
+        pending = _carry_item_approval_to_pause(run_dir, store, pending)
     if args.require_approval and pending.status != "approved":
+        from openadapt_flow.cli_hints import command
+
+        approve_command = (
+            command("item-approval approve")
+            if pending.category == "item_approval"
+            else "openadapt flow approve"
+        )
         print(
             f"Pending escalation at {run_dir} is {pending.status!r}, not "
             "'approved'. Approval is required before resume:\n"
-            f"    openadapt flow approve {run_dir}"
+            f"    {approve_command} {run_dir}"
         )
         return 3
 
@@ -2563,17 +2773,50 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             "paused workflow cannot be identified safely. Nothing was executed."
         )
         return 3
+    if pending.category == "item_approval":
+        from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
+
+        if (
+            ItemApprovalStore(run_dir).find_unused_approval(
+                run_id=manifest.run_id,
+                step_id=pending.step_id,
+                step_index=pending.step_index,
+            )
+            is None
+        ):
+            from openadapt_flow.cli_hints import command
+
+            print(
+                "Resume REFUSED: this item waits for a person to approve the "
+                f"save in Desktop's Run it ({command('item-approval approve')}). "
+                "Nothing was executed."
+            )
+            return 3
+    resume_mode = _resume_approval_mode(args, manifest.governed_authorization)
+    if isinstance(resume_mode, int):
+        return resume_mode
     managed_binding = None
     if manifest.delivery_authority_kind == "cloud_runner":
         from openadapt_flow.runner.dispatch_envelope import (
             ManagedDispatchEnvelopeError,
             read_managed_dispatch_envelope,
+            with_runner_local_authorization,
         )
 
         try:
             managed_binding = read_managed_dispatch_envelope(
                 Path(getattr(args, "managed_dispatch_file", ""))
             )
+            retained = manifest.governed_authorization
+            if retained is not None and retained.approval_mode is not None:
+                # The runner bound its own approval mode at admission; Cloud's
+                # dispatch never carries it.
+                managed_binding = with_runner_local_authorization(
+                    managed_binding,
+                    managed_binding.authorization.model_copy(
+                        update={"approval_mode": retained.approval_mode}
+                    ),
+                )
         except (ManagedDispatchEnvelopeError, TypeError, ValueError):
             print(
                 "Resume REFUSED: managed dispatch binding is invalid. Nothing was executed."
@@ -2747,6 +2990,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             qualification_campaign_guard=campaign_guard,
             runtime_config=cfg.runtime,
             checkpoint_key=ckpt_key,
+            approval_gate=_resume_approval_gate(args, resume_mode, run_dir),
         )
         return resume(
             run_dir,
@@ -2873,6 +3117,15 @@ def _cmd_approve(args: argparse.Namespace) -> int:
     if pending.status == "rejected":
         print("This durable pause was rejected and cannot be approved or resumed.")
         return 1
+    if pending.category in {"item_approval", "item_declined"}:
+        from openadapt_flow.cli_hints import command
+
+        print(
+            "This item waits for a person's approval before a save. Only "
+            f"Desktop's Run it can answer it ({command('item-approval')} "
+            "approve|decline); a generic approval can't save an item."
+        )
+        return 1
 
     # The approver identity defaults to the invoking OS user (a resume with a
     # blank approver is refused by the durable library); --approver overrides.
@@ -2930,6 +3183,161 @@ def _cmd_approve(args: argparse.Namespace) -> int:
         f"Resume it with:  {command('resume')} {run_dir}"
     )
     return 0
+
+
+def _cmd_item_approval(args: argparse.Namespace) -> int:
+    """List, approve or decline per-item approval requests (Desktop's Run it).
+
+    ``show`` prints the run's requests as JSON. ``approve`` and ``decline``
+    answer one request exactly once, for the request digest the person saw.
+    Flow accepts an answer only with ``--decided-by human`` from the
+    ``desktop_run_it`` route; the waiting run re-checks every answer itself.
+    """
+    import json
+
+    from openadapt_flow.approval_mode.item_approval import (
+        ItemApprovalRefused,
+        ItemApprovalStore,
+        make_answer,
+        request_summary,
+    )
+
+    run_dir = Path(args.run_dir)
+    store = ItemApprovalStore(run_dir)
+    verb = args.item_approval_cmd
+    if verb == "show":
+        rows = [request_summary(store, request) for request in store.requests()]
+        if not args.all:
+            rows = [row for row in rows if row["status"] in {"waiting", "approved"}]
+        print(
+            json.dumps(
+                {
+                    "schema": "openadapt.item-approval-list/v1",
+                    "run_dir": str(run_dir.resolve()),
+                    "requests": rows,
+                },
+                indent=2,
+                sort_keys=True,
+            )
+        )
+        return 0
+
+    def refuse(code: str, message: str) -> int:
+        print(json.dumps({"ok": False, "code": code, "message": message}))
+        return 2
+
+    if bool(args.unauthenticated) == bool(args.approver_id):
+        return refuse(
+            "approver_invalid",
+            "name the approver's Cloud user id with --approver-id, or pass "
+            "--unauthenticated when Desktop is signed out",
+        )
+    if args.unauthenticated and args.auth_method not in {None, "none"}:
+        return refuse("approver_invalid", "a signed-out approval has no sign-in method")
+    if args.approver_id and args.auth_method in {None, "none"}:
+        return refuse(
+            "approver_invalid",
+            "a Cloud approver needs --auth-method cloud_aal2 or cloud_aal1",
+        )
+    try:
+        request = store.read_request(args.request_id)
+        if args.request_sha256 != request.digest():
+            raise ItemApprovalRefused(
+                "request_digest_mismatch",
+                "the request changed, or this isn't the request the person saw",
+            )
+        status = store.status(request)
+        if status != "waiting":
+            raise ItemApprovalRefused(
+                f"request_{status}", f"this approval request is {status}"
+            )
+        answer = make_answer(
+            request,
+            decision="approve" if verb == "approve" else "decline",
+            decided_by=args.decided_by,
+            route=args.route,
+            approver_id=None if args.unauthenticated else args.approver_id,
+            auth_method="none" if args.unauthenticated else args.auth_method,
+            decline_reason=getattr(args, "reason", None),
+        )
+        store.write_answer(answer)
+    except ItemApprovalRefused as exc:
+        return refuse(exc.code, str(exc))
+    resume_required = _answer_durable_item_pause(run_dir, request, answer)
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "request_id": request.request_id,
+                "decision": answer.decision,
+                "answer_sha256": answer.digest(),
+                "resume_required": resume_required,
+            }
+        )
+    )
+    return 0
+
+
+def _answer_durable_item_pause(run_dir: Path, request, answer) -> bool:
+    """Carry an answer to a durable pause the run left after waiting.
+
+    A run that stopped waiting (no answer in time) left a durable
+    ``item_approval`` pause. An approval then authorizes exactly one resume of
+    that pause; a decline ends it. Returns True when ``resume`` must follow.
+    """
+    from openadapt_flow import crypto
+    from openadapt_flow.runtime.durable.approval import (
+        ResumeRefused,
+        issue_resume_approval,
+    )
+    from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
+    from openadapt_flow.runtime.durable.program_checkpoint import bundle_version
+
+    try:
+        store = CheckpointStore(run_dir, key=crypto.resolve_key(None))
+        pending = store.read_pending()
+        manifest = store.read_manifest()
+    except Exception:  # noqa: BLE001 - no durable pause to carry the answer to
+        return False
+    if (
+        pending is None
+        or manifest is None
+        or pending.category != "item_approval"
+        or pending.status != "pending"
+        or pending.step_id != request.step_id
+        or pending.step_index != request.step_index
+        or manifest.run_id != request.run_id
+    ):
+        return False
+    if answer.decision == "decline":
+        store.cas_pending(
+            store.model_digest(pending),
+            pending.model_copy(update={"status": "rejected"}),
+        )
+        return False
+    approver = (
+        f"desktop:{answer.approver_id}"
+        if answer.approver_id is not None
+        else "desktop:unauthenticated"
+    )
+    try:
+        approval = issue_resume_approval(
+            pending,
+            approver=approver,
+            resolution="approve_item",
+            bundle_version=bundle_version(manifest.bundle_dir),
+            workflow_name=pending.workflow_name,
+            run_id=manifest.run_id,
+            run_dir=run_dir,
+        )
+        store.commit_approval_transition(
+            expected_pending=pending,
+            approval=approval,
+            target_status="approved",
+        )
+    except (ResumeRefused, OSError):
+        return False
+    return True
 
 
 def _cmd_bench(args: argparse.Namespace) -> int:
@@ -3569,10 +3977,6 @@ def _cmd_qualify_run_case(args: argparse.Namespace) -> int:
         )
         if case is None:
             raise ValueError("qualification case is not declared by this project")
-        if case.kind.value != "representative":
-            raise ValueError(
-                "fault qualification cases require the configured fault-driver campaign"
-            )
         if not case.action_targets or case.runtime_input_sha256 is None:
             raise ValueError(
                 "qualification case has no exact approved action/input scope"
@@ -3583,6 +3987,9 @@ def _cmd_qualify_run_case(args: argparse.Namespace) -> int:
         input_sha256 = runtime_inputs_digest(workflow, params, worklists)
         if input_sha256 != case.runtime_input_sha256:
             raise ValueError("qualification case inputs do not match the approved case")
+        fault_driver = None
+        if case.kind.value != "representative":
+            fault_driver = _qualification_drill_driver(args, workflow, params)
         campaign_id_sha256 = qualification_campaign_id_sha256(args.campaign_id)
         run_id_sha256 = qualification_run_id_sha256(args.run_id)
     except (OSError, ValueError) as exc:
@@ -3599,6 +4006,7 @@ def _cmd_qualify_run_case(args: argparse.Namespace) -> int:
         "campaign_id_sha256": campaign_id_sha256,
         "run_id": args.run_id,
         "run_id_sha256": run_id_sha256,
+        "fault_driver": fault_driver,
     }
     args.profile = "standard"
     args.policy = None
@@ -3615,7 +4023,128 @@ def _cmd_qualify_run_case(args: argparse.Namespace) -> int:
     args.dry_run = bool(getattr(args, "dry_run", False))
     if args.dry_run:
         return _cmd_run(args)
-    return _cmd_run(args)
+    exit_code = _cmd_run(args)
+    if fault_driver is not None:
+        _retain_drill_evidence(Path(args.run_dir), fault_driver)
+    return exit_code
+
+
+def _qualification_drill_driver(args: argparse.Namespace, workflow, params):
+    """The fault driver for one readiness drill (a fault qualification case).
+
+    ``--fault-driver NAME`` loads a configured campaign's driver from the
+    ``openadapt_flow.qualification_fault_drivers`` entry point. Otherwise the
+    drill uses this computer's local campaign, which the project must already
+    trust (``openadapt-flow qualify drills``). Raises ``ValueError``.
+    """
+    name = getattr(args, "fault_driver", None)
+    if name:
+        from openadapt_flow.qualification_faults import (
+            load_qualification_fault_driver,
+        )
+
+        return load_qualification_fault_driver(name)
+    from openadapt_flow.qualification_drills import (
+        LocalDrillDriver,
+        LocalDrillError,
+        local_drill_key,
+        project_trusts_local_key,
+    )
+
+    try:
+        key = local_drill_key(create=False)
+    except LocalDrillError as exc:
+        raise ValueError(str(exc)) from exc
+    if key is None or not project_trusts_local_key(workflow, key):
+        from openadapt_flow.cli_hints import command
+
+        raise ValueError(
+            f"readiness drills need a fault driver: run `{command('qualify drills')} "
+            "BUNDLE` on this computer to create the local drill campaign, "
+            "or pass --fault-driver for a configured campaign"
+        )
+    return LocalDrillDriver(key, workflow=workflow, params=params)
+
+
+def _retain_drill_evidence(run_dir: Path, driver) -> None:
+    """Keep the drill's receipt and mutation record next to its report."""
+    from openadapt_flow.ir import RunReport
+    from openadapt_flow.qualification_drills import write_drill_evidence
+
+    try:
+        report = RunReport.model_validate_json(
+            (run_dir / "report.json").read_text(encoding="utf-8")
+        )
+    except (OSError, ValueError):
+        report = None
+    try:
+        summary = write_drill_evidence(run_dir, driver, report)
+    except OSError:
+        print("The drill's fault receipt could not be retained.")
+        return
+    if summary.get("staged"):
+        print(
+            "Drill fault receipt retained: "
+            f"{run_dir / 'qualification-fault' / 'receipt.json'}"
+        )
+    else:
+        declined = summary.get("declined") or "not_staged"
+        print(
+            f"This drill couldn't be staged here ({declined}), so it hasn't "
+            "passed. Nothing was saved."
+        )
+
+
+def _cmd_qualify_drills(args: argparse.Namespace) -> int:
+    """Create or refresh this computer's local readiness-drill campaign."""
+    import json
+
+    from openadapt_flow.qualification import QualificationError, save_qualified_workflow
+    from openadapt_flow.qualification_drills import (
+        LocalDrillError,
+        local_drill_key,
+        prepare_local_drill_campaign,
+    )
+
+    try:
+        workflow = _qualification_workflow(args)
+        if workflow.manifest is None or workflow.qualification is None:
+            raise LocalDrillError("drills need a sealed bundle with Check it set up")
+        key = local_drill_key(create=True)
+        assert key is not None
+        campaign = prepare_local_drill_campaign(
+            workflow,
+            key=key,
+            from_case_id=args.from_case,
+            save_step_id=args.save_step,
+        )
+        save_qualified_workflow(workflow, args.bundle)
+    except (LocalDrillError, QualificationError, OSError, ValueError) as exc:
+        print(f"qualify drills REFUSED: {exc}. Nothing was changed.")
+        return 2
+    if args.json:
+        print(json.dumps(campaign.as_json(), indent=2, sort_keys=True))
+    else:
+        print(
+            f"Readiness drills for step {campaign.save_step_id!r} of practice case "
+            f"{campaign.from_case_id!r}:"
+        )
+        labels = {
+            "added": "added",
+            "scoped": "now runs the practice case's inputs",
+            "kept": "already set up, unchanged",
+        }
+        for drill in campaign.drills:
+            print(f"  {drill.case_id}: {drill.name} ({labels[drill.state]})")
+        for kind, reason in campaign.skipped:
+            print(f"  {kind}: not applicable ({reason})")
+        from openadapt_flow.cli_hints import command
+
+        print(
+            "Each drill uses the practice case's inputs. Run each with "
+            f"`{command('qualify run-case')}`."
+        )
+    return 0
 
 
 def _cmd_qualify(args: argparse.Namespace) -> int:
@@ -3661,6 +4190,8 @@ def _cmd_qualify(args: argparse.Namespace) -> int:
     verb = args.qualify_cmd
     if verb == "run-case":
         return _cmd_qualify_run_case(args)
+    if verb == "drills":
+        return _cmd_qualify_drills(args)
     if verb == "schema":
         print(json.dumps(project_schema(), indent=2, sort_keys=True))
         return 0
@@ -5495,6 +6026,37 @@ def _add_backend_flags(p: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_approval_flags(p: argparse.ArgumentParser) -> None:
+    """Add the per-item approval flags to ``run``, ``resume`` and ``run-case``."""
+
+    p.add_argument(
+        "--approval-mode",
+        choices=["each_item", "problems_only", "not_gated"],
+        default=None,
+        help=(
+            "Per-item approval before each consequential save. each_item (the "
+            "default for the Standard and Regulated profiles): the run waits "
+            "before every save until a person approves it in Desktop's Run it "
+            "(see `item-approval`). problems_only: only problems go to a "
+            "person; until a switch record is configured, every save still "
+            "asks. not_gated: no per-item pause, recorded in the report (the "
+            "hosted runner, Execute and MCP callers). Overrides "
+            "runtime.approval_mode. A resume always keeps the run's own mode."
+        ),
+    )
+    p.add_argument(
+        "--approval-wait",
+        type=float,
+        default=None,
+        metavar="SECONDS",
+        help=(
+            "How long the run waits for a person's answer before it stops "
+            "before the save (default 900, at most 14400). An answer given "
+            "later can still be used by `resume`."
+        ),
+    )
+
+
 def _add_deployment_flags(
     p: argparse.ArgumentParser, *, worklist: bool = False
 ) -> None:
@@ -6470,6 +7032,7 @@ def build_parser() -> argparse.ArgumentParser:
             "OPENADAPT_FLOW_REPORT_RUN=1)"
         ),
     )
+    _add_approval_flags(p)
     p.set_defaults(func=_cmd_run)
 
     p = sub.add_parser(
@@ -6547,6 +7110,7 @@ def build_parser() -> argparse.ArgumentParser:
     _add_browser_session_flags(p)
     _add_deployment_flags(p)
     _add_attest_flags(p)
+    _add_approval_flags(p)
     p.set_defaults(func=_cmd_resume)
 
     p = sub.add_parser(
@@ -6582,6 +7146,68 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.set_defaults(func=_cmd_approve)
+
+    p = sub.add_parser(
+        "item-approval",
+        help=(
+            "List, approve or decline the per-item approval requests a run is "
+            "waiting on (Desktop's Run it)"
+        ),
+    )
+    item_sub = p.add_subparsers(dest="item_approval_cmd", required=True)
+    q = item_sub.add_parser("show", help="Print the run's approval requests as JSON")
+    q.add_argument("run_dir", help="The run directory")
+    q.add_argument(
+        "--all",
+        action="store_true",
+        help="Include answered, used and expired requests",
+    )
+    q.set_defaults(func=_cmd_item_approval)
+    for verb, verb_help in (
+        ("approve", "Approve one save a person checked in Desktop's Run it"),
+        ("decline", "Don't save: decline one save with a closed reason"),
+    ):
+        q = item_sub.add_parser(verb, help=verb_help)
+        q.add_argument("run_dir", help="The run directory")
+        q.add_argument("--request-id", required=True)
+        q.add_argument(
+            "--request-sha256",
+            required=True,
+            help="The request digest from `item-approval show` that the person saw",
+        )
+        q.add_argument(
+            "--decided-by",
+            required=True,
+            help="Who decided. Only 'human' is accepted.",
+        )
+        q.add_argument(
+            "--route",
+            required=True,
+            help="Where the person decided. Only 'desktop_run_it' is accepted.",
+        )
+        q.add_argument(
+            "--approver-id",
+            default=None,
+            help="The approver's own OpenAdapt Cloud user id",
+        )
+        q.add_argument(
+            "--auth-method",
+            choices=["cloud_aal2", "cloud_aal1", "none"],
+            default=None,
+            help="How the approver signed in to Cloud",
+        )
+        q.add_argument(
+            "--unauthenticated",
+            action="store_true",
+            help="Desktop was signed out: record the answer without a name",
+        )
+        if verb == "decline":
+            q.add_argument(
+                "--reason",
+                required=True,
+                choices=["wrong_values", "wrong_record", "screen_problem"],
+            )
+        q.set_defaults(func=_cmd_item_approval)
 
     p = sub.add_parser(
         "bench", help="Replay a bundle N times against MockMed and aggregate"
@@ -7158,12 +7784,14 @@ def build_parser() -> argparse.ArgumentParser:
     q = qsub.add_parser(
         "run-case",
         help=(
-            "Run one current representative qualification case with Flow-owned "
-            "Standard authorization"
+            "Run one current qualification case (the practice item or a "
+            "readiness drill) with Flow-owned Standard authorization"
         ),
     )
     q.add_argument("bundle", help="Sealed workflow bundle directory")
-    q.add_argument("--case-id", required=True, help="Declared representative case")
+    q.add_argument(
+        "--case-id", required=True, help="Declared practice case or readiness drill"
+    )
     q.add_argument(
         "--inputs",
         required=True,
@@ -7191,9 +7819,42 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("--headed", action="store_true", help="Run browser headed")
     q.add_argument("--dry-run", action="store_true", help="Validate without input")
     q.add_argument("--save-healed-to", default=None, help=argparse.SUPPRESS)
+    q.add_argument(
+        "--fault-driver",
+        default=None,
+        metavar="NAME",
+        help=(
+            "A drill's fault driver from the openadapt_flow."
+            "qualification_fault_drivers entry point (a configured campaign). "
+            "Without it, a drill uses this computer's local drill campaign "
+            "(see `qualify drills`)."
+        ),
+    )
     _add_backend_flags(q)
     _add_browser_session_flags(q)
     _add_deployment_flags(q)
+    _add_approval_flags(q)
+    q.set_defaults(func=_cmd_qualify)
+
+    q = qsub.add_parser(
+        "drills",
+        help=(
+            "Add the five readiness drills for the practice case's save and "
+            "trust this computer's local drill key (a local campaign)"
+        ),
+    )
+    q.add_argument("bundle", help="Sealed workflow bundle directory")
+    q.add_argument(
+        "--from-case",
+        default=None,
+        help="The practice (representative) case to drill from",
+    )
+    q.add_argument(
+        "--save-step",
+        default=None,
+        help="The save to drill (default: the practice case's first save)",
+    )
+    q.add_argument("--json", action="store_true", help="Print the campaign as JSON")
     q.set_defaults(func=_cmd_qualify)
 
     q = qsub.add_parser(

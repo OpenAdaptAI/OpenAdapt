@@ -15,10 +15,10 @@ import re
 import threading
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Literal, Mapping, TypeAlias, Union, cast
+from typing import Any, Literal, Mapping, TypeAlias, Union, cast
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from openadapt_flow.ir import Interstitial, QualifiedEffectRequirement, Step, Workflow
 from openadapt_flow.qualification_admission import (
@@ -452,6 +452,22 @@ class GovernedRunAuthorization(BaseModel):
     qualification_fault_step_id_sha256: str | None = Field(
         default=None, pattern="^[a-f0-9]{64}$"
     )
+    #: Per-item approval mode bound at admission (``openadapt_flow.
+    #: approval_mode``). A resumed run uses the retained value, never a new
+    #: one. ``None`` (authorizations minted before approval modes, or by
+    #: Cloud) serializes exactly as before; for a Standard or Regulated run
+    #: the runtime then gates like ``each_item``. It is a runner-local field:
+    #: it is not part of the Cloud dispatch binding digest.
+    approval_mode: Literal["each_item", "problems_only", "not_gated"] | None = None
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Keep authorizations without an approval mode byte-identical."""
+
+        data: dict[str, Any] = handler(self)
+        if self.approval_mode is None:
+            data.pop("approval_mode", None)
+        return data
 
     @model_validator(mode="after")
     def _qualification_binding_is_complete(self) -> "GovernedRunAuthorization":

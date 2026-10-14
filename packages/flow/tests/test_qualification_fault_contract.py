@@ -2788,12 +2788,16 @@ def test_api_fault_mutation_cannot_fall_through_to_gui_when_api_is_unavailable(
     )
 
     assert report.execution_outcome == "HALTED"
-    assert actuator.calls == 1
+    # The fault went uncaught, so the input boundary refuses before the API
+    # is even called; the screen path is never tried either.
+    assert actuator.calls == 0
     assert len(report.qualification_fault_mutations) == 1
     assert backend.actions == []
     assert report.results[0].delivery_attempted is False
     assert report.results[0].safety_refusal_evidence is None
-    assert "requires the API actuation path" in (report.results[0].error or "")
+    assert "did not produce its required detector refusal" in (
+        report.results[0].error or ""
+    )
     assert (
         fault_detector_contract_error(
             report,

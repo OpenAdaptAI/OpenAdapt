@@ -2361,9 +2361,14 @@ class PlaywrightBackend:
 
         ``caret="initial"`` prevents Playwright from toggling inline styles on
         the editable element inside a guarded record row. A temporary
-        screenshot stylesheet hides the blinking caret from the pixels, so
-        consecutive captures provide a stable resolver/identity observation;
-        the stylesheet is injected outside the guarded row.
+        screenshot stylesheet hides the caret from the pixels and stops it
+        blinking (``caret-animation: manual``, ignored by browsers that don't
+        know it), so consecutive captures provide a stable resolver/identity
+        observation; the stylesheet is injected outside the guarded row.
+        Without the second rule a transparent caret still blinks, and each
+        blink repaints: in Chromium consecutive frames then differ in a few
+        anti-aliased pixels, so a frame digest taken by one capture didn't
+        match the next one (a readiness drill's signed frame, for example).
         """
 
         def capture() -> bytes:
@@ -2374,7 +2379,10 @@ class PlaywrightBackend:
                 type="png",
                 full_page=False,
                 caret="initial",
-                style="* { caret-color: transparent !important; }",
+                style=(
+                    "* { caret-color: transparent !important; "
+                    "caret-animation: manual !important; }"
+                ),
                 **options,
             )
 

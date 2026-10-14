@@ -697,6 +697,11 @@ def _allowed_actions(
     # (a non-action program pause), unlike continue and skip below.
     if pending.delivery_uncertainty is None:
         actions.insert(0, "reject")
+    if pending.category in {"item_approval", "item_declined"}:
+        # A per-item approval pause is answered only through the item-approval
+        # route. Continue would mark a save as done by hand that never
+        # happened, and Skip would pass a save without a person.
+        return tuple(actions)
     step = _source_step(workflow, pending)
     if step is None:
         return tuple(actions)
@@ -2400,6 +2405,16 @@ def execute_attended_action(
     if pending is None:
         raise AttendedActionRefused("the run is not durably paused")
     _refuse_rejected_pause(pending)
+    if pending.category in {"item_approval", "item_declined"} and request.action in {
+        "continue",
+        "skip",
+        "reconcile",
+    }:
+        raise AttendedActionRefused(
+            "this item waits for a person's approval before a save; answer it "
+            "through Desktop's Run it (openadapt-flow item-approval). Continue "
+            "and Skip can't approve a save"
+        )
     capability = actions.validate(request, pending=pending, manifest=manifest, now=now)
     unresolved_before_lease = actions.unresolved_delivery(capability.pause_id)
     if unresolved_before_lease is not None:

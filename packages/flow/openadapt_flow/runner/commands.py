@@ -81,6 +81,10 @@ def build_run_argv(
     ]
     if params_file is not None:
         argv += ["--params-file", str(params_file)]
+    # A Cloud-dispatched run has no per-item pause until the founder decides
+    # otherwise (approval-mode design section 11). The mode is explicit, and
+    # the run report records "not_gated".
+    argv += ["--approval-mode", "not_gated"]
     if qualification_authority_file is not None:
         argv += ["--qualification-authority-file", str(qualification_authority_file)]
     if verified.bundle.policy:
@@ -111,6 +115,9 @@ def build_resume_argv(
     argv = [sys.executable, "-m", "openadapt_flow", "resume", str(run_dir)]
     if require_approval:
         argv.append("--require-approval")
+    # Only used when the retained run predates approval modes: a resume keeps
+    # the mode its run was admitted with.
+    argv += ["--approval-mode", "not_gated"]
     if params_file is not None:
         argv += ["--params-file", str(params_file)]
     if managed_dispatch_file is not None:
