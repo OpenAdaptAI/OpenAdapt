@@ -13,8 +13,8 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from engine.auth import pairing, store
-from engine.auth.browser_pkce import (
+from openadapt_desktop.auth import pairing, store
+from openadapt_desktop.auth.browser_pkce import (
     BrowserPkceProvider,
     _LoopbackReceiver,
     _write_callback_body,
@@ -78,8 +78,8 @@ def _validation() -> _Response:
 
 def _desktop_available(monkeypatch) -> None:
     monkeypatch.delenv("OPENADAPT_HEADLESS", raising=False)
-    monkeypatch.setattr("engine.auth.browser_pkce.sys.platform", "darwin")
-    monkeypatch.setattr("engine.auth.browser_pkce.secure_store_available", lambda: True)
+    monkeypatch.setattr("openadapt_desktop.auth.browser_pkce.sys.platform", "darwin")
+    monkeypatch.setattr("openadapt_desktop.auth.browser_pkce.secure_store_available", lambda: True)
     monkeypatch.setattr(pairing, "secure_store_available", lambda: True)
 
 
@@ -175,13 +175,17 @@ class TestLoopbackReceiver:
 class TestIsAvailable:
     def test_headless_env_false(self, monkeypatch) -> None:
         monkeypatch.setenv("OPENADAPT_HEADLESS", "1")
-        monkeypatch.setattr("engine.auth.browser_pkce.secure_store_available", lambda: True)
+        monkeypatch.setattr(
+            "openadapt_desktop.auth.browser_pkce.secure_store_available", lambda: True
+        )
         assert BrowserPkceProvider().is_available() is False
 
     def test_linux_without_display_false(self, monkeypatch) -> None:
         monkeypatch.delenv("OPENADAPT_HEADLESS", raising=False)
-        monkeypatch.setattr("engine.auth.browser_pkce.sys.platform", "linux")
-        monkeypatch.setattr("engine.auth.browser_pkce.secure_store_available", lambda: True)
+        monkeypatch.setattr("openadapt_desktop.auth.browser_pkce.sys.platform", "linux")
+        monkeypatch.setattr(
+            "openadapt_desktop.auth.browser_pkce.secure_store_available", lambda: True
+        )
         monkeypatch.delenv("DISPLAY", raising=False)
         monkeypatch.delenv("WAYLAND_DISPLAY", raising=False)
         assert BrowserPkceProvider().is_available() is False
@@ -193,7 +197,7 @@ class TestIsAvailable:
         monkeypatch.delenv("OPENADAPT_SUPABASE_URL", raising=False)
         monkeypatch.delenv("OPENADAPT_SUPABASE_ANON_KEY", raising=False)
         assert BrowserPkceProvider(open_browser=lambda _: None).is_available() is True
-        source = Path("engine/auth/browser_pkce.py").read_text()
+        source = Path("openadapt_desktop/auth/browser_pkce.py").read_text()
         assert "/auth/v1/token" not in source
         assert "OPENADAPT_SUPABASE_" not in source
 
@@ -210,8 +214,10 @@ class TestIsAvailable:
 
     def test_locked_keychain_refuses_before_opening_browser(self, monkeypatch) -> None:
         monkeypatch.delenv("OPENADAPT_HEADLESS", raising=False)
-        monkeypatch.setattr("engine.auth.browser_pkce.sys.platform", "darwin")
-        monkeypatch.setattr("engine.auth.browser_pkce.secure_store_available", lambda: False)
+        monkeypatch.setattr("openadapt_desktop.auth.browser_pkce.sys.platform", "darwin")
+        monkeypatch.setattr(
+            "openadapt_desktop.auth.browser_pkce.secure_store_available", lambda: False
+        )
         opened: list[str] = []
         with pytest.raises(RuntimeError, match="unavailable"):
             BrowserPkceProvider(open_browser=opened.append).login()

@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from engine import managed_vision as vision
+from openadapt_desktop import managed_vision as vision
 
 
 def _wheel(tmp_path: Path, name: str, members: dict[str, bytes]) -> tuple[vision.Wheel, Path]:

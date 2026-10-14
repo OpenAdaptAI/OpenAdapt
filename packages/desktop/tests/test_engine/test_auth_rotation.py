@@ -8,7 +8,7 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from engine.auth import rotation, store
+from openadapt_desktop.auth import rotation, store
 
 HOST = "https://app.openadapt.ai"
 OLD_TOKEN = "oai_ingest_" + "A" * 43

@@ -390,6 +390,7 @@ export function RecordReview({
           idPrefix={`${fieldPrefix}-record-target`}
           disabled={recording || busy}
           capabilities={firstWorkflow ? capabilities : undefined}
+          urlRequired={firstWorkflow}
         />
         {firstWorkflow && !targetIssue && capabilityIssue && (
           <Button

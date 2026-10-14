@@ -91,6 +91,10 @@ deployment HIPAA-compliant.
 - Run-list item values reach Flow only through an owner-only params file that
   exists for the length of one call. They never enter a process argument list,
   an event, a log line, a notification, or a Cloud payload.
+- In the local index database, an item's values, its label, and the expected
+  and observed text of a right-record check are stored encrypted (AES-256-GCM).
+  The key is in the OS keychain, never in the database. A closed item's values
+  are deleted. Without the keychain key, Desktop doesn't run new items.
 - Desktop starts without downloading a browser. The first browser workflow
   pulls the Chromium revision pinned by the bundled Playwright runtime into
   `~/.openadapt/browser-runtime`. Air-gapped packages point

@@ -4,16 +4,16 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from engine.coach import (
+from openadapt_desktop.coach import (
     COACH_SCHEMA_VERSION,
     apply_coach_update,
     bind_coach_target,
     empty_coach,
     sanitize_hint,
 )
-from engine.config import EngineConfig
-from engine.dispatch import EngineDispatcher, EngineServices
-from engine.socket_server import _LOCAL_AGENT_COMMANDS, _TRAY_EVENTS, DesktopSocketServer
+from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.dispatch import EngineDispatcher, EngineServices
+from openadapt_desktop.socket_server import _LOCAL_AGENT_COMMANDS, _TRAY_EVENTS, DesktopSocketServer
 
 HMAC = "a" * 64
 
@@ -134,7 +134,7 @@ def test_socket_set_coach_replies_on_that_connection_only(tmp_path: Path) -> Non
 
 def test_presentation_export_does_not_consume_the_coach_channel() -> None:
     root = Path(__file__).resolve().parents[2]
-    source = (root / "engine/presentation_export.py").read_text(encoding="utf-8")
+    source = (root / "openadapt_desktop/presentation_export.py").read_text(encoding="utf-8")
     assert "overlay://coach" in source
     assert "openadapt.control-overlay-coach/v1" in source
     assert "TIMELINE_SCHEMA = \"openadapt.control-overlay-timeline/v2\"" in source

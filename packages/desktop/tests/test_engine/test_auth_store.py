@@ -6,9 +6,9 @@ from uuid import NAMESPACE_URL, uuid5
 
 import pytest
 
-from engine.auth import store
-from engine.auth.paste import PasteTokenProvider
-from engine.auth.provider import AuthProvider, Credential
+from openadapt_desktop.auth import store
+from openadapt_desktop.auth.paste import PasteTokenProvider
+from openadapt_desktop.auth.provider import AuthProvider, Credential
 
 
 def _cred(host: str = "https://app.openadapt.ai", token: str = "oai_ingest_abc") -> Credential:
@@ -300,7 +300,7 @@ class TestHeadlessDegrade:
     @pytest.fixture
     def raising_keyring(self, monkeypatch):
         kr = _RaisingKeyring()
-        monkeypatch.setattr("engine.auth.store._keyring", lambda: kr)
+        monkeypatch.setattr("openadapt_desktop.auth.store._keyring", lambda: kr)
         monkeypatch.delenv("OPENADAPT_INGEST_TOKEN", raising=False)
         return kr
 
@@ -329,7 +329,7 @@ class TestProtocolConformance:
         assert isinstance(PasteTokenProvider(), AuthProvider)
 
     def test_browser_is_auth_provider(self) -> None:
-        from engine.auth.browser_pkce import BrowserPkceProvider
+        from openadapt_desktop.auth.browser_pkce import BrowserPkceProvider
 
         assert isinstance(BrowserPkceProvider(), AuthProvider)
 

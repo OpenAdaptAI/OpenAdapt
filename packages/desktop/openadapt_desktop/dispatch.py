@@ -1,0 +1,5327 @@
+"""dispatch -- the single command dispatcher shared by both local wires.
+
+Two surfaces talk to the engine and BOTH route through this one dispatcher, so
+command semantics can never drift between them:
+
+    * the Tauri sidecar over stdin/stdout JSON-lines (:mod:`openadapt_desktop.ipc`), whose
+      frontend catalog of command names lives in the app's ``src/lib/engine.ts``
+      (``CMD`` values); and
+    * the tray over the loopback TCP socket (:mod:`openadapt_desktop.socket_server`), whose
+      command names live in the tray's ``IPCMessageType`` enum.
+
+The dispatcher keys handlers on the EXACT ``engine.ts`` ``CMD`` strings
+(``compile_recording`` not ``compile`` -- review 2.1 P0-2/P0-3). The tray's
+command vocabulary is a strict subset (``start_recording`` / ``stop_recording``
+/ ``get_status`` / ``pause_sync`` / ``resume_sync`` / ``open_workflow_library``
+/ ``open_teach``); the socket server maps those names straight through.
+
+Each handler returns a JSON-serializable ``dict`` whose shape matches the
+frontend TypeScript types (``AuthStatus`` / ``EngineStatus`` / ``Workflow`` /
+``RunReport`` / ``SyncState`` / ``NeedsAttention`` / ``PermissionStatus``).
+Handlers emit events (``recording_started`` / ``compile_progress`` /
+``sync_state`` / ``break_count`` / ``log_line`` / ...) through the injected
+``emit`` callback so both wires stream the same events.
+
+Services (db / storage / controller / flow bridge) are built lazily on first
+use, so constructing a dispatcher is cheap and side-effect-free.
+"""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+import sys
+import threading
+import time
+import uuid
+from contextlib import nullcontext
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Any, Callable
+from urllib.parse import urlsplit
+
+from loguru import logger
+
+from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.private_fs import ensure_private_dir
+
+EmitFn = Callable[[str, dict], None]
+
+_RUN_PERSISTENCE_MARKER = ".desktop-run-persistence.json"
+_KNOWN_RUN_OUTCOMES = frozenset(
+    {
+        "VERIFIED",
+        "COMPLETED_UNVERIFIED",
+        "HALTED",
+        "FAILED",
+        "ROLLED_BACK",
+        "success",
+        "halt",
+        "unknown",
+    }
+)
+_TEACHABLE_RUN_OUTCOMES = frozenset({"HALTED", "halt"})
+_TEACH_CORRECTION_SCHEMA = "openadapt.desktop-teach-correction/v1"
+_TEACH_CORRECTION_META_KEY = "teach_correction"
+
+
+def _noop_emit(event: str, data: dict) -> None:
+    """Default event sink -- drops events when no emitter is wired."""
+
+
+def _canonical_hosted_origin(value: Any) -> str:
+    """Return a safe hosted origin or raise before any credential is sent."""
+
+    from openadapt_desktop.auth.store import canonical_host_origin
+
+    raw_value = str(value or "").strip()
+    parsed_value = urlsplit(raw_value)
+    if parsed_value.scheme.lower() == "http" and parsed_value.hostname not in {
+        "localhost",
+        "127.0.0.1",
+        "::1",
+    }:
+        raise ValueError("A remote hosted origin must use HTTPS")
+    normalized = canonical_host_origin(raw_value)
+    if not normalized:
+        raise ValueError("Host must be an HTTP(S) origin")
+    return normalized
+
+
+@dataclass
+class _ActiveFlowRecording:
+    capture_id: str
+    capture_dir: Path
+    started_at: str
+    started_monotonic: float
+    session: Any
+    redactions: tuple[str, ...]
+    task: str = ""
+
+
+class EngineServices:
+    """Lazily-constructed engine subsystems shared across commands.
+
+    Args:
+        config: Engine configuration.
+        db: Injected :class:`~engine.db.IndexDB` (built on demand otherwise).
+        storage: Injected storage manager (built on demand otherwise).
+        audit: Injected audit logger (built on demand otherwise).
+        controller: Injected recording controller (built on demand otherwise).
+        flow_bridge: Injected flow bridge (built on demand otherwise).
+    """
+
+    def __init__(
+        self,
+        config: EngineConfig,
+        *,
+        db: Any = None,
+        storage: Any = None,
+        audit: Any = None,
+        controller: Any = None,
+        flow_bridge: Any = None,
+        runner: Any = None,
+        portal: Any = None,
+        authoring: Any = None,
+    ) -> None:
+        self.config = config
+        self._db = db
+        self._storage = storage
+        self._audit = audit
+        self._controller = controller
+        self._flow_bridge = flow_bridge
+        # The runner-loop service is shared across wires like everything else,
+        # but it needs the dispatcher's emit callback, so the dispatcher builds
+        # it lazily (tests inject a fake here).
+        self.runner = runner
+        # The mobile decision portal is likewise built on first use so the
+        # engine never binds a socket or spawns a console it was not asked for.
+        self.portal = portal
+        self.authoring = authoring
+
+    @property
+    def db(self) -> Any:
+        if self._db is None:
+            from openadapt_desktop.db import IndexDB
+
+            ensure_private_dir(self.config.data_dir)
+            self._db = IndexDB(self.config.data_dir / "index.db")
+            self._db.initialize()
+        return self._db
+
+    @property
+    def storage(self) -> Any:
+        if self._storage is None:
+            from openadapt_desktop.storage_manager import StorageManager
+
+            self._storage = StorageManager(self.config)
+            self._storage.initialize()
+            self._storage._db = self.db
+        return self._storage
+
+    @property
+    def audit(self) -> Any:
+        if self._audit is None:
+            from openadapt_desktop.audit import AuditLogger
+
+            self._audit = AuditLogger(
+                self.config.audit_log_path, enabled=self.config.network_audit_log
+            )
+        return self._audit
+
+    @property
+    def flow_bridge(self) -> Any:
+        if self._flow_bridge is None:
+            from openadapt_desktop.flow_bridge import FlowBridge
+
+            self._flow_bridge = FlowBridge()
+        return self._flow_bridge
+
+    @property
+    def controller(self) -> Any:
+        if self._controller is None:
+            from openadapt_desktop.controller import RecordingController
+
+            self._controller = RecordingController(
+                captures_dir=self.config.data_dir / "captures",
+                quality=self.config.recording_quality,
+                storage_manager=self.storage,
+                flow_bridge=self.flow_bridge,
+                db=self.db,
+                bundles_dir=self.config.data_dir / "bundles",
+            )
+        return self._controller
+
+    def close(self) -> None:
+        """Release owned resources (only the DB holds an open handle)."""
+        if self._db is not None:
+            try:
+                self._db.close()
+            except Exception:
+                pass
+
+
+class EngineDispatcher:
+    """Maps command names to engine actions for both local wires.
+
+    Args:
+        config: Engine configuration.
+        services: Injected :class:`EngineServices` (built from ``config``
+            otherwise). Injected in tests to supply fakes.
+        emit: Callback ``emit(event, data)`` used to stream events to the
+            connected surface(s). Defaults to a no-op.
+    """
+
+    def __init__(
+        self,
+        config: EngineConfig,
+        *,
+        services: EngineServices | None = None,
+        emit: EmitFn | None = None,
+    ) -> None:
+        self.config = config
+        self.services = services or EngineServices(config)
+        self.emit = emit or _noop_emit
+        # Sync is orthogonal to recording -- a single paused flag mirrors the
+        # tray's pause/resume-sync commands and the frontend sync banner.
+        self._sync_paused = False
+        self._flow_recording: _ActiveFlowRecording | None = None
+        self._pending_run_memory: dict[tuple[str, str], tuple[Path, str, bool]] = {}
+        # Work items whose run this engine process started and hasn't
+        # finished. A queued item that isn't here was interrupted.
+        self._running_items: set[str] = set()
+        # Runs that may stop before a save and wait for a person to approve
+        # it, keyed by run directory. Read by ``get_item_approval`` and
+        # ``answer_item_approval``, which the IPC wire serves while a run
+        # waits (they never take the dispatch lock).
+        self._approval_watches: dict[str, dict[str, Any]] = {}
+        self._approval_lock = threading.Lock()
+        self._coach: dict[str, Any] = {}
+        self._handlers: dict[str, Callable[..., dict | None]] = {}
+        self._register()
+        from openadapt_desktop.coach import empty_coach
+
+        self._coach = empty_coach()
+
+    # ------------------------------------------------------------------ setup
+
+    def _register(self) -> None:
+        """Register every command keyed on the frontend ``engine.ts`` name."""
+        self._handlers = {
+            # recording lifecycle
+            "start_recording": self.start_recording,
+            "stop_recording": self.stop_recording,
+            "pause_recording": self.pause_recording,
+            "resume_recording": self.resume_recording,
+            "get_status": self.get_status,
+            "set_coach": self.set_coach,
+            "get_coach": self.get_coach,
+            "clear_coach": self.clear_coach,
+            # library / captures / workflows
+            "get_workflows": self.get_workflows,
+            "get_first_workflow_state": self.get_first_workflow_state,
+            "set_first_workflow_stage": self.set_first_workflow_stage,
+            "get_captures": self.get_captures,
+            "get_storage_usage": self.get_storage_usage,
+            "get_presentation_export_status": self.get_presentation_export_status,
+            "export_presentation_video": self.export_presentation_video,
+            # the loop: compile -> replay/run -> teach
+            "compile_recording": self.compile_recording,
+            "replay_workflow": self.replay_workflow,
+            "replay_first_workflow": self.replay_first_workflow,
+            "run_workflow": self.run_workflow,
+            "get_run_report": self.get_run_report,
+            "retry_run_persistence": self.retry_run_persistence,
+            # simple operator surface: inputs, items, the inbox, results
+            "get_task_inputs": self.get_task_inputs,
+            "run_item": self.run_item,
+            "list_attention_items": self.list_attention_items,
+            "resolve_attention_item": self.resolve_attention_item,
+            "get_attention_screenshot": self.get_attention_screenshot,
+            "get_results_summary": self.get_results_summary,
+            # Each save waits for a person (Flow's ``each_item`` gate). These
+            # two answer a waiting run while it runs.
+            "get_item_approval": self.get_item_approval,
+            "answer_item_approval": self.answer_item_approval,
+            # "Only ask a person about problems": read the switch, turn it off.
+            # Nothing here turns it on; that happens in OpenAdapt Cloud.
+            "get_approval_mode": self.get_approval_mode,
+            "turn_off_approval_mode": self.turn_off_approval_mode,
+            "run_sample": self.run_sample,
+            "teach_fix": self.teach_fix,
+            # qualification cockpit (canonical Flow graph/policy/manifests)
+            "get_qualification": self.get_qualification,
+            "initialize_qualification": self.initialize_qualification,
+            "propose_qualification_from_demo": self.propose_qualification_from_demo,
+            "set_qualification_risk": self.set_qualification_risk,
+            "arm_qualification_identity": self.arm_qualification_identity,
+            "set_qualification_identity": self.set_qualification_identity,
+            "bind_qualification_effect": self.bind_qualification_effect,
+            "set_qualification_effect_verification": (self.set_qualification_effect_verification),
+            "set_qualification_minimum_effect_tier": (self.set_qualification_minimum_effect_tier),
+            "author_qualification_business_decision": (self.author_qualification_business_decision),
+            "set_qualification_judgment_cases": (self.set_qualification_judgment_cases),
+            "add_qualification_case": self.add_qualification_case,
+            "run_qualification_case": self.run_qualification_case,
+            "import_qualification_results": self.import_qualification_results,
+            "certify_qualification": self.certify_qualification,
+            "version_qualification_workflow": self.version_qualification_workflow,
+            "seal_qualification_workflow": self.seal_qualification_workflow,
+            "export_qualification_workflow": self.export_qualification_workflow,
+            "deploy_qualification_workflow": self.deploy_qualification_workflow,
+            # cloud sync / push
+            "push_workflow": self.push_workflow,
+            "get_sync_state": self.get_sync_state,
+            "pause_sync": self.pause_sync,
+            "resume_sync": self.resume_sync,
+            "get_needs_attention": self.get_needs_attention,
+            # auth (both providers live in engine.auth -- spec 3a)
+            "login_browser": self.login_browser,
+            "login_paste": self.login_paste,
+            "connect_uri": self.connect_uri,
+            "claim_runner_uri": self.claim_runner_uri,
+            "authoring_allow": self.authoring_allow,
+            "authoring_deny": self.authoring_deny,
+            "authoring_status": self.authoring_status,
+            "authoring_pin_target": self.authoring_pin_target,
+            "logout": self.logout,
+            "get_auth_status": self.get_auth_status,
+            # config / settings
+            "get_config": self.get_config,
+            "set_config": self.set_config,
+            # effective policy (fail-closed; Tier-1 user / Tier-2 org / Tier-3 safety)
+            "get_effective_policy": self.get_effective_policy,
+            "refresh_policy": self.refresh_policy,
+            # OS permissions
+            "check_permissions": self.check_permissions,
+            "request_input_monitoring": self.request_input_monitoring,
+            # capability-aware surface availability (engine.capabilities)
+            "get_capabilities": self.get_capabilities,
+            # review / egress gate
+            "scrub_capture": self.scrub_capture,
+            "approve_review": self.approve_review,
+            "dismiss_review": self.dismiss_review,
+            "get_pending_reviews": self.get_pending_reviews,
+            # tray-only UI navigation (relayed to the desktop frontend)
+            "open_workflow_library": self.open_workflow_library,
+            "open_teach": self.open_teach,
+            # hosted runner (strict register / poll / callback transport)
+            "runner_status": self.runner_status,
+            "runner_enable": self.runner_enable,
+            "runner_disable": self.runner_disable,
+            # mobile attended-decision portal (Desktop owns lifecycle, ingress,
+            # QR pairing, and generic notifications -- never a decision)
+            "portal_status": self.portal_status,
+            "portal_start": self.portal_start,
+            "portal_stop": self.portal_stop,
+            "portal_create_pairing": self.portal_create_pairing,
+            "portal_pairing_status": self.portal_pairing_status,
+            "portal_approve_pairing": self.portal_approve_pairing,
+            "portal_cancel_pairing": self.portal_cancel_pairing,
+            "portal_devices": self.portal_devices,
+            "portal_revoke_device": self.portal_revoke_device,
+            "portal_notification": self.portal_notification,
+        }
+
+    @property
+    def commands(self) -> list[str]:
+        """The registered command names (for discovery / tests)."""
+        return sorted(self._handlers)
+
+    def dispatch(self, cmd: str, params: dict | None = None) -> dict | None:
+        """Dispatch a command by name, returning its JSON-serializable result.
+
+        Args:
+            cmd: The command name (an ``engine.ts`` ``CMD`` value / tray type).
+            params: Command parameters.
+
+        Returns:
+            The handler's result dict.
+
+        Raises:
+            KeyError: If the command is not registered.
+        """
+        handler = self._handlers.get(cmd)
+        if handler is None:
+            raise KeyError(f"Unknown command: {cmd}")
+        return handler(**(params or {}))
+
+    # ------------------------------------------------------- recording
+
+    def start_recording(self, **params: Any) -> dict:
+        """Start a recording session and emit ``recording_started``."""
+        controller = self.services.controller
+        if self._flow_recording is not None:
+            return self._status_dict(controller)
+        if controller.is_recording:
+            return self._status_dict(controller)
+
+        first_workflow = params.get("first_workflow") is True
+        task = str(params.get("purpose") or params.get("task") or params.get("name") or "")
+        target = None
+        if params.get("target") is not None:
+            try:
+                target, deployment_config = self._execution_target(params)
+                if target is None:
+                    raise ValueError("recording target is required")
+                if deployment_config is not None:
+                    raise ValueError(
+                        "deployment_config applies to replay and governed run, not recording"
+                    )
+                target.validate_record_required()
+            except ValueError as exc:
+                message = str(exc)
+                self.emit("recording_error", {"error": message})
+                raise ValueError(message) from None
+            from openadapt_desktop.capabilities import CapabilityError, ensure_backend_capability
+
+            try:
+                ensure_backend_capability(target.backend, action="record")
+            except CapabilityError as exc:
+                message = str(exc)
+                self.emit("recording_error", {"error": message})
+                raise ValueError(message) from None
+
+        if first_workflow and (target is None or (target.backend == "web" and not target.url)):
+            message = "Choose a real application target before recording the first workflow"
+            self.emit("recording_error", {"error": message})
+            raise ValueError(message)
+        if first_workflow and not task.strip():
+            message = "Describe the first workflow task before recording"
+            self.emit("recording_error", {"error": message})
+            raise ValueError(message)
+
+        recording_metadata: dict[str, object] | None = None
+        if task == "teach_fix":
+            workflow_id = str(params.get("workflow_id") or "")
+            run_id = str(params.get("run_id") or "")
+            run, error = self._teachable_run(workflow_id, expected_run_id=run_id)
+            if run is None:
+                raise ValueError(error or "The halted run is not available for Teach")
+            recording_metadata = {
+                _TEACH_CORRECTION_META_KEY: {
+                    "schema": _TEACH_CORRECTION_SCHEMA,
+                    "workflow_id": workflow_id,
+                    "run_id": run_id,
+                }
+            }
+
+        needs_native_input = target is None or target.backend != "web"
+        if (
+            sys.platform == "darwin"
+            and needs_native_input
+            and not _mac_preflight_input_monitoring()
+        ):
+            # Starting a capture is the explicit user action where macOS may
+            # present its Input Monitoring consent prompt. Passive permission
+            # checks must remain prompt-free.
+            if not _mac_request_input_monitoring():
+                message = (
+                    "Input Monitoring permission is required to record keyboard "
+                    "and mouse input. Grant it in System Settings, then try again."
+                )
+                self.emit("recording_error", {"error": message})
+                raise PermissionError(message)
+        if target is not None:
+            if target.backend == "web":
+                ensure_browser = getattr(
+                    self.services.flow_bridge,
+                    "ensure_browser_runtime",
+                    None,
+                )
+                if ensure_browser is not None:
+                    try:
+                        ensure_browser(
+                            lambda state, detail: self.emit(
+                                "browser_runtime",
+                                {
+                                    "workflow_id": "recording",
+                                    "state": state,
+                                    "detail": detail,
+                                },
+                            )
+                        )
+                    except Exception:
+                        message = "Browser setup failed before recording began"
+                        self.emit("recording_error", {"error": message})
+                        raise RuntimeError(message) from None
+            capture_id = uuid.uuid4().hex[:8]
+            timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
+            capture_dir = self.config.data_dir / "captures" / f"{timestamp}_{capture_id}"
+            control_dir = self.config.data_dir / "recording-control"
+            stop_path = control_dir / f".stop-{capture_id}"
+            ready_path = control_dir / f".ready-{capture_id}"
+            started_at = datetime.now(timezone.utc).isoformat()
+            from openadapt_desktop.private_flow_config import (
+                prepare_flow_record_request,
+                stage_private_yaml,
+            )
+
+            if target.backend == "web" and not target.url:
+                active = _ActiveFlowRecording(
+                    capture_id=capture_id,
+                    capture_dir=capture_dir,
+                    started_at=started_at,
+                    started_monotonic=time.monotonic(),
+                    session=None,
+                    redactions=(),
+                    task=task,
+                )
+                self._remember_first_workflow_recording(
+                    params=params,
+                    capture_id=capture_id,
+                    target=target,
+                    task=task,
+                )
+                self.services.audit.log("recording_started", capture_id=capture_id)
+                self.emit("recording_started", {"capture_id": capture_id})
+                try:
+                    result = self.services.flow_bridge.demo_record(capture_dir)
+                except Exception:
+                    message = "OpenAdapt Flow could not create the bundled demonstration"
+                    self.emit("recording_error", {"error": message})
+                    self.emit("status_update", self._status_dict(controller))
+                    raise RuntimeError(message) from None
+                return self._finalize_flow_capture(active, result)
+
+            prepared = prepare_flow_record_request(
+                target=target,
+                out_dir=capture_dir,
+                task=task,
+                stop_path=stop_path,
+                ready_path=ready_path,
+            )
+            try:
+                with stage_private_yaml(
+                    control_dir,
+                    prepared=prepared,
+                    prefix=".record-request-",
+                ) as request:
+                    session = self.services.flow_bridge.start_record(
+                        capture_dir,
+                        request=request,
+                        stop_path=stop_path,
+                        ready_path=ready_path,
+                    )
+            except Exception:
+                stop_path.unlink(missing_ok=True)
+                ready_path.unlink(missing_ok=True)
+                message = "OpenAdapt Flow could not start the selected recording target"
+                self.emit("recording_error", {"error": message})
+                raise RuntimeError(message) from None
+            self._flow_recording = _ActiveFlowRecording(
+                capture_id=capture_id,
+                capture_dir=capture_dir,
+                started_at=started_at,
+                started_monotonic=time.monotonic(),
+                session=session,
+                redactions=prepared.redactions,
+                task=task,
+            )
+            self._remember_first_workflow_recording(
+                params=params,
+                capture_id=capture_id,
+                target=target,
+                task=task,
+            )
+            self.services.audit.log("recording_started", capture_id=capture_id)
+            self.emit("recording_started", {"capture_id": capture_id})
+            self.emit("status_update", self._status_dict(controller))
+            return {"capture_id": capture_id, "recording": True}
+
+        capture_id = controller.start(
+            task_description=str(task),
+            metadata=recording_metadata,
+        )
+        self._remember_first_workflow_recording(
+            params=params,
+            capture_id=capture_id,
+            target=target,
+            task=task,
+        )
+        self.services.audit.log("recording_started", capture_id=capture_id)
+        self.emit("recording_started", {"capture_id": capture_id})
+        self.emit("status_update", self._status_dict(controller))
+        return {"capture_id": capture_id, "recording": True}
+
+    def _remember_first_workflow_recording(
+        self,
+        *,
+        params: dict[str, Any],
+        capture_id: str,
+        target: Any | None,
+        task: str,
+    ) -> None:
+        if target is not None:
+            try:
+                # Check it and Run it start from the app the task was shown
+                # in. The target stays in the local database.
+                self.services.db.set_task_target(
+                    capture_id,
+                    target.model_dump(mode="json", exclude_none=True),
+                )
+            except Exception:
+                logger.warning("Could not remember where this task was recorded")
+        if params.get("first_workflow") is not True:
+            return
+        self.services.db.set_first_workflow_state(
+            stage="record",
+            capture_id=capture_id,
+            target=(
+                target.model_dump(mode="json", exclude_none=True)
+                if target is not None
+                else None
+            ),
+            task=task,
+        )
+
+    def stop_recording(self, **params: Any) -> dict:
+        """Stop the active recording, retain it, and compile it automatically."""
+        authoring = self.services.authoring
+        if authoring is not None and authoring.is_bound():
+            return authoring.operator_stop()
+        controller = self.services.controller
+        active = self._flow_recording
+        if active is not None:
+            try:
+                result = active.session.stop()
+            finally:
+                self._flow_recording = None
+            return self._finalize_flow_capture(active, result)
+        if not controller.is_recording:
+            self.emit("recording_error", {"error": "No recording is active"})
+            return {"capture_id": None, "recording": False}
+        metadata = controller.stop()
+        self.emit("recording_stopped", metadata)
+        self.emit("status_update", self._status_dict(controller))
+        self.clear_coach()
+        stopped = {"capture_id": metadata.get("id"), **metadata}
+        correction = self._stopped_teach_correction(stopped)
+        if correction is not None:
+            stopped["correction"] = correction
+            return stopped
+        stopped["compile"] = self._compile_registered_capture(
+            str(stopped["capture_id"]),
+            automatic=True,
+        )
+        return stopped
+
+    def _finalize_flow_capture(self, active: _ActiveFlowRecording, result: Any) -> dict:
+        """Register one compile-ready Flow capture and emit its local evidence."""
+
+        from openadapt_desktop.private_flow_config import redact_flow_log
+
+        for line in (result.stdout or "").splitlines():
+            self.emit(
+                "log_line",
+                {"line": redact_flow_log(line, active.redactions)},
+            )
+        if not result.ok or not (active.capture_dir / "meta.json").is_file():
+            message = (
+                "OpenAdapt Flow could not finalize a compile-ready recording; "
+                "the incomplete local capture was retained for inspection"
+            )
+            self.emit("recording_error", {"error": message})
+            self.emit("status_update", self._status_dict(self.services.controller))
+            raise RuntimeError(message)
+
+        meta_path = active.capture_dir / "meta.json"
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            meta = {}
+        if not isinstance(meta, dict):
+            meta = {}
+        meta.setdefault("capture_id", active.capture_id)
+        if active.task:
+            meta["task_description"] = active.task
+        meta_path.write_text(json.dumps(meta, indent=2), encoding="utf-8")
+        if self.services.db.get_capture(active.capture_id) is None:
+            self.services.db.insert_capture(
+                active.capture_id,
+                str(active.capture_dir),
+                str(meta.get("started_at") or active.started_at),
+                task_description=str(meta.get("task_description") or ""),
+            )
+        duration = max(0.0, time.monotonic() - active.started_monotonic)
+        try:
+            # The recording's length is the manual baseline Results uses for
+            # its labeled time-saved estimate.
+            self.services.db.update_capture(
+                active.capture_id,
+                duration_secs=round(duration, 1),
+                stopped_at=datetime.now(timezone.utc).isoformat(),
+            )
+        except Exception:
+            logger.warning("Could not store the recording length")
+        metadata = {
+            "capture_id": active.capture_id,
+            "id": active.capture_id,
+            "duration": duration,
+            "event_count": 0,
+            "size_bytes": sum(
+                path.stat().st_size for path in active.capture_dir.rglob("*") if path.is_file()
+            ),
+            "path": str(active.capture_dir),
+            "recording": False,
+        }
+        self.emit("recording_stopped", metadata)
+        self.emit("status_update", self._status_dict(self.services.controller))
+        self.clear_coach()
+        metadata["compile"] = self._compile_registered_capture(
+            active.capture_id,
+            automatic=True,
+        )
+        return metadata
+
+    def pause_recording(self, **params: Any) -> dict:
+        """Pause is not supported (stop/start instead); report current status."""
+        return self.get_status()
+
+    def resume_recording(self, **params: Any) -> dict:
+        """Overlay Resume during an authoring pause records the typed field."""
+        authoring = self.services.authoring
+        if authoring is not None and authoring.has_pause():
+            return authoring.continue_pause()
+        return self.get_status()
+
+    def get_status(self, **params: Any) -> dict:
+        """Return the current :class:`EngineStatus`-shaped recording status."""
+        authoring = self.services.authoring
+        if authoring is not None:
+            status = authoring.status_dict()
+            if status is not None and (status.get("recording") or status.get("halted")):
+                return status
+        return self._status_dict(self.services.controller)
+
+    def set_coach(self, **params: Any) -> dict:
+        """Update the local-only demonstration coach. Never persisted."""
+        from openadapt_desktop.coach import apply_coach_update
+
+        self._coach = apply_coach_update(self._coach, params)
+        self.emit("coach", dict(self._coach))
+        return dict(self._coach)
+
+    def get_coach(self, **params: Any) -> dict:
+        """Return the current local coach payload."""
+        return dict(self._coach)
+
+    def clear_coach(self, **params: Any) -> dict:
+        """Drop the in-memory coach payload and notify local listeners."""
+        from openadapt_desktop.coach import empty_coach
+
+        self._coach = empty_coach()
+        self.emit("coach", dict(self._coach))
+        return dict(self._coach)
+
+    def _status_dict(self, controller: Any) -> dict:
+        from openadapt_desktop.controller import RecordingState
+
+        if self._flow_recording is not None:
+            return {
+                "recording": True,
+                "paused": False,
+                "duration_secs": max(
+                    0.0,
+                    time.monotonic() - self._flow_recording.started_monotonic,
+                ),
+                "capture_id": self._flow_recording.capture_id,
+                "controls": {"pause": False, "resume": False, "stop": True},
+            }
+        recording = controller.is_recording
+        paused = controller.state == RecordingState.PAUSED
+        duration = None
+        started = getattr(controller, "_started_at", None)
+        if started:
+            try:
+                from datetime import datetime, timezone
+
+                duration = (
+                    datetime.now(timezone.utc) - datetime.fromisoformat(started)
+                ).total_seconds()
+            except Exception:
+                duration = None
+        return {
+            "recording": recording,
+            "paused": paused,
+            "duration_secs": duration,
+            "capture_id": controller.current_capture_id,
+            # The canonical Capture/Flow record sessions currently support a
+            # clean finalizing stop, not a lossless pause/resume. Keep this
+            # capability explicit so every UI can avoid a placebo control.
+            "controls": {
+                "pause": False,
+                "resume": False,
+                "stop": recording,
+            },
+        }
+
+    # ------------------------------------------------------- library
+
+    def get_first_workflow_state(self, **params: Any) -> dict:
+        """Return the durable local stage for the first workflow journey."""
+
+        state = self.services.db.get_first_workflow_state()
+        return {"ok": True, "state": state}
+
+    def set_first_workflow_stage(self, **params: Any) -> dict:
+        """Move the first workflow between explicit operator-facing stages."""
+
+        stage = str(params.get("stage") or "")
+        if stage not in {
+            "record",
+            "review",
+            "qualification",
+            "qualification_after_result",
+            "complete",
+        }:
+            raise ValueError("Invalid first workflow stage")
+        if stage == "record":
+            current = self.services.db.get_first_workflow_state()
+            if current is not None and current.get("stage") in {"executing", "reconciliation"}:
+                # A first run that started and hasn't been checked keeps its
+                # lock. Recording another task would replace this record and
+                # drop the lock that stops the run from repeating.
+                raise ValueError(
+                    "Check the target of the last run before you record another task."
+                )
+            self.services.db.set_first_workflow_state(stage="record")
+            return {"ok": True, "state": self.services.db.get_first_workflow_state()}
+
+        current = self.services.db.get_first_workflow_state()
+        workflow_id = str(params.get("workflow_id") or "")
+        current_workflow_id = str((current or {}).get("workflow_id") or "")
+        same_workflow = bool(workflow_id and workflow_id == current_workflow_id)
+        # ``complete`` from review/qualification leaves the read-only first-run
+        # path before anything ran, so a task that saves data can go to the
+        # guided readiness test instead of looping between two screens.
+        # Executing and reconciliation stages still require a person to
+        # check the target first.
+        allowed_from = {
+            "review": {"qualification", "complete"},
+            "qualification": {"review", "qualification", "complete"},
+            "executing": {"review"},
+            "reconciliation": {"review"},
+            "result": {"qualification_after_result"},
+            "qualification_after_result": {
+                "qualification_after_result",
+                "complete",
+            },
+            "complete": set(),
+        }
+        qualification_version = False
+        if (
+            current is not None
+            and stage in {"qualification", "qualification_after_result"}
+            and not same_workflow
+        ):
+            candidate = self.services.db.get_bundle(workflow_id)
+            qualification_version = bool(
+                current.get("stage") in {"qualification", "qualification_after_result"}
+                and candidate
+                and candidate.get("capture_id") == current.get("capture_id")
+            )
+        if current is None or (not same_workflow and not qualification_version):
+            raise ValueError("The first workflow stage does not match this workflow")
+        current_stage = str(current.get("stage") or "")
+        if stage not in allowed_from.get(current_stage, set()):
+            raise ValueError("Invalid first workflow stage transition")
+        self.services.db.set_first_workflow_state(
+            stage=stage,
+            capture_id=current.get("capture_id"),
+            workflow_id=workflow_id,
+            target=current.get("target"),
+            task=str(current.get("task") or ""),
+        )
+        return {"ok": True, "state": self.services.db.get_first_workflow_state()}
+
+    def get_workflows(self, **params: Any) -> list:
+        """Return the local workflow library as a list of ``Workflow`` dicts.
+
+        The frontend (``src/lib/engine.ts`` / ``App.tsx`` / ``WorkflowLibrary``)
+        consumes a bare ``Workflow[]``; return the list directly so the two
+        parallel wires share one shape.
+        """
+        bundles = self.services.db.list_bundles(limit=int(params.get("limit", 100)))
+        return [self._bundle_to_workflow(b) for b in bundles]
+
+    def _bundle_to_workflow(self, b: dict) -> dict:
+        bid = b.get("bundle_id")
+        open_halts = sum(
+            1 for h in self.services.db.list_open_halts() if h.get("workflow_id") == bid
+        )
+        last_run_state = None
+        try:
+            rep = self.get_run_report(workflow_id=bid)
+        except Exception:
+            rep = None
+        if rep:
+            report_outcome = rep.get("outcome")
+            states = {s.get("state") for s in (rep.get("steps") or [])}
+            if report_outcome == "VERIFIED":
+                last_run_state = "verified"
+            elif report_outcome == "HALTED" or rep.get("halt") or "halted" in states:
+                last_run_state = "halted"
+            elif report_outcome == "FAILED" or "failed" in states:
+                last_run_state = "failed"
+            elif report_outcome in {"COMPLETED_UNVERIFIED", "ROLLED_BACK", "unknown"}:
+                last_run_state = "attention"
+            elif states:
+                last_run_state = "verified"
+        from openadapt_desktop.outcomes import plain_result
+        from openadapt_desktop.work_items import (
+            OPEN,
+            TEACHING,
+            blocks_more_runs,
+            public_item,
+        )
+
+        last_result = None
+        if rep:
+            last_result = plain_result(
+                rep.get("outcome"),
+                rep.get("transaction_outcome"),
+            )["key"]
+        open_items = [
+            public_item(row)
+            for row in self.services.db.list_work_items(
+                workflow_id=str(bid),
+                statuses=(OPEN, TEACHING),
+            )
+        ]
+        capture = (
+            self.services.db.get_capture(str(b.get("capture_id")))
+            if b.get("capture_id")
+            else None
+        )
+        task = str((capture or {}).get("task_description") or "")
+        # The bundle status is set by the readiness-test commands: "certified"
+        # only after Flow certified the current revision. Flow's governed run
+        # also refuses a plaintext bundle, so a certified version is ready to
+        # run only once it is sealed (encrypted at rest).
+        bundle_path = Path(str(b.get("bundle_path") or ""))
+        encrypted = bool(b.get("bundle_path")) and (
+            bundle_path / "workflow.json.enc"
+        ).is_file()
+        status = str(b.get("status") or "")
+        if status == "certified":
+            readiness = "ready" if encrypted else "checking"
+        elif status in {"qualification_pending", "qualification_failed"}:
+            readiness = "checking"
+        else:
+            readiness = "new"
+        return {
+            "id": bid,
+            "name": b.get("workflow_name") or b.get("capture_id") or bid,
+            "steps": b.get("steps") or 0,
+            "updated_at": b.get("compiled_at") or b.get("created_at"),
+            "last_run_state": last_run_state,
+            "last_result": last_result,
+            "open_halts": open_halts,
+            "open_items": len(open_items),
+            # Items a person chose to fix by showing the step again.
+            "teaching_items": sum(1 for item in open_items if item["status"] == TEACHING),
+            "blocked": any(blocks_more_runs(item) for item in open_items),
+            "readiness": readiness,
+            "certified": status == "certified",
+            "encrypted": encrypted,
+            "version": int(b.get("version") or 1),
+            "capture_id": b.get("capture_id"),
+            "task": task if task != "teach_fix" else "",
+            "demo_seconds": self._demonstration_seconds(b),
+            "synced": bool(b.get("workflow_id")),
+            "workflow_id": b.get("workflow_id"),
+        }
+
+    def get_captures(self, **params: Any) -> dict:
+        """Return recent captures from local storage."""
+        captures = self.services.storage.get_captures(
+            limit=int(params.get("limit", 50)),
+            review_status=params.get("status"),
+        )
+        return {"captures": captures}
+
+    def _presentation_capture_dir(self, params: dict[str, Any]) -> Path:
+        capture_id = str(params.get("capture_id") or "")
+        capture = self.services.db.get_capture(capture_id) if capture_id else None
+        if not capture:
+            raise ValueError(f"Unknown capture {capture_id or '<missing>'}")
+        capture_dir = Path(str(capture["capture_path"])).resolve(strict=True)
+        captures_root = (self.config.data_dir / "captures").resolve(strict=False)
+        try:
+            capture_dir.relative_to(captures_root)
+        except ValueError as error:
+            raise ValueError("Capture path is outside the local capture boundary") from error
+        if capture_dir == captures_root or not capture_dir.is_dir():
+            raise ValueError("Capture path is not a capture directory")
+        return capture_dir
+
+    def get_presentation_export_status(self, **params: Any) -> dict:
+        from openadapt_desktop.presentation_export import presentation_export_status
+
+        return presentation_export_status(self._presentation_capture_dir(params))
+
+    def export_presentation_video(self, **params: Any) -> dict:
+        from openadapt_desktop.presentation_export import export_presentation_video
+
+        return export_presentation_video(self._presentation_capture_dir(params))
+
+    def get_storage_usage(self, **params: Any) -> dict:
+        """Return local storage usage."""
+        return self.services.storage.get_storage_usage()
+
+    # ------------------------------------------------------- the loop
+
+    def compile_recording(self, **params: Any) -> dict:
+        """Compile a captured recording into a flow bundle.
+
+        Frontend passes ``capture_id``; returns ``{workflow_id}`` where the id
+        is the LOCAL bundle id (the hosted id only exists after a push).
+        """
+        capture_id = params.get("capture_id")
+        if not capture_id:
+            return {"ok": False, "error": "capture_id is required", "workflow_id": ""}
+        return self._compile_registered_capture(str(capture_id), automatic=False)
+
+    def _compile_registered_capture(self, capture_id: str, *, automatic: bool) -> dict:
+        """Compile one retained capture and report a retryable local state.
+
+        Flow writes the bundle to a separate directory. The source recording
+        remains in the capture directory on success and on failure.
+        """
+        progress = {"capture_id": capture_id, "automatic": automatic}
+        capture = self.services.db.get_capture(capture_id)
+        capture_dir = capture and (capture.get("capture_path") or capture.get("capture_dir"))
+        if not capture_dir:
+            error = f"OpenAdapt could not find the retained recording {capture_id}."
+            self.emit(
+                "compile_progress",
+                {
+                    **progress,
+                    "state": "failed",
+                    "error": error,
+                    "recording_retained": False,
+                },
+            )
+            return {
+                "ok": False,
+                "error": error,
+                "workflow_id": "",
+                "recording_retained": False,
+            }
+        self.emit("compile_progress", {**progress, "state": "compiling"})
+        try:
+            compiled = self.services.controller.compile_capture(capture_id, Path(capture_dir))
+        except Exception:
+            logger.exception("Compile failed for retained capture {cid}", cid=capture_id)
+            compiled = None
+        recording_retained = Path(capture_dir).is_dir()
+        if not compiled:
+            error = (
+                "OpenAdapt could not compile this recording. "
+                "The raw recording was retained and is ready for another attempt."
+                if recording_retained
+                else "OpenAdapt could not compile because the recording is no longer available."
+            )
+            failed = {
+                **progress,
+                "state": "failed",
+                "error": error,
+                "recording_retained": recording_retained,
+            }
+            self.emit("compile_progress", failed)
+            return {
+                "ok": False,
+                "error": error,
+                "workflow_id": "",
+                "recording_retained": recording_retained,
+            }
+        first_state = self.services.db.get_first_workflow_state()
+        if (
+            first_state
+            and first_state.get("stage") == "record"
+            and first_state.get("capture_id") == capture_id
+        ):
+            try:
+                self._initialize_first_workflow_review(
+                    workflow_id=str(compiled["bundle_id"]),
+                    bundle_path=Path(str(compiled["bundle_path"])),
+                    target=first_state.get("target"),
+                )
+            except Exception:
+                logger.exception("Could not initialize the first workflow review")
+                error = (
+                    "OpenAdapt compiled this recording, but it couldn't open the "
+                    "action review. The recording and compiled workflow are saved. "
+                    "Try the compile again."
+                )
+                self.emit(
+                    "compile_progress",
+                    {
+                        **progress,
+                        "state": "review_failed",
+                        "bundle_id": compiled["bundle_id"],
+                        "error": error,
+                        "recording_retained": recording_retained,
+                    },
+                )
+                return {
+                    "ok": False,
+                    "error": error,
+                    "workflow_id": str(compiled["bundle_id"]),
+                    "bundle_path": str(compiled["bundle_path"]),
+                    "recording_retained": recording_retained,
+                }
+            self.services.db.set_first_workflow_state(
+                stage="review",
+                capture_id=capture_id,
+                workflow_id=str(compiled["bundle_id"]),
+                target=first_state.get("target"),
+                task=str(first_state.get("task") or ""),
+            )
+        self.emit(
+            "compile_progress",
+            {
+                **progress,
+                "state": "compiled",
+                "bundle_id": compiled["bundle_id"],
+                "recording_retained": recording_retained,
+            },
+        )
+        return {
+            "ok": True,
+            "workflow_id": compiled["bundle_id"],
+            "bundle_path": compiled["bundle_path"],
+            "recording_retained": recording_retained,
+        }
+
+    def _initialize_first_workflow_review(
+        self,
+        *,
+        workflow_id: str,
+        bundle_path: Path,
+        target: object,
+    ) -> dict:
+        """Create Flow's sealed draft project for the first action review."""
+
+        from openadapt_desktop.qualification import initialize_first_replay_review
+        from openadapt_desktop.targets import ExecutionTarget
+
+        parsed_target = ExecutionTarget.model_validate(target)
+        application = {
+            "web": "Browser application",
+            "windows": "Windows application",
+            "macos": "macOS application",
+            "linux": "Linux application",
+            "rdp": "RDP application",
+            "citrix": "Citrix application",
+        }[parsed_target.backend]
+        return initialize_first_replay_review(
+            bundle_path,
+            workflow_id=workflow_id,
+            target_kind=parsed_target.backend,
+            application=application,
+            environment_digest=self._canonical_target_digest(parsed_target),
+            bundle_key=self._qualification_bundle_key(workflow_id),
+        )
+
+    @staticmethod
+    def _canonical_target_digest(target: Any) -> str:
+        # The signed-in browser a run attaches to is how it reaches the app,
+        # not which app it is. Leaving it out keeps the reviewed application
+        # identity stable (and every digest made before these fields existed).
+        target_json = json.dumps(
+            target.model_dump(
+                mode="json",
+                exclude={"browser_cdp_endpoint", "browser_page_url"},
+            ),
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(target_json.encode("utf-8")).hexdigest()
+
+    _ATTACHED_BROWSER_UNSUPPORTED = (
+        "This version of the OpenAdapt engine can't run in your signed-in "
+        "browser. Update OpenAdapt, or clear the signed-in browser address."
+    )
+    _APPROVAL_GATE_UNSUPPORTED = (
+        "This version of the OpenAdapt engine can't stop for your approval "
+        "before each save, so OpenAdapt didn't start. Update OpenAdapt, then "
+        "try again."
+    )
+
+    def _flow_gates_each_save(self) -> bool:
+        """Whether the installed Flow stops before each save for a person."""
+
+        supports = getattr(self.services.flow_bridge, "supports_approval_gate", None)
+        return supports is not None and bool(supports())
+
+    def _flow_runs_attached_browser(self) -> bool:
+        """Whether the installed Flow honors a signed-in browser address.
+
+        An older engine ignores the address and opens a new, signed-out
+        browser, so Desktop refuses instead of running anyway.
+        """
+
+        supports = getattr(self.services.flow_bridge, "supports_attached_browser_runs", None)
+        return supports is not None and bool(supports())
+
+    def replay_workflow(self, **params: Any) -> dict:
+        """Replay a bundle locally and return a ``RunReport``-shaped dict."""
+        return self._replay_or_run(params, run=False)
+
+    def replay_first_workflow(self, **params: Any) -> dict:
+        """Replay one exact reviewed read-only bundle under supervision."""
+
+        return self._replay_or_run(params, run=False, first_supervised=True)
+
+    def run_workflow(self, **params: Any) -> dict:
+        """Run a bundle under the deployment config; return a ``RunReport`` dict."""
+        return self._replay_or_run(params, run=True)
+
+    def _replay_or_run(
+        self,
+        params: dict,
+        *,
+        run: bool,
+        first_supervised: bool = False,
+    ) -> dict:
+        workflow_id = params.get("workflow_id")
+        bundle = self._bundle_dir(workflow_id)
+        if bundle is None:
+            return self._pre_action_refusal(f"Unknown workflow {workflow_id}")
+        first_state = self.services.db.get_first_workflow_state()
+        active_first_review = bool(
+            first_state
+            and first_state.get("workflow_id") == workflow_id
+            and first_state.get("stage")
+            in {"review", "qualification", "executing", "reconciliation"}
+        )
+        if active_first_review and not first_supervised:
+            return self._pre_action_refusal(
+                "Finish this workflow's first supervised run before using the normal run controls."
+            )
+        target = None
+        deployment_config = None
+        if first_supervised:
+            if not (
+                first_state
+                and first_state.get("stage") == "review"
+                and first_state.get("workflow_id") == workflow_id
+            ):
+                return self._pre_action_refusal(
+                    "Open the active first workflow review before the supervised run."
+                )
+            admission = params.get("admission")
+            if not isinstance(admission, dict):
+                return self._pre_action_refusal(
+                    "Open the current workflow review before the first supervised run."
+                )
+            if admission.get("workflow_id") != workflow_id:
+                return self._pre_action_refusal(
+                    "The workflow changed after review. Open the current review before running it."
+                )
+            try:
+                target, deployment_config = self._execution_target(params)
+            except ValueError as exc:
+                return self._pre_action_refusal(str(exc))
+            if target is None:
+                return self._pre_action_refusal(
+                    "The recorded application target is required for the first supervised run."
+                )
+            if deployment_config is not None:
+                return self._pre_action_refusal(
+                    "Use the recorded application target without an advanced "
+                    "deployment config for the first supervised run."
+                )
+            try:
+                from openadapt_desktop.qualification import (
+                    QualificationError,
+                    admit_first_supervised_replay,
+                )
+
+                admit_first_supervised_replay(
+                    bundle,
+                    workflow_id=str(workflow_id),
+                    expected_project_revision=admission.get("project_revision"),
+                    expected_bundle_content_digest=admission.get(
+                        "bundle_content_digest"
+                    ),
+                    expected_environment_digest=self._canonical_target_digest(target),
+                    bundle_key=self._qualification_bundle_key(str(workflow_id)),
+                )
+            except QualificationError as exc:
+                return self._pre_action_refusal(str(exc))
+            except Exception:
+                logger.exception("Could not validate the first supervised replay")
+                return self._pre_action_refusal(
+                    "Desktop could not verify the current workflow review. "
+                    "Open it again before running."
+                )
+        else:
+            try:
+                target, deployment_config = self._execution_target(params)
+            except ValueError as exc:
+                return self._pre_action_refusal(str(exc))
+        if target is not None:
+            from openadapt_desktop.capabilities import CapabilityError, ensure_backend_capability
+
+            try:
+                ensure_backend_capability(target.backend, action="run" if run else "replay")
+            except CapabilityError as exc:
+                return self._pre_action_refusal(str(exc))
+            if target.browser_cdp_endpoint and not self._flow_runs_attached_browser():
+                return self._pre_action_refusal(self._ATTACHED_BROWSER_UNSUPPORTED)
+        qualification_case_execution = params.get("_qualification_case_execution")
+        # Every Desktop run of real items stops before each save until a
+        # person approves it (Flow's ``each_item``). A config without a
+        # profile isn't gated unless the caller asks, so Desktop always asks.
+        # The practice case of Check it is gated by Flow itself; a drill never
+        # asks. A Flow that can't gate never runs.
+        gated_run = run and qualification_case_execution is None
+        practice_case = (
+            qualification_case_execution is not None
+            and qualification_case_execution.get("kind") == "representative"
+        )
+        if (gated_run or practice_case) and not self._flow_gates_each_save():
+            return self._pre_action_refusal(self._APPROVAL_GATE_UNSUPPORTED)
+        run_id = uuid.uuid4().hex[:8]
+        run_dir = self.config.data_dir / "runs" / f"{'run' if run else 'replay'}-{run_id}"
+        # Owner-only: Flow writes the report and screenshots of the record here.
+        ensure_private_dir(run_dir, root=self.config.data_dir)
+        params_file = None
+        qualification_case_id = params.get("_qualification_case_id")
+        # One work item's validated input values (see ``run_item``). They reach
+        # Flow only through a private params file that exists for the length of
+        # the call; the values never enter argv, events, or logs.
+        item_inputs = params.get("_item_inputs")
+        if item_inputs is not None and (
+            qualification_case_id is not None or qualification_case_execution is not None
+        ):
+            return self._pre_action_refusal(
+                "Item inputs and qualification case inputs cannot be combined"
+            )
+        if qualification_case_id is not None:
+            from openadapt_desktop.qualification_lifecycle import case_parameters_path
+
+            params_file = case_parameters_path(
+                self.config.data_dir,
+                workflow_id=str(workflow_id),
+                case_id=str(qualification_case_id),
+            )
+        from openadapt_desktop.bundle_keys import bundle_key_environment
+
+        bundle_env = bundle_key_environment(str(workflow_id))
+        backend = target.backend if target is not None else "configured"
+        # A selected config always exists (validated above). The historical
+        # governed-run default remains fail-loud when absent; a direct target
+        # can still form a complete target-only deployment config.
+        default_config = self.config.data_dir / "deployment.json"
+        base_config = deployment_config
+        if run and base_config is None and default_config.is_file():
+            base_config = default_config
+
+        result = None
+        invocation_started = False
+        log_redactions: tuple[str, ...] = ()
+        try:
+            from openadapt_desktop.private_flow_config import (
+                prepare_flow_config,
+                stage_private_text,
+                stage_private_yaml,
+            )
+
+            prepared = prepare_flow_config(base_config, target)
+            # The signed-in browser can also come from the operator's own
+            # config file (or the default deployment.json), not only from the
+            # target. Decide from the exact snapshot Flow will receive.
+            if (
+                prepared is not None
+                and prepared.attached_browser
+                and not self._flow_runs_attached_browser()
+            ):
+                return self._pre_action_refusal(self._ATTACHED_BROWSER_UNSUPPORTED)
+            log_redactions = prepared.redactions if prepared is not None else ()
+            if prepared is None:
+                staged_context = nullcontext(None)
+            else:
+                staged_context = stage_private_yaml(run_dir, prepared=prepared)
+            if isinstance(item_inputs, dict):
+                log_redactions = tuple(log_redactions) + tuple(
+                    str(value)
+                    for value in item_inputs.values()
+                    if isinstance(value, (str, int, float)) and len(str(value)) >= 3
+                )
+                inputs_context: Any = stage_private_text(
+                    run_dir,
+                    payload=json.dumps(item_inputs, sort_keys=True),
+                    prefix=".item-inputs-",
+                    suffix=".json",
+                )
+            else:
+                inputs_context = nullcontext(None)
+
+            with staged_context as staged_config, inputs_context as inputs_path:
+                if inputs_path is not None:
+                    params_file = inputs_path
+                # Native/remote Flow backends do not import or launch
+                # Playwright. Config-only execution delegates backend setup to
+                # Flow, preserving a native/remote backend without injecting
+                # Desktop's historical web default.
+                ensure_browser = getattr(self.services.flow_bridge, "ensure_browser_runtime", None)
+                should_ensure_browser = (
+                    not run
+                    and ensure_browser is not None
+                    and (
+                        (target is not None and target.backend == "web")
+                        or (target is None and deployment_config is None)
+                    )
+                )
+                if should_ensure_browser:
+                    try:
+                        ensure_browser(
+                            lambda state, detail: self.emit(
+                                "browser_runtime",
+                                {
+                                    "workflow_id": workflow_id,
+                                    "state": state,
+                                    "detail": detail,
+                                },
+                            )
+                        )
+                    except Exception:
+                        return self._pre_action_refusal(
+                            "Browser setup failed before Flow was invoked"
+                        )
+
+                self.emit(
+                    "replay_progress",
+                    {
+                        "workflow_id": workflow_id,
+                        "state": "running",
+                        "backend": backend,
+                        "mode": "governed" if run else "replay",
+                        "total_steps": self._workflow_step_count(workflow_id),
+                    },
+                )
+                if first_supervised:
+                    try:
+                        self._mark_first_workflow_execution_started(
+                            str(workflow_id)
+                        )
+                    except Exception:
+                        return self._pre_action_refusal(
+                            "Desktop could not save the supervised run state."
+                        )
+                watch = None
+                if gated_run or practice_case:
+                    watch = self._open_approval_watch(
+                        workflow_id=str(workflow_id),
+                        run_dir=run_dir,
+                        kind="practice" if practice_case else "item",
+                        values=(
+                            item_inputs
+                            if isinstance(item_inputs, dict)
+                            else (qualification_case_execution or {}).get("values")
+                        ),
+                    )
+                try:
+                    invocation_started = True
+                    if run:
+                        from openadapt_desktop.flow_bridge import (
+                            APPROVAL_WAIT_S,
+                            DESKTOP_APPROVAL_MODE,
+                        )
+
+                        # A missing historical default stays fail-loud in Flow.
+                        config_path = staged_config or default_config
+                        run_kwargs: dict[str, Any] = {"out_dir": run_dir}
+                        if params_file is not None:
+                            run_kwargs["params_file"] = params_file
+                        if bundle_env:
+                            run_kwargs["env_overrides"] = bundle_env
+                        if qualification_case_execution is not None:
+                            case_kwargs: dict[str, Any] = {}
+                            if practice_case:
+                                case_kwargs["approval_wait_s"] = APPROVAL_WAIT_S
+                            result = self.services.flow_bridge.qualify_run_case(
+                                bundle,
+                                config_path,
+                                case_id=str(qualification_case_execution["case_id"]),
+                                inputs_file=Path(qualification_case_execution["inputs_file"]),
+                                campaign_id=str(qualification_case_execution["campaign_id"]),
+                                run_id=run_id,
+                                out_dir=run_dir,
+                                env_overrides=bundle_env,
+                                **case_kwargs,
+                            )
+                        else:
+                            result = self.services.flow_bridge.run(
+                                bundle,
+                                config_path,
+                                approval_mode=DESKTOP_APPROVAL_MODE,
+                                approval_wait_s=APPROVAL_WAIT_S,
+                                **run_kwargs,
+                            )
+                    else:
+                        replay_kwargs: dict[str, Any] = {
+                            "out_dir": run_dir,
+                            "config": staged_config,
+                        }
+                        if params_file is not None:
+                            replay_kwargs["params_file"] = params_file
+                        if bundle_env:
+                            replay_kwargs["env_overrides"] = bundle_env
+                        result = self.services.flow_bridge.replay(bundle, **replay_kwargs)
+                except Exception:
+                    # Once invocation begins, delivery/effect state is unknown.
+                    # Never echo exception text: it may contain config values.
+                    result = None
+                finally:
+                    if watch is not None:
+                        self._close_approval_watch(watch)
+        except Exception as exc:
+            from openadapt_desktop.private_flow_config import PrivateFlowConfigError
+
+            if invocation_started:
+                # Cleanup or post-spawn failures cannot prove that no action
+                # reached the target.
+                result = None
+            elif isinstance(exc, PrivateFlowConfigError):
+                return self._pre_action_refusal(str(exc))
+            else:
+                return self._pre_action_refusal(
+                    "Execution configuration could not be staged safely"
+                )
+
+        from openadapt_desktop.flow_bridge import FlowBridge
+
+        report_data = FlowBridge.read_report(run_dir)
+        if result is None:
+            outcome = "unknown"
+            error = (
+                "Flow invocation ended without a classifiable result. The "
+                "workflow may have delivered an action."
+            )
+        else:
+            from openadapt_desktop.private_flow_config import redact_flow_log
+
+            for line in (result.stdout or "").splitlines():
+                self.emit(
+                    "log_line",
+                    {"line": redact_flow_log(line, log_redactions)},
+                )
+            outcome = FlowBridge.classify_outcome(result.returncode, report_data)
+            error = None
+            if outcome == "unknown":
+                error = (
+                    "Flow produced no explicit success or halt outcome "
+                    f"(exit {result.returncode}). The workflow may have delivered "
+                    "an action."
+                )
+
+        persistence = self._persist_local_run(
+            run_id=run_id,
+            run_dir=run_dir,
+            workflow_id=str(workflow_id),
+            outcome=outcome,
+            first_supervised=first_supervised,
+        )
+        if first_supervised and persistence["state"] == "persisted":
+            self._mark_first_workflow_result(str(workflow_id), outcome)
+        report = self._run_report(
+            run_dir,
+            workflow_id,
+            run_id,
+            outcome=outcome,
+            error=error,
+        )
+        report["persistence"] = persistence
+        progress_state = {
+            "VERIFIED": "done",
+            "COMPLETED_UNVERIFIED": "completed_unverified",
+            "HALTED": "halted",
+            "FAILED": "failed",
+            "ROLLED_BACK": "rolled_back",
+            "success": "done",
+            "halt": "halted",
+            "unknown": "unknown",
+        }[outcome]
+        self.emit(
+            "replay_progress",
+            {
+                "workflow_id": workflow_id,
+                "state": progress_state,
+                # Preserve the precise contract outcome. A legacy ``done``
+                # progress state alone is not sufficient to claim VERIFIED.
+                "outcome": outcome,
+                "backend": backend,
+                "mode": "governed" if run else "replay",
+                "profile": (
+                    report.get("outcome_details", {}).get("profile")
+                    if isinstance(report.get("outcome_details"), dict)
+                    else None
+                ),
+                "current_step": len(report.get("steps") or []) or None,
+                "total_steps": report.get("total_steps"),
+                "duration_s": (report.get("metrics") or {}).get("duration_s"),
+                "evidence_classes": (
+                    report.get("outcome_details", {}).get("evidence_classes")
+                    if isinstance(report.get("outcome_details"), dict)
+                    else []
+                ),
+                "model_calls": (
+                    report.get("outcome_details", {}).get("model_calls")
+                    if isinstance(report.get("outcome_details"), dict)
+                    else None
+                ),
+                "external_network_calls": (
+                    report.get("outcome_details", {}).get("external_network_calls")
+                    if isinstance(report.get("outcome_details"), dict)
+                    else None
+                ),
+            },
+        )
+        return report
+
+    @staticmethod
+    def _persistence_marker_path(run_dir: Path) -> Path:
+        return run_dir / _RUN_PERSISTENCE_MARKER
+
+    def _persist_local_run(
+        self,
+        *,
+        run_id: str,
+        run_dir: Path,
+        workflow_id: str,
+        outcome: str,
+        first_supervised: bool = False,
+    ) -> dict:
+        """Persist one local run or leave a bounded recovery marker."""
+
+        pending_key = (workflow_id, run_id)
+        if first_supervised:
+            self._pending_run_memory[pending_key] = (
+                run_dir,
+                outcome,
+                first_supervised,
+            )
+        marker = self._persistence_marker_path(run_dir)
+        payload = {
+            "schema": "openadapt.desktop-run-persistence/v1",
+            "run_id": run_id,
+            "workflow_id": workflow_id,
+            "outcome": outcome,
+            "first_supervised": first_supervised,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        staging = marker.with_name(f"{marker.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            staging.write_text(json.dumps(payload, sort_keys=True))
+            staging.replace(marker)
+        except Exception:
+            staging.unlink(missing_ok=True)
+            if not first_supervised:
+                return {
+                    "state": "failed",
+                    "retryable": False,
+                    "message": (
+                        "The run report is available for this session, but Desktop "
+                        "could not create a local history recovery record. Preserve "
+                        "the run evidence before closing Desktop."
+                    ),
+                }
+            return {
+                "state": "failed",
+                "retryable": True,
+                "message": (
+                    "The run report is available for this session, but Desktop "
+                    "could not create a local history recovery record. Retry the "
+                    "save before you leave this page."
+                ),
+            }
+
+        try:
+            self.services.db.insert_run(
+                run_id,
+                str(run_dir),
+                bundle_id=workflow_id,
+                status=outcome,
+            )
+        except Exception:
+            return self._degraded_run_persistence()
+
+        try:
+            marker.unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Could not remove reconciled run persistence marker")
+        self._pending_run_memory.pop(pending_key, None)
+        return {
+            "state": "persisted",
+            "retryable": False,
+            "message": "The report is saved in local history.",
+        }
+
+    @staticmethod
+    def _degraded_run_persistence() -> dict:
+        return {
+            "state": "degraded",
+            "retryable": True,
+            "message": (
+                "The report remains available, but Desktop could not add this run "
+                "to local history. History and Teach will not use it until the "
+                "local history save succeeds."
+            ),
+        }
+
+    def _pending_run(
+        self,
+        workflow_id: str,
+        *,
+        run_id: str | None = None,
+    ) -> tuple[Path, dict] | None:
+        """Find the newest valid local-history recovery marker."""
+
+        runs_root = self.config.data_dir / "runs"
+        if not runs_root.is_dir():
+            return None
+        matches: list[tuple[float, Path, dict]] = []
+        for marker in runs_root.glob(f"*/{_RUN_PERSISTENCE_MARKER}"):
+            if marker.parent.is_symlink():
+                continue
+            try:
+                payload = json.loads(marker.read_text())
+                valid = (
+                    payload.get("schema") == "openadapt.desktop-run-persistence/v1"
+                    and payload.get("workflow_id") == workflow_id
+                    and payload.get("outcome") in _KNOWN_RUN_OUTCOMES
+                    and isinstance(payload.get("run_id"), str)
+                    and isinstance(payload.get("created_at"), str)
+                    and (run_id is None or payload.get("run_id") == run_id)
+                )
+                if valid:
+                    matches.append((marker.stat().st_mtime, marker.parent, payload))
+            except (OSError, ValueError, TypeError):
+                continue
+        if not matches:
+            return None
+        _mtime, run_dir, payload = max(matches, key=lambda item: item[0])
+        return run_dir, payload
+
+    @staticmethod
+    def _pending_run_is_newer(pending: tuple[Path, dict] | None, run: dict | None) -> bool:
+        if pending is None:
+            return False
+        if run is None:
+            return True
+        return str(pending[1].get("created_at") or "") >= str(run.get("created_at") or "")
+
+    def retry_run_persistence(self, **params: Any) -> dict:
+        """Retry a failed local-history save from its bounded recovery marker."""
+
+        workflow_id = str(params.get("workflow_id") or "")
+        run_id = str(params.get("run_id") or "")
+        if not workflow_id or not run_id:
+            return {"ok": False, "error": "workflow_id and run_id are required"}
+
+        pending = self._pending_run(workflow_id, run_id=run_id)
+        in_memory = self._pending_run_memory.get((workflow_id, run_id))
+        first_supervised = bool(
+            (pending is not None and pending[1].get("first_supervised") is True)
+            or (in_memory is not None and in_memory[2])
+        )
+        existing = self.services.db.get_run(run_id)
+        if existing is not None:
+            if existing.get("bundle_id") != workflow_id:
+                return {"ok": False, "error": "The saved run belongs to another workflow"}
+            if existing.get("status") in _KNOWN_RUN_OUTCOMES:
+                report = self._run_report(
+                    Path(str(existing["run_path"])),
+                    workflow_id,
+                    run_id,
+                    outcome=str(existing["status"]),
+                )
+                report["persistence"] = {
+                    "state": "persisted",
+                    "retryable": False,
+                    "message": "The report is saved in local history.",
+                }
+                self._pending_run_memory.pop((workflow_id, run_id), None)
+                if first_supervised:
+                    self._mark_first_workflow_result(
+                        workflow_id,
+                        str(existing["status"]),
+                    )
+                return {"ok": True, "report": report}
+
+        if pending is None:
+            if in_memory is None:
+                return {
+                    "ok": False,
+                    "error": "No retryable local history record was found for this run",
+                }
+            run_dir, remembered_outcome, _remembered_first_supervised = in_memory
+            payload = {"outcome": remembered_outcome}
+        else:
+            run_dir, payload = pending
+        try:
+            if existing is None:
+                self.services.db.insert_run(
+                    run_id,
+                    str(run_dir),
+                    bundle_id=workflow_id,
+                    status=str(payload["outcome"]),
+                )
+            else:
+                if Path(str(existing.get("run_path") or "")) != run_dir:
+                    return {
+                        "ok": False,
+                        "error": "The recovery record does not match the saved run path",
+                    }
+                self.services.db.update_run(run_id, status=str(payload["outcome"]))
+        except Exception:
+            return {
+                "ok": False,
+                "error": "Local history is still unavailable. Fix local storage and retry.",
+            }
+        try:
+            self._persistence_marker_path(run_dir).unlink(missing_ok=True)
+        except OSError:
+            logger.warning("Could not remove reconciled run persistence marker")
+        self._pending_run_memory.pop((workflow_id, run_id), None)
+        if first_supervised:
+            self._mark_first_workflow_result(workflow_id, str(payload["outcome"]))
+        report = self._run_report(
+            run_dir,
+            workflow_id,
+            run_id,
+            outcome=str(payload["outcome"]),
+        )
+        report["persistence"] = {
+            "state": "persisted",
+            "retryable": False,
+            "message": "The report is saved in local history.",
+        }
+        return {"ok": True, "report": report}
+
+    def _mark_first_workflow_result(self, workflow_id: str, outcome: str) -> None:
+        state = self.services.db.get_first_workflow_state()
+        if (
+            state is None
+            or state.get("stage") != "executing"
+            or state.get("workflow_id") != workflow_id
+        ):
+            return
+        self.services.db.set_first_workflow_state(
+            stage=(
+                "result"
+                if outcome in {"VERIFIED", "COMPLETED_UNVERIFIED", "success"}
+                else "reconciliation"
+            ),
+            capture_id=state.get("capture_id"),
+            workflow_id=workflow_id,
+            target=state.get("target"),
+            task=str(state.get("task") or ""),
+        )
+
+    def _mark_first_workflow_execution_started(self, workflow_id: str) -> None:
+        state = self.services.db.get_first_workflow_state()
+        if (
+            state is None
+            or state.get("stage") != "review"
+            or state.get("workflow_id") != workflow_id
+        ):
+            raise ValueError("The first workflow review is no longer active")
+        self.services.db.set_first_workflow_state(
+            stage="executing",
+            capture_id=state.get("capture_id"),
+            workflow_id=workflow_id,
+            target=state.get("target"),
+            task=str(state.get("task") or ""),
+        )
+
+    @staticmethod
+    def _pre_action_refusal(error: str) -> dict:
+        """Return the only response that proves Flow was never invoked."""
+
+        return {
+            "ok": False,
+            "outcome": "refused",
+            "pre_action_refusal": True,
+            "error": error,
+        }
+
+    def _execution_target(self, params: dict) -> tuple[Any | None, Path | None]:
+        """Validate one typed PHI-capable target and optional config path."""
+
+        from pydantic import ValidationError
+
+        from openadapt_desktop.targets import ExecutionTarget
+
+        raw_target = params.get("target")
+        target = None
+        if raw_target is not None:
+            if not isinstance(raw_target, dict):
+                raise ValueError("target must be an object")
+            try:
+                target = ExecutionTarget.model_validate(raw_target)
+            except ValidationError as exc:
+                # Pydantic errors can contain selector values. Return field
+                # names only; every target value is treated as PHI-capable.
+                fields = sorted(
+                    {
+                        ".".join(str(part) for part in error.get("loc", ()))
+                        for error in exc.errors()
+                        if error.get("loc")
+                    }
+                )
+                detail = ", ".join(fields) or "target"
+                raise ValueError(f"Invalid execution target ({detail})") from None
+
+        raw_config = params.get("deployment_config")
+        deployment_config: Path | None = None
+        if raw_config is not None:
+            if not isinstance(raw_config, str) or not raw_config.strip():
+                raise ValueError("deployment_config must be a non-empty local file path")
+            deployment_config = Path(raw_config.strip()).expanduser()
+            if not deployment_config.is_file():
+                raise ValueError("Selected deployment config file was not found")
+        if target is not None:
+            try:
+                target.validate_required(deployment_config=deployment_config is not None)
+            except ValueError as exc:
+                raise ValueError(str(exc)) from None
+
+        return target, deployment_config
+
+    def get_run_report(self, **params: Any) -> dict | None:
+        """Return the latest ``RunReport`` for a workflow, or None if none."""
+        workflow_id = str(params.get("workflow_id") or "")
+        runs = [
+            r for r in self.services.db.list_runs(limit=100) if r.get("bundle_id") == workflow_id
+        ]
+        pending = self._pending_run(workflow_id)
+        pending_is_newest = self._pending_run_is_newer(
+            pending,
+            runs[0] if runs else None,
+        )
+        if pending_is_newest:
+            assert pending is not None
+            run_dir, payload = pending
+            report = self._run_report(
+                run_dir,
+                workflow_id,
+                str(payload["run_id"]),
+                outcome=str(payload["outcome"]),
+            )
+            report["persistence"] = self._degraded_run_persistence()
+            return report
+        if not runs:
+            return None
+        run = runs[0]
+        run_dir = run.get("run_path")
+        if not run_dir:
+            return None
+        stored_outcome = run.get("status")
+        if stored_outcome not in _KNOWN_RUN_OUTCOMES:
+            pending = self._pending_run(workflow_id, run_id=str(run.get("run_id") or ""))
+            if pending is not None:
+                pending_dir, payload = pending
+                report = self._run_report(
+                    pending_dir,
+                    workflow_id,
+                    str(payload["run_id"]),
+                    outcome=str(payload["outcome"]),
+                )
+                report["persistence"] = self._degraded_run_persistence()
+                return report
+        outcome = stored_outcome if stored_outcome in _KNOWN_RUN_OUTCOMES else None
+        report = self._run_report(
+            Path(run_dir),
+            workflow_id,
+            run.get("run_id", ""),
+            outcome=outcome,
+        )
+        report["persistence"] = (
+            {
+                "state": "persisted",
+                "retryable": False,
+                "message": "The report is saved in local history.",
+            }
+            if outcome is not None
+            else {
+                "state": "failed",
+                "retryable": False,
+                "message": (
+                    "Desktop found the run evidence, but its local history outcome "
+                    "is incomplete and no recovery record is available."
+                ),
+            }
+        )
+        return report
+
+    def _run_report(
+        self,
+        run_dir: Path,
+        workflow_id: str | None,
+        run_id: str,
+        *,
+        outcome: str | None = None,
+        error: str | None = None,
+    ) -> dict:
+        from openadapt_desktop.flow_bridge import PRECISE_FLOW_OUTCOMES, FlowBridge
+
+        report = FlowBridge.read_report(run_dir)
+        inferred_returncode = 0 if report.get("success") is True else 1
+        classified_outcome = FlowBridge.classify_outcome(inferred_returncode, report)
+        if outcome is None:
+            # Report-only fallback for older DB rows. A true report can be
+            # explicit success evidence; a structured halt remains a halt.
+            outcome = classified_outcome
+        elif outcome != "unknown" and classified_outcome != outcome:
+            outcome = "unknown"
+            error = error or (
+                "The retained report no longer proves the stored execution outcome. "
+                "Inspect the local run evidence before retrying."
+            )
+        halt = FlowBridge.read_halt(run_dir)
+        halt_state = (
+            (halt or {}).get("state_id")
+            if outcome in {"HALTED", "halt"} and isinstance(halt, dict)
+            else None
+        )
+
+        # openadapt-flow writes per-step outcomes under ``results`` (each with
+        # step_id / intent / ok / resolution / effect_verified / elapsed_ms). Map
+        # them onto the frontend ``RunStep`` shape; fall back to a pre-shaped
+        # ``steps`` list for older reports.
+        results = report.get("results")
+        if isinstance(results, list) and results:
+            steps = [self._map_step(r, halt_state) for r in results]
+        else:
+            raw_steps = report.get("steps")
+            steps = raw_steps if isinstance(raw_steps, list) else []
+
+        halt_block = None
+        if outcome in {"HALTED", "halt"} and isinstance(halt, dict) and halt:
+            rung = None
+            for r in results or []:
+                if r.get("step_id") == halt_state:
+                    rung = (r.get("resolution") or {}).get("rung")
+            halt_block = {
+                "step_index": self._step_index(halt.get("state_id") or halt.get("step_index")),
+                "step_intent": (
+                    halt.get("intent") or halt.get("step_intent") or "Execution halted"
+                ),
+                "reason": halt.get("reason")
+                or "The runtime halted before completing the workflow.",
+                "resolver_rung": halt.get("resolver_rung") or rung,
+            }
+
+        total_steps = (
+            self._workflow_step_count(workflow_id) or report.get("total_steps") or len(steps)
+        )
+        total_ms = report.get("total_ms")
+        metrics = report.get("metrics") or {}
+        duration_s = metrics.get("duration_s")
+        if duration_s is None and isinstance(total_ms, (int, float)):
+            duration_s = round(total_ms / 1000.0, 1)
+        cost = metrics.get("cost_usd")
+        if cost is None:
+            cost = report.get("est_model_cost_usd")
+
+        outcome_details = None
+        envelope = report.get("outcome_envelope")
+        if outcome in PRECISE_FLOW_OUTCOMES:
+            # FlowBridge validated this exact envelope before classifying the
+            # outcome. Project its bounded evidence contract into the cockpit.
+            if isinstance(envelope, dict):
+                outcome_details = {
+                    "profile": envelope.get("profile"),
+                    "production_eligible": envelope.get("production_eligible"),
+                    "execution_completed": envelope.get("execution_completed"),
+                    "required_contracts": envelope.get("required_contracts"),
+                    "passed_contracts": envelope.get("passed_contracts"),
+                    "evidence_classes": envelope.get("evidence_classes"),
+                    "model_calls": envelope.get("model_calls"),
+                    "external_network_calls": envelope.get("external_network_calls"),
+                    "compensation_actions": envelope.get("compensation_actions"),
+                }
+
+        from openadapt_desktop.outcomes import consistent_transaction_outcome, halt_kind
+
+        # Flow's transaction outcome states what is known about the business
+        # effect. Desktop forwards it only when it agrees with the validated
+        # execution outcome; every plain label derives from it.
+        transaction_outcome = (
+            consistent_transaction_outcome(outcome, report.get("transaction_outcome"))
+            if outcome in PRECISE_FLOW_OUTCOMES
+            else None
+        )
+        kind = halt_kind(report) if outcome not in {"VERIFIED", "success"} else None
+        mismatch = self._identity_mismatch(results) if kind == "wrong_record" else None
+        if halt_block is not None:
+            halt_block["kind"] = kind or "other"
+            if mismatch is not None:
+                # Local only: these values can identify a record. They render
+                # in the local cockpit and never leave this computer.
+                halt_block["expected"] = mismatch[0]
+                halt_block["observed"] = mismatch[1]
+
+        mapped = {
+            "ok": outcome in {"VERIFIED", "success"},
+            "outcome": outcome,
+            "transaction_outcome": transaction_outcome,
+            "stop_kind": kind,
+            "pre_action_refusal": False,
+            "run_id": report.get("run_id") or run_id,
+            "workflow_id": workflow_id or report.get("workflow_id") or "",
+            "workflow_name": report.get("workflow_name", ""),
+            "total_steps": total_steps,
+            "steps": steps,
+            "halt": halt_block,
+            "metrics": {"duration_s": duration_s, "cost_usd": cost},
+            "outcome_details": outcome_details,
+        }
+        from openadapt_desktop.approval_mode import item_approval
+
+        # Flow's per-item approval-mode block, as closed codes. Present only
+        # when the run had an approval gate; Desktop never adds or upgrades it.
+        mapped["approval"] = item_approval(report.get("approval"))
+        if error:
+            mapped["error"] = error
+        return mapped
+
+    @staticmethod
+    def _identity_mismatch(results: Any) -> tuple[str, str, str] | None:
+        """Expected and observed record text from a right-record check stop."""
+
+        if not isinstance(results, list):
+            return None
+        for result in results:
+            if not isinstance(result, dict):
+                continue
+            identity = result.get("identity")
+            if isinstance(identity, dict) and identity.get("status") == "mismatch":
+                return (
+                    str(identity.get("expected") or "")[:120],
+                    str(identity.get("observed") or "")[:120],
+                    str(result.get("intent") or ""),
+                )
+        return None
+
+    @staticmethod
+    def _step_index(step_id: Any) -> int:
+        """Parse a ``step_009`` id (or int) into a 0-based index."""
+        if isinstance(step_id, int):
+            return step_id
+        try:
+            return int(str(step_id).rsplit("_", 1)[-1])
+        except (ValueError, TypeError):
+            return 0
+
+    def _map_step(self, r: dict, halt_state: str | None) -> dict:
+        """Map one flow ``results`` entry onto a frontend ``RunStep`` dict."""
+        intent = str(r.get("intent") or "")
+        action, _, rest = intent.partition(" ")
+        target = rest.strip().strip("'\"") or "-"
+        sid = r.get("step_id")
+        if sid is not None and sid == halt_state:
+            state = "halted"
+        elif r.get("ok"):
+            state = "verified"
+        elif r.get("skipped"):
+            state = "pending"
+        else:
+            state = "failed"
+        ev = r.get("effect_verified")
+        effect = "verified" if ev is True else ("not_verified" if ev is False else None)
+        elapsed = r.get("elapsed_ms")
+        return {
+            "index": self._step_index(sid),
+            "action": action or intent or "step",
+            "target": target,
+            "state": state,
+            "latency_ms": round(elapsed) if isinstance(elapsed, (int, float)) else None,
+            "effect": effect,
+        }
+
+    def _workflow_step_count(self, workflow_id: str | None) -> int | None:
+        """Best-effort total step count from the bundle's ``workflow.json``."""
+        bundle = self._bundle_dir(workflow_id)
+        if bundle is None:
+            return None
+        wf = bundle / "workflow.json"
+        if not wf.exists():
+            return None
+        try:
+            data = json.loads(wf.read_text())
+        except (OSError, ValueError):
+            return None
+        steps = data.get("steps") or data.get("program") or []
+        return len(steps) if hasattr(steps, "__len__") else None
+
+    def teach_fix(self, **params: Any) -> dict:
+        """Teach a fix for a halted workflow via ``openadapt-flow teach``."""
+        workflow_id = str(params.get("workflow_id") or "")
+        bundle = self._bundle_dir(workflow_id)
+        if bundle is None:
+            return {"promoted": False, "message": f"Unknown workflow {workflow_id}"}
+        run, error = self._teachable_run(
+            workflow_id,
+            expected_run_id=str(params.get("run_id") or ""),
+        )
+        if run is None:
+            return {"promoted": False, "message": error or "No halted run to teach against"}
+        try:
+            fix = self._teach_correction_path(params, workflow_id=workflow_id, run=run)
+        except ValueError as exc:
+            return {"promoted": False, "message": str(exc)}
+        out_dir = self.config.data_dir / "bundles" / f"{workflow_id}_taught_{uuid.uuid4().hex[:6]}"
+        try:
+            result = self.services.flow_bridge.teach(
+                Path(run["run_path"]),
+                bundle,
+                out_dir,
+                fix=fix,
+            )
+        except Exception as exc:
+            return {"promoted": False, "message": str(exc)}
+        message = "Fix promoted." if result.ok else (result.stderr or "Teach did not promote.")
+        return {"promoted": result.ok, "message": message}
+
+    def _teachable_run(
+        self,
+        workflow_id: str,
+        *,
+        expected_run_id: str,
+    ) -> tuple[dict | None, str | None]:
+        """Return the exact latest halted run or a safe refusal reason."""
+
+        if not workflow_id:
+            return None, "A workflow is required for Teach."
+        if not expected_run_id:
+            return None, "The halted run is required for Teach."
+        # Teach responds to the latest execution state. It must not search for
+        # an older halt after a newer VERIFIED, FAILED, or other terminal run.
+        run = next(
+            (
+                item
+                for item in self.services.db.list_runs(limit=100)
+                if item.get("bundle_id") == workflow_id
+            ),
+            None,
+        )
+        pending = self._pending_run(workflow_id)
+        pending_matches_saved_run = bool(
+            pending is not None
+            and run is not None
+            and pending[1].get("run_id") == run.get("run_id")
+        )
+        if pending_matches_saved_run or self._pending_run_is_newer(pending, run):
+            return (
+                None,
+                "The latest run is not saved in local history. Retry the "
+                "local history save before teaching a fix.",
+            )
+        if run is None:
+            return None, "No halted run to teach against"
+        if str(run.get("run_id") or "") != expected_run_id:
+            return None, "The selected halt is stale. Open the latest run before teaching."
+        if run.get("status") not in _TEACHABLE_RUN_OUTCOMES:
+            status = str(run.get("status") or "unknown")
+            return None, f"The latest run ended as {status}, so it is not teachable."
+        if not run.get("run_path"):
+            return None, "The latest halted run has no evidence path"
+        return run, None
+
+    def _stopped_teach_correction(self, stopped: dict) -> dict | None:
+        """Expose the exact local correction artifact when Teach recorded it."""
+
+        capture_id = str(stopped.get("capture_id") or "")
+        if not capture_id:
+            return None
+        capture = self.services.db.get_capture(capture_id)
+        if not capture or capture.get("task_description") != "teach_fix":
+            return None
+        path, binding = self._validated_recorded_correction(capture_id)
+        return {
+            "schema": _TEACH_CORRECTION_SCHEMA,
+            "capture_id": capture_id,
+            "fix_path": str(path),
+            "workflow_id": binding["workflow_id"],
+            "run_id": binding["run_id"],
+        }
+
+    def _validated_recorded_correction(self, capture_id: str) -> tuple[Path, dict]:
+        """Resolve one completed correction capture and validate its run binding."""
+
+        capture = self.services.db.get_capture(capture_id)
+        if not capture or capture.get("task_description") != "teach_fix":
+            raise ValueError("The selected artifact is not a Teach correction recording.")
+        if not capture.get("stopped_at"):
+            raise ValueError("Stop the correction recording before you submit it.")
+        try:
+            path = self._presentation_capture_dir({"capture_id": capture_id})
+        except (OSError, ValueError) as exc:
+            raise ValueError("The correction recording is not available.") from exc
+        meta_path = path / "meta.json"
+        if not meta_path.is_file() or meta_path.is_symlink():
+            raise ValueError("The correction recording has no trusted metadata.")
+        try:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise ValueError("The correction recording metadata is invalid.") from exc
+        binding = meta.get(_TEACH_CORRECTION_META_KEY) if isinstance(meta, dict) else None
+        if (
+            not isinstance(binding, dict)
+            or set(binding) != {"schema", "workflow_id", "run_id"}
+            or binding.get("schema") != _TEACH_CORRECTION_SCHEMA
+            or not isinstance(binding.get("workflow_id"), str)
+            or not isinstance(binding.get("run_id"), str)
+        ):
+            raise ValueError("The correction recording is not bound to a halted run.")
+        return path, binding
+
+    def _teach_correction_path(self, params: dict, *, workflow_id: str, run: dict) -> Path:
+        """Return the explicit fix artifact for the exact current halted run."""
+
+        mode = str(params.get("mode") or "record")
+        if mode == "describe":
+            note = str(params.get("note") or "").strip()
+            if not note:
+                raise ValueError("Describe the corrective action before you submit it.")
+            binding_key = hashlib.sha256(
+                f"{workflow_id}\0{run['run_id']}".encode("utf-8")
+            ).hexdigest()[:16]
+            correction_dir = self.config.data_dir / "corrections" / binding_key
+            correction_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
+            fix = correction_dir / f"{uuid.uuid4().hex}.json"
+            fix.write_text(
+                json.dumps({"resolution_steps": [{"intent": note}]}, indent=2),
+                encoding="utf-8",
+            )
+            fix.chmod(0o600)
+            return fix
+        if mode != "record":
+            raise ValueError("The Teach correction mode is not supported.")
+        capture_id = str(params.get("fix_capture_id") or "")
+        supplied_path = str(params.get("fix_path") or "")
+        if not capture_id or not supplied_path:
+            raise ValueError("Record and stop the corrective action before you submit it.")
+        fix, binding = self._validated_recorded_correction(capture_id)
+        if Path(supplied_path).resolve() != fix:
+            raise ValueError("The correction artifact path does not match the recorded capture.")
+        if binding["workflow_id"] != workflow_id or binding["run_id"] != str(
+            run.get("run_id") or ""
+        ):
+            raise ValueError("The correction recording belongs to a different halted run.")
+        return fix
+
+    def _bundle_dir(self, bundle_id: str | None) -> Path | None:
+        if not bundle_id:
+            return None
+        bundle = self.services.db.get_bundle(bundle_id)
+        if not bundle or not bundle.get("bundle_path"):
+            return None
+        return Path(bundle["bundle_path"])
+
+    def _qualification_bundle_dir(self, bundle_id: str | None) -> Path:
+        """Resolve one writable local bundle without following a staged symlink."""
+
+        bundle = self._bundle_dir(bundle_id)
+        if bundle is None:
+            raise ValueError(f"Unknown workflow {bundle_id}")
+        root = (self.config.data_dir / "bundles").resolve()
+        resolved = bundle.resolve()
+        if not resolved.is_relative_to(root):
+            raise ValueError("Workflow bundle is outside the local Desktop bundle store")
+        # A symlinked bundle (or parent below the bundle-store root) can alias a
+        # different workflow while still resolving inside ``root``.  Reject the
+        # unresolved path itself before returning the canonical directory.
+        cursor = bundle.absolute()
+        while cursor.resolve() != root:
+            if cursor == cursor.parent or not cursor.resolve().is_relative_to(root):
+                raise ValueError("Workflow bundle is outside the local Desktop bundle store")
+            if cursor.is_symlink():
+                raise ValueError(
+                    "Workflow bundle contains a symbolic link and cannot be edited safely"
+                )
+            cursor = cursor.parent
+        if not resolved.is_dir():
+            raise ValueError("Workflow bundle is unavailable")
+        if any(path.is_symlink() for path in resolved.rglob("*")):
+            raise ValueError("Workflow bundle contains a symbolic link and cannot be edited safely")
+        return resolved
+
+    @staticmethod
+    def _qualification_bundle_key(bundle_id: str) -> str | None:
+        from openadapt_desktop.bundle_keys import load_bundle_key
+
+        return load_bundle_key(bundle_id)
+
+    def get_qualification(self, **params: Any) -> dict:
+        """Inspect Flow's canonical graph, coverage, and certification contract."""
+
+        from openadapt_desktop.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            first_replay_review_is_draft,
+            inspect_bundle,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            result = inspect_bundle(
+                bundle,
+                workflow_id=workflow_id,
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            result["draft_environment"] = first_replay_review_is_draft(
+                bundle,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def propose_qualification_from_demo(self, **params: Any) -> dict:
+        """Fill pins from the recording that produced this bundle."""
+
+        from openadapt_desktop.qualification import propose_qualification_from_demo
+
+        workflow_id = str(params.get("workflow_id") or "")
+        recording_dir = params.get("recording_dir")
+        try:
+            if not recording_dir:
+                row = self.services.db.get_bundle(workflow_id)
+                capture_id = row.get("capture_id") if row else None
+                capture = (
+                    self.services.db.get_capture(str(capture_id))
+                    if capture_id
+                    else None
+                )
+                recording_dir = capture and (
+                    capture.get("capture_path") or capture.get("capture_dir")
+                )
+            if not recording_dir:
+                raise ValueError(
+                    "recording_dir is required when this bundle has no "
+                    "retained capture"
+                )
+            return propose_qualification_from_demo(
+                self._qualification_bundle_dir(workflow_id),
+                workflow_id=workflow_id,
+                recording_dir=Path(str(recording_dir)),
+                policy_pack=str(params.get("policy_pack") or "community"),
+                accept=bool(params.get("accept", True)),
+                admit_local=bool(params.get("admit_local", False)),
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def initialize_qualification(self, **params: Any) -> dict:
+        """Create Flow's versioned project for one explicit environment boundary."""
+
+        from openadapt_desktop.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            first_replay_review_is_draft,
+            initialize_qualification,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        raw_capabilities = params.get("required_capabilities") or []
+        try:
+            if not isinstance(raw_capabilities, list):
+                raise ValueError("required_capabilities must be a list")
+            bundle = self._qualification_bundle_dir(workflow_id)
+            bundle_key = self._qualification_bundle_key(workflow_id)
+            replace_first_replay_draft = first_replay_review_is_draft(
+                bundle,
+                bundle_key=bundle_key,
+            )
+            if replace_first_replay_draft:
+                first_state = self.services.db.get_first_workflow_state()
+                candidate = self.services.db.get_bundle(workflow_id)
+                same_completed_capture = bool(
+                    first_state
+                    and first_state.get("stage") == "complete"
+                    and candidate
+                    and candidate.get("capture_id") == first_state.get("capture_id")
+                )
+                if not (
+                    first_state
+                    and first_state.get("stage")
+                    in {"result", "qualification_after_result", "complete"}
+                    and (
+                        first_state.get("workflow_id") == workflow_id
+                        or same_completed_capture
+                    )
+                ):
+                    raise ValueError(
+                        "Save the first supervised run before setting the "
+                        "qualification environment."
+                    )
+            result = initialize_qualification(
+                bundle,
+                workflow_id=workflow_id,
+                target_kind=str(params.get("target_kind") or ""),
+                application=str(params.get("application") or ""),
+                application_version=str(params.get("application_version") or ""),
+                environment_label=(
+                    str(params["environment_label"])
+                    if params.get("environment_label") is not None
+                    else None
+                ),
+                environment_digest=(
+                    str(params["environment_digest"])
+                    if params.get("environment_digest") is not None
+                    else None
+                ),
+                required_capabilities=[str(item) for item in raw_capabilities],
+                minimum_effect_tier=int(params.get("minimum_effect_tier", 3)),
+                policy_source=policy,
+                bundle_key=bundle_key,
+                replace_first_replay_draft=replace_first_replay_draft,
+            )
+            result["draft_environment"] = False
+            self.services.db.update_bundle(workflow_id, status="qualification_pending")
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def set_qualification_risk(self, **params: Any) -> dict:
+        """Correct one action risk, reseal it, and invalidate prior certification."""
+
+        from openadapt_desktop.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            set_action_risk,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            result = set_action_risk(
+                bundle,
+                workflow_id=workflow_id,
+                step_id=str(params.get("step_id") or ""),
+                risk=str(params.get("risk") or ""),
+                explanation=(
+                    str(params["explanation"]) if params.get("explanation") is not None else None
+                ),
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            self.services.db.update_bundle(
+                workflow_id,
+                status=(
+                    "certified" if result.get("certification_current") else "qualification_pending"
+                ),
+            )
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def arm_qualification_identity(self, **params: Any) -> dict:
+        """Arm retained Flow identity evidence for one exact action."""
+
+        from openadapt_desktop.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            arm_action_identity,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            result = arm_action_identity(
+                bundle,
+                workflow_id=workflow_id,
+                step_id=str(params.get("step_id") or ""),
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            self.services.db.update_bundle(
+                workflow_id,
+                status=(
+                    "certified" if result.get("certification_current") else "qualification_pending"
+                ),
+            )
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def set_qualification_identity(self, **params: Any) -> dict:
+        """Persist exact or signal-quorum semantics for retained identity evidence."""
+
+        from openadapt_desktop.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            set_action_identity_policy,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        raw_signals = params.get("signals") or []
+        try:
+            if not isinstance(raw_signals, list) or not all(
+                isinstance(signal, dict) for signal in raw_signals
+            ):
+                raise ValueError("signals must be a list of identity signal objects")
+            bundle = self._qualification_bundle_dir(workflow_id)
+            result = set_action_identity_policy(
+                bundle,
+                workflow_id=workflow_id,
+                step_id=str(params.get("step_id") or ""),
+                enforcement=str(params.get("enforcement") or ""),
+                signals=raw_signals,
+                quorum=int(params.get("quorum", 0)),
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            self.services.db.update_bundle(
+                workflow_id,
+                status=(
+                    "certified" if result.get("certification_current") else "qualification_pending"
+                ),
+            )
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def bind_qualification_effect(self, **params: Any) -> dict:
+        """Bind one parameterized Flow effect contract without raw JSON edits."""
+
+        from openadapt_desktop.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            bind_action_effect,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            raw_index = params.get("effect_index")
+            result = bind_action_effect(
+                bundle,
+                workflow_id=workflow_id,
+                step_id=str(params.get("step_id") or ""),
+                kind=str(params.get("kind") or ""),
+                match_field=str(params.get("match_field") or ""),
+                match_param=str(params.get("match_param") or ""),
+                field=(str(params["field"]) if params.get("field") is not None else None),
+                value_param=(
+                    str(params["value_param"]) if params.get("value_param") is not None else None
+                ),
+                idempotency_param=(
+                    str(params["idempotency_param"])
+                    if params.get("idempotency_param") is not None
+                    else None
+                ),
+                key_field=str(params.get("key_field") or "key"),
+                expected_count=int(params.get("expected_count", 1)),
+                count_new_only=bool(params.get("count_new_only", False)),
+                effect_index=int(raw_index) if raw_index is not None else None,
+                verification_tier=int(params.get("verification_tier", 3)),
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            self.services.db.update_bundle(
+                workflow_id,
+                status=(
+                    "certified" if result.get("certification_current") else "qualification_pending"
+                ),
+            )
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def set_qualification_effect_verification(self, **params: Any) -> dict:
+        """Set the required evidence tier for one selected declared effect."""
+
+        from openadapt_desktop.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            set_action_effect_verification,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            result = set_action_effect_verification(
+                bundle,
+                workflow_id=workflow_id,
+                step_id=str(params.get("step_id") or ""),
+                effect_index=int(params.get("effect_index", -1)),
+                verification_tier=int(params.get("verification_tier", 3)),
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            self.services.db.update_bundle(
+                workflow_id,
+                status=(
+                    "certified" if result.get("certification_current") else "qualification_pending"
+                ),
+            )
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def set_qualification_minimum_effect_tier(self, **params: Any) -> dict:
+        """Version the project's minimum accepted effect strength."""
+
+        from openadapt_desktop.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            set_project_minimum_effect_tier,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            result = set_project_minimum_effect_tier(
+                bundle,
+                workflow_id=workflow_id,
+                minimum_effect_tier=int(params.get("minimum_effect_tier", 3)),
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            self.services.db.update_bundle(
+                workflow_id,
+                status=(
+                    "certified" if result.get("certification_current") else "qualification_pending"
+                ),
+            )
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def author_qualification_business_decision(self, **params: Any) -> dict:
+        """Add or update one Flow-owned typed decision from form fields."""
+
+        from openadapt_desktop.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            author_business_decision,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        raw_roles = params.get("authorized_roles") or []
+        raw_options = params.get("options") or []
+        raw_requirements = params.get("evidence_requirements") or []
+        try:
+            if not isinstance(raw_roles, list):
+                raise ValueError("authorized_roles must be a list")
+            if not isinstance(raw_options, list) or not all(
+                isinstance(item, dict) for item in raw_options
+            ):
+                raise ValueError("options must be a list of decision option objects")
+            if not isinstance(raw_requirements, list) or not all(
+                isinstance(item, dict) for item in raw_requirements
+            ):
+                raise ValueError("evidence_requirements must be a list of evidence objects")
+            bundle = self._qualification_bundle_dir(workflow_id)
+            result = author_business_decision(
+                bundle,
+                workflow_id=workflow_id,
+                graph_id=str(params.get("graph_id") or ""),
+                state_id=str(params.get("state_id") or ""),
+                question=str(params.get("question") or ""),
+                authorized_roles=[str(item) for item in raw_roles],
+                output_param=str(params.get("output_param") or ""),
+                options=raw_options,
+                evidence_requirements=raw_requirements,
+                expires_after_s=int(params.get("expires_after_s", 3600)),
+                revalidation_kind=str(params.get("revalidation_kind") or ""),
+                revalidation_text=(
+                    str(params["revalidation_text"])
+                    if params.get("revalidation_text") is not None
+                    else None
+                ),
+                revalidation_state_id=(
+                    str(params["revalidation_state_id"])
+                    if params.get("revalidation_state_id") is not None
+                    else None
+                ),
+                insert_before_state_id=(
+                    str(params["insert_before_state_id"])
+                    if params.get("insert_before_state_id") is not None
+                    else None
+                ),
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            self.services.db.update_bundle(workflow_id, status="qualification_pending")
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def set_qualification_judgment_cases(self, **params: Any) -> dict:
+        """Save Flow-owned local judgment cases. No runtime decision is created."""
+
+        from openadapt_desktop.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            set_judgment_cases,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        raw_schemas = params.get("schemas") or []
+        raw_cases = params.get("cases") or []
+        try:
+            if not isinstance(raw_schemas, list) or not all(
+                isinstance(item, dict) for item in raw_schemas
+            ):
+                raise ValueError("schemas must be a list of local fact-schema objects")
+            if not isinstance(raw_cases, list) or not all(
+                isinstance(item, dict) for item in raw_cases
+            ):
+                raise ValueError("cases must be a list of local judgment-case objects")
+            bundle = self._qualification_bundle_dir(workflow_id)
+            result = set_judgment_cases(
+                bundle,
+                workflow_id=workflow_id,
+                schemas=raw_schemas,
+                cases=raw_cases,
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            self.services.db.update_bundle(workflow_id, status="qualification_pending")
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def add_qualification_case(self, **params: Any) -> dict:
+        """Add a typed case and keep its optional parameter fixture local."""
+
+        from openadapt_desktop.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            add_qualification_case,
+        )
+        from openadapt_desktop.qualification_lifecycle import store_case_parameters
+
+        workflow_id = str(params.get("workflow_id") or "")
+        case_id = str(params.get("case_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            from openadapt_desktop.qualification import inspect_bundle
+
+            current = inspect_bundle(
+                bundle,
+                workflow_id=workflow_id,
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            secret_params = {
+                str(item["name"])
+                for item in current.get("controls", {}).get("parameters", [])
+                if item.get("secret")
+            }
+            input_ref = None
+            parameters_json = params.get("parameters_json")
+            if parameters_json is not None:
+                _path, input_ref = store_case_parameters(
+                    self.config.data_dir,
+                    workflow_id=workflow_id,
+                    case_id=case_id,
+                    parameters_json=str(parameters_json),
+                    forbidden_keys=secret_params,
+                )
+            result = add_qualification_case(
+                bundle,
+                workflow_id=workflow_id,
+                case_id=case_id,
+                kind=str(params.get("kind") or "representative"),
+                description=str(params.get("description") or ""),
+                input_ref=input_ref,
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            self.services.db.update_bundle(workflow_id, status="qualification_pending")
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def run_qualification_case(self, **params: Any) -> dict:
+        """Execute, hash, sign, and retain one case against the exact revision."""
+
+        from openadapt_desktop.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            prepare_local_qualification_runner,
+            record_local_qualification_result,
+            set_local_qualification_case_scope,
+        )
+        from openadapt_desktop.qualification_lifecycle import (
+            retain_capability_observation,
+            retain_drill_evidence,
+            retain_run_evidence,
+            stage_case_runtime_inputs,
+            store_case_parameters,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        case_id = str(params.get("case_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            from openadapt_desktop.qualification import inspect_bundle
+
+            current = inspect_bundle(
+                bundle,
+                workflow_id=workflow_id,
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            case_view = next(
+                (
+                    item
+                    for item in (current.get("project") or {}).get("cases", [])
+                    if str(item.get("id")) == case_id
+                ),
+                None,
+            )
+            if case_view is None:
+                raise ValueError(f"Unknown qualification case {case_id!r}")
+            case_kind = str(case_view.get("kind") or "")
+            is_drill = case_kind not in {"representative", "nominal"}
+            bundle_env = self._bundle_env(workflow_id)
+            if is_drill:
+                # A drill needs this computer's local drill campaign (B276).
+                # Flow sets it up from the practice case's inputs and save,
+                # and refuses until the practice item has been set up.
+                supports_drills = getattr(
+                    self.services.flow_bridge, "supports_local_drills", None
+                )
+                if supports_drills is None or not supports_drills():
+                    raise ValueError(
+                        "This version of the OpenAdapt engine can't run the safety "
+                        "drills on this computer. Update OpenAdapt, then try again."
+                    )
+                drills = self.services.flow_bridge.qualify_drills(
+                    bundle, env_overrides=bundle_env
+                )
+                if not drills.get("ok"):
+                    raise ValueError(
+                        "OpenAdapt couldn't set up the safety drills: "
+                        + str(drills.get("error") or "Flow refused")
+                    )
+                current = inspect_bundle(
+                    bundle,
+                    workflow_id=workflow_id,
+                    policy_source=policy,
+                    bundle_key=self._qualification_bundle_key(workflow_id),
+                )
+                case_view = next(
+                    item
+                    for item in (current.get("project") or {}).get("cases", [])
+                    if str(item.get("id")) == case_id
+                )
+            secret_params = {
+                str(item["name"])
+                for item in current.get("controls", {}).get("parameters", [])
+                if item.get("secret")
+            }
+            parameters_json = params.get("parameters_json")
+            if parameters_json is not None:
+                store_case_parameters(
+                    self.config.data_dir,
+                    workflow_id=workflow_id,
+                    case_id=case_id,
+                    parameters_json=str(parameters_json),
+                    forbidden_keys=secret_params,
+                )
+            from openadapt_desktop.qualification import _load
+            from openadapt_desktop.qualification_lifecycle import case_parameters_path
+
+            parameters_path = case_parameters_path(
+                self.config.data_dir,
+                workflow_id=workflow_id,
+                case_id=case_id,
+            )
+            if parameters_path is None:
+                raise ValueError("Qualification case parameters are required before execution")
+            workflow_for_inputs = _load(
+                bundle,
+                key=self._qualification_bundle_key(workflow_id),
+            )
+            inputs_path, runtime_input_bytes = stage_case_runtime_inputs(
+                self.config.data_dir,
+                workflow_id=workflow_id,
+                case_id=case_id,
+                workflow=workflow_for_inputs,
+                parameters_path=parameters_path,
+            )
+            fault_target = params.get("fault_target")
+            scoped_fault = case_view.get("fault_target")
+            if is_drill and isinstance(scoped_fault, dict) and scoped_fault.get("step_id"):
+                # The drill campaign already named the save this drill changes.
+                fault_target = {
+                    "step_id": scoped_fault["step_id"],
+                    "actuation_path": scoped_fault.get("actuation_path") or "gui",
+                }
+            set_local_qualification_case_scope(
+                bundle,
+                workflow_id=workflow_id,
+                case_id=case_id,
+                runtime_input_bytes=runtime_input_bytes,
+                fault_target=fault_target,
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            prepare_local_qualification_runner(
+                bundle,
+                workflow_id=workflow_id,
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            drill_setup: dict[str, Any] | None = None
+            if not is_drill:
+                # Set up the drills from this practice case now: it changes
+                # the project, and a change after a result would undo it.
+                supports_drills = getattr(
+                    self.services.flow_bridge, "supports_local_drills", None
+                )
+                if supports_drills is not None and supports_drills():
+                    drill_setup = self.services.flow_bridge.qualify_drills(
+                        bundle, env_overrides=bundle_env
+                    )
+                    if drill_setup.get("ok"):
+                        drill_setup = {
+                            "ok": True,
+                            "drills": len(
+                                (drill_setup.get("campaign") or {}).get("drills") or []
+                            ),
+                            "skipped": [
+                                str(item.get("kind"))
+                                for item in (drill_setup.get("campaign") or {}).get(
+                                    "skipped"
+                                )
+                                or []
+                                if isinstance(item, dict)
+                            ],
+                        }
+                else:
+                    drill_setup = {
+                        "ok": False,
+                        "error": "This version of the OpenAdapt engine can't set up safety drills.",
+                    }
+            practice_values: dict[str, Any] | None = None
+            if not is_drill:
+                try:
+                    stored_values = json.loads(Path(parameters_path).read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    stored_values = None
+                if isinstance(stored_values, dict):
+                    practice_values = {
+                        str(name): value
+                        for name, value in stored_values.items()
+                        if str(name) not in secret_params
+                    }
+            execution_params = {
+                "workflow_id": workflow_id,
+                "_qualification_case_id": case_id,
+                "_qualification_case_execution": {
+                    "case_id": case_id,
+                    "kind": "fault" if is_drill else "representative",
+                    "inputs_file": str(inputs_path),
+                    "campaign_id": uuid.uuid4().hex,
+                    "values": practice_values,
+                },
+            }
+            if params.get("target") is not None:
+                execution_params["target"] = params["target"]
+            if params.get("deployment_config") is not None:
+                execution_params["deployment_config"] = params["deployment_config"]
+            execution = self._replay_or_run(execution_params, run=True)
+            if execution.get("pre_action_refusal"):
+                return {
+                    "ok": False,
+                    "workflow_id": workflow_id,
+                    "error": execution.get("error") or "Case execution was refused",
+                    "case_run": execution,
+                }
+            run_id = str(execution.get("run_id") or "")
+            run = self.services.db.get_run(run_id)
+            if not run or not run.get("run_path"):
+                raise ValueError("Qualification run did not retain a local evidence directory")
+            raw_report_path = Path(str(run["run_path"])) / "report.json"
+            if not raw_report_path.is_file() or raw_report_path.is_symlink():
+                raise ValueError("Qualification run did not retain a valid report")
+            raw_report_bytes = raw_report_path.read_bytes()
+            try:
+                raw_report = json.loads(raw_report_bytes)
+            except json.JSONDecodeError as exc:
+                raise ValueError("Qualification run report is not valid JSON") from exc
+            if not isinstance(raw_report, dict):
+                raise ValueError("Qualification run report must be a JSON object")
+            if not is_drill:
+                unanswered = self._practice_not_approved(raw_report)
+                if unanswered is not None:
+                    # Nothing was saved. A person didn't approve the save, so
+                    # the run says nothing about the task: record no result.
+                    return {
+                        "ok": False,
+                        "workflow_id": workflow_id,
+                        "error": unanswered,
+                        "not_approved": True,
+                        "case_run": execution,
+                        "drill_setup": drill_setup,
+                    }
+            evidence = retain_run_evidence(
+                bundle,
+                case_id=case_id,
+                run_id=run_id,
+                run_dir=Path(str(run["run_path"])),
+                report_bytes=raw_report_bytes,
+                runtime_input_bytes=runtime_input_bytes,
+            )
+            if is_drill:
+                fault_evidence, drill_problem = retain_drill_evidence(
+                    bundle,
+                    case_id=case_id,
+                    run_id=run_id,
+                    run_dir=Path(str(run["run_path"])),
+                )
+                if drill_problem is not None:
+                    return {
+                        "ok": False,
+                        "workflow_id": workflow_id,
+                        "error": drill_problem,
+                        "case_run": execution,
+                    }
+                evidence.extend(fault_evidence)
+            from openadapt_flow.traversal import iter_workflow_steps
+
+            from openadapt_desktop.flow_bridge import FlowBridge
+            from openadapt_desktop.qualification import _flow_api, _load, _runtime_version
+            from openadapt_desktop.qualification_capabilities import (
+                collect_qualification_capabilities,
+                sign_qualification_capability_observation,
+            )
+            from openadapt_desktop.qualification_keys import KEY_ID, qualification_signer
+
+            precise_outcome = str(execution.get("outcome") or "unknown")
+            if (
+                precise_outcome
+                not in {
+                    "VERIFIED",
+                    "COMPLETED_UNVERIFIED",
+                    "HALTED",
+                    "FAILED",
+                    "ROLLED_BACK",
+                }
+                or FlowBridge.classify_outcome(0, raw_report) != precise_outcome
+            ):
+                raise ValueError(
+                    "Qualification requires a complete, internally consistent "
+                    "Flow execution-outcome report"
+                )
+            workflow = _load(
+                bundle,
+                key=self._qualification_bundle_key(workflow_id),
+            )
+            project = workflow.qualification
+            if project is None:  # pragma: no cover - guarded before execution
+                raise ValueError("Qualification project disappeared during case execution")
+            actual_runtime_version = _runtime_version()
+            capability_observation = collect_qualification_capabilities(
+                raw_report,
+                expected_target_kind=project.environment.target_kind,
+                runtime_version=actual_runtime_version,
+                report_sha256=hashlib.sha256(raw_report_bytes).hexdigest(),
+                action_kinds={step.id: step.action.value for step in iter_workflow_steps(workflow)},
+            )
+            private_key, _public_key = qualification_signer()
+            signed_capability_observation = sign_qualification_capability_observation(
+                capability_observation,
+                project_id=project.project_id,
+                project_revision=project.revision,
+                project_contract_sha256=project.contract_sha256(),
+                workflow_contract_sha256=_flow_api()["workflow_contract_sha256"](workflow),
+                environment_contract_sha256=project.environment.contract_sha256(),
+                environment_digest=project.environment.environment_digest,
+                case_id=case_id,
+                run_id=run_id,
+                attestation_key_id=KEY_ID,
+                private_key=private_key,
+            )
+            evidence.append(
+                retain_capability_observation(
+                    bundle,
+                    case_id=case_id,
+                    run_id=run_id,
+                    observation=signed_capability_observation.model_dump(mode="json"),
+                )
+            )
+            outcome_map = {
+                "VERIFIED": "verified",
+                "COMPLETED_UNVERIFIED": "completed_unverified",
+                "HALTED": "halted",
+                "FAILED": "failed",
+                "ROLLED_BACK": "rolled_back",
+                "halt": "halted",
+                "success": "completed_unverified",
+                "unknown": "failed",
+            }
+            raw_outcome = precise_outcome
+            observed_outcome = outcome_map.get(raw_outcome, "failed")
+            missing_capabilities = sorted(
+                set(project.environment.required_capabilities)
+                - set(signed_capability_observation.observed_capabilities)
+            )
+            if missing_capabilities:
+                result = inspect_bundle(
+                    bundle,
+                    workflow_id=workflow_id,
+                    policy_source=policy,
+                    bundle_key=self._qualification_bundle_key(workflow_id),
+                )
+                result.update(
+                    {
+                        "ok": False,
+                        "error": (
+                            "This exact run did not observe required runner capabilities: "
+                            + ", ".join(missing_capabilities)
+                        ),
+                        "missing_capabilities": missing_capabilities,
+                        "case_run": execution,
+                    }
+                )
+                self.services.db.update_bundle(
+                    workflow_id,
+                    status="qualification_pending",
+                )
+                return result
+            result = record_local_qualification_result(
+                bundle,
+                workflow_id=workflow_id,
+                case_id=case_id,
+                observed_outcome=observed_outcome,
+                evidence=evidence,
+                capability_observation=signed_capability_observation,
+                detail_code=(
+                    None if raw_outcome in {"VERIFIED", "HALTED"} else raw_outcome.lower()
+                ),
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            result["case_run"] = execution
+            stopped = self._first_failed_step(raw_report)
+            if stopped is not None:
+                result["stop_reason"] = stopped
+            if drill_setup is not None:
+                result["drill_setup"] = drill_setup
+            self.services.db.update_bundle(workflow_id, status="qualification_pending")
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    @staticmethod
+    def _first_failed_step(report: dict) -> str | None:
+        """Flow's own words for the step a case run stopped at, if one failed.
+
+        Shown only on this computer, under Check it's technical details.
+        """
+
+        for row in report.get("results") or []:
+            if isinstance(row, dict) and row.get("ok") is False and row.get("error"):
+                intent = str(row.get("intent") or row.get("step_id") or "A step")
+                return f"{intent}: {row['error']}"[:600]
+        return None
+
+    @staticmethod
+    def _practice_not_approved(report: dict) -> str | None:
+        """Why a practice run ended without the person's approval, if it did.
+
+        Flow records the approval as ``approval.decision``: ``approved`` once
+        a person approved every save, ``declined`` for Don't save, and
+        ``approval_required`` when nobody answered in time.
+        """
+
+        approval = report.get("approval")
+        if not isinstance(approval, dict):
+            return None
+        decision = approval.get("decision")
+        if decision == "declined":
+            return (
+                "You chose Don't save, so nothing was saved and the practice run "
+                "didn't count. Fix what was wrong, then run the practice item again."
+            )
+        if decision == "approval_required":
+            return (
+                "Nobody approved the save in time, so nothing was saved and the "
+                "practice run didn't count. Run the practice item again and "
+                "approve the save when OpenAdapt asks."
+            )
+        return None
+
+    def _bundle_env(self, workflow_id: str) -> dict[str, str]:
+        from openadapt_desktop.bundle_keys import bundle_key_environment
+
+        return bundle_key_environment(str(workflow_id))
+
+    def import_qualification_results(self, **params: Any) -> dict:
+        """Import canonical signed results and re-verify every local evidence hash."""
+
+        from openadapt_desktop.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            import_qualification_results,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        try:
+            result = import_qualification_results(
+                self._qualification_bundle_dir(workflow_id),
+                workflow_id=workflow_id,
+                signed_results_json=str(params.get("signed_results_json") or ""),
+                policy_source=policy,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            self.services.db.update_bundle(workflow_id, status="qualification_pending")
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def certify_qualification(self, **params: Any) -> dict:
+        """Persist a pass/fail policy attempt into the resealed local bundle."""
+
+        from openadapt_desktop.qualification import (
+            DEFAULT_QUALIFICATION_POLICY,
+            certify_bundle,
+            first_replay_review_is_draft,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        policy = str(params.get("policy") or DEFAULT_QUALIFICATION_POLICY)
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            bundle_key = self._qualification_bundle_key(workflow_id)
+            if first_replay_review_is_draft(bundle, bundle_key=bundle_key):
+                raise ValueError(
+                    "Set the exact qualification environment before certification."
+                )
+            result = certify_bundle(
+                bundle,
+                workflow_id=workflow_id,
+                policy_source=policy,
+                bundle_key=bundle_key,
+            )
+            self.services.db.update_bundle(
+                workflow_id,
+                status=(
+                    "certified" if result.get("certification_current") else "qualification_failed"
+                ),
+            )
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def _new_bundle_version(self, workflow_id: str) -> tuple[str, int, Path, dict]:
+        source = self.services.db.get_bundle(workflow_id)
+        if source is None:
+            raise ValueError(f"Unknown workflow {workflow_id}")
+        version = int(source.get("version") or 1) + 1
+        new_id = f"{workflow_id}-v{version}-{uuid.uuid4().hex[:6]}"
+        destination = self.config.data_dir / "bundles" / new_id
+        return new_id, version, destination, source
+
+    def _register_bundle_version(
+        self,
+        *,
+        bundle_id: str,
+        version: int,
+        destination: Path,
+        source: dict,
+        status: str,
+    ) -> None:
+        self.services.db.insert_bundle(
+            bundle_id,
+            str(destination),
+            capture_id=source.get("capture_id"),
+        )
+        self.services.db.update_bundle(
+            bundle_id,
+            workflow_name=source.get("workflow_name") or "",
+            version=version,
+            steps=int(source.get("steps") or 0),
+            schema_version=int(source.get("schema_version") or 2),
+            status=status,
+        )
+
+    def version_qualification_workflow(self, **params: Any) -> dict:
+        """Create an exact local working version without altering its predecessor."""
+
+        import shutil
+
+        from openadapt_desktop.bundle_keys import copy_bundle_key, delete_bundle_key
+        from openadapt_desktop.qualification_lifecycle import copy_bundle_version
+
+        workflow_id = str(params.get("workflow_id") or "")
+        try:
+            source_path = self._qualification_bundle_dir(workflow_id)
+            new_id, version, destination, source = self._new_bundle_version(workflow_id)
+            copy_bundle_version(source_path, destination)
+            encrypted = (destination / "workflow.json.enc").is_file()
+            if encrypted:
+                copy_bundle_key(workflow_id, new_id)
+            self._register_bundle_version(
+                bundle_id=new_id,
+                version=version,
+                destination=destination,
+                source=source,
+                status=str(source.get("status") or "qualification_pending"),
+            )
+            return {"ok": True, "workflow_id": new_id, "version": version}
+        except Exception as exc:
+            if "destination" in locals():
+                shutil.rmtree(destination, ignore_errors=True)
+            if "new_id" in locals():
+                delete_bundle_key(new_id)
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def seal_qualification_workflow(self, **params: Any) -> dict:
+        """Create an encrypted version through Flow's atomic sealing command."""
+
+        import shutil
+
+        from openadapt_desktop.bundle_keys import delete_bundle_key, generate_bundle_key
+        from openadapt_desktop.qualification import inspect_bundle, seal_qualification_bundle
+
+        workflow_id = str(params.get("workflow_id") or "")
+        try:
+            source_path = self._qualification_bundle_dir(workflow_id)
+            current = inspect_bundle(
+                source_path,
+                workflow_id=workflow_id,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            if current["graph"]["bundle"]["encrypted"]:
+                raise ValueError("This workflow version is already sealed and encrypted")
+            new_id, version, destination, source = self._new_bundle_version(workflow_id)
+            key = generate_bundle_key(new_id)
+            verified = seal_qualification_bundle(
+                source_path,
+                destination,
+                workflow_id=new_id,
+                destination_key=key,
+            )
+            self._register_bundle_version(
+                bundle_id=new_id,
+                version=version,
+                destination=destination,
+                source=source,
+                status=(
+                    "certified"
+                    if verified.get("certification_current")
+                    else "qualification_pending"
+                ),
+            )
+            return {
+                "ok": True,
+                "workflow_id": new_id,
+                "version": version,
+                "certification_current": verified.get("certification_current", False),
+            }
+        except Exception as exc:
+            if "destination" in locals():
+                shutil.rmtree(destination, ignore_errors=True)
+            if "new_id" in locals():
+                delete_bundle_key(new_id)
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def export_qualification_workflow(self, **params: Any) -> dict:
+        """Export the exact certified encrypted artifact to a deterministic archive."""
+
+        import hashlib
+
+        from openadapt_desktop.qualification import inspect_bundle
+        from openadapt_desktop.qualification_lifecycle import export_certified_bundle
+
+        workflow_id = str(params.get("workflow_id") or "")
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            qualified = inspect_bundle(
+                bundle,
+                workflow_id=workflow_id,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            if not qualified.get("capability_coverage", {}).get("satisfied"):
+                raise ValueError(
+                    "Every required runner capability must be observed in signed "
+                    "current-revision case evidence before export"
+                )
+            if not qualified.get("certification_current"):
+                raise ValueError("Certify this exact workflow version before export")
+            if not qualified["graph"]["bundle"]["encrypted"]:
+                raise ValueError("Seal and encrypt this workflow version before export")
+            row = self.services.db.get_bundle(workflow_id) or {}
+            exports = self.config.data_dir / "exports"
+            staging = exports / f".{workflow_id}-{uuid.uuid4().hex}.zip"
+            digest = export_certified_bundle(bundle, staging)
+            destination = exports / (
+                f"{workflow_id}-v{int(row.get('version') or 1)}-{digest[:12]}.zip"
+            )
+            if destination.exists():
+                existing = hashlib.sha256(destination.read_bytes()).hexdigest()
+                if existing != digest:
+                    raise ValueError("An export with this artifact identity is inconsistent")
+                staging.unlink()
+            else:
+                staging.replace(destination)
+            return {
+                "ok": True,
+                "workflow_id": workflow_id,
+                "path": str(destination),
+                "sha256": digest,
+            }
+        except Exception as exc:
+            if "staging" in locals():
+                staging.unlink(missing_ok=True)
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def deploy_qualification_workflow(self, **params: Any) -> dict:
+        """Send an exact certified sealed artifact through Flow's governed push path."""
+
+        from openadapt_desktop.auth.store import auth_header
+        from openadapt_desktop.bundle_keys import bundle_key_environment
+        from openadapt_desktop.qualification import inspect_bundle
+        from openadapt_desktop.qualification_lifecycle import (
+            parse_flow_push,
+            persist_deployment_handoff,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        try:
+            bundle = self._qualification_bundle_dir(workflow_id)
+            qualified = inspect_bundle(
+                bundle,
+                workflow_id=workflow_id,
+                bundle_key=self._qualification_bundle_key(workflow_id),
+            )
+            if not qualified.get("capability_coverage", {}).get("satisfied"):
+                raise ValueError(
+                    "Every required runner capability must be observed in signed "
+                    "current-revision case evidence before deployment"
+                )
+            if not qualified.get("certification_current"):
+                raise ValueError("Certify this exact workflow version before deployment")
+            if not qualified["graph"]["bundle"]["encrypted"]:
+                raise ValueError("Seal and encrypt this workflow version before deployment")
+            if not self.services.flow_bridge.supports_command("push"):
+                raise ValueError("The bundled Flow runtime does not support governed deployment")
+            env = bundle_key_environment(workflow_id)
+            authorization = auth_header(self.config.hosted_host).get("Authorization", "")
+            if authorization.startswith("Bearer "):
+                env["OPENADAPT_INGEST_TOKEN"] = authorization.removeprefix("Bearer ")
+            try:
+                pushed = self.services.flow_bridge.push(
+                    bundle,
+                    kind="bundle",
+                    host=self.config.hosted_host,
+                    env_overrides=env,
+                    json_output=True,
+                )
+                result = parse_flow_push(
+                    pushed.stdout,
+                    pushed.stderr,
+                    ok=pushed.ok,
+                    expected_host=self.config.hosted_host,
+                )
+            except Exception:
+                # The child can fail after it dispatched a request. No raw
+                # exception or blind retry can replace reconciliation.
+                result = parse_flow_push("", "", ok=False)
+            try:
+                handoff = persist_deployment_handoff(
+                    self.config.data_dir,
+                    local_workflow_id=workflow_id,
+                    result=result,
+                )
+                result["handoff_path"] = str(handoff)
+            except Exception:
+                result["ok"] = False
+                result["local_persistence_error"] = True
+                result["error"] = (
+                    "Desktop could not retain the deployment handoff. Do not retry an "
+                    "attempted upload. Reconcile the exact artifact in Cloud."
+                )
+            if result.get("deployed"):
+                hosted_workflow_id = result["workflow_id"]
+                self.services.db.update_bundle(
+                    workflow_id,
+                    workflow_id=hosted_workflow_id,
+                    status="deployed",
+                )
+            result["local_workflow_id"] = workflow_id
+            return result
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    # ------------------------------------------------------- sync / push
+
+    def push_workflow(self, **params: Any) -> dict:
+        """Start a governed push and preserve a required local-review pause."""
+        from openadapt_desktop import hosted
+        from openadapt_desktop.qualification_lifecycle import persist_deployment_handoff
+
+        workflow_id = params.get("workflow_id")
+        bundle = self._bundle_dir(workflow_id)
+        if bundle is None:
+            return {"ok": False, "error": f"Unknown workflow {workflow_id}", "workflow_id": ""}
+        self._emit_sync("pushing")
+        try:
+            result = hosted.push(
+                bundle,
+                kind="bundle",
+                host=self.config.hosted_host,
+                db=self.services.db,
+                bundle_id=workflow_id,
+            )
+            try:
+                handoff = persist_deployment_handoff(
+                    self.config.data_dir,
+                    local_workflow_id=str(workflow_id),
+                    result=result,
+                )
+                result["handoff_path"] = str(handoff)
+            except Exception:
+                result["local_persistence_error"] = True
+                if result.get("success"):
+                    result["success"] = False
+                result["error"] = (
+                    "Desktop could not retain the deployment handoff. Do not retry an "
+                    "attempted upload. Reconcile the exact artifact in Cloud."
+                )
+        except Exception as exc:
+            self._emit_sync("offline")
+            return {"ok": False, "error": str(exc), "workflow_id": ""}
+        if result.get("success"):
+            self._emit_sync("synced")
+        elif result.get("pending_review"):
+            self._emit_sync("paused")
+        else:
+            self._emit_sync("offline")
+        return {
+            "ok": bool(result.get("success")),
+            "pending_review": bool(result.get("pending_review")),
+            "delivery_uncertain": bool(result.get("delivery_uncertain")),
+            "sanitized_path": result.get("sanitized_path", ""),
+            "review_command": result.get("review_command", ""),
+            "workflow_id": result.get("workflow_id", ""),
+            "artifact_ingest_id": result.get("artifact_ingest_id"),
+            "next_action": result.get("next_action"),
+            "delivery": result.get("delivery"),
+            "handoff_path": result.get("handoff_path", ""),
+            "local_persistence_error": bool(result.get("local_persistence_error")),
+            "dashboard_url": result.get("dashboard_url", ""),
+            "error": result.get("error", ""),
+        }
+
+    def _sync_state_now(self) -> str:
+        """``local`` without a Cloud sign-in: nothing is backed up then."""
+        try:
+            signed_in = bool(self.get_auth_status().get("authenticated"))
+        except Exception:
+            logger.exception("Could not read the Cloud sign-in for the sync state")
+            signed_in = False
+        if not signed_in:
+            return "local"
+        return "paused" if self._sync_paused else "synced"
+
+    def get_sync_state(self, **params: Any) -> dict:
+        """Return the current :class:`SyncState`-shaped sync status."""
+        return {"state": self._sync_state_now(), "queued": 0}
+
+    def pause_sync(self, **params: Any) -> dict:
+        """Pause the upload/sync queue and emit ``sync_state``."""
+        self._sync_paused = True
+        return self._emit_sync(self._sync_state_now())
+
+    def resume_sync(self, **params: Any) -> dict:
+        """Resume the upload/sync queue and emit ``sync_state``."""
+        self._sync_paused = False
+        return self._emit_sync(self._sync_state_now())
+
+    def _emit_sync(self, state: str) -> dict:
+        payload = {"state": state, "queued": 0}
+        self.emit("sync_state", payload)
+        return payload
+
+    def get_needs_attention(self, **params: Any) -> dict:
+        """Return the local break count as a ``NeedsAttention`` dict + emit badge."""
+        open_halts = self.services.db.count_open_halts()
+        open_items = self._open_item_count()
+        count = open_halts + open_items
+        payload = {
+            "count": count,
+            "open_halts": open_halts,
+            "open_items": open_items,
+            "failed_runs": 0,
+        }
+        self.emit("break_count", {"count": count})
+        return payload
+
+    def _open_item_count(self) -> int:
+        from openadapt_desktop.work_items import OPEN, TEACHING
+
+        self._reconcile_interrupted_items()
+        try:
+            return len(self.services.db.list_work_items(statuses=(OPEN, TEACHING)))
+        except Exception:
+            logger.exception("Could not count open work items")
+            return 0
+
+    # ------------------------------------------------- simple operator surface
+
+    def _reconcile_interrupted_items(self) -> None:
+        """Turn items whose run was interrupted into records to check.
+
+        An item is inserted as queued before its run starts. If Desktop or the
+        engine stopped during that run, nothing recorded how it ended, and the
+        save may have gone through. Such an item becomes an open item with an
+        unknown outcome: it waits in Needs you, blocks more items of its task,
+        and is never retried until a person checks the record.
+        """
+
+        from openadapt_desktop.work_items import OPEN, QUEUED
+
+        try:
+            rows = self.services.db.list_work_items(statuses=(QUEUED,))
+        except Exception:
+            logger.exception("Could not read queued work items")
+            return
+        now = datetime.now(timezone.utc).isoformat()
+        for row in rows:
+            if row["item_id"] in self._running_items:
+                continue
+            self.services.db.update_work_item(
+                row["item_id"],
+                status=OPEN,
+                execution_outcome="unknown",
+                halt_reason=(
+                    "OpenAdapt stopped while this item was running. "
+                    "The save may have gone through."
+                ),
+                finished_at=now,
+            )
+
+
+    def _task_inputs(self, workflow_id: str) -> list[dict]:
+        from openadapt_desktop.qualification import task_parameters
+
+        bundle = self._qualification_bundle_dir(workflow_id)
+        return task_parameters(
+            bundle,
+            bundle_key=self._qualification_bundle_key(workflow_id),
+        )
+
+    def get_task_inputs(self, **params: Any) -> dict:
+        """Return the inputs one run of a task needs and where it was recorded.
+
+        No secret value is returned. The recorded target is local data: it can
+        name an internal host or window, and it never leaves this computer.
+        """
+
+        workflow_id = str(params.get("workflow_id") or "")
+        try:
+            return {
+                "ok": True,
+                "workflow_id": workflow_id,
+                "inputs": self._task_inputs(workflow_id),
+                "target": self._task_target(workflow_id),
+            }
+        except Exception as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+
+    def _task_target(self, workflow_id: str) -> dict | None:
+        """The application target the task's recording used, if known."""
+
+        bundle = self.services.db.get_bundle(workflow_id)
+        capture_id = (bundle or {}).get("capture_id")
+        if not capture_id:
+            return None
+        try:
+            target = self.services.db.get_task_target(str(capture_id))
+        except Exception:
+            return None
+        if target is None:
+            first = self.services.db.get_first_workflow_state() or {}
+            if first.get("capture_id") == capture_id and isinstance(first.get("target"), dict):
+                target = first["target"]
+        return target
+
+    # ------------------------------------------------ per-item approval
+
+    #: The largest screenshot Desktop shows on the approval screen.
+    _APPROVAL_SCREENSHOT_MAX_BYTES = 15 * 1024 * 1024
+
+    def _open_approval_watch(
+        self,
+        *,
+        workflow_id: str,
+        run_dir: Path,
+        kind: str,
+        values: Any,
+    ) -> dict[str, Any]:
+        """Remember a run that may wait for a person before a save.
+
+        The input values stay in memory for the approval screen only. They
+        never go to a file, a log or an event.
+        """
+
+        shown_values: list[dict[str, str]] = []
+        if isinstance(values, dict):
+            for name, value in values.items():
+                if isinstance(value, (str, int, float)) and not isinstance(value, bool):
+                    shown_values.append({"name": str(name), "value": str(value)})
+        watch = {
+            "workflow_id": workflow_id,
+            "run_dir": str(run_dir),
+            "kind": kind,
+            "values": shown_values,
+            "started_at": datetime.now(timezone.utc).isoformat(),
+        }
+        with self._approval_lock:
+            self._approval_watches[str(run_dir)] = watch
+        self.emit("item_approval", {"workflow_id": workflow_id, "state": "watching"})
+        return watch
+
+    def _close_approval_watch(self, watch: dict[str, Any]) -> None:
+        with self._approval_lock:
+            self._approval_watches.pop(str(watch["run_dir"]), None)
+        self.emit(
+            "item_approval",
+            {"workflow_id": watch["workflow_id"], "state": "closed"},
+        )
+
+    def _approval_watch(self, workflow_id: str) -> dict[str, Any] | None:
+        with self._approval_lock:
+            watches = [
+                dict(watch)
+                for watch in self._approval_watches.values()
+                if not workflow_id or watch["workflow_id"] == workflow_id
+            ]
+        return watches[0] if len(watches) == 1 else None
+
+    def _approval_screenshot(self, run_dir: Path, row: dict) -> str | None:
+        """The filled form Flow saved for this request, as a data URL.
+
+        Only a PNG inside the run's own folder whose bytes match the digest
+        Flow recorded in the request. Anything else shows no picture, and the
+        approval screen then offers no way to approve.
+        """
+
+        try:
+            root = run_dir.resolve()
+            raw = Path(str(row.get("screenshot") or ""))
+            if raw.is_symlink():
+                return None
+            path = raw.resolve()
+            if not path.is_relative_to(root) or not path.is_file():
+                return None
+            if path.stat().st_size > self._APPROVAL_SCREENSHOT_MAX_BYTES:
+                return None
+            data = path.read_bytes()
+        except (OSError, ValueError):
+            return None
+        expected = str(row.get("screenshot_sha256") or "").removeprefix("sha256:")
+        if hashlib.sha256(data).hexdigest() != expected or not data.startswith(b"\x89PNG"):
+            return None
+        return "data:image/png;base64," + base64.b64encode(data).decode("ascii")
+
+    @staticmethod
+    def _approval_deadline(row: dict) -> str | None:
+        """When the run stops waiting: the request's time plus Desktop's wait."""
+
+        from openadapt_desktop.flow_bridge import APPROVAL_WAIT_S
+
+        try:
+            created = datetime.fromisoformat(str(row.get("created_at")).replace("Z", "+00:00"))
+            expires = datetime.fromisoformat(str(row.get("expires_at")).replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        from datetime import timedelta
+
+        return min(created + timedelta(seconds=APPROVAL_WAIT_S), expires).isoformat()
+
+    def get_item_approval(self, **params: Any) -> dict:
+        """The save a running item waits on, for the approval screen.
+
+        Returns ``{"running": False}`` when no run of this task is going.
+        While one runs, ``waiting`` says whether it has stopped before a save.
+        The request carries the filled form and the item's own values.
+        """
+
+        workflow_id = str(params.get("workflow_id") or "")
+        watch = self._approval_watch(workflow_id)
+        if watch is None:
+            return {"ok": True, "running": False, "waiting": False}
+        base = {
+            "ok": True,
+            "running": True,
+            "waiting": False,
+            "workflow_id": watch["workflow_id"],
+            "kind": watch["kind"],
+        }
+        run_dir = Path(watch["run_dir"])
+        if not (run_dir / "item-approval").is_dir():
+            return base
+        try:
+            rows = self.services.flow_bridge.item_approval_show(run_dir)
+        except Exception:
+            logger.exception("Could not list the run's approval requests")
+            return {**base, "ok": False, "error": "Desktop couldn't read the approval request."}
+        waiting = [row for row in rows if row.get("status") == "waiting"]
+        if not waiting:
+            return base
+        row = waiting[0]
+        return {
+            **base,
+            "waiting": True,
+            "request": {
+                "request_id": str(row.get("request_id") or ""),
+                "request_sha256": str(row.get("request_sha256") or ""),
+                "step_id": str(row.get("step_id") or ""),
+                "step_intent": str(row.get("step_intent") or "")[:300],
+                "answer_by": self._approval_deadline(row),
+                "screenshot": self._approval_screenshot(run_dir, row),
+                "values": watch["values"],
+            },
+        }
+
+    def answer_item_approval(self, **params: Any) -> dict:
+        """Approve or decline the save a running item waits on.
+
+        Desktop answers only a request that is waiting right now in a run this
+        engine started, for the exact digest the person saw. Flow checks the
+        answer again before it saves.
+        """
+
+        from openadapt_desktop.flow_bridge import DECLINE_REASONS
+
+        workflow_id = str(params.get("workflow_id") or "")
+        decision = str(params.get("decision") or "")
+        request_id = str(params.get("request_id") or "")
+        request_sha256 = str(params.get("request_sha256") or "")
+        reason = params.get("reason")
+        if decision not in {"approve", "decline"}:
+            return {"ok": False, "error": "Choose Approve and save or Don't save."}
+        if decision == "decline" and reason not in DECLINE_REASONS:
+            return {"ok": False, "error": "Choose why it shouldn't save."}
+        watch = self._approval_watch(workflow_id)
+        if watch is None:
+            return {
+                "ok": False,
+                "error": "That run isn't waiting any more. Nothing was approved.",
+            }
+        run_dir = Path(watch["run_dir"])
+        try:
+            rows = self.services.flow_bridge.item_approval_show(run_dir)
+        except Exception:
+            logger.exception("Could not list the run's approval requests")
+            return {"ok": False, "error": "Desktop couldn't read the approval request."}
+        if not any(
+            row.get("request_id") == request_id
+            and row.get("request_sha256") == request_sha256
+            and row.get("status") == "waiting"
+            for row in rows
+        ):
+            return {
+                "ok": False,
+                "error": "That request isn't waiting any more. Nothing was approved.",
+            }
+        try:
+            answer = self.services.flow_bridge.item_approval_answer(
+                run_dir,
+                decision=decision,  # type: ignore[arg-type]
+                request_id=request_id,
+                request_sha256=request_sha256,
+                reason=str(reason) if decision == "decline" else None,
+            )
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+        except Exception:
+            logger.exception("Could not answer the approval request")
+            return {
+                "ok": False,
+                "error": "Desktop couldn't send your answer. Nothing was approved.",
+            }
+        if not answer.get("ok"):
+            return {
+                "ok": False,
+                "error": "Flow refused the answer, so nothing was approved.",
+                "code": str(answer.get("code") or ""),
+            }
+        if answer.get("resume_required"):
+            # The run stopped waiting before the answer arrived. Desktop
+            # doesn't resume it: run the item again.
+            return {
+                "ok": False,
+                "error": (
+                    "The run had already stopped waiting, so nothing was saved. "
+                    "Run the item again."
+                ),
+            }
+        return {
+            "ok": True,
+            "decision": "approved" if decision == "approve" else "declined",
+        }
+
+    def run_item(self, **params: Any) -> dict:
+        """Run a task once on one item's input values and record the outcome.
+
+        Refuses before Flow is invoked when the values don't match the task's
+        inputs, when an earlier item of this task may have saved and nobody
+        has checked the record yet, or when the same item is already done.
+        """
+
+        from openadapt_desktop.item_vault import ItemVaultError
+        from openadapt_desktop.work_items import (
+            CLOSED_STATUSES,
+            COMPLETED_STATUSES,
+            OPEN,
+            TEACHING,
+            WorkItemError,
+            blocks_more_runs,
+            item_label,
+            legacy_inputs_digest,
+            new_id,
+            public_item,
+            result_for_run,
+            status_after_run,
+            validate_inputs,
+        )
+
+        workflow_id = str(params.get("workflow_id") or "")
+        if self._bundle_dir(workflow_id) is None:
+            return self._pre_action_refusal(f"Unknown workflow {workflow_id}")
+        try:
+            declared = self._task_inputs(workflow_id)
+        except Exception:
+            logger.exception("Could not read task inputs")
+            return self._pre_action_refusal(
+                "Desktop couldn't read the inputs this task needs."
+            )
+        try:
+            values = validate_inputs(params.get("inputs"), declared)
+        except WorkItemError as exc:
+            return self._pre_action_refusal(str(exc))
+
+        retry_of = params.get("_retry_of")
+        self._reconcile_interrupted_items()
+        open_items = self.services.db.list_work_items(
+            workflow_id=workflow_id,
+            statuses=(OPEN, TEACHING),
+        )
+        for row in open_items:
+            if blocks_more_runs(public_item(row)):
+                label = row.get("label") or f"item {int(row.get('position') or 0) + 1}"
+                return self._pre_action_refusal(
+                    f"The save for {label} may have gone through. Check that "
+                    "record in Needs you before you run more items."
+                )
+        if self._open_hosted_save_to_check(workflow_id):
+            # Design 7.5: a run of this task that OpenAdapt Cloud started on
+            # this computer may have saved, and nobody has checked it yet.
+            return self._pre_action_refusal(
+                "A run of this task that OpenAdapt Cloud started on this "
+                "computer may have saved. Check that record in Needs you "
+                "before you run more items."
+            )
+        # The item's values are stored sealed with the keychain key. Without
+        # the key Desktop can neither store them privately nor tell whether
+        # this item is already done, so nothing runs.
+        try:
+            digest = self.services.db.work_item_digest(workflow_id, values)
+        except ItemVaultError as exc:
+            return self._pre_action_refusal(str(exc))
+        done_digests = {digest, legacy_inputs_digest(workflow_id, values)}
+        if not params.get("allow_repeat") and retry_of is None:
+            for row in self.services.db.list_work_items(
+                workflow_id=workflow_id,
+                statuses=tuple(COMPLETED_STATUSES),
+            ):
+                if row.get("inputs_digest") in done_digests:
+                    return self._pre_action_refusal(
+                        "This item is already done, so OpenAdapt didn't enter "
+                        "it again."
+                    )
+
+        batch_id = str(params.get("batch_id") or new_id("batch"))
+        try:
+            position = max(0, int(params.get("position") or 0))
+        except (TypeError, ValueError):
+            position = 0
+        item_id = new_id("item")
+        try:
+            self.services.db.insert_work_item(
+                item_id,
+                batch_id=batch_id,
+                workflow_id=workflow_id,
+                position=position,
+                label=item_label(values, declared),
+                inputs_json=json.dumps(values, sort_keys=True),
+                inputs_digest=digest,
+                retry_of=str(retry_of) if retry_of else None,
+            )
+        except ItemVaultError as exc:
+            return self._pre_action_refusal(str(exc))
+        execution: dict[str, Any] = {
+            "workflow_id": workflow_id,
+            "_item_inputs": values,
+        }
+        if params.get("target") is not None:
+            execution["target"] = params["target"]
+        if params.get("deployment_config") is not None:
+            execution["deployment_config"] = params["deployment_config"]
+        self._running_items.add(item_id)
+        try:
+            report = self._replay_or_run(execution, run=True)
+        except Exception:
+            # The run may have reached the application before it failed.
+            logger.exception("An item run ended without a report")
+            report = {
+                "ok": False,
+                "outcome": "unknown",
+                "transaction_outcome": None,
+                "pre_action_refusal": False,
+                "run_id": "",
+                "error": "The run ended without a result. The save may have gone through.",
+            }
+        finally:
+            self._running_items.discard(item_id)
+        finished = datetime.now(timezone.utc).isoformat()
+        if report.get("pre_action_refusal"):
+            self.services.db.update_work_item(
+                item_id,
+                execution_outcome="refused",
+                status=OPEN,
+                halt_reason=str(report.get("error") or "")[:500],
+                finished_at=finished,
+            )
+        else:
+            from openadapt_desktop.approval_mode import confirm_no_person
+            from openadapt_desktop.outcomes import consistent_transaction_outcome
+
+            result = result_for_run(report)
+            consistent_tx = consistent_transaction_outcome(
+                report.get("outcome"), report.get("transaction_outcome")
+            )
+            approval = report.get("approval") if isinstance(report.get("approval"), dict) else None
+            if approval is not None and approval.get("decision") == "no_person":
+                # Flow decided this item needs no person. Accept that only when
+                # this computer's own records agree; otherwise a person looks.
+                try:
+                    local_switch = self._approval_view(workflow_id)
+                except Exception:
+                    logger.exception("Could not read the task's switch after a run")
+                    local_switch = None
+                approval = confirm_no_person(
+                    approval,
+                    consistent_tx=consistent_tx,
+                    local_switch=local_switch,
+                    retry_or_repeat=bool(retry_of) or bool(params.get("allow_repeat")),
+                    caller_configuration=params.get("deployment_config") is not None,
+                )
+                report["approval"] = approval
+            halt = report.get("halt") if isinstance(report.get("halt"), dict) else {}
+            self.services.db.update_work_item(
+                item_id,
+                approval_json=json.dumps(approval, sort_keys=True) if approval else None,
+                run_id=str(report.get("run_id") or ""),
+                execution_outcome=str(report.get("outcome") or "unknown"),
+                transaction_outcome=report.get("transaction_outcome"),
+                halt_kind=report.get("stop_kind"),
+                halt_step=str((halt or {}).get("step_intent") or "")[:300],
+                halt_reason=str((halt or {}).get("reason") or report.get("error") or "")[:500],
+                expected=str((halt or {}).get("expected") or ""),
+                observed=str((halt or {}).get("observed") or ""),
+                duration_s=(report.get("metrics") or {}).get("duration_s"),
+                status=status_after_run(result["key"], approval, consistent_tx),
+                finished_at=finished,
+            )
+        row = self.services.db.get_work_item(item_id)
+        if row and row.get("status") in CLOSED_STATUSES:
+            # Nothing reads a closed item's values again; its digest still
+            # marks it done.
+            self.services.db.clear_work_item_inputs(item_id)
+        self.get_needs_attention()
+        row = self.services.db.get_work_item(item_id)
+        return {
+            "ok": True,
+            "item": public_item(row or {}),
+            "report": report,
+        }
+
+    def list_attention_items(self, **params: Any) -> dict:
+        """Every item and hosted run that waits for a person, newest first."""
+
+        from openadapt_desktop.outcomes import plain_result_for_transaction
+        from openadapt_desktop.work_items import OPEN, TEACHING, public_item
+
+        self._reconcile_interrupted_items()
+        names = {
+            row.get("bundle_id"): row.get("workflow_name") or row.get("capture_id") or ""
+            for row in self.services.db.list_bundles(limit=500)
+        }
+        items: list[dict[str, Any]] = []
+        for row in self.services.db.list_work_items(statuses=(OPEN, TEACHING)):
+            item = public_item(row)
+            item["source"] = "item"
+            item["task_name"] = names.get(row["workflow_id"]) or row["workflow_id"]
+            items.append(item)
+        for halt in self.services.db.list_open_halts():
+            run = self.services.db.get_run(str(halt.get("run_id") or "")) or {}
+            result = plain_result_for_transaction(run.get("status"))
+            items.append(
+                {
+                    "item_id": str(halt["halt_id"]),
+                    "source": "hosted",
+                    "workflow_id": halt.get("workflow_id") or "",
+                    "task_name": names.get(halt.get("workflow_id")) or "",
+                    "label": "",
+                    "run_id": halt.get("run_id"),
+                    "status": "open",
+                    "result": result["key"],
+                    "nothing_written": result["nothing_written"],
+                    "execution_outcome": None,
+                    "transaction_outcome": run.get("status"),
+                    "halt_kind": None,
+                    "halt_step": halt.get("step_intent") or "",
+                    "halt_reason": halt.get("reason") or "",
+                    "expected": "",
+                    "observed": "",
+                    "created_at": halt.get("created_at"),
+                    "actions": ["handled"],
+                }
+            )
+        items.sort(key=lambda item: str(item.get("created_at") or ""), reverse=True)
+        return {"ok": True, "items": items, "switches": self._approval_switches(names)}
+
+    def resolve_attention_item(self, **params: Any) -> dict:
+        """Record a person's decision on one stopped item.
+
+        "retry" is allowed only when the run proved nothing was written.
+        "retry_after_check" is allowed only after the person confirms that
+        they looked at the record and nothing was saved.
+        """
+
+        from openadapt_desktop.work_items import (
+            CLOSED_STATUSES,
+            RETRIED,
+            TEACHING,
+            WorkItemError,
+            check_action,
+            public_item,
+            resolution_status,
+        )
+
+        item_id = str(params.get("item_id") or "")
+        action = str(params.get("action") or "")
+        now = datetime.now(timezone.utc).isoformat()
+        if item_id.startswith("halt-"):
+            halt = self.services.db.get_halt(item_id)
+            if halt is None or action != "handled":
+                return {"ok": False, "error": "That choice isn't available for this run."}
+            self.services.db.update_halt(item_id, status="resolved", resolved_at=now)
+            self.get_needs_attention()
+            return {"ok": True}
+        row = self.services.db.get_work_item(item_id)
+        if row is None:
+            return {"ok": False, "error": "This item is no longer waiting for you."}
+        item = public_item(row, include_values=True)
+        try:
+            check_action(item, action, record_checked=params.get("record_checked") is True)
+        except WorkItemError as exc:
+            return {"ok": False, "error": str(exc)}
+        status = resolution_status(action)
+        if status == RETRIED and row.get("sealed_unreadable"):
+            # The values are sealed with a key this computer no longer has.
+            # Running the item again with anything else could act on the
+            # wrong record.
+            return {
+                "ok": False,
+                "error": (
+                    "OpenAdapt can't read this item's values on this computer, "
+                    "so it didn't start it again."
+                ),
+            }
+        self.services.db.update_work_item(
+            item_id,
+            status=status,
+            resolved_at=None if status == TEACHING else now,
+        )
+        resolved = public_item(self.services.db.get_work_item(item_id) or row)
+        if action not in {"retry", "retry_after_check"}:
+            if status in CLOSED_STATUSES:
+                self.services.db.clear_work_item_inputs(item_id)
+            self.get_needs_attention()
+            return {"ok": True, "resolved": resolved}
+        rerun_params: dict[str, Any] = {
+            "workflow_id": row["workflow_id"],
+            "inputs": item.get("inputs") or {},
+            "batch_id": row["batch_id"],
+            "position": row["position"],
+            "_retry_of": item_id,
+        }
+        for key in ("target", "deployment_config"):
+            if params.get(key) is not None:
+                rerun_params[key] = params[key]
+        rerun = self.run_item(**rerun_params)
+        if rerun.get("pre_action_refusal"):
+            # Nothing ran. Put the item back so the person can choose again.
+            self.services.db.update_work_item(item_id, status=row["status"], resolved_at=None)
+            self.get_needs_attention()
+            return {
+                "ok": False,
+                "error": rerun.get("error") or "OpenAdapt didn't start the new run.",
+            }
+        # The new item carries the values from here on.
+        self.services.db.clear_work_item_inputs(item_id)
+        return {"ok": True, "resolved": resolved, **rerun}
+
+    def get_attention_screenshot(self, **params: Any) -> dict:
+        """The retained screen where an item's run stopped, for its inbox card.
+
+        Local only: the frame can show a patient record. It is read from the
+        item's own run directory and returned to the local cockpit.
+        """
+
+        item_id = str(params.get("item_id") or "")
+        row = self.services.db.get_work_item(item_id)
+        run = self.services.db.get_run(str((row or {}).get("run_id") or "")) if row else None
+        if not run or not run.get("run_path"):
+            return {"ok": False}
+        run_dir = Path(str(run["run_path"]))
+        from openadapt_desktop.flow_bridge import FlowBridge
+
+        report = FlowBridge.read_report(run_dir)
+        results = report.get("results") if isinstance(report.get("results"), list) else []
+        stopped = next(
+            (r for r in results if isinstance(r, dict) and not r.get("ok")),
+            results[-1] if results else None,
+        )
+        if not isinstance(stopped, dict):
+            return {"ok": False}
+        frame = self._step_frame(run_dir, stopped, prefer="before")
+        if frame is None:
+            return {"ok": False}
+        return {"ok": True, **frame}
+
+    @staticmethod
+    def _step_frame(run_dir: Path, step: dict, *, prefer: str) -> dict | None:
+        """One retained step frame as a data URL, plus the point it acted on.
+
+        The frame must be a PNG inside ``run_dir``; a symlink or a path that
+        leaves the run directory is refused.
+        """
+
+        import base64
+
+        order = ("before_png", "after_png") if prefer == "before" else ("after_png", "before_png")
+        relative = next(
+            (step.get(key) for key in order if isinstance(step.get(key), str) and step.get(key)),
+            None,
+        )
+        if not relative:
+            return None
+        try:
+            root = run_dir.resolve(strict=True)
+            frame = run_dir / relative
+            if frame.is_symlink():
+                return None
+            frame = frame.resolve(strict=True)
+            frame.relative_to(root)
+            data = frame.read_bytes()
+        except (OSError, ValueError):
+            return None
+        if len(data) > 12_000_000 or not data.startswith(b"\x89PNG\r\n\x1a\n"):
+            return None
+        width = int.from_bytes(data[16:20], "big")
+        height = int.from_bytes(data[20:24], "big")
+        focus = None
+        resolution = step.get("resolution")
+        point = resolution.get("point") if isinstance(resolution, dict) else None
+        if isinstance(point, dict) and isinstance(point.get("x"), (int, float)):
+            focus = {"x": point["x"], "y": point.get("y", 0)}
+        elif isinstance(point, (list, tuple)) and len(point) >= 2:
+            focus = {"x": point[0], "y": point[1]}
+        return {
+            "data_url": "data:image/png;base64," + base64.b64encode(data).decode("ascii"),
+            "width": width,
+            "height": height,
+            "focus": focus,
+            "step": str(step.get("intent") or ""),
+        }
+
+    def get_results_summary(self, **params: Any) -> dict:
+        """Counts of what got done, what needed a person, and what was prevented."""
+
+        from openadapt_desktop.work_items import public_item, summarize
+
+        self._reconcile_interrupted_items()
+        rows = self.services.db.list_work_items(limit=5000)
+        bundles = {row.get("bundle_id"): row for row in self.services.db.list_bundles(limit=500)}
+        baselines: dict[str, float | None] = {}
+        names: dict[str, str] = {}
+        for workflow_id, bundle in bundles.items():
+            names[str(workflow_id)] = str(
+                bundle.get("workflow_name") or bundle.get("capture_id") or workflow_id
+            )
+            baselines[str(workflow_id)] = self._demonstration_seconds(bundle)
+        summary = summarize(rows, baselines=baselines)
+        recent = []
+        for row in rows[:50]:
+            item = public_item(row)
+            item["task_name"] = names.get(row["workflow_id"], row["workflow_id"])
+            recent.append(item)
+        return {
+            "ok": True,
+            **summary,
+            "names": names,
+            "recent": recent,
+            "switches": self._approval_switches(names),
+        }
+
+    def _demonstration_seconds(self, bundle: dict) -> float | None:
+        """How long the person's own recording of the task took, if known."""
+
+        capture_id = bundle.get("capture_id")
+        capture = self.services.db.get_capture(str(capture_id)) if capture_id else None
+        duration = (capture or {}).get("duration_secs")
+        if isinstance(duration, (int, float)) and 1 <= duration <= 6 * 3600:
+            return float(duration)
+        return None
+
+    # ------------------------------------- only ask a person about problems
+
+    def _runner_id(self) -> str | None:
+        try:
+            from openadapt_desktop.auth.store import load_runner_credential
+
+            stored = load_runner_credential(self.config.hosted_host) or {}
+        except Exception:
+            return None
+        runner_id = stored.get("runner_id")
+        return str(runner_id) if runner_id else None
+
+    def _open_hosted_save_to_check(self, workflow_id: str) -> bool:
+        """An open halt of a Cloud-started run of this task that may have saved.
+
+        Hosted halts carry the Cloud workflow id; a Desktop item carries the
+        local task version. Either id matches. A halt whose run proved that
+        nothing was written doesn't block.
+        """
+
+        from openadapt_desktop.outcomes import plain_result_for_transaction
+
+        bundle = self.services.db.get_bundle(workflow_id) or {}
+        ids = {workflow_id, str(bundle.get("workflow_id") or "")} - {""}
+        try:
+            halts = self.services.db.list_open_halts()
+        except Exception:
+            logger.exception("Could not read open hosted halts")
+            return True
+        for halt in halts:
+            if str(halt.get("workflow_id") or "") not in ids:
+                continue
+            run = self.services.db.get_run(str(halt.get("run_id") or "")) or {}
+            if not plain_result_for_transaction(run.get("status"))["nothing_written"]:
+                return True
+        return False
+
+    def _item_running(self, workflow_id: str) -> bool:
+        for item_id in list(self._running_items):
+            row = self.services.db.get_work_item(item_id)
+            if row and row.get("workflow_id") == workflow_id:
+                return True
+        return False
+
+    def _approval_view(self, workflow_id: str) -> dict:
+        """The switch for one task version, with the reasons it can't apply here."""
+
+        from openadapt_desktop.approval_mode import (
+            blockers,
+            flow_switch_api,
+            read_switch,
+            store_dir,
+        )
+
+        bundle = self.services.db.get_bundle(workflow_id) or {}
+        view = read_switch(
+            self.config.data_dir,
+            workflow_id,
+            bundle_dir=self._bundle_dir(workflow_id),
+            runner_id=self._runner_id() if store_dir(
+                self.config.data_dir, workflow_id
+            ).exists() else None,
+            item_running=self._item_running(workflow_id),
+        )
+        if view["state"] == "none":
+            # A switch turned on for another version of the same recording
+            # doesn't carry over: a new version needs its own.
+            capture_id = bundle.get("capture_id")
+            if capture_id:
+                for other in self.services.db.list_bundles(limit=500):
+                    other_id = str(other.get("bundle_id") or "")
+                    if other_id == workflow_id or other.get("capture_id") != capture_id:
+                        continue
+                    try:
+                        sibling = read_switch(
+                            self.config.data_dir, other_id, bundle_dir=None, runner_id=None
+                        )
+                    except Exception:
+                        continue
+                    if sibling["state"] != "none":
+                        view.update(state="off", off_reason="version_changed")
+                        break
+        found = blockers(flow_has_switch=flow_switch_api() is not None)
+        state = view["state"]
+        if state in {"on", "waiting_for_cloud"} and found:
+            # On in Cloud, but this computer doesn't check items before each
+            # save, so the switch changes nothing here.
+            state = "not_used_here"
+        host = str(self.config.hosted_host or "").rstrip("/")
+        cloud_id = bundle.get("workflow_id")
+        return {
+            **view,
+            "state": state,
+            "recorded_state": view["state"],
+            # Design 4: the switch appears only on runners with a current
+            # runner setup. Runner setup isn't built, so Desktop shows the
+            # switch only for a task version that has one on this computer.
+            "visible": view["state"] != "none",
+            "blockers": found,
+            "can_turn_off": view["state"] in {"on", "waiting_for_cloud"},
+            "cloud_url": (
+                f"{host}/dashboard/workflows/{cloud_id}" if host and cloud_id
+                else (f"{host}/dashboard/workflows" if host else None)
+            ),
+        }
+
+    def _approval_switches(self, names: dict) -> list[dict]:
+        """Every task version with a switch on this computer, for the screens."""
+
+        from openadapt_desktop.approval_mode import stored_switch_ids
+
+        switches = []
+        for workflow_id in stored_switch_ids(self.config.data_dir):
+            if self.services.db.get_bundle(workflow_id) is None:
+                continue
+            try:
+                view = self._approval_view(workflow_id)
+            except Exception:
+                logger.exception("Could not read a task's switch")
+                continue
+            switches.append(
+                {
+                    "workflow_id": workflow_id,
+                    "task_name": names.get(workflow_id) or "",
+                    "state": view["state"],
+                    "off_reason": view["off_reason"],
+                    "off_at": view["off_at"],
+                    "off_by_this_computer": view["off_by_this_computer"],
+                    "turned_on": view["turned_on"],
+                    "off_step": self._switch_off_step(workflow_id, view["off_reason"]),
+                }
+            )
+        return switches
+
+    def _switch_off_step(self, workflow_id: str, reason: Any) -> str:
+        """The step a screen-changed switch-off happened at, if Desktop saw it."""
+
+        if reason != "screen_changed":
+            return ""
+        from openadapt_desktop.approval_mode import parse_stored
+
+        for row in self.services.db.list_work_items(workflow_id=workflow_id, limit=200):
+            approval = parse_stored(row.get("approval_json")) or {}
+            if approval.get("switch_off_reason") == "screen_changed":
+                return str(row.get("halt_step") or "")[:300]
+        return ""
+
+    def get_approval_mode(self, **params: Any) -> dict:
+        """The switch "Only ask a person about problems" for one task version.
+
+        Read-only. With ``requirements`` true, and for a switch the task card
+        shows, it also evaluates E1 to E8 through Flow from what this computer
+        knows. Turning the switch on happens in OpenAdapt Cloud only.
+        """
+
+        from openadapt_desktop.approval_mode import SwitchApprovalError, local_requirements
+
+        workflow_id = str(params.get("workflow_id") or "")
+        bundle = self.services.db.get_bundle(workflow_id)
+        if bundle is None:
+            return {"ok": False, "workflow_id": workflow_id, "error": "Unknown task."}
+        try:
+            view = self._approval_view(workflow_id)
+        except SwitchApprovalError as exc:
+            return {"ok": False, "workflow_id": workflow_id, "error": str(exc)}
+        result = {"ok": True, "workflow_id": workflow_id, **view}
+        result["off_step"] = self._switch_off_step(workflow_id, view["off_reason"])
+        if params.get("requirements") and view["visible"]:
+            bundle_dir = self._bundle_dir(workflow_id)
+            # The same rule as the task card's "Ready": certified, then sealed.
+            certified_and_sealed = (
+                str(bundle.get("status") or "") == "certified"
+                and bundle_dir is not None
+                and (bundle_dir / "workflow.json.enc").is_file()
+            )
+            try:
+                from openadapt_desktop.qualification import _load
+
+                workflow = _load(
+                    bundle_dir,
+                    key=self._qualification_bundle_key(workflow_id),
+                )
+            except Exception:
+                result["requirements"] = {
+                    "available": False,
+                    "reason": "version_unreadable",
+                    "items": [],
+                }
+            else:
+                result["requirements"] = local_requirements(
+                    workflow, certified_and_sealed=certified_and_sealed
+                )
+        return result
+
+    def turn_off_approval_mode(self, **params: Any) -> dict:
+        """Turn the switch off for one task version from this computer.
+
+        Anyone here may do it, signed in or not, online or offline. It
+        applies before the next save. Cloud can't turn it back on: Flow
+        refuses any status that doesn't include this computer's latest switch
+        log event. Reporting the switch-off to Cloud isn't built yet.
+        """
+
+        from openadapt_desktop.approval_mode import SwitchApprovalError, turn_off
+
+        workflow_id = str(params.get("workflow_id") or "")
+        if self.services.db.get_bundle(workflow_id) is None:
+            return {"ok": False, "error": "Unknown task."}
+        try:
+            outcome = turn_off(self.config.data_dir, workflow_id)
+        except SwitchApprovalError as exc:
+            return {"ok": False, "error": str(exc)}
+        except Exception:
+            logger.exception("Could not turn the switch off")
+            return {"ok": False, "error": "OpenAdapt couldn't record the switch-off."}
+        return {**outcome, "mode": self.get_approval_mode(workflow_id=workflow_id)}
+
+    # ------------------------------------------------------------ sample
+
+    def run_sample(self, **params: Any) -> dict:
+        """Run Flow's built-in sample task so a new user sees it work first.
+
+        Flow serves a synthetic clinic app with made-up patients on this
+        computer and drives it in a headless browser, so this needs no
+        operating-system permission, no account, and none of the user's apps.
+        It runs the sample twice: once normally, and once against a backend
+        that drops the save after the screen says "saved". Each result is
+        derived from Flow's transaction outcome like every other run.
+        """
+
+        from openadapt_desktop.flow_bridge import FlowBridge
+        from openadapt_desktop.outcomes import consistent_transaction_outcome, plain_result
+
+        ensure_browser = getattr(self.services.flow_bridge, "ensure_browser_runtime", None)
+        if ensure_browser is not None:
+            try:
+                ensure_browser(
+                    lambda state, detail: self.emit(
+                        "sample_progress", {"state": "browser", "detail": detail}
+                    )
+                )
+            except Exception:
+                return {
+                    "ok": False,
+                    "error": (
+                        "OpenAdapt couldn't prepare its browser. Check your "
+                        "internet connection, then try again."
+                    ),
+                }
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        sample_dir = self.config.data_dir / "samples" / f"sample-{stamp}-{uuid.uuid4().hex[:6]}"
+        sample_dir.parent.mkdir(parents=True, exist_ok=True)
+        self.emit("sample_progress", {"state": "running", "detail": ""})
+        started = time.monotonic()
+        try:
+            self.services.flow_bridge.tutorial(sample_dir, break_it=True)
+        except Exception:
+            logger.exception("The sample task did not run")
+            self.emit("sample_progress", {"state": "failed", "detail": ""})
+            return {
+                "ok": False,
+                "error": "The sample didn't run. Check that the OpenAdapt engine is ready.",
+            }
+        runs: list[dict[str, Any]] = []
+        for kind, folder in (("normal", "run"), ("save_dropped", "run-broken")):
+            run_dir = sample_dir / folder
+            report = FlowBridge.read_report(run_dir)
+            if not report:
+                continue
+            execution = report.get("execution_outcome")
+            transaction = consistent_transaction_outcome(
+                execution, report.get("transaction_outcome")
+            )
+            result = plain_result(execution, transaction)
+            results = [r for r in report.get("results") or [] if isinstance(r, dict)]
+            steps = []
+            save_step: dict | None = None
+            right_record = 0
+            confirmed = 0
+            refuted = 0
+            for index, step in enumerate(results):
+                evidence = [e for e in step.get("effect_evidence") or [] if isinstance(e, dict)]
+                saves = bool(evidence) or step.get("effect_verified") is not None
+                identity = step.get("identity")
+                if isinstance(identity, dict) and identity.get("status") == "verified":
+                    right_record += 1
+                confirmed += sum(1 for e in evidence if e.get("final_verdict") == "confirmed")
+                refuted += sum(1 for e in evidence if e.get("final_verdict") != "confirmed")
+                steps.append(
+                    {
+                        "index": index,
+                        "intent": str(step.get("intent") or ""),
+                        "ok": bool(step.get("ok")),
+                        "saves": saves,
+                    }
+                )
+                if saves:
+                    save_step = step
+            frame = (
+                self._step_frame(run_dir, save_step, prefer="after")
+                if save_step is not None
+                else None
+            )
+            params_used = report.get("params") if isinstance(report.get("params"), dict) else {}
+            runs.append(
+                {
+                    "kind": kind,
+                    "result": result["key"],
+                    "nothing_written": result["nothing_written"],
+                    "execution_outcome": execution,
+                    "transaction_outcome": transaction,
+                    "steps": steps,
+                    "right_record_checks": right_record,
+                    "record_checks_confirmed": confirmed,
+                    "record_checks_failed": refuted,
+                    "model_calls": report.get("model_calls"),
+                    "inputs": {
+                        str(key): str(value)
+                        for key, value in params_used.items()
+                        if isinstance(value, (str, int, float))
+                    },
+                    "screen": frame,
+                }
+            )
+        self.emit("sample_progress", {"state": "done" if runs else "failed", "detail": ""})
+        if not runs:
+            return {
+                "ok": False,
+                "error": "The sample finished without a result to show.",
+            }
+        return {
+            "ok": True,
+            "seconds": round(time.monotonic() - started, 1),
+            "runs": runs,
+        }
+
+    # ------------------------------------------------------- auth
+
+    def login_browser(self, **params: Any) -> dict:
+        """Log in via the browser-PKCE provider; return an ``AuthStatus``."""
+        from openadapt_desktop import auth
+
+        try:
+            host = _canonical_hosted_origin(
+                params.get("host") or self.config.hosted_host
+            )
+            cred = auth.login(host=host, prefer="browser_pkce")
+            if _canonical_hosted_origin(cred.get("host")) != host:
+                raise ValueError("Authenticated host did not match the requested host")
+        except Exception as exc:
+            return {"authenticated": False, "error": str(exc)}
+        self.config.hosted_host = host
+        self._persist_config_key("hosted_host", host)
+        self._emit_sync(self._sync_state_now())
+        return self._auth_status(cred)
+
+    def login_paste(self, **params: Any) -> dict:
+        """Log in with a pasted ingest token; return an ``AuthStatus``."""
+        from openadapt_desktop.auth.paste import PasteTokenProvider
+
+        token = params.get("token")
+        try:
+            host = _canonical_hosted_origin(
+                params.get("host") or self.config.hosted_host
+            )
+            cred = PasteTokenProvider(host=host).login(token=token)
+            if _canonical_hosted_origin(cred.get("host")) != host:
+                raise ValueError("Authenticated host did not match the requested host")
+        except Exception as exc:
+            return {"authenticated": False, "error": str(exc)}
+        self.config.hosted_host = host
+        self._persist_config_key("hosted_host", host)
+        self._emit_sync(self._sync_state_now())
+        return self._auth_status(cred)
+
+    def connect_uri(self, **params: Any) -> dict:
+        """Handle only a validated ``openadapt://connect`` pairing URI."""
+        from openadapt_desktop.auth.pairing import connect_uri
+
+        uri = params.get("uri")
+        if not isinstance(uri, str):
+            raise ValueError("uri is required")
+        result = connect_uri(uri)
+        host = _canonical_hosted_origin(result["host"])
+        result = {**result, "host": host}
+        self.config.hosted_host = host
+        self._persist_config_key("hosted_host", host)
+        self.emit(
+            "pairing_state",
+            {"status": "connected", "host": host},
+        )
+        self._emit_sync(self._sync_state_now())
+        return result
+
+    def _authoring_service(self) -> Any:
+        if self.services.authoring is None:
+            from openadapt_desktop.authoring_runner import AuthoringRunner
+
+            self.services.authoring = AuthoringRunner(
+                self.config,
+                emit=self.emit,
+                audit=self.services.audit,
+            )
+        return self.services.authoring
+
+    def claim_runner_uri(self, **params: Any) -> dict:
+        """Claim one validated ``openadapt://runner`` bind URI."""
+        uri = params.get("uri")
+        if not isinstance(uri, str):
+            raise ValueError("uri is required")
+        result = self._authoring_service().claim_uri(uri)
+        self.emit("authoring_state", self._authoring_service().status())
+        return result
+
+    def authoring_allow(self, **params: Any) -> dict:
+        """Allow the pending connector ``sub`` to drive this job."""
+        return self._authoring_service().allow(replace=params.get("replace") is True)
+
+    def authoring_deny(self, **params: Any) -> dict:
+        """Refuse the pending Allow request."""
+        return self._authoring_service().deny()
+
+    def authoring_status(self, **params: Any) -> dict:
+        """Return the local authoring bind / Allow state."""
+        return self._authoring_service().status()
+
+    def authoring_pin_target(self, **params: Any) -> dict:
+        """Pin the local authoring backend. Titles never go to MCP."""
+        return self._authoring_service().pin_target(**params)
+
+    def logout(self, **params: Any) -> dict:
+        """Clear only the credential for the selected safe hosted origin."""
+        from openadapt_desktop.auth.store import (
+            active_host,
+            canonical_host_origin,
+            clear_credential,
+        )
+
+        stored_host = active_host()
+        requested_host = params.get("host")
+        if requested_host:
+            try:
+                requested_origin = _canonical_hosted_origin(requested_host)
+            except ValueError:
+                return {"authenticated": False, "error": "Hosted origin is invalid"}
+            if stored_host and canonical_host_origin(stored_host) == requested_origin:
+                clear_credential(stored_host)
+            else:
+                clear_credential(requested_origin)
+        elif stored_host:
+            if not canonical_host_origin(stored_host):
+                return {"authenticated": False, "error": "Hosted origin is invalid"}
+            clear_credential(stored_host)
+        self._emit_sync(self._sync_state_now())
+        return {"authenticated": False}
+
+    def get_auth_status(self, **params: Any) -> dict:
+        """Return auth only when the credential belongs to the configured host."""
+        from openadapt_desktop.auth.store import active_credential, canonical_host_origin
+
+        cred = active_credential()
+        configured_host = canonical_host_origin(self.config.hosted_host)
+        if (
+            not cred
+            or not configured_host
+            or canonical_host_origin(str(cred.get("host") or "")) != configured_host
+        ):
+            return {"authenticated": False, "host": configured_host or None}
+        return self._auth_status(cred)
+
+    def _auth_status(self, cred: Any) -> dict:
+        return {
+            "authenticated": True,
+            "kind": cred.get("kind"),
+            "host": cred.get("host"),
+            "org_id": cred.get("org_id"),
+        }
+
+    # ------------------------------------------------------- config
+
+    def get_config(self, **params: Any) -> dict:
+        """Return the user-facing (non-secret) config the settings screen reads."""
+        return {
+            # ``host`` is the key the Settings screen reads; keep ``hosted_host``
+            # too for any consumer keyed on the engine field name.
+            "host": self.config.hosted_host,
+            "hosted_host": self.config.hosted_host,
+            "deployment_lane": self.config.deployment_lane,
+            "phi_mode": self.config.phi_mode,
+            "poll_interval_s": self.config.poll_interval_s,
+        }
+
+    def set_config(self, **params: Any) -> dict:
+        """Update a non-secret hosted config key (persisted to ``config.toml``).
+
+        Only whitelisted hosted keys are accepted; secrets never touch this file.
+        """
+        key = params.get("key")
+        value = params.get("value")
+        if key == "host":
+            key = "hosted_host"
+        allowed = {"hosted_host", "deployment_lane", "phi_mode", "poll_interval_s"}
+        if key not in allowed:
+            return {"ok": False, "error": f"Unknown or non-settable key: {key}"}
+        if key == "hosted_host":
+            try:
+                value = _canonical_hosted_origin(value)
+            except ValueError as exc:
+                return {"ok": False, "error": str(exc)}
+        # Update the live config object so subsequent commands see the change.
+        try:
+            setattr(self.config, key, value)
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+        self._persist_config_key(key, value)
+        return {"ok": True, **self.get_config()}
+
+    def _persist_config_key(self, key: str, value: Any) -> None:
+        """Write a single ``[hosted]`` key into ``~/.openadapt/config.toml``."""
+        import tomllib
+
+        from openadapt_desktop.config import _config_toml_path
+
+        # Map EngineConfig field -> config.toml [hosted] key.
+        toml_key = {"hosted_host": "host"}.get(key, key)
+        path = _config_toml_path()
+        data: dict[str, Any] = {}
+        if path.exists():
+            try:
+                data = tomllib.loads(path.read_text())
+            except Exception:
+                data = {}
+        hosted = data.get("hosted")
+        if not isinstance(hosted, dict):
+            hosted = {}
+        hosted[toml_key] = value
+        data["hosted"] = hosted
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(_dumps_toml(data))
+        except Exception as exc:
+            logger.warning("Could not persist config key {k}: {e}", k=key, e=exc)
+
+    # ------------------------------------------------------- effective policy
+
+    def get_effective_policy(self, **params: Any) -> dict:
+        """Return the org's effective policy, always fail-closed on safety.
+
+        Resolves via :func:`openadapt_desktop.policy.resolve_effective_policy` (network ->
+        cache -> fully-safe default). NEVER raises to the caller: any unexpected
+        error still yields the fail-closed default so the settings screen and any
+        run gate can rely on a fully-populated, safest-value ``safety`` block.
+
+        The result carries ``is_admin``/``role`` (the cloud is the only source of
+        admin status -- the engine has ``org_id`` but no role concept) so the
+        frontend can decide which Tier-2/Tier-3 cards are read-only.
+        """
+        from openadapt_desktop import policy as policy_mod
+
+        try:
+            return policy_mod.resolve_effective_policy(self.config.hosted_host)
+        except Exception as exc:  # defensive: resolver shouldn't raise, but never crash
+            logger.warning("get_effective_policy fell back to fail-closed: {e}", e=exc)
+            return policy_mod.harden_safety(
+                {
+                    "user": {},
+                    "org": {},
+                    "is_admin": False,
+                    "role": "member",
+                    "policy_version": None,
+                    "source": "fail-closed-default",
+                }
+            )
+
+    def refresh_policy(self, **params: Any) -> dict:
+        """Force a network fetch of the effective policy, refreshing the cache.
+
+        On network failure this still returns a usable, hardened policy (cache or
+        the fail-closed default) via :func:`get_effective_policy` -- ``refresh``
+        is a hint to skip any staleness, not a promise the network is up.
+        """
+        from openadapt_desktop import policy as policy_mod
+
+        try:
+            hardened = policy_mod.harden_safety(
+                policy_mod.fetch_effective_policy(self.config.hosted_host)
+            )
+            hardened["source"] = "network"
+            return hardened
+        except policy_mod.PolicyFetchError as exc:
+            logger.warning("refresh_policy fetch failed ({e}); resolving fail-closed", e=exc)
+            return self.get_effective_policy()
+
+    # ------------------------------------------------------- permissions
+
+    def check_permissions(self, **params: Any) -> dict:
+        """Return the prompt-free :class:`PermissionStatus`.
+
+        macOS capture needs Screen Recording, Accessibility, and Input
+        Monitoring. This check never requests access. Input Monitoring fails
+        closed if its preflight API is unavailable; non-mac platforms do not
+        use these macOS permissions and report all three as granted.
+        """
+        if sys.platform != "darwin":
+            return {
+                "screen_recording": True,
+                "accessibility": True,
+                "input_monitoring": True,
+            }
+        screen = _mac_preflight_screen()
+        access = _mac_preflight_accessibility()
+        input_monitoring = _mac_preflight_input_monitoring()
+        return {
+            "screen_recording": screen,
+            "accessibility": access,
+            "input_monitoring": input_monitoring,
+        }
+
+    def request_input_monitoring(self, **params: Any) -> dict:
+        """Request Input Monitoring and return the refreshed permission state.
+
+        This command is reserved for an explicit user action in the onboarding
+        UI. The passive :meth:`check_permissions` command remains prompt-free.
+        The post-request preflight is authoritative: a successful request call
+        does not count as permission until macOS reports access as granted.
+        """
+        if sys.platform != "darwin":
+            return self.check_permissions()
+        if not _mac_preflight_input_monitoring():
+            _mac_request_input_monitoring()
+        return self.check_permissions()
+
+    def get_capabilities(self, **params: Any) -> dict:
+        """Return the machine-readable capability report for every surface.
+
+        The report is produced by :mod:`openadapt_desktop.capabilities`, the same module
+        that gates record/replay/run, so the UI's pills and the engine's
+        refusal messages can never disagree. Detection is prompt-free and
+        never raises.
+        """
+        from openadapt_desktop.capabilities import capability_report
+
+        return capability_report()
+
+    # ------------------------------------------------------- review / egress
+
+    def scrub_capture(self, **params: Any) -> dict:
+        """Scrub PII from a capture and advance its review state."""
+        from openadapt_desktop.review import ReviewStatus, transition_status
+        from openadapt_desktop.scrubber import Scrubber, ScrubbingUnavailableError, ScrubLevel
+
+        capture_id = params.get("capture_id")
+        capture = capture_id and self.services.db.get_capture(capture_id)
+        if not capture:
+            return {"ok": False, "error": f"Unknown capture {capture_id}"}
+        capture_id = str(capture_id)
+        level = params.get("level", "basic")
+        scrubber = Scrubber(level=ScrubLevel(level))
+        try:
+            scrubbed = scrubber.scrub_capture(Path(capture["capture_path"]))
+        except ScrubbingUnavailableError as exc:
+            # The scrub could not run. The capture stays CAPTURED, which the
+            # review state machine already blocks from every egress path.
+            logger.warning("scrub_capture refused for {c}: {e}", c=capture_id, e=exc)
+            self.services.audit.log(
+                "scrub_refused", capture_id=capture_id, level=level, reason=str(exc)
+            )
+            return {"ok": False, "error": str(exc)}
+        transition_status(
+            capture_id,
+            ReviewStatus.CAPTURED,
+            ReviewStatus.SCRUBBED,
+            db=self.services.db,
+            audit=self.services.audit,
+        )
+        self.services.db.update_capture(capture_id, scrubbed_path=str(scrubbed))
+        return {"ok": True, "scrubbed_path": str(scrubbed)}
+
+    def approve_review(self, **params: Any) -> dict:
+        """Approve a scrubbed capture for egress."""
+        return self._review_transition(params, "SCRUBBED", "REVIEWED")
+
+    def dismiss_review(self, **params: Any) -> dict:
+        """Dismiss scrubbing (accept PII risk) for a capture."""
+        return self._review_transition(params, "CAPTURED", "DISMISSED")
+
+    def _review_transition(self, params: dict, frm: str, to: str) -> dict:
+        from openadapt_desktop.review import ReviewStatus, transition_status
+
+        capture_id = params.get("capture_id")
+        if not capture_id:
+            return {"ok": False, "error": "capture_id is required"}
+        try:
+            transition_status(
+                capture_id,
+                getattr(ReviewStatus, frm),
+                getattr(ReviewStatus, to),
+                db=self.services.db,
+                audit=self.services.audit,
+            )
+        except Exception as exc:
+            return {"ok": False, "error": str(exc)}
+        return {"ok": True}
+
+    def get_pending_reviews(self, **params: Any) -> dict:
+        """Return captures pending review."""
+        from openadapt_desktop.review import get_pending_reviews
+
+        return {"pending": get_pending_reviews(self.services.db)}
+
+    # ------------------------------------------------------- runner lane
+
+    def _runner_service(self) -> Any:
+        """Lazily build the shared hosted-runner service."""
+        if self.services.runner is None:
+            from openadapt_desktop.hosted_runner import RunnerService
+
+            self.services.runner = RunnerService(self.config, self.services, emit=self.emit)
+        return self.services.runner
+
+    def runner_status(self, **params: Any) -> dict:
+        """Return the ``RunnerStatus``-shaped dict for the Runner screen."""
+        return self._runner_service().status()
+
+    def runner_enable(self, **params: Any) -> dict:
+        """Enable the runner lane, start its loop, and persist the flag."""
+        status = self._runner_service().enable()
+        self._persist_config_key("runner_enabled", bool(status.get("enabled")))
+        return status
+
+    def runner_disable(self, **params: Any) -> dict:
+        """Disable the runner lane, stop its loop, and persist the flag."""
+        status = self._runner_service().disable()
+        self._persist_config_key("runner_enabled", False)
+        return status
+
+    # ------------------------------------------- mobile decision portal
+
+    def _portal_service(self) -> Any:
+        """Lazily build the runner-local decision portal service."""
+        if self.services.portal is None:
+            from openadapt_desktop.portal.service import PortalService
+
+            self.services.portal = PortalService(self.config)
+        return self.services.portal
+
+    def portal_status(self, **params: Any) -> dict:
+        """Portal lifecycle state, ingress posture, and paired devices."""
+        return self._portal_service().status()
+
+    def portal_start(self, **params: Any) -> dict:
+        """Start the portal, or fail closed with the exact misconfiguration."""
+        from openadapt_desktop.portal.service import PortalError
+
+        try:
+            status = self._portal_service().start()
+        except PortalError as exc:
+            # Fail loud and stay stopped. The portal never falls back to a
+            # broader bind address to make itself reachable.
+            raise ValueError(str(exc)) from None
+        self.emit("portal_state", status)
+        return status
+
+    def portal_stop(self, **params: Any) -> dict:
+        """Stop the portal and the attended console it supervises."""
+        status = self._portal_service().stop()
+        self.emit("portal_state", status)
+        return status
+
+    def portal_create_pairing(self, **params: Any) -> dict:
+        """Mint one single-use, five-minute QR pairing for a phone."""
+        return self._portal_service().create_pairing()
+
+    def portal_pairing_status(self, **params: Any) -> dict:
+        """Poll one pairing so Desktop can show the scanned device's code."""
+        return self._portal_service().pairing_status(params.get("pairing_id", ""))
+
+    def portal_approve_pairing(self, **params: Any) -> dict:
+        """Approve a scanned phone using the code that phone is displaying."""
+        return self._portal_service().approve_pairing(
+            params.get("pairing_id", ""), params.get("confirm_code", "")
+        )
+
+    def portal_cancel_pairing(self, **params: Any) -> dict:
+        """Cancel a pairing and revoke any session it minted."""
+        return self._portal_service().cancel_pairing(params.get("pairing_id", ""))
+
+    def portal_devices(self, **params: Any) -> dict:
+        """List live paired phones (never a token or its digest)."""
+        return {"devices": self._portal_service().devices()}
+
+    def portal_revoke_device(self, **params: Any) -> dict:
+        """Revoke one paired phone immediately."""
+        return self._portal_service().revoke_device(params.get("session_id", ""))
+
+    def portal_notification(self, **params: Any) -> dict:
+        """Emit the generic operating-system notification payload.
+
+        The payload is asserted generic before it is emitted, so a regression
+        that widened it would fail here rather than on a lock screen.
+        """
+        from openadapt_desktop.portal.notifications import assert_generic_notification
+
+        # Asserted here as well as in the portal service: this is the last
+        # point before the payload crosses into the shell's notification
+        # plugin, so a regression fails loudly instead of on a lock screen.
+        payload = assert_generic_notification(self._portal_service().notification())
+        self.emit("attention_notification", payload)
+        return payload
+
+    # ------------------------------------------------------- tray UI nav
+
+    def open_workflow_library(self, **params: Any) -> dict:
+        """Relay a tray request to open the desktop workflow-library window."""
+        self.emit("open_window", {"view": "workflow_library"})
+        return {"ok": True}
+
+    def open_teach(self, **params: Any) -> dict:
+        """Relay a tray request to open the desktop local-teach view."""
+        self.emit("open_window", {"view": "teach", "workflow_id": params.get("workflow_id")})
+        return {"ok": True}
+
+
+def _dumps_toml(data: dict) -> str:
+    """Serialize a shallow ``{table: {k: v}}`` dict to TOML (stdlib has no writer)."""
+    lines: list[str] = []
+    scalars = {k: v for k, v in data.items() if not isinstance(v, dict)}
+    for key, value in scalars.items():
+        lines.append(f"{key} = {_toml_value(value)}")
+    for table, body in data.items():
+        if not isinstance(body, dict):
+            continue
+        lines.append(f"[{table}]")
+        for key, value in body.items():
+            lines.append(f"{key} = {_toml_value(value)}")
+    return "\n".join(lines) + "\n"
+
+
+def _toml_value(value: Any) -> str:
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (int, float)):
+        return str(value)
+    return '"' + str(value).replace("\\", "\\\\").replace('"', '\\"') + '"'
+
+
+def _mac_preflight_screen() -> bool:  # pragma: no cover - platform-specific
+    try:
+        from Quartz import CGPreflightScreenCaptureAccess
+
+        return bool(CGPreflightScreenCaptureAccess())
+    except Exception:
+        return True
+
+
+def _mac_preflight_accessibility() -> bool:  # pragma: no cover - platform-specific
+    try:
+        from ApplicationServices import AXIsProcessTrusted
+
+        return bool(AXIsProcessTrusted())
+    except Exception:
+        return True
+
+
+def _mac_preflight_input_monitoring() -> bool:  # pragma: no cover - platform-specific
+    """Check Input Monitoring without presenting the system consent prompt."""
+    try:
+        from Quartz import CGPreflightListenEventAccess
+
+        return bool(CGPreflightListenEventAccess())
+    except Exception as exc:
+        logger.warning("Input Monitoring preflight unavailable: {e}", e=exc)
+        return False
+
+
+def _mac_request_input_monitoring() -> bool:  # pragma: no cover - platform-specific
+    """Request Input Monitoring after an explicit user action."""
+    try:
+        from Quartz import CGRequestListenEventAccess
+
+        return bool(CGRequestListenEventAccess())
+    except Exception as exc:
+        logger.warning("Input Monitoring request unavailable: {e}", e=exc)
+        return False

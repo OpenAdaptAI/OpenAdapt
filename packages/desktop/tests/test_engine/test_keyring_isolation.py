@@ -1,6 +1,6 @@
 """Engine tests must never reach the developer's OS keychain.
 
-The autouse ``fake_keyring`` fixture patches ``engine.auth.store._keyring``. A
+The autouse ``fake_keyring`` fixture patches ``openadapt_desktop.auth.store._keyring``. A
 module that binds ``_keyring`` or a ``_kr_*`` helper by name keeps whatever
 function it saw at import time: the real keychain when it is imported before a
 fixture runs, or one test's stale fake when it is first imported inside a test.
@@ -12,15 +12,15 @@ import ast
 from base64 import b64encode
 from pathlib import Path
 
-import engine
+import openadapt_desktop
 
 # Imported at collection time, before any fixture runs: the case that used to
 # bind the real keychain.
-from engine import bundle_keys, qualification_keys
-from engine.auth.store import SERVICE_NAME
+from openadapt_desktop import bundle_keys, qualification_keys
+from openadapt_desktop.auth.store import SERVICE_NAME
 
 _KEYRING_HELPERS = {"_keyring", "_kr_get", "_kr_set", "_kr_delete"}
-_ENGINE_ROOT = Path(engine.__file__).resolve().parent
+_ENGINE_ROOT = Path(openadapt_desktop.__file__).resolve().parent
 
 
 def _store_helper_bindings(tree: ast.AST, package: tuple[str, ...]) -> list[tuple[int, str]]:
@@ -34,23 +34,26 @@ def _store_helper_bindings(tree: ast.AST, package: tuple[str, ...]) -> list[tupl
             module = ".".join(base + ((node.module,) if node.module else ()))
         else:
             module = node.module or ""
-        if module == "engine.auth.store":
+        if module == "openadapt_desktop.auth.store":
             bindings.extend(
-                (node.lineno, alias.name)
-                for alias in node.names
-                if alias.name in _KEYRING_HELPERS
+                (node.lineno, alias.name) for alias in node.names if alias.name in _KEYRING_HELPERS
             )
     return bindings
 
 
 def test_guard_detects_by_name_binding():
-    absolute = ast.parse("from engine.auth.store import DEFAULT_HOST, _keyring, _kr_get\n")
+    absolute = ast.parse(
+        "from openadapt_desktop.auth.store import DEFAULT_HOST, _keyring, _kr_get\n"
+    )
     relative = ast.parse("from .store import (\n    _kr_set,\n)\n")
-    attribute = ast.parse("from engine.auth import store as _store\n")
+    attribute = ast.parse("from openadapt_desktop.auth import store as _store\n")
 
-    assert _store_helper_bindings(absolute, ("engine",)) == [(1, "_keyring"), (1, "_kr_get")]
-    assert _store_helper_bindings(relative, ("engine", "auth")) == [(1, "_kr_set")]
-    assert _store_helper_bindings(attribute, ("engine",)) == []
+    assert _store_helper_bindings(absolute, ("openadapt_desktop",)) == [
+        (1, "_keyring"),
+        (1, "_kr_get"),
+    ]
+    assert _store_helper_bindings(relative, ("openadapt_desktop", "auth")) == [(1, "_kr_set")]
+    assert _store_helper_bindings(attribute, ("openadapt_desktop",)) == []
 
 
 def test_no_engine_module_binds_keyring_helpers_by_name():
@@ -68,7 +71,7 @@ def test_no_engine_module_binds_keyring_helpers_by_name():
 
     assert not offenders, (
         "These imports bypass the test keyring fake. Use "
-        "`from engine.auth import store as _store` and call `_store._keyring()`:\n"
+        "`from openadapt_desktop.auth import store as _store` and call `_store._keyring()`:\n"
         + "\n".join(offenders)
     )
 

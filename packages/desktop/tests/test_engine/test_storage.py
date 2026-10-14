@@ -5,8 +5,8 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from engine.config import EngineConfig
-from engine.storage_manager import StorageManager
+from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.storage_manager import StorageManager
 
 
 class TestStorageManager:

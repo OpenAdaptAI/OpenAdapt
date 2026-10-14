@@ -41,7 +41,7 @@ export interface ExecutionTarget {
 }
 
 /**
- * Capability-aware surface availability (engine/capabilities.py), schema
+ * Capability-aware surface availability (openadapt_desktop/capabilities.py), schema
  * "openadapt-desktop.capability-report/v1". The engine's detection is the
  * single source of truth; the UI never claims "Available" without it.
  */
@@ -169,7 +169,7 @@ export interface WorkItem {
   saved_without_person?: boolean;
 }
 
-/** Flow's per-item approval block, projected by engine/approval_mode.py. */
+/** Flow's per-item approval block, projected by openadapt_desktop/approval_mode.py. */
 export interface ItemApproval {
   /**
    * False when Flow's own model rejected the block, or when Desktop's own
@@ -517,6 +517,8 @@ export interface QualificationEditableEffect {
 
 export interface QualificationActionControls {
   step_id: string;
+  /** Role and accessible name the recorder saved for the clicked control. */
+  target?: { role?: string | null; name?: string | null } | null;
   execution_paths: ("gui" | "api")[];
   classification?: {
     step_id: string;
@@ -977,7 +979,8 @@ export interface ReplayProgress {
 }
 
 export interface SyncState {
-  state: "synced" | "pushing" | "offline" | "paused";
+  /** ``local``: not signed in to Cloud, so nothing is backed up there. */
+  state: "synced" | "pushing" | "offline" | "paused" | "local";
   queued: number;
 }
 
@@ -1075,7 +1078,7 @@ export interface GroundingModelConfig {
 }
 
 // A minimal view of GET /api/policy/effective (resolved by the cloud control
-// plane, fetched + cached fail-closed by the engine — see engine/policy.py /
+// plane, fetched + cached fail-closed by the engine — see openadapt_desktop/policy.py /
 // docs/POLICY_SYNC.md). Only the fields the grounding-model section needs are
 // typed here.
 export interface EffectivePolicy {
@@ -1083,6 +1086,11 @@ export interface EffectivePolicy {
   grounding_model: GroundingModelConfig;
   resolved_at?: string;
   offline?: boolean;
+  /**
+   * Where the engine got it: "network", "cache", or "fail-closed-default"
+   * when neither Cloud nor a saved copy answered (no organization policy).
+   */
+  source?: string;
 }
 
 /** A run waiting for a person to approve a save (``get_item_approval``). */

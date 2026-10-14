@@ -6,7 +6,7 @@ Tauri refuses to build the shell unless
 path with the PyInstaller freeze of the engine. In a source checkout this
 script fills it instead, so the development shell starts with a live engine.
 
-By default it writes a small launcher that runs ``python -m engine`` from this
+By default it writes a small launcher that runs ``python -m openadapt_desktop`` from this
 checkout's ``.venv``. Engine edits then take effect on the next app start, and
 no freeze is needed. Windows can't run a script as the sidecar, so there (or
 anywhere, to test the packaged engine) ``--frozen`` runs the same PyInstaller
@@ -79,7 +79,7 @@ def launcher_text(venv: Path) -> str:
         "# Runs the engine from a source checkout. Never package this file.\n"
         f'PATH={shlex.quote(str(bin_dir))}:"$PATH"\n'
         "export PATH\n"
-        f'exec {shlex.quote(str(python))} -m engine "$@"\n'
+        f'exec {shlex.quote(str(python))} -m openadapt_desktop "$@"\n'
     )
 
 

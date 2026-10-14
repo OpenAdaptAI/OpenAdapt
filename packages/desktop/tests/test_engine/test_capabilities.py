@@ -14,8 +14,8 @@ from pathlib import Path
 import pytest
 import yaml
 
-from engine import capabilities
-from engine.capabilities import (
+from openadapt_desktop import capabilities
+from openadapt_desktop.capabilities import (
     CAPABILITY_SCHEMA,
     SURFACES,
     CapabilityError,
@@ -23,8 +23,8 @@ from engine.capabilities import (
     ensure_backend_capability,
     refusal_message,
 )
-from engine.config import EngineConfig
-from engine.dispatch import EngineDispatcher, EngineServices
+from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.dispatch import EngineDispatcher, EngineServices
 
 # Bound before any fixture patches the module attribute.
 _REAL_DETECT = capabilities.detect_capability
@@ -39,7 +39,7 @@ def _versions(monkeypatch, versions: dict[str, str]) -> None:
 
 
 def _platform(monkeypatch, value: str) -> None:
-    monkeypatch.setattr("engine.capabilities.sys.platform", value)
+    monkeypatch.setattr("openadapt_desktop.capabilities.sys.platform", value)
 
 
 class TestWebSurface:
@@ -379,7 +379,7 @@ class _IdleController:
 def dispatcher(tmp_path: Path):
     config = EngineConfig(data_dir=tmp_path / ".openadapt", log_level="WARNING")
     config.data_dir.mkdir(parents=True, exist_ok=True)
-    from engine.db import IndexDB
+    from openadapt_desktop.db import IndexDB
 
     db = IndexDB(tmp_path / "index.db")
     db.initialize()
@@ -448,7 +448,7 @@ class TestDispatchIntegration:
 
     def test_record_refuses_fast_and_emits_error(self, dispatcher, monkeypatch) -> None:
         disp, _db, events = dispatcher
-        monkeypatch.setattr("engine.dispatch.sys.platform", "linux")
+        monkeypatch.setattr("openadapt_desktop.dispatch.sys.platform", "linux")
         monkeypatch.setattr(capabilities, "detect_capability", _refused)
 
         with pytest.raises(ValueError, match="record refused: linux \\(AT-SPI\\) needs"):
@@ -472,7 +472,7 @@ class TestRecordHelperRefusal:
     def test_private_record_helper_refuses_before_flow(
         self, tmp_path, monkeypatch, capsys
     ) -> None:
-        from engine import flow_record_entry
+        from openadapt_desktop import flow_record_entry
 
         monkeypatch.setattr(capabilities, "detect_capability", _refused)
         request = tmp_path / "request.yaml"
@@ -504,10 +504,10 @@ class TestCliCapabilities:
     def test_json_output_matches_schema(self, tmp_path, monkeypatch, capsys) -> None:
         from unittest.mock import patch as mock_patch
 
-        from engine.cli import main as cli_main
+        from openadapt_desktop.cli import main as cli_main
 
         config = EngineConfig(data_dir=tmp_path / ".openadapt", log_level="WARNING")
-        with mock_patch("engine.cli.EngineConfig", return_value=config):
+        with mock_patch("openadapt_desktop.cli.EngineConfig", return_value=config):
             cli_main(["capabilities", "--json"])
         report = json.loads(capsys.readouterr().out)
         assert report["schema"] == CAPABILITY_SCHEMA
@@ -519,10 +519,10 @@ class TestCliCapabilities:
     def test_human_output_lists_every_surface(self, tmp_path, monkeypatch, capsys) -> None:
         from unittest.mock import patch as mock_patch
 
-        from engine.cli import main as cli_main
+        from openadapt_desktop.cli import main as cli_main
 
         config = EngineConfig(data_dir=tmp_path / ".openadapt", log_level="WARNING")
-        with mock_patch("engine.cli.EngineConfig", return_value=config):
+        with mock_patch("openadapt_desktop.cli.EngineConfig", return_value=config):
             cli_main(["capabilities"])
         out = capsys.readouterr().out
         for surface in SURFACES:

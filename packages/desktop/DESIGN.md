@@ -1481,7 +1481,7 @@ Developers working on the Python engine use `uv` (consistent with all other Open
 ```bash
 cd openadapt-desktop
 uv sync                    # Install all Python deps
-uv run python -m engine    # Run the Python engine
+uv run python -m openadapt_desktop    # Run the Python engine
 ```
 
 The Tauri shell is developed using standard Rust/Node.js tooling:
@@ -1723,7 +1723,7 @@ openadapt-desktop/
     assets/
     styles/
     scripts/
-  engine/                      # Python sidecar source
+  openadapt_desktop/           # Python sidecar source
     __init__.py
     main.py                    # Entry point for sidecar
     controller.py              # Recording controller (start/stop/pause)

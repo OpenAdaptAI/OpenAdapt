@@ -19,15 +19,24 @@ from pathlib import Path
 
 import pytest
 
-from engine.config import EngineConfig
-from engine.db import IndexDB
-from engine.dispatch import EngineDispatcher, EngineServices
-from engine.flow_bridge import APPROVAL_WAIT_S, FlowBridge, FlowResult
+from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.db import IndexDB
+from openadapt_desktop.dispatch import EngineDispatcher, EngineServices
+from openadapt_desktop.flow_bridge import APPROVAL_WAIT_S, FlowBridge, FlowResult
 from tests.test_engine.test_work_items import _verified_report
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"filled form"
 REQUEST_ID = "0" * 31 + "1"
 REQUEST_SHA = "sha256:" + "a" * 64
+
+
+def _fake_pinned_flow(monkeypatch) -> None:
+    """Stand in for the pinned openadapt-flow installed next to this Python."""
+
+    monkeypatch.setattr(
+        "openadapt_desktop.flow_bridge._pinned_flow_command",
+        lambda: ["/usr/bin/openadapt-flow"],
+    )
 
 
 class _Storage:
@@ -383,7 +392,7 @@ def test_the_wire_answers_an_approval_while_a_run_waits(
 ) -> None:
     """A run holds the command queue; the approval still gets through."""
 
-    from engine.ipc import IPCHandler
+    from openadapt_desktop.ipc import IPCHandler
 
     config = EngineConfig(data_dir=tmp_path / ".openadapt", log_level="WARNING")
     handler = IPCHandler(config=config)
@@ -437,7 +446,7 @@ def _bridge(calls: list, *, returncode: int = 0, stdout: str = "") -> FlowBridge
 
 
 def test_bridge_asks_flow_to_wait_before_each_save(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr("engine.flow_bridge.shutil.which", lambda _: "/usr/bin/openadapt-flow")
+    _fake_pinned_flow(monkeypatch)
     calls: list = []
     bridge = _bridge(calls)
     bridge.run(
@@ -465,7 +474,7 @@ def test_bridge_asks_flow_to_wait_before_each_save(monkeypatch, tmp_path: Path) 
 
 
 def test_bridge_answers_as_a_signed_out_person_from_run_it(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr("engine.flow_bridge.shutil.which", lambda _: "/usr/bin/openadapt-flow")
+    _fake_pinned_flow(monkeypatch)
     calls: list = []
     ok = json.dumps(
         {
@@ -513,7 +522,7 @@ def test_bridge_answers_as_a_signed_out_person_from_run_it(monkeypatch, tmp_path
 
 
 def test_bridge_reports_a_refused_answer(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr("engine.flow_bridge.shutil.which", lambda _: "/usr/bin/openadapt-flow")
+    _fake_pinned_flow(monkeypatch)
     refused = json.dumps({"ok": False, "code": "request_expired", "message": "expired"})
     bridge = _bridge([], returncode=2, stdout=refused)
     answer = bridge.item_approval_answer(
@@ -530,7 +539,7 @@ def test_bridge_reports_a_refused_answer(monkeypatch, tmp_path: Path) -> None:
 
 
 def test_bridge_reads_the_drill_campaign_or_flows_refusal(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr("engine.flow_bridge.shutil.which", lambda _: "/usr/bin/openadapt-flow")
+    _fake_pinned_flow(monkeypatch)
     campaign = {
         "schema": "openadapt.local-drill-campaign/v1",
         "from_case_id": "practice-1",
@@ -552,7 +561,7 @@ def test_bridge_reads_the_drill_campaign_or_flows_refusal(monkeypatch, tmp_path:
 
 
 def test_bridge_lists_requests_only_in_flows_shape(monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr("engine.flow_bridge.shutil.which", lambda _: "/usr/bin/openadapt-flow")
+    _fake_pinned_flow(monkeypatch)
     listing = {"schema": "openadapt.item-approval-list/v1", "requests": [_request_row(tmp_path)]}
     rows = _bridge([], stdout=json.dumps(listing)).item_approval_show(tmp_path)
     assert rows[0]["request_id"] == REQUEST_ID

@@ -5,8 +5,8 @@ from __future__ import annotations
 import httpx
 import pytest
 
-from engine.auth import store
-from engine.auth.paste import PasteTokenProvider, TokenValidationError
+from openadapt_desktop.auth import store
+from openadapt_desktop.auth.paste import PasteTokenProvider, TokenValidationError
 
 from .conftest import FakeResponse
 
@@ -51,7 +51,7 @@ class TestPasteTokenProvider:
 
     def test_login_with_explicit_token(self, fake_keyring, monkeypatch) -> None:
         monkeypatch.setattr(
-            "engine.auth.paste.httpx.get",
+            "openadapt_desktop.auth.paste.httpx.get",
             lambda *a, **k: _lifetime_response(),
         )
         provider = PasteTokenProvider(host="https://app.openadapt.ai")
@@ -66,7 +66,7 @@ class TestPasteTokenProvider:
     def test_login_reads_env_when_headless(self, fake_keyring, monkeypatch) -> None:
         monkeypatch.setenv("OPENADAPT_INGEST_TOKEN", ENV_TOKEN)
         monkeypatch.setattr(
-            "engine.auth.paste.httpx.get",
+            "openadapt_desktop.auth.paste.httpx.get",
             lambda *a, **k: FakeResponse(200, {"org_id": "org_env"}),
         )
 
@@ -78,7 +78,7 @@ class TestPasteTokenProvider:
 
     def test_login_prompts_interactively(self, fake_keyring, monkeypatch) -> None:
         monkeypatch.setattr(
-            "engine.auth.paste.httpx.get",
+            "openadapt_desktop.auth.paste.httpx.get",
             lambda *a, **k: FakeResponse(200, {}),
         )
         cred = PasteTokenProvider(prompt=lambda _: f"  {PASTED_TOKEN}  ").login()
@@ -89,7 +89,7 @@ class TestPasteTokenProvider:
     ) -> None:
         response = _lifetime_response()
         response.headers.pop("cache-control")
-        monkeypatch.setattr("engine.auth.paste.httpx.get", lambda *a, **k: response)
+        monkeypatch.setattr("openadapt_desktop.auth.paste.httpx.get", lambda *a, **k: response)
 
         cred = PasteTokenProvider().login(token=TOKEN)
 
@@ -98,7 +98,7 @@ class TestPasteTokenProvider:
 
     def test_login_rejects_bad_token(self, fake_keyring, monkeypatch) -> None:
         monkeypatch.setattr(
-            "engine.auth.paste.httpx.get",
+            "openadapt_desktop.auth.paste.httpx.get",
             lambda *a, **k: FakeResponse(401),
         )
         with pytest.raises(TokenValidationError, match="rejected"):
@@ -108,7 +108,7 @@ class TestPasteTokenProvider:
         def _raise(*a, **k):
             raise httpx.ConnectError("down")
 
-        monkeypatch.setattr("engine.auth.paste.httpx.get", _raise)
+        monkeypatch.setattr("openadapt_desktop.auth.paste.httpx.get", _raise)
         with pytest.raises(TokenValidationError, match="Could not reach"):
             PasteTokenProvider().login(token=TOKEN)
 
@@ -125,7 +125,7 @@ class TestPasteTokenProvider:
         self, wrong_role, monkeypatch
     ) -> None:
         monkeypatch.setattr(
-            "engine.auth.paste.httpx.get",
+            "openadapt_desktop.auth.paste.httpx.get",
             lambda *a, **k: pytest.fail("wrong credential role reached Cloud validation"),
         )
         with pytest.raises(TokenValidationError, match="pairing code or portal"):

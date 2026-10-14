@@ -1,6 +1,6 @@
 // "Only ask a person about problems": the words for the switch.
 //
-// The engine (engine/approval_mode.py) returns closed codes. This file turns
+// The engine (openadapt_desktop/approval_mode.py) returns closed codes. This file turns
 // them into the words a person reads. The rule it keeps: nothing says that
 // only problems come to the person unless the engine reports the switch as
 // "on", which it does only when this computer checks every item before and

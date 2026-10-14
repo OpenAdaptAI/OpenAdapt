@@ -52,7 +52,7 @@ def test_public_metadata_identifies_component_role_and_admission_boundary() -> N
     assert package["description"] == expected_native_description
     assert cargo["package"]["description"] == expected_native_description
     assert pyproject["project"]["readme"] == "README.md"
-    assert pyproject["project"]["scripts"] == {"openadapt-desktop": "engine.cli:main"}
+    assert pyproject["project"]["scripts"] == {"openadapt-desktop": "openadapt_desktop.cli:main"}
 
 
 def test_target_authoring_uses_detected_availability_vocabulary_and_shared_form() -> None:
@@ -61,7 +61,7 @@ def test_target_authoring_uses_detected_availability_vocabulary_and_shared_form(
     watch = (ROOT / "src/screens/WatchRun.tsx").read_text(encoding="utf-8")
     readme = (ROOT / "README.md").read_text(encoding="utf-8")
 
-    # Availability is DETECTED (engine/capabilities.py), never hardcoded:
+    # Availability is DETECTED (openadapt_desktop/capabilities.py), never hardcoded:
     # "Available" appears only as the pill for the detected-available state.
     assert "availability:" not in form
     assert '"Beta"' not in form
@@ -187,11 +187,11 @@ def test_semantic_release_refreshes_lock_and_builds_before_tagging() -> None:
 
 
 def test_release_lock_sync_updates_only_editable_root_version(tmp_path: Path) -> None:
-    (tmp_path / "engine").mkdir()
+    (tmp_path / "openadapt_desktop").mkdir()
     (tmp_path / "pyproject.toml").write_text(
         '[project]\nname = "openadapt-desktop"\nversion = "0.3.0"\n'
     )
-    (tmp_path / "engine/__init__.py").write_text('__version__ = "0.3.0"\n')
+    (tmp_path / "openadapt_desktop/__init__.py").write_text('__version__ = "0.3.0"\n')
     (tmp_path / "uv.lock").write_text(
         'version = 1\n\n[[package]]\nname = "openadapt-desktop"\n'
         'version = "0.2.0"\nsource = { editable = "." }\n'

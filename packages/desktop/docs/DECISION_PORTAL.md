@@ -94,7 +94,7 @@ workflow policy for later runs.
 | `OPENADAPT_PORTAL_PORT` | `0` | `0` selects an ephemeral loopback port |
 | `OPENADAPT_PORTAL_CONSOLE_PORT` | `7863` | Loopback port for the supervised Flow attended console |
 
-The rules, all enforced in `engine/portal/ingress.py` and all fail-closed:
+The rules, all enforced in `openadapt_desktop/portal/ingress.py` and all fail-closed:
 
 1. The default binds `127.0.0.1` and advertises a loopback URL. A phone cannot
    reach it, and the pairing screen says so rather than minting a dead link.
@@ -131,7 +131,7 @@ failure is an opaque "the local decision service did not start":
 - this computer must be registered with the control plane, or Desktop refuses
   and names the host; and
 - the resolved Flow must be at least `MIN_FLOW_FOR_REMOTE_DECISIONS`
-  (`engine/portal/service.py`), because an older one exits on the unknown flag
+  (`openadapt_desktop/portal/service.py`), because an older one exits on the unknown flag
   before printing its capability banner.
 
 `enabled` must be literally `true`. A truthy string or a `1` means no. Neither
@@ -197,7 +197,7 @@ before any action continues.
 
 Task projections, decision outcomes, and evidence crops are served
 `Cache-Control: no-store` (plus `Pragma: no-cache`) and are never written to a
-cache by the shell. The service worker in `engine/portal/shell/sw.js` precaches
+cache by the shell. The service worker in `openadapt_desktop/portal/shell/sw.js` precaches
 one frozen literal list of shell assets, has no after-the-fact cache write, and
 its fetch handler is an allowlist that returns without intercepting anything
 else — so a newly added protected route is excluded by default. Shell assets
@@ -356,7 +356,7 @@ proves this behaviourally against the built artifact on every sidecar build: it
 starts the frozen attended console, parses the banner with the portal's own
 parser, and drives `/api/session`, `/api/attention`,
 `/api/attention/{run_id}`, and an unauthenticated probe through
-`engine.portal.flow_client`.
+`openadapt_desktop.portal.flow_client`.
 
 ### Runtime: wired
 
@@ -434,6 +434,6 @@ nowhere in Flow, and Flow echoes it back verbatim.
 
 One upstream seam is worth closing: the attended console generates its bearer
 capability inside `serve()` and only prints it on stdout, so
-`engine/portal/service.py` parses the exact banner line. A narrow
+`openadapt_desktop/portal/service.py` parses the exact banner line. A narrow
 `--capability-file` option in Flow would replace that with a supported
 interface. The parser is strict and fails loud rather than guessing.

@@ -12,9 +12,9 @@ import json
 import re
 from pathlib import Path
 
-from engine.portal.server import PROTECTED_PREFIX, SHELL_ASSETS
+from openadapt_desktop.portal.server import PROTECTED_PREFIX, SHELL_ASSETS
 
-SHELL = Path(__file__).resolve().parents[2] / "engine" / "portal" / "shell"
+SHELL = Path(__file__).resolve().parents[2] / "openadapt_desktop" / "portal" / "shell"
 SW = (SHELL / "sw.js").read_text(encoding="utf-8")
 APP = (SHELL / "app.js").read_text(encoding="utf-8")
 

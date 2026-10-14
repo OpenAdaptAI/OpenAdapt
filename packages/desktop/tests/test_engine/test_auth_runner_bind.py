@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from engine.auth import pairing
-from engine.auth.runner_bind import (
+from openadapt_desktop.auth import pairing
+from openadapt_desktop.auth.runner_bind import (
     RunnerBindError,
     parse_runner_uri,
     valid_bind_token,

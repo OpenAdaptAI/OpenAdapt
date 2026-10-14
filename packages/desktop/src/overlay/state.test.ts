@@ -3,6 +3,7 @@ import type { ReplayProgress } from "../lib/types";
 import {
   EMPTY_OVERLAY_STATE,
   overlayExpands,
+  overlayPlainStatus,
   overlaySecondaryItems,
   reduceControlOverlay,
 } from "./state";
@@ -220,7 +221,83 @@ it("keeps governed hosted-run failures out of the completed state", () => {
   });
 
   expect(halted.phase).toBe("halted");
-  expect(reconcile.phase).toBe("failed");
+  // A save may have gone through: never "Didn't finish", which invites a re-run.
+  expect(reconcile.phase).toBe("halted");
+  expect(reconcile.pausePrompt).toBe("Check the record");
+});
+
+const MANAGED_OUTCOMES: Array<[string | undefined, string, string]> = [
+  ["VERIFIED", "verified", "Done and checked"],
+  // Flow's transaction outcome proves that nothing was written.
+  ["HALTED_BEFORE_EFFECT", "halted", "Stopped before saving"],
+  ["REJECTED_POLICY", "halted", "Stopped before saving"],
+  ["CANCELED", "halted", "Stopped before saving"],
+  // A coarse halt says nothing about a write.
+  ["HALTED", "halted", "Stopped for review"],
+  ["halted-needs-attention", "halted", "Stopped for review"],
+  // A save may have gone through.
+  ["RECONCILIATION_REQUIRED", "halted", "Check the record"],
+  ["ROLLED_BACK", "rolled_back", "Check the record"],
+  ["FAILED_PLATFORM", "failed", "Didn't finish"],
+  ["FAILED", "failed", "Didn't finish"],
+  ["COMPLETED_UNVERIFIED", "completed_unverified", "Finished, not checked"],
+  // Nothing is known, so nothing proves that no save happened.
+  ["SOMETHING_NEW", "failed", "Check the record"],
+  [undefined, "failed", "Check the record"],
+];
+
+it.each(MANAGED_OUTCOMES)(
+  "labels a managed run that ended %s by its own outcome",
+  (outcome, phase, plain) => {
+    const running = reduceControlOverlay(EMPTY_OVERLAY_STATE, {
+      kind: "runner-state",
+      status: { enabled: true, state: "running", last_runs: [] },
+    });
+    const ended = reduceControlOverlay(running, {
+      kind: "runner-state",
+      status: {
+        enabled: true,
+        state: "polling",
+        last_runs: outcome === undefined ? [] : [{ run_id: "r", outcome }],
+      },
+    });
+
+    expect(ended.phase).toBe(phase);
+    expect(ended.pausePrompt || overlayPlainStatus(ended.phase)).toBe(plain);
+    if (outcome !== "VERIFIED") expect(ended.phase).not.toBe("verified");
+    if (outcome === "RECONCILIATION_REQUIRED") {
+      expect(overlayPlainStatus(ended.phase)).not.toMatch(/finish|fail/i);
+    }
+  },
+);
+
+it("drops the check-the-record prompt when the next managed run starts", () => {
+  const running = reduceControlOverlay(EMPTY_OVERLAY_STATE, {
+    kind: "runner-state",
+    status: { enabled: true, state: "running", last_runs: [] },
+  });
+  const reconcile = reduceControlOverlay(running, {
+    kind: "runner-state",
+    status: {
+      enabled: true,
+      state: "polling",
+      last_runs: [{ run_id: "r", outcome: "RECONCILIATION_REQUIRED" }],
+    },
+  });
+  const next = reduceControlOverlay(reconcile, {
+    kind: "runner-state",
+    status: { enabled: true, state: "running", last_runs: [] },
+  });
+
+  expect(next.phase).toBe("executing");
+  expect(next.pausePrompt).toBeNull();
+
+  const replay = reduceControlOverlay(reconcile, {
+    kind: "replay-progress",
+    progress: { workflow_id: "workflow-1", state: "running", backend: "web" },
+  });
+  expect(replay.phase).toBe("executing");
+  expect(replay.pausePrompt).toBeNull();
 });
 
 it("exports a deterministic presentation frame without the local workflow label", () => {

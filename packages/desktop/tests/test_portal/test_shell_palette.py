@@ -19,7 +19,7 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[2]
-SHELL = ROOT / "engine" / "portal" / "shell"
+SHELL = ROOT / "openadapt_desktop" / "portal" / "shell"
 CANONICAL = ROOT / "src" / "styles" / "vendor" / "openadapt-web" / "tokens.json"
 
 # Each shell token and the canonical token it copies.
@@ -59,7 +59,7 @@ def test_shell_token_matches_canonical(shell_token: str, canonical_token: str) -
     canonical = _canonical_colors()
     assert canonical_token in canonical, f"{canonical_token} is not a canonical token"
     assert _shell_root()[shell_token] == canonical[canonical_token], (
-        f"{shell_token} in engine/portal/shell/styles.css drifted from "
+        f"{shell_token} in openadapt_desktop/portal/shell/styles.css drifted from "
         f"{canonical_token}. Copy the canonical value; do not pick a new one."
     )
 

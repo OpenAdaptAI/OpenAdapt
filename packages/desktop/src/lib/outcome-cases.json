@@ -1,5 +1,5 @@
 {
-  "_comment": "Shared cases for engine/outcomes.py and src/lib/outcomes.ts. A label may claim that nothing was written only when the transaction outcome proves it.",
+  "_comment": "Shared cases for openadapt_desktop/outcomes.py and src/lib/outcomes.ts. A label may claim that nothing was written only when the transaction outcome proves it.",
   "cases": [
     { "execution": "VERIFIED", "transaction": "VERIFIED", "key": "done_checked", "nothing_written": false, "safe_to_retry": false },
     { "execution": "VERIFIED", "transaction": null, "key": "done_checked", "nothing_written": false, "safe_to_retry": false },

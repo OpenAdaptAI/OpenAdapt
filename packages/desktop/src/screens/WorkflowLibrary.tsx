@@ -78,46 +78,55 @@ export function WorkflowLibrary({
               </tr>
             </thead>
             <tbody>
-              {workflows.map((w) => (
-                <tr key={w.id}>
-                  <td>
-                    {w.name}
-                    {w.open_halts ? (
-                      <span style={{ marginLeft: "var(--space-2)" }}>
-                        <Pill tone="warn">{w.open_halts} halt</Pill>
-                      </span>
-                    ) : null}
-                  </td>
-                  <td className="num">{w.steps}</td>
-                  <td>
-                    {w.last_run_state ? (
-                      <StatePill state={w.last_run_state} />
-                    ) : (
-                      <span className="page-sub">—</span>
-                    )}
-                  </td>
-                  <td>
-                    <Pill tone={w.synced ? "ok" : "neutral"}>
-                      {w.synced ? "synced" : "local"}
-                    </Pill>
-                  </td>
-                  <td className="num">
-                    <div className="row" style={{ justifyContent: "flex-end" }}>
-                      <Button size="sm" onClick={() => onQualify(w.id)}>
-                        Qualify
-                      </Button>
-                      <Button size="sm" onClick={() => onWatch(w.id)}>
-                        Watch run
-                      </Button>
+              {workflows.map((w) => {
+                // After a stop, the next step is to fix the workflow, not to
+                // test it for going live.
+                const stopped =
+                  w.last_run_state === "halted" || w.last_run_state === "failed";
+                const teach = Boolean(w.open_halts) || w.last_run_state === "halted";
+                return (
+                  <tr key={w.id}>
+                    <td>
+                      {w.name}
                       {w.open_halts ? (
-                        <Button size="sm" onClick={() => onTeach(w.id)}>
-                          Teach fix
-                        </Button>
+                        <span style={{ marginLeft: "var(--space-2)" }}>
+                          <Pill tone="warn">{w.open_halts} halt</Pill>
+                        </span>
                       ) : null}
-                    </div>
-                  </td>
-                </tr>
-              ))}
+                    </td>
+                    <td className="num">{w.steps}</td>
+                    <td>
+                      {w.last_run_state ? (
+                        <StatePill state={w.last_run_state} />
+                      ) : (
+                        <span className="page-sub">—</span>
+                      )}
+                    </td>
+                    <td>
+                      <Pill tone={w.synced ? "ok" : "neutral"}>
+                        {w.synced ? "synced" : "local"}
+                      </Pill>
+                    </td>
+                    <td className="num">
+                      <div className="row" style={{ justifyContent: "flex-end" }}>
+                        {!stopped && (
+                          <Button size="sm" onClick={() => onQualify(w.id)}>
+                            Qualify
+                          </Button>
+                        )}
+                        <Button size="sm" onClick={() => onWatch(w.id)}>
+                          Watch run
+                        </Button>
+                        {teach ? (
+                          <Button size="sm" onClick={() => onTeach(w.id)}>
+                            Teach fix
+                          </Button>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}

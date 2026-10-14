@@ -3,7 +3,7 @@
 This binds an actual loopback port and speaks HTTP, so the handler, the
 headers, and the single-use claim are exercised through the same path a phone
 would take.  The upstream attended console is faked at the seam
-(:class:`engine.portal.flow_client.FlowConsoleClient`) because the decision
+(:class:`openadapt_desktop.portal.flow_client.FlowConsoleClient`) because the decision
 semantics belong to ``openadapt-flow``, not to Desktop.
 """
 
@@ -15,10 +15,10 @@ import urllib.request
 
 import pytest
 
-from engine.portal.flow_client import FlowResponse
-from engine.portal.ingress import resolve_ingress
-from engine.portal.pairing import DevicePairingStore
-from engine.portal.server import PortalApp, PortalServer
+from openadapt_desktop.portal.flow_client import FlowResponse
+from openadapt_desktop.portal.ingress import resolve_ingress
+from openadapt_desktop.portal.pairing import DevicePairingStore
+from openadapt_desktop.portal.server import PortalApp, PortalServer
 
 RUN_ID = "a1b2c3d4e5f6a1b2c3d4e5f6"
 TASK = {

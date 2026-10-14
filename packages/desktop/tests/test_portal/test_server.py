@@ -6,10 +6,10 @@ import json
 
 import pytest
 
-from engine.portal.flow_client import FLOW_ROUTES, FlowConsoleUnavailable, FlowResponse
-from engine.portal.ingress import resolve_ingress
-from engine.portal.pairing import DevicePairingStore
-from engine.portal.server import PROTECTED_PREFIX, SHELL_ASSETS, PortalApp
+from openadapt_desktop.portal.flow_client import FLOW_ROUTES, FlowConsoleUnavailable, FlowResponse
+from openadapt_desktop.portal.ingress import resolve_ingress
+from openadapt_desktop.portal.pairing import DevicePairingStore
+from openadapt_desktop.portal.server import PROTECTED_PREFIX, SHELL_ASSETS, PortalApp
 
 ORIGIN = "https://openadapt.clinic.example"
 
@@ -226,7 +226,7 @@ def test_a_refusal_from_flow_is_relayed_with_its_status() -> None:
 
 
 def test_the_phone_never_receives_the_flow_console_capability() -> None:
-    from engine.portal.flow_client import FlowConsoleClient
+    from openadapt_desktop.portal.flow_client import FlowConsoleClient
 
     flow = FlowConsoleClient(port=7863, access_token="console-bearer-secret")
     app, pairings = build(flow)
@@ -244,7 +244,7 @@ def test_the_phone_never_receives_the_flow_console_capability() -> None:
 
 def test_the_portal_stops_a_request_for_an_unallowlisted_console_route() -> None:
     """The relay is an allowlist; there is no generic proxy path."""
-    from engine.portal.flow_client import FlowConsoleClient
+    from openadapt_desktop.portal.flow_client import FlowConsoleClient
 
     client = FlowConsoleClient(port=7863, access_token="t")
     with pytest.raises(FlowConsoleUnavailable) as refused:
@@ -303,7 +303,7 @@ def test_security_headers_are_present_on_every_response() -> None:
 
 def test_the_portal_keeps_no_access_log() -> None:
     """Paths carry run and artifact identifiers, so nothing is logged."""
-    from engine.portal import server as module
+    from openadapt_desktop.portal import server as module
 
     assert module._Handler.log_message(object(), "%s", "x") is None
 
@@ -313,7 +313,7 @@ def test_the_portal_keeps_no_access_log() -> None:
 
 def test_the_handler_sets_a_socket_timeout() -> None:
     """Without one, every read blocks forever and idle sockets pin threads."""
-    from engine.portal import server as module
+    from openadapt_desktop.portal import server as module
 
     assert module._Handler.timeout is not None
     assert 0 < module._Handler.timeout <= 60
@@ -347,7 +347,7 @@ def test_an_active_image_format_is_not_relayed_to_a_phone() -> None:
     """An SVG is a document, not a crop."""
     import httpx
 
-    from engine.portal.flow_client import FlowConsoleClient
+    from openadapt_desktop.portal.flow_client import FlowConsoleClient
 
     def transport(request: httpx.Request) -> httpx.Response:
         return httpx.Response(
@@ -378,7 +378,7 @@ def test_an_upstream_server_error_body_is_not_forwarded_to_a_phone() -> None:
     """A 5xx can carry a traceback or a deployment path; a 4xx carries a refusal."""
     import httpx
 
-    from engine.portal.flow_client import FlowConsoleClient
+    from openadapt_desktop.portal.flow_client import FlowConsoleClient
 
     def transport(request: httpx.Request) -> httpx.Response:
         if "actions" in str(request.url):
@@ -403,7 +403,7 @@ def test_an_upstream_server_error_body_is_not_forwarded_to_a_phone() -> None:
 
 def test_the_relay_refuses_an_identifier_the_http_surface_would_have_rejected() -> None:
     """Defense in depth: the two boundaries cannot silently drift apart."""
-    from engine.portal.flow_client import FlowConsoleClient
+    from openadapt_desktop.portal.flow_client import FlowConsoleClient
 
     client = FlowConsoleClient(port=7863, access_token="t")
     for kwargs in (

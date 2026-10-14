@@ -35,7 +35,7 @@ const STYLESHEETS = [
   "src/styles/tokens.css",
   "src/styles/app.css",
   "src/overlay/overlay.css",
-  "engine/portal/shell/styles.css",
+  "openadapt_desktop/portal/shell/styles.css",
 ];
 
 function read(relative: string): string {

@@ -10,7 +10,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from engine.private_flow_config import (
+from openadapt_desktop.private_flow_config import (
     PrivateFlowConfigError,
     flow_log_redactions,
     prepare_flow_config,
@@ -18,7 +18,7 @@ from engine.private_flow_config import (
     redact_flow_log,
     stage_private_yaml,
 )
-from engine.targets import ExecutionTarget
+from openadapt_desktop.targets import ExecutionTarget
 
 
 def test_merges_target_over_base_config_with_mode_0600_and_removes_file(

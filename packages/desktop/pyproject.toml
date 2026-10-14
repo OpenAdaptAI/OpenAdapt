@@ -113,7 +113,7 @@ dev = [
 ]
 
 [project.scripts]
-openadapt-desktop = "engine.cli:main"
+openadapt-desktop = "openadapt_desktop.cli:main"
 
 [project.urls]
 Homepage = "https://openadapt.ai"
@@ -122,7 +122,7 @@ Issues = "https://github.com/OpenAdaptAI/openadapt-desktop/issues"
 
 
 [tool.hatch.build.targets.wheel]
-packages = ["engine"]
+packages = ["openadapt_desktop"]
 
 # python-semantic-release 10.6.2 still accepts click 8.1.8, which pip-audit
 # reports as PYSEC-2026-2132 (fix: 8.3.3). The GitHub Action is SHA-pinned at
@@ -141,7 +141,7 @@ select = ["E", "F", "I", "W"]
 
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
-version_variables = ["engine/__init__.py:__version__"]
+version_variables = ["openadapt_desktop/__init__.py:__version__"]
 commit_message = "chore: release {version}"
 major_on_zero = false
 allow_zero_version = true

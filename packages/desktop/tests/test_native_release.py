@@ -544,6 +544,17 @@ def test_updater_feed_is_disabled_until_signing_key_lifecycle_exists() -> None:
     assert "tauri_plugin_updater::Builder::new().build()" in guarded[1]
 
 
+def test_update_check_is_hidden_while_the_updater_is_not_registered() -> None:
+    """Without the plugin the update check can only fail, so Settings asks first."""
+
+    main_rs = (ROOT / "src-tauri/src/main.rs").read_text()
+    assert ".manage(commands::UpdaterAvailable(updater_configured))" in main_rs
+    assert "commands::updater_available," in main_rs
+    settings = (ROOT / "src/screens/Settings.tsx").read_text()
+    assert "updaterAvailable()" in settings
+    assert "Update check unavailable: ${String(e)}" not in settings
+
+
 def test_installer_smoke_gates_on_a_real_launch() -> None:
     """Every installer smoke invocation must also prove the app launches.
 

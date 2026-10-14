@@ -24,7 +24,7 @@ def _match(pattern: str, text: str, source: str) -> str:
 
 def release_versions(root: Path = ROOT) -> dict[str, str]:
     pyproject = (root / "pyproject.toml").read_text(encoding="utf-8")
-    package_init = (root / "engine/__init__.py").read_text(encoding="utf-8")
+    package_init = (root / "openadapt_desktop/__init__.py").read_text(encoding="utf-8")
     lock = (root / "uv.lock").read_text(encoding="utf-8")
 
     return {
@@ -33,8 +33,8 @@ def release_versions(root: Path = ROOT) -> dict[str, str]:
             pyproject,
             "pyproject.toml",
         ),
-        "engine/__init__.py": _match(
-            r'^__version__ = "([^"]+)"$', package_init, "engine/__init__.py"
+        "openadapt_desktop/__init__.py": _match(
+            r'^__version__ = "([^"]+)"$', package_init, "openadapt_desktop/__init__.py"
         ),
         "uv.lock": _match(
             r'\[\[package\]\]\s+name = "openadapt-desktop"\s+version = "([^"]+)"'
@@ -49,7 +49,7 @@ def sync_lock_version(root: Path = ROOT) -> str:
     versions = release_versions(root)
     source_versions = {
         versions["pyproject.toml"],
-        versions["engine/__init__.py"],
+        versions["openadapt_desktop/__init__.py"],
     }
     if len(source_versions) != 1:
         raise ValueError(f"release source versions differ: {versions}")

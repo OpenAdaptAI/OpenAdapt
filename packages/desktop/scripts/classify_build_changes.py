@@ -30,9 +30,9 @@ FULL_ARTIFACT_FILES = {
 
 FULL_ARTIFACT_PREFIXES = (
     ".github/actions/",
-    # build_frozen_engine.py freezes engine/__main__.py and its local imports
+    # build_frozen_engine.py freezes openadapt_desktop/__main__.py and its local imports
     # into the sidecar that every native installer embeds.
-    "engine/",
+    "openadapt_desktop/",
     "src-tauri/",
 )
 

@@ -17,11 +17,11 @@ from pathlib import Path
 
 import pytest
 
-from engine.config import EngineConfig
-from engine.db import IndexDB
-from engine.dispatch import EngineDispatcher, EngineServices
-from engine.outcomes import halt_kind, plain_result, plain_result_for_transaction
-from engine.work_items import WorkItemError, summarize, validate_inputs
+from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.db import IndexDB
+from openadapt_desktop.dispatch import EngineDispatcher, EngineServices
+from openadapt_desktop.outcomes import halt_kind, plain_result, plain_result_for_transaction
+from openadapt_desktop.work_items import WorkItemError, summarize, validate_inputs
 
 REPO = Path(__file__).resolve().parents[2]
 CASES = json.loads((REPO / "src" / "lib" / "outcome-cases.json").read_text())["cases"]
@@ -48,8 +48,8 @@ SWITCH_CASES = json.loads((REPO / "src" / "lib" / "outcome-cases.json").read_tex
 def test_the_switch_never_changes_an_outcome_word(case: dict) -> None:
     """Shared with src/lib/approvalMode.test.ts: same cases, same answers."""
 
-    from engine.outcomes import consistent_transaction_outcome
-    from engine.work_items import public_item, status_after_run
+    from openadapt_desktop.outcomes import consistent_transaction_outcome
+    from openadapt_desktop.work_items import public_item, status_after_run
 
     key = plain_result(case["execution"], case["transaction"])["key"]
     assert key == case["key"]
@@ -210,7 +210,7 @@ class _Bridge:
         return True
 
     def run(self, bundle, config, out_dir=None, params_file=None, env_overrides=None, **_k):
-        from engine.flow_bridge import FlowResult
+        from openadapt_desktop.flow_bridge import FlowResult
 
         staged = None
         if params_file is not None:

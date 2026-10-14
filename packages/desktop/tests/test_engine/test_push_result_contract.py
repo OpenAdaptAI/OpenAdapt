@@ -7,7 +7,7 @@ import os
 import stat
 from pathlib import Path
 
-from engine.qualification_lifecycle import (
+from openadapt_desktop.qualification_lifecycle import (
     parse_flow_push,
     persist_deployment_handoff,
 )

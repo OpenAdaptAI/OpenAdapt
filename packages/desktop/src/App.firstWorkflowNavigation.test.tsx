@@ -405,3 +405,41 @@ it("won't start another task while an uncertain first run is unchecked", async (
   expect(await screen.findByText("First supervised replay")).toBeTruthy();
   expect(screen.queryByText("First workflow recording")).toBeNull();
 });
+
+function bootTasks(
+  auth: { authenticated: boolean },
+  syncState: (fallback: unknown) => unknown,
+): void {
+  vi.mocked(engineTry).mockImplementation(async (command, _params, fallback) => {
+    if (command === CMD.GET_AUTH_STATUS) return auth;
+    if (command === CMD.GET_SYNC_STATE) return syncState(fallback);
+    const boot = bootDefaults(command);
+    if (boot !== undefined) return boot;
+    if (command === CMD.GET_WORKFLOWS) {
+      return [{ id: "workflow-1", name: "Test workflow", steps: 1 }];
+    }
+    if (command === CMD.GET_FIRST_WORKFLOW_STATE) return { ok: true, state: null };
+    return fallback ?? null;
+  });
+}
+
+it("says Local only, not synced, when nothing is backed up to Cloud", async () => {
+  bootTasks({ authenticated: true }, () => ({ state: "local", queued: 0 }));
+
+  render(<App />);
+  expect(await screen.findByRole("heading", { name: "Tasks" })).toBeTruthy();
+  const status = screen.getByLabelText("Desktop status");
+  await waitFor(() => expect(status.textContent).toContain("Local only"));
+  expect(status.textContent).not.toMatch(/synced/i);
+  expect(status.querySelector(".status-dot.ok, [data-tone='ok']")).toBeNull();
+});
+
+it("never shows a sync state the engine didn't report", async () => {
+  // The engine can't answer, so the screen keeps whatever it assumed at start.
+  bootTasks({ authenticated: true }, (fallback) => fallback);
+
+  render(<App />);
+  expect(await screen.findByRole("heading", { name: "Tasks" })).toBeTruthy();
+  const status = screen.getByLabelText("Desktop status");
+  expect(status.textContent).not.toMatch(/synced|local/i);
+});

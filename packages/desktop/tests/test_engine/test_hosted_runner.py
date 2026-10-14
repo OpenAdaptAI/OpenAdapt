@@ -16,9 +16,9 @@ from uuid import NAMESPACE_URL, uuid5
 import httpx
 import pytest
 
-import engine.hosted_runner as hosted_runner
-from engine.config import EngineConfig
-from engine.hosted_runner import (
+import openadapt_desktop.hosted_runner as hosted_runner
+from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.hosted_runner import (
     HttpHostedRunnerTransport,
     RunnerService,
     RunnerTransportError,

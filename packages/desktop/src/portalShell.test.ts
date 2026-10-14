@@ -15,7 +15,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // The shipped shell sources, exactly as the portal serves them.
 // (The stylesheet's own rules are asserted in tests/test_portal/test_shell.py;
 // vitest does not process CSS, so a `?raw` import of it would be empty.)
-import APP from "../engine/portal/shell/app.js?raw";
+import APP from "../openadapt_desktop/portal/shell/app.js?raw";
 
 const RESOLUTION_HALT = {
   task: {

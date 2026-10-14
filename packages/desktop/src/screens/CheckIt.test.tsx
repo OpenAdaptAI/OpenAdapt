@@ -126,7 +126,7 @@ it("says what the task changes and how it checks, in plain words", async () => {
   expect(await screen.findByText("Click “Save”")).toBeTruthy();
   expect(
     screen.getByText(
-      "Sets status note on the record for the member ID you give it to the note you give it.",
+      "Sets the status note to the note you give it.",
     ),
   ).toBeTruthy();
   expect(screen.getByText(/matches the member ID you give it/)).toBeTruthy();

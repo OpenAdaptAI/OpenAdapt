@@ -9,8 +9,8 @@ from types import ModuleType
 
 import pytest
 
-from engine import controller as controller_module
-from engine.controller import RecordingController, RecordingState
+from openadapt_desktop import controller as controller_module
+from openadapt_desktop.controller import RecordingController, RecordingState
 
 REAL_LOAD_CAPTURE_RECORDER = controller_module._load_capture_recorder  # noqa: SLF001
 
@@ -18,7 +18,7 @@ REAL_LOAD_CAPTURE_RECORDER = controller_module._load_capture_recorder  # noqa: S
 def test_frozen_capture_provisions_vision_before_recorder_import(monkeypatch) -> None:
     calls: list[str] = []
     monkeypatch.setattr(controller_module.sys, "frozen", True, raising=False)
-    managed = ModuleType("engine.managed_vision")
+    managed = ModuleType("openadapt_desktop.managed_vision")
     capture = ModuleType("openadapt_capture")
 
     class Recorder:
@@ -29,7 +29,7 @@ def test_frozen_capture_provisions_vision_before_recorder_import(monkeypatch) ->
 
     managed.ensure_managed_vision_runtime = provision  # type: ignore[attr-defined]
     capture.Recorder = Recorder  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "engine.managed_vision", managed)
+    monkeypatch.setitem(sys.modules, "openadapt_desktop.managed_vision", managed)
     monkeypatch.setitem(sys.modules, "openadapt_capture", capture)
 
     assert REAL_LOAD_CAPTURE_RECORDER() is Recorder
@@ -89,7 +89,9 @@ class TestRecordingController:
             def stop(self) -> None:
                 calls["stopped"] = True
 
-        monkeypatch.setattr("engine.controller._load_capture_recorder", lambda: ContractRecorder)
+        monkeypatch.setattr(
+            "openadapt_desktop.controller._load_capture_recorder", lambda: ContractRecorder
+        )
         controller = RecordingController(captures_dir=tmp_data_dir / "captures")
 
         controller.start(task_description="Claims intake")
@@ -110,7 +112,7 @@ class TestRecordingController:
         def unavailable():
             raise RuntimeError("native recorder unavailable")
 
-        monkeypatch.setattr("engine.controller._load_capture_recorder", unavailable)
+        monkeypatch.setattr("openadapt_desktop.controller._load_capture_recorder", unavailable)
         controller = RecordingController(captures_dir=tmp_data_dir / "captures")
 
         with pytest.raises(RuntimeError, match="Could not start native recording"):
@@ -149,7 +151,9 @@ class TestRecordingController:
             def stop(self) -> None:
                 raise RuntimeError("writer did not stop")
 
-        monkeypatch.setattr("engine.controller._load_capture_recorder", lambda: BrokenStopRecorder)
+        monkeypatch.setattr(
+            "openadapt_desktop.controller._load_capture_recorder", lambda: BrokenStopRecorder
+        )
         controller = RecordingController(captures_dir=tmp_data_dir / "captures")
         controller.start()
 
@@ -195,7 +199,9 @@ class TestRecordingController:
             def register_capture(self, capture_id: str, capture_dir: Path) -> None:
                 raise RuntimeError("index unavailable")
 
-        monkeypatch.setattr("engine.controller._load_capture_recorder", lambda: TrackedRecorder)
+        monkeypatch.setattr(
+            "openadapt_desktop.controller._load_capture_recorder", lambda: TrackedRecorder
+        )
         controller = RecordingController(
             captures_dir=tmp_data_dir / "captures",
             storage_manager=FailingStorageManager(),
@@ -330,8 +336,8 @@ class TestPostStopCompile:
     def test_auto_compile_records_bundle(self, tmp_data_dir: Path) -> None:
         from unittest.mock import MagicMock
 
-        from engine.db import IndexDB
-        from engine.flow_bridge import FlowResult
+        from openadapt_desktop.db import IndexDB
+        from openadapt_desktop.flow_bridge import FlowResult
 
         db = IndexDB(tmp_data_dir / "index.db")
         db.initialize()

@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
 
-from engine.config import EngineConfig
+from openadapt_desktop.config import EngineConfig
 
 
 class FakeRecorder:
@@ -36,7 +37,19 @@ class FakeRecorder:
 def fake_native_recorder(monkeypatch):
     """Prevent unit tests from injecting real mouse/keyboard/screen capture."""
 
-    monkeypatch.setattr("engine.controller._load_capture_recorder", lambda: FakeRecorder)
+    monkeypatch.setattr("openadapt_desktop.controller._load_capture_recorder", lambda: FakeRecorder)
+
+
+@pytest.fixture(autouse=True)
+def restore_umask():
+    """The engine entry points set a private umask; keep it from leaking between tests."""
+
+    previous = os.umask(0o022)
+    os.umask(previous)
+    try:
+        yield
+    finally:
+        os.umask(previous)
 
 
 @pytest.fixture

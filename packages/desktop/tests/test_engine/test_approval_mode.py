@@ -21,7 +21,7 @@ from pathlib import Path
 
 import pytest
 
-from engine.approval_mode import (
+from openadapt_desktop.approval_mode import (
     NOT_BUILT,
     SwitchApprovalError,
     accept_switch,
@@ -30,9 +30,9 @@ from engine.approval_mode import (
     saved_without_person,
     turn_off,
 )
-from engine.config import EngineConfig
-from engine.db import IndexDB
-from engine.dispatch import EngineDispatcher, EngineServices
+from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.db import IndexDB
+from openadapt_desktop.dispatch import EngineDispatcher, EngineServices
 
 switch_api = pytest.importorskip("openadapt_flow.approval_mode.switch")
 flow_ir = pytest.importorskip("openadapt_flow.ir")
@@ -178,7 +178,7 @@ class _Bridge:
         return True
 
     def run(self, bundle, config, out_dir=None, params_file=None, env_overrides=None, **_k):
-        from engine.flow_bridge import FlowResult
+        from openadapt_desktop.flow_bridge import FlowResult
 
         assert _k.get("approval_mode") == "each_item"
         self.calls += 1
@@ -240,7 +240,7 @@ def test_desktop_has_no_command_that_turns_the_switch_on(task) -> None:
         "get_item_approval",
         "answer_item_approval",
     }
-    source = Path(__file__).resolve().parents[2] / "engine" / "dispatch.py"
+    source = Path(__file__).resolve().parents[2] / "openadapt_desktop" / "dispatch.py"
     assert "accept_switch" not in source.read_text()
 
 
@@ -642,7 +642,7 @@ def switch_in_use(task, monkeypatch: pytest.MonkeyPatch):
 
     disp, db, config, digest = task
     accept_switch(config.data_dir, "wf-note", _envelope(digest))
-    monkeypatch.setattr("engine.approval_mode.NOT_BUILT", ())
+    monkeypatch.setattr("openadapt_desktop.approval_mode.NOT_BUILT", ())
     assert disp.dispatch("get_approval_mode", {"workflow_id": "wf-note"})["state"] == "on"
     return disp, db, config, digest
 

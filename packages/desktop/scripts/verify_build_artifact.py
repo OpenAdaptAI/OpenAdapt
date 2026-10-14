@@ -75,6 +75,11 @@ REQUIRED_FROZEN_NOTICES = (
     "third_party/rapidocr/NOTICE",
 )
 NOTICE_INVENTORY_MEMBER = f"{NOTICE_BUNDLE_MEMBER}/{NOTICE_INVENTORY_NAME}"
+# The one import package the wheel may install. A generic top-level name such
+# as ``engine`` collides with any other package or local module of that name
+# in the same environment, and the launcher installs several OpenAdapt
+# packages into one environment.
+IMPORT_PACKAGE = "openadapt_desktop"
 
 
 def bundled_flow_banner(root: Path = ROOT) -> str:
@@ -371,6 +376,18 @@ def verify_python_distributions(parser: argparse.ArgumentParser, root: Path = RO
         if archive.suffix == ".whl":
             with zipfile.ZipFile(archive) as package:
                 members = package.namelist()
+            top_level = {member.split("/", 1)[0] for member in members}
+            unexpected = sorted(
+                name
+                for name in top_level
+                if name != IMPORT_PACKAGE
+                and not (name.startswith("openadapt_desktop-") and name.endswith(".dist-info"))
+            )
+            if unexpected or IMPORT_PACKAGE not in top_level:
+                parser.error(
+                    f"{archive.name} must install only the {IMPORT_PACKAGE!r} package; "
+                    f"other top-level names: {unexpected}"
+                )
         else:
             with tarfile.open(archive, "r:gz") as package:
                 members = package.getnames()

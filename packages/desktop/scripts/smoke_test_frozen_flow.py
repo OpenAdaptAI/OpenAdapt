@@ -70,7 +70,7 @@ def _seed_halted_run(runs_root: Path) -> None:
 def _console_command(
     executable: Path, root: Path, port: int, config: Path | None = None
 ) -> list[str]:
-    """The exact shape ``engine.portal.service`` spawns.
+    """The exact shape ``openadapt_desktop.portal.service`` spawns.
 
     With ``config`` this is the full portal command, mutations included. Without
     it, the same command minus ``--allow-actions``: Flow deliberately refuses
@@ -130,14 +130,14 @@ def _stage_portal_config(directory: Path, deployment: dict) -> Any:
     """Stage a deployment config exactly the way ``PortalService`` does.
 
     Serialization, the ``.deployment-`` prefix, the 0600 mode, and removal on
-    exit all come from ``engine.private_flow_config`` -- the same module and the
+    exit all come from ``openadapt_desktop.private_flow_config`` -- the same module and the
     same call the portal uses -- so this exercises the real staging path rather
     than a hand-written file.
     """
 
     import yaml
 
-    from engine.private_flow_config import PreparedPrivateYaml, stage_private_yaml
+    from openadapt_desktop.private_flow_config import PreparedPrivateYaml, stage_private_yaml
 
     directory.mkdir(parents=True, exist_ok=True)
     prepared = PreparedPrivateYaml(
@@ -149,7 +149,7 @@ def _stage_portal_config(directory: Path, deployment: dict) -> Any:
 def _await_console_banner(process: subprocess.Popen) -> tuple[int, str]:
     """Read the capability banner exactly the way the portal service does."""
 
-    from engine.portal.service import _parse_console_banner
+    from openadapt_desktop.portal.service import _parse_console_banner
 
     found: queue.Queue = queue.Queue(maxsize=1)
 
@@ -203,8 +203,8 @@ def _drive_portal_surface(
     import urllib.error
     import urllib.request
 
-    from engine.portal.flow_client import FlowConsoleClient, FlowConsoleUnavailable
-    from engine.portal.notifications import (
+    from openadapt_desktop.portal.flow_client import FlowConsoleClient, FlowConsoleUnavailable
+    from openadapt_desktop.portal.notifications import (
         assert_generic_notification,
         notification_from_upstream,
     )
@@ -291,7 +291,7 @@ def _stop(process: subprocess.Popen) -> None:
     that child alive, still mapping the extracted runtime's DLLs -- which then
     makes this smoke's temporary directory undeletable.
     """
-    from engine.portal.service import _kill_tree
+    from openadapt_desktop.portal.service import _kill_tree
 
     _kill_tree(process)
     try:
@@ -324,7 +324,7 @@ def _verify_bundled_capture(executable: Path, root: Path, env: dict[str, str]) -
 
     # The exact phrase the engine prints, imported rather than restated so a
     # reworded verdict cannot make this assertion quietly vacuous.
-    from engine.cli import CAPTURE_CHORD_VERIFIED as CAPTURE_CHORD_MARKER
+    from openadapt_desktop.cli import CAPTURE_CHORD_VERIFIED as CAPTURE_CHORD_MARKER
 
     probe_env = dict(env)
     probe_env["OPENADAPT_DATA_DIR"] = str(root / "capture-contract-data")
@@ -646,7 +646,7 @@ def main() -> int:
             raise RuntimeError(
                 "frozen replay did not bind its external-network observation to the outcome"
             )
-        from engine.flow_bridge import FlowBridge
+        from openadapt_desktop.flow_bridge import FlowBridge
 
         if FlowBridge.classify_outcome(0, report) != "COMPLETED_UNVERIFIED":
             raise RuntimeError(

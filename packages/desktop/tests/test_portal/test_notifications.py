@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from engine.portal.notifications import (
+from openadapt_desktop.portal.notifications import (
     NOTIFICATION_FIELDS,
     NotificationLeak,
     assert_generic_notification,
@@ -99,8 +99,8 @@ def test_the_assertion_refuses_any_widened_payload() -> None:
 
 
 def test_the_dispatcher_emits_only_an_asserted_generic_payload(monkeypatch) -> None:
-    from engine.config import EngineConfig
-    from engine.dispatch import EngineDispatcher, EngineServices
+    from openadapt_desktop.config import EngineConfig
+    from openadapt_desktop.dispatch import EngineDispatcher, EngineServices
 
     class LeakyPortal:
         def notification(self):

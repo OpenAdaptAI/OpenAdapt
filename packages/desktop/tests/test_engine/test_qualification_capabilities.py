@@ -12,13 +12,13 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 pytest.importorskip("openadapt_flow.ir")
 
-from engine.qualification_capabilities import (
+from openadapt_desktop.qualification_capabilities import (
     collect_qualification_capabilities,
     current_signed_capability_observations,
     sign_qualification_capability_observation,
     verify_qualification_capability_observation,
 )
-from engine.qualification_lifecycle import retain_capability_observation
+from openadapt_desktop.qualification_lifecycle import retain_capability_observation
 
 
 def _sha() -> str:

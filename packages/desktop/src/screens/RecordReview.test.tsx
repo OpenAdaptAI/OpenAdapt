@@ -309,3 +309,49 @@ it("shows a recording failure and lets the user retry", async () => {
     }),
   );
 });
+
+it("never tells a first-time user to leave the page URL blank", async () => {
+  vi.mocked(engineTry).mockImplementation(async (command) => {
+    if (command === CMD.GET_CAPABILITIES) return capabilityReport();
+    return {
+      recording: false,
+      paused: false,
+      duration_secs: 0,
+      capture_id: null,
+      controls: { pause: false, resume: false, stop: false },
+    };
+  });
+
+  render(<RecordReview firstWorkflow onCompiled={() => {}} />);
+  fireEvent.change(screen.getByLabelText("What does this task do?"), {
+    target: { value: "Save one test value" },
+  });
+
+  // The first-workflow form rejects a blank URL, so its hint must ask for one.
+  expect(screen.queryByText(/Leave blank/)).toBeNull();
+  expect(screen.getByText(/Enter the full address of the page/)).toBeTruthy();
+  expect(
+    screen.getByText("Enter the page URL for the app you want to record."),
+  ).toBeTruthy();
+  const recordButton = screen.getByRole("button", {
+    name: "Record this task",
+  }) as HTMLButtonElement;
+  expect(recordButton.disabled).toBe(true);
+});
+
+it("still offers the bundled demonstration where a blank URL works", () => {
+  vi.mocked(engineTry).mockImplementation(async (command) => {
+    if (command === CMD.GET_CAPABILITIES) return capabilityReport();
+    return {
+      recording: false,
+      paused: false,
+      duration_secs: 0,
+      capture_id: null,
+      controls: { pause: false, resume: false, stop: false },
+    };
+  });
+
+  render(<RecordReview onCompiled={() => {}} />);
+
+  expect(screen.getByText(/Leave blank to use Flow's bundled local demonstration/)).toBeTruthy();
+});

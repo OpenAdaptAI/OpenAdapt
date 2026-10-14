@@ -14,8 +14,8 @@ import uuid
 
 import pytest
 
-from engine.config import EngineConfig
-from engine.ipc import IPCHandler
+from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.ipc import IPCHandler
 
 
 @pytest.fixture

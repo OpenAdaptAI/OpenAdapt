@@ -12,15 +12,15 @@ from typing import Any
 import httpx
 import pytest
 
-from engine.auth.store import load_authoring_lease
-from engine.authoring_runner import (
+from openadapt_desktop.auth.store import load_authoring_lease
+from openadapt_desktop.authoring_runner import (
     POLL_WAIT_S,
     AuthoringCoachOnly,
     AuthoringError,
     AuthoringRunner,
     project_observe,
 )
-from engine.config import EngineConfig
+from openadapt_desktop.config import EngineConfig
 
 BIND = "oab_" + "A" * 43
 PACK = "p.abcdefghijkl"
@@ -173,8 +173,17 @@ def _mailbox(
     return runner, requests, recorder, audit
 
 
-def _envelope(tool: str, *, sub: str = SUB, args: dict[str, Any] | None = None) -> dict[str, Any]:
-    return {
+_NO_DISPLAY = object()
+
+
+def _envelope(
+    tool: str,
+    *,
+    sub: str = SUB,
+    args: dict[str, Any] | None = None,
+    client_display: Any = "ChatGPT",
+) -> dict[str, Any]:
+    envelope = {
         "schema_version": "openadapt.authoring.command/v1",
         "command_id": f"cmd_{tool}",
         "pack_id": PACK,
@@ -182,8 +191,11 @@ def _envelope(tool: str, *, sub: str = SUB, args: dict[str, Any] | None = None) 
         "args": args or {},
         "oauth_sub_sha256": sub,
         "client_id_sha256": CLIENT,
-        "client_display": "ChatGPT",
+        "client_display": client_display,
     }
+    if client_display is _NO_DISPLAY:
+        del envelope["client_display"]
+    return envelope
 
 
 def test_claim_stores_lease_without_returning_the_secret(tmp_path: Path) -> None:
@@ -210,7 +222,7 @@ def test_claim_maps_mailbox_failures(tmp_path: Path, status: int) -> None:
 
 def test_poll_wait_is_zero_not_twenty_five(tmp_path: Path) -> None:
     assert POLL_WAIT_S == 0
-    source = Path("engine/authoring_runner.py").read_text(encoding="utf-8")
+    source = Path("openadapt_desktop/authoring_runner.py").read_text(encoding="utf-8")
     assert "DEFAULT_WAIT_S" not in source
     assert '"wait_seconds": POLL_WAIT_S' in source
     assert "from openadapt_flow.backends.win_agent" not in source
@@ -412,7 +424,7 @@ def test_node_table_is_mode_0600(tmp_path: Path) -> None:
 
 
 def test_projector_drops_value_title_and_six_digit_names(tmp_path: Path) -> None:
-    from engine.authoring_runner import NodeTable
+    from openadapt_desktop.authoring_runner import NodeTable
 
     table = NodeTable(tmp_path / "nodes.json", b"key")
     payload = project_observe(
@@ -447,8 +459,8 @@ def test_projector_drops_value_title_and_six_digit_names(tmp_path: Path) -> None
 
 
 def test_dispatch_resume_and_stop_use_authoring_when_bound(tmp_path: Path) -> None:
-    from engine.db import IndexDB
-    from engine.dispatch import EngineDispatcher, EngineServices
+    from openadapt_desktop.db import IndexDB
+    from openadapt_desktop.dispatch import EngineDispatcher, EngineServices
 
     runner, _requests, recorder, _audit = _mailbox(tmp_path)
     runner.claim_uri(URI, start_loop=False)
@@ -487,6 +499,44 @@ def test_replace_allow_required_for_a_second_sub(tmp_path: Path) -> None:
     assert runner._allowed_sub == SUB
     runner.allow(replace=True)
     assert runner._allowed_sub == OTHER_SUB
+
+
+@pytest.mark.parametrize("display", ["Claude", "ChatGPT"])
+def test_allow_prompts_name_the_client_that_asked(tmp_path: Path, display: str) -> None:
+    runner, _requests, _recorder, _audit = _mailbox(tmp_path)
+    events: list[tuple[str, dict[str, Any]]] = []
+    runner.emit = lambda event, data: events.append((event, data))
+    runner.claim_uri(URI, start_loop=False)
+    runner.handle_envelope(_envelope("bind_pack", client_display=display))
+    runner.allow()
+    assert runner.status()["status"] == "bound"
+    assert runner.status()["client_display"] == display
+    runner.handle_envelope(_envelope("bind_pack", sub=OTHER_SUB, client_display=display))
+
+    prompts = [data["prompt"] for _event, data in events if "prompt" in data]
+    assert prompts == [
+        f"Allow {display} to drive this job",
+        f"A different {display} account is asking. Allow it to replace the current one?",
+    ]
+
+
+@pytest.mark.parametrize("display", [_NO_DISPLAY, None, "", "Gemini"])
+def test_allow_prompts_never_guess_a_client(tmp_path: Path, display: Any) -> None:
+    runner, _requests, _recorder, _audit = _mailbox(tmp_path)
+    events: list[tuple[str, dict[str, Any]]] = []
+    runner.emit = lambda event, data: events.append((event, data))
+    runner.claim_uri(URI, start_loop=False)
+    runner.handle_envelope(_envelope("bind_pack", client_display=display))
+    assert runner.allow()["client_display"] is None
+    assert runner.status()["client_display"] is None
+    runner.handle_envelope(_envelope("bind_pack", sub=OTHER_SUB, client_display=display))
+
+    prompts = [data["prompt"] for _event, data in events if "prompt" in data]
+    assert prompts == [
+        "Allow your assistant to drive this job",
+        "A different assistant account is asking. Allow it to replace the current one?",
+    ]
+    assert "ChatGPT" not in json.dumps([data for _event, data in events])
 
 
 def test_macos_without_unique_window_is_coach_only(tmp_path: Path) -> None:

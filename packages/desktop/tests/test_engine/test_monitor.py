@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import time
 
-from engine.config import EngineConfig
-from engine.monitor import HealthMonitor
+from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.monitor import HealthMonitor
 
 
 class TestHealthMonitor:

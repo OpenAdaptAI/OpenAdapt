@@ -191,6 +191,49 @@ function terminalPhase(progress: ReplayProgress): OverlayPhase {
   return "completed_unverified";
 }
 
+const CHECK_THE_RECORD = "Check the record";
+const STOPPED_BEFORE_SAVING = "Stopped before saving";
+
+/**
+ * The phase and plain words for a managed run's last outcome.
+ *
+ * Every Flow transaction outcome is named. The overlay contract has no phase
+ * for "check the record" or "refused before any effect" yet, so those use the
+ * halted phase with their own words. An unknown or missing outcome is never
+ * shown as completed: nothing proves that no save happened.
+ */
+function managedRunResult(
+  outcome: string | null | undefined,
+  runnerState: string,
+): { phase: OverlayPhase; prompt: string | null } {
+  switch (outcome) {
+    case "VERIFIED":
+      return { phase: "verified", prompt: null };
+    case "RECONCILIATION_REQUIRED":
+      // A save may have gone through. "Didn't finish" would invite a re-run.
+      return { phase: "halted", prompt: CHECK_THE_RECORD };
+    case "HALTED_BEFORE_EFFECT":
+    case "REJECTED_POLICY":
+    case "CANCELED":
+      // Flow proved that nothing was written.
+      return { phase: "halted", prompt: STOPPED_BEFORE_SAVING };
+    case "HALTED":
+    case "halted-needs-attention":
+      return { phase: "halted", prompt: null };
+  }
+  if (runnerState === "error") return { phase: "failed", prompt: CHECK_THE_RECORD };
+  switch (outcome) {
+    case "ROLLED_BACK":
+      return { phase: "rolled_back", prompt: null };
+    case "COMPLETED_UNVERIFIED":
+      return { phase: "completed_unverified", prompt: null };
+    case "FAILED_PLATFORM":
+    case "FAILED":
+      return { phase: "failed", prompt: null };
+  }
+  return { phase: "failed", prompt: CHECK_THE_RECORD };
+}
+
 export function reduceControlOverlay(
   state: ControlOverlayState,
   input: ControlOverlayInput,
@@ -247,6 +290,8 @@ export function reduceControlOverlay(
         ...state,
         visible: true,
         phase: terminalPhase(progress),
+        // Words from an earlier managed run never carry into this one.
+        pausePrompt: null,
         mode,
         surface: progress.backend,
         profile: progress.profile ?? state.profile,
@@ -290,27 +335,22 @@ export function reduceControlOverlay(
           surface: state.surface,
           localWorkflowLabel: "Managed workflow",
           controls: { pause: false, resume: false, stop: false },
+          pausePrompt: null,
         };
       }
       if (state.mode !== "managed" || state.phase !== "executing") return state;
-      return {
-        ...state,
-        visible: true,
-        phase:
-          input.status.last_runs[0]?.outcome === "VERIFIED"
-            ? "verified"
-            : input.status.last_runs[0]?.outcome === "RECONCILIATION_REQUIRED"
-              ? "failed"
-              : input.status.last_runs[0]?.outcome === "HALTED" ||
-                  input.status.last_runs[0]?.outcome === "HALTED_BEFORE_EFFECT" ||
-                input.status.last_runs[0]?.outcome === "halted-needs-attention"
-              ? "halted"
-              : input.status.state === "error"
-                ? "failed"
-                : input.status.last_runs[0]?.outcome === "ROLLED_BACK"
-                  ? "rolled_back"
-                  : "completed_unverified",
-      };
+      {
+        const result = managedRunResult(
+          input.status.last_runs[0]?.outcome,
+          input.status.state,
+        );
+        return {
+          ...state,
+          visible: true,
+          phase: result.phase,
+          pausePrompt: result.prompt,
+        };
+      }
     case "workflow-metadata":
       return {
         ...state,

@@ -5,7 +5,7 @@
 // and whether this version is approved and sealed. Nothing is inferred from
 // the UI. The full contract stays in "Advanced: exact checks".
 
-import { humanizeInput, plainStep, sentenceCase } from "./outcomes";
+import { humanizeInput, plainStep, plainTargetStep, sentenceCase } from "./outcomes";
 import type {
   QualificationEditableEffect,
   QualificationNode,
@@ -90,20 +90,39 @@ function parameterName(expression: { source: string; value?: string | null } | n
   return humanizeInput(expression.value);
 }
 
+/**
+ * One plain line for what a save changes: the field, and where its value
+ * comes from. A field line doesn't repeat the input that finds the record;
+ * "How it makes sure it's the right record" covers that.
+ */
 export function describeEffect(effect: QualificationEditableEffect): string {
-  const match = Object.values(effect.match ?? {})
-    .map(parameterName)
-    .find(Boolean);
   const value = parameterName(effect.value);
-  const record = match ? `the record for the ${match} you give it` : "the record";
-  if (effect.kind === "field_equals" && effect.field) {
-    return value
-      ? `Sets ${humanizeInput(effect.field)} on ${record} to the ${value} you give it.`
-      : `Sets ${humanizeInput(effect.field)} on ${record}.`;
+  const field = effect.field ? humanizeInput(effect.field) : null;
+  if (effect.kind === "field_equals" && field) {
+    if (value) {
+      return value === field
+        ? `Sets the ${field} you give it.`
+        : `Sets the ${field} to the ${value} you give it.`;
+    }
+    return effect.value?.source === "literal"
+      ? `Sets the ${field} to the same value every time.`
+      : `Sets the ${field}.`;
   }
-  return effect.field && value
-    ? `Saves a ${humanizeInput(effect.field)} on ${record}, from the ${value} you give it.`
-    : `Saves an entry on ${record}.`;
+  const keys = [
+    ...new Set(
+      Object.values(effect.match ?? {})
+        .map(parameterName)
+        .filter((name): name is string => Boolean(name)),
+    ),
+  ];
+  const given = keys.length ? ` with the ${keys.join(" and ")} you give it` : "";
+  if (effect.expected_count === 0) return `Checks that no record${given} is saved.`;
+  if (field && value) {
+    return value === field
+      ? `Saves the ${field} you give it.`
+      : `Saves a ${field} from the ${value} you give it.`;
+  }
+  return `Saves a record${given}.`;
 }
 
 // What each drill changes, as Flow's local drill campaign makes it (B276):
@@ -172,6 +191,17 @@ function caseView(
 const SHOWN_NODE_KINDS = new Set(["action", "terminal", "branch", "loop", "business_decision"]);
 const HIDDEN_STEPS_CAPTION = "Runs a part of the task that isn't shown step by step here";
 
+/** The control a step clicks, by its structure, before the OCR-based title. */
+function stepCaption(
+  node: QualificationNode,
+  control: QualificationProject["controls"]["actions"][string] | undefined,
+): string {
+  return (
+    plainTargetStep(node.action, control?.target) ??
+    plainStep(node.title || node.action || node.id)
+  );
+}
+
 /** Derive the short path from one qualification projection. */
 export function checkPlan(response: QualificationProject): CheckPlan {
   const actions = response.graph.nodes.filter(
@@ -200,7 +230,7 @@ export function checkPlan(response: QualificationProject): CheckPlan {
       if (classification === "read_only" && control?.classification?.operator_confirmed) {
         readCount += 1;
       } else {
-        unproven.push({ id: node.id, caption: plainStep(node.title || node.action || node.id) });
+        unproven.push({ id: node.id, caption: stepCaption(node, control) });
       }
       continue;
     }
@@ -213,7 +243,7 @@ export function checkPlan(response: QualificationProject): CheckPlan {
       .filter((tier): tier is number => typeof tier === "number");
     writes.push({
       id: node.id,
-      caption: plainStep(node.title || node.action || node.id),
+      caption: stepCaption(node, control),
       effects: effects.length
         ? effects.map(describeEffect)
         : node.effects.length

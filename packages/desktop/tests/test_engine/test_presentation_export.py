@@ -22,7 +22,7 @@ from openadapt_types import (
 )
 from PIL import Image
 
-from engine.presentation_export import (
+from openadapt_desktop.presentation_export import (
     build_step_placement_plan,
     choose_capsule_bounds,
     export_presentation_video,

@@ -11,20 +11,20 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from engine.audit import AuditLogger
-from engine.backends.protocol import UploadResult
-from engine.config import EngineConfig
-from engine.controller import RecordingController, RecordingState
-from engine.db import IndexDB
-from engine.review import (
+from openadapt_desktop.audit import AuditLogger
+from openadapt_desktop.backends.protocol import UploadResult
+from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.controller import RecordingController, RecordingState
+from openadapt_desktop.db import IndexDB
+from openadapt_desktop.review import (
     ReviewStatus,
     check_egress_allowed,
     get_pending_reviews,
     transition_status,
 )
-from engine.scrubber import Scrubber, ScrubLevel
-from engine.storage_manager import StorageManager
-from engine.upload_manager import UploadManager
+from openadapt_desktop.scrubber import Scrubber, ScrubLevel
+from openadapt_desktop.storage_manager import StorageManager
+from openadapt_desktop.upload_manager import UploadManager
 
 
 @pytest.fixture
@@ -164,7 +164,7 @@ class TestE2EPipeline:
             db=pipeline.db,
         )
 
-        from engine.review import EgressBlockedError
+        from openadapt_desktop.review import EgressBlockedError
 
         with pytest.raises(EgressBlockedError):
             check_egress_allowed(capture_id, pipeline.db)
@@ -178,7 +178,7 @@ class TestE2EPipeline:
         capture_id = controller.start()
         controller.stop()
 
-        from engine.review import EgressBlockedError
+        from openadapt_desktop.review import EgressBlockedError
 
         with pytest.raises(EgressBlockedError):
             pipeline.upload_manager.enqueue(capture_id, "mock")

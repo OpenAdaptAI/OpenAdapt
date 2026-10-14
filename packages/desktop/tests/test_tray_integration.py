@@ -11,8 +11,8 @@ from pathlib import Path
 
 import pytest
 
-from engine.config import EngineConfig
-from engine.socket_server import IPC_PROTOCOL_VERSION, DesktopSocketServer
+from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.socket_server import IPC_PROTOCOL_VERSION, DesktopSocketServer
 
 TRAY_SOURCE = os.environ.get("OPENADAPT_TRAY_SOURCE")
 pytestmark = pytest.mark.skipif(

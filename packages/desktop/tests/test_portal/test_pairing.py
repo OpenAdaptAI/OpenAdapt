@@ -6,8 +6,8 @@ import threading
 
 import pytest
 
-from engine.auth.pairing import PAIRING_SECRET_RE as CLOUD_SECRET_RE
-from engine.portal.pairing import (
+from openadapt_desktop.auth.pairing import PAIRING_SECRET_RE as CLOUD_SECRET_RE
+from openadapt_desktop.portal.pairing import (
     MAX_CONFIRM_ATTEMPTS,
     PAIRING_TTL_S,
     PORTAL_PAIRING_SECRET_RE,
@@ -105,7 +105,7 @@ def test_expiry_uses_a_monotonic_clock_not_the_wall_clock(monkeypatch) -> None:
     """Moving the system clock backwards must not extend a pairing."""
     import datetime as real
 
-    import engine.portal.pairing as module
+    import openadapt_desktop.portal.pairing as module
 
     clock = Clock()
     pairings = store(clock)
@@ -354,7 +354,7 @@ def test_a_suspended_machine_cannot_extend_a_session(monkeypatch) -> None:
     """Monotonic time stalls across suspend, so wall time is a ceiling too."""
     import datetime as real
 
-    import engine.portal.pairing as module
+    import openadapt_desktop.portal.pairing as module
 
     clock = Clock()
     pairings = store(clock)

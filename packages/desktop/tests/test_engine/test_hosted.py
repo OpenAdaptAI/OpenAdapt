@@ -8,10 +8,10 @@ from pathlib import Path
 
 import pytest
 
-from engine import hosted
-from engine.backends.protocol import UploadResult
-from engine.flow_bridge import FlowResult
-from engine.hosted import PhiBoundaryError, report_break, zip_dir
+from openadapt_desktop import hosted
+from openadapt_desktop.backends.protocol import UploadResult
+from openadapt_desktop.flow_bridge import FlowResult
+from openadapt_desktop.hosted import PhiBoundaryError, report_break, zip_dir
 
 _SHA_A = "a" * 64
 _SHA_B = "b" * 64
@@ -161,7 +161,7 @@ class TestPush:
         tmp_path: Path,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        from engine.db import IndexDB
+        from openadapt_desktop.db import IndexDB
 
         rec = tmp_path / "rec1"
         rec.mkdir()
@@ -272,7 +272,7 @@ class TestPush:
             lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError(secret)),
         )
         monkeypatch.setattr(
-            "engine.hosted.logger.warning",
+            "openadapt_desktop.hosted.logger.warning",
             lambda *args, **kwargs: warnings.append((args, kwargs)),
         )
 
@@ -290,7 +290,7 @@ class TestPush:
         rec.mkdir()
         document = _push_document(status="paused_for_review")
         monkeypatch.setattr(
-            "engine.hosted.FlowBridge.push",
+            "openadapt_desktop.hosted.FlowBridge.push",
             lambda *args, **kwargs: FlowResult(
                 ok=True, returncode=0, stdout=json.dumps(document)
             ),
@@ -325,7 +325,7 @@ class TestPush:
                 stdout=json.dumps(_push_document()),
             )
 
-        monkeypatch.setattr("engine.hosted.FlowBridge.push", fake_push)
+        monkeypatch.setattr("openadapt_desktop.hosted.FlowBridge.push", fake_push)
 
         result = hosted.push(rec)
 
@@ -349,7 +349,7 @@ class TestPush:
             lambda host, explicit=None: explicit or "",
         )
         monkeypatch.setattr(
-            "engine.hosted.FlowBridge.push",
+            "openadapt_desktop.hosted.FlowBridge.push",
             lambda *_args, **kwargs: (
                 calls.append(kwargs)
                 or FlowResult(
@@ -373,7 +373,7 @@ class TestPush:
         rec.mkdir()
         workflow_id = _WORKFLOW_ID
         monkeypatch.setattr(
-            "engine.hosted.FlowBridge.push",
+            "openadapt_desktop.hosted.FlowBridge.push",
             lambda *args, **kwargs: FlowResult(
                 ok=True,
                 returncode=0,
@@ -395,7 +395,7 @@ class TestPush:
         rec = tmp_path / "rec"
         rec.mkdir()
         monkeypatch.setattr(
-            "engine.hosted.FlowBridge.push",
+            "openadapt_desktop.hosted.FlowBridge.push",
             lambda *args, **kwargs: FlowResult(
                 ok=True, returncode=0, stdout=json.dumps(_push_document(status="failed"))
             ),
@@ -417,7 +417,7 @@ class TestPush:
         malformed = _push_document(kind="bundle")
         malformed["workflow_id"] = None
         monkeypatch.setattr(
-            "engine.hosted.FlowBridge.push",
+            "openadapt_desktop.hosted.FlowBridge.push",
             lambda *args, **kwargs: FlowResult(
                 ok=True,
                 returncode=0,
@@ -439,7 +439,7 @@ class TestPush:
         rec.mkdir()
         document = _push_document(status="failed")
         monkeypatch.setattr(
-            "engine.hosted.FlowBridge.push",
+            "openadapt_desktop.hosted.FlowBridge.push",
             lambda *args, **kwargs: FlowResult(
                 ok=False,
                 returncode=1,
@@ -473,7 +473,7 @@ class TestReportBreak:
         self._write_report(run_dir, {"reason": "drift", "step_intent": "click"})
         calls: list[dict] = []
         monkeypatch.setattr(
-            "engine.hosted.FlowBridge.report_break",
+            "openadapt_desktop.hosted.FlowBridge.report_break",
             lambda *a, **k: (
                 calls.append(k)
                 or FlowResult(
@@ -498,7 +498,7 @@ class TestReportBreak:
         run_dir = tmp_path / "run"
         self._write_report(run_dir, {"reason": "drift"})
         monkeypatch.setattr(
-            "engine.hosted.FlowBridge.report_break",
+            "openadapt_desktop.hosted.FlowBridge.report_break",
             lambda *a, **k: FlowResult(
                 ok=True,
                 returncode=0,
@@ -515,7 +515,7 @@ class TestReportBreak:
         run_dir = tmp_path / "run"
         self._write_report(run_dir, {"reason": "drift"})
         monkeypatch.setattr(
-            "engine.hosted.FlowBridge.report_break",
+            "openadapt_desktop.hosted.FlowBridge.report_break",
             lambda *a, **k: FlowResult(
                 ok=True,
                 returncode=0,
@@ -540,11 +540,11 @@ class TestReportBreak:
         secret = "/runs/Jane-Doe-12345/report.json"
         warnings: list[tuple[tuple, dict]] = []
         monkeypatch.setattr(
-            "engine.hosted.FlowBridge.report_break",
+            "openadapt_desktop.hosted.FlowBridge.report_break",
             lambda *args, **kwargs: (_ for _ in ()).throw(RuntimeError(secret)),
         )
         monkeypatch.setattr(
-            "engine.hosted.logger.warning",
+            "openadapt_desktop.hosted.logger.warning",
             lambda *args, **kwargs: warnings.append((args, kwargs)),
         )
 
@@ -559,7 +559,7 @@ class TestReportBreak:
         self._write_report(run_dir, {"reason": secret, "step_intent": secret})
         calls: list[tuple[tuple, dict]] = []
         monkeypatch.setattr(
-            "engine.hosted.FlowBridge.report_break",
+            "openadapt_desktop.hosted.FlowBridge.report_break",
             lambda *args, **kwargs: (
                 calls.append((args, kwargs))
                 or FlowResult(

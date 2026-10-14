@@ -35,8 +35,9 @@ fn main() {
     // signing-key lifecycle exists
     // (tests/test_native_release.py::test_updater_feed_is_disabled_until_signing_key_lifecycle_exists),
     // so register the plugin only when a valid config is present. The day the
-    // config lands, the updater turns on with no Rust change; until then the
-    // frontend's update check reports "unavailable" instead of the app dying.
+    // config lands, the updater turns on with no Rust change; until then
+    // `updater_available` returns false and Settings offers the releases page
+    // instead of an update check that can only fail.
     let updater_configured = context
         .config()
         .plugins
@@ -60,6 +61,7 @@ fn main() {
     }
     builder
         .manage(SidecarHandle(engine.clone()))
+        .manage(commands::UpdaterAvailable(updater_configured))
         .setup(move |app| {
             tray::setup_tray(app)?;
             let ffmpeg = Arc::new(
@@ -96,6 +98,7 @@ fn main() {
             // generic bridge + native helpers
             commands::engine_invoke,
             commands::sidecar_status,
+            commands::updater_available,
             commands::open_external,
             commands::set_control_overlay_visible,
             commands::set_control_overlay_interactive,

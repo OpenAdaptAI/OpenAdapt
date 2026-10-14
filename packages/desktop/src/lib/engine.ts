@@ -95,13 +95,13 @@ export const CMD = {
   GET_CONFIG: "get_config",
   SET_CONFIG: "set_config",
   // governed policy (Tier-2/3) resolved by the cloud control plane and fetched +
-  // cached fail-closed by the engine (engine/policy.py, docs/POLICY_SYNC.md).
+  // cached fail-closed by the engine (openadapt_desktop/policy.py, docs/POLICY_SYNC.md).
   // The desktop consumes it read-only; the canonical write path is the cloud API.
   GET_EFFECTIVE_POLICY: "get_effective_policy",
   // OS permissions (screen recording / accessibility / input monitoring)
   CHECK_PERMISSIONS: "check_permissions",
   REQUEST_INPUT_MONITORING: "request_input_monitoring",
-  // capability-aware surface availability (engine/capabilities.py)
+  // capability-aware surface availability (openadapt_desktop/capabilities.py)
   GET_CAPABILITIES: "get_capabilities",
   // review / egress gate (existing engine surface)
   SCRUB_CAPTURE: "scrub_capture",
@@ -112,7 +112,7 @@ export const CMD = {
   RUNNER_STATUS: "runner_status",
   RUNNER_ENABLE: "runner_enable",
   RUNNER_DISABLE: "runner_disable",
-  // mobile attended-decision portal (engine/portal). Desktop owns lifecycle,
+  // mobile attended-decision portal (openadapt_desktop/portal). Desktop owns lifecycle,
   // ingress posture, QR pairing, and generic notifications — never a decision.
   PORTAL_STATUS: "portal_status",
   PORTAL_START: "portal_start",
@@ -189,6 +189,19 @@ export async function engineTry<T>(
 export async function sidecarRunning(): Promise<boolean> {
   try {
     return await invoke<boolean>("sidecar_status");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Did this build register the updater plugin? Only a build with an update
+ * feed does. False outside Tauri, and false if the shell can't say.
+ */
+export async function updaterAvailable(): Promise<boolean> {
+  if (!inTauri()) return false;
+  try {
+    return (await invoke<boolean>("updater_available")) === true;
   } catch {
     return false;
   }

@@ -9,7 +9,7 @@ from pathlib import Path
 
 import pytest
 
-from engine.scrubber import Scrubber, ScrubbingUnavailableError, ScrubLevel
+from openadapt_desktop.scrubber import Scrubber, ScrubbingUnavailableError, ScrubLevel
 
 _PRESIDIO_MODULE = "openadapt_privacy.providers.presidio"
 

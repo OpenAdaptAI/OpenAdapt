@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import pytest
 
-from engine.backends.hosted_ingest import HostedIngestBackend
-from engine.backends.protocol import StorageBackend
-from engine.backends.s3 import S3Backend
+from openadapt_desktop.backends.hosted_ingest import HostedIngestBackend
+from openadapt_desktop.backends.protocol import StorageBackend
+from openadapt_desktop.backends.s3 import S3Backend
 
 
 class TestProtocolConformance:

@@ -146,7 +146,7 @@ describe("why an item came to a person", () => {
   });
 });
 
-describe("shared switch cases (engine/work_items.py reads the same file)", () => {
+describe("shared switch cases (openadapt_desktop/work_items.py reads the same file)", () => {
   it.each(cases.switch_cases.map((c) => [c.name, c] as const))("%s", (_name, item) => {
     // The outcome word comes from the transaction outcome alone.
     expect(plainResult(item.execution, item.transaction).key).toBe(item.key);

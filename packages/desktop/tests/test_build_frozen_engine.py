@@ -136,8 +136,8 @@ def test_frozen_runtime_bundles_required_third_party_notices(tmp_path: Path) -> 
         f"{build.RAPIDOCR_NOTICE_DIR / 'NOTICE'}:third_party/rapidocr",
         f"{tmp_path / 'frozen-notices'}:third_party/python",
     ]
-    assert ["--collect-data", "engine"] == command[
-        command.index("engine") - 1 : command.index("engine") + 1
+    assert ["--collect-data", "openadapt_desktop"] == command[
+        command.index("openadapt_desktop") - 1 : command.index("openadapt_desktop") + 1
     ]
     assert ["--hidden-import", "onnxruntime"] == command[
         command.index("onnxruntime") - 1 : command.index("onnxruntime") + 1

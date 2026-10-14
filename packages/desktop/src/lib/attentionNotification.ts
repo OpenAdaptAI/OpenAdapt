@@ -6,7 +6,7 @@
 //
 // The guarantee is structural: this module never forwards a string from the
 // engine. It reads one integer count and renders the body from a fixed
-// template, mirroring `engine/portal/notifications.py`. There is no code path
+// template, mirroring `openadapt_desktop/portal/notifications.py`. There is no code path
 // by which protected content can reach the notification plugin.
 
 /** The complete set of fields a notification payload may carry. */

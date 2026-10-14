@@ -5,8 +5,8 @@ from __future__ import annotations
 import sys
 from types import ModuleType
 
-from engine import __version__
-from engine import main as engine_main
+from openadapt_desktop import __version__
+from openadapt_desktop import main as engine_main
 
 
 def test_startup_log_uses_canonical_engine_version() -> None:
@@ -43,7 +43,7 @@ def test_normal_frozen_startup_configures_browser_cache_first(monkeypatch) -> No
         def main() -> None:
             calls.append("cli")
 
-    monkeypatch.setitem(sys.modules, "engine.cli", FakeCli)
+    monkeypatch.setitem(sys.modules, "openadapt_desktop.cli", FakeCli)
 
     engine_main.main()
 
@@ -68,13 +68,13 @@ def test_embedded_playwright_strips_python_module_argv(monkeypatch) -> None:
 
 
 def test_embedded_flow_version_stays_offline(monkeypatch, capsys) -> None:
-    managed = ModuleType("engine.managed_vision")
+    managed = ModuleType("openadapt_desktop.managed_vision")
 
     def unexpected_provision() -> None:
         raise AssertionError("version discovery must not provision optional vision")
 
     managed.ensure_managed_vision_runtime = unexpected_provision  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "engine.managed_vision", managed)
+    monkeypatch.setitem(sys.modules, "openadapt_desktop.managed_vision", managed)
     monkeypatch.setattr(engine_main, "_configure_frozen_browser_cache", lambda: None)
     monkeypatch.setattr(engine_main, "_normalize_flow_auto_scrub_capability", lambda: None)
     monkeypatch.setattr(engine_main, "_embedded_flow_version", lambda: "1.21.0")
@@ -98,7 +98,7 @@ def test_embedded_flow_command_provisions_vision_before_import(
         ["engine", "__openadapt_flow__", "lint", "bundle"],
     )
 
-    managed = ModuleType("engine.managed_vision")
+    managed = ModuleType("openadapt_desktop.managed_vision")
 
     def provision() -> None:
         calls.append("provision")
@@ -110,7 +110,7 @@ def test_embedded_flow_command_provisions_vision_before_import(
         calls.append("flow")
 
     flow.main = flow_main  # type: ignore[attr-defined]
-    monkeypatch.setitem(sys.modules, "engine.managed_vision", managed)
+    monkeypatch.setitem(sys.modules, "openadapt_desktop.managed_vision", managed)
     monkeypatch.setitem(sys.modules, "openadapt_flow.__main__", flow)
 
     engine_main._run_embedded_flow()

@@ -25,13 +25,25 @@ const AX_PANE =
 const INPUT_PANE =
   "x-apple.systempreferences:com.apple.preference.security?Privacy_ListenEvent";
 
+const UNKNOWN: PermissionStatus = {
+  screen_recording: false,
+  accessibility: false,
+  input_monitoring: false,
+};
+
+function permissionPill(granted: boolean, known: boolean) {
+  if (!known) return <Pill tone="neutral">unknown</Pill>;
+  return (
+    <Pill tone={granted ? "ok" : "warn"}>{granted ? "granted" : "needed"}</Pill>
+  );
+}
+
 export function Onboarding({ onStart }: { onStart?: () => void }) {
-  const [perms, setPerms] = useState<PermissionStatus>({
-    screen_recording: false,
-    accessibility: false,
-    input_monitoring: false,
-  });
+  const [perms, setPerms] = useState<PermissionStatus>(UNKNOWN);
   const [checked, setChecked] = useState(false);
+  // False when the engine didn't answer. Its fallback is not a real answer,
+  // so Desktop must not tell anyone a permission is missing.
+  const [known, setKnown] = useState(false);
   const [requestingInput, setRequestingInput] = useState(false);
   const [videoRuntime, setVideoRuntime] = useState<FfmpegRuntimeStatus>({
     phase: "checking",
@@ -41,16 +53,13 @@ export function Onboarding({ onStart }: { onStart?: () => void }) {
   });
 
   async function refresh() {
-    const p = await engineTry<PermissionStatus>(
+    const p = await engineTry<PermissionStatus | null>(
       CMD.CHECK_PERMISSIONS,
       {},
-      {
-        screen_recording: false,
-        accessibility: false,
-        input_monitoring: false,
-      },
+      null,
     );
-    setPerms(p);
+    setKnown(p !== null);
+    setPerms(p ?? UNKNOWN);
     setChecked(true);
   }
 
@@ -80,7 +89,8 @@ export function Onboarding({ onStart }: { onStart?: () => void }) {
 
   const permissionsReady =
     !MAC ||
-    (perms.screen_recording &&
+    (known &&
+      perms.screen_recording &&
       perms.accessibility &&
       perms.input_monitoring);
   const videoReady = videoRuntime.phase === "ready";
@@ -108,7 +118,13 @@ export function Onboarding({ onStart }: { onStart?: () => void }) {
             Re-check permissions
           </Button>
         </div>
-        {!permissionsReady && checked && (
+        {MAC && checked && !known && (
+          <p className="hint">
+            Desktop can't reach the local engine, so it can't check these
+            permissions yet. If this doesn't clear, quit and reopen OpenAdapt.
+          </p>
+        )}
+        {!permissionsReady && checked && known && (
           <p className="hint">Grant the permissions below to record desktop apps.</p>
         )}
         {permissionsReady && !videoReady && (
@@ -129,9 +145,7 @@ export function Onboarding({ onStart }: { onStart?: () => void }) {
             />
             <div className="stack">
               <div className="row">
-                <Pill tone={perms.screen_recording ? "ok" : "warn"}>
-                  {perms.screen_recording ? "granted" : "needed"}
-                </Pill>
+                {permissionPill(perms.screen_recording, known)}
                 <span className="spacer" />
                 <span>Screen Recording</span>
                 <Button size="sm" onClick={() => openExternal(SCREEN_PANE)}>
@@ -139,9 +153,7 @@ export function Onboarding({ onStart }: { onStart?: () => void }) {
                 </Button>
               </div>
               <div className="row">
-                <Pill tone={perms.accessibility ? "ok" : "warn"}>
-                  {perms.accessibility ? "granted" : "needed"}
-                </Pill>
+                {permissionPill(perms.accessibility, known)}
                 <span className="spacer" />
                 <span>Accessibility</span>
                 <Button size="sm" onClick={() => openExternal(AX_PANE)}>
@@ -149,12 +161,10 @@ export function Onboarding({ onStart }: { onStart?: () => void }) {
                 </Button>
               </div>
               <div className="row">
-                <Pill tone={perms.input_monitoring ? "ok" : "warn"}>
-                  {perms.input_monitoring ? "granted" : "needed"}
-                </Pill>
+                {permissionPill(perms.input_monitoring, known)}
                 <span className="spacer" />
                 <span>Input Monitoring</span>
-                {!perms.input_monitoring && (
+                {known && !perms.input_monitoring && (
                   <Button
                     size="sm"
                     disabled={requestingInput}

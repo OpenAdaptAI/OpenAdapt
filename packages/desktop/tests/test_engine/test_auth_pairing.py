@@ -6,7 +6,7 @@ from uuid import uuid4
 
 import pytest
 
-from engine.auth import pairing, store
+from openadapt_desktop.auth import pairing, store
 
 SECRET = "oap_" + "A" * 43
 TOKEN = "oai_ingest_" + "B" * 43

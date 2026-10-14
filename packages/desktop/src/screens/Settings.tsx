@@ -1,7 +1,13 @@
 // Settings — deployment lane, PHI mode, hosted host, auth, and updater.
 // Lane and PHI mode are the PHI-boundary routing controls (spec §1.3/§3e).
 import { useEffect, useState } from "react";
-import { CMD, engineInvoke, engineTry, openExternal } from "../lib/engine";
+import {
+  CMD,
+  engineInvoke,
+  engineTry,
+  openExternal,
+  updaterAvailable,
+} from "../lib/engine";
 import type {
   AuthStatus,
   DeploymentLane,
@@ -22,6 +28,8 @@ import {
   overlayPresentationEnabled,
   saveOverlayPresentation,
 } from "../overlay/preferences";
+
+const RELEASES_URL = "https://github.com/OpenAdaptAI/openadapt-desktop/releases";
 
 interface Cfg {
   host: string;
@@ -44,6 +52,8 @@ export function Settings({
     phi_mode: "off",
   });
   const [updateMsg, setUpdateMsg] = useState<string | null>(null);
+  // Null until the shell says whether this build can update itself.
+  const [canUpdate, setCanUpdate] = useState<boolean | null>(null);
   const [policy, setPolicy] = useState<EffectivePolicy | null>(null);
   const [includeOverlay, setIncludeOverlay] = useState(
     overlayPresentationEnabled,
@@ -57,6 +67,7 @@ export function Settings({
     // cloud control plane and fetched fail-closed by the engine. Read-only here;
     // degrade to null (managed-in-cloud note) if the engine cannot resolve it.
     engineTry<EffectivePolicy | null>(CMD.GET_EFFECTIVE_POLICY, {}, null).then(setPolicy);
+    void updaterAvailable().then(setCanUpdate);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -97,7 +108,10 @@ export function Settings({
         setUpdateMsg(`Installed ${update.version}. Restart to apply.`);
       }
     } catch (e) {
-      setUpdateMsg(`Update check unavailable: ${String(e)}`);
+      console.warn("update check failed", e);
+      setUpdateMsg(
+        "OpenAdapt couldn't check for updates. Try again later, or get the latest version from the releases page.",
+      );
     }
   }
 
@@ -224,7 +238,12 @@ export function Settings({
         </Field>
       </Card>
 
-      <GroundingModelCard policy={policy} host={cfg.host} />
+      <GroundingModelCard
+        policy={policy}
+        host={cfg.host}
+        signedIn={auth.authenticated}
+        onConnectCloud={onConnectCloud}
+      />
 
       <Card>
         <CardHead
@@ -258,12 +277,23 @@ export function Settings({
       <Card>
         <CardHead
           title="Version and updates"
-          sub="Automatic updates stay off until signed releases ship. Each new release has to be installed by hand."
+          sub={
+            canUpdate
+              ? "Check for a new version and install it from here."
+              : "Automatic updates stay off until signed releases ship. Each new release has to be installed by hand."
+          }
         />
         <div className="row">
-          <Button variant="ghost" onClick={checkUpdate}>
-            Check for updates
-          </Button>
+          {canUpdate ? (
+            <Button variant="ghost" onClick={checkUpdate}>
+              Check for updates
+            </Button>
+          ) : null}
+          {canUpdate === false ? (
+            <Button variant="ghost" onClick={() => void openExternal(RELEASES_URL)}>
+              Open the releases page
+            </Button>
+          ) : null}
           {updateMsg && <span className="page-sub">{updateMsg}</span>}
         </div>
         <div style={{ marginTop: "var(--space-4)" }}>
@@ -290,13 +320,22 @@ function ReadRow({ label, value }: { label: string; value: string }) {
 function GroundingModelCard({
   policy,
   host,
+  signedIn,
+  onConnectCloud,
 }: {
   policy: EffectivePolicy | null;
   host: string;
+  signedIn: boolean;
+  onConnectCloud: () => void;
 }) {
   const gm = policy?.grounding_model ?? null;
   const isAdmin = Boolean(policy?.is_admin);
   const enabled = Boolean(gm?.enabled);
+  // The engine's fail-closed default is not an organization's policy: neither
+  // Cloud nor a saved copy answered. With nobody signed in, there is no
+  // organization at all, so the card must not point to an admin.
+  const noOrgPolicy = policy?.source === "fail-closed-default";
+  const localOnly = noOrgPolicy && !signedIn;
 
   return (
     <Card>
@@ -320,7 +359,22 @@ function GroundingModelCard({
         </div>
       </details>
 
-      {gm === null ? (
+      {policy === null ? (
+        <p className="page-sub" style={{ marginTop: "var(--space-3)" }}>
+          Desktop can't read this setting from the local engine right now.
+        </p>
+      ) : noOrgPolicy ? (
+        <>
+          <Field label="Grounding-model rung">
+            <Pill tone="ok">Off (local only)</Pill>
+          </Field>
+          <p className="page-sub">
+            {localOnly
+              ? "No OpenAdapt Cloud workspace is connected, so the model stays off and OpenAdapt finds buttons and fields on this computer only. Connect a workspace to use your organization's setting."
+              : "OpenAdapt Cloud can't be reached and there's no saved copy of your organization's setting, so the model stays off for now."}
+          </p>
+        </>
+      ) : gm === null ? (
         <p className="page-sub" style={{ marginTop: "var(--space-3)" }}>
           Your organization manages this setting in OpenAdapt Cloud. Sign in
           and open the dashboard to see or change it.
@@ -352,21 +406,30 @@ function GroundingModelCard({
         </>
       )}
 
-      <div className="row" style={{ marginTop: "var(--space-4)" }}>
-        <Pill tone="neutral">read-only</Pill>
-        <span className="page-sub">
-          {isAdmin
-            ? "Admins change this in the cloud dashboard (the single canonical write path)."
-            : "Only an organization admin can change this."}
-        </span>
-        <span className="spacer" />
-        <Button
-          variant="ghost"
-          onClick={() => openExternal(`${host}/dashboard/settings`)}
-        >
-          {isAdmin ? "Manage in cloud dashboard" : "Open cloud dashboard"}
-        </Button>
-      </div>
+      {localOnly ? (
+        <div className="row" style={{ marginTop: "var(--space-4)" }}>
+          <span className="spacer" />
+          <Button variant="ghost" onClick={onConnectCloud}>
+            Connect to OpenAdapt Cloud
+          </Button>
+        </div>
+      ) : policy !== null ? (
+        <div className="row" style={{ marginTop: "var(--space-4)" }}>
+          <Pill tone="neutral">read-only</Pill>
+          <span className="page-sub">
+            {isAdmin
+              ? "Admins change this in the cloud dashboard (the single canonical write path)."
+              : "Only an organization admin can change this."}
+          </span>
+          <span className="spacer" />
+          <Button
+            variant="ghost"
+            onClick={() => openExternal(`${host}/dashboard/settings`)}
+          >
+            {isAdmin ? "Manage in cloud dashboard" : "Open cloud dashboard"}
+          </Button>
+        </div>
+      ) : null}
     </Card>
   );
 }

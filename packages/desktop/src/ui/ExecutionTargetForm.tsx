@@ -43,7 +43,7 @@ type PillTone = "neutral" | "ok" | "run" | "warn" | "crit";
 
 /**
  * Pill copy per detected capability state. "Available" is shown ONLY when the
- * engine's detection (engine/capabilities.py) reports it; before the report
+ * engine's detection (openadapt_desktop/capabilities.py) reports it; before the report
  * arrives, or without an engine, the pill says the state is being checked.
  */
 export const CAPABILITY_PILLS: Record<
@@ -96,11 +96,17 @@ export function ExecutionTargetForm({
   idPrefix,
   disabled = false,
   capabilities,
+  urlRequired = false,
 }: {
   target: ExecutionTarget;
   onChange: (target: ExecutionTarget) => void;
   idPrefix: string;
   disabled?: boolean;
+  /**
+   * The caller refuses a blank page URL (the first-workflow recording does),
+   * so the hint must ask for one instead of offering the bundled demo.
+   */
+  urlRequired?: boolean;
   /**
    * Optional pre-fetched capability report. When omitted, the form queries
    * the engine itself (get_capabilities) and degrades to "Checking
@@ -185,6 +191,7 @@ export function ExecutionTargetForm({
         switchRdpMode={(mode) => onChange(switchRdpTransport(target, mode))}
         idPrefix={idPrefix}
         disabled={disabled}
+        urlRequired={urlRequired}
       />
     </>
   );
@@ -197,6 +204,7 @@ function TargetFields({
   switchRdpMode,
   idPrefix,
   disabled,
+  urlRequired,
 }: {
   target: ExecutionTarget;
   rdpMode: RdpMode;
@@ -207,6 +215,7 @@ function TargetFields({
   switchRdpMode: (mode: RdpMode) => void;
   idPrefix: string;
   disabled: boolean;
+  urlRequired: boolean;
 }) {
   switch (target.backend) {
     case "web":
@@ -214,7 +223,11 @@ function TargetFields({
         <>
           <Field
             label="Page URL"
-            hint="Leave blank to use Flow's bundled local demonstration."
+            hint={
+              urlRequired
+                ? "Enter the full address of the page you'll work in, starting with http:// or https://."
+                : "Leave blank to use Flow's bundled local demonstration."
+            }
             htmlFor={`${idPrefix}-web-url`}
             hintId={`${idPrefix}-web-url-hint`}
           >

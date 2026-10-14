@@ -73,7 +73,7 @@ def test_launcher_runs_the_engine_from_the_venv(tmp_path: Path) -> None:
         [str(target), "doctor"], capture_output=True, text=True, check=True, timeout=30
     )
     args, first_path = result.stdout.splitlines()
-    assert args == "-m engine doctor"
+    assert args == "-m openadapt_desktop doctor"
     assert first_path == str(venv / "bin")
 
 

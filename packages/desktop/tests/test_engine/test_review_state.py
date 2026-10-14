@@ -7,8 +7,8 @@ from pathlib import Path
 
 import pytest
 
-from engine.db import IndexDB
-from engine.review import (
+from openadapt_desktop.db import IndexDB
+from openadapt_desktop.review import (
     EGRESS_ALLOWED_STATES,
     EgressArtifactError,
     EgressBlockedError,
@@ -23,7 +23,7 @@ from engine.review import (
 def test_derivative_tree_digest_distinguishes_member_type_and_path(tmp_path: Path) -> None:
     """A directory name cannot collide with a file path plus its content hash."""
 
-    from engine.review import derivative_tree_sha256
+    from openadapt_desktop.review import derivative_tree_sha256
 
     derivative = tmp_path / "capture.scrubbed"
     derivative.mkdir()
@@ -159,7 +159,7 @@ class TestCheckEgress:
         (scrubbed / "scrub_manifest.json").write_text(
             '{"scrub_level":"standard"}'
         )
-        from engine.review import derivative_tree_sha256
+        from openadapt_desktop.review import derivative_tree_sha256
 
         (scrubbed / "review_status.json").write_text(
             '{"status":"reviewed","approved_tree_sha256":"'
@@ -279,7 +279,7 @@ class TestCheckEgress:
         db: IndexDB,
         tmp_path: Path,
     ) -> None:
-        from engine.review import derivative_tree_sha256
+        from openadapt_desktop.review import derivative_tree_sha256
 
         raw = tmp_path / "cap"
         scrubbed = tmp_path / "cap.scrubbed"
@@ -322,7 +322,7 @@ class TestCheckEgress:
         db: IndexDB,
         tmp_path: Path,
     ) -> None:
-        from engine.review import derivative_tree_sha256
+        from openadapt_desktop.review import derivative_tree_sha256
 
         raw = tmp_path / "cap"
         scrubbed = tmp_path / "cap.scrubbed"

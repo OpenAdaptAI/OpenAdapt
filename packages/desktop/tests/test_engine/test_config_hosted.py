@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from engine.config import EngineConfig
+from openadapt_desktop.config import EngineConfig
 
 
 def _write_toml(path: Path, body: str) -> None:

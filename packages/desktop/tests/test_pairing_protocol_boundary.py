@@ -32,9 +32,9 @@ def test_single_instance_precedes_deep_link_and_handoff_is_fixed() -> None:
 
 
 def test_python_pairing_action_has_no_shell_or_navigation_escape_hatch() -> None:
-    pairing = (ROOT / "engine/auth/pairing.py").read_text()
-    store = (ROOT / "engine/auth/store.py").read_text()
-    dispatch = (ROOT / "engine/dispatch.py").read_text()
+    pairing = (ROOT / "openadapt_desktop/auth/pairing.py").read_text()
+    store = (ROOT / "openadapt_desktop/auth/store.py").read_text()
+    dispatch = (ROOT / "openadapt_desktop/dispatch.py").read_text()
     assert '"connect_uri": self.connect_uri' in dispatch
     assert '"claim_runner_uri": self.claim_runner_uri' in dispatch
     assert "subprocess" not in pairing
@@ -51,7 +51,7 @@ def test_python_pairing_action_has_no_shell_or_navigation_escape_hatch() -> None
 
 
 def test_python_runner_bind_is_parse_only() -> None:
-    runner_bind = (ROOT / "engine/auth/runner_bind.py").read_text()
+    runner_bind = (ROOT / "openadapt_desktop/auth/runner_bind.py").read_text()
     assert "def parse_runner_uri" in runner_bind
     assert "httpx" not in runner_bind
     assert "keyring" not in runner_bind
@@ -66,7 +66,7 @@ def test_python_runner_bind_is_parse_only() -> None:
     assert "oals_" in runner_bind
     assert "BIND_HEX_BODY_RE" in runner_bind
     assert "LEASE_BASE64URL_BODY_RE" in runner_bind
-    authoring = (ROOT / "engine/authoring_runner.py").read_text(encoding="utf-8")
+    authoring = (ROOT / "openadapt_desktop/authoring_runner.py").read_text(encoding="utf-8")
     assert 'action not in MAILBOX_ACTIONS' in authoring
     assert '"allow"' in authoring
     assert "win_agent" in authoring

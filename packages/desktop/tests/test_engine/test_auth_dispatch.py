@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from engine import auth
+from openadapt_desktop import auth
 
 
 class TestAvailableProviders:

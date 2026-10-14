@@ -9,8 +9,8 @@ from pathlib import Path
 
 import pytest
 
-from engine.config import EngineConfig
-from engine.socket_server import IPC_PROTOCOL_VERSION, DesktopSocketServer
+from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.socket_server import IPC_PROTOCOL_VERSION, DesktopSocketServer
 
 
 @pytest.fixture
@@ -153,7 +153,7 @@ class TestCommandDispatch:
 
     def test_non_tray_events_are_filtered(self, server) -> None:
         """Events the tray enum can't decode are never forwarded."""
-        from engine.socket_server import _TRAY_EVENTS
+        from openadapt_desktop.socket_server import _TRAY_EVENTS
 
         # replay_progress / log_line / open_window are not tray vocabulary.
         assert "replay_progress" not in _TRAY_EVENTS

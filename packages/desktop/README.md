@@ -165,13 +165,20 @@ covers pairing, what the phone can see, and how a decision is applied.
 ## Engine command line
 
 The engine also runs without the app. In a source checkout, put `uv run` in
-front of each command. From PyPI, with Python 3.11 or 3.12, install Flow
-alongside it:
+front of each command. From PyPI, with Python 3.11 or 3.12, install the exact
+Flow release this Desktop was built for alongside it. The engine runs only that
+release, never another `openadapt-flow` it finds on your `PATH`, and `doctor`
+says which one it found:
 
 ```bash
-pip install openadapt-desktop "openadapt-flow[browser]"
+pip install openadapt-desktop "openadapt-flow[browser,console]==1.35.1"
 openadapt-desktop doctor
 ```
+
+To run another Flow, such as a source checkout, set
+`OPENADAPT_DESKTOP_FLOW_BIN` to its `openadapt-flow` program. `doctor` then
+reports it as an unpinned developer override. The installed app ignores this
+setting.
 
 | Command | What it does |
 | --- | --- |
@@ -191,7 +198,7 @@ Cloud with `push`.
 ```bash
 uv sync --python 3.12 --extra dev --extra build
 uv run pytest tests -q
-uv run ruff check engine tests scripts
+uv run ruff check openadapt_desktop tests scripts
 npm run test:ui
 ```
 
@@ -220,11 +227,11 @@ openadapt-flow: record -> compile -> check -> run -> stop or repair
 ```
 
 ```text
-engine/       Python engine: recording, review, sign-in, sync, and the Flow bridge
-src-tauri/    Rust shell: starts and restarts the engine, tray socket wiring
-src/          React screens and the engine client
-scripts/      Build, release, screenshot, and development scripts
-tests/        Python unit and end-to-end tests
+openadapt_desktop/  Python engine: recording, review, sign-in, sync, and the Flow bridge
+src-tauri/          Rust shell: starts and restarts the engine, tray socket wiring
+src/                React screens and the engine client
+scripts/            Build, release, screenshot, and development scripts
+tests/              Python unit and end-to-end tests
 ```
 
 [DESIGN.md](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/DESIGN.md)

@@ -7,7 +7,7 @@ from pathlib import Path
 
 import pytest
 
-from engine.db import IndexDB
+from openadapt_desktop.db import IndexDB
 
 
 @pytest.fixture

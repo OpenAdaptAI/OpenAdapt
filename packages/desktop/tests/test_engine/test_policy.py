@@ -20,9 +20,9 @@ from pathlib import Path
 import httpx
 import pytest
 
-from engine import policy as policy_mod
-from engine.config import EngineConfig
-from engine.dispatch import EngineDispatcher
+from openadapt_desktop import policy as policy_mod
+from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.dispatch import EngineDispatcher
 
 from .conftest import FakeResponse
 
@@ -63,7 +63,7 @@ class TestFetchAndCache:
     ) -> None:
         body = _full_policy()
         monkeypatch.setattr(
-            "engine.policy.httpx.get", lambda *a, **k: FakeResponse(200, body)
+            "openadapt_desktop.policy.httpx.get", lambda *a, **k: FakeResponse(200, body)
         )
         result = policy_mod.resolve_effective_policy("https://app.openadapt.ai")
         assert result["source"] == "network"
@@ -95,7 +95,7 @@ class TestFetchAndCache:
         def _down(*a, **k):
             raise httpx.ConnectError("network down")
 
-        monkeypatch.setattr("engine.policy.httpx.get", _down)
+        monkeypatch.setattr("openadapt_desktop.policy.httpx.get", _down)
         result = policy_mod.resolve_effective_policy("https://app.openadapt.ai")
         assert result["source"] == "cache"
         assert result["policy_version"] == 3
@@ -109,7 +109,7 @@ class TestFetchAndCache:
         def _down(*a, **k):
             raise httpx.ConnectError("network down")
 
-        monkeypatch.setattr("engine.policy.httpx.get", _down)
+        monkeypatch.setattr("openadapt_desktop.policy.httpx.get", _down)
         result = policy_mod.resolve_effective_policy("https://app.openadapt.ai")
         assert result["source"] == "fail-closed-default"
         assert result["is_admin"] is False
@@ -124,7 +124,7 @@ class TestFetchAndCache:
     def test_http_error_status_falls_back(self, cache_path: Path, monkeypatch) -> None:
         _write_bound_cache(_full_policy(policy_version=9))
         monkeypatch.setattr(
-            "engine.policy.httpx.get", lambda *a, **k: FakeResponse(500, {})
+            "openadapt_desktop.policy.httpx.get", lambda *a, **k: FakeResponse(500, {})
         )
         result = policy_mod.resolve_effective_policy("https://app.openadapt.ai")
         assert result["source"] == "cache"
@@ -132,7 +132,7 @@ class TestFetchAndCache:
 
     def test_fetch_raises_on_401(self, cache_path: Path, monkeypatch) -> None:
         monkeypatch.setattr(
-            "engine.policy.httpx.get", lambda *a, **k: FakeResponse(401, {})
+            "openadapt_desktop.policy.httpx.get", lambda *a, **k: FakeResponse(401, {})
         )
         with pytest.raises(policy_mod.PolicyFetchError, match="401"):
             policy_mod.fetch_effective_policy("https://app.openadapt.ai")
@@ -143,7 +143,7 @@ class TestFetchAndCache:
         body = _full_policy()
         body.pop("policy_version")
         monkeypatch.setattr(
-            "engine.policy.httpx.get", lambda *a, **k: FakeResponse(200, body)
+            "openadapt_desktop.policy.httpx.get", lambda *a, **k: FakeResponse(200, body)
         )
         with pytest.raises(policy_mod.PolicyFetchError, match="policy version"):
             policy_mod.fetch_effective_policy("https://app.openadapt.ai")
@@ -154,7 +154,7 @@ class TestFetchAndCache:
     ) -> None:
         _write_bound_cache(_full_policy(policy_version=8))
         monkeypatch.setattr(
-            "engine.policy.httpx.get",
+            "openadapt_desktop.policy.httpx.get",
             lambda *a, **k: FakeResponse(200, _full_policy(policy_version=7)),
         )
 
@@ -171,7 +171,7 @@ class TestFetchAndCache:
         changed = _full_policy(policy_version=8)
         changed["safety"] = {**changed["safety"], "halt_on_ambiguous": False}
         monkeypatch.setattr(
-            "engine.policy.httpx.get", lambda *a, **k: FakeResponse(200, changed)
+            "openadapt_desktop.policy.httpx.get", lambda *a, **k: FakeResponse(200, changed)
         )
 
         with pytest.raises(policy_mod.PolicyFetchError, match="without a new version"):
@@ -192,7 +192,7 @@ class TestFetchAndCache:
         changed = _full_policy(policy_version=8)
         changed[field] = value
         monkeypatch.setattr(
-            "engine.policy.httpx.get", lambda *a, **k: FakeResponse(200, changed)
+            "openadapt_desktop.policy.httpx.get", lambda *a, **k: FakeResponse(200, changed)
         )
 
         with pytest.raises(policy_mod.PolicyFetchError, match="without a new version"):
@@ -210,7 +210,7 @@ class TestFetchAndCache:
             user={"theme": "light"},
         )
         monkeypatch.setattr(
-            "engine.policy.httpx.get", lambda *a, **k: FakeResponse(200, refreshed)
+            "openadapt_desktop.policy.httpx.get", lambda *a, **k: FakeResponse(200, refreshed)
         )
 
         assert policy_mod.fetch_effective_policy("https://app.openadapt.ai") == refreshed
@@ -226,7 +226,7 @@ class TestFetchAndCache:
             called = True
             return FakeResponse(200, _full_policy())
 
-        monkeypatch.setattr("engine.policy.httpx.get", _get)
+        monkeypatch.setattr("openadapt_desktop.policy.httpx.get", _get)
         with pytest.raises(policy_mod.PolicyFetchError, match="must use HTTPS"):
             policy_mod.fetch_effective_policy("http://policy.example.test")
         assert called is False
@@ -242,7 +242,7 @@ class TestFetchAndCache:
     ) -> None:
         _write_bound_cache(_full_policy(policy_version=3))
         monkeypatch.setattr(
-            "engine.policy.httpx.get",
+            "openadapt_desktop.policy.httpx.get",
             lambda *a, **k: (_ for _ in ()).throw(httpx.ConnectError("down")),
         )
         result = policy_mod.resolve_effective_policy("https://other.openadapt.ai")
@@ -255,7 +255,7 @@ class TestFetchAndCache:
         _write_bound_cache(_full_policy(policy_version=3))
         monkeypatch.setenv("OPENADAPT_INGEST_TOKEN", "oai_ingest_other_principal")
         monkeypatch.setattr(
-            "engine.policy.httpx.get",
+            "openadapt_desktop.policy.httpx.get",
             lambda *a, **k: (_ for _ in ()).throw(httpx.ConnectError("down")),
         )
         result = policy_mod.resolve_effective_policy("https://app.openadapt.ai")
@@ -264,8 +264,8 @@ class TestFetchAndCache:
     def test_offline_cache_rejects_other_org(
         self, cache_path: Path, monkeypatch, fake_keyring
     ) -> None:
-        from engine.auth.provider import Credential
-        from engine.auth.store import store_credential
+        from openadapt_desktop.auth.provider import Credential
+        from openadapt_desktop.auth.store import store_credential
 
         monkeypatch.delenv("OPENADAPT_INGEST_TOKEN")
         credential: Credential = {
@@ -281,7 +281,7 @@ class TestFetchAndCache:
         credential["org_id"] = "org_99"
         store_credential(credential)
         monkeypatch.setattr(
-            "engine.policy.httpx.get",
+            "openadapt_desktop.policy.httpx.get",
             lambda *a, **k: (_ for _ in ()).throw(httpx.ConnectError("down")),
         )
         result = policy_mod.resolve_effective_policy("https://app.openadapt.ai")
@@ -339,7 +339,7 @@ class TestFetchAndCache:
         self, cache_path: Path, monkeypatch
     ) -> None:
         monkeypatch.setattr(
-            "engine.policy.httpx.get", lambda *a, **k: FakeResponse(200, _full_policy())
+            "openadapt_desktop.policy.httpx.get", lambda *a, **k: FakeResponse(200, _full_policy())
         )
         policy_mod.resolve_effective_policy("https://app.openadapt.ai")
         leftovers = list(cache_path.parent.glob(".policy.*.tmp"))
@@ -389,7 +389,7 @@ class TestServerOmitsSafetyKeyIsFailClosed:
         body = _full_policy()
         del body["safety"]["model_calls.allowed_in_healthy_run"]
         monkeypatch.setattr(
-            "engine.policy.httpx.get", lambda *a, **k: FakeResponse(200, body)
+            "openadapt_desktop.policy.httpx.get", lambda *a, **k: FakeResponse(200, body)
         )
         result = policy_mod.resolve_effective_policy("https://app.openadapt.ai")
         assert result["source"] == "network"
@@ -555,7 +555,7 @@ class TestDispatcherCommand:
         def _down(*a, **k):
             raise httpx.ConnectError("down")
 
-        monkeypatch.setattr("engine.policy.httpx.get", _down)
+        monkeypatch.setattr("openadapt_desktop.policy.httpx.get", _down)
         disp = self._dispatcher(tmp_path)
         result = disp.dispatch("get_effective_policy", {})
         assert result["source"] == "fail-closed-default"
@@ -566,7 +566,7 @@ class TestDispatcherCommand:
         self, tmp_path: Path, cache_path: Path, monkeypatch
     ) -> None:
         monkeypatch.setattr(
-            "engine.policy.httpx.get", lambda *a, **k: FakeResponse(200, _full_policy())
+            "openadapt_desktop.policy.httpx.get", lambda *a, **k: FakeResponse(200, _full_policy())
         )
         disp = self._dispatcher(tmp_path)
         result = disp.dispatch("get_effective_policy", {})
@@ -577,7 +577,7 @@ class TestDispatcherCommand:
         self, tmp_path: Path, cache_path: Path, monkeypatch
     ) -> None:
         monkeypatch.setattr(
-            "engine.policy.httpx.get", lambda *a, **k: FakeResponse(200, _full_policy())
+            "openadapt_desktop.policy.httpx.get", lambda *a, **k: FakeResponse(200, _full_policy())
         )
         disp = self._dispatcher(tmp_path)
         result = disp.dispatch("refresh_policy", {})

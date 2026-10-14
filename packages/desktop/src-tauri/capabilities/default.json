@@ -1,7 +1,7 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Core permissions for the OpenAdapt Desktop shell: run the engine sidecar, receive engine events, show notifications, and self-update.",
+  "description": "Core permissions for the OpenAdapt Desktop shell: run the engine sidecar, receive engine events, show notifications, and (only in a build with an update feed) self-update.",
   "windows": ["main"],
   "permissions": [
     "core:default",

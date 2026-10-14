@@ -10,8 +10,8 @@ from pathlib import Path
 
 import pytest
 
-from engine.config import EngineConfig
-from engine.portal.service import PortalError, PortalService, _parse_console_banner
+from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.portal.service import PortalError, PortalService, _parse_console_banner
 
 #: A deployment config shaped like the ones that make this file sensitive: it
 #: carries a reusable credential, not just a backend name and a URL.
@@ -102,7 +102,7 @@ def test_a_console_that_never_announces_itself_fails_loud(monkeypatch, tmp_path)
             self.stdout = io.StringIO("")
 
     monkeypatch.setattr(
-        "engine.portal.service._flow_command", lambda _bin: ["openadapt-flow"]
+        "openadapt_desktop.portal.service._flow_command", lambda _bin: ["openadapt-flow"]
     )
     service = PortalService(
         configured(tmp_path / "data"), popen=lambda *a, **k: Silent()
@@ -115,7 +115,7 @@ def test_a_console_that_never_announces_itself_fails_loud(monkeypatch, tmp_path)
 
 
 def test_a_missing_flow_runtime_fails_loud(monkeypatch) -> None:
-    monkeypatch.setattr("engine.portal.service._flow_command", lambda _bin: None)
+    monkeypatch.setattr("openadapt_desktop.portal.service._flow_command", lambda _bin: None)
     service = PortalService(config())
     with pytest.raises(PortalError, match="not available"):
         service.start()
@@ -153,7 +153,7 @@ def _fake_client(monkeypatch, *, fail_first: int = 0) -> list[list[str]]:
     ``fail_first`` makes the first N ``session`` calls raise the exact transport
     failure a not-yet-bound uvicorn produces.
     """
-    from engine.portal.flow_client import FlowConsoleUnavailable, FlowResponse
+    from openadapt_desktop.portal.flow_client import FlowConsoleUnavailable, FlowResponse
 
     state = {"session_calls": 0}
 
@@ -180,7 +180,7 @@ def _fake_client(monkeypatch, *, fail_first: int = 0) -> list[list[str]]:
                 )
             return FlowResponse(200, [], None, "application/json")
 
-    monkeypatch.setattr("engine.portal.service.FlowConsoleClient", FakeClient)
+    monkeypatch.setattr("openadapt_desktop.portal.service.FlowConsoleClient", FakeClient)
     return state
 
 
@@ -188,7 +188,7 @@ def _started(monkeypatch, tmp_path, **overrides) -> PortalService:
     token = "b" * 43
     process = FakeProcess(f"  http://127.0.0.1:7863/#token={token}")
     monkeypatch.setattr(
-        "engine.portal.service._flow_command", lambda _bin: ["openadapt-flow"]
+        "openadapt_desktop.portal.service._flow_command", lambda _bin: ["openadapt-flow"]
     )
     _fake_client(monkeypatch)
     service = PortalService(
@@ -285,7 +285,7 @@ def _spawned(monkeypatch, tmp_path, **overrides):
     token = "c" * 43
     process = FakeProcess(f"  http://127.0.0.1:7863/#token={token}")
     monkeypatch.setattr(
-        "engine.portal.service._flow_command", lambda _bin: ["openadapt-flow"]
+        "openadapt_desktop.portal.service._flow_command", lambda _bin: ["openadapt-flow"]
     )
     _fake_client(monkeypatch)
     seen: dict = {}
@@ -354,7 +354,7 @@ def test_the_staged_config_does_not_outlive_the_console_banner(
 
 def test_a_missing_deployment_target_refuses_before_spawning(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
-        "engine.portal.service._flow_command", lambda _bin: ["openadapt-flow"]
+        "openadapt_desktop.portal.service._flow_command", lambda _bin: ["openadapt-flow"]
     )
     spawned: list = []
 
@@ -375,7 +375,7 @@ def test_an_unreadable_deployment_config_refuses_without_echoing_it(
     monkeypatch, tmp_path
 ) -> None:
     monkeypatch.setattr(
-        "engine.portal.service._flow_command", lambda _bin: ["openadapt-flow"]
+        "openadapt_desktop.portal.service._flow_command", lambda _bin: ["openadapt-flow"]
     )
     data_dir = tmp_path / "data"
     data_dir.mkdir()
@@ -387,7 +387,7 @@ def test_an_unreadable_deployment_config_refuses_without_echoing_it(
 
 def test_a_staging_left_by_a_killed_process_is_swept(monkeypatch, tmp_path) -> None:
     """``finally`` cannot survive SIGKILL, so start-up sweeps old leftovers."""
-    from engine.portal.service import STALE_STAGING_AGE_S
+    from openadapt_desktop.portal.service import STALE_STAGING_AGE_S
 
     staging = tmp_path / "data" / "portal"
     staging.mkdir(parents=True)
@@ -417,9 +417,9 @@ def test_the_readiness_check_retries_until_uvicorn_binds(monkeypatch, tmp_path) 
     token = "d" * 43
     process = FakeProcess(f"  http://127.0.0.1:7863/#token={token}")
     monkeypatch.setattr(
-        "engine.portal.service._flow_command", lambda _bin: ["openadapt-flow"]
+        "openadapt_desktop.portal.service._flow_command", lambda _bin: ["openadapt-flow"]
     )
-    monkeypatch.setattr("engine.portal.service.CONSOLE_READY_POLL_S", 0.0)
+    monkeypatch.setattr("openadapt_desktop.portal.service.CONSOLE_READY_POLL_S", 0.0)
     state = _fake_client(monkeypatch, fail_first=3)
     service = PortalService(configured(tmp_path / "data"), popen=lambda *a, **k: process)
     try:
@@ -434,10 +434,10 @@ def test_the_readiness_wait_is_bounded_and_fails_loud(monkeypatch, tmp_path) -> 
     token = "e" * 43
     process = FakeProcess(f"  http://127.0.0.1:7863/#token={token}")
     monkeypatch.setattr(
-        "engine.portal.service._flow_command", lambda _bin: ["openadapt-flow"]
+        "openadapt_desktop.portal.service._flow_command", lambda _bin: ["openadapt-flow"]
     )
-    monkeypatch.setattr("engine.portal.service.CONSOLE_READY_POLL_S", 0.0)
-    monkeypatch.setattr("engine.portal.service.CONSOLE_READY_TIMEOUT_S", 0.05)
+    monkeypatch.setattr("openadapt_desktop.portal.service.CONSOLE_READY_POLL_S", 0.0)
+    monkeypatch.setattr("openadapt_desktop.portal.service.CONSOLE_READY_TIMEOUT_S", 0.05)
     _fake_client(monkeypatch, fail_first=10**6)
     service = PortalService(configured(tmp_path / "data"), popen=lambda *a, **k: process)
     with pytest.raises(PortalError, match="did not answer"):
@@ -456,9 +456,9 @@ def test_a_console_that_exits_is_not_waited_out(monkeypatch, tmp_path) -> None:
 
     process = Exited(f"  http://127.0.0.1:7863/#token={token}")
     monkeypatch.setattr(
-        "engine.portal.service._flow_command", lambda _bin: ["openadapt-flow"]
+        "openadapt_desktop.portal.service._flow_command", lambda _bin: ["openadapt-flow"]
     )
-    monkeypatch.setattr("engine.portal.service.CONSOLE_READY_TIMEOUT_S", 300.0)
+    monkeypatch.setattr("openadapt_desktop.portal.service.CONSOLE_READY_TIMEOUT_S", 300.0)
     _fake_client(monkeypatch, fail_first=10**6)
     service = PortalService(configured(tmp_path / "data"), popen=lambda *a, **k: process)
     started = time.monotonic()
@@ -479,7 +479,7 @@ def test_stopping_the_console_kills_the_whole_process_tree_on_windows(
     ``--allow-actions`` attended console still serving after the operator
     stopped the portal.
     """
-    from engine.portal import service as service_mod
+    from openadapt_desktop.portal import service as service_mod
 
     calls: list = []
     monkeypatch.setattr(service_mod, "_WINDOWS", True)
@@ -501,7 +501,7 @@ def test_stopping_the_console_kills_the_whole_process_tree_on_windows(
 
 def test_stopping_the_console_terminates_directly_off_windows(monkeypatch) -> None:
     """POSIX bootloaders exec into the app, so one terminate is the whole tree."""
-    from engine.portal import service as service_mod
+    from openadapt_desktop.portal import service as service_mod
 
     monkeypatch.setattr(service_mod, "_WINDOWS", False)
     monkeypatch.setattr(
@@ -552,7 +552,7 @@ def _capture_spawn(monkeypatch, banner_token: str = "b" * 43):
         return FakeProcess(f"http://127.0.0.1:7863/#token={banner_token}")
 
     monkeypatch.setattr(
-        "engine.portal.service._flow_command", lambda _bin: ["openadapt-flow"]
+        "openadapt_desktop.portal.service._flow_command", lambda _bin: ["openadapt-flow"]
     )
     return seen, popen
 
@@ -571,9 +571,9 @@ def test_remote_decisions_refuses_when_this_computer_is_not_registered(
     monkeypatch, tmp_path
 ) -> None:
     seen, popen = _capture_spawn(monkeypatch)
-    monkeypatch.setattr("engine.portal.service.load_runner_credential", lambda _h: None)
+    monkeypatch.setattr("openadapt_desktop.portal.service.load_runner_credential", lambda _h: None)
     monkeypatch.setattr(
-        "engine.portal.service.PortalService._assert_flow_supports_remote_decisions",
+        "openadapt_desktop.portal.service.PortalService._assert_flow_supports_remote_decisions",
         lambda _self: None,
     )
     service = PortalService(remote_configured(tmp_path / "data"), popen=popen)
@@ -612,11 +612,11 @@ def test_remote_decisions_passes_the_flag_and_the_credential(
 ) -> None:
     seen, popen = _capture_spawn(monkeypatch)
     monkeypatch.setattr(
-        "engine.portal.service.load_runner_credential",
+        "openadapt_desktop.portal.service.load_runner_credential",
         lambda _h: {"runner_id": "runner_exact_01", "runner_token": RUNNER_TOKEN},
     )
     monkeypatch.setattr(
-        "engine.portal.service.PortalService._assert_flow_supports_remote_decisions",
+        "openadapt_desktop.portal.service.PortalService._assert_flow_supports_remote_decisions",
         lambda _self: None,
     )
     service = PortalService(remote_configured(tmp_path / "data"), popen=popen)
@@ -635,11 +635,11 @@ def test_remote_decisions_refuses_a_credential_for_a_different_runner(
 ) -> None:
     seen, popen = _capture_spawn(monkeypatch)
     monkeypatch.setattr(
-        "engine.portal.service.load_runner_credential",
+        "openadapt_desktop.portal.service.load_runner_credential",
         lambda _h: {"runner_id": "runner_other", "runner_token": RUNNER_TOKEN},
     )
     monkeypatch.setattr(
-        "engine.portal.service.PortalService._assert_flow_supports_remote_decisions",
+        "openadapt_desktop.portal.service.PortalService._assert_flow_supports_remote_decisions",
         lambda _self: None,
     )
     service = PortalService(remote_configured(tmp_path / "data"), popen=popen)

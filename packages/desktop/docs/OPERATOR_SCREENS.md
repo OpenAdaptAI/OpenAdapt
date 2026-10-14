@@ -25,7 +25,7 @@ on every task.
 ## Safety rules the screens keep
 
 - Every plain result comes from Flow's transaction outcome
-  (`engine/outcomes.py`, mirrored in `src/lib/outcomes.ts`; both are tested
+  (`openadapt_desktop/outcomes.py`, mirrored in `src/lib/outcomes.ts`; both are tested
   against `src/lib/outcome-cases.json`). Only `HALTED_BEFORE_EFFECT`,
   `REJECTED_POLICY`, `CANCELED`, `FAILED_PLATFORM`, and a refusal before Flow
   was invoked prove that nothing was written. A coarse `HALTED`, an unknown
@@ -47,6 +47,9 @@ on every task.
 - Item values reach Flow only through an owner-only params file that exists
   for the length of the call. They never enter a process argument list, an
   event, a log line, a notification, or a Cloud payload.
+- The index database stores item values, labels, and right-record check text
+  encrypted, with the key in the OS keychain. A closed item's values are
+  deleted. Without the key, `run_item` refuses before anything runs.
 - Results count an item as done only when its transaction outcome is
   `VERIFIED`. Items a person finished count under "Needed a person".
 - A first task leaves the read-only first-run path only before anything ran.
@@ -113,7 +116,7 @@ runs under Standard); a drill never asks.
 How it works:
 
 - `get_item_approval` and `answer_item_approval` are served while a run
-  holds the command queue (`engine/ipc.py` `CONCURRENT_COMMANDS`). They read
+  holds the command queue (`openadapt_desktop/ipc.py` `CONCURRENT_COMMANDS`). They read
   and answer only a run this engine started and hasn't finished, and only a
   request that is waiting now, for the exact digest the person saw.
 - Desktop has no person-level sign-in (its Cloud credential belongs to the
@@ -147,7 +150,7 @@ engine part is `openadapt_flow/approval_mode/` (Flow `docs/APPROVAL_MODES.md`).
 Safety rules:
 
 - Desktop never turns the switch on. No IPC command writes a switch record.
-  `engine/approval_mode.py` `accept_switch` stores one that Cloud sent, for
+  `openadapt_desktop/approval_mode.py` `accept_switch` stores one that Cloud sent, for
   the Cloud status client (not built) and for tests.
 - Anyone at this computer can turn it off, signed in or not, offline too.
   Desktop appends Flow's `switched_off` event to the runner's hash-chained
@@ -177,7 +180,7 @@ Safety rules:
   its approval block says why (`unconfirmed`). Flow's own evidence model is
   looser: it accepts `no_person` with no item checks.
 - A run whose transaction outcome disagrees with its execution outcome
-  reads "Check the record" (`engine/flow_bridge.py`, `classify_outcome`).
+  reads "Check the record" (`openadapt_desktop/flow_bridge.py`, `classify_outcome`).
   Before, Desktop dropped the disagreeing transaction outcome and kept a
   bare `VERIFIED`, which closed the item as "Done and checked".
 - A pasted list never changes a value on the way to the task. A row with
@@ -200,7 +203,7 @@ Safety rules:
   item nobody approved in time under `each_item` can run again.
 
 What isn't built yet, so the switch can't take effect on any computer
-(`engine/approval_mode.py` `NOT_BUILT`; each is listed under "Missing on
+(`openadapt_desktop/approval_mode.py` `NOT_BUILT`; each is listed under "Missing on
 this computer"):
 
 1. **No field-change check.** Flow can't yet check that a save changed

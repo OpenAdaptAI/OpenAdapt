@@ -10,7 +10,7 @@ from types import ModuleType
 
 import yaml
 
-from engine import flow_record_entry
+from openadapt_desktop import flow_record_entry
 
 
 class _InertThread:

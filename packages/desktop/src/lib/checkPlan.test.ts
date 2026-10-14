@@ -103,3 +103,47 @@ it("still says a task only reads when Flow sees exactly the steps the graph show
   expect(plan.unproven).toEqual([]);
   expect(plan.changes).toBe("not_needed");
 });
+
+/**
+ * Three clicks from a recorded referral task. OCR read the State list's
+ * current value "Unassigned" as "Jnassigned", and Flow's step title kept the
+ * misread. The recorder also saved each control's role and accessible name.
+ */
+function referralClicks() {
+  const node = (id: string, index: number, title: string) => ({
+    id, index, kind: "action", title, action: "click",
+    effects: [], postconditions: [], halts: [], badges: [], risk: "reversible",
+  });
+  const control = (stepId: string, target: { role: string | null; name: string | null } | null) => ({
+    step_id: stepId,
+    execution_paths: ["gui"],
+    classification: null,
+    identity: { can_arm: false, armed: false, sources: [], policy: null },
+    effects: [],
+    target,
+  });
+  const project = subTaskSave({ withCallNode: false, withReportCount: false });
+  project.report.refusals = [];
+  project.graph.nodes = [
+    node("state", 0, "click 'Jnassigned'"),
+    node("fname", 1, "click 'FirstName'"),
+    node("save", 2, "click 'Save'"),
+  ] as unknown as QualificationProject["graph"]["nodes"];
+  project.controls.actions = {
+    state: control("state", { role: "combobox", name: "form_state" }),
+    fname: control("fname", { role: "textbox", name: "First Name" }),
+    save: control("save", null),
+  } as unknown as QualificationProject["controls"]["actions"];
+  return project;
+}
+
+it("names each clicked control from its structure, never from a misread word", () => {
+  const plan = checkPlan(referralClicks());
+  const captions = plan.unproven.map((step) => step.caption);
+
+  expect(captions.join(" ")).not.toContain("Jnassigned");
+  expect(captions).toContain("Open the “form state” list");
+  expect(captions).toContain("Click the “First Name” field");
+  // No structure was recorded for this one, so the screen text is all there is.
+  expect(captions).toContain("Click “Save”");
+});

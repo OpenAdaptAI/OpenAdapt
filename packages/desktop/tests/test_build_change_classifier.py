@@ -48,9 +48,9 @@ def test_protected_main_uses_cheap_jobs_for_application_only_changes(paths: list
         "scripts/sync_frozen_dependencies.py",
         "scripts/verify_build_artifact.py",
         ".github/workflows/build.yml",
-        "engine/__main__.py",
-        "engine/dispatch.py",
-        "engine/vision-runtime-manifest.json",
+        "openadapt_desktop/__main__.py",
+        "openadapt_desktop/dispatch.py",
+        "openadapt_desktop/vision-runtime-manifest.json",
         "THIRD_PARTY_NOTICES.md",
     ],
 )

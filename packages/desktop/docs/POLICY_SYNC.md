@@ -10,7 +10,7 @@ the cloud control plane. Policy is layered in three tiers:
 | 3    | `safety` | Safety guardrails that gate whether a run may proceed | Org admins, **via the cloud API only** |
 
 The engine owns the **fetch + cache + fail-closed** half of this contract
-(`engine/policy.py`). The frontend renders the effective policy read-only in
+(`openadapt_desktop/policy.py`). The frontend renders the effective policy read-only in
 `src/screens/Settings.tsx`. Hosted organization and safety policy changes stay
 in the authenticated Cloud administration surface.
 
@@ -20,7 +20,7 @@ in the authenticated Cloud administration surface.
 
 Bearer-authed (the same `Authorization: Bearer <token>` the rest of the hosted
 loop uses, resolved for the exact destination by
-`engine.auth.store.auth_header(host)`). The cloud returns the
+`openadapt_desktop.auth.store.auth_header(host)`). The cloud returns the
 org's fully-resolved policy:
 
 ```jsonc
@@ -125,7 +125,7 @@ the server omitted a key.
    one and hardened to all safe defaults.
 4. Network and cache failures **never raise** out of `resolve_effective_policy`
    / `load_cached_policy`. They degrade, like the keychain gate in
-   `engine.auth.store`). Only `fetch_effective_policy` raises, so its caller can
+   `openadapt_desktop.auth.store`). Only `fetch_effective_policy` raises, so its caller can
    choose to fall back.
 5. **A run whose engine cannot evaluate safety policy must refuse.** When
    `source == "fail-closed-default"` the engine has no authoritative safety
@@ -171,7 +171,7 @@ tighten a run, but it can't relax one.
 | `pixel_verify.consequential_policy` | `required` → `runtime.pixel_verify_enabled = true`. `disabled` is the platform *baseline*, not a prohibition, so a locally-armed check stays armed. |
 | `model_calls.allowed_in_healthy_run` | `false` → `runtime.allow_model_grounding = false` (fully local). `true` is a permission, not an instruction to enable. |
 | `effect_verification.required_for_consequential`, `unverified_write.allow`, `identity_gate.strictness`, `halt_on_ambiguous` | Any at its strict value requires a **production execution profile** (effect contracts, identity coverage, settled frames, no blanket unverified-write approval). `demo` is escalated to `standard`. An **absent** profile stays absent because Flow resolves it to `regulated`, which is stricter than anything Desktop would write. |
-| `egress.artifact_policy` | Validated, **not** projected onto the run: artifact egress is governed by the upload path (`engine/upload_manager.py`, `engine/hosted.py`), not the replay runtime. |
+| `egress.artifact_policy` | Validated, **not** projected onto the run: artifact egress is governed by the upload path (`openadapt_desktop/upload_manager.py`, `openadapt_desktop/hosted.py`), not the replay runtime. |
 
 The `grounding_model` projection is deliberately **not** bound to runs here: it
 is an egress *capability*, and auto-enabling a capability from a cached policy is
@@ -194,21 +194,21 @@ codes, not parameter values, screenshots, local paths, or exception text.
 
 | Symbol | Purpose |
 |--------|---------|
-| `engine/policy.py :: SAFE_SAFETY_DEFAULTS` | Safest value for every safety key |
-| `engine/policy.py :: fetch_effective_policy(host, timeout=10.0)` | Bearer GET, atomic-cache-write, raises `PolicyFetchError` on failure |
-| `engine/policy.py :: load_cached_policy(host)` | Read only a fresh cache bound to this exact host and credential; `None` on any mismatch or error |
-| `engine/policy.py :: harden_safety(policy)` | Fill missing/`None` safety keys with safe defaults (fail-closed) |
-| `engine/policy.py :: resolve_effective_policy(host)` | network → cache → fail-closed, always hardened, adds `source` |
-| `engine/policy.py :: SAFETY_VALUE_DOMAINS` | Exact allowed values per safety key (mirrors the cloud registry) |
-| `engine/policy.py :: binding_safety(policy)` | The pre-run gate: refuses a non-authoritative/malformed policy (`PolicyEnforcementError`) |
-| `engine/policy.py :: apply_safety_policy(deployment, safety)` | Strengthen-only projection onto a Flow deployment config |
-| `engine/hosted_runner.py :: RunnerService` | Registers, polls, delegates the exact lease to Flow, and sends Flow's terminal callback |
+| `openadapt_desktop/policy.py :: SAFE_SAFETY_DEFAULTS` | Safest value for every safety key |
+| `openadapt_desktop/policy.py :: fetch_effective_policy(host, timeout=10.0)` | Bearer GET, atomic-cache-write, raises `PolicyFetchError` on failure |
+| `openadapt_desktop/policy.py :: load_cached_policy(host)` | Read only a fresh cache bound to this exact host and credential; `None` on any mismatch or error |
+| `openadapt_desktop/policy.py :: harden_safety(policy)` | Fill missing/`None` safety keys with safe defaults (fail-closed) |
+| `openadapt_desktop/policy.py :: resolve_effective_policy(host)` | network → cache → fail-closed, always hardened, adds `source` |
+| `openadapt_desktop/policy.py :: SAFETY_VALUE_DOMAINS` | Exact allowed values per safety key (mirrors the cloud registry) |
+| `openadapt_desktop/policy.py :: binding_safety(policy)` | The pre-run gate: refuses a non-authoritative/malformed policy (`PolicyEnforcementError`) |
+| `openadapt_desktop/policy.py :: apply_safety_policy(deployment, safety)` | Strengthen-only projection onto a Flow deployment config |
+| `openadapt_desktop/hosted_runner.py :: RunnerService` | Registers, polls, delegates the exact lease to Flow, and sends Flow's terminal callback |
 | `openadapt_flow.runner.hosted_adapter :: HostedRunnerAdapter` | Verifies admissions, resolves admitted parameters, owns one-use execution, and builds terminal evidence |
-| `engine/dispatch.py :: get_effective_policy` | Dispatcher command; never raises; returns the fail-closed default on error |
-| `engine/dispatch.py :: refresh_policy` | Dispatcher command; forces a network fetch, then falls back like `get_effective_policy` |
+| `openadapt_desktop/dispatch.py :: get_effective_policy` | Dispatcher command; never raises; returns the fail-closed default on error |
+| `openadapt_desktop/dispatch.py :: refresh_policy` | Dispatcher command; forces a network fetch, then falls back like `get_effective_policy` |
 
-Both commands are auto-exposed over the Tauri stdin/stdout wire (`engine/ipc.py`)
-and the tray loopback (`engine/socket_server.py`) because they are registered in
+Both commands are auto-exposed over the Tauri stdin/stdout wire (`openadapt_desktop/ipc.py`)
+and the tray loopback (`openadapt_desktop/socket_server.py`) because they are registered in
 `EngineDispatcher._register`.
 
 ---

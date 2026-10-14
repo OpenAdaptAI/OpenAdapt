@@ -69,6 +69,17 @@ pub fn sidecar_status(state: State<'_, SidecarHandle>) -> bool {
     state.0.is_running()
 }
 
+/// Whether this build registered the updater plugin. `main.rs` registers it
+/// only when the build carries an update feed (`plugins.updater`), and no build
+/// does until signed releases ship. Settings shows its update check only when
+/// this is true, because without the plugin the check can only fail.
+pub struct UpdaterAvailable(pub bool);
+
+#[tauri::command]
+pub fn updater_available(state: State<'_, UpdaterAvailable>) -> bool {
+    state.0
+}
+
 /// Show or hide the compact control overlay without focusing it.
 ///
 /// The overlay is created once at startup as an always-on-top window with

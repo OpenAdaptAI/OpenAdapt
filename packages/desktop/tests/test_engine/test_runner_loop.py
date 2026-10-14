@@ -1,9 +1,9 @@
-"""Compatibility checks for the retired ``engine.runner_loop`` import path."""
+"""Compatibility checks for the retired ``openadapt_desktop.runner_loop`` import path."""
 
 from __future__ import annotations
 
-import engine.hosted_runner as hosted_runner
-import engine.runner_loop as runner_loop
+import openadapt_desktop.hosted_runner as hosted_runner
+import openadapt_desktop.runner_loop as runner_loop
 
 
 def test_legacy_runner_module_reexports_the_flow_backed_service() -> None:

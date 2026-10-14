@@ -32,7 +32,7 @@ Cross-platform desktop app for continuous screen recording and AI training data 
 ```bash
 uv sync --extra dev
 uv run pytest tests/ -v
-uv run ruff check engine/ tests/
+uv run ruff check openadapt_desktop/ tests/
 ```
 
 ## Architecture
@@ -47,20 +47,20 @@ Communication via JSON-over-stdin/stdout IPC protocol (see DESIGN.md Appendix B)
 
 1. **Raw-then-review scrubbing**: Recordings saved raw to disk. Scrubbing is a separate user-reviewed step. `check_egress_allowed()` gates ALL outbound paths.
 2. **Build-time trust**: Tauri Cargo.toml feature flags physically exclude upload code. Enterprise binary verifiable with `strings`.
-3. **Multiple storage backends**: StorageBackend protocol in `engine/backends/protocol.py`. All backends conform to the same interface.
+3. **Multiple storage backends**: StorageBackend protocol in `openadapt_desktop/backends/protocol.py`. All backends conform to the same interface.
 4. **Network audit logging**: Every outbound request logged to `audit.jsonl` (JSONL format).
 
 ## File Map
 
 | File | Purpose |
 |------|---------|
-| `engine/controller.py` | Recording lifecycle (start/stop/pause) |
-| `engine/review.py` | Upload review state machine (the egress gate) |
-| `engine/scrubber.py` | PII scrubbing orchestration |
-| `engine/config.py` | Settings (pydantic-settings, OPENADAPT_ prefix) |
-| `engine/audit.py` | Network audit logger |
-| `engine/backends/protocol.py` | StorageBackend protocol definition |
-| `engine/backends/s3.py` | S3/R2/MinIO backend |
+| `openadapt_desktop/controller.py` | Recording lifecycle (start/stop/pause) |
+| `openadapt_desktop/review.py` | Upload review state machine (the egress gate) |
+| `openadapt_desktop/scrubber.py` | PII scrubbing orchestration |
+| `openadapt_desktop/config.py` | Settings (pydantic-settings, OPENADAPT_ prefix) |
+| `openadapt_desktop/audit.py` | Network audit logger |
+| `openadapt_desktop/backends/protocol.py` | StorageBackend protocol definition |
+| `openadapt_desktop/backends/s3.py` | S3/R2/MinIO backend |
 | `src-tauri/src/commands.rs` | IPC commands (13 endpoints) |
 | `src-tauri/src/main.rs` | Tauri entry point |
 | `DESIGN.md` | Comprehensive design document (v2.0, 1800 lines) |
@@ -69,23 +69,23 @@ Communication via JSON-over-stdin/stdout IPC protocol (see DESIGN.md Appendix B)
 
 ```bash
 uv run pytest tests/ -v              # all tests
-uv run ruff check engine/ tests/     # lint
+uv run ruff check openadapt_desktop/ tests/     # lint
 ```
 
 ## Hosted loop modules (engine rewire)
 
 | File | Purpose |
 |------|---------|
-| `engine/auth/provider.py` | `AuthProvider` Protocol + `Credential` TypedDict (shared contract) |
-| `engine/auth/store.py` | Keychain store (`keyring`, service `ai.openadapt.desktop`) + `auth_header()` |
-| `engine/auth/paste.py` | `PasteTokenProvider` (token paste / headless env) |
-| `engine/auth/browser_pkce.py` | `BrowserPkceProvider` (system browser + loopback PKCE) |
-| `engine/backends/hosted_ingest.py` | `HostedIngestBackend` -> `POST /api/ingest` (bearer) |
-| `engine/hosted.py` | `push` (zip -> ingest) + `report_break` (`/api/runs/ingest-report`) |
-| `engine/flow_bridge.py` | Wraps the `openadapt-flow` CLI (record/compile/replay/run/teach) |
-| `engine/dispatch.py` | Shared command dispatcher (frontend `engine.ts` CMD names -> engine actions) used by BOTH local wires |
-| `engine/ipc.py` | Tauri stdin/stdout JSON-lines wire -> `EngineDispatcher` |
-| `engine/socket_server.py` | Tray loopback TCP server + `~/.openadapt/desktop_ipc.json` discovery file (spec 3d) |
+| `openadapt_desktop/auth/provider.py` | `AuthProvider` Protocol + `Credential` TypedDict (shared contract) |
+| `openadapt_desktop/auth/store.py` | Keychain store (`keyring`, service `ai.openadapt.desktop`) + `auth_header()` |
+| `openadapt_desktop/auth/paste.py` | `PasteTokenProvider` (token paste / headless env) |
+| `openadapt_desktop/auth/browser_pkce.py` | `BrowserPkceProvider` (system browser + loopback PKCE) |
+| `openadapt_desktop/backends/hosted_ingest.py` | `HostedIngestBackend` -> `POST /api/ingest` (bearer) |
+| `openadapt_desktop/hosted.py` | `push` (zip -> ingest) + `report_break` (`/api/runs/ingest-report`) |
+| `openadapt_desktop/flow_bridge.py` | Wraps the `openadapt-flow` CLI (record/compile/replay/run/teach) |
+| `openadapt_desktop/dispatch.py` | Shared command dispatcher (frontend `engine.ts` CMD names -> engine actions) used by BOTH local wires |
+| `openadapt_desktop/ipc.py` | Tauri stdin/stdout JSON-lines wire -> `EngineDispatcher` |
+| `openadapt_desktop/socket_server.py` | Tray loopback TCP server + `~/.openadapt/desktop_ipc.json` discovery file (spec 3d) |
 
 ## Dependencies
 

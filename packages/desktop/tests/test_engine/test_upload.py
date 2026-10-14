@@ -7,12 +7,12 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from engine.audit import AuditLogger
-from engine.backends.protocol import UploadResult
-from engine.config import EngineConfig
-from engine.db import IndexDB
-from engine.review import EgressBlockedError
-from engine.upload_manager import UploadManager
+from openadapt_desktop.audit import AuditLogger
+from openadapt_desktop.backends.protocol import UploadResult
+from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.db import IndexDB
+from openadapt_desktop.review import EgressBlockedError
+from openadapt_desktop.upload_manager import UploadManager
 
 
 @pytest.fixture
@@ -39,7 +39,7 @@ def mock_backend() -> MagicMock:
 
 
 def _write_review_files(path: Path) -> None:
-    from engine.review import derivative_tree_sha256
+    from openadapt_desktop.review import derivative_tree_sha256
 
     (path / "scrub_manifest.json").write_text('{"scrub_level":"standard"}')
     (path / "review_status.json").write_text(

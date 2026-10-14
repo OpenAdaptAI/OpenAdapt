@@ -15,12 +15,12 @@ from pathlib import Path
 
 import pytest
 
-from engine.config import EngineConfig
-from engine.db import IndexDB
-from engine.dispatch import EngineDispatcher, EngineServices
-from engine.flow_bridge import APPROVAL_WAIT_S, FlowResult
-from engine.qualification import add_qualification_case
-from engine.qualification_lifecycle import retain_drill_evidence
+from openadapt_desktop.config import EngineConfig
+from openadapt_desktop.db import IndexDB
+from openadapt_desktop.dispatch import EngineDispatcher, EngineServices
+from openadapt_desktop.flow_bridge import APPROVAL_WAIT_S, FlowResult
+from openadapt_desktop.qualification import add_qualification_case
+from openadapt_desktop.qualification_lifecycle import retain_drill_evidence
 from tests.test_engine.test_qualification import _bundle, _initialize
 
 pytest.importorskip("openadapt_flow.qualification")

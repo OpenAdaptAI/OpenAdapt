@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from engine.portal.ingress import (
+from openadapt_desktop.portal.ingress import (
     LOOPBACK_HOST,
     WILDCARD_BIND_HOSTS,
     IngressError,

@@ -24,7 +24,7 @@ from threading import Thread
 from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
-SHELL = ROOT / "engine" / "portal" / "shell"
+SHELL = ROOT / "openadapt_desktop" / "portal" / "shell"
 
 
 def _task(*, kind: str, delivery: str, actions: list[str]) -> dict[str, Any]:

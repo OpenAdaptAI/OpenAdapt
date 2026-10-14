@@ -217,7 +217,7 @@ def build_command(
         "--collect-data",
         "openadapt_flow",
         "--collect-data",
-        "engine",
+        "openadapt_desktop",
         "--hidden-import",
         "onnxruntime",
         "--hidden-import",
@@ -263,7 +263,7 @@ def build_command(
                 str(ROOT / "src-tauri" / "Entitlements.plist"),
             )
         )
-    command.append(str(ROOT / "engine" / "__main__.py"))
+    command.append(str(ROOT / "openadapt_desktop" / "__main__.py"))
     return command
 
 

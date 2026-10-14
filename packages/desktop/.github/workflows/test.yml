@@ -38,7 +38,7 @@ jobs:
         run: uv sync --locked --extra dev
 
       - name: Lint
-        run: uv run ruff check engine/ tests/ scripts/
+        run: uv run ruff check openadapt_desktop/ tests/ scripts/
 
       - name: Run tests
         run: uv run pytest tests/ -v

@@ -1,6 +1,6 @@
 // Plain results derived from Flow's transaction outcome.
 //
-// This mirrors engine/outcomes.py. Both read the same cases from
+// This mirrors openadapt_desktop/outcomes.py. Both read the same cases from
 // outcome-cases.json in their tests, so the two copies cannot drift apart.
 //
 // The safety rule: a label may say "nothing was written" or offer a retry
@@ -245,19 +245,80 @@ const INPUT_WORDS: Record<string, string> = {
   url: "URL",
 };
 
+// Whole names that EMR patient tables abbreviate or write in database word
+// order, so "fname" reads "first name" and "phone_home" reads "home phone".
+const INPUT_PHRASES: Record<string, string> = {
+  fname: "first name",
+  mname: "middle name",
+  lname: "last name",
+  "phone home": "home phone",
+  "phone cell": "mobile phone",
+  "phone biz": "work phone",
+};
+
 /** "member_id" -> "member ID", "patientName" -> "patient name". */
 export function humanizeInput(name: string): string {
   const words = name
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
     .split(/[_\-\s]+/)
     .filter(Boolean)
-    .map((word) => INPUT_WORDS[word.toLowerCase()] ?? word.toLowerCase());
-  return words.join(" ") || name;
+    .map((word) => word.toLowerCase());
+  const phrase = INPUT_PHRASES[words.join(" ")];
+  if (phrase) return phrase;
+  return words.map((word) => INPUT_WORDS[word] ?? word).join(" ") || name;
 }
 
 /** Sentence-case a phrase: "member ID" -> "Member ID". */
 export function sentenceCase(text: string): string {
   return text ? text.charAt(0).toUpperCase() + text.slice(1) : text;
+}
+
+const CLICK_VERBS: Record<string, string> = {
+  click: "Click",
+  double_click: "Double-click",
+  right_click: "Right-click",
+};
+
+/**
+ * A caption for a click from the control it clicks: its role and accessible
+ * name, as the recorder saved them. Returns null when there is no name to go
+ * on, so the caller falls back to the step title. A step title quotes OCR
+ * text, which can misread a control; the structure doesn't.
+ */
+export function plainTargetStep(
+  action: string | null | undefined,
+  target: { role?: string | null; name?: string | null } | null | undefined,
+): string | null {
+  const verb = CLICK_VERBS[String(action ?? "").toLowerCase()];
+  const raw = String(target?.name ?? "").trim().replace(/\s+/g, " ");
+  if (!verb || !raw) return null;
+  // A name with no spaces is usually an element's id or form name, such as
+  // "form_state"; make it readable. A real label is kept as written.
+  const name = /\s/.test(raw) ? raw : humanizeInput(raw);
+  const quoted = `“${name}”`;
+  switch (String(target?.role ?? "").toLowerCase()) {
+    case "combobox":
+    case "listbox":
+      return verb === "Click" ? `Open the ${quoted} list` : `${verb} the ${quoted} list`;
+    case "textbox":
+    case "searchbox":
+    case "spinbutton":
+      return `${verb} the ${quoted} field`;
+    case "checkbox":
+      return `${verb} the ${quoted} checkbox`;
+    case "radio":
+      return `${verb} the ${quoted} option`;
+    case "button":
+      return `${verb} the ${quoted} button`;
+    case "link":
+      return `${verb} the ${quoted} link`;
+    case "tab":
+      return `${verb} the ${quoted} tab`;
+    case "menuitem":
+      return `${verb} ${quoted} in the menu`;
+    default:
+      return `${verb} ${quoted}`;
+  }
 }
 
 /** One plain caption for a compiled step intent, such as "click 'Save'". */
