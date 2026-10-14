@@ -540,6 +540,12 @@ def _resolve_backend_config(args: argparse.Namespace, cfg, workflow=None):
         backend = backend.model_copy(
             update={"rdp_readiness_text": args.rdp_readiness_text}
         )
+    if getattr(args, "browser_cdp_endpoint", None):
+        backend = backend.model_copy(
+            update={"browser_cdp_endpoint": args.browser_cdp_endpoint}
+        )
+    if getattr(args, "browser_page_url", None):
+        backend = backend.model_copy(update={"browser_page_url": args.browser_page_url})
     return backend
 
 
@@ -1663,6 +1669,124 @@ def _cmd_process(args: argparse.Namespace) -> int:
     return cmd_process(args)
 
 
+@contextmanager
+def _attached_web_page(backend_cfg, *, url: Optional[str], workflow=None):
+    """Bind the signed-in tab of a running local Chromium for one run.
+
+    A practice run, a drill, and a production run of a task that starts on a
+    signed-in screen cannot start from a new browser: it opens on the
+    application's sign-in page and step 1 never matches. Attaching to the
+    browser the task was recorded in starts the run from that same signed-in
+    session, with no credential in the program, the recording, or the config.
+
+    The contract is the recorder's attach contract: a loopback DevTools
+    endpoint with an explicit port, exactly one open tab on the ``url`` origin
+    (or the exact ``browser_page_url``), and no launch, navigation, or close.
+    The run starts from the screen that tab shows, so the operator opens the
+    task's first screen before starting it; any other screen fails step 1's
+    checks before input. Leaving the context only drops the DevTools
+    connection. Every refusal raises :class:`SystemExit` before any input.
+    """
+
+    from openadapt_flow.interactive_recorder import (
+        BrowserAttachError,
+        select_attached_page,
+        validate_browser_cdp_endpoint,
+    )
+
+    endpoint = backend_cfg.browser_cdp_endpoint
+    if not endpoint:
+        raise SystemExit(
+            "REFUSED: browser_page_url requires browser_cdp_endpoint (the "
+            "signed-in browser to attach to). Nothing was executed."
+        )
+    if not url:
+        raise SystemExit(
+            "REFUSED: an attached-browser run needs the application URL "
+            "(--url or backend.url) to select the signed-in tab. Nothing was "
+            "executed."
+        )
+    try:
+        validate_browser_cdp_endpoint(endpoint)
+    except BrowserAttachError as exc:
+        raise SystemExit(f"REFUSED: {exc}. Nothing was executed.") from None
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as playwright:
+        try:
+            browser = playwright.chromium.connect_over_cdp(endpoint)
+        except Exception:
+            raise SystemExit(
+                "REFUSED: could not connect to the local Chromium DevTools "
+                "endpoint. Start the signed-in browser with remote debugging "
+                "and retry. Nothing was executed."
+            ) from None
+        try:
+            page = select_attached_page(
+                browser,
+                app_url=url,
+                page_url=backend_cfg.browser_page_url,
+            )
+        except BrowserAttachError as exc:
+            raise SystemExit(f"REFUSED: {exc}. Nothing was executed.") from None
+        recorded = getattr(workflow, "viewport", None)
+        if recorded:
+            try:
+                live = page.evaluate("() => [window.innerWidth, window.innerHeight]")
+                live_size: Optional[tuple[int, int]] = (int(live[0]), int(live[1]))
+            except Exception:
+                live_size = None
+            expected = f"{int(recorded[0])}x{int(recorded[1])}"
+            if live_size is None:
+                raise SystemExit(
+                    "REFUSED: could not read the size of the signed-in tab (it "
+                    "may still be loading). Wait until the task's first screen "
+                    f"has loaded at {expected} CSS pixels and retry. Nothing was "
+                    "executed."
+                )
+            if live_size != (int(recorded[0]), int(recorded[1])):
+                raise SystemExit(
+                    "REFUSED: the signed-in tab shows the application at "
+                    f"{live_size[0]}x{live_size[1]} CSS pixels, but the task was "
+                    f"recorded at {expected}. Resize the browser window to match "
+                    "and retry. Nothing was executed."
+                )
+        yield page
+    # Leaving sync_playwright() drops the DevTools connection. The operator's
+    # browser, its tabs, and its signed-in session stay as they are.
+
+
+def _attached_entry_url(page, url: Optional[str]) -> Optional[str]:
+    """The entry URL an attached run may report: ``url`` only if the tab is on it.
+
+    A launched browser loads ``url`` before replay, so its report names that
+    entry. An attached run loads nothing: it starts from whatever the
+    signed-in tab shows. Reporting the configured URL for a tab on another
+    page would let hosted validation, which binds the report's entry URL to
+    the attested one, accept a run that never started there. Any difference
+    other than the fragment reports no entry URL, which that validation
+    refuses.
+    """
+
+    if not url:
+        return None
+    try:
+        current = urlsplit(str(page.url))
+        wanted = urlsplit(url)
+    except Exception:
+        return None
+
+    def comparable(parts) -> tuple[str, str, str, str]:
+        return (
+            parts.scheme.lower(),
+            parts.netloc.lower(),
+            parts.path or "/",
+            parts.query,
+        )
+
+    return url if comparable(current) == comparable(wanted) else None
+
+
 def _default_run_dir() -> Path:
     """Timestamped default run directory under ``runs/``."""
     from datetime import datetime, timezone
@@ -1768,6 +1892,64 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             "omit --url to use it (drift your own app for real)."
         )
 
+    def run_on_page(page, *, entry_url: Optional[str]):
+        # The browser backend is built through the same factory as the
+        # desktop backends; the grounding / identity / deployment wiring and
+        # the run are shared (see _build_and_run_replayer). ``--drift`` (a
+        # MockMed teaching aid) forces the visual floor so the healing ladder
+        # is exercised instead of the structural rung resolving it.
+        return _build_and_run_replayer(
+            build_backend(backend_cfg, page=page),
+            workflow=workflow,
+            params=params,
+            worklists=worklists,
+            bundle=bundle,
+            run_dir=run_dir,
+            save_healed_to=(Path(args.save_healed_to) if args.save_healed_to else None),
+            allow_egress=allow_egress,
+            effect_verifier=effect_verifier,
+            api_actuator=api_actuator,
+            durable=durable,
+            use_structural=not bool(args.drift),
+            pixel_verify_enabled=cfg.runtime.pixel_verify_enabled,
+            governed_authorization=getattr(args, "_governed_run_authorization", None),
+            delivery_authority_kind=getattr(
+                args, "_delivery_authority_kind", "customer_local"
+            ),
+            remote_delivery_run_id=getattr(args, "_remote_delivery_run_id", None),
+            managed_dispatch_binding=getattr(args, "_managed_dispatch_binding", None),
+            production_qualification_guard=getattr(
+                args, "_production_qualification_guard", None
+            ),
+            qualification_campaign_guard=getattr(
+                args, "_qualification_campaign_guard", None
+            ),
+            runtime_config=cfg.runtime,
+            execution_target_kind="web",
+            surface_override=bool(getattr(args, "_surface_override", False)),
+            execution_origin=(
+                f"{urlsplit(page.url).scheme}://{urlsplit(page.url).netloc}"
+            ),
+            execution_entry_url=entry_url,
+            run_id=getattr(args, "_qualification_run_id", None),
+        )
+
+    if backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url:
+        # Start from the signed-in session the task uses: bind the open tab of
+        # the operator's running browser instead of launching a new, signed-out
+        # one. Nothing navigates or closes that browser.
+        if args.drift or getattr(args, "record_video", None) is not None:
+            raise SystemExit(
+                "REFUSED: --drift and --record-video apply only to a browser "
+                "that Flow launches, not to an attached signed-in browser. "
+                "Nothing was executed."
+            )
+        with _attached_web_page(backend_cfg, url=url, workflow=workflow) as page:
+            report = run_on_page(page, entry_url=_attached_entry_url(page, url))
+        return _finish_replay(
+            run_dir, report, args, backend_kind=_report_backend_kind(backend_cfg.kind)
+        )
+
     stop = None
     if url is None:
         from openadapt_flow.mockmed.server import serve
@@ -1801,54 +1983,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
                 page = browser.new_page(viewport=_VIEWPORT)
             page.goto(url)
             try:
-                # The browser backend is built through the same factory as the
-                # desktop backends; the grounding / identity / deployment wiring
-                # and the run are shared (see _build_and_run_replayer). ``--drift``
-                # (a MockMed teaching aid) forces the visual floor so the healing
-                # ladder is exercised instead of the structural rung resolving it.
-                report = _build_and_run_replayer(
-                    build_backend(backend_cfg, page=page),
-                    workflow=workflow,
-                    params=params,
-                    worklists=worklists,
-                    bundle=bundle,
-                    run_dir=run_dir,
-                    save_healed_to=(
-                        Path(args.save_healed_to) if args.save_healed_to else None
-                    ),
-                    allow_egress=allow_egress,
-                    effect_verifier=effect_verifier,
-                    api_actuator=api_actuator,
-                    durable=durable,
-                    use_structural=not bool(args.drift),
-                    pixel_verify_enabled=cfg.runtime.pixel_verify_enabled,
-                    governed_authorization=getattr(
-                        args, "_governed_run_authorization", None
-                    ),
-                    delivery_authority_kind=getattr(
-                        args, "_delivery_authority_kind", "customer_local"
-                    ),
-                    remote_delivery_run_id=getattr(
-                        args, "_remote_delivery_run_id", None
-                    ),
-                    managed_dispatch_binding=getattr(
-                        args, "_managed_dispatch_binding", None
-                    ),
-                    production_qualification_guard=getattr(
-                        args, "_production_qualification_guard", None
-                    ),
-                    qualification_campaign_guard=getattr(
-                        args, "_qualification_campaign_guard", None
-                    ),
-                    runtime_config=cfg.runtime,
-                    execution_target_kind="web",
-                    surface_override=bool(getattr(args, "_surface_override", False)),
-                    execution_origin=(
-                        f"{urlsplit(page.url).scheme}://{urlsplit(page.url).netloc}"
-                    ),
-                    execution_entry_url=url,
-                    run_id=getattr(args, "_qualification_run_id", None),
-                )
+                report = run_on_page(page, entry_url=url)
             finally:
                 video_path = None
                 if context is not None:
@@ -2518,17 +2653,25 @@ def _cmd_resume(args: argparse.Namespace) -> int:
                     "pass --url or set backend.url in --config."
                 )
             headed = args.headed or cfg.backend.headed
-            ensure_chromium_installed()
-            from playwright.sync_api import sync_playwright
-
-            with sync_playwright() as p:
-                browser = p.chromium.launch(headless=not headed)
-                page = browser.new_page(viewport=_VIEWPORT)
-                page.goto(url)
-                try:
+            if backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url:
+                # Resume in the same signed-in browser the run used; nothing
+                # navigates or closes it.
+                with _attached_web_page(
+                    backend_cfg, url=url, workflow=workflow
+                ) as page:
                     report = _resume_with(build_backend(backend_cfg, page=page))
-                finally:
-                    browser.close()
+            else:
+                ensure_chromium_installed()
+                from playwright.sync_api import sync_playwright
+
+                with sync_playwright() as p:
+                    browser = p.chromium.launch(headless=not headed)
+                    page = browser.new_page(viewport=_VIEWPORT)
+                    page.goto(url)
+                    try:
+                        report = _resume_with(build_backend(backend_cfg, page=page))
+                    finally:
+                        browser.close()
         else:
             # Desktop/native/remote: no browser, no --url; the factory builds
             # the native backend from the resolved config (fail-loud on a missing
@@ -4996,6 +5139,33 @@ def _cmd_repair(args: argparse.Namespace) -> int:
     return run_repair_command(args)
 
 
+def _add_browser_session_flags(p: argparse.ArgumentParser) -> None:
+    """Add the attached signed-in browser flags to a run-shaped subparser."""
+
+    p.add_argument(
+        "--browser-cdp-endpoint",
+        default=None,
+        metavar="URL",
+        help=(
+            "Run in an already-running, signed-in local Chromium through its "
+            "loopback DevTools endpoint (for example, http://127.0.0.1:9222) "
+            "instead of launching a new, signed-out browser. The run binds the "
+            "one open tab on the --url origin, starts from the screen it shows, "
+            "and never navigates or closes the browser. Overrides "
+            "backend.browser_cdp_endpoint from --config."
+        ),
+    )
+    p.add_argument(
+        "--browser-page-url",
+        default=None,
+        metavar="URL",
+        help=(
+            "Exact current URL of the tab to run in, when more than one open "
+            "tab has the --url origin. Requires --browser-cdp-endpoint."
+        ),
+    )
+
+
 def _add_backend_flags(p: argparse.ArgumentParser) -> None:
     """Add the backend-selector flags (``--backend`` + targets) to a subparser.
 
@@ -5845,6 +6015,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     _add_backend_flags(p)
+    _add_browser_session_flags(p)
     _add_deployment_flags(p, worklist=True)
     _add_attest_flags(p)
     p.set_defaults(func=_cmd_replay)
@@ -5914,6 +6085,7 @@ def build_parser() -> argparse.ArgumentParser:
         "--record-video", default=None, metavar="DIR", help=argparse.SUPPRESS
     )
     _add_backend_flags(p)
+    _add_browser_session_flags(p)
     _add_deployment_flags(p, worklist=True)
     _add_attest_flags(p)
     # Fail-closed admission-gate controls (see openadapt_flow.run_gate).
@@ -6133,6 +6305,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     _add_backend_flags(p)
+    _add_browser_session_flags(p)
     _add_deployment_flags(p)
     _add_attest_flags(p)
     p.set_defaults(func=_cmd_resume)
@@ -6751,6 +6924,7 @@ def build_parser() -> argparse.ArgumentParser:
     q.add_argument("--dry-run", action="store_true", help="Validate without input")
     q.add_argument("--save-healed-to", default=None, help=argparse.SUPPRESS)
     _add_backend_flags(q)
+    _add_browser_session_flags(q)
     _add_deployment_flags(q)
     q.set_defaults(func=_cmd_qualify)
 

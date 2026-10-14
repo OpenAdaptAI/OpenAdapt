@@ -141,9 +141,18 @@ the system of record.
 
 That last distinction makes correct risk classification important. Risk is
 inferred from action text and metadata and can be overridden, but inference is
-heuristic. An icon-only save, a generic "OK", or an Enter key that submits a
-form can be under-classified. A benign label containing a write-shaped word can
-be over-classified and halt unnecessarily.
+heuristic. A generic "OK" or an Enter key that submits a form can be
+under-classified. A benign label containing a write-shaped word can be
+over-classified and halt unnecessarily.
+
+Icon-only controls get two compile-time rules. A single OCR glyph (a
+floppy-disk Save icon reads as "日") is not a label, so the click needs
+qualification review instead of passing as a labelled non-write. And when a
+demonstration entered data and no later step declares a write, every icon-only
+click after the last entry is presumed to commit that record: it compiles
+irreversible, and qualification requires its record check. An icon-only click
+that only navigates after data entry is therefore over-classified until an
+operator reclassifies it.
 
 For consequential or entity-sensitive workflows, require a policy that refuses
 unarmed actions, review the inferred risk and tags, and test identity against

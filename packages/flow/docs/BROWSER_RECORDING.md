@@ -96,6 +96,33 @@ recorded URL by structure: it reports the origin and the path, keeps every
 parameter name, and drops the value of any parameter named after a declared
 secret field. Treat all other URL data as sensitive recording data.
 
+## Run in the same signed-in browser
+
+A task recorded after sign-in starts on a signed-in screen. A browser that
+Flow launches for a run opens on the application's sign-in page instead, so
+step 1 never matches. Run such a task, including its qualification practice
+run and drills, in the browser it was recorded in:
+
+```bash
+openadapt-flow run bundle --url https://your.app \
+  --browser-cdp-endpoint http://127.0.0.1:9222
+```
+
+A deployment config can set the same values as `backend.browser_cdp_endpoint`
+and `backend.browser_page_url`. The run uses the recorder's attach contract: a
+loopback endpoint with an explicit port, exactly one open tab on the `--url`
+origin (or the exact `--browser-page-url`), and no launch, navigation, or
+close. It starts from the screen the tab shows, so open the task's first
+screen before each run. Step 1's checks stop a run on a screen where they
+don't find step 1's target, but they don't check which page the tab is on. The
+run's report names the `--url` entry only when the tab is on that exact URL.
+The tab must show the application at the recorded viewport size, or the run
+refuses. No credential enters the program, the recording, or the config.
+
+Attended actions (`console --attend --allow-actions`) open their own visible
+browser. They refuse a config that names a signed-in browser instead of
+silently acting in a new, signed-out one.
+
 ## Safety and privacy contract
 
 - The CDP endpoint must use `localhost` or a loopback IP address and must have

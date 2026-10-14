@@ -78,6 +78,19 @@ class BackendConfig(BaseModel):
     url: Optional[str] = None
     #: Run the browser headed (visible). Default headless. ``web`` only.
     headed: bool = False
+    #: Loopback DevTools endpoint of an already-running, signed-in local
+    #: Chromium (for example ``http://127.0.0.1:9222``). When set, a run
+    #: attaches to that browser instead of launching a new, signed-out one:
+    #: it binds the one open tab on the ``url`` origin, starts from the screen
+    #: that tab shows, and detaches afterwards without navigating or closing
+    #: the browser. This is the same attach contract the recorder uses, so a
+    #: practice run, a drill, and a production run start from the signed-in
+    #: session the task was recorded in. No credential enters the program, the
+    #: recording, or this config. ``web`` only.
+    browser_cdp_endpoint: Optional[str] = None
+    #: Exact current URL of the tab to bind when more than one open tab has
+    #: the ``url`` origin. Requires ``browser_cdp_endpoint``. ``web`` only.
+    browser_page_url: Optional[str] = None
 
     # -- windows (WAA HTTP agent) --------------------------------------------
     #: Base URL of the in-guest WAA agent (e.g. ``http://localhost:5001`` over

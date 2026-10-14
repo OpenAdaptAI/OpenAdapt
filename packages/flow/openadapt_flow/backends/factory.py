@@ -86,6 +86,11 @@ def build_backend(
             )
         from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 
+        # A browser reached through a DevTools attach keeps its own window and
+        # device pixel ratio. Retain CSS-pixel frames there, exactly as the
+        # attach recorder does, so frames and DOM coordinates share one space.
+        if getattr(cfg, "browser_cdp_endpoint", None):
+            return PlaywrightBackend(page, screenshot_scale="css")
         return PlaywrightBackend(page)
 
     if kind == "windows":

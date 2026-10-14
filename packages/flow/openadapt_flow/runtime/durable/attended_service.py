@@ -372,6 +372,18 @@ class AttendedActionService:
         action_timeout_s: float = 300.0,
         shutdown_timeout_s: float = 30.0,
     ) -> None:
+        backend = deployment.backend
+        if backend.browser_cdp_endpoint or backend.browser_page_url:
+            # This service launches its own visible browser at backend.url. It
+            # cannot attach to the person's signed-in browser, so honoring the
+            # rest of the config would silently act in a new, signed-out
+            # session instead of the one the deployment names.
+            raise ValueError(
+                "attended actions cannot run in an attached signed-in browser "
+                "(backend.browser_cdp_endpoint / backend.browser_page_url); "
+                "remove those keys to let the attended service open its own "
+                "visible browser. Nothing was executed."
+            )
         self._deployment = deployment.model_copy(deep=True)
         self._key = key
         self._owner = _ThreadOwnedAttendedExecutor(

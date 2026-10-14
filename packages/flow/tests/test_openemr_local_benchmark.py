@@ -1346,3 +1346,102 @@ def test_model_free_run_rejects_paid_flags_before_fixture_use(tmp_path: Path) ->
             headed=False,
             model_free=True,
         )
+
+
+def test_compiled_confirm_create_is_the_declared_consequential_write(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """#confirmCreate creates the chart, so the compiled program must declare
+    it irreversible with its record check. It used to be forced "reversible"
+    while #create, which only opens the duplicate check, stayed irreversible.
+    """
+
+    from openadapt_flow.ir import ActionKind, Anchor, ParamKind, ParamSpec, Step
+    from openadapt_flow.ir import Workflow as FlowWorkflow
+    from scripts.openemr_local_demo import compile_recording as compile_openemr
+
+    spec = SyntheticPatientSpec()
+    params = spec.params()
+    recording = tmp_path / "recording"
+    recording.mkdir()
+    save_index = len(params) + 1
+    (recording / "events.jsonl").write_text(
+        json.dumps({"i": save_index, "kind": "click", "x": 600, "y": 280}) + "\n"
+    )
+    (recording / "openemr-save-event.json").write_text(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "event_index": save_index,
+                "dom_target": "#confirmCreate inside duplicate-check iframe",
+            }
+        )
+    )
+
+    def click(step_id: str, selector: str, label: str, risk: str) -> Step:
+        return Step(
+            id=step_id,
+            intent=f"click '{label}'",
+            action=ActionKind.CLICK,
+            anchor=Anchor(
+                template=f"templates/{step_id}.png",
+                region=(0, 0, 160, 64),
+                click_point=(80, 32),
+                ocr_text=label,
+                structural=StructuralLocator(
+                    selector=selector, role="button", name=label
+                ),
+            ),
+            risk=risk,
+        )
+
+    def fake_compile(recording_dir, bundle_dir, *, name):
+        steps = [
+            Step(
+                id=f"step_{index:03d}",
+                intent=f"type <{param}>",
+                action=ActionKind.TYPE,
+                param=param,
+            )
+            for index, param in enumerate(params)
+        ]
+        steps.append(
+            click(
+                f"step_{len(params):03d}",
+                "#create",
+                "Create New Patient",
+                "irreversible",
+            )
+        )
+        # What the compiler infers for the confirm click on its own.
+        steps.append(
+            click(
+                f"step_{save_index:03d}",
+                "#confirmCreate",
+                "Confirm Create New Patient",
+                "irreversible",
+            )
+        )
+        workflow = FlowWorkflow(
+            name=name,
+            params=dict(params),
+            param_specs={
+                param: ParamSpec(name=param, type=ParamKind.STRING, example=value)
+                for param, value in params.items()
+            },
+            steps=steps,
+        )
+        workflow.save(Path(bundle_dir))
+        return FlowWorkflow.load(Path(bundle_dir))
+
+    monkeypatch.setattr("openadapt_flow.compiler.compile_recording", fake_compile)
+    bundle = tmp_path / "bundle"
+    compile_openemr(recording, bundle)
+
+    workflow = _validate_benchmark_bundle(bundle)
+    confirm = next(step for step in workflow.steps if step.effects)
+    assert confirm.id == f"step_{save_index:03d}"
+    assert confirm.risk == "irreversible"
+    assert confirm.risk_review_required is False
+    assert "creates the patient chart" in (confirm.risk_explanation or "")
+    assert [effect.kind for effect in confirm.effects][0] is EffectKind.RECORD_WRITTEN

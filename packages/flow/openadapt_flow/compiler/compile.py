@@ -45,7 +45,12 @@ from openadapt_flow.ir import (
     StructuralLocator,
     Workflow,
 )
-from openadapt_flow.risk import infer_step_risk
+from openadapt_flow.risk import (
+    PRESUMED_COMMIT_EXPLANATION,
+    infer_step_risk,
+    is_meaningful_label,
+    presumed_commit_step_ids,
+)
 from openadapt_flow.runtime.identity import (
     band_region,
     context_from_lines,
@@ -2067,9 +2072,12 @@ def compile_recording(
                     "double_click": "double-click",
                     "right_click": "right-click",
                 }[kind]
+                # A single OCR glyph read off an icon (a floppy-disk Save reads
+                # as "日") is not a label; naming the step after it would tell
+                # a reviewer the click targets text that is not on screen.
                 intent = (
                     f"{verb} '{ocr_text}'"
-                    if ocr_text
+                    if is_meaningful_label(ocr_text)
                     else f"{verb} recorded visual target"
                 )
             pending.append(
@@ -2426,6 +2434,17 @@ def compile_recording(
         step.risk = inference.risk
         step.risk_explanation = inference.explanation
         step.risk_review_required = inference.requires_review
+
+    # A demonstration that entered data and ends without any write-shaped step
+    # still committed that data through an unlabelled control (an icon-only
+    # Save). Presume those icon-only clicks commit the record, in the safe
+    # direction, so the program never describes a data-entry task as one that
+    # only reads. Explicit risk_overrides below still win.
+    for step_id in presumed_commit_step_ids(steps):
+        presumed = next(step for step in steps if step.id == step_id)
+        presumed.risk = "irreversible"
+        presumed.risk_explanation = PRESUMED_COMMIT_EXPLANATION
+        presumed.risk_review_required = False
 
     if risk_overrides:
         by_id = {step.id: step for step in steps}

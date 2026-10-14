@@ -30,6 +30,13 @@ one application. Built-in strong write signals keep precedence, and conflicting
 rules require qualification. Every inference retains PHI-free evidence tokens
 plus an explanation.
 
+A single OCR glyph is not a label: icon-only controls read as fragments such
+as "日" (a floppy-disk Save icon), so a label needs at least two letters or
+digits before it can mark a click as a labelled non-write. One workflow-level
+rule complements the per-step heuristic (:func:`presumed_commit_step_ids`):
+when a demonstration entered data and no later step declares a write, the
+icon-only clicks after the last entry are presumed to commit that record.
+
 False-positive posture
 ----------------------
 DELIBERATELY biased toward ``irreversible`` on write-shaped steps. A false
@@ -408,6 +415,90 @@ def is_write_shaped(text: str) -> bool:
     return bool(text) and _WRITE_RE.search(text) is not None
 
 
+# A retained control label must carry at least this many letters or digits to
+# count as evidence of what the control does. Icon-only controls OCR to single
+# glyphs: openIMIS's floppy-disk Save button reads as the CJK glyph "日", a
+# check mark as "v", a close cross as "X". Such a fragment proves nothing about
+# the control's business effect, so it must not turn an icon-only actuator into
+# a "labelled non-write" control.
+MIN_LABEL_ALNUM_CHARS = 2
+
+
+def is_meaningful_label(value: object) -> bool:
+    """True if ``value`` is a control label rather than an icon's OCR glyph."""
+
+    if not isinstance(value, str):
+        return False
+    return sum(1 for character in value if character.isalnum()) >= (
+        MIN_LABEL_ALNUM_CHARS
+    )
+
+
+# Data-entry actions. A demonstration that performs one of these entered values
+# into the application; the record those values form is committed by a later
+# action unless the demonstration abandons it.
+_DATA_ENTRY_ACTIONS = frozenset({ActionKind.TYPE, ActionKind.SELECT_OPTION})
+_POINTER_ACTIONS = frozenset({ActionKind.CLICK, ActionKind.DOUBLE_CLICK})
+PRESUMED_COMMIT_EXPLANATION = (
+    "the demonstration entered data and then used this unlabelled control; "
+    "it is presumed to commit the entered record"
+)
+
+
+def _declares_write(step: Step) -> bool:
+    return (
+        step.risk == "irreversible"
+        or bool(step.effects)
+        or step.api_binding is not None
+    )
+
+
+def _is_icon_only_pointer(step: Step) -> bool:
+    if step.action not in _POINTER_ACTIONS:
+        return False
+    if step.anchor is None:
+        return True
+    structural = step.anchor.structural
+    labels = (
+        step.anchor.ocr_text,
+        structural.name if structural is not None else None,
+    )
+    return not any(is_meaningful_label(value) for value in labels)
+
+
+def presumed_commit_step_ids(steps: Iterable[Step]) -> tuple[str, ...]:
+    """Return icon-only clicks presumed to commit the demonstrated data entry.
+
+    A demonstration that types or selects values and then ends without any
+    write-shaped step has still committed those values somewhere: the commit
+    control was simply unlabelled (an icon-only Save, a check mark, a floppy
+    disk). Per-step inference cannot see that, because a single icon click
+    carries no write signal of its own. This workflow-level pass closes the
+    gap in the safe direction: when no step from the last data entry onward
+    already declares a write, every icon-only pointer click after that entry
+    is presumed to commit the entered record.
+
+    Labelled clicks are never presumed (their label already decided their
+    risk), and a demonstration without data entry presumes nothing. A false
+    presumption costs availability (an operator confirms or reclassifies the
+    step during qualification); a missed commit lets a write compile as a
+    benign step and lets a readiness review describe the task as read-only.
+    """
+
+    ordered = list(steps)
+    entries = [
+        index
+        for index, step in enumerate(ordered)
+        if step.action in _DATA_ENTRY_ACTIONS
+    ]
+    if not entries:
+        return ()
+    tail = ordered[entries[-1] :]
+    if any(_declares_write(step) for step in tail):
+        return ()
+    return tuple(step.id for step in tail if _is_icon_only_pointer(step))
+
+
 def step_text(step: Step) -> str:
     """The text a click step's risk is inferred from: its intent plus its
     target's retained OCR and structural-accessibility labels (the intent
@@ -634,16 +725,20 @@ def infer_step_risk(
         (structural.name if structural is not None else None),
     )
     if step.anchor is None or not any(
-        isinstance(value, str) and value.strip() for value in target_labels
+        is_meaningful_label(value) for value in target_labels
     ):
         # An unlabelled primary click may be a focus/navigation action or an
         # icon-only write. Demo replay remains usable, but no policy may certify
         # the unresolved classification until qualification supplies an
-        # explicit override.
+        # explicit override. A single OCR glyph read off an icon is not a label.
+        glyph_only = any(
+            isinstance(value, str) and value.strip() for value in target_labels
+        )
         return RiskInference(
             "reversible",
             "unlabelled pointer control may be navigation, focus, or a state change",
-            (action_evidence, "ambiguity:icon_only"),
+            (action_evidence, "ambiguity:icon_only")
+            + (("label:glyph_only",) if glyph_only else ()),
             requires_review=True,
         )
     return RiskInference(

@@ -438,3 +438,321 @@ def test_risk_overrides_still_win_both_directions(two_button_bundle, tmp_path):
     assert by_id["step_000"].risk == "irreversible"
     assert by_id["step_001"].risk == "reversible"
     assert all(not step.risk_review_required for step in by_id.values())
+
+
+# --- B273: an icon-only Save after data entry is a consequential write ------
+
+
+class TestIconOnlyCommit:
+    """The openIMIS claims program compiled every step, Save included, as a
+    benign read: the floppy-disk Save icon OCR'd to the glyph "日", which
+    counted as a label, and nothing marked the click that commits the claim.
+    """
+
+    @pytest.mark.parametrize("glyph", ["日", "X", "+", "v", " ✓ "])
+    def test_a_single_glyph_is_not_a_label(self, glyph: str) -> None:
+        inference = infer_step_risk(_click_step(f"click '{glyph}'", glyph))
+
+        assert inference.risk == "reversible"
+        assert inference.requires_review is True
+        assert "ambiguity:icon_only" in inference.evidence
+        assert "label:glyph_only" in inference.evidence
+
+    def test_a_short_word_is_still_a_label(self) -> None:
+        inference = infer_step_risk(_click_step("click 'OK'", "OK"))
+
+        assert inference.requires_review is False
+        assert inference.evidence == ("action:click", "signal:labelled_non_write")
+
+    @staticmethod
+    def _claims_shaped(save_ocr: str | None = "日") -> list[Step]:
+        steps = [
+            Step(
+                id="step_000",
+                intent="type <insurance_no>",
+                action=ActionKind.TYPE,
+                param="insurance_no",
+            ),
+            _click_step("click 'Claim No.'", "Claim No."),
+            Step(
+                id="step_002",
+                intent="type 'General'",
+                action=ActionKind.TYPE,
+                text="General",
+            ),
+            _click_step("click 'ultation'", "ultation"),
+            _click_step("click recorded visual target", save_ocr),
+        ]
+        for index, step in enumerate(steps):
+            step.id = f"step_{index:03d}"
+            inference = infer_step_risk(step)
+            step.risk = inference.risk
+            step.risk_review_required = inference.requires_review
+        return steps
+
+    def test_icon_only_click_after_data_entry_is_presumed_to_commit(self) -> None:
+        from openadapt_flow.risk import presumed_commit_step_ids
+
+        assert presumed_commit_step_ids(self._claims_shaped("日")) == ("step_004",)
+        assert presumed_commit_step_ids(self._claims_shaped(None)) == ("step_004",)
+
+    def test_presumption_needs_data_entry_and_no_declared_write(self) -> None:
+        from openadapt_flow.risk import presumed_commit_step_ids
+
+        # Without data entry an icon click is ambiguous, not a presumed commit.
+        navigation = [_click_step("click recorded visual target", None)]
+        assert presumed_commit_step_ids(navigation) == ()
+
+        # A labelled Save after the entry already declares the commit.
+        labelled = self._claims_shaped("日")
+        labelled.append(_click_step("click 'Save'", "Save"))
+        labelled[-1].id = "step_005"
+        labelled[-1].risk = "irreversible"
+        assert presumed_commit_step_ids(labelled) == ()
+
+        # Icon clicks before the last entry do not commit what follows.
+        early_icon = self._claims_shaped("日")
+        early_icon.insert(0, _click_step("click recorded visual target", None))
+        early_icon[0].id = "step_early"
+        assert "step_early" not in presumed_commit_step_ids(early_icon)
+
+
+def _icon_save_recording(tmp_path: Path) -> Path:
+    """Type one value into a form, then click a text-free round Save icon."""
+
+    recording = tmp_path / "icon-save-recording"
+    (recording / "frames").mkdir(parents=True)
+    form = _blank()
+    cv2.putText(
+        form,
+        "Health facility claim",
+        (60, 80),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        1.0,
+        (0, 0, 0),
+        2,
+        cv2.LINE_AA,
+    )
+    cv2.putText(
+        form,
+        "Insured number",
+        (60, 180),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.7,
+        (60, 60, 60),
+        2,
+        cv2.LINE_AA,
+    )
+    cv2.rectangle(form, (60, 200), (460, 250), (120, 120, 120), 2)
+    # An icon-only floating Save button: a filled disc with a floppy shape.
+    cv2.circle(form, (1190, 700), 32, (110, 80, 0), -1)
+    cv2.rectangle(form, (1176, 686), (1204, 714), (255, 255, 255), 2)
+    cv2.rectangle(form, (1182, 686), (1198, 696), (255, 255, 255), -1)
+    typed = form.copy()
+    cv2.putText(
+        typed,
+        "610420233",
+        (72, 236),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.8,
+        (0, 0, 0),
+        2,
+        cv2.LINE_AA,
+    )
+    saved = typed.copy()
+    cv2.putText(
+        saved,
+        "Claim saved",
+        (60, 400),
+        cv2.FONT_HERSHEY_SIMPLEX,
+        0.9,
+        (0, 120, 0),
+        2,
+        cv2.LINE_AA,
+    )
+    _write_frame(recording, 0, "before", form)
+    _write_frame(recording, 0, "after", typed)
+    _write_frame(recording, 1, "before", typed)
+    _write_frame(recording, 1, "after", saved)
+    events = [
+        {
+            "i": 0,
+            "kind": "type",
+            "text": "610420233",
+            "param": "insurance_no",
+            "t": 1.0,
+        },
+        {"i": 1, "kind": "click", "x": 1190, "y": 700, "t": 2.0},
+    ]
+    (recording / "events.jsonl").write_text(
+        "\n".join(json.dumps(event) for event in events) + "\n"
+    )
+    (recording / "meta.json").write_text(
+        json.dumps(
+            {
+                "id": "rec-icon-save",
+                "created_at": "2026-10-12T00:00:00+00:00",
+                "viewport": list(VIEWPORT),
+                "params": {"insurance_no": "610420233"},
+            }
+        )
+    )
+    return recording
+
+
+def test_compiled_icon_save_is_a_consequential_write_that_needs_a_record_check(
+    tmp_path: Path,
+) -> None:
+    """A program whose Save has no declared effect must still declare the
+    write, so qualification asks for its record check instead of calling the
+    task read-only."""
+
+    from openadapt_flow.qualification import (
+        ActionRiskClass,
+        EnvironmentBoundary,
+        QualificationRefusalCode,
+        evaluate_qualification,
+        init_project,
+    )
+
+    workflow = compile_recording(
+        _icon_save_recording(tmp_path), tmp_path / "bundle", name="icon-save"
+    )
+    save = workflow.steps[-1]
+
+    assert save.action is ActionKind.CLICK
+    assert save.effects == []
+    assert save.risk == "irreversible"
+    assert save.risk_review_required is False
+    assert "presumed to commit" in (save.risk_explanation or "")
+    assert save.intent == "click recorded visual target"
+
+    project = init_project(
+        workflow,
+        environment=EnvironmentBoundary(
+            target_kind="web",
+            application="Test claims app",
+            application_version="1",
+            environment_digest="b" * 64,
+            runtime_version="1.35.1",
+        ),
+    )
+    draft = project.action_classifications[save.id]
+    assert draft.classification is ActionRiskClass.IRREVERSIBLE
+    assert draft.operator_confirmed is False
+
+    report = evaluate_qualification(workflow)
+    save_refusals = {
+        refusal.code for refusal in report.refusals if refusal.step_id == save.id
+    }
+    assert QualificationRefusalCode.EFFECT_CONTRACT_MISSING in save_refusals
+    assert QualificationRefusalCode.ACTION_CLASSIFICATION_UNCONFIRMED in save_refusals
+    assert report.consequential_action_count >= 1
+    assert report.passed is False
+
+
+# --- Adversarial: no saving step is ever drafted "read-only" -----------------
+#
+# Check it calls a task read-only only when every step carries an
+# operator-confirmed read-only classification. Flow drafts that classification
+# on its own for exactly one shape: a wait or scroll with nothing that can
+# write. These tests try every other actuating shape, label, and override.
+
+
+def _actuating_step(kind: ActionKind, label: str | None) -> Step:
+    anchor = Anchor(
+        template="t.png", region=(0, 0, 10, 10), click_point=(5, 5), ocr_text=label
+    )
+    extra: dict[str, object] = {}
+    if kind is ActionKind.TYPE:
+        extra = {"text": "610420233"}
+    elif kind is ActionKind.KEY:
+        extra = {"key": "enter"}
+    elif kind is ActionKind.HOTKEY:
+        extra = {"key": "enter", "modifiers": ["ctrl"], "anchor": None}
+    elif kind is ActionKind.SELECT_OPTION:
+        extra = {
+            "text": "Approved",
+            "selection_commit_key": "Enter",
+            "selection_region": (0, 0, 10, 10),
+        }
+    fields: dict[str, object] = {"anchor": anchor, **extra}
+    return Step(id="s", intent=f"{kind.value} {label or ''}", action=kind, **fields)
+
+
+def _drafted(step: Step):
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.qualification import EnvironmentBoundary, init_project
+
+    workflow = Workflow(name="adversarial", steps=[step])
+    project = init_project(
+        workflow,
+        environment=EnvironmentBoundary(
+            target_kind="web",
+            application="Test app",
+            application_version="1",
+            environment_digest="c" * 64,
+            runtime_version="1.35.1",
+        ),
+    )
+    return project.action_classifications[step.id]
+
+
+@pytest.mark.parametrize(
+    "kind",
+    [kind for kind in ActionKind if kind not in {ActionKind.WAIT, ActionKind.SCROLL}],
+)
+@pytest.mark.parametrize("label", [None, "日", "日日", "OK", "Close", "Save"])
+@pytest.mark.parametrize("operator_override", [False, True])
+def test_no_actuating_step_is_drafted_read_only(
+    kind: ActionKind, label: str | None, operator_override: bool
+) -> None:
+    from openadapt_flow.qualification import ActionRiskClass
+
+    step = _actuating_step(kind, label)
+    if operator_override:
+        # What a compile-time risk_overrides "reversible" leaves behind.
+        step.risk = "reversible"
+        step.risk_review_required = False
+        step.risk_explanation = "operator-qualified override: reversible"
+
+    drafted = _drafted(step)
+
+    assert drafted.classification is not ActionRiskClass.READ_ONLY
+    assert not (
+        drafted.operator_confirmed
+        and drafted.classification is not ActionRiskClass.IRREVERSIBLE
+    )
+
+
+@pytest.mark.parametrize("kind", [ActionKind.WAIT, ActionKind.SCROLL])
+def test_a_wait_or_scroll_that_can_write_is_never_drafted_read_only(
+    kind: ActionKind,
+) -> None:
+    from openadapt_flow.qualification import ActionRiskClass
+    from openadapt_flow.runtime.effects import Effect, EffectKind, ValueExpr
+
+    api_write = Step(
+        id="s",
+        intent="Wait",
+        action=kind,
+        api_binding=ApiBinding(url_template="/claims"),
+    )
+    declared_effect = Step(
+        id="s",
+        intent="Wait",
+        action=kind,
+        effects=[
+            Effect(
+                kind=EffectKind.RECORD_WRITTEN,
+                match={"record_id": ValueExpr(param="record_id")},
+            )
+        ],
+    )
+    forced = Step(id="s", intent="Wait", action=kind, risk="irreversible")
+
+    for step in (api_write, declared_effect, forced):
+        assert _drafted(step).classification is not ActionRiskClass.READ_ONLY
+    # The one shape Flow drafts read-only by itself.
+    plain = _drafted(Step(id="s", intent="Wait", action=kind))
+    assert plain.classification is ActionRiskClass.READ_ONLY

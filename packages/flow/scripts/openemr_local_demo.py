@@ -826,7 +826,16 @@ def compile_recording(recording_dir: Path, bundle_dir: Path) -> None:
     # this transition. Bind the semantic state we actually require instead.
     open_step.expect = [_duplicate_dialog_postcondition()]
     save_steps[0].effects = patient_effects()
-    save_steps[0].risk = "reversible"
+    # #confirmCreate is the click that creates the chart: declare it the
+    # consequential write it is, so the irreversible-step safeguards stay
+    # armed and qualification requires its record check. (It used to be
+    # forced to "reversible" while #create, which only opens the duplicate
+    # check, stayed irreversible.)
+    save_steps[0].risk = "irreversible"
+    save_steps[0].risk_explanation = (
+        "the marked #confirmCreate click creates the patient chart"
+    )
+    save_steps[0].risk_review_required = False
     expected_params = set(SyntheticPatientSpec().params())
     if (
         set(workflow.params) != expected_params
@@ -911,7 +920,7 @@ def _validate_benchmark_bundle(bundle_dir: Path) -> Any:
         or any(not item.required for item in workflow.param_specs.values())
         or len(effect_steps) != 1
         or effect_steps[0].action.value != "click"
-        or effect_steps[0].risk != "reversible"
+        or effect_steps[0].risk != "irreversible"
         or [effect.model_dump(mode="json") for effect in effect_steps[0].effects]
         != effects_payload
         or len(dialog_steps) != 1

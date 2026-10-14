@@ -1182,12 +1182,16 @@ def _inferred_action_classification(step: "Step") -> ActionRiskClassification:
     if step.risk_review_required:
         classification = ActionRiskClass.UNKNOWN
         explanation = step.risk_explanation or "compiled Flow risk requires review"
+    elif step.risk == "irreversible":
+        # A compiled irreversible decision is never weaker than the per-step
+        # re-inference. Workflow-level evidence (an icon-only Save presumed
+        # to commit the demonstrated entry) is invisible to that re-inference,
+        # which would otherwise draft the write as "unknown".
+        classification = ActionRiskClass.IRREVERSIBLE
+        explanation = step.risk_explanation or "compiled Flow risk is irreversible"
     elif runtime_inference.requires_review:
         classification = ActionRiskClass.UNKNOWN
         explanation = runtime_inference.explanation
-    elif step.risk == "irreversible":
-        classification = ActionRiskClass.IRREVERSIBLE
-        explanation = step.risk_explanation or "compiled Flow risk is irreversible"
     elif runtime_inference.risk == "irreversible":
         classification = ActionRiskClass.IRREVERSIBLE
         explanation = runtime_inference.explanation
