@@ -81,10 +81,12 @@ def main():
     Manual Demo Lifecycle:
         openadapt flow demo-record --out rec
         openadapt flow compile rec --out bundle --name demo
-        openadapt flow lint bundle --strict
+        openadapt flow lint bundle
         openadapt flow certify bundle --policy permissive
         openadapt flow replay bundle
 
+    Lint lists the demo's coverage gaps. The demo has warnings, so
+    `lint --strict` exits 1 on it.
     The manual demo is runnable but not certified for consequential work.
     Use `openadapt flow tutorial` for the effect-verified first run.
 
