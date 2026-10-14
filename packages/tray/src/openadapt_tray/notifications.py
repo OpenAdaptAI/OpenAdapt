@@ -78,20 +78,11 @@ class NotificationManager:
                 Path(__file__).resolve()
             )
             if not is_app_bundle:
-                # Not in app bundle - try desktop-notifier anyway, fall back if it fails
-                try:
-                    from desktop_notifier.macos import CocoaNotificationCenter
-
-                    # Try to initialize to see if it works
-                    CocoaNotificationCenter()
-                    print("desktop-notifier initialized successfully")
-                    return "desktop-notifier"
-                except Exception as e:
-                    # If desktop-notifier can't initialize, use AppleScript
-                    print(
-                        f"desktop-notifier not available ({e}), using AppleScript for notifications"
-                    )
-                    return "macos"
+                # desktop-notifier reaches macOS Notification Center only from
+                # an app bundle; elsewhere it swaps in a backend that drops
+                # every notification. A pip-installed tray is not a bundle, so
+                # it uses AppleScript.
+                return "macos"
 
         # Use desktop-notifier on all platforms
         return "desktop-notifier"

@@ -1,6 +1,7 @@
 """Global hotkey handling for OpenAdapt Tray."""
 
 import contextlib
+import importlib
 import sys
 import threading
 from collections.abc import Callable
@@ -105,6 +106,43 @@ def format_hotkey(spec: str, platform: str | None = None) -> str:
     return "".join(shown) if platform == "darwin" else "+".join(shown)
 
 
+def _pin_macos_keyboard_layout() -> bool:
+    """Read the keyboard layout on the main thread and give pynput that copy.
+
+    pynput's macOS listeners read the current keyboard layout with the Text
+    Input Sources API from their own background threads. Once the process has
+    an NSApplication, which pystray creates, macOS 15 aborts the process when
+    that API runs off the main thread, so ``openadapt-tray`` died with SIGABRT
+    about a second after it started. Reading the layout here and handing every
+    listener the same value keeps the call on the main thread. pynput reads the
+    layout once per listener anyway, so the listeners behave as before.
+
+    Returns:
+        True when the listeners can start. False means no listener may start,
+        because starting one would call the API off the main thread.
+    """
+    if threading.current_thread() is not threading.main_thread():
+        print("Warning: hotkeys must be started on the main thread on macOS")
+        return False
+    try:
+        darwin_util = importlib.import_module("pynput._util.darwin")
+        darwin_keyboard = importlib.import_module("pynput.keyboard._darwin")
+        if not hasattr(darwin_keyboard, "keycode_context"):
+            raise AttributeError("pynput.keyboard._darwin has no keycode_context")
+        with darwin_util.keycode_context() as layout:
+            pinned = layout
+    except Exception as e:
+        print(f"Warning: could not read the keyboard layout: {e}")
+        return False
+
+    @contextlib.contextmanager
+    def pinned_keycode_context():
+        yield pinned
+
+    darwin_keyboard.keycode_context = pinned_keycode_context
+    return True
+
+
 @dataclass
 class HotkeyConfig:
     """Hotkey configuration."""
@@ -153,6 +191,10 @@ class HotkeyManager:
 
         try:
             from pynput import keyboard
+
+            if sys.platform == "darwin" and not _pin_macos_keyboard_layout():
+                print("Warning: hotkeys disabled; use the tray menu instead")
+                return
 
             # Build hotkey dict for pynput
             hotkeys = {}

@@ -1,7 +1,7 @@
 [project]
 name = "openadapt-tray"
 version = "0.3.5"
-description = "Experimental status and launcher companion for OpenAdapt workflow authoring and governed repair"
+description = "Menu-bar and system-tray controls and status for OpenAdapt Desktop"
 readme = "README.md"
 requires-python = ">=3.10"
 license = "MIT"

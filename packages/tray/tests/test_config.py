@@ -226,3 +226,22 @@ class TestTrayConfig:
 
         assert error is None
         assert config.dashboard_port == 8080
+
+
+class TestEnsureFile:
+    """Settings opens tray.json, so the file has to exist first."""
+
+    def test_missing_file_is_written_with_current_settings(self, tmp_path):
+        config_file = tmp_path / "openadapt" / "tray.json"
+        config = TrayConfig(deployment_lane="byoc")
+        with patch.object(TrayConfig, "config_path", return_value=config_file):
+            assert config.ensure_file() == config_file
+            assert TrayConfig.load().deployment_lane == "byoc"
+
+    def test_existing_file_is_never_rewritten(self, tmp_path):
+        # An unreadable tray.json stays exactly as the user left it.
+        config_file = tmp_path / "tray.json"
+        config_file.write_text("{ not json")
+        with patch.object(TrayConfig, "config_path", return_value=config_file):
+            assert TrayConfig().ensure_file() == config_file
+        assert config_file.read_text() == "{ not json"

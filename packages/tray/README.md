@@ -2,161 +2,120 @@
 
 [![PyPI version](https://img.shields.io/pypi/v/openadapt-tray.svg)](https://pypi.org/project/openadapt-tray/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/OpenAdaptAI/openadapt-tray/blob/main/LICENSE)
 
-A menu-bar icon that shows what OpenAdapt is doing and gives you a start/stop
-button for it. It records nothing, compiles nothing, and replays nothing. It
-mirrors state from the desktop app over an authenticated loopback socket and
-reads one number from the hosted control plane.
+openadapt-tray puts OpenAdapt in the macOS menu bar or the Windows and Linux
+system tray. You can start and stop recordings from its menu or with a hotkey,
+see whether OpenAdapt Desktop is recording or compiling a recording into a
+workflow, and see how many of your automations in OpenAdapt Cloud stopped and
+need a person.
 
-Which means the honest description is: this is a status surface, not an
-integrated desktop product. The workflow logic all lives in
-[`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow).
+It's for people who use
+[OpenAdapt Desktop](https://github.com/OpenAdaptAI/openadapt-desktop) and want
+those controls without opening the app window. The tray doesn't record or run
+anything itself. OpenAdapt Desktop records, and
+[openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) compiles and
+replays workflows. The tray sends them commands and shows what they report.
 
-[Documentation](https://docs.openadapt.ai) ·
-[openadapt-desktop](https://github.com/OpenAdaptAI/openadapt-desktop) ·
-[OpenAdapt launcher](https://github.com/OpenAdaptAI/OpenAdapt)
-
-## Install
+## Quick start
 
 ```bash
 pip install openadapt-tray
-openadapt-tray            # openadapt-tray-gui is the same entry point,
-                          # registered under gui_scripts so Windows
-                          # launches it without a console window
+openadapt-tray
 ```
 
-Needs a graphical session. With no desktop IPC server and no hosted token it
-will sit there offline, which is correct behaviour rather than a failure.
+The OpenAdapt icon appears in the menu bar or system tray. When you select
+**Start Recording**, the tray asks for a capture name, starts the installed
+OpenAdapt Desktop app if it isn't running, and asks it to record.
+
+Without the desktop app, the tray runs, but recording can't start. OpenAdapt
+Desktop has no trusted signed build to download yet
+([its README](https://github.com/OpenAdaptAI/openadapt-desktop#try-it) explains),
+and the `openadapt-desktop` command that pip installs doesn't open the socket
+the tray connects to.
+
+On macOS, the global hotkeys need permission to read the keyboard. Allow the
+app that starts the tray, such as Terminal, in **System Settings** >
+**Privacy & Security** under **Accessibility** and **Input Monitoring**. The
+menu works without them.
+
+Once OpenAdapt Desktop is signed in to OpenAdapt Cloud, the tray checks for
+automations that need attention. It reads the same token from the OS keychain,
+or from the `OPENADAPT_INGEST_TOKEN` environment variable.
 
 ## The menu
 
-Built from whatever local and hosted state currently exists:
-
 ```text
-Start Recording (⌃⇧R)             # Ctrl+Shift+R on Windows and Linux
-Recent Captures
-<N automations need attention>    # only when count > 0
+Start Recording (⌃⇧R)              Ctrl+Shift+R on Windows and Linux
+Recent Captures                    View opens a capture's folder
+⚠ 2 automations need attention     shown only when the count is above zero
 Open Desktop App
 Open Cloud Dashboard
-Account: connected · <N> days left
-Pause Sync / Sync (offline)
-Settings...
+Account: connected · 30 days left  or "Account: sign in" when signed out
+Pause Sync                         "Resume Sync" while paused,
+                                   "Sync (offline)" when signed out or offline
+Settings...                        opens tray.json
 Quit
 ```
 
-The hotkey in the recording item is your `toggle_recording` setting, shown the
-way your platform writes shortcuts. During a local operation the recording item
-becomes Starting, Stop Recording, Stopping, or Compiling. The account row turns
-into a sign-in action, an expiry warning, or an unavailable status, and
-clicking it opens the credential settings page. These labels follow events; the
-tray isn't doing the work.
+While OpenAdapt Desktop works, the recording item changes to **Starting...**,
+**Stop Recording**, **Stopping...**, or **Compiling...**, and the icon changes
+color:
 
-The icon is always the OpenAdapt mark, tinted by state so you can read it at a
-glance: brand blue idle, amber starting or stopping, red while recording,
-purple while compiling, red on error. One high-resolution transparent master
-gets tinted, so the states can't drift into different-looking marks.
+| Idle | Starting or stopping | Recording, or an error | Compiling |
+| :---: | :---: | :---: | :---: |
+| <img src="https://raw.githubusercontent.com/OpenAdaptAI/openadapt-tray/main/assets/icons/idle@2x.png" width="32" alt="Blue OpenAdapt icon"> | <img src="https://raw.githubusercontent.com/OpenAdaptAI/openadapt-tray/main/assets/icons/recording_starting@2x.png" width="32" alt="Amber OpenAdapt icon"> | <img src="https://raw.githubusercontent.com/OpenAdaptAI/openadapt-tray/main/assets/icons/recording@2x.png" width="32" alt="Red OpenAdapt icon"> | <img src="https://raw.githubusercontent.com/OpenAdaptAI/openadapt-tray/main/assets/icons/compiling@2x.png" width="32" alt="Purple OpenAdapt icon"> |
 
-Recording and sync are two independent channels. A machine can compile a fresh
-recording while a previous push is still syncing, or sit idle and offline.
+A red dot on the icon means automations need attention. Selecting the
+needs-attention item opens the cloud dashboard. If `deployment_lane` is `byoc`,
+the setting for keeping recordings on this machine, the item opens Teach in
+OpenAdapt Desktop instead and never opens the cloud dashboard. Either
+`tray.json` or OpenAdapt Desktop can set it.
 
-## How it talks to things
-
-```text
-openadapt-tray (status mirror + launcher)
-    |                                   \
-    | authenticated loopback IPC         \ HTTPS: GET needs-attention count
-    v                                     v
-openadapt-desktop (local cockpit)     hosted control plane (app.openadapt.ai)
-    |
-    v
-openadapt-flow (compile / replay / halt / repair / teach)
-```
-
-Local control goes to `openadapt-desktop`. The desktop app writes a discovery
-file at `~/.openadapt/desktop_ipc.json`, the tray reads it and opens an
-authenticated loopback connection, then sends start/stop, open-library,
-open-teach, and pause/resume-sync, and consumes status events coming back. If
-discovery fails, the tray launches `openadapt-desktop` and waits about ten
-seconds.
-
-Hosted state is one narrow read:
-
-```text
-GET <hosted_url>/api/needs-attention/count
-Authorization: Bearer <ingest token>
-→ { "count": 0, "credential": {
-     "expires_at": "2026-08-05T12:00:00Z",
-     "expires_in_days": 8,
-     "expiring_soon": true,
-     "legacy_non_expiring": false,
-     "warning_days": 14
-   } }
-```
-
-The token comes from `OPENADAPT_INGEST_TOKEN` or the OS keychain, never from
-`tray.json`, and it's never stored or logged. Polling defaults to 60 seconds,
-clamps to a 30-second floor, and backs off when offline. The control plane
-decides when a credential enters its 14-day warning window; the tray shows one
-actionable notification per credential and expiry, surviving a tray restart,
-and keeps only a non-secret identity digest to deduplicate.
-
-No screenshots, bundles, or capture artifacts go through this poller.
-
-Clicking the needs-attention row routes by lane. On `cloud` it opens
-`<hosted_url>/dashboard`. On `byoc` with desktop IPC connected it sends
-`open_teach` locally, so workflow data stays inside the customer environment.
-On `byoc` with no desktop IPC it currently falls back to the hosted dashboard,
-and a regulated deployment should not treat that fallback as a validated
-PHI-safe path. Gate it or change it before production.
-
-## What this doesn't do yet
-
-The tray's client behaviour is covered by unit tests: the state machine, the
-IPC framing, the menus, the icon tinting, and mocked hosted HTTP. None of that
-proves a working installer, a live hosted service, or an authoring loop that
-runs end to end.
-
-- `openadapt-desktop`'s `main` serves the exact discovery-socket and command
-  contract this tray expects, but the two have not been validated together end
-  to end, and no signed generally-available desktop build ships that server.
-- No packaged installer proves tray startup, permissions, or auto-start on
-  macOS, Windows, and Linux.
-- Hosted polling is tested against mocks. Nothing here validates a live service
-  contract.
-- Recent-capture View still calls a legacy launcher command before falling back
-  to a file browser.
-- Sign-in opens a settings page. There's no interactive authentication.
-- The tray doesn't certify a workflow or verify its effects. Nothing here is a
-  safety control.
+[PROTOCOL.md](https://github.com/OpenAdaptAI/openadapt-tray/blob/main/docs/PROTOCOL.md)
+describes the local socket, the one cloud request, and how the tray handles the
+token.
 
 ## Configuration
 
-Non-secret settings live at `~/Library/Application Support/openadapt/tray.json`
-on macOS, `%APPDATA%/openadapt/tray.json` on Windows, and
-`${XDG_CONFIG_HOME:-~/.config}/openadapt/tray.json` on Linux:
+**Settings...** opens `tray.json` in a text editor and creates it with the
+defaults if it doesn't exist. Changes take effect the next time the tray starts.
+The file is at:
+
+- macOS: `~/Library/Application Support/openadapt/tray.json`
+- Windows: `%APPDATA%\openadapt\tray.json`
+- Linux: `${XDG_CONFIG_HOME:-~/.config}/openadapt/tray.json`
+
+The settings you're most likely to change:
 
 ```json
 {
   "hotkeys": {
     "toggle_recording": "<ctrl>+<shift>+r",
-    "open_dashboard": "<ctrl>+<shift>+d",
-    "stop_recording": "<ctrl>+<ctrl>+<ctrl>"
+    "open_dashboard": "<ctrl>+<shift>+d"
   },
-  "captures_directory": "~/openadapt/captures",
-  "desktop_ipc_port": null,
+  "stop_on_triple_ctrl": true,
   "hosted_url": "https://app.openadapt.ai",
   "deployment_lane": "cloud",
   "poll_interval_s": 60,
-  "show_notifications": true,
-  "auto_start_on_login": false
+  "show_notifications": true
 }
 ```
 
-`deployment_lane` takes `cloud` or `byoc`. The triple-ctrl stop hotkey is real,
-not a typo: the `stop_on_triple_ctrl` setting defaults to true and is what
-enables it. The ingest token does
-not belong in this file.
+- Hotkeys use [pynput](https://pynput.readthedocs.io/) syntax.
+  `open_dashboard` opens the workflow library in OpenAdapt Desktop.
+- `stop_on_triple_ctrl` stops a recording when you press Ctrl three times,
+  each within half a second of the last.
+- `deployment_lane` is `cloud` or `byoc`.
+- `captures_directory` is the folder that **Recent Captures** lists. It
+  defaults to `~/openadapt/captures`.
+- `poll_interval_s` sets how often, in seconds, the tray checks OpenAdapt
+  Cloud. The minimum is 30.
+
+The token never goes in this file. The file that **Settings...** creates also
+has keys the tray doesn't use: `dashboard_port`, `auto_launch_dashboard`,
+`auto_start_on_login`, `minimize_to_tray`, `default_record_audio`,
+`default_transcribe`, and `hotkeys.stop_recording`.
 
 ## Development
 
@@ -165,28 +124,50 @@ git clone https://github.com/OpenAdaptAI/openadapt-tray.git
 cd openadapt-tray
 uv sync --extra dev
 uv run pytest tests -q
+uv run ruff check .
 uv run openadapt-tray
 ```
 
 ```text
 src/openadapt_tray/
-  app.py            tray lifecycle, desktop delegation, and routing
-  ipc.py            authenticated loopback IPC client
+  app.py            tray lifecycle, desktop delegation, and click routing
+  ipc.py            client for OpenAdapt Desktop's loopback socket
   hosted.py         needs-attention poller and lane routing
   state.py          recording, sync, and badge state
-  menu.py           state-dependent tray menu
-  icons.py          per-state OpenAdapt-mark tinting
+  menu.py           the menu
+  icons.py          per-state icon tinting
+  shortcuts.py      global hotkeys
   keychain.py       ingest-token lookup
-  config.py         non-secret local preferences
+  config.py         tray.json
+  desktop.py        finds and starts the installed OpenAdapt Desktop app
+  notifications.py  desktop notifications
+  platform/         per-OS dialogs and opening tray.json
 ```
 
-For an OpenAdapt workflow you can actually run, use the launcher instead:
+To try OpenAdapt itself from the command line, start with the
+[OpenAdapt launcher](https://github.com/OpenAdaptAI/OpenAdapt).
 
-```bash
-pip install 'openadapt[browser]'
-openadapt quickstart
-```
+## Limits
+
+- The tray doesn't record, compile, replay, or check workflow results. It
+  shows what OpenAdapt Desktop and OpenAdapt Cloud report.
+- OpenAdapt Desktop's CI tests this tray's socket client against the desktop's
+  server. The two apps haven't been run together end to end from packaged
+  installs.
+- The quick start was checked by hand on macOS 15: the tray starts and shows
+  this menu. Recording through OpenAdapt Desktop and the global hotkeys weren't
+  tried. On Windows and Linux, only the unit tests run in CI.
+- On macOS, a tray installed with pip sends notifications through AppleScript,
+  so clicking a needs-attention notification doesn't open the dashboard.
+  Notification clicks haven't been tried on Windows or Linux.
+- The cloud poller is tested against mocked responses, not a live account.
+- There's no installer, and the tray doesn't start at login.
+- OpenAdapt Desktop saves its captures in `~/.openadapt/captures` and manages
+  them itself, so they don't appear under **Recent Captures** by default. Open
+  them from the desktop app.
+- **Account: sign in** opens the token page of the cloud dashboard. The tray
+  has no sign-in flow of its own.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](https://github.com/OpenAdaptAI/openadapt-tray/blob/main/LICENSE)

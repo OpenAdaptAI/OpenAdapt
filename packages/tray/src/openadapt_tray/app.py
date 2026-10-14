@@ -384,21 +384,65 @@ class TrayApplication:
     def open_needs_attention(self) -> bool:
         """Route a needs-attention click by deployment lane (§3c).
 
+        On the byoc lane the click only ever opens Teach in the desktop app.
+        When the desktop is not connected, the tray starts it on a background
+        thread and sends the command once it connects.
+
         Returns:
-            True if something opened. When nothing opened the user is told,
-            rather than being left in front of an unchanged screen.
+            False when nothing opened; the user is told rather than being left
+            in front of an unchanged screen. True when something opened, or
+            when a byoc click started the desktop app (that thread reports its
+            own failure).
         """
+        lane = self._needs_attention_lane()
+        if lane == LANE_BYOC and not self.ipc.is_connected():
+            threading.Thread(target=self._open_teach_async, daemon=True).start()
+            return True
         routed = route_break_click(
             self.config,
             ipc_client=self.ipc if self.ipc.is_connected() else None,
+            lane=lane,
         )
         if not routed:
-            self.notifications.show(
-                "Could not open needs-attention",
-                "Neither the desktop app nor a browser could be opened. "
-                f"Open {self.config.hosted_url.rstrip('/')}/dashboard manually.",
-            )
+            self._report_needs_attention_failure(lane)
         return routed
+
+    def _needs_attention_lane(self) -> str:
+        """Return the lane a needs-attention click routes for.
+
+        Either tray.json or the desktop's status report can put this machine on
+        the byoc lane. Either one is enough, so a disagreement keeps the click
+        local instead of sending it to the hosted dashboard.
+        """
+        if self.config.deployment_lane == LANE_BYOC or self.state.current.is_byoc():
+            return LANE_BYOC
+        return LANE_CLOUD
+
+    def _open_teach_async(self) -> None:
+        """Start the desktop app if needed, then open Teach (byoc lane)."""
+        if self.ensure_desktop_connection() and route_break_click(
+            self.config,
+            ipc_client=self.ipc,
+            lane=LANE_BYOC,
+        ):
+            return
+        self._report_needs_attention_failure(LANE_BYOC)
+
+    def _report_needs_attention_failure(self, lane: str) -> None:
+        """Tell the user that a needs-attention click opened nothing."""
+        if lane == LANE_BYOC:
+            self.notifications.show(
+                "Could not open Teach",
+                "Open the OpenAdapt desktop app to review the automations that "
+                "need attention. On the byoc lane the tray does not open the "
+                "cloud dashboard.",
+            )
+            return
+        self.notifications.show(
+            "Could not open needs-attention",
+            "No browser could be opened. "
+            f"Open {self.config.hosted_url.rstrip('/')}/dashboard manually.",
+        )
 
     def login(self) -> bool:
         """Start the hosted login flow.
@@ -433,7 +477,7 @@ class TrayApplication:
                 "The desktop app did not accept the pause command.",
             )
             return False
-        self.state.set_sync_state(SyncState.SYNCED)
+        self.state.set_sync_state(SyncState.PAUSED)
         return True
 
     def resume_sync(self) -> bool:
@@ -444,6 +488,7 @@ class TrayApplication:
                 "The desktop app did not accept the resume command.",
             )
             return False
+        self.state.set_sync_state(SyncState.SYNCED)
         return True
 
     def _report_config_error(self) -> None:
@@ -588,6 +633,7 @@ class TrayApplication:
             "syncing": SyncState.SYNCING,
             "pushing": SyncState.SYNCING,
             "offline": SyncState.OFFLINE,
+            "paused": SyncState.PAUSED,
         }
         sync = mapping.get(str(name).lower())
         if sync is not None:

@@ -35,6 +35,7 @@ class SyncState(Enum):
     SYNCED = auto()
     SYNCING = auto()  # a.k.a. PUSHING — an upload is in flight
     OFFLINE = auto()
+    PAUSED = auto()  # the desktop's upload queue is paused
 
     # Backwards/spec-friendly alias: the spec names this channel "SYNCING/PUSHING".
     @classmethod
@@ -131,6 +132,10 @@ class AppState:
     def is_offline(self) -> bool:
         """Check if the sync channel is offline."""
         return self.sync_state == SyncState.OFFLINE
+
+    def is_sync_paused(self) -> bool:
+        """Check if the desktop's upload queue is paused."""
+        return self.sync_state == SyncState.PAUSED
 
     def has_breaks(self) -> bool:
         """Check if any automations currently need attention."""

@@ -1,5 +1,6 @@
 """Windows-specific functionality for OpenAdapt Tray."""
 
+import subprocess
 import webbrowser
 from typing import TYPE_CHECKING
 
@@ -93,13 +94,25 @@ class WindowsHandler(PlatformHandler):
                     f"(MessageBoxW: {e}; tkinter: {fallback_error})"
                 ) from fallback_error
 
-    def open_settings_dialog(self, config: "TrayConfig") -> None:
-        """Open settings in default browser.
+    def open_settings_dialog(self, config: "TrayConfig") -> bool:
+        """Open ``tray.json`` in Notepad.
+
+        Notepad keeps running until the user closes it, so it is started
+        without waiting for it to exit.
 
         Args:
             config: Current configuration.
+
+        Returns:
+            True if Notepad started.
         """
-        webbrowser.open(f"http://localhost:{config.dashboard_port}/settings")
+        path = config.ensure_file()
+        try:
+            subprocess.Popen(["notepad.exe", str(path)])
+        except OSError as e:
+            print(f"Could not start Notepad: {e}")
+            return False
+        return True
 
     def open_training_dialog(self) -> None:
         """Open training dialog in browser."""

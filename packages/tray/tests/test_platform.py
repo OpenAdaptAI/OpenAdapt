@@ -312,3 +312,72 @@ class TestMacOSDialogsSeparateFailureFromAnswer:
         handler = MacOSHandler()
         with patch("subprocess.run", return_value=self._result(0, "OK", "")):
             assert handler.confirm_dialog("t", "m") is True
+
+
+class TestSettingsOpensTrayJson:
+    """Settings opens tray.json; it used to open a dead localhost:8080 page."""
+
+    def _config(self, tmp_path):
+        from openadapt_tray.config import TrayConfig
+
+        config = TrayConfig()
+        path = tmp_path / "tray.json"
+        return config, path
+
+    @pytest.mark.parametrize(
+        ("handler_class", "command"),
+        [(MacOSHandler, ["open", "-t"]), (LinuxHandler, ["xdg-open"])],
+    )
+    def test_opens_the_file_and_reports_success(
+        self, tmp_path, handler_class, command
+    ):
+        from openadapt_tray.config import TrayConfig
+
+        config, path = self._config(tmp_path)
+        with patch.object(TrayConfig, "config_path", return_value=path), patch(
+            "openadapt_tray.platform.base.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 0, b"", b""),
+        ) as run:
+            assert handler_class().open_settings_dialog(config) is True
+        assert run.call_args.args[0] == [*command, str(path)]
+        assert path.exists()
+
+    def test_windows_starts_notepad_without_waiting(self, tmp_path):
+        from openadapt_tray.config import TrayConfig
+
+        config, path = self._config(tmp_path)
+        with patch.object(TrayConfig, "config_path", return_value=path), patch(
+            "openadapt_tray.platform.windows.subprocess.Popen"
+        ) as popen:
+            assert WindowsHandler().open_settings_dialog(config) is True
+        assert popen.call_args.args[0] == ["notepad.exe", str(path)]
+
+    def test_windows_missing_notepad_reports_failure(self, tmp_path):
+        from openadapt_tray.config import TrayConfig
+
+        config, path = self._config(tmp_path)
+        with patch.object(TrayConfig, "config_path", return_value=path), patch(
+            "openadapt_tray.platform.windows.subprocess.Popen",
+            side_effect=FileNotFoundError,
+        ):
+            assert WindowsHandler().open_settings_dialog(config) is False
+
+    def test_failed_opener_reports_failure(self, tmp_path):
+        from openadapt_tray.config import TrayConfig
+
+        config, path = self._config(tmp_path)
+        with patch.object(TrayConfig, "config_path", return_value=path), patch(
+            "openadapt_tray.platform.base.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 1, b"", b"no editor"),
+        ):
+            assert LinuxHandler().open_settings_dialog(config) is False
+
+    def test_missing_opener_reports_failure(self, tmp_path):
+        from openadapt_tray.config import TrayConfig
+
+        config, path = self._config(tmp_path)
+        with patch.object(TrayConfig, "config_path", return_value=path), patch(
+            "openadapt_tray.platform.base.subprocess.run",
+            side_effect=FileNotFoundError,
+        ):
+            assert LinuxHandler().open_settings_dialog(config) is False

@@ -433,6 +433,87 @@ class TestNeedsAttentionClickReportsDeadEnds:
         app.notifications.show.assert_not_called()
 
 
+class TestByocNeedsAttentionStaysLocal:
+    """On the byoc lane a needs-attention click only ever opens Teach locally."""
+
+    def _byoc_app(self, *, connected: bool):
+        app = _make_test_app()
+        app.config.deployment_lane = "byoc"
+        app.notifications = MagicMock()
+        app.ipc = MagicMock()
+        app.ipc.is_connected.return_value = connected
+        return app
+
+    def test_connected_desktop_opens_teach(self):
+        app = self._byoc_app(connected=True)
+        app.ipc.send_open_teach.return_value = True
+        with patch("openadapt_tray.hosted.webbrowser.open") as browser:
+            assert app.open_needs_attention() is True
+        app.ipc.send_open_teach.assert_called_once()
+        browser.assert_not_called()
+        app.notifications.show.assert_not_called()
+
+    def test_refused_teach_is_reported_without_opening_the_dashboard(self):
+        app = self._byoc_app(connected=True)
+        app.ipc.send_open_teach.return_value = False
+        with patch("openadapt_tray.hosted.webbrowser.open") as browser:
+            assert app.open_needs_attention() is False
+        browser.assert_not_called()
+        app.notifications.show.assert_called_once()
+        assert "Teach" in app.notifications.show.call_args.args[0]
+
+    def test_disconnected_desktop_is_started_on_a_background_thread(self):
+        app = self._byoc_app(connected=False)
+        with patch("openadapt_tray.app.threading.Thread") as thread:
+            assert app.open_needs_attention() is True
+        assert thread.call_args.kwargs["target"] == app._open_teach_async
+        thread.return_value.start.assert_called_once()
+
+    def test_background_launch_opens_teach_once_connected(self):
+        app = self._byoc_app(connected=False)
+        app.ipc.send_open_teach.return_value = True
+        with patch.object(
+            app, "ensure_desktop_connection", return_value=True
+        ), patch("openadapt_tray.hosted.webbrowser.open") as browser:
+            app._open_teach_async()
+        app.ipc.send_open_teach.assert_called_once()
+        browser.assert_not_called()
+        app.notifications.show.assert_not_called()
+
+    def test_background_launch_failure_is_reported_without_the_dashboard(self):
+        app = self._byoc_app(connected=False)
+        with patch.object(
+            app, "ensure_desktop_connection", return_value=False
+        ), patch("openadapt_tray.hosted.webbrowser.open") as browser:
+            app._open_teach_async()
+        browser.assert_not_called()
+        app.ipc.send_open_teach.assert_not_called()
+        app.notifications.show.assert_called_once()
+
+    def test_desktop_reported_byoc_lane_overrides_a_cloud_config(self):
+        """tray.json says cloud, the desktop says byoc: the click stays local."""
+        from openadapt_tray.state import LANE_BYOC
+
+        app = self._byoc_app(connected=True)
+        app.config.deployment_lane = "cloud"
+        app.state.set_deployment_lane(LANE_BYOC)
+        app.ipc.send_open_teach.return_value = True
+        with patch("openadapt_tray.hosted.webbrowser.open") as browser:
+            assert app.open_needs_attention() is True
+        app.ipc.send_open_teach.assert_called_once()
+        browser.assert_not_called()
+
+    def test_cloud_lane_still_opens_the_dashboard(self):
+        app = self._byoc_app(connected=True)
+        app.config.deployment_lane = "cloud"
+        with patch(
+            "openadapt_tray.hosted.webbrowser.open", return_value=True
+        ) as browser:
+            assert app.open_needs_attention() is True
+        browser.assert_called_once_with("https://app.openadapt.ai/dashboard")
+        app.ipc.send_open_teach.assert_not_called()
+
+
 class TestOpenActionsReportDeadEnds:
     def test_connected_desktop_command_failure_is_reported(self):
         app = _make_test_app()
@@ -511,7 +592,23 @@ class TestFailedIPCResultsStayFailed:
         app.ipc.send_pause_sync.return_value = True
 
         assert app.pause_sync() is True
+        assert app.state.current.sync_state == SyncState.PAUSED
+
+    def test_successful_resume_clears_the_pause(self):
+        app = _make_test_app()
+        app.state.set_sync_state(SyncState.PAUSED)
+        app.ipc = MagicMock()
+        app.ipc.is_connected.return_value = True
+        app.ipc.send_resume_sync.return_value = True
+
+        assert app.resume_sync() is True
         assert app.state.current.sync_state == SyncState.SYNCED
+
+    def test_desktop_paused_sync_event_is_shown(self):
+        # openadapt-desktop emits sync_state "paused" after pause_sync.
+        app = _make_test_app()
+        app._on_ipc_sync_state(MagicMock(data={"state": "paused"}))
+        assert app.state.current.sync_state == SyncState.PAUSED
 
     def test_failed_resume_is_reported(self):
         app = _make_test_app()

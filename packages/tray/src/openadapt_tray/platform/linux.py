@@ -6,7 +6,11 @@ import webbrowser
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from openadapt_tray.platform.base import DialogUnavailableError, PlatformHandler
+from openadapt_tray.platform.base import (
+    DialogUnavailableError,
+    PlatformHandler,
+    run_opener,
+)
 
 if TYPE_CHECKING:
     from openadapt_tray.config import TrayConfig
@@ -179,13 +183,16 @@ class LinuxHandler(PlatformHandler):
                 f"no confirmation dialog available (zenity, kdialog, tkinter): {e}"
             ) from e
 
-    def open_settings_dialog(self, config: "TrayConfig") -> None:
-        """Open settings in default browser.
+    def open_settings_dialog(self, config: "TrayConfig") -> bool:
+        """Open ``tray.json`` with the desktop's default application.
 
         Args:
             config: Current configuration.
+
+        Returns:
+            True if xdg-open accepted the file.
         """
-        webbrowser.open(f"http://localhost:{config.dashboard_port}/settings")
+        return run_opener(["xdg-open", str(config.ensure_file())])
 
     def open_training_dialog(self) -> None:
         """Open training dialog in browser."""

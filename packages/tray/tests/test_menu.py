@@ -11,6 +11,7 @@ from openadapt_tray.state import (
     AppState,
     CredentialState,
     CredentialStatus,
+    SyncState,
     TrayState,
 )
 
@@ -165,6 +166,18 @@ class TestMenuBuilder:
         item = builder._build_sync_item(app.state.current)
         assert "Pause Sync" in str(item.text)
 
+    def test_sync_item_resume_when_paused(self):
+        """A paused queue offers Resume Sync, so the pause can be undone."""
+        app = self.create_mock_app(
+            AppState(state=TrayState.IDLE, sync_state=SyncState.PAUSED)
+        )
+        builder = MenuBuilder(app)
+
+        item = builder._build_sync_item(app.state.current)
+        assert "Resume Sync" in str(item.text)
+        item(None)
+        app.resume_sync.assert_called_once()
+
     @pytest.mark.parametrize(
         ("credential", "label"),
         [
@@ -282,34 +295,86 @@ class TestCapturesSubmenuDistinguishesEmptyFromUnreadable:
             builder._get_recent_captures()
 
 
-class TestViewCaptureChecksExitStatus:
-    """A CLI that ran and failed used to be indistinguishable from one that worked."""
+class TestViewCapture:
+    """View opens the capture folder and says so when nothing opened."""
 
-    def test_nonzero_exit_falls_back_to_file_browser(self):
+    def test_view_opens_the_folder_without_the_launcher(self):
         builder = MenuBuilder(MagicMock())
-        with patch("subprocess.run") as run, patch.object(
-            builder, "_open_in_file_browser"
-        ) as fallback:
-            run.return_value = subprocess.CompletedProcess([], 2, b"", b"boom")
+        with patch(
+            "openadapt_tray.menu.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 0, b"", b""),
+        ) as run:
             builder._view_capture("/tmp/capture")
-        fallback.assert_called_once_with("/tmp/capture")
+        run.assert_called_once()
+        command = run.call_args.args[0]
+        assert command[-1] == "/tmp/capture"
+        assert "openadapt" not in command
+        builder.app.notifications.show.assert_not_called()
 
-    def test_zero_exit_does_not_fall_back(self):
+    @pytest.mark.parametrize(
+        ("platform", "opener"),
+        [("darwin", "open"), ("linux", "xdg-open"), ("win32", "explorer")],
+    )
+    def test_uses_the_platform_file_browser(self, platform, opener):
         builder = MenuBuilder(MagicMock())
-        with patch("subprocess.run") as run, patch.object(
-            builder, "_open_in_file_browser"
-        ) as fallback:
-            run.return_value = subprocess.CompletedProcess([], 0, b"", b"")
-            builder._view_capture("/tmp/capture")
-        fallback.assert_not_called()
+        with patch("openadapt_tray.menu.sys.platform", platform), patch(
+            "openadapt_tray.menu.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 0, b"", b""),
+        ) as run:
+            assert builder._open_in_file_browser("/tmp/capture") is True
+        assert run.call_args.args[0] == [opener, "/tmp/capture"]
 
-    def test_missing_cli_falls_back_once(self):
+    def test_missing_file_browser_is_reported(self):
         builder = MenuBuilder(MagicMock())
-        with patch("subprocess.run", side_effect=FileNotFoundError), patch.object(
-            builder, "_open_in_file_browser"
-        ) as fallback:
-            builder._view_capture("/tmp/capture")
-        fallback.assert_called_once_with("/tmp/capture")
+        with patch("openadapt_tray.menu.sys.platform", "linux"), patch(
+            "openadapt_tray.menu.subprocess.run", side_effect=FileNotFoundError
+        ):
+            assert builder._open_in_file_browser("/tmp/capture") is False
+        builder.app.notifications.show.assert_called_once()
+        assert "/tmp/capture" in builder.app.notifications.show.call_args.args[1]
+
+    def test_failed_file_browser_is_reported(self):
+        builder = MenuBuilder(MagicMock())
+        with patch("openadapt_tray.menu.sys.platform", "darwin"), patch(
+            "openadapt_tray.menu.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 1, b"", b"no such file"),
+        ):
+            assert builder._open_in_file_browser("/tmp/capture") is False
+        builder.app.notifications.show.assert_called_once()
+
+    def test_explorer_exit_status_is_not_a_failure(self):
+        # explorer.exe exits 1 even after it opened the folder.
+        builder = MenuBuilder(MagicMock())
+        with patch("openadapt_tray.menu.sys.platform", "win32"), patch(
+            "openadapt_tray.menu.subprocess.run",
+            return_value=subprocess.CompletedProcess([], 1, b"", b""),
+        ):
+            assert builder._open_in_file_browser("C:/capture") is True
+        builder.app.notifications.show.assert_not_called()
+
+
+class TestOpenSettings:
+    """A Settings click that opened nothing says where the file is."""
+
+    def test_opened_settings_stay_quiet(self):
+        app = MagicMock()
+        app.platform.open_settings_dialog.return_value = True
+        MenuBuilder(app)._open_settings()
+        app.notifications.show.assert_not_called()
+
+    def test_unopened_settings_name_the_file(self):
+        app = MagicMock()
+        app.platform.open_settings_dialog.return_value = False
+        app.config.config_path.return_value = "/home/me/.config/openadapt/tray.json"
+        MenuBuilder(app)._open_settings()
+        app.notifications.show.assert_called_once()
+        assert "tray.json" in app.notifications.show.call_args.args[1]
+
+    def test_unwritable_settings_file_is_reported(self):
+        app = MagicMock()
+        app.platform.open_settings_dialog.side_effect = PermissionError("read-only")
+        MenuBuilder(app)._open_settings()
+        app.notifications.show.assert_called_once()
 
 
 class TestDeleteCaptureWhenNoDialogCanBeShown:

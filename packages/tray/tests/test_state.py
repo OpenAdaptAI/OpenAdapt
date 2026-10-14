@@ -42,7 +42,7 @@ class TestSyncState:
     def test_sync_states_defined(self):
         """Verify the sync channel states."""
         names = {s.name for s in SyncState}
-        assert names == {"SYNCED", "SYNCING", "OFFLINE"}
+        assert names == {"SYNCED", "SYNCING", "OFFLINE", "PAUSED"}
 
     def test_pushing_is_syncing_alias(self):
         """PUSHING is a spec alias for SYNCING."""

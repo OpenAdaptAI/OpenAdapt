@@ -165,6 +165,20 @@ class TrayConfig:
         filtered = {k: v for k, v in data.items() if k in known}
         return cls(hotkeys=hotkeys, **filtered)
 
+    def ensure_file(self) -> Path:
+        """Return the ``tray.json`` path, writing these settings if it is missing.
+
+        An existing file is never rewritten, so an unreadable ``tray.json``
+        stays as the user left it.
+
+        Raises:
+            OSError: The file was missing and could not be written.
+        """
+        path = self.config_path()
+        if not path.exists():
+            self.save()
+        return path
+
     def save(self) -> None:
         """Save configuration to file."""
         path = self.config_path()

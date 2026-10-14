@@ -2,6 +2,7 @@
 
 import shutil
 import subprocess
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from functools import partial
@@ -124,6 +125,8 @@ class MenuBuilder:
         """
         if state.is_offline():
             return Item("Sync (offline)", None, enabled=False)
+        if state.is_sync_paused():
+            return Item("Resume Sync", lambda: self.app.resume_sync())
         return Item("Pause Sync", lambda: self.app.pause_sync())
 
     def _build_recording_item(self, state) -> Item:
@@ -251,41 +254,34 @@ class MenuBuilder:
         self.app.login()
 
     def _open_settings(self) -> None:
-        """Open settings dialog."""
-        self.app.platform.open_settings_dialog(self.app.config)
+        """Open ``tray.json``, the file the tray reads its settings from."""
+        try:
+            opened = self.app.platform.open_settings_dialog(self.app.config)
+        except OSError as e:
+            print(f"Could not open settings: {e}")
+            opened = False
+        if not opened:
+            self.app.notifications.show(
+                "Could not open settings",
+                f"Edit {self.app.config.config_path()} in a text editor, "
+                "then restart the tray.",
+            )
 
     def _quit(self) -> None:
         """Quit the application."""
         self.app.quit()
 
     def _view_capture(self, path: str) -> None:
-        """View a capture.
+        """Open a capture's folder in the system file browser.
+
+        View used to run ``openadapt visualize`` first. The current
+        ``openadapt`` launcher has no such command, so every click waited for
+        that command to fail before the folder opened.
 
         Args:
             path: Path to capture directory.
         """
-        try:
-            # Try using openadapt CLI first.
-            result = subprocess.run(
-                ["openadapt", "visualize", path],
-                check=False,  # returncode is inspected directly below
-                capture_output=True,
-            )
-        except FileNotFoundError:
-            # No CLI at all — fall back to the file browser.
-            self._open_in_file_browser(path)
-            return
-
-        # A CLI that exists but failed used to be indistinguishable from one
-        # that worked: the exit status was never read, so "View" did nothing at
-        # all and said nothing about it. Fall back the same way a missing CLI
-        # does.
-        if result.returncode != 0:
-            print(
-                f"openadapt visualize failed (exit {result.returncode}): "
-                f"{result.stderr}"
-            )
-            self._open_in_file_browser(path)
+        self._open_in_file_browser(path)
 
     def _delete_capture(self, path: str, name: str) -> None:
         """Delete a capture after confirmation.
@@ -330,19 +326,36 @@ class MenuBuilder:
         """Open the local workflow library in the desktop app."""
         self.app.open_desktop_app()
 
-    def _open_in_file_browser(self, path: str) -> None:
+    def _open_in_file_browser(self, path: str) -> bool:
         """Open a path in the system file browser.
 
         Args:
             path: Path to open.
-        """
-        import sys
 
-        # check=False: a file browser that is missing or refuses to open is
-        # not worth raising over -- this is a best-effort convenience action.
+        Returns:
+            True if the file browser accepted the path. When it did not, the
+            user is told where the capture is.
+        """
         if sys.platform == "darwin":
-            subprocess.run(["open", path], check=False)
+            command = ["open", path]
         elif sys.platform == "win32":
-            subprocess.run(["explorer", path], check=False)
+            command = ["explorer", path]
         else:
-            subprocess.run(["xdg-open", path], check=False)
+            command = ["xdg-open", path]
+        try:
+            result = subprocess.run(command, check=False, capture_output=True)
+        except OSError as e:
+            print(f"Could not start {command[0]}: {e}")
+            opened = False
+        else:
+            # explorer.exe exits 1 even after it opens the folder, so its exit
+            # status says nothing; `open` and xdg-open exit 0 on success.
+            opened = sys.platform == "win32" or result.returncode == 0
+            if not opened:
+                print(f"{command[0]} exited {result.returncode}: {result.stderr}")
+        if not opened:
+            self.app.notifications.show(
+                "Could not open the capture",
+                f"No file browser opened it. The capture is at {path}.",
+            )
+        return opened

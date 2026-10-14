@@ -5,7 +5,11 @@ import webbrowser
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from openadapt_tray.platform.base import DialogUnavailableError, PlatformHandler
+from openadapt_tray.platform.base import (
+    DialogUnavailableError,
+    PlatformHandler,
+    run_opener,
+)
 
 if TYPE_CHECKING:
     from openadapt_tray.config import TrayConfig
@@ -140,13 +144,16 @@ class MacOSHandler(PlatformHandler):
         _raise_if_osascript_failed(result, "confirmation")
         return False  # The user clicked Cancel.
 
-    def open_settings_dialog(self, config: "TrayConfig") -> None:
-        """Open settings in default browser.
+    def open_settings_dialog(self, config: "TrayConfig") -> bool:
+        """Open ``tray.json`` in the default text editor.
 
         Args:
             config: Current configuration.
+
+        Returns:
+            True if the editor accepted the file.
         """
-        webbrowser.open(f"http://localhost:{config.dashboard_port}/settings")
+        return run_opener(["open", "-t", str(config.ensure_file())])
 
     def open_training_dialog(self) -> None:
         """Open training dialog in browser."""

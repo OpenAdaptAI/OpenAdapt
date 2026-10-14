@@ -355,22 +355,37 @@ class TestRouteBreakClick:
         ipc.send_open_teach.assert_called_once()
         mock_open.assert_not_called()
 
-    def test_byoc_command_failure_falls_back_to_dashboard(self):
-        """A False IPC result means the local teach view did not open."""
+    def test_byoc_command_failure_never_opens_the_dashboard(self):
+        """A refused open-teach is reported, not rerouted to the hosted side."""
         cfg = make_config(deployment_lane="byoc")
         ipc = MagicMock()
         ipc.send_open_teach.return_value = False
         with patch(
             "openadapt_tray.hosted.webbrowser.open", return_value=True
         ) as mock_open:
-            assert route_break_click(cfg, ipc_client=ipc) is True
-        mock_open.assert_called_once_with("https://example.test/dashboard")
+            assert route_break_click(cfg, ipc_client=ipc) is False
+        mock_open.assert_not_called()
 
-    def test_byoc_falls_back_to_dashboard_when_no_desktop(self):
+    def test_byoc_command_exception_never_opens_the_dashboard(self):
+        cfg = make_config(deployment_lane="byoc")
+        ipc = MagicMock()
+        ipc.send_open_teach.side_effect = OSError("socket closed")
+        with patch("openadapt_tray.hosted.webbrowser.open") as mock_open:
+            assert route_break_click(cfg, ipc_client=ipc) is False
+        mock_open.assert_not_called()
+
+    def test_byoc_without_desktop_never_opens_the_dashboard(self):
         cfg = make_config(deployment_lane="byoc")
         with patch("openadapt_tray.hosted.webbrowser.open") as mock_open:
-            route_break_click(cfg, ipc_client=None)
-        mock_open.assert_called_once()
+            assert route_break_click(cfg, ipc_client=None) is False
+        mock_open.assert_not_called()
+
+    def test_lane_argument_overrides_the_config_lane(self):
+        """The app passes the desktop-reported lane when it is byoc."""
+        cfg = make_config(deployment_lane="cloud")
+        with patch("openadapt_tray.hosted.webbrowser.open") as mock_open:
+            assert route_break_click(cfg, ipc_client=None, lane="byoc") is False
+        mock_open.assert_not_called()
 
     def test_browser_exception_reports_no_route(self):
         cfg = make_config(deployment_lane="cloud")

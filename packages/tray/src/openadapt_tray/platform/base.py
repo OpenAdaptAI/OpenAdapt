@@ -1,5 +1,6 @@
 """Abstract base class for platform-specific functionality."""
 
+import subprocess
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING
 
@@ -15,6 +16,27 @@ class DialogUnavailableError(RuntimeError):
     "the prompt never appeared" used to be the same ``None`` -- so a click on
     Delete or Start Recording could do nothing at all, silently, forever.
     """
+
+
+def run_opener(command: list[str]) -> bool:
+    """Run a command that hands a file to another app, and report success.
+
+    Args:
+        command: The opener and its arguments, such as ``["open", "-t", path]``.
+
+    Returns:
+        True if the opener ran and exited 0. False if it was missing, timed
+        out, or exited non-zero.
+    """
+    try:
+        result = subprocess.run(command, check=False, capture_output=True, timeout=10)
+    except (OSError, subprocess.SubprocessError) as e:
+        print(f"Could not run {command[0]}: {e}")
+        return False
+    if result.returncode != 0:
+        print(f"{command[0]} exited {result.returncode}: {result.stderr}")
+        return False
+    return True
 
 
 class PlatformHandler(ABC):
@@ -61,11 +83,17 @@ class PlatformHandler(ABC):
         """
 
     @abstractmethod
-    def open_settings_dialog(self, config: "TrayConfig") -> None:
-        """Open settings dialog.
+    def open_settings_dialog(self, config: "TrayConfig") -> bool:
+        """Open ``tray.json`` in a text editor.
+
+        The file is written with the current settings first if it does not
+        exist. Changes take effect the next time the tray starts.
 
         Args:
             config: Current configuration.
+
+        Returns:
+            True if an editor accepted the file.
         """
 
     @abstractmethod

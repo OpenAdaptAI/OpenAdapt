@@ -12,7 +12,8 @@ Contract (spec §3c) — the exact request this module issues::
 
 Click routing is lane-aware:
   * cloud lane → open ``{hosted_url}/dashboard`` in the browser
-  * byoc lane  → IPC ``open_teach`` to the desktop (the fix stays local)
+  * byoc lane  → IPC ``open_teach`` to the desktop (the fix stays local); the
+    hosted dashboard is never a fallback on this lane
 """
 
 import hashlib
@@ -34,7 +35,7 @@ from openadapt_tray.config import (
     OFFLINE_POLL_INTERVAL_S,
     TrayConfig,
 )
-from openadapt_tray.state import CredentialState, CredentialStatus
+from openadapt_tray.state import LANE_BYOC, CredentialState, CredentialStatus
 
 COUNT_ENDPOINT_PATH = "/api/needs-attention/count"
 REQUEST_TIMEOUT_S = 10.0
@@ -637,29 +638,36 @@ class HostedPoller:
 def route_break_click(
     config: TrayConfig,
     ipc_client: object | None = None,
+    lane: str | None = None,
 ) -> bool:
     """Route a break/needs-attention click by deployment lane.
 
     Args:
         config: Tray configuration (provides lane + hosted_url).
         ipc_client: Optional IPC client used for the byoc local-teach route.
+        lane: The lane to route for. Defaults to ``config.deployment_lane``.
 
     Returns:
         True if the click was routed somewhere the user can see. False means
-        neither route worked and NOTHING opened -- the user clicked and the
-        screen did not change, so the caller must say so rather than assume the
-        click landed.
+        nothing opened -- the user clicked and the screen did not change, so
+        the caller must say so rather than assume the click landed.
     """
-    # PHI stays local on the byoc lane: open the desktop teach view over IPC,
-    # and fall through to the hosted dashboard only if the desktop is
-    # unreachable (or there is no IPC client to reach it with).
-    if config.deployment_lane == "byoc" and ipc_client is not None:
+    lane = config.deployment_lane if lane is None else lane
+    if lane == LANE_BYOC:
+        # On the byoc lane the fix is taught in the desktop app, so workflow
+        # data stays on this machine. The hosted dashboard is never a fallback
+        # here: when the desktop cannot take the command, nothing opens and the
+        # caller reports it.
+        if ipc_client is None:
+            print("byoc needs-attention click: the desktop app is not connected")
+            return False
         try:
             if ipc_client.send_open_teach():
                 return True
-            print("Desktop refused the open-teach command; trying the dashboard")
+            print("Desktop refused the open-teach command")
         except Exception as e:
             print(f"Failed to route byoc break click to desktop: {e}")
+        return False
     # webbrowser.open returns False when it could not find or start a browser.
     # Discarding that made a dead click indistinguishable from a served one.
     try:
