@@ -1,0 +1,316 @@
+/* Episode Timeline Component Styles */
+
+.oa-episode-timeline {
+  padding: var(--oa-space-md);
+  background: var(--oa-bg-secondary);
+  border-radius: var(--oa-border-radius-lg);
+  margin: var(--oa-space-md) 0;
+}
+
+/* Current Episode Indicator */
+.oa-episode-current-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  background: var(--oa-bg-tertiary);
+  border-radius: var(--oa-border-radius);
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: var(--oa-text-secondary);
+}
+
+.oa-episode-current-indicator strong {
+  color: var(--oa-accent);
+  font-weight: 700;
+  font-size: 16px;
+}
+
+.oa-episode-current-name {
+  color: var(--oa-text-primary);
+  font-weight: 600;
+}
+
+.oa-episode-divider {
+  color: var(--oa-text-muted);
+  margin: 0 4px;
+}
+
+/* Episode Labels */
+.oa-episode-labels {
+  position: relative;
+  height: 40px;
+  margin-bottom: 12px;
+}
+
+.oa-episode-label {
+  position: absolute;
+  top: 0;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border: 2px solid transparent;
+  opacity: 0.7;
+  overflow: hidden;
+}
+
+.oa-episode-label:hover {
+  opacity: 1;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+  z-index: 10;
+}
+
+.oa-episode-label:focus {
+  outline: 2px solid var(--oa-accent);
+  outline-offset: 2px;
+}
+
+.oa-episode-label.oa-episode-current {
+  opacity: 1;
+  border-color: var(--oa-accent);
+  box-shadow: 0 0 12px rgba(0, 212, 170, 0.6);
+  z-index: 5;
+}
+
+.oa-episode-label.oa-episode-past {
+  opacity: 0.5;
+}
+
+.oa-episode-label.oa-episode-future {
+  opacity: 0.3;
+}
+
+.oa-episode-label-text {
+  font-size: 12px;
+  font-weight: 600;
+  color: white;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+  margin-right: 8px;
+}
+
+.oa-episode-label-duration {
+  font-size: 11px;
+  font-weight: 500;
+  color: rgba(255, 255, 255, 0.8);
+  white-space: nowrap;
+}
+
+/* Timeline Track */
+.oa-timeline-track {
+  position: relative;
+  height: 8px;
+  background: var(--oa-bg-tertiary);
+  border-radius: 4px;
+  overflow: visible;
+  cursor: pointer;
+  margin-bottom: 8px;
+}
+
+.oa-timeline-track:focus {
+  outline: 2px solid var(--oa-accent);
+  outline-offset: 4px;
+}
+
+.oa-episode-segment {
+  position: absolute;
+  top: 0;
+  height: 100%;
+  border-radius: 4px;
+  transition: filter 0.2s ease;
+}
+
+.oa-episode-segment.oa-episode-current {
+  filter: brightness(1.2);
+}
+
+.oa-episode-boundary {
+  position: absolute;
+  top: -6px;
+  bottom: -6px;
+  width: 2px;
+  background: rgba(255, 255, 255, 0.4);
+  z-index: 10;
+  pointer-events: none;
+}
+
+.oa-current-marker {
+  position: absolute;
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: var(--oa-accent);
+  border: 2px solid var(--oa-bg-secondary);
+  box-shadow: 0 0 8px var(--oa-accent);
+  z-index: 20;
+  pointer-events: none;
+  transition: left 0.1s linear;
+}
+
+/* Episode Controls */
+.oa-episode-controls {
+  display: flex;
+  gap: 12px;
+  justify-content: center;
+  margin-top: 12px;
+}
+
+.oa-episode-nav-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  background: var(--oa-bg-tertiary);
+  border: 1px solid var(--oa-border-color);
+  border-radius: var(--oa-border-radius);
+  color: var(--oa-text-primary);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.oa-episode-nav-btn:hover:not(:disabled) {
+  background: var(--oa-accent-dim);
+  color: var(--oa-accent);
+  border-color: var(--oa-accent);
+}
+
+.oa-episode-nav-btn:focus {
+  outline: 2px solid var(--oa-accent);
+  outline-offset: 2px;
+}
+
+.oa-episode-nav-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.oa-episode-nav-btn svg {
+  width: 16px;
+  height: 16px;
+  fill: currentColor;
+}
+
+/* Episode Tooltip */
+.oa-episode-tooltip {
+  position: absolute;
+  z-index: 100;
+  background: var(--oa-bg-primary);
+  border: 1px solid var(--oa-border-color);
+  border-radius: var(--oa-border-radius-lg);
+  padding: 12px;
+  box-shadow: var(--oa-shadow-lg);
+  max-width: 300px;
+  pointer-events: none;
+}
+
+.oa-episode-tooltip-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.oa-episode-tooltip-name {
+  color: var(--oa-accent);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.oa-episode-tooltip-meta {
+  color: var(--oa-text-muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.oa-episode-tooltip-description {
+  color: var(--oa-text-secondary);
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+
+.oa-episode-tooltip-footer {
+  color: var(--oa-text-muted);
+  font-size: 11px;
+  padding-top: 8px;
+  border-top: 1px solid var(--oa-border-color);
+}
+
+/* Empty State */
+.oa-episode-timeline-empty {
+  padding: 40px;
+  text-align: center;
+  color: var(--oa-text-muted);
+  font-size: 14px;
+}
+
+/* Episode Color Variables */
+:root {
+  --episode-1-bg: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
+  --episode-2-bg: linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%);
+  --episode-3-bg: linear-gradient(135deg, #ec4899 0%, #db2777 100%);
+  --episode-4-bg: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  --episode-5-bg: linear-gradient(135deg, #10b981 0%, #059669 100%);
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+  .oa-episode-timeline {
+    padding: var(--oa-space-sm);
+  }
+
+  .oa-episode-labels {
+    height: auto;
+    min-height: 40px;
+  }
+
+  .oa-episode-label {
+    /* Stack labels on mobile if too many */
+    position: relative;
+    width: 100% !important;
+    left: 0 !important;
+    margin-bottom: 4px;
+  }
+
+  .oa-episode-current-indicator {
+    flex-wrap: wrap;
+    font-size: 12px;
+  }
+
+  .oa-episode-nav-btn span {
+    display: none; /* Show only icons on mobile */
+  }
+
+  .oa-episode-tooltip {
+    max-width: 250px;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 480px) {
+  .oa-episode-label-duration {
+    display: none; /* Hide duration on very small screens */
+  }
+
+  .oa-episode-controls {
+    width: 100%;
+  }
+
+  .oa-episode-nav-btn {
+    flex: 1;
+    justify-content: center;
+  }
+}

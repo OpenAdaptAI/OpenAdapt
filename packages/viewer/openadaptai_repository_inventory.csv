@@ -1,0 +1,48 @@
+Repository,Stars,Forks,Watchers,Last Commit,Created,Open Issues,Open PRs,Status,Recommendation,Priority,Rationale,Dependencies,Archive Message
+OpenAdapt,1470,216,15,2026-01-17,2023-04-12,0,0,Active,Keep,CRITICAL,"Main repository with high visibility and community engagement. Core product.",None,N/A
+openadapt-web,7,12,1,2026-01-17,2023-05-04,5,1,Active,Keep,HIGH,"Official website for OpenAdapt.AI. Active development with contributors.",None,N/A
+openadapt-tray,0,0,0,2026-01-17,2026-01-17,1,0,Active,Keep,HIGH,"New system tray GUI for OpenAdapt. Part of modular architecture.",Uses openadapt packages,N/A
+openadapt-evals,0,0,0,2026-01-17,2026-01-16,0,2,Active,Keep,HIGH,"Unified evaluation framework for GUI agents. Critical for benchmarking.",Uses openadapt-viewer,N/A
+openadapt-viewer,0,0,0,2026-01-17,2026-01-16,0,1,Active,Keep,HIGH,"Shared HTML visualization components. Used by multiple packages.",None,N/A
+openadapt-ml,2,0,0,2026-01-17,2025-12-07,1,2,Active,Keep,HIGH,"ML training toolkit. Core to product strategy.",Uses openadapt-capture openadapt-viewer openadapt-privacy,N/A
+openadapt-capture,0,0,0,2026-01-17,2025-12-12,0,2,Active,Keep,HIGH,"Data collection infrastructure. Foundation for ML training.",Uses openadapt-privacy,N/A
+openadapt-retrieval,0,0,0,2026-01-17,2026-01-16,0,0,Active,Keep,MEDIUM,"Multimodal demo retrieval. Part of RAG strategy.",None,N/A
+openadapt-grounding,0,0,0,2026-01-17,2026-01-14,0,1,Active,Keep,MEDIUM,"UI element detection with temporal smoothing. Critical for reliability.",Uses OmniParser,N/A
+openadapt-agent,0,0,0,2026-01-17,2026-01-17,0,0,Active,Keep,HIGH,"Production execution engine with safety gates. Bridges eval to production.",Uses openadapt-grounding,N/A
+openadapt-telemetry,0,0,0,2026-01-17,2026-01-17,0,0,Active,Keep,MEDIUM,"Unified error tracking and analytics. Operational infrastructure.",None,N/A
+openadapt-privacy,0,2,0,2026-01-17,2025-12-12,0,0,Active,Keep,HIGH,"PII/PHI detection and redaction. Critical for enterprise adoption.",None,N/A
+.github,0,0,0,2026-01-17,2024-09-16,0,0,Active,Keep,LOW,"Organization-level GitHub configuration.",None,N/A
+OmniMCP,68,13,1,2025-04-08,2025-03-17,12,4,Moderate,Keep,HIGH,"Popular integration project with active community. High engagement.",None,N/A
+PydanticPrompt,5,0,0,2025-04-06,2025-03-23,0,1,Moderate,Keep,MEDIUM,"Utility library for LLM schema documentation. Useful tooling.",None,N/A
+OpenAdapter,1,0,0,2025-02-18,2024-10-30,3,1,Low,Keep,MEDIUM,"Cloud deployment automation for models. Strategic infrastructure.",None,N/A
+OmniParser,4,1,0,2025-02-14,2024-10-28,1,1,Low,Keep,MEDIUM,"Fork of Microsoft OmniParser with modifications for OpenAdapt.",None,N/A
+OpenCUA,1,0,0,2025-08-18,2025-08-18,0,0,Fork,Keep,MEDIUM,"Research dataset reference (AgentNet). Educational value.",None,N/A
+SoM,13,5,0,2024-06-05,2023-12-10,1,0,Low,Keep,MEDIUM,"Set-of-Mark prompting fork with OpenAdapt modifications.",None,N/A
+atomacos,7,1,0,2023-08-08,2023-05-14,0,0,Stale,Keep,HIGH,"macOS accessibility automation. Critical dependency for macOS support.",Used by OpenAdapt,N/A
+pynput,4,1,0,2023-08-08,2022-11-08,0,0,Stale,Keep,HIGH,"Input device control fork. Critical dependency for automation.",Used by OpenAdapt,N/A
+app,0,3,1,2025-01-11,2025-01-11,0,0,Empty,Review,"DECISION NEEDED","Desktop app repository with only LICENSE file. No code committed.","If developed, uses OpenAdapt","Archive if no development in 30 days: Empty repository placeholder for planned desktop application. Development moved to openadapt-tray. See https://github.com/OpenAdaptAI/openadapt-tray"
+openadapt-new,0,0,0,2026-01-17,2026-01-16,0,0,Archived,Keep Archived,N/A,"Correctly archived sandbox repository.",None,N/A
+OpenAdaptVault,2,0,0,2024-10-30,2024-10-30,0,0,Archived,Keep Archived,N/A,"Correctly archived historical snapshot.",None,N/A
+OpenSanitizer,5,0,0,2024-10-31,2024-10-31,0,0,Superseded,Archive,PHASE 2,"Superseded by openadapt-privacy. Same functionality.",None,"This project has been superseded by openadapt-privacy which provides enhanced PII/PHI detection and redaction. Please migrate to: https://github.com/OpenAdaptAI/openadapt-privacy"
+OpenReflector,2,0,0,2024-10-31,2024-10-31,0,0,Experimental,Archive,PHASE 2,"Experimental Anthropic Computer Use integration. Limited adoption.",None,"Experimental project for Anthropic Computer Use container integration. Archived due to limited adoption and integration challenges. Core functionality being incorporated into main OpenAdapt workflow."
+procdoc,0,0,0,2024-08-08,2024-06-25,0,0,Stale,Archive,PHASE 2,"Process documentation experiment. Inactive >6 months.",None,"Process documentation experiment archived due to inactivity. Functionality may be integrated into future OpenAdapt releases. See main OpenAdapt repository for current documentation."
+openadapt-gitbook,1,1,1,2023-12-13,2023-06-08,0,0,Obsolete,Archive,PHASE 2,"Documentation moved to website and READMEs.",None,"Documentation has been migrated to the main website (https://openadapt.ai) and individual repository READMEs as part of the modular architecture transition."
+oa.blog,0,1,0,2023-07-27,2023-07-26,1,0,Inactive,Archive,PHASE 2,"Inactive blog theme fork.",None,"Blog theme fork archived. OpenAdapt news updates and announcements available at https://openadapt.ai"
+OmniMCP.web,0,1,0,2025-03-22,2025-03-19,0,0,Fork,Archive,PHASE 1,"Netlify template fork with minimal changes.",None,"Web interface fork for OmniMCP archived. Development consolidated into main OmniMCP repository. See https://github.com/OpenAdaptAI/OmniMCP"
+omniparser-api,0,0,0,2024-11-26,2025-03-24,0,0,Fork,Archive,PHASE 1,"Self-hosted API fork. Use official implementation.",None,"Self-hosted OmniParser API fork archived. Use official Microsoft OmniParser (https://github.com/microsoft/OmniParser) or OpenAdaptAI/OmniParser fork for maintained implementations."
+llama-agentic-system,1,0,0,2024-07-23,2024-07-23,0,0,Fork,Archive,PHASE 1,"Research fork. No changes.",None,"Research fork archived. Refer to upstream Meta repository for active development: https://github.com/meta-llama/llama-agentic-system"
+whisper,0,0,0,2024-07-01,2024-07-01,0,0,Fork,Archive,PHASE 1,"OpenAI Whisper fork. No changes.",None,"Fork archived. Use official OpenAI Whisper repository: https://github.com/openai/whisper"
+ultralytics,0,0,0,2024-05-30,2024-05-30,0,0,Fork,Archive,PHASE 1,"YOLOv8 fork. No changes.",None,"Fork archived. Use official Ultralytics YOLOv8 repository: https://github.com/ultralytics/ultralytics"
+grok-1,0,0,0,2024-03-18,2024-03-18,0,0,Fork,Archive,PHASE 1,"Grok model fork. Reference only.",None,"Fork archived. Refer to xAI's official Grok repository for model access and updates."
+Self-Rewarding-Language-Models,0,0,0,2024-03-15,2024-03-15,0,0,Fork,Archive,PHASE 1,"Research fork. No changes.",None,"Research fork archived. See upstream repository for Self-Rewarding Language Models implementation."
+Prompt-Engineering-Guide,0,1,0,2024-03-10,2024-03-10,0,0,Fork,Archive,PHASE 1,"Resource fork. No changes.",None,"Fork archived. Use official DAIR.AI Prompt Engineering Guide: https://github.com/dair-ai/Prompt-Engineering-Guide"
+prismer,1,0,0,2024-01-17,2024-03-08,0,0,Fork,Archive,PHASE 1,"NVIDIA Prismer fork. No changes.",None,"Research fork archived. Refer to NVIDIA's official Prismer repository for vision-language model implementation."
+active-prompt,0,0,0,2023-11-22,2024-03-10,0,0,Fork,Archive,PHASE 1,"Active prompting fork. No changes.",None,"Research fork archived. See original repository for Active Prompting with Chain-of-Thought implementation."
+samapi,0,0,0,2023-09-15,2024-01-17,0,0,Fork,Archive,PHASE 1,"Segment Anything API fork.",None,"Segment Anything Model API fork archived. Use official Meta SAM repository: https://github.com/facebookresearch/segment-anything"
+R1-V,0,0,0,2025-02-05,2025-02-05,0,0,Fork,Archive,PHASE 1,"VLM research fork.",None,"Research reference fork archived. Refer to original R1-V repository for active development."
+Qwen2.5-VL,0,0,0,2025-01-28,2025-01-28,0,0,Fork,Archive,PHASE 1,"Qwen VLM fork. No changes.",None,"Fork archived. Use official Qwen repository: https://github.com/QwenLM/Qwen2.5-VL"
+open-r1-multimodal,0,0,0,2025-01-29,2025-01-29,0,0,Fork,Archive,PHASE 1,"Multimodal training fork.",None,"Multimodal training fork archived. Refer to open-r1 upstream repository for active development."
+Janus,0,0,0,2025-01-27,2025-01-27,0,0,Fork,Archive,PHASE 1,"DeepSeek Janus fork.",None,"Research fork archived. Use official DeepSeek Janus repository: https://github.com/deepseek-ai/Janus"
+UI-TARS-desktop,1,1,0,2025-01-21,2025-01-21,0,0,Fork,Review,"PHASE 3","Desktop application fork with minimal adoption. Evaluate strategic value.",None,"Desktop application fork archived due to limited adoption and maintenance overhead. Core GUI automation functionality integrated into OpenAdapt ecosystem."
+CogVLM,2,1,0,2024-03-07,2024-03-02,0,0,Fork,Archive,PHASE 1,"CogVLM research fork.",None,"Fork archived. Use official Tsinghua CogVLM repository: https://github.com/THUDM/CogVLM"
+Awesome-LLM-Reasoning,3,1,0,2024-03-08,2024-03-08,0,0,Fork,Archive,PHASE 1,"Resource collection fork.",None,"Resource fork archived. Refer to original curated list for LLM reasoning papers and updates."

@@ -1,0 +1,129 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openadapt-viewer"
+version = "0.2.0"
+description = "Standalone HTML viewer generation for OpenAdapt ML dashboards and benchmarks"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    {name = "Richard Abrich", email = "richard@openadapt.ai"}
+]
+maintainers = [
+    {name = "OpenAdaptAI"}
+]
+keywords = ["viewer", "dashboard", "visualization", "ml", "benchmarks", "html"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Visualization",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    "jinja2>=3.1.0",
+    "plotly>=5.18.0",
+    "pydantic>=2.0.0",
+    "pillow>=10.0.0",
+    "playwright>=1.57.0",
+    "imageio>=2.37.2",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    # Bounded on purpose. `ruff>=0.1.0` unpinned means `ruff check` here answers
+    # differently depending on the day it is resolved: ruff 0.16.0 grew its
+    # DEFAULT rule set from 59 rules to 413, and this project selected no rules
+    # explicitly, so it silently inherited 354 new ones. This tree reported 0
+    # findings under the 0.14.13 that `uv.lock` happened to pin and 261 under
+    # 0.16.0. Raise the ceiling deliberately, with the findings cleared in the
+    # same change.
+    "ruff>=0.16,<0.17",
+]
+screenshots = [
+    "playwright>=1.40.0",
+]
+all = [
+    "openadapt-viewer[dev,screenshots]",
+]
+
+[project.scripts]
+openadapt-viewer = "openadapt_viewer.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/OpenAdaptAI/openadapt-viewer"
+Repository = "https://github.com/OpenAdaptAI/openadapt-viewer"
+Documentation = "https://github.com/OpenAdaptAI/openadapt-viewer#readme"
+Issues = "https://github.com/OpenAdaptAI/openadapt-viewer/issues"
+Changelog = "https://github.com/OpenAdaptAI/openadapt-viewer/releases"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openadapt_viewer"]
+
+[tool.ruff]
+line-length = 100
+# Pinned to the floor of `requires-python = ">=3.10"`. Without it ruff infers the
+# target from `requires-python`, which is the same answer today but would move on
+# its own the day that floor is raised -- changing which pyupgrade rewrites fire.
+target-version = "py310"
+
+# There is deliberately no `select` here: this project keeps ruff's FULL default
+# rule set (413 rules as of 0.16). The residual after safe autofix was 102
+# findings across a 13.8k-line tree, small enough to read and judge one by one,
+# and doing so is what surfaced the defects fixed in this change -- a bare
+# `except:` that hid an unparseable timestamp behind a file mtime, two CSS reads
+# that fell back to a truncated stylesheet in silence, two screenshot scripts
+# that exited 0 after every scenario failed, and a `.lstrip("../")` that was
+# never a prefix strip. Narrowing to `["E","F","I","W"]` would have found none
+# of them. Predictability comes instead from the bounded `ruff>=0.16,<0.17` in
+# the dev extra above: ruff only grows its default set in a minor release, so
+# the rule set cannot move until a person raises that ceiling and owns the new
+# findings in the same change.
+#
+# On DTZ (39 of the 102): every naive datetime here was fixed with a trailing
+# `.astimezone()`, which attaches the machine's local zone WITHOUT moving the
+# wall clock. Both timestamps a user actually sees -- `created_at_formatted` in
+# the segmentation catalog and the `Created:` column of
+# `openadapt-viewer catalog list` -- render through `strftime` with no `%z`, so
+# their output is byte-identical before and after. This was the point: a viewer
+# shows the time the recording happened on this machine, and converting those to
+# UTC would have silently shifted what the user reads. Only `.isoformat()`
+# output changes, gaining a `+HH:MM` suffix, which makes the emitted
+# `generated_at` metadata unambiguous rather than different.
+
+[tool.ruff.lint.per-file-ignores]
+# RUF022 wants `__all__` sorted alphabetically. Both of these are grouped by
+# subsystem with `# Core` / `# Components` / `# Builders` / `# Viewers` /
+# `# Catalog` headings, and an alphabetical sort strands every heading against
+# unrelated names. The grouping documents the package layout and is worth more
+# than the ordering, so the rule is turned off for these two files rather than
+# repo-wide.
+"src/openadapt_viewer/__init__.py" = ["RUF022"]
+"src/openadapt_viewer/components/__init__.py" = ["RUF022"]
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+commit_message = "chore: release {version}"
+
+[tool.semantic_release.branches.main]
+match = "main"
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "style", "test"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "playwright: marks tests requiring playwright and browsers (deselect with '-m \"not playwright\"')",
+]

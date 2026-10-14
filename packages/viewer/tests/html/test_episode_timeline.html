@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Episode Timeline Component Test</title>
+    <link rel="stylesheet" href="src/openadapt_viewer/styles/episode_timeline.css">
+    <script src="src/openadapt_viewer/components/episode_timeline.js"></script>
+    <style>
+        :root {
+            --oa-bg-primary: #0a0a0f;
+            --oa-bg-secondary: #12121a;
+            --oa-bg-tertiary: #1a1a24;
+            --oa-border-color: rgba(255, 255, 255, 0.06);
+            --oa-border-radius: 8px;
+            --oa-border-radius-lg: 12px;
+            --oa-text-primary: #f0f0f0;
+            --oa-text-secondary: #888;
+            --oa-text-muted: #555;
+            --oa-accent: #00d4aa;
+            --oa-accent-dim: rgba(0, 212, 170, 0.15);
+            --oa-space-xs: 4px;
+            --oa-space-sm: 8px;
+            --oa-space-md: 16px;
+            --oa-space-lg: 24px;
+            --oa-shadow-lg: 0 8px 16px rgba(0, 0, 0, 0.4);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", sans-serif;
+            background: var(--oa-bg-primary);
+            color: var(--oa-text-primary);
+            padding: 40px;
+            margin: 0;
+        }
+
+        .test-container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            text-align: center;
+            margin-bottom: 40px;
+            color: var(--oa-accent);
+        }
+
+        .status-panel {
+            background: var(--oa-bg-secondary);
+            border-radius: var(--oa-border-radius-lg);
+            padding: 20px;
+            margin-bottom: 20px;
+        }
+
+        .status-item {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
+            border-bottom: 1px solid var(--oa-border-color);
+        }
+
+        .status-item:last-child {
+            border-bottom: none;
+        }
+
+        .status-label {
+            color: var(--oa-text-secondary);
+        }
+
+        .status-value {
+            color: var(--oa-accent);
+            font-weight: 600;
+        }
+
+        .controls {
+            display: flex;
+            gap: 12px;
+            margin-top: 20px;
+        }
+
+        button {
+            padding: 10px 20px;
+            background: var(--oa-accent);
+            border: none;
+            border-radius: var(--oa-border-radius);
+            color: var(--oa-bg-primary);
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: #00e5b8;
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <h1>Episode Timeline Component Test</h1>
+
+        <div class="status-panel">
+            <div class="status-item">
+                <span class="status-label">Current Time:</span>
+                <span class="status-value" id="current-time">0.0s</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Current Episode:</span>
+                <span class="status-value" id="current-episode">-</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Total Duration:</span>
+                <span class="status-value" id="total-duration">6.7s</span>
+            </div>
+        </div>
+
+        <div id="timeline-container"></div>
+
+        <div class="controls">
+            <button onclick="simulatePlayback()">Simulate Playback</button>
+            <button onclick="jumpToTime(0)">Jump to Start</button>
+            <button onclick="jumpToTime(3.5)">Jump to Episode 2</button>
+            <button onclick="jumpToTime(6.7)">Jump to End</button>
+        </div>
+    </div>
+
+    <script>
+        let timeline = null;
+        let simulationInterval = null;
+        let currentTime = 0;
+
+        // Test data from test_episodes.json
+        const episodes = [
+            {
+                episode_id: "episode_001",
+                name: "Navigate to System Settings",
+                description: "User opens System Settings application from the dock and navigates to the Displays section.",
+                start_time: 0.0,
+                end_time: 3.5,
+                duration: 3.5,
+                steps: [
+                    "Click System Settings icon in dock",
+                    "Wait for Settings window to open",
+                    "Click on Displays in sidebar"
+                ],
+                boundary_confidence: 0.92
+            },
+            {
+                episode_id: "episode_002",
+                name: "Disable Night Shift",
+                description: "User scrolls down to find Night Shift settings and toggles it off.",
+                start_time: 3.5,
+                end_time: 6.7,
+                duration: 3.2,
+                steps: [
+                    "Scroll down in Displays settings",
+                    "Click on Night Shift option",
+                    "Toggle Night Shift switch to off position"
+                ],
+                boundary_confidence: 0.95
+            }
+        ];
+
+        // Initialize timeline
+        window.addEventListener('DOMContentLoaded', () => {
+            const container = document.getElementById('timeline-container');
+
+            timeline = new EpisodeTimeline({
+                container: container,
+                episodes: episodes,
+                currentTime: 0,
+                totalDuration: 6.7,
+                onSeek: (time) => {
+                    console.log('Seek to:', time);
+                    jumpToTime(time);
+                },
+                onEpisodeChange: (episode) => {
+                    console.log('Episode changed:', episode.name);
+                    document.getElementById('current-episode').textContent = episode.name;
+                }
+            });
+
+            console.log('Timeline initialized successfully!');
+        });
+
+        function updateTime(time) {
+            currentTime = time;
+            document.getElementById('current-time').textContent = time.toFixed(1) + 's';
+
+            if (timeline) {
+                timeline.update({ currentTime: time });
+            }
+        }
+
+        function jumpToTime(time) {
+            if (simulationInterval) {
+                clearInterval(simulationInterval);
+                simulationInterval = null;
+            }
+            updateTime(time);
+        }
+
+        function simulatePlayback() {
+            if (simulationInterval) {
+                clearInterval(simulationInterval);
+                simulationInterval = null;
+                return;
+            }
+
+            currentTime = 0;
+            simulationInterval = setInterval(() => {
+                currentTime += 0.1;
+                if (currentTime >= 6.7) {
+                    clearInterval(simulationInterval);
+                    simulationInterval = null;
+                    currentTime = 6.7;
+                }
+                updateTime(currentTime);
+            }, 100);
+        }
+
+        // Keyboard shortcuts for testing
+        document.addEventListener('keydown', (e) => {
+            if (e.key === ' ') {
+                e.preventDefault();
+                simulatePlayback();
+            }
+        });
+    </script>
+</body>
+</html>

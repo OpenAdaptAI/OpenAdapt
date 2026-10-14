@@ -1,0 +1,322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Search Functionality Test</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            max-width: 1000px;
+            margin: 40px auto;
+            padding: 20px;
+            background: #1a1a2e;
+            color: #e0e0e0;
+        }
+
+        h1 {
+            color: #00d9ff;
+        }
+
+        .test-section {
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .test-case {
+            margin: 15px 0;
+            padding: 15px;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 6px;
+            border-left: 3px solid #00d9ff;
+        }
+
+        .test-pass {
+            border-left-color: #34d399;
+        }
+
+        .test-fail {
+            border-left-color: #ff5f5f;
+        }
+
+        .query {
+            color: #00d9ff;
+            font-weight: bold;
+        }
+
+        .text {
+            color: #b8b8d1;
+            font-style: italic;
+        }
+
+        .result {
+            margin-top: 10px;
+            padding: 8px;
+            border-radius: 4px;
+        }
+
+        .pass {
+            background: rgba(52, 211, 153, 0.2);
+            color: #34d399;
+        }
+
+        .fail {
+            background: rgba(255, 95, 95, 0.2);
+            color: #ff5f5f;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            margin: 10px 0;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            color: #e0e0e0;
+            font-size: 1em;
+        }
+
+        .result-list {
+            margin-top: 15px;
+        }
+
+        .result-item {
+            padding: 10px;
+            margin: 5px 0;
+            background: rgba(255, 255, 255, 0.05);
+            border-radius: 4px;
+        }
+
+        .no-results {
+            color: #ff5f5f;
+            font-style: italic;
+        }
+    </style>
+</head>
+<body>
+    <h1>Advanced Search Functionality Test</h1>
+
+    <div class="test-section">
+        <h2>Test Cases</h2>
+        <p>These test cases verify that the advanced search algorithm works correctly:</p>
+        <div id="test-results"></div>
+    </div>
+
+    <div class="test-section">
+        <h2>Interactive Test</h2>
+        <p>Try searching for episodes yourself:</p>
+        <input type="text" id="search-input" placeholder="Type search query (e.g., 'nightshift', 'disable', etc.)">
+        <div class="result-list" id="results"></div>
+    </div>
+
+    <script>
+        // Test data
+        const testEpisodes = [
+            {
+                name: "Disable night shift",
+                description: "Turn off the night shift feature in system settings",
+                steps: ["Open settings", "Navigate to display", "Toggle night shift off"]
+            },
+            {
+                name: "Enable dark mode",
+                description: "Switch to dark mode for better nighttime viewing",
+                steps: ["Open preferences", "Select appearance", "Choose dark theme"]
+            },
+            {
+                name: "Configure nightshift schedule",
+                description: "Set up automatic nightshift timing",
+                steps: ["Open display settings", "Configure schedule", "Save changes"]
+            },
+            {
+                name: "Open notepad",
+                description: "Launch the notepad application",
+                steps: ["Click Start", "Type notepad", "Press Enter"]
+            },
+            {
+                name: "Create new document",
+                description: "Start a new text document in notepad",
+                steps: ["Open notepad", "File menu", "Select new"]
+            }
+        ];
+
+        // Advanced search function (same as in segmentation_viewer.html)
+        function advancedSearch(items, query, fields = ['name', 'description', 'steps']) {
+            if (!query || query.trim() === '') {
+                return items;
+            }
+
+            // Tokenize and normalize query
+            const queryTokens = query
+                .toLowerCase()
+                .replace(/[^a-z0-9\s]/g, ' ')
+                .replace(/\s+/g, ' ')
+                .trim()
+                .split(' ')
+                .filter(t => t.length > 0);
+
+            if (queryTokens.length === 0) {
+                return items;
+            }
+
+            return items.filter(item => {
+                // Build searchable text from all specified fields
+                const searchText = fields
+                    .map(field => {
+                        const value = item[field];
+                        if (Array.isArray(value)) {
+                            return value.map(v => typeof v === 'string' ? v : v.description || '').join(' ');
+                        }
+                        return value || '';
+                    })
+                    .join(' ')
+                    .toLowerCase()
+                    .replace(/[^a-z0-9\s]/g, ' ')
+                    .replace(/\s+/g, ' ');
+
+                // All query tokens must match somewhere in the searchable text
+                return queryTokens.every(queryToken => {
+                    const searchTokens = searchText.split(' ');
+                    return searchTokens.some(searchToken =>
+                        searchToken.includes(queryToken) || queryToken.includes(searchToken)
+                    );
+                });
+            });
+        }
+
+        // Test cases
+        const tests = [
+            {
+                query: "nightshift",
+                text: "Disable night shift",
+                shouldMatch: true,
+                reason: "Single word matches space-separated words"
+            },
+            {
+                query: "night shift",
+                text: "Configure nightshift schedule",
+                shouldMatch: true,
+                reason: "Space-separated words match single word"
+            },
+            {
+                query: "shift night",
+                text: "Disable night shift",
+                shouldMatch: true,
+                reason: "Token order independence"
+            },
+            {
+                query: "nightsh",
+                text: "Configure nightshift schedule",
+                shouldMatch: true,
+                reason: "Partial word matching"
+            },
+            {
+                query: "disable dark",
+                text: "Enable dark mode",
+                shouldMatch: false,
+                reason: "'disable' not found (only 'dark' matches)"
+            },
+            {
+                query: "notepad",
+                text: "Open notepad",
+                shouldMatch: true,
+                reason: "Exact word match"
+            },
+            {
+                query: "note pad",
+                text: "Open notepad",
+                shouldMatch: true,
+                reason: "Space-separated matches compound word"
+            },
+            {
+                query: "dark night",
+                text: "Enable dark mode",
+                shouldMatch: false,
+                reason: "'night' not found (only 'dark' matches)"
+            }
+        ];
+
+        // Run tests
+        function runTests() {
+            const container = document.getElementById('test-results');
+            let passed = 0;
+            let failed = 0;
+
+            tests.forEach((test, idx) => {
+                const testItem = { name: test.text, description: '', steps: [] };
+                const results = advancedSearch([testItem], test.query);
+                const matched = results.length > 0;
+                const success = matched === test.shouldMatch;
+
+                if (success) passed++;
+                else failed++;
+
+                const div = document.createElement('div');
+                div.className = `test-case ${success ? 'test-pass' : 'test-fail'}`;
+                div.innerHTML = `
+                    <strong>Test ${idx + 1}:</strong><br>
+                    Query: <span class="query">"${test.query}"</span><br>
+                    Text: <span class="text">"${test.text}"</span><br>
+                    Expected: ${test.shouldMatch ? 'MATCH' : 'NO MATCH'}<br>
+                    Result: ${matched ? 'MATCH' : 'NO MATCH'}<br>
+                    Reason: ${test.reason}<br>
+                    <div class="result ${success ? 'pass' : 'fail'}">
+                        ${success ? '✓ PASS' : '✗ FAIL'}
+                    </div>
+                `;
+                container.appendChild(div);
+            });
+
+            const summary = document.createElement('div');
+            summary.style.marginTop = '20px';
+            summary.style.padding = '15px';
+            summary.style.background = 'rgba(255, 255, 255, 0.1)';
+            summary.style.borderRadius = '6px';
+            summary.innerHTML = `
+                <strong>Summary:</strong><br>
+                Passed: <span style="color: #34d399">${passed}</span><br>
+                Failed: <span style="color: #ff5f5f">${failed}</span><br>
+                Success Rate: ${Math.round((passed / tests.length) * 100)}%
+            `;
+            container.appendChild(summary);
+        }
+
+        // Interactive search
+        document.getElementById('search-input').addEventListener('input', function(e) {
+            const query = e.target.value;
+            const results = advancedSearch(testEpisodes, query);
+            const container = document.getElementById('results');
+
+            if (!query.trim()) {
+                container.innerHTML = '<p style="color: #b8b8d1">All episodes shown (5 total)</p>';
+                testEpisodes.forEach(ep => {
+                    const div = document.createElement('div');
+                    div.className = 'result-item';
+                    div.innerHTML = `<strong>${ep.name}</strong><br>${ep.description}`;
+                    container.appendChild(div);
+                });
+                return;
+            }
+
+            if (results.length === 0) {
+                container.innerHTML = '<p class="no-results">No matches found</p>';
+                return;
+            }
+
+            container.innerHTML = `<p style="color: #34d399">Found ${results.length} match(es)</p>`;
+            results.forEach(ep => {
+                const div = document.createElement('div');
+                div.className = 'result-item';
+                div.innerHTML = `<strong>${ep.name}</strong><br>${ep.description}`;
+                container.appendChild(div);
+            });
+        });
+
+        // Initialize
+        runTests();
+        document.getElementById('search-input').dispatchEvent(new Event('input'));
+    </script>
+</body>
+</html>

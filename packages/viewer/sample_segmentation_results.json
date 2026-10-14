@@ -1,0 +1,66 @@
+{
+  "recording_id": "turn-off-nightshift",
+  "episodes": [
+    {
+      "episode_id": "ep-001",
+      "name": "Open System Preferences",
+      "description": "User opens System Preferences from the Dock to access system settings",
+      "steps": [
+        "Click on System Preferences icon in the Dock",
+        "Wait for System Preferences window to open",
+        "Window displays with all preference panes visible"
+      ],
+      "start_time": 0.0,
+      "end_time": 2.5,
+      "duration": 2.5,
+      "application": "Finder/Dock",
+      "start_frame_index": 0,
+      "end_frame_index": 5,
+      "boundary_confidence": 0.92,
+      "coherence_score": 0.88
+    },
+    {
+      "episode_id": "ep-002",
+      "name": "Navigate to Displays Settings",
+      "description": "User navigates to the Displays preference pane to access Night Shift settings",
+      "steps": [
+        "Click on 'Displays' icon in System Preferences",
+        "Wait for Displays pane to load",
+        "Click on 'Night Shift' tab"
+      ],
+      "start_time": 2.5,
+      "end_time": 6.8,
+      "duration": 4.3,
+      "application": "System Preferences",
+      "start_frame_index": 5,
+      "end_frame_index": 14,
+      "boundary_confidence": 0.95,
+      "coherence_score": 0.91
+    },
+    {
+      "episode_id": "ep-003",
+      "name": "Disable Night Shift",
+      "description": "User turns off Night Shift by unchecking the schedule checkbox",
+      "steps": [
+        "Locate the 'Schedule' checkbox",
+        "Click to uncheck 'Schedule'",
+        "Verify Night Shift is now off",
+        "Close System Preferences window"
+      ],
+      "start_time": 6.8,
+      "end_time": 12.3,
+      "duration": 5.5,
+      "application": "System Preferences",
+      "start_frame_index": 14,
+      "end_frame_index": 25,
+      "boundary_confidence": 0.89,
+      "coherence_score": 0.87
+    }
+  ],
+  "metadata": {
+    "total_duration": 12.3,
+    "total_frames": 25,
+    "recording_date": "2026-01-17",
+    "segmentation_version": "1.0.0"
+  }
+}

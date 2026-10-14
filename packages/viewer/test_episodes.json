@@ -1,0 +1,103 @@
+{
+  "recording_id": "turn-off-nightshift",
+  "recording_name": "Turn Off Night Shift Demo",
+  "episodes": [
+    {
+      "episode_id": "episode_001",
+      "name": "Navigate to System Settings",
+      "description": "User opens System Settings application from the dock and navigates to the Displays section.",
+      "application": "macOS System Settings",
+      "start_time": 0.0,
+      "end_time": 3.5,
+      "start_time_formatted": "00:00.0",
+      "end_time_formatted": "00:03.5",
+      "duration": 3.5,
+      "recording_ids": ["turn-off-nightshift"],
+      "frame_indices": [0, 1, 2, 3, 4],
+      "steps": [
+        "Click System Settings icon in dock",
+        "Wait for Settings window to open",
+        "Click on Displays in sidebar"
+      ],
+      "boundary_confidence": 0.92,
+      "coherence_score": 0.88,
+      "screenshots": {
+        "thumbnail": "../openadapt-capture/turn-off-nightshift/screenshots/capture_31807990_step_0.png",
+        "key_frames": [
+          {
+            "frame_index": 0,
+            "step_index": 0,
+            "path": "../openadapt-capture/turn-off-nightshift/screenshots/capture_31807990_step_0.png",
+            "action": "Click System Settings icon in dock"
+          },
+          {
+            "frame_index": 2,
+            "step_index": 1,
+            "path": "../openadapt-capture/turn-off-nightshift/screenshots/capture_31807990_step_2.png",
+            "action": "Wait for Settings window to open"
+          },
+          {
+            "frame_index": 4,
+            "step_index": 2,
+            "path": "../openadapt-capture/turn-off-nightshift/screenshots/capture_31807990_step_4.png",
+            "action": "Click on Displays in sidebar"
+          }
+        ]
+      }
+    },
+    {
+      "episode_id": "episode_002",
+      "name": "Disable Night Shift",
+      "description": "User scrolls down to find Night Shift settings and toggles it off.",
+      "application": "macOS System Settings",
+      "start_time": 3.5,
+      "end_time": 6.7,
+      "start_time_formatted": "00:03.5",
+      "end_time_formatted": "00:06.7",
+      "duration": 3.2,
+      "recording_ids": ["turn-off-nightshift"],
+      "frame_indices": [4, 5, 6, 7, 8],
+      "steps": [
+        "Scroll down in Displays settings",
+        "Click on Night Shift option",
+        "Toggle Night Shift switch to off position"
+      ],
+      "boundary_confidence": 0.95,
+      "coherence_score": 0.91,
+      "screenshots": {
+        "thumbnail": "../openadapt-capture/turn-off-nightshift/screenshots/capture_31807990_step_4.png",
+        "key_frames": [
+          {
+            "frame_index": 4,
+            "step_index": 0,
+            "path": "../openadapt-capture/turn-off-nightshift/screenshots/capture_31807990_step_4.png",
+            "action": "Scroll down in Displays settings"
+          },
+          {
+            "frame_index": 6,
+            "step_index": 1,
+            "path": "../openadapt-capture/turn-off-nightshift/screenshots/capture_31807990_step_6.png",
+            "action": "Click on Night Shift option"
+          },
+          {
+            "frame_index": 8,
+            "step_index": 2,
+            "path": "../openadapt-capture/turn-off-nightshift/screenshots/capture_31807990_step_8.png",
+            "action": "Toggle Night Shift switch to off position"
+          }
+        ]
+      }
+    }
+  ],
+  "boundaries": [
+    {
+      "timestamp": 3.5,
+      "confidence": 0.92,
+      "reason": "Transition from navigation to settings configuration"
+    }
+  ],
+  "llm_model": "gpt-4o",
+  "processing_timestamp": "2026-01-17T12:00:00.000000",
+  "coverage": 1.0,
+  "avg_confidence": 0.935
+}

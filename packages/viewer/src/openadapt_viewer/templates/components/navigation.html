@@ -1,0 +1,35 @@
+{# Navigation tabs component #}
+{% if tabs is defined and tabs %}
+<nav class="bg-white dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+    <div class="container mx-auto px-4">
+        <div class="flex space-x-1 overflow-x-auto" role="tablist">
+            {% for tab in tabs %}
+            <button
+                @click="activeTab = '{{ tab.id }}'"
+                :class="{
+                    'border-primary-500 text-primary-600 dark:text-primary-400': activeTab === '{{ tab.id }}',
+                    'border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-300 hover:border-gray-300 dark:hover:border-gray-600': activeTab !== '{{ tab.id }}'
+                }"
+                class="px-4 py-3 border-b-2 font-medium text-sm whitespace-nowrap transition-colors"
+                role="tab"
+                :aria-selected="activeTab === '{{ tab.id }}'"
+            >
+                {% if tab.icon %}
+                <span class="inline-flex items-center">
+                    {{ tab.icon | safe }}
+                    <span class="ml-2">{{ tab.label }}</span>
+                </span>
+                {% else %}
+                {{ tab.label }}
+                {% endif %}
+                {% if tab.badge is defined and tab.badge %}
+                <span class="ml-2 px-2 py-0.5 text-xs rounded-full {{ tab.badge_class | default('bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300') }}">
+                    {{ tab.badge }}
+                </span>
+                {% endif %}
+            </button>
+            {% endfor %}
+        </div>
+    </div>
+</nav>
+{% endif %}
