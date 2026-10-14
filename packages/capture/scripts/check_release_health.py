@@ -28,6 +28,13 @@ TAG_PATTERN = re.compile(r"^v(?P<version>\d+\.\d+\.\d+)$")
 COMMIT_PATTERN = re.compile(r"^(?P<kind>[A-Za-z]+)(?:\([^)]*\))?(?P<breaking>!)?:\s+.+$")
 BREAKING_FOOTER = re.compile(r"^BREAKING[ -]CHANGE:", re.MULTILINE)
 ACTIVE_RUN_STATES = {"queued", "in_progress", "waiting", "pending", "requested"}
+# The release.yml step that asks the release GitHub App for a token. It fails
+# when the App is not installed on this repository or its credentials are wrong.
+# The publish-tag job has a step with the same name, but it reads the pypi
+# environment, so the advice below names only the tag-creation job.
+APP_TOKEN_JOB = "create-release-tag"
+APP_TOKEN_STEP = "Create the exact release App token"
+FAILED_CONCLUSIONS = {"failure", "timed_out"}
 ALLOWED_COMMIT_KINDS = frozenset("build chore ci docs feat fix perf refactor style test".split())
 RELEASE_GRACE = timedelta(hours=4)
 TAG_GRACE = timedelta(hours=1)
@@ -185,6 +192,67 @@ def fetch_pypi_versions() -> dict[str, Any]:
     }
 
 
+def run_failed(run: dict[str, Any] | None) -> bool:
+    return bool(
+        run and run.get("status") == "completed" and run.get("conclusion") in FAILED_CONCLUSIONS
+    )
+
+
+def failed_steps(run_id: Any) -> list[dict[str, str]] | None:
+    """Return the failed steps of one workflow run, or None if they can't be read."""
+    try:
+        payload = github_get(
+            f"/repos/{REPOSITORY}/actions/runs/{run_id}/jobs",
+            {"filter": "latest", "per_page": "100"},
+        )
+        return [
+            {"job": job.get("name", ""), "step": step.get("name", "")}
+            for job in payload.get("jobs", [])
+            for step in job.get("steps") or []
+            if step.get("conclusion") in FAILED_CONCLUSIONS
+        ]
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError, TypeError, AttributeError):
+        return None
+
+
+def release_blocker(run: dict[str, Any] | None) -> tuple[str | None, str | None]:
+    """Explain why the latest release run failed, as (alert, note)."""
+    if not run_failed(run):
+        return None, None
+    assert run is not None
+    when = f" on {run['created_at'][:10]}" if run.get("created_at") else ""
+    steps = run.get("failed_steps")
+    if steps is None:
+        if "failed_steps" not in run:
+            return None, None
+        return None, (
+            f"The check couldn't read the steps of release run {run.get('id')}, "
+            "so it doesn't say why that run failed."
+        )
+    if any(
+        step.get("job") == APP_TOKEN_JOB and step.get("step") == APP_TOKEN_STEP for step in steps
+    ):
+        return (
+            f"**Release blocked:** The latest release run, {run.get('id')}{when}, "
+            f'failed at "{APP_TOKEN_STEP}". That step fails when the release '
+            "GitHub App can't get a token for this repository. Check that the App "
+            f"is installed on {REPOSITORY} with read and write access to contents, "
+            "and that the release-identity environment has its current App ID and "
+            "private key. Then dispatch release.yml again."
+        ), None
+    if steps:
+        where = ", ".join(f'"{step["step"]}" in job {step["job"]}' for step in steps)
+        return (
+            f"**Last release run failed:** Release run {run.get('id')}{when} failed "
+            f"at {where}. Fix that step, then dispatch release.yml again."
+        ), None
+    return (
+        f"**Last release run failed:** Release run {run.get('id')}{when} concluded "
+        f"{run.get('conclusion')}, and GitHub listed no failed step. Open that run, "
+        "fix the cause, then dispatch release.yml again."
+    ), None
+
+
 def collect_live_state() -> dict[str, Any]:
     main = github_get(f"/repos/{REPOSITORY}/commits/{BRANCH}")
     tags = github_get(f"/repos/{REPOSITORY}/tags", {"per_page": "100"})
@@ -213,6 +281,8 @@ def collect_live_state() -> dict[str, Any]:
         {"branch": BRANCH, "per_page": "20"},
     ).get("workflow_runs", [])
     release_runs.sort(key=lambda run: run.get("created_at") or "", reverse=True)
+    if release_runs and run_failed(release_runs[0]):
+        release_runs[0] = {**release_runs[0], "failed_steps": failed_steps(release_runs[0]["id"])}
 
     state: dict[str, Any] = {
         "now": datetime.now(timezone.utc).isoformat(),
@@ -307,6 +377,12 @@ def evaluate(state: dict[str, Any]) -> tuple[list[str], list[str]]:
             f"remained after {state.get('latest_tag')} for {humanize(oldest_age)}."
             f"{dispatch} {rows}."
         )
+        # Say why the last attempt failed, whichever main commit it ran on.
+        blocker_alert, blocker_note = release_blocker(latest_run)
+        if blocker_alert:
+            alerts.append(blocker_alert)
+        if blocker_note:
+            notes.append(blocker_note)
     elif releasable:
         reason = (
             "release active"
@@ -534,6 +610,51 @@ def self_test() -> int:
             0,
         ),
         ("README pin the check cannot read alerts", {"readme_pins": ["==1.2.*"]}, 1),
+        (
+            "release App token failure is named next to unreleased work",
+            {
+                "release_runs": [
+                    {
+                        **release_run(16, sha="c" * 40, conclusion="failure"),
+                        "failed_steps": [{"job": "create-release-tag", "step": APP_TOKEN_STEP}],
+                    }
+                ],
+                "commits_since_tag": [commit("fix: pending", "2026-07-20T00:00:00+00:00")],
+            },
+            2,
+        ),
+        (
+            "release failure with nothing to release is quiet",
+            {
+                "release_runs": [
+                    {
+                        **release_run(17, sha="c" * 40, conclusion="failure"),
+                        "failed_steps": [{"job": "create-release-tag", "step": APP_TOKEN_STEP}],
+                    }
+                ]
+            },
+            0,
+        ),
+        (
+            "release failure with no failed step is still named",
+            {
+                "release_runs": [
+                    {**release_run(19, sha="c" * 40, conclusion="failure"), "failed_steps": []}
+                ],
+                "commits_since_tag": [commit("fix: pending", "2026-07-20T00:00:00+00:00")],
+            },
+            2,
+        ),
+        (
+            "unreadable release steps add no alert",
+            {
+                "release_runs": [
+                    {**release_run(18, sha="c" * 40, conclusion="failure"), "failed_steps": None}
+                ],
+                "commits_since_tag": [commit("fix: pending", "2026-07-20T00:00:00+00:00")],
+            },
+            1,
+        ),
     ]
     failures = []
     for name, override, expected in cases:
