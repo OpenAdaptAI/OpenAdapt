@@ -75,7 +75,7 @@ jobs:
         run: dbus-run-session -- xvfb-run -a uv run --no-sync pytest tests/test_linux_atspi_integration.py -v --timeout=60
 
       - name: Run tests
-        run: uv run pytest tests/ -v --ignore=tests/test_browser_bridge.py --timeout=120
+        run: uv run pytest tests/ -v --timeout=120
         timeout-minutes: 10
 
   # Windows is the primary live-recording platform: this job runs the full
@@ -113,7 +113,7 @@ jobs:
         run: uv sync --extra dev
 
       - name: Run unit tests
-        run: uv run pytest tests/ -v --ignore=tests/test_browser_bridge.py -m "not slow" --timeout=120
+        run: uv run pytest tests/ -v -m "not slow" --timeout=120
         timeout-minutes: 10
 
       - name: Run live recorder integration tests
@@ -154,7 +154,7 @@ jobs:
         run: uv sync --extra dev
 
       - name: Run unit tests
-        run: uv run pytest tests/ -v --ignore=tests/test_browser_bridge.py -m "not slow" --timeout=120
+        run: uv run pytest tests/ -v -m "not slow" --timeout=120
         timeout-minutes: 10
 
   lint:

@@ -20,7 +20,8 @@
 #
 # Each operating system has a separate runner variable. A release dispatch
 # selects Linux only. This prevents an available Linux runner from queueing
-# work for missing macOS or Windows runners.
+# work for missing macOS or Windows runners. A scheduled or "all" run warns
+# for each lane it skips and fails when no lane can run.
 
 name: Live qualification
 
@@ -95,6 +96,9 @@ jobs:
             [ "${LINUX_RUNNERS}" = "1" ] && run_linux=true
             [ "${MACOS_RUNNERS}" = "1" ] && run_macos=true
             [ "${WINDOWS_RUNNERS}" = "1" ] && run_windows=true
+            [ "${run_linux}" = true ] || echo "::warning::The Linux lane did not run: CAPTURE_SELF_HOSTED_QUALIFIED_LINUX_RUNNERS is not 1."
+            [ "${run_macos}" = true ] || echo "::warning::The macOS lane did not run: CAPTURE_SELF_HOSTED_QUALIFIED_MACOS_RUNNERS is not 1."
+            [ "${run_windows}" = true ] || echo "::warning::The Windows lane did not run: CAPTURE_SELF_HOSTED_QUALIFIED_WINDOWS_RUNNERS is not 1."
           elif [ "${REQUESTED_PLATFORM}" = "linux" ] && [ "${LINUX_RUNNERS}" = "1" ]; then
             run_linux=true
           elif [ "${REQUESTED_PLATFORM}" = "macos" ] && [ "${MACOS_RUNNERS}" = "1" ]; then
@@ -109,6 +113,12 @@ jobs:
           run_any=false
           if [ "${run_linux}" = true ] || [ "${run_macos}" = true ] || [ "${run_windows}" = true ]; then
             run_any=true
+          fi
+          # GitHub counts skipped jobs as success, so a run with no lane would
+          # report a qualification that never happened.
+          if [ "${run_any}" != true ]; then
+            echo "::error::No qualified runner is declared, so no live qualification lane ran."
+            exit 1
           fi
           {
             echo "candidate_sha=${candidate_sha}"

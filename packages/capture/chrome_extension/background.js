@@ -232,6 +232,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
   switch (message.type) {
     case 'USER_EVENT':
+      // Input events leave the browser only while recording. A tab that
+      // missed a mode change must not keep sending keystrokes.
+      if (currentMode !== 'record') {
+        sendResponse({ success: false, error: 'Not recording' });
+        break;
+      }
+      message.tabId = tabId;
+      sendToServer(message);
+      sendResponse({ success: true });
+      break;
+
     case 'DOM_EVENT':
       // Add tab ID and relay to server
       message.tabId = tabId;

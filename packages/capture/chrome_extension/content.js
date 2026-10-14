@@ -23,6 +23,9 @@ if (!DEBUG) {
 let currentMode = 'idle';
 let recordListenersAttached = false;
 let replayObserversAttached = false;
+// [target, eventType, handler] for every record-mode listener, so leaving
+// record mode can remove each one.
+let recordListeners = [];
 
 // ============ Configuration ============
 
@@ -88,7 +91,8 @@ function setMode(mode) {
     debounceSendVisibleHTML('setmode');
     if (!replayObserversAttached) attachReplayObservers();
     if (recordListenersAttached) detachRecordListeners();
-  } else if (currentMode === 'idle') {
+  } else {
+    // Idle, or a mode this script does not know: capture nothing.
     if (recordListenersAttached) detachRecordListeners();
     if (replayObserversAttached) disconnectReplayObservers();
   }
@@ -97,6 +101,7 @@ function setMode(mode) {
 // ============ Coordinate Transformation ============
 
 function trackMouseEvent(event) {
+  if (currentMode !== 'record') return;
   const { clientX, clientY, screenX, screenY } = event;
   const prevCoordMappingsStr = JSON.stringify(coordMappings);
 
@@ -379,6 +384,8 @@ function sendMessageToBackgroundScript(message) {
 // ============ Record Mode Event Handlers ============
 
 function handleUserEvent(event) {
+  if (currentMode !== 'record') return;
+
   let eventTarget = event.target;
 
   if (!(eventTarget instanceof HTMLElement)) {
@@ -459,7 +466,7 @@ function attachRecordListeners() {
   const lastEventTimeMap = new Map();
 
   Object.entries(eventTargetMap).forEach(([eventType, target]) => {
-    target.addEventListener(eventType, (event) => {
+    const handler = (event) => {
       const debounceDelay = eventDebounceDelayMap[eventType];
       const lastEventTime = lastEventTimeMap.get(eventType) || 0;
       const now = Date.now();
@@ -468,20 +475,25 @@ function attachRecordListeners() {
         handleUserEvent(event);
         lastEventTimeMap.set(eventType, now);
       }
-    }, true);
+    };
+    target.addEventListener(eventType, handler, true);
+    recordListeners.push([target, eventType, handler]);
   });
 
   // Track mouse for coordinate mappings
   ['mousedown', 'mouseup', 'mousemove'].forEach(eventType => {
     document.body.addEventListener(eventType, trackMouseEvent, true);
+    recordListeners.push([document.body, eventType, trackMouseEvent]);
   });
 
   recordListenersAttached = true;
 }
 
 function detachRecordListeners() {
-  // Note: In practice we'd need to store handler references to properly remove them
-  // For now, just mark as detached
+  for (const [target, eventType, handler] of recordListeners) {
+    target.removeEventListener(eventType, handler, true);
+  }
+  recordListeners = [];
   recordListenersAttached = false;
 }
 

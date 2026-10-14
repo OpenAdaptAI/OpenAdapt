@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import socket
 
 import pytest
 
@@ -392,6 +393,30 @@ class TestBrowserEventRecord:
 # Tests for Browser Bridge (WebSocket server)
 # =============================================================================
 
+HOST = "127.0.0.1"
+
+
+def _free_port() -> int:
+    """Return a port that is free now, so a busy fixed port cannot fail a run."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as sock:
+        sock.bind((HOST, 0))
+        return sock.getsockname()[1]
+
+
+def _url(bridge: BrowserBridge) -> str:
+    return f"ws://{HOST}:{bridge.port}"
+
+
+async def _recv_json(ws, timeout: float = 1.0) -> dict:
+    """Receive one message, failing fast instead of hanging when none arrives."""
+    return json.loads(await asyncio.wait_for(ws.recv(), timeout=timeout))
+
+
+async def _expect_mode(ws, mode: BrowserMode) -> None:
+    message = await _recv_json(ws)
+    assert message["type"] == MessageType.SET_MODE.value
+    assert message["payload"]["mode"] == mode.value
+
 
 @pytest.mark.skipif(not WEBSOCKETS_AVAILABLE, reason="websockets not installed")
 class TestBrowserBridge:
@@ -400,7 +425,7 @@ class TestBrowserBridge:
     @pytest.fixture
     async def bridge(self):
         """Create a browser bridge instance for testing."""
-        bridge = BrowserBridge(port=8766)
+        bridge = BrowserBridge(host=HOST, port=_free_port())
         await bridge.start()
         yield bridge
         await bridge.stop()
@@ -419,7 +444,7 @@ class TestBrowserBridge:
     @pytest.mark.asyncio
     async def test_bridge_start_stop(self):
         """Test starting and stopping the bridge."""
-        bridge = BrowserBridge(port=8768)
+        bridge = BrowserBridge(host=HOST, port=_free_port())
 
         assert bridge.is_running is False
 
@@ -432,7 +457,7 @@ class TestBrowserBridge:
     @pytest.mark.asyncio
     async def test_client_connection(self, bridge):
         """Test extension can connect and receive mode."""
-        async with websockets.connect("ws://localhost:8766") as ws:
+        async with websockets.connect(_url(bridge)) as ws:
             message = await asyncio.wait_for(ws.recv(), timeout=1.0)
             data = json.loads(message)
 
@@ -445,11 +470,10 @@ class TestBrowserBridge:
     @pytest.mark.asyncio
     async def test_mode_broadcast(self, bridge):
         """Test mode changes broadcast to all clients."""
-        async with websockets.connect("ws://localhost:8766") as ws1:
-            async with websockets.connect("ws://localhost:8766") as ws2:
-                # Drain initial mode messages
-                await ws1.recv()
-                await ws2.recv()
+        async with websockets.connect(_url(bridge)) as ws1:
+            async with websockets.connect(_url(bridge)) as ws2:
+                await _expect_mode(ws1, BrowserMode.IDLE)
+                await _expect_mode(ws2, BrowserMode.IDLE)
 
                 # Change mode
                 await bridge.set_mode(BrowserMode.RECORD)
@@ -462,15 +486,23 @@ class TestBrowserBridge:
                     assert data["payload"]["mode"] == BrowserMode.RECORD.value
 
     @pytest.mark.asyncio
+    async def test_mode_set_before_connect_arrives_as_one_message(self, bridge):
+        """A client that connects after a mode change gets exactly one SET_MODE."""
+        await bridge.set_mode(BrowserMode.RECORD)
+
+        async with websockets.connect(_url(bridge)) as ws:
+            await _expect_mode(ws, BrowserMode.RECORD)
+            with pytest.raises(asyncio.TimeoutError):
+                await asyncio.wait_for(ws.recv(), timeout=0.3)
+
+    @pytest.mark.asyncio
     async def test_dom_event_capture(self, bridge):
         """Test DOM events are captured in record mode."""
         await bridge.set_mode(BrowserMode.RECORD)
 
-        async with websockets.connect("ws://localhost:8766") as ws:
-            # Drain initial mode message
-            await ws.recv()
-            # Drain the mode change message from set_mode
-            await ws.recv()
+        async with websockets.connect(_url(bridge)) as ws:
+            # The bridge sends its current mode once on connect.
+            await _expect_mode(ws, BrowserMode.RECORD)
 
             # Send DOM event
             event = {
@@ -516,8 +548,8 @@ class TestBrowserBridge:
         """Test DOM events are ignored when not in record mode."""
         # Bridge starts in IDLE mode
 
-        async with websockets.connect("ws://localhost:8766") as ws:
-            await ws.recv()  # Drain initial mode message
+        async with websockets.connect(_url(bridge)) as ws:
+            await _expect_mode(ws, BrowserMode.IDLE)
 
             # Send DOM event
             event = {
@@ -541,10 +573,9 @@ class TestBrowserBridge:
         """Test DOM snapshots are captured."""
         await bridge.set_mode(BrowserMode.RECORD)
 
-        async with websockets.connect("ws://localhost:8766") as ws:
-            # Drain messages
-            await ws.recv()
-            await ws.recv()
+        async with websockets.connect(_url(bridge)) as ws:
+            # The bridge sends its current mode once on connect.
+            await _expect_mode(ws, BrowserMode.RECORD)
 
             # Send DOM snapshot
             snapshot = {
@@ -584,8 +615,8 @@ class TestBrowserBridge:
     @pytest.mark.asyncio
     async def test_pong_handling(self, bridge):
         """Test PONG messages are handled."""
-        async with websockets.connect("ws://localhost:8766") as ws:
-            await ws.recv()  # Drain initial mode message
+        async with websockets.connect(_url(bridge)) as ws:
+            await _expect_mode(ws, BrowserMode.IDLE)
 
             # Send PONG
             pong = {
@@ -601,8 +632,8 @@ class TestBrowserBridge:
     @pytest.mark.asyncio
     async def test_error_handling(self, bridge):
         """Test ERROR messages are handled."""
-        async with websockets.connect("ws://localhost:8766") as ws:
-            await ws.recv()  # Drain initial mode message
+        async with websockets.connect(_url(bridge)) as ws:
+            await _expect_mode(ws, BrowserMode.IDLE)
 
             # Send ERROR
             error = {
@@ -622,8 +653,8 @@ class TestBrowserBridge:
     @pytest.mark.asyncio
     async def test_invalid_json_handling(self, bridge):
         """Test invalid JSON is handled gracefully."""
-        async with websockets.connect("ws://localhost:8766") as ws:
-            await ws.recv()  # Drain initial mode message
+        async with websockets.connect(_url(bridge)) as ws:
+            await _expect_mode(ws, BrowserMode.IDLE)
 
             # Send invalid JSON
             await ws.send("not valid json {{{")
@@ -634,8 +665,8 @@ class TestBrowserBridge:
     @pytest.mark.asyncio
     async def test_ping_broadcast(self, bridge):
         """Test ping is broadcast to clients."""
-        async with websockets.connect("ws://localhost:8766") as ws:
-            await ws.recv()  # Drain initial mode message
+        async with websockets.connect(_url(bridge)) as ws:
+            await _expect_mode(ws, BrowserMode.IDLE)
 
             # Send ping from server
             await bridge.send_ping()
@@ -648,8 +679,8 @@ class TestBrowserBridge:
     @pytest.mark.asyncio
     async def test_execute_action(self, bridge):
         """Test execute action is broadcast to clients."""
-        async with websockets.connect("ws://localhost:8766") as ws:
-            await ws.recv()  # Drain initial mode message
+        async with websockets.connect(_url(bridge)) as ws:
+            await _expect_mode(ws, BrowserMode.IDLE)
 
             # Execute action
             await bridge.execute_action(
@@ -676,9 +707,9 @@ class TestBrowserBridge:
         bridge.on_event = on_event
         await bridge.set_mode(BrowserMode.RECORD)
 
-        async with websockets.connect("ws://localhost:8766") as ws:
-            await ws.recv()
-            await ws.recv()
+        async with websockets.connect(_url(bridge)) as ws:
+            # The bridge sends its current mode once on connect.
+            await _expect_mode(ws, BrowserMode.RECORD)
 
             # Send DOM event
             event = {
@@ -708,9 +739,9 @@ class TestBrowserBridge:
         bridge.on_snapshot = on_snapshot
         await bridge.set_mode(BrowserMode.RECORD)
 
-        async with websockets.connect("ws://localhost:8766") as ws:
-            await ws.recv()
-            await ws.recv()
+        async with websockets.connect(_url(bridge)) as ws:
+            # The bridge sends its current mode once on connect.
+            await _expect_mode(ws, BrowserMode.RECORD)
 
             # Send DOM snapshot
             snapshot = {
@@ -735,9 +766,9 @@ class TestBrowserBridge:
         """Test clearing events and snapshots."""
         await bridge.set_mode(BrowserMode.RECORD)
 
-        async with websockets.connect("ws://localhost:8766") as ws:
-            await ws.recv()
-            await ws.recv()
+        async with websockets.connect(_url(bridge)) as ws:
+            # The bridge sends its current mode once on connect.
+            await _expect_mode(ws, BrowserMode.RECORD)
 
             # Send event and snapshot
             await ws.send(json.dumps({
@@ -770,8 +801,8 @@ class TestBrowserBridge:
     @pytest.mark.asyncio
     async def test_client_disconnect_handling(self, bridge):
         """Test client disconnection is handled gracefully."""
-        async with websockets.connect("ws://localhost:8766") as ws:
-            await ws.recv()
+        async with websockets.connect(_url(bridge)) as ws:
+            await _expect_mode(ws, BrowserMode.IDLE)
             assert bridge.client_count == 1
 
         # After disconnect
@@ -783,8 +814,8 @@ class TestBrowserBridge:
         """Test multiple clients can connect."""
         clients = []
         for _ in range(3):
-            ws = await websockets.connect("ws://localhost:8766")
-            await ws.recv()  # Drain mode message
+            ws = await websockets.connect(_url(bridge))
+            await _expect_mode(ws, BrowserMode.IDLE)
             clients.append(ws)
 
         assert bridge.client_count == 3
@@ -801,8 +832,8 @@ class TestBrowserBridge:
         """Test bridge string representation."""
         repr_str = repr(bridge)
         assert "BrowserBridge" in repr_str
-        assert "localhost" in repr_str
-        assert "8766" in repr_str
+        assert HOST in repr_str
+        assert f"port={bridge.port}" in repr_str
         assert "idle" in repr_str
 
 

@@ -19,6 +19,11 @@ REPOSITORY = "OpenAdaptAI/openadapt-capture"
 BRANCH = "main"
 GITHUB_API = "https://api.github.com"
 PYPI_API = "https://pypi.org/pypi/openadapt-capture/json"
+README = Path(__file__).resolve().parents[1] / "README.md"
+# An install command such as pip install "openadapt-capture>=1.3.0,<1.4".
+README_PIN = re.compile(r"openadapt-capture(?:\[[^\]]*\])?(?P<spec>[<>=!~][^\s\"'`;]*)")
+SPECIFIER_CLAUSE = re.compile(r"^(?P<op>~=|==|!=|<=|>=|<|>)(?P<version>\d+(?:\.\d+)*)$")
+FINAL_RELEASE = re.compile(r"^\d+(?:\.\d+)*$")
 TAG_PATTERN = re.compile(r"^v(?P<version>\d+\.\d+\.\d+)$")
 COMMIT_PATTERN = re.compile(r"^(?P<kind>[A-Za-z]+)(?:\([^)]*\))?(?P<breaking>!)?:\s+.+$")
 BREAKING_FOOTER = re.compile(r"^BREAKING[ -]CHANGE:", re.MULTILINE)
@@ -54,6 +59,62 @@ def humanize(value: timedelta) -> str:
 def version_key(value: str) -> tuple[int, int, int]:
     major, minor, patch = value.split(".")
     return int(major), int(minor), int(patch)
+
+
+def readme_pins(text: str) -> list[str]:
+    """Return each distinct version specifier the README tells users to install."""
+    pins: list[str] = []
+    for match in README_PIN.finditer(text):
+        if match.group("spec") not in pins:
+            pins.append(match.group("spec"))
+    return pins
+
+
+def _release(value: str, width: int) -> tuple[int, ...]:
+    parts = [int(part) for part in value.split(".")]
+    return tuple(parts + [0] * (width - len(parts)))
+
+
+def parse_specifier(specifier: str) -> list[tuple[str, str]] | None:
+    """Split a pip specifier into (operator, version) clauses.
+
+    Returns None for syntax this dependency-free check does not model, such as
+    wildcards or pre-releases, so the caller can report it instead of guessing.
+    """
+    clauses = []
+    for clause in specifier.split(","):
+        match = SPECIFIER_CLAUSE.fullmatch(clause.strip())
+        if not match:
+            return None
+        op, bound = match.group("op"), match.group("version")
+        if op == "~=" and "." not in bound:
+            return None
+        clauses.append((op, bound))
+    return clauses
+
+
+def satisfies(version: str, clauses: list[tuple[str, str]]) -> bool:
+    """Check a version against parsed clauses. Pip skips pre-releases here."""
+    if not FINAL_RELEASE.fullmatch(version):
+        return False
+    for op, bound in clauses:
+        width = max(len(version.split(".")), len(bound.split(".")))
+        have, want = _release(version, width), _release(bound, width)
+        if op == "~=":
+            prefix = len(bound.split(".")) - 1
+            ok = have >= want and have[:prefix] == want[:prefix]
+        else:
+            ok = {
+                "==": have == want,
+                "!=": have != want,
+                "<=": have <= want,
+                ">=": have >= want,
+                "<": have < want,
+                ">": have > want,
+            }[op]
+        if not ok:
+            return False
+    return True
 
 
 def bump_level(message: str) -> str | None:
@@ -110,10 +171,17 @@ def fetch_pypi_versions() -> dict[str, Any]:
         AttributeError,
     ) as error:
         return {"reachable": False, "error": str(error)}
+    releases = payload.get("releases", {})
     return {
         "reachable": True,
         "latest": payload.get("info", {}).get("version"),
-        "versions": sorted(payload.get("releases", {}).keys()),
+        "versions": sorted(releases.keys()),
+        # pip skips a version whose files are all yanked or deleted.
+        "installable": sorted(
+            version
+            for version, files in releases.items()
+            if any(not file.get("yanked") for file in files or [])
+        ),
     }
 
 
@@ -153,6 +221,7 @@ def collect_live_state() -> dict[str, Any]:
         "release_runs": release_runs[:10],
         "release_tags": [release.get("tag_name") for release in releases],
         "pypi": fetch_pypi_versions(),
+        "readme_pins": readme_pins(README.read_text(encoding="utf-8")),
         "latest_tag": None,
         "latest_version": None,
         "latest_tag_date": None,
@@ -286,6 +355,29 @@ def evaluate(state: dict[str, Any]) -> tuple[list[str], list[str]]:
     elif pypi_exists is None:
         notes.append("PyPI was unreachable, so no PyPI absence was inferred.")
 
+    pins = state.get("readme_pins") or []
+    if pins and pypi_versions is not None and not active_runs:
+        installable = pypi.get("installable", pypi.get("versions")) or []
+        for pin in pins:
+            clauses = parse_specifier(pin)
+            matches = [v for v in installable if clauses and satisfies(v, clauses)]
+            if clauses is None:
+                alerts.append(
+                    f"**README pin unchecked:** README.md tells users to install "
+                    f"`openadapt-capture{pin}`, and this check cannot evaluate that "
+                    "specifier. Use plain version comparisons."
+                )
+            elif not matches:
+                alerts.append(
+                    f"**README ahead of PyPI:** README.md tells users to install "
+                    f"`openadapt-capture{pin}`, but no published version satisfies it "
+                    f"(PyPI latest: {pypi.get('latest')}). Publish the release, or pin "
+                    "the README to a published version."
+                )
+            else:
+                newest = max(matches, key=lambda v: _release(v, 4))
+                notes.append(f"README pin `openadapt-capture{pin}` resolves on PyPI to {newest}.")
+
     if latest_run:
         notes.append(
             "Latest manual release run (context only, not attributed to a tag): "
@@ -357,6 +449,7 @@ def self_test() -> int:
         "pypi": {"reachable": True, "versions": ["1.2.0"]},
         "release_runs": [],
         "commits_since_tag": [],
+        "readme_pins": [],
     }
     cases = [
         (
@@ -417,6 +510,30 @@ def self_test() -> int:
         ),
         ("PyPI artifact makes missing page cosmetic", {"release_tags": []}, 0),
         ("release without PyPI alerts", {"pypi": {"reachable": True, "versions": []}}, 1),
+        ("README pin ahead of PyPI alerts", {"readme_pins": [">=1.3.0,<1.4"]}, 1),
+        ("README pin on a published version is quiet", {"readme_pins": [">=1.2.0,<1.3"]}, 0),
+        (
+            "README pin on a yanked version alerts",
+            {
+                "readme_pins": [">=1.2.0,<1.3"],
+                "pypi": {"reachable": True, "versions": ["1.2.0"], "installable": []},
+            },
+            1,
+        ),
+        (
+            "README pin waits for an active release",
+            {
+                "readme_pins": [">=1.3.0,<1.4"],
+                "release_runs": [release_run(15, status="in_progress", conclusion=None)],
+            },
+            0,
+        ),
+        (
+            "README pin is not judged while PyPI is unreachable",
+            {"readme_pins": [">=1.3.0,<1.4"], "pypi": {"reachable": False}},
+            0,
+        ),
+        ("README pin the check cannot read alerts", {"readme_pins": ["==1.2.*"]}, 1),
     ]
     failures = []
     for name, override, expected in cases:
@@ -434,6 +551,10 @@ def self_test() -> int:
         failures.append("PyPI outage was treated as evidence that an alert resolved")
     if not can_close_issue(base, []):
         failures.append("complete healthy state did not resolve an alert")
+    if readme_pins('pip install "openadapt-capture[linux]>=1.3.0,<1.4"\n'
+                   'pip install "openadapt-capture[linux]"\n'
+                   "github.com/OpenAdaptAI/openadapt-capture/blob/main") != [">=1.3.0,<1.4"]:
+        failures.append("README install pins were not extracted exactly")
     if bump_level("revert!: undo an accidental release") is not None:
         failures.append("unconfigured commit kind incorrectly triggered a major release")
     if failures:
