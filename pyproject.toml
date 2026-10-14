@@ -157,7 +157,7 @@ Repository = "https://github.com/OpenAdaptAI/openadapt"
 "Bug Tracker" = "https://github.com/OpenAdaptAI/openadapt/issues"
 
 [build-system]
-requires = ["hatchling==1.32.0"]
+requires = ["hatchling==1.32.4"]
 build-backend = "hatchling.build"
 
 [tool.hatch.metadata.hooks.custom]
