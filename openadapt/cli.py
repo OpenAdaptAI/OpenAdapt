@@ -477,9 +477,17 @@ def quickstart(
             "Watch it catch a lie: openadapt quickstart --break-it --out "
             f"{root}-break-it"
         )
+    # The tutorial bundle is recorded against MockMed's fault server, and
+    # `replay --drift` serves plain MockMed, so replaying that bundle halts at
+    # the login screen with or without drift. Record a demo on plain MockMed.
+    drift = Path(f"{root}-drift")
+    rec, bundle = (shlex.quote(str(drift / name)) for name in ("rec", "bundle"))
+    click.echo("See it stop when the screen changes (a separate MockMed demo):")
+    click.echo(f"  openadapt flow demo-record --out {rec}")
+    click.echo(f"  openadapt flow compile {rec} --out {bundle} --name drift-demo")
     click.echo(
-        "See a fail-safe halt: openadapt flow replay "
-        f"{root / 'bundle'} --drift modal --run-dir {root}-halt"
+        f"  openadapt flow replay {bundle} --drift modal --run-dir "
+        f"{shlex.quote(str(drift / 'run'))}"
     )
     if _agent_serves_tutorial():
         click.echo("Give a local agent the run tool (synthetic MockMed, no frames):")
