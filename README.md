@@ -430,7 +430,7 @@ The block below is generated from the signed public lifecycle record.
 The signed ledger has seven active target admissions. Their evidence class
 is `remote-safe-synthetic`, not MockMed `production_acceptance`. They remain
 valid until revoked; there's no expiry date. `pip install openadapt` is the
-admitted runtime (launcher 1.16.0, Flow 1.34.0). Desktop's admitted artifact
+admitted runtime (launcher 1.16.0, Flow 1.35.1). Desktop's admitted artifact
 is the 0.16.0 wheel. Native Mac DMGs stay ad-hoc signed 0.15.0; don't treat
 those as admitted. A Production run still needs a workflow admission for the
 exact compiled bundle, application, and environment.

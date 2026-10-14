@@ -181,7 +181,7 @@ class ReadmeMaturityContractTests(unittest.TestCase):
         self.assertIn("there's no expiry date", block)
         self.assertIn("pip install openadapt", block)
         self.assertIn("1.16.0", block)
-        self.assertIn("1.34.0", block)
+        self.assertIn("1.35.1", block)
         self.assertIn("0.16.0 wheel", block)
         self.assertIn("0.15.0", block)
         self.assertIn("workflow admission", block)
