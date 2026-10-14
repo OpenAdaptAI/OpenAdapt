@@ -67,6 +67,46 @@ _XKB_COMPOSE_COMPOSING = 1
 _XKB_COMPOSE_COMPOSED = 2
 _XKB_COMPOSE_CANCELLED = 3
 
+# Stable sonames of the system libraries this observer loads.
+_X_LIBRARY_SONAMES = (
+    ("X11", "libX11.so.6"),
+    ("Xtst", "libXtst.so.6"),
+    ("xkbcommon", "libxkbcommon.so.0"),
+)
+
+
+def _load_x_libraries() -> tuple[Any, Any, Any]:
+    """Load libX11, libXtst, and libxkbcommon without starting a subprocess.
+
+    ``ctypes.util.find_library`` runs ``ldconfig -p`` in a subprocess. The
+    recorder forks its writer processes while this observer starts, and a fork
+    that lands inside that ``Popen`` gives the writer a copy of the pipe the
+    parent is reading, so setup blocks until the writer exits. The stable
+    sonames load directly; ``find_library`` stays as the fallback for an
+    unusual library layout.
+    """
+    loaded = []
+    for name, soname in _X_LIBRARY_SONAMES:
+        try:
+            loaded.append(ctypes.CDLL(soname))
+            continue
+        except OSError:
+            pass
+        found = ctypes.util.find_library(name)
+        if not found:
+            raise InputObserverUnavailableError(
+                "Linux input observation requires the system libX11, libXtst "
+                "(X RECORD), and permissively licensed libxkbcommon runtime libraries"
+            )
+        try:
+            loaded.append(ctypes.CDLL(found))
+        except OSError as exc:
+            raise InputObserverUnavailableError(
+                f"could not load X11 input libraries: {exc}"
+            ) from exc
+    x11, xtst, xkbcommon = loaded
+    return x11, xtst, xkbcommon
+
 
 @dataclass(slots=True)
 class _FrameCaptureCut:
@@ -415,22 +455,7 @@ class LinuxXInputObserver(ThreadedInputObserver):
         # capture may be unsafe once screen and input threads run concurrently.
         ensure_xlib_thread_support()
 
-        x11_name = ctypes.util.find_library("X11")
-        xtst_name = ctypes.util.find_library("Xtst")
-        xkbcommon_name = ctypes.util.find_library("xkbcommon")
-        if not x11_name or not xtst_name or not xkbcommon_name:
-            raise InputObserverUnavailableError(
-                "Linux input observation requires the system libX11, libXtst "
-                "(X RECORD), and permissively licensed libxkbcommon runtime libraries"
-            )
-        try:
-            self._x11 = ctypes.CDLL(x11_name)
-            self._xtst = ctypes.CDLL(xtst_name)
-            self._xkbcommon = ctypes.CDLL(xkbcommon_name)
-        except OSError as exc:
-            raise InputObserverUnavailableError(
-                f"could not load X11 input libraries: {exc}"
-            ) from exc
+        self._x11, self._xtst, self._xkbcommon = _load_x_libraries()
 
         self._configure_api()
         self._initialize_compose()
@@ -512,12 +537,7 @@ class LinuxXInputObserver(ThreadedInputObserver):
             )
         self._record_context = int(context)
         self._record_callback = _XRecordInterceptProc(self._record_intercept)
-        if not self._xtst.XRecordEnableContextAsync(
-            self._data_display,
-            self._record_context,
-            self._record_callback,
-            None,
-        ):
+        if not self._enable_record_context():
             raise InputObserverPermissionError(
                 "the X11 server refused to enable the global X RECORD context"
             )
@@ -537,6 +557,20 @@ class LinuxXInputObserver(ThreadedInputObserver):
                 "X RECORD observed the pointer-baseline marker without arming input"
             )
         self._setup_complete = True
+
+    def _enable_record_context(self) -> int:
+        """Enable the new context on the data connection once the server has it."""
+        # XRecordCreateContext only queues the request in the control
+        # connection's output buffer. The data connection names the new
+        # context, so the server must have created it first; otherwise it
+        # answers XRecordBadContext and Xlib's default handler exits.
+        self._x11.XSync(self._control_display, 0)
+        return self._xtst.XRecordEnableContextAsync(
+            self._data_display,
+            self._record_context,
+            self._record_callback,
+            None,
+        )
 
     def _raise_if_setup_cancelled(self) -> None:
         """Keep an outer readiness timeout from becoming a partial start."""
@@ -576,6 +610,8 @@ class LinuxXInputObserver(ThreadedInputObserver):
         self._x11.XOpenDisplay.restype = ctypes.c_void_p
         self._x11.XCloseDisplay.argtypes = [ctypes.c_void_p]
         self._x11.XCloseDisplay.restype = ctypes.c_int
+        self._x11.XSync.argtypes = [ctypes.c_void_p, ctypes.c_int]
+        self._x11.XSync.restype = ctypes.c_int
         self._x11.XDefaultRootWindow.argtypes = [ctypes.c_void_p]
         self._x11.XDefaultRootWindow.restype = ctypes.c_ulong
         self._x11.XCreatePixmap.argtypes = [
@@ -1276,6 +1312,18 @@ class LinuxXInputObserver(ThreadedInputObserver):
         # to have received every possible delivered copy.
         self._finalize_pending()
 
+    def _disable_record_context(self) -> int:
+        """Send DisableContext to the server, not just to Xlib's buffer."""
+        disabled = self._xtst.XRecordDisableContext(
+            self._control_display,
+            self._record_context,
+        )
+        # Like CreateContext, DisableContext is queued on the control
+        # connection. Without this round trip the server never sees it, so
+        # EndOfData never reaches the data connection and the drain times out.
+        self._x11.XSync(self._control_display, 0)
+        return disabled
+
     def _teardown(self) -> None:
         cleanup_failures: list[BaseException] = []
 
@@ -1305,10 +1353,7 @@ class LinuxXInputObserver(ThreadedInputObserver):
         ):
             disabled = attempt(
                 "while disabling the X RECORD context",
-                lambda: self._xtst.XRecordDisableContext(
-                    self._control_display,
-                    self._record_context,
-                ),
+                self._disable_record_context,
             )
             if disabled:
                 attempt(

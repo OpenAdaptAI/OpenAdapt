@@ -93,6 +93,13 @@ _CANONICAL_KEY_NAMES = {
 
 _MODIFIER_KEYCODES = frozenset({54, 55, 56, 57, 58, 59, 60, 61, 62, 63})
 
+# macOS grants these permissions to the app that hosts the process: the
+# terminal for the `capture` command, or OpenAdapt Desktop for its recorder.
+_PERMISSION_TARGET = (
+    "allow the app that runs the recorder (your terminal, or OpenAdapt "
+    "Desktop), then quit and reopen that app."
+)
+
 
 class DarwinInputObserver(ThreadedInputObserver):
     """Observe macOS keyboard and mouse input without modifying the event stream."""
@@ -155,13 +162,13 @@ class DarwinInputObserver(ThreadedInputObserver):
                 request_permission()
             if not self._has_observation_permission():
                 raise InputObserverPermissionError(
-                    "macOS denied global input observation. Enable Input Monitoring "
-                    "for OpenAdapt in System Settings > Privacy & Security."
+                    "macOS denied global input observation. In System Settings > "
+                    f"Privacy & Security > Input Monitoring, {_PERMISSION_TARGET}"
                 )
         if not self._has_active_filter_permission():
             raise InputObserverPermissionError(
-                "macOS denied the ordered input barrier. Enable Accessibility "
-                "for OpenAdapt in System Settings > Privacy & Security."
+                "macOS denied the ordered input barrier. In System Settings > "
+                f"Privacy & Security > Accessibility, {_PERMISSION_TARGET}"
             )
 
         event_mask = 0

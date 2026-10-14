@@ -64,11 +64,13 @@ from openadapt_capture.db import (
     get_session_for_path,
 )
 from openadapt_capture.db.models import ActionEvent, Recording
-from openadapt_capture.desktop_capture import DesktopCaptureScope
+from openadapt_capture.desktop_capture import DesktopCaptureError, DesktopCaptureScope
 from openadapt_capture.extensions import synchronized_queue as sq
 from openadapt_capture.input_observer import (
     InputObserver,
     InputObserverError,
+    InputObserverPermissionError,
+    InputObserverUnavailableError,
     ObservedInput,
     ObservedKey,
     ObservedMouseButton,
@@ -2769,7 +2771,18 @@ def _transcribe_on_device(audio: "np.ndarray", backend: str) -> dict:
     return recorder._transcribe_openai_whisper(audio, "base", True)
 
 
-@logger.catch(reraise=True)
+# Errors whose message says what the user must fix: no FFmpeg, a denied OS
+# permission, or an unusable display. They still propagate and utils.trace
+# logs each on one line, but loguru doesn't print a traceback for them.
+_SETUP_ERRORS = (
+    video.FFmpegUnavailableError,
+    InputObserverPermissionError,
+    InputObserverUnavailableError,
+    DesktopCaptureError,
+)
+
+
+@logger.catch(reraise=True, exclude=_SETUP_ERRORS)
 @utils.trace(logger)
 def record(
     task_description: str,

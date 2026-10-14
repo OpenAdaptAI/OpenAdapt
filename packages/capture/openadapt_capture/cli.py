@@ -12,6 +12,31 @@ from __future__ import annotations
 from pathlib import Path
 
 
+def _stop_instructions() -> str:
+    """Say how to stop a recording, including the configured stop sequences."""
+    from openadapt_capture.config import settings
+
+    phrases = []
+    for sequence in settings.STOP_SEQUENCES:
+        if not sequence:
+            continue
+        if all(len(key) == 1 for key in sequence):
+            phrases.append(f"type {''.join(sequence)}")
+        elif len(set(sequence)) == 1:
+            phrases.append(f"press {sequence[0].capitalize()} {len(sequence)} times")
+        else:
+            phrases.append("press " + " ".join(sequence))
+    if not phrases:
+        return "To stop, press Ctrl+C here."
+    if len(phrases) == 1:
+        choices = phrases[0]
+    elif len(phrases) == 2:
+        choices = f"{phrases[0]} or {phrases[1]}"
+    else:
+        choices = f"{', '.join(phrases[:-1])}, or {phrases[-1]}"
+    return f"To stop, press Ctrl+C here. In any app, you can also {choices}."
+
+
 def record(
     output_dir: str,
     description: str | None = None,
@@ -91,34 +116,58 @@ def record(
         )
         print()
 
+    from openadapt_capture.desktop_capture import DesktopCaptureError
+    from openadapt_capture.input_observer import InputObserverError
+    from openadapt_capture.video import FFmpegUnavailableError
+
     print(f"Recording to: {output_dir}")
     if window:
         print(f"Window-scoped: owner={window_owner!r} title={window_title!r}")
-    print("Press Ctrl+C or type stop sequence to stop recording...")
+    print(_stop_instructions())
     print()
 
-    with Recorder(
-        output_dir,
-        task_description=description or "",
-        capture_video=video,
-        capture_audio=audio,
-        capture_images=images,
-        send_profile=send_profile,
-        window=window,
-    ) as recorder:
-        if not recorder.wait_for_ready():
-            print("Recording did not become ready. No successful capture was saved.")
-            raise SystemExit(1)
-        print(f"Capture session: {recorder.control_session_id}")
-        print(
-            "Stop from another terminal: "
-            f"capture stop --session-id {recorder.control_session_id}"
-        )
-        try:
-            while recorder.is_recording:
-                time.sleep(1)
-        except KeyboardInterrupt:
-            pass
+    ready = False
+    try:
+        with Recorder(
+            output_dir,
+            task_description=description or "",
+            capture_video=video,
+            capture_audio=audio,
+            capture_images=images,
+            send_profile=send_profile,
+            window=window,
+        ) as recorder:
+            if not recorder.wait_for_ready():
+                print("Recording did not become ready. No successful capture was saved.")
+                raise SystemExit(1)
+            ready = True
+            print(f"Capture session: {recorder.control_session_id}")
+            print(
+                "Stop from another terminal: "
+                f"capture stop --session-id {recorder.control_session_id}"
+            )
+            try:
+                while recorder.is_recording:
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                pass
+    except (FFmpegUnavailableError, InputObserverError, DesktopCaptureError) as exc:
+        print()
+        if ready:
+            # The recording started, so this is a failure, not a setup step.
+            print(f"Recording failed: {exc}")
+            print("No successful capture was saved.")
+            raise SystemExit(1) from exc
+        # A missing FFmpeg, a denied OS permission, or no usable display is a
+        # setup step, not a crash: print the fix instead of a traceback.
+        print(f"Recording did not start: {exc}")
+        if isinstance(exc, DesktopCaptureError):
+            print(
+                "Capture couldn't read the screen layout. Unlock the screen and "
+                "wake the display, then try again."
+            )
+        print("No successful capture was saved.")
+        raise SystemExit(1) from exc
 
     print()
     print(f"Recorded {recorder.event_count} events")

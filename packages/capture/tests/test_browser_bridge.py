@@ -6,7 +6,7 @@ import socket
 
 import pytest
 
-from openadapt_capture.browser_bridge import (
+from experimental.browser_bridge import (
     BrowserBridge,
     BrowserEventRecord,
     BrowserMode,

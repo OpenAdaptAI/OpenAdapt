@@ -20,6 +20,7 @@ FORBIDDEN_ARCHIVE_PATHS = (
     ".github/",
     "CLAUDE.md",
     "chrome_extension/",
+    "experimental/",
     "docs/images/demo.gif",
     "docs/whisper-integration-plan.md",
     "examples/",

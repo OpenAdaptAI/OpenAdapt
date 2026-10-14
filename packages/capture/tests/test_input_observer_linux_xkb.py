@@ -11,6 +11,7 @@ import pytest
 
 from openadapt_capture.input_observer import (
     InputObserverError,
+    InputObserverUnavailableError,
     ObservedKey,
     ObservedMouseButton,
     ObservedMouseMove,
@@ -172,12 +173,77 @@ def test_direct_setup_initializes_xlib_threads_before_loading_x11(
         "find_library",
         lambda _name: pytest.fail("loaded Xlib before XInitThreads succeeded"),
     )
+    monkeypatch.setattr(
+        linux_module.ctypes,
+        "CDLL",
+        lambda _name: pytest.fail("loaded Xlib before XInitThreads succeeded"),
+    )
 
     with pytest.raises(RuntimeError, match="XInitThreads refused"):
         observer._setup()
 
     assert observer._x11 is None
     assert observer._control_display is None
+
+
+def test_x_libraries_load_by_soname_without_a_subprocess(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """find_library runs ldconfig in a subprocess, which a concurrent fork can hang."""
+    loaded: list[str] = []
+
+    def fake_cdll(name: str) -> str:
+        loaded.append(name)
+        return f"handle:{name}"
+
+    monkeypatch.setattr(linux_module.ctypes, "CDLL", fake_cdll)
+    monkeypatch.setattr(
+        linux_module.ctypes.util,
+        "find_library",
+        lambda _name: pytest.fail("searched for a library that loads by soname"),
+    )
+
+    assert linux_module._load_x_libraries() == (
+        "handle:libX11.so.6",
+        "handle:libXtst.so.6",
+        "handle:libxkbcommon.so.0",
+    )
+    assert loaded == ["libX11.so.6", "libXtst.so.6", "libxkbcommon.so.0"]
+
+
+def test_x_libraries_fall_back_to_a_search_for_an_unusual_layout(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def fake_cdll(name: str) -> str:
+        if name == "libXtst.so.6":
+            raise OSError("no such file")
+        return f"handle:{name}"
+
+    monkeypatch.setattr(linux_module.ctypes, "CDLL", fake_cdll)
+    monkeypatch.setattr(
+        linux_module.ctypes.util,
+        "find_library",
+        lambda name: "libXtst.so.99" if name == "Xtst" else None,
+    )
+
+    assert linux_module._load_x_libraries() == (
+        "handle:libX11.so.6",
+        "handle:libXtst.so.99",
+        "handle:libxkbcommon.so.0",
+    )
+
+
+def test_missing_x_library_is_reported_as_unavailable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def missing(_name: str) -> str:
+        raise OSError("no such file")
+
+    monkeypatch.setattr(linux_module.ctypes, "CDLL", missing)
+    monkeypatch.setattr(linux_module.ctypes.util, "find_library", lambda _name: None)
+
+    with pytest.raises(InputObserverUnavailableError, match="libXtst"):
+        linux_module._load_x_libraries()
 
 
 @pytest.mark.skipif(
@@ -1095,6 +1161,44 @@ def test_shutdown_drain_times_out_without_end_of_data(
     assert process_count == 1
 
 
+def test_enable_flushes_the_new_context_before_the_data_connection_names_it() -> None:
+    """CreateContext is buffered on the control connection until a round trip.
+
+    Enabling the context on the data connection first makes the server answer
+    XRecordBadContext, which Xlib's default error handler turns into an exit.
+    """
+    observer = make_observer()
+    control_display = object()
+    data_display = object()
+    callback = object()
+    observer._control_display = control_display
+    observer._data_display = data_display
+    observer._record_context = 7
+    observer._record_callback = callback
+    calls: list[str] = []
+
+    class EnableX11:
+        def XSync(self, display, discard) -> int:
+            assert display is control_display
+            assert discard == 0
+            calls.append("sync")
+            return 1
+
+    class EnableXtst:
+        def XRecordEnableContextAsync(self, display, context, proc, closure) -> int:
+            assert display is data_display
+            assert (context, proc, closure) == (7, callback, None)
+            calls.append("enable")
+            # A server that never received CreateContext rejects the context.
+            return 1 if calls == ["sync", "enable"] else 0
+
+    observer._x11 = EnableX11()
+    observer._xtst = EnableXtst()
+
+    assert observer._enable_record_context() == 1
+    assert calls == ["sync", "enable"]
+
+
 def test_teardown_drains_then_releases_every_native_resource() -> None:
     observer = make_observer()
     observer.shutdown_timeout = 0.1
@@ -1127,10 +1231,13 @@ def test_teardown_drains_then_releases_every_native_resource() -> None:
         def XRecordProcessReplies(self, display) -> None:
             assert display is data_display
             self.calls.append("process")
-            intercept_record(
-                observer,
-                category=linux_module._XRECORD_END_OF_DATA,
-            )
+            # The server sends EndOfData only after DisableContext leaves
+            # Xlib's buffer on the control connection.
+            if self.calls[:2] == ["disable", "sync"]:
+                intercept_record(
+                    observer,
+                    category=linux_module._XRECORD_END_OF_DATA,
+                )
 
         def XRecordFreeData(self, _pointer) -> None:
             self.free_data_count += 1
@@ -1145,6 +1252,12 @@ def test_teardown_drains_then_releases_every_native_resource() -> None:
         def __init__(self) -> None:
             self.freed = []
             self.closed = []
+
+        def XSync(self, display, discard) -> int:
+            assert display is control_display
+            assert discard == 0
+            xtst.calls.append("sync")
+            return 1
 
         def XFree(self, value) -> int:
             self.freed.append(value)
@@ -1176,7 +1289,7 @@ def test_teardown_drains_then_releases_every_native_resource() -> None:
 
     observer._teardown()
 
-    assert xtst.calls == ["disable", "process", "free_context"]
+    assert xtst.calls == ["disable", "sync", "process", "free_context"]
     assert xtst.free_data_count == 1
     assert x11.freed == [record_range]
     assert x11.closed == [data_display, control_display]
@@ -1287,6 +1400,9 @@ def test_failed_start_drain_never_arms_or_emits_buffered_input() -> None:
             return 1
 
     class FailedStartX11:
+        def XSync(self, _display, _discard) -> int:
+            return 1
+
         def XCloseDisplay(self, _display) -> int:
             return 0
 
@@ -1316,6 +1432,9 @@ def exercise_cancelled_start_lifecycle(
     class LifecycleX11:
         def __init__(self) -> None:
             self.close_count = 0
+
+        def XSync(self, _display, _discard) -> int:
+            return 1
 
         def XCloseDisplay(self, _display) -> int:
             self.close_count += 1
@@ -1483,6 +1602,9 @@ def test_outer_timeout_cancels_already_armed_record_batch_transactionally() -> N
     class LifecycleX11:
         def __init__(self) -> None:
             self.close_count = 0
+
+        def XSync(self, _display, _discard) -> int:
+            return 1
 
         def XCloseDisplay(self, _display) -> int:
             self.close_count += 1

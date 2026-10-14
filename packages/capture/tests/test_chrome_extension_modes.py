@@ -1,8 +1,9 @@
 """The Chrome extension prototype sends input events only while recording.
 
-These tests run ``chrome_extension/content.js`` and
-``chrome_extension/background.js`` in Node against the small fake browser in
-``tests/chrome_extension_harness.js`` and count the messages each script sends.
+These tests run ``experimental/chrome_extension/content.js`` and
+``experimental/chrome_extension/background.js`` in Node against the small
+fake browser in ``tests/chrome_extension_harness.js`` and count the messages
+each script sends.
 """
 
 from __future__ import annotations
@@ -17,8 +18,8 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 HARNESS = ROOT / "tests" / "chrome_extension_harness.js"
-CONTENT = ROOT / "chrome_extension" / "content.js"
-BACKGROUND = ROOT / "chrome_extension" / "background.js"
+CONTENT = ROOT / "experimental" / "chrome_extension" / "content.js"
+BACKGROUND = ROOT / "experimental" / "chrome_extension" / "background.js"
 
 INPUT_EVENTS = [
     {"event": "keydown"},

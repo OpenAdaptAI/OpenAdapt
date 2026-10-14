@@ -18,8 +18,8 @@ mode.
 
 ## The prototype's exposure
 
-The repository-only Chrome extension prototype can observe pages across its
-configured host permissions. Its development bridge can emit DOM text and
+The Chrome extension prototype in `experimental/chrome_extension/` can
+observe pages across its configured host permissions. Its development bridge can emit DOM text and
 keyboard events to an unauthenticated local WebSocket, and it contains legacy
 direct DOM replay. Those files are excluded from the published wheel and source
 archive. The production Capture API doesn't export the bridge, and the former

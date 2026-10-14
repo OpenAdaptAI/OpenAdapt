@@ -66,8 +66,8 @@ openadapt_capture/
   audio.py         # Audio recording + transcription
   visualize/       # Demo GIF and HTML viewer generation
   share.py         # Magic Wormhole sharing
-  browser_bridge.py # Browser extension integration
   cli.py           # CLI commands (capture record, capture info, capture share)
+experimental/      # Unfinished prototypes kept out of the package (Chrome extension, WebSocket bridge)
 ```
 
 ## Key Components
