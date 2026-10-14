@@ -29,6 +29,9 @@ dependencies = [
     "pydantic>=2.0",
 ]
 
+[project.scripts]
+openadapt-vocab-lint = "openadapt_types.vocabulary.lint:main"
+
 [project.urls]
 Homepage = "https://github.com/OpenAdaptAI/openadapt-types"
 Repository = "https://github.com/OpenAdaptAI/openadapt-types"
