@@ -11114,7 +11114,9 @@ class Replayer:
         evidence. A qualification case refuses before workflow actuation when
         the active backend cannot independently return the application,
         application version, and session identity or when either expected
-        application field differs.
+        application field differs. The one exception is the signed-in web
+        session observer: its version is the operator's Check it confirmation,
+        bound into its contract and environment digests.
         """
 
         authorization = self.governed_authorization
@@ -11132,6 +11134,26 @@ class Replayer:
             return "qualification target kind does not match the project"
 
         configured_observer = self.qualification_environment_observer
+        if configured_observer is None:
+            from openadapt_flow.qualification_web_session import (
+                SIGNED_IN_WEB_SESSION_OBSERVER_ID,
+                SignedInWebSessionObserver,
+            )
+
+            if (
+                project.environment.environment_observer_id
+                == SIGNED_IN_WEB_SESSION_OBSERVER_ID
+            ):
+                # Real web apps carry no OpenAdapt markers: identify them by
+                # origin and signed-in session, with the version the operator
+                # confirmed in Check it. The contract and environment digests
+                # below still have to match the project exactly.
+                try:
+                    configured_observer = SignedInWebSessionObserver(
+                        project.environment.application_version
+                    )
+                except ValueError:
+                    return "qualification confirmed application version is invalid"
         if configured_observer is None:
             if not callable(
                 getattr(self.backend, "qualification_environment_identity", None)
