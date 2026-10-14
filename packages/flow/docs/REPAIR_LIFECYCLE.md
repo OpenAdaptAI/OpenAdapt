@@ -48,7 +48,21 @@ bundle:
   healed bundle at the end. That healed bundle is now registered as a repair
   candidate (source `heal`) with the run's heal evidence attached.
 - **Teach path** (`openadapt_flow/learning/teach.py`): a promoted taught
-  bundle is registered as a repair candidate (source `teach`).
+  bundle is registered as a repair candidate (source `teach`). The fix comes
+  from a recording of the operator's correction, and the taught step clicks
+  the target that recording captured, with its template crops copied into the
+  taught bundle. Where the step goes depends on where the run stopped:
+  - The stopped step never acted (a dialog covered its target): the fix runs
+    before it, only when the dialog's text is on screen.
+  - The stopped step acted and its expected screen didn't appear: the fix
+    becomes that step's exception handler. If the recording repeats the step,
+    the learned program retries it after the fix. If not, the fix must also
+    reach the step's expected screen.
+  - teach refuses to retry a step that can write (irreversible, or with
+    system-of-record effects), because nothing shows that its first delivery
+    wrote nothing. It also refuses a fix with no recorded target, and a halt
+    where no text on screen was new (the guard needs text that earlier screens
+    of the run did not show).
 
 Registration failure fails CLOSED by absence: a proposed bundle without a
 candidate record cannot enter the lifecycle at all.

@@ -316,6 +316,8 @@ def _successful_return_summaries(
                         for transition in state.transitions
                         if transition.target in graph.states
                     )
+                if state.on_exception in graph.states:
+                    return_adjacency[state_id].append(str(state.on_exception))
                 if state.kind is StateKind.TERMINAL:
                     if (state.outcome or "success") == "success":
                         exits.add(state_id)
@@ -380,6 +382,9 @@ def _successful_return_summaries(
                                 "cond::" + _predicate_key(transition.guard)
                             )
                         adjacency[state_id].append((transition.target, contribution))
+                if state.on_exception in graph.states:
+                    # The state failed: none of its tokens hold on this edge.
+                    adjacency[state_id].append((str(state.on_exception), set()))
                 if state.kind is StateKind.TERMINAL:
                     if (state.outcome or "success") == "success":
                         terminals.add(state_id)
@@ -457,8 +462,10 @@ def _analyze(
     Direct subflow calls use an interprocedural successful-return summary. Thus,
     a decision or guard that every child return crosses also dominates the
     caller continuation. Loop bodies do not contribute return tokens because a
-    loop can execute zero rows. Cycles converge because the meet only shrinks a
-    node's must-set."""
+    loop can execute zero rows. An ``on_exception`` edge is a path too: it
+    carries only the tokens that held on entry to the failed state, so a write
+    reachable through an exception handler is gated like any other. Cycles
+    converge because the meet only shrinks a node's must-set."""
     graphs: dict[str, ProgramGraph] = {_MAIN: main}
     for name, g in (subflows or {}).items():
         graphs[name] = g
@@ -495,6 +502,11 @@ def _analyze(
                         if t.guard is not None:
                             contrib.add("cond::" + _predicate_key(t.guard))
                         outs.append((_node_id(gname, t.target), contrib))
+            if st.on_exception in g.states:
+                # A failed action routes to its exception handler. The state
+                # did not complete, so none of the tokens it would establish
+                # (its identity arming, its own guard) hold on this edge.
+                outs.append((_node_id(gname, str(st.on_exception)), set()))
             if (
                 st.kind is StateKind.SUBFLOW_CALL
                 and st.subflow is not None

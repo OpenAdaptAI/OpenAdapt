@@ -40,6 +40,11 @@ class TraceStep(BaseModel):
     #: identity-relevant (a click on an entity row). Diagnostic for clustering
     #: and induction; the loop never trusts it as a live verification.
     identity: Optional[str] = None
+    #: The action was delivered but did not reach its expected result (its
+    #: postcondition failed), for example because a dialog opened in response
+    #: to it. The live interpreter then continues only through the state's
+    #: ``on_exception`` handler, so a symbolic walk does the same.
+    failed: bool = False
 
 
 class ExecutionTrace(BaseModel):

@@ -27,6 +27,7 @@ All deterministic, ``$0``, no model calls.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from enum import Enum
 from typing import Optional
 
@@ -34,6 +35,7 @@ from openadapt_flow.ir import (
     ActionKind,
     Anchor,
     Guard,
+    PostconditionKind,
     Predicate,
     PredicateKind,
     ProgramGraph,
@@ -242,24 +244,54 @@ def generate_stream(
 
 # -- the reference (stand-in) inducer -----------------------------------------
 
+#: Postconditions about what the screen shows, which stay meaningful when
+#: checked after a later action (unlike "the URL changed since this step began").
+_SCREEN_STATE_CHECKS = frozenset(
+    {
+        PostconditionKind.TEXT_PRESENT,
+        PostconditionKind.TEXT_ABSENT,
+        PostconditionKind.REGION_STABLE,
+    }
+)
+
 
 class StructuralDiffInducer:
-    """Deterministic reference inducer: splice a newly-observed OPTIONAL step in.
+    """Deterministic reference inducer: splice a newly-observed step in.
 
-    A stand-in for the real multi-trace-induction PR, implementing exactly the
-    "a new optional step appeared" case: it diffs the fit traces against a base
-    program, finds an intent that occurs in SOME successful traces but is not an
-    action in the base program, and inserts it as a GUARDED optional step (a
-    Phase-1 ``skip`` guard keyed on the co-occurring screen fact) after the
-    base step it consistently follows. Reversible + unarmed by construction (a
-    dialog dismissal has no identity/effect), so it never fabricates the safety
-    evidence the regression gate protects.
+    A stand-in for the real multi-trace-induction PR. It diffs the fit traces
+    against a base program, finds an intent that occurs in SOME successful
+    traces but is not an action in the base program, and splices it in, keyed
+    on the screen fact that co-occurs with it. Two placements are supported,
+    decided by what the traces show:
 
-    It handles ONLY the additive-optional-step revision; any other structural
-    drift (a renamed field, a new loop) yields the base program UNCHANGED, so the
-    loop's canary correctly finds the candidate still fails to cover the novelty
-    and refuses it -- the honest "I could not learn this" path.
+    - **Before a step** (the obstruction appeared before the next step could
+      act): the new step goes after the base step it consistently follows, as
+      a GUARDED optional step (a Phase-1 ``skip`` guard on the fact).
+    - **After a failed step** (the step was delivered, then an obstruction
+      appeared in response, so its postcondition failed): the trace shows the
+      step marked ``failed`` followed by the new step. The failed step's state
+      gets an ``on_exception`` edge to the new step, which halts unless the
+      fact is present. When the trace then repeats the failed step (the
+      dialog stopped it from taking effect), a retry of that step follows the
+      new step. Otherwise the step took effect and the dialog only covered
+      the result: the new step also checks the failed step's own expected
+      screen, then continues to its successor. A run where the step succeeds
+      never visits these states.
+
+    The new step's on-screen target comes from ``recorded_steps`` (intent ->
+    the compiled :class:`~openadapt_flow.ir.Step` of the operator's fix
+    recording, with its real anchor) when one is given. Without it the step
+    gets a placeholder anchor, which only the synthetic stream uses; a caller
+    replaying the result on a real screen must supply recorded steps.
+
+    The inducer invents no identity, effect, or risk evidence, so the
+    regression gate keeps the final say. Anything else (a renamed field, a new
+    loop, an ambiguous splice point) yields the base program UNCHANGED, so the
+    loop's canary finds the novelty still uncovered and refuses it.
     """
+
+    def __init__(self, recorded_steps: Optional[Mapping[str, Step]] = None) -> None:
+        self._recorded: dict[str, Step] = dict(recorded_steps or {})
 
     def induce(
         self,
@@ -284,7 +316,18 @@ class StructuralDiffInducer:
         fact = self._guard_fact(successes, new_intent)
         if predecessor is None or fact is None:
             return base.model_copy(deep=True)
-        return self._splice_optional_step(base, new_intent, predecessor, fact)
+        placement = self._placement(successes, new_intent)
+        if placement in ("after_failed_retry", "after_failed_continue"):
+            return self._splice_exception_handler(
+                base,
+                new_intent,
+                predecessor,
+                fact,
+                retry=placement == "after_failed_retry",
+            )
+        if placement == "before":
+            return self._splice_optional_step(base, new_intent, predecessor, fact)
+        return base.model_copy(deep=True)
 
     # -- helpers ------------------------------------------------------------
 
@@ -317,6 +360,33 @@ class StructuralDiffInducer:
         return next(iter(preds)) if len(preds) == 1 else None
 
     @staticmethod
+    def _placement(successes: list[ExecutionTrace], new_intent: str) -> Optional[str]:
+        """Where the traces put the new step.
+
+        ``"after_failed_retry"``: right after a FAILED step and followed by that
+        same step again (dismiss, then retry). ``"after_failed_continue"``:
+        right after a FAILED step, then on to other steps. ``"before"``: the
+        preceding step did not fail. ``None`` when the traces disagree (an
+        ambiguous splice is not attempted)."""
+        kinds: set[str] = set()
+        for trace in successes:
+            steps = trace.steps
+            for i, step in enumerate(steps):
+                if step.intent != new_intent:
+                    continue
+                prev = steps[i - 1] if i > 0 else None
+                nxt = steps[i + 1] if i + 1 < len(steps) else None
+                if prev is not None and prev.failed:
+                    retried = nxt is not None and nxt.intent == prev.intent
+                    kinds.add(
+                        "after_failed_retry" if retried else "after_failed_continue"
+                    )
+                else:
+                    kinds.add("before")
+                break
+        return next(iter(kinds)) if len(kinds) == 1 else None
+
+    @staticmethod
     def _guard_fact(successes: list[ExecutionTrace], new_intent: str) -> Optional[str]:
         """A fact TRUE in exactly the traces that contain the new step and
         absent from those that do not -- the guard predicate's text."""
@@ -338,29 +408,118 @@ class StructuralDiffInducer:
         return None
 
     @staticmethod
-    def _splice_optional_step(
-        base: ProgramGraph, new_intent: str, predecessor: str, fact: str
-    ) -> ProgramGraph:
-        graph = base.model_copy(deep=True)
-        # Locate the predecessor action state and its current successor.
-        pred_state = next(
+    def _unique_action_state(graph: ProgramGraph, intent: str) -> Optional[State]:
+        """The ONE action state performing ``intent``; None when absent or
+        when several states share the intent (the splice point is ambiguous)."""
+        matches = [
             s
             for s in graph.states.values()
             if s.kind is StateKind.ACTION
             and s.step is not None
-            and s.step.intent == predecessor
+            and s.step.intent == intent
+        ]
+        return matches[0] if len(matches) == 1 else None
+
+    @staticmethod
+    def _fresh_id(graph: ProgramGraph, wanted: str) -> str:
+        sid, n = wanted, 2
+        while sid in graph.states:
+            sid, n = f"{wanted}_{n}", n + 1
+        return sid
+
+    def _new_state(self, sid: str, intent: str, target: str, guard: Guard) -> State:
+        """The spliced action state: the operator's recorded step when one was
+        supplied for ``intent``, else the placeholder the synthetic stream uses."""
+        recorded = self._recorded.get(intent)
+        if recorded is None:
+            return _action_state(sid, intent, target, guard=guard)
+        step = recorded.model_copy(deep=True, update={"id": sid, "guard": guard})
+        return State(
+            id=sid,
+            kind=StateKind.ACTION,
+            step=step,
+            transitions=[Transition(target=target, label="")],
         )
-        old_target = (
-            pred_state.transitions[0].target if pred_state.transitions else "__end__"
-        )
-        new_sid = "s_" + new_intent.lower().replace(" ", "_")[:24]
-        guard = Guard(
+
+    @staticmethod
+    def _fact_guard(fact: str, on_unmet: str) -> Guard:
+        return Guard(
             predicate=Predicate(
                 kind=PredicateKind.TEXT_PRESENT, text=fact, intent=f"{fact} present"
             ),
-            on_unmet="skip",
+            on_unmet=on_unmet,  # type: ignore[arg-type]
         )
-        new_state = _action_state(new_sid, new_intent, old_target, guard=guard)
-        graph.states[new_sid] = new_state
+
+    def _splice_optional_step(
+        self, base: ProgramGraph, new_intent: str, predecessor: str, fact: str
+    ) -> ProgramGraph:
+        graph = base.model_copy(deep=True)
+        # Locate the predecessor action state and its current successor.
+        pred_state = self._unique_action_state(graph, predecessor)
+        if pred_state is None:
+            return graph
+        old_target = (
+            pred_state.transitions[0].target if pred_state.transitions else "__end__"
+        )
+        new_sid = self._fresh_id(
+            graph, "s_" + new_intent.lower().replace(" ", "_")[:24]
+        )
+        graph.states[new_sid] = self._new_state(
+            new_sid, new_intent, old_target, self._fact_guard(fact, "skip")
+        )
         pred_state.transitions = [Transition(target=new_sid, label="")]
+        return graph
+
+    def _splice_exception_handler(
+        self,
+        base: ProgramGraph,
+        new_intent: str,
+        failed_intent: str,
+        fact: str,
+        *,
+        retry: bool,
+    ) -> ProgramGraph:
+        graph = base.model_copy(deep=True)
+        failed_state = self._unique_action_state(graph, failed_intent)
+        if (
+            failed_state is None
+            or failed_state.step is None
+            or failed_state.on_exception is not None
+        ):
+            return graph  # ambiguous, or an authored handler already exists
+        failed_step = failed_state.step
+        successors = [t.model_copy(deep=True) for t in failed_state.transitions]
+        new_sid = self._fresh_id(
+            graph, "s_" + new_intent.lower().replace(" ", "_")[:24]
+        )
+        # The handler runs only after the step failed; it halts unless the
+        # obstruction the operator resolved is on screen.
+        handler = self._new_state(
+            new_sid, new_intent, "__end__", self._fact_guard(fact, "halt")
+        )
+        assert handler.step is not None
+        if retry:
+            retry_sid = self._fresh_id(graph, f"{failed_state.id}__retry")
+            handler.transitions = [Transition(target=retry_sid, label="")]
+            graph.states[retry_sid] = State(
+                id=retry_sid,
+                kind=StateKind.ACTION,
+                step=failed_step.model_copy(
+                    deep=True, update={"id": f"{failed_step.id}__retry"}
+                ),
+                transitions=successors,
+            )
+        else:
+            # The failed step took effect; the dialog only covered the result.
+            # After the dismissal the screen must show what the failed step was
+            # expected to produce. Checks relative to the step's own starting
+            # screen (URL or title changed, a new tab) are not repeated.
+            handler.step.expect = list(handler.step.expect) + [
+                p.model_copy(deep=True)
+                for p in failed_step.expect
+                if p.kind in _SCREEN_STATE_CHECKS
+            ]
+            handler.transitions = successors
+        graph.states[new_sid] = handler
+        failed_state.on_exception = new_sid
         return graph

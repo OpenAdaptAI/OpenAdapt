@@ -422,6 +422,12 @@ claims:
         proves: >-
           The `teach` CLI resolves a halt via a correction spec or a recording,
           refuses an underdetermined fix, and errors on a non-halted run.
+      - path: tests/test_teach_placement.py
+        proves: >-
+          A recorded fix's own target is carried into the taught bundle; the
+          fix is placed before a step that never acted and after a step that
+          acted (retried, or checked against its expected screen); retrying a
+          step that can write, and a fix with no recorded target, are refused.
     caveats:
       - >-
         Promotion is governed by a regression gate that blocks identity-

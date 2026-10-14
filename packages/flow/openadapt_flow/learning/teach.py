@@ -32,15 +32,36 @@ DEMONSTRATION of the fix, :func:`teach` wires the EXISTING loop end to end:
 Deterministic and ``$0`` on the shipped path: the resolution is induced by the
 model-free reference inducer
 (:class:`~openadapt_flow.learning.synth_stream.StructuralDiffInducer`), which
-handles the "an unexpected optional dialog intercepted the workflow" resolution
-class the halt->learn loop was built for (splice a guarded, reversible dismiss
-step keyed on the observed screen fact). A model-backed inducer wires in behind
-the same :class:`~openadapt_flow.learning.loop.Inducer` seam without touching
-this flow.
+handles the "an unexpected dialog intercepted the workflow" resolution class
+the halt->learn loop was built for. Three things make that work on a real
+bundle, not only on the synthetic stream:
+
+- **The recorded target is carried.** A fix RECORDING compiles to steps with
+  real anchors. Those steps, and their template crops, become the spliced
+  step, so the taught bundle clicks what the operator clicked. A fix given
+  only as intents has no on-screen target and is refused.
+- **The step goes where the dialog appeared.** When the halted step never
+  acted (the dialog blocked its target), the dismiss step is spliced before
+  it. When the halted step was delivered and the dialog appeared in response,
+  the dismiss step becomes that step's exception handler. If the fix
+  recording ends by doing the step again, the learned program retries it;
+  otherwise the dismiss step must also reach the step's expected screen. A
+  delivered step that can write (irreversible, or with system-of-record
+  effects) is never retried: teach refuses, because nothing proves the first
+  delivery wrote nothing.
+- **The guard keys on new text.** The branch guard uses text that appeared on
+  the screen where the run stopped and on no earlier screen of the same run,
+  preferring the label of the control the operator clicked. Text that every
+  screen shows can't tell the two situations apart.
+
+A model-backed inducer wires in behind the same
+:class:`~openadapt_flow.learning.loop.Inducer` seam without touching this flow.
 """
 
 from __future__ import annotations
 
+import difflib
+import re
 import shutil
 from pathlib import Path
 from typing import Optional
@@ -49,9 +70,13 @@ from pydantic import BaseModel, Field
 
 from openadapt_flow.ir import (
     ActionKind,
+    Anchor,
+    Predicate,
     ProgramGraph,
     RunReport,
     StateKind,
+    Step,
+    StepResult,
     Workflow,
     lift_to_program,
 )
@@ -307,53 +332,350 @@ def _baseline_success(
     )
 
 
-def _correction_from_spec(
+# -- where the run stopped -----------------------------------------------------
+
+
+def _halted_result(report: RunReport) -> Optional[StepResult]:
+    """The result of the step the run stopped on, when the report holds it."""
+    halt = report.halt
+    assert halt is not None
+    for result in reversed(report.results):
+        if result.step_id == halt.state_id and not result.ok and not result.skipped:
+            return result
+    return None
+
+
+def _halted_step(program: ProgramGraph, report: RunReport) -> Optional[Step]:
+    """The base program's step the run stopped on (by state id, step id, then a
+    unique intent), or None when it can't be told apart."""
+    halt = report.halt
+    assert halt is not None
+    state = program.states.get(halt.state_id)
+    if state is not None and state.step is not None:
+        return state.step
+    steps = [
+        s.step
+        for s in program.states.values()
+        if s.kind is StateKind.ACTION and s.step is not None
+    ]
+    by_id = [step for step in steps if step.id == halt.state_id]
+    if len(by_id) == 1:
+        return by_id[0]
+    by_intent = [step for step in steps if step.intent == halt.intent]
+    return by_intent[0] if len(by_intent) == 1 else None
+
+
+def _was_delivered(result: Optional[StepResult]) -> bool:
+    """True when the halted step's input reached the application before the run
+    stopped: its postcondition failed, not its target resolution."""
+    return bool(result is not None and result.delivery_attempted)
+
+
+def _can_write(step: Step) -> bool:
+    """The step may change a system of record (the gate's definition)."""
+    return step.risk == "irreversible" or bool(step.effects)
+
+
+# -- the branch guard ----------------------------------------------------------
+
+_QUOTED_LABEL = re.compile(r"'([^']+)'")
+
+
+def _norm(text: str) -> str:
+    return "".join(text.lower().split())
+
+
+def _similar(a: str, b: str) -> bool:
+    """The same on-screen text, allowing small OCR differences."""
+    na, nb = _norm(a), _norm(b)
+    if not na or not nb:
+        return False
+    return na == nb or difflib.SequenceMatcher(None, na, nb).ratio() >= 0.9
+
+
+def _texts_seen_before_halt(
+    run_dir: Path,
+    report: RunReport,
+    halted: Optional[StepResult],
+    delivered: bool,
+) -> Optional[list[str]]:
+    """The text of every screen the run passed through before the obstruction.
+
+    Reads the starting frame of each step that completed, plus the starting
+    frame of the halted step when it was delivered (the obstruction appeared
+    only after it acted). Returns None when no frame can be read or OCR is
+    unavailable.
+    """
+    frames: list[Path] = []
+    for result in report.results:
+        if result.before_png is None:
+            continue
+        completed = result.ok and not result.skipped
+        if completed or (delivered and result is halted):
+            frames.append(run_dir / result.before_png)
+    readable = [frame for frame in frames if frame.is_file()]
+    if not readable:
+        return None
+    try:
+        from openadapt_flow.privacy import scrub_text
+        from openadapt_flow.vision.ocr import ocr
+
+        seen: list[str] = []
+        for frame in readable:
+            for line in ocr(frame.read_bytes()):
+                text = (scrub_text(line.text) or "").strip()
+                if text:
+                    seen.append(text)
+    except Exception:
+        return None
+    return seen
+
+
+def _fix_labels(spec: CorrectionSpec, recorded: dict[str, Step]) -> list[str]:
+    """On-screen labels of the controls the fix clicks: a recorded step's OCR
+    text, else the quoted label in its intent (``click 'Maybe later'``)."""
+    labels: list[str] = []
+    for correction_step in spec.resolution_steps:
+        step = recorded.get(correction_step.intent)
+        if step is not None and step.anchor is not None and step.anchor.ocr_text:
+            labels.append(step.anchor.ocr_text)
+        labels.extend(_QUOTED_LABEL.findall(correction_step.intent))
+    return [label for label in labels if label.strip()]
+
+
+def _choose_guard_fact(
+    observed: list[str], seen: Optional[list[str]], labels: list[str]
+) -> Optional[str]:
+    """Pick the screen text the learned branch keys on.
+
+    Only text that appeared where the run stopped and on no earlier screen of
+    the run qualifies: text every screen shows can't tell the obstruction from
+    a normal run. Among the new texts, the label of the control the operator
+    clicked wins; otherwise the first in reading order. Without earlier frames
+    to compare with, only the fixing control's own label is accepted.
+    """
+    if seen is None:
+        new_texts = [t for t in observed if any(_similar(t, lb) for lb in labels)]
+    else:
+        new_texts = [t for t in observed if not any(_similar(t, x) for x in seen)]
+    for label in labels:
+        for text in new_texts:
+            if _similar(text, label):
+                return text
+    return new_texts[0] if new_texts else None
+
+
+# -- the correction ----------------------------------------------------------
+
+
+class _Plan(BaseModel):
+    """The correction to learn, or the reason teach won't attempt it."""
+
+    model_config = {"arbitrary_types_allowed": True}
+
+    correction: Optional[ExecutionTrace] = None
+    baseline: Optional[ExecutionTrace] = None
+    refusal: str = ""
+
+
+def _plan_correction(
     spec: CorrectionSpec,
     program: ProgramGraph,
     report: RunReport,
-) -> tuple[ExecutionTrace, ExecutionTrace]:
-    """Build ``(correction, baseline)`` from a scripted correction spec."""
+    *,
+    run_dir: Path,
+    recorded: dict[str, Step],
+) -> _Plan:
+    """Build the ``(correction, baseline)`` traces, or a refusal reason.
+
+    Places the fix where the obstruction appeared. ``tail`` is the halted step
+    and the remainder of the program.
+
+    - The halted step never acted (the obstruction blocked its target):
+      ``completed + fix + tail``.
+    - The halted step acted and its postcondition failed, and the fix ends by
+      doing that step again (the obstruction stopped it from taking effect):
+      ``completed + [halted step, failed] + fix + tail``. The learned program
+      retries the step after the fix.
+    - The halted step acted and the fix does not repeat it (the step took
+      effect and the obstruction covered the result):
+      ``completed + [halted step, failed] + fix + tail[1:]``.
+
+    Retrying a step that can write is refused: nothing shows that its first
+    delivery wrote nothing.
+    """
     if not spec.resolution_steps:
         raise TeachError(
             "the correction spec has no resolution_steps -- a fix must "
             "demonstrate at least one corrective action"
+        )
+    halt = report.halt
+    assert halt is not None
+    halted = _halted_result(report)
+    delivered = _was_delivered(halted)
+    halted_step = _halted_step(program, report)
+    fix_steps = list(spec.resolution_steps)
+    # A fix that ends by doing the halted step again: the learned program
+    # performs that step after the fix itself, so it is not a new step.
+    repeats_halted = fix_steps[-1].intent == halt.intent
+    if repeats_halted:
+        fix_steps = fix_steps[:-1]
+    if not fix_steps:
+        raise TeachError(
+            "the fix demonstrates no action other than the step where the run stopped"
         )
     tail = (
         tuple(spec.tail_intents)
         if spec.tail_intents is not None
         else _tail_intents(program, report)
     )
+    clean_tail = tail  # a run where the obstruction never appeared
     halt_trace = execution_trace_from_halt(
         report, trace_id=f"{report.workflow_name}-halt-probe"
     )
+    if delivered:
+        if halted_step is None:
+            return _Plan(
+                refusal=(
+                    f"the run stopped after {halt.intent!r} acted, and teach "
+                    "can't find that step in --bundle, so it can't place the "
+                    "fix after it"
+                )
+            )
+        if repeats_halted and _can_write(halted_step):
+            return _Plan(
+                refusal=(
+                    f"the run stopped after {halt.intent!r} was delivered, and "
+                    "that step can write to the record. The fix repeats it, "
+                    "and nothing shows that the first delivery wrote nothing, "
+                    "so the learned workflow could save twice. Check the "
+                    "record before you run the workflow again"
+                )
+            )
+        if not repeats_halted and halted_step.effects:
+            return _Plan(
+                refusal=(
+                    f"the run stopped after {halt.intent!r} was delivered, and "
+                    "its write is checked against the system of record only "
+                    "when its screen check passes. After the fix nothing would "
+                    "check that write, so teach won't learn this fix"
+                )
+            )
+        halt_trace.steps.append(
+            TraceStep(intent=halt.intent, action=halted_step.action, failed=True)
+        )
+        if not repeats_halted and tail and tail[0] == halt.intent:
+            tail = tail[1:]
     if spec.facts is not None:
-        halt_trace = halt_trace.model_copy(update={"facts": dict(spec.facts)})
-    resolution_steps = [
-        TraceStep(intent=s.intent, action=s.action) for s in spec.resolution_steps
-    ]
+        facts = dict(spec.facts)
+    else:
+        fact = _choose_guard_fact(
+            list(halt.observed_texts),
+            _texts_seen_before_halt(run_dir, report, halted, delivered),
+            _fix_labels(spec, recorded),
+        )
+        if fact is None:
+            return _Plan(
+                refusal=(
+                    "no text on the screen where the run stopped was new, so "
+                    "teach can't tell when the fix applies. Pass the text to "
+                    "key on as 'facts' in a .json correction spec"
+                )
+            )
+        facts = {fact: True}
+    halt_trace = halt_trace.model_copy(update={"facts": facts})
     correction = resolution_demonstration(
         halt_trace,
-        resolution_steps=resolution_steps,
+        resolution_steps=[
+            TraceStep(intent=s.intent, action=s.action) for s in fix_steps
+        ],
         tail_intents=tail,
         trace_id=f"{report.workflow_name}-correction",
         params=spec.params or runtime_params_for_gui(report.params),
     )
-    return correction, _baseline_success(program, report, tail)
+    return _Plan(
+        correction=correction,
+        baseline=_baseline_success(program, report, clean_tail),
+    )
 
 
-def _correction_from_recording(
-    recording_dir: Path,
-    program: ProgramGraph,
-    report: RunReport,
-) -> tuple[ExecutionTrace, ExecutionTrace]:
-    """Build ``(correction, baseline)`` from a RECORDING of the resolution.
+def _rebase_anchor(
+    anchor: Optional[Anchor], prefix: str, carried: dict[str, Path], source: Path
+) -> Optional[Anchor]:
+    """Point an anchor's crops at ``templates/<prefix>/...`` in the taught
+    bundle and remember which source file each new path copies from."""
+    if anchor is None:
+        return None
+    update: dict[str, object] = {}
+    for field in ("template", "identifier_crop"):
+        rel = getattr(anchor, field)
+        if rel and rel.startswith("templates/"):
+            new_rel = f"templates/{prefix}/{rel[len('templates/') :]}"
+            carried[new_rel] = source / rel
+            update[field] = new_rel
+    return anchor.model_copy(update=update) if update else anchor
+
+
+def _rebase_predicate(
+    pred: Optional[Predicate], prefix: str, carried: dict[str, Path], source: Path
+) -> Optional[Predicate]:
+    if pred is None:
+        return None
+    return pred.model_copy(
+        update={
+            "anchor": _rebase_anchor(pred.anchor, prefix, carried, source),
+            "operands": [
+                _rebase_predicate(op, prefix, carried, source) for op in pred.operands
+            ],
+        }
+    )
+
+
+def _rebase_step(
+    step: Step, prefix: str, carried: dict[str, Path], source: Path
+) -> Step:
+    """A copy of a compiled fix step whose crops resolve in the taught bundle."""
+    expect = []
+    for post in step.expect:
+        if post.template and post.template.startswith("templates/"):
+            new_rel = f"templates/{prefix}/{post.template[len('templates/') :]}"
+            carried[new_rel] = source / post.template
+            post = post.model_copy(update={"template": new_rel})
+        expect.append(post)
+    guard = step.guard
+    if guard is not None:
+        guard = guard.model_copy(
+            update={
+                "predicate": _rebase_predicate(guard.predicate, prefix, carried, source)
+            }
+        )
+    return step.model_copy(
+        deep=True,
+        update={
+            "anchor": _rebase_anchor(step.anchor, prefix, carried, source),
+            "drag_end_anchor": _rebase_anchor(
+                step.drag_end_anchor, prefix, carried, source
+            ),
+            "expect": expect,
+            "guard": guard,
+            "wait_until": _rebase_predicate(step.wait_until, prefix, carried, source),
+        },
+    )
+
+
+def _spec_from_recording(
+    recording_dir: Path, report: RunReport
+) -> tuple[CorrectionSpec, dict[str, Step], dict[str, Path]]:
+    """Compile a RECORDING of the resolution into a spec plus its real targets.
 
     The recording is compiled through the ordinary single-trace bootstrap
-    (:func:`compile_recording`); its steps become the corrective
-    ``resolution_steps`` (the NEW actions the operator demonstrated, e.g. dismiss
-    the dialog). The originally-blocked tail is read off the base program and the
-    observed screen fact is carried from the halt -- so the operator records ONLY
-    the fix, not a re-run of the whole task.
+    (:func:`compile_recording`). Its steps become the corrective
+    ``resolution_steps`` (the NEW actions the operator demonstrated, e.g.
+    dismiss the dialog), and each compiled step, with its recorded anchor, is
+    returned so the inducer splices the real target rather than a placeholder.
+    When the recording ends by doing the step the run stopped on again, the
+    learned program retries that step (see :func:`_plan_correction`). Returns
+    ``(spec, recorded steps by intent, taught-bundle path -> source crop)``.
     """
     from openadapt_flow.compiler.compile import compile_recording
 
@@ -364,20 +686,27 @@ def _correction_from_recording(
             "recording produced by `openadapt-flow record`, or a .json "
             "correction spec."
         )
+    compiled_dir = recording / "_teach_compiled"
     compiled = compile_recording(
-        recording, recording / "_teach_compiled", name=f"{report.workflow_name}-fix"
+        recording, compiled_dir, name=f"{report.workflow_name}-fix"
     )
-    spec = CorrectionSpec(
-        resolution_steps=[
-            CorrectionStep(intent=s.intent, action=s.action) for s in compiled.steps
-        ]
-    )
-    if not spec.resolution_steps:
+    fix_steps = list(compiled.steps)
+    if not fix_steps:
         raise TeachError(
             f"the fix recording {recording} compiled to zero steps -- it "
             "demonstrates no corrective action"
         )
-    return _correction_from_spec(spec, program, report)
+    prefix = "teach-" + re.sub(r"[^A-Za-z0-9_-]+", "-", compiled.recording_id or "fix")
+    carried: dict[str, Path] = {}
+    recorded = {
+        s.intent: _rebase_step(s, prefix, carried, compiled_dir) for s in fix_steps
+    }
+    spec = CorrectionSpec(
+        resolution_steps=[
+            CorrectionStep(intent=s.intent, action=s.action) for s in fix_steps
+        ]
+    )
+    return spec, recorded, carried
 
 
 def _load_fix(fix: Path | str) -> Optional[CorrectionSpec]:
@@ -422,11 +751,12 @@ class TeachResult(BaseModel):
         ]
         if self.outcome.clusters:
             lines.append(f"  clusters: {self.outcome.clusters}")
-        lines.append(
-            "  held-out coverage: "
-            f"{self.outcome.coverage_before:.2f} -> "
-            f"{self.outcome.coverage_after:.2f}"
-        )
+        if self.outcome.action != _NOT_ATTEMPTED:
+            lines.append(
+                "  held-out coverage: "
+                f"{self.outcome.coverage_before:.2f} -> "
+                f"{self.outcome.coverage_after:.2f}"
+            )
         if self.outcome.gate is not None:
             gate = "passed" if self.outcome.gate.passed else "FAILED"
             lines.append(f"  regression gate: {gate}")
@@ -444,6 +774,23 @@ class TeachResult(BaseModel):
         return "\n".join(lines)
 
 
+#: ``LearnOutcome.action`` for a refusal decided before the learn loop ran.
+_NOT_ATTEMPTED = "not_attempted"
+
+
+def _refusal(skill_id: str, reason: str) -> TeachResult:
+    return TeachResult(
+        skill_id=skill_id,
+        promoted=False,
+        outcome=LearnOutcome(
+            skill_id=skill_id,
+            action=_NOT_ATTEMPTED,
+            reason=reason,
+            active_version=0,
+        ),
+    )
+
+
 _TARGETED_ACTIONS = frozenset(
     {
         ActionKind.CLICK,
@@ -454,31 +801,30 @@ _TARGETED_ACTIONS = frozenset(
 )
 
 
-def _anchor_keys(graphs: list[ProgramGraph]) -> set[tuple[object, ...]]:
-    keys: set[tuple[object, ...]] = set()
-    for graph in graphs:
-        for state in graph.states.values():
-            step = state.step
-            if step is None:
-                continue
-            for anchor in (step.anchor, step.drag_end_anchor):
-                if anchor is not None:
-                    keys.add((anchor.template, anchor.region, anchor.click_point))
-    return keys
+def _anchor_key(anchor: Anchor) -> tuple[object, ...]:
+    return (anchor.template, anchor.region, anchor.click_point)
 
 
-def _real_target_canary(bundle_dir: Path) -> ProgramCanaryFn:
-    """Veto a candidate whose NEW on-screen target has no crop in the bundle.
+def _real_target_canary(bundle_dir: Path, carried: dict[str, Path]) -> ProgramCanaryFn:
+    """Veto a candidate whose NEW on-screen target has no crop to resolve.
 
-    A fix given only as intents carries no on-screen target, so the reference
-    inducer fills the spliced step with a placeholder anchor. Its template does
-    not exist in a real bundle, the step can never resolve, and the taught
-    bundle would halt exactly as before. Promoting it would report LEARNED for
-    a repair that cannot work, so it is refused instead.
+    A step the base program already had keeps its anchors. A spliced click or
+    drag must point at a crop that exists, either in the base bundle or among
+    the crops carried from the fix recording. A fix given only as intents has
+    no recorded target, so the inducer fills in a placeholder whose crop does
+    not exist: the taught bundle would stop at the same place, so it is
+    refused instead.
     """
 
     def canary(ctx: CanaryContext) -> tuple[bool, str]:
-        known = _anchor_keys([ctx.active, *ctx.subflows.values()])
+        known: set[tuple[object, ...]] = set()
+        for graph in [ctx.active, *ctx.subflows.values()]:
+            for state in graph.states.values():
+                if state.step is None:
+                    continue
+                for anchor in (state.step.anchor, state.step.drag_end_anchor):
+                    if anchor is not None:
+                        known.add(_anchor_key(anchor))
         for graph in [ctx.candidate, *ctx.subflows.values()]:
             for state in graph.states.values():
                 step = state.step
@@ -488,34 +834,42 @@ def _real_target_canary(bundle_dir: Path) -> ProgramCanaryFn:
                 if step.action is ActionKind.DRAG:
                     anchors.append(step.drag_end_anchor)
                 for anchor in anchors:
+                    if anchor is not None and _anchor_key(anchor) in known:
+                        continue
                     if anchor is not None and (
-                        (anchor.template, anchor.region, anchor.click_point) in known
+                        anchor.template in carried
+                        or (bundle_dir / anchor.template).is_file()
                     ):
                         continue
-                    if anchor is None or not (bundle_dir / anchor.template).is_file():
-                        return False, (
-                            f"the fix step {step.intent!r} has no real on-screen "
-                            "target in this bundle, so a re-run would stop at "
-                            "the same place. teach can't add a new target yet; "
-                            "record the workflow again with this step included "
-                            "and compile it instead"
-                        )
+                    return False, (
+                        f"the fix step {step.intent!r} has no recorded on-screen "
+                        "target, so the taught bundle would stop at the same "
+                        "place. Record the fix (openadapt-flow record) and pass "
+                        "the recording as --fix"
+                    )
         return True, ""
 
     return canary
 
 
 def _copy_templates(src_bundle: Path, out_bundle: Path) -> None:
-    """Carry the base bundle's template crops into the updated bundle so the
-    promoted program can resolve its anchors on re-run."""
+    """Carry the base bundle's template crops (subfolders included, such as
+    identifier crops) into the updated bundle so the promoted program can
+    resolve its anchors on re-run."""
     src_templates = src_bundle / "templates"
     if not src_templates.is_dir():
         return
-    dst_templates = out_bundle / "templates"
-    dst_templates.mkdir(parents=True, exist_ok=True)
-    for crop in src_templates.iterdir():
-        if crop.is_file():
-            shutil.copy2(crop, dst_templates / crop.name)
+    shutil.copytree(src_templates, out_bundle / "templates", dirs_exist_ok=True)
+
+
+def _copy_carried(carried: dict[str, Path], out_bundle: Path) -> None:
+    """Copy the fix recording's crops to the paths the spliced step uses."""
+    for rel, source in carried.items():
+        if not source.is_file():
+            raise TeachError(f"the fix recording's crop {source} is missing")
+        destination = out_bundle / rel
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, destination)
 
 
 def teach(
@@ -541,7 +895,7 @@ def teach(
             ``<out>.skills`` -- a SIBLING of ``out`` so ``out`` is created only
             when a bundle is actually promoted; the promotion lineage is kept).
         inducer: The resolution inducer (default: the model-free reference
-            :class:`StructuralDiffInducer`).
+            :class:`StructuralDiffInducer`, given the fix recording's steps).
 
     Returns:
         A :class:`TeachResult`. ``promoted`` True means an updated bundle was
@@ -560,10 +914,17 @@ def teach(
     sid = skill_id or report.workflow_name
 
     spec = _load_fix(fix)
-    if spec is not None:
-        correction, baseline = _correction_from_spec(spec, program, report)
-    else:
-        correction, baseline = _correction_from_recording(Path(fix), program, report)
+    recorded: dict[str, Step] = {}
+    carried: dict[str, Path] = {}
+    if spec is None:
+        spec, recorded, carried = _spec_from_recording(Path(fix), report)
+    plan = _plan_correction(
+        spec, program, report, run_dir=Path(run_dir), recorded=recorded
+    )
+    if plan.refusal:
+        # Refused before learning: nothing is written, not even a library.
+        return _refusal(sid, plan.refusal)
+    assert plan.correction is not None and plan.baseline is not None
 
     lib_root = (
         Path(library_dir)
@@ -579,10 +940,10 @@ def teach(
         library,
         sid,
         halt_report=report,
-        correction=correction,
-        inducer=inducer or StructuralDiffInducer(),
-        baseline=[baseline],
-        canary=_real_target_canary(Path(bundle)),
+        correction=plan.correction,
+        inducer=inducer or StructuralDiffInducer(recorded_steps=recorded),
+        baseline=[plan.baseline],
+        canary=_real_target_canary(Path(bundle), carried),
     )
 
     if not outcome.promoted:
@@ -603,8 +964,10 @@ def teach(
         }
     )
     out_bundle = Path(out)
-    updated.save(out_bundle)
+    # Crops go in first: saving seals a manifest over the files present.
     _copy_templates(Path(bundle), out_bundle)
+    _copy_carried(carried, out_bundle)
+    updated.save(out_bundle)
     # Governed repair promotion (Section 9): the taught bundle is a lifecycle
     # CANDIDATE, never an implicitly active bundle. A detached
     # repair/candidate.json is written into it; promotion to active requires

@@ -156,6 +156,7 @@
 |---|---|---|---|---|
 | `tests/test_halt_learn_loop.py` | test | ci (required PR gate (test)) | supported | A surprise modal halts and emits a learnable trace; teaching promotes a guarded dismiss branch that replays without regression; an underdetermined correction is refused. |
 | `tests/test_teach_cli.py` | test | ci (required PR gate (test)) | supported | The `teach` CLI resolves a halt via a correction spec or a recording, refuses an underdetermined fix, and errors on a non-halted run. |
+| `tests/test_teach_placement.py` | test | ci (required PR gate (test)) | supported | A recorded fix's own target is carried into the taught bundle; the fix is placed before a step that never acted and after a step that acted (retried, or checked against its expected screen); retrying a step that can write, and a fix with no recorded target, are refused. |
 
 **Caveats (honest limits):**
 

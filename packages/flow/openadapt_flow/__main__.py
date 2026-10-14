@@ -5253,14 +5253,14 @@ def _cmd_teach(args: argparse.Namespace) -> int:
         from openadapt_flow.cli_hints import command
 
         print(
-            "\nLEARNED. Re-run the updated bundle and the workflow no longer "
-            f"halts on this situation:\n    {command('replay')} {args.out}"
+            "\nLEARNED a repair candidate. Nothing has replayed it yet. Replay it "
+            "where the run stopped before you rely on it:"
+            f"\n    {command('replay')} {args.out}"
         )
         return 0
     print(
-        "\nREFUSED (governed): the correction was underdetermined or would "
-        "weaken a safety invariant, so nothing was promoted and the base bundle "
-        "is unchanged (it still halts here). Supply a clearer or safer fix."
+        "\nREFUSED (governed): nothing was promoted and the base bundle is "
+        "unchanged, so it still stops here. The reason is above."
     )
     return 1
 

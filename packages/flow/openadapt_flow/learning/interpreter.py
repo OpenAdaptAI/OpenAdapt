@@ -7,7 +7,8 @@ explain the executions we just saw?" without a live app. This module walks a
 SAME control-flow rules the live Phase-2 interpreter in
 :mod:`openadapt_flow.runtime.replayer` applies (guarded transitions evaluated in
 order, first match wins; a guarded ``skip`` step is a no-op when its predicate
-is unmet; loops bounded by ``max_iterations``) -- but instead of resolving pixels
+is unmet; a failed action continues only through its state's ``on_exception``
+handler; loops bounded by ``max_iterations``) -- but instead of resolving pixels
 it consumes the trace's ordered action intents and evaluates predicates against
 the trace's recorded ``facts`` / ``params``.
 
@@ -103,6 +104,9 @@ class _Walk:
     visits: int = 0
     fail_reason: str = ""
     terminal: str = ""
+    #: Set when the action just consumed FAILED on the trace and its state
+    #: routes the failure to an ``on_exception`` handler (the next state).
+    exception_target: Optional[str] = None
 
     def fail(self, reason: str) -> bool:
         if not self.fail_reason:
@@ -157,6 +161,11 @@ def _walk_graph(graph: ProgramGraph, walk: _Walk) -> Optional[bool]:
         result = _exec_state(graph, state, walk)
         if result is False:
             return False
+        if walk.exception_target is not None:
+            # The action failed on the trace: the live interpreter skips the
+            # state's transitions and routes to its exception handler.
+            state_id, walk.exception_target = walk.exception_target, None
+            continue
         state_id = _select_transition(state, walk.trace)
         if state_id is None and state.transitions:
             # Branch/guarded state whose guards ALL failed on this trace: the
@@ -220,6 +229,15 @@ def _consume_action(state: State, walk: _Walk) -> Optional[bool]:
             f"'{step.intent}', trace performed '{observed.intent}'"
         )
     walk.pos += 1
+    if observed.failed:
+        # The trace performed this action and it did not reach its expected
+        # result. A live run continues only through an exception handler.
+        if state.on_exception is None:
+            return walk.fail(
+                f"step '{step.id}' ({step.intent}) failed on the trace and its "
+                "state has no exception handler (a live run would HALT here)"
+            )
+        walk.exception_target = state.on_exception
     return None
 
 
