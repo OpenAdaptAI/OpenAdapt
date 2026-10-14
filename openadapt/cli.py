@@ -8,16 +8,15 @@ Usage:
     openadapt flow certify bundle --policy clinical-write
 
     openadapt capture start --name my-task
-    openadapt capture stop
     openadapt capture list
     openadapt capture view <name>
 
-    openadapt train --capture my-task --model qwen3vl-2b
+    openadapt train start --capture my-task --model qwen3vl-2b
     openadapt train status
     openadapt train stop
 
-    openadapt eval --checkpoint model.pt --benchmark waa
-    openadapt eval --agent api-claude --benchmark waa
+    openadapt eval run --checkpoint model.pt --benchmark waa
+    openadapt eval run --agent api-claude --benchmark waa
 
     openadapt serve --port 8080
 
@@ -950,7 +949,6 @@ def capture():
     \b
     Examples:
         openadapt capture start --name login-flow
-        openadapt capture stop
         openadapt capture list
         openadapt capture view login-flow
     """
@@ -996,7 +994,10 @@ def capture_start(name: str, video: bool, audio: bool):
         sys.exit(1)
 
 
-@capture.command("stop")
+# Hidden: it can't stop a capture, so it isn't listed with the commands that
+# work. Typing it still explains how to stop one, and it exits non-zero
+# because nothing was stopped.
+@capture.command("stop", hidden=True)
 def capture_stop():
     """Explain how to stop a capture started in another terminal."""
     raise click.ClickException(
@@ -1378,26 +1379,42 @@ def version():
     from importlib.metadata import PackageNotFoundError
     from importlib.metadata import version as dist_version
 
+    def installed(name: str) -> Optional[str]:
+        try:
+            return dist_version(name)
+        except PackageNotFoundError:
+            return None
+
     click.echo("OpenAdapt Ecosystem Versions:")
     click.echo("=" * 40)
 
-    packages = [
-        "openadapt",
-        "openadapt-agent",
-        "openadapt-capture",
-        "openadapt-ml",
-        "openadapt-evals",
-        "openadapt-flow",
-        "openadapt-viewer",
-        "openadapt-grounding",
-        "openadapt-retrieval",
-    ]
+    # The base install brings in these four.
+    for name in ("openadapt", "openadapt-flow", "openadapt-agent", "openadapt-types"):
+        click.echo(f"  {name}: {installed(name) or 'not installed'}")
+    capture = installed("openadapt-capture") or "not installed (optional extra)"
+    click.echo(f"  openadapt-capture: {capture}")
+    click.echo(
+        "  OpenAdapt Desktop: a separate app, not a Python package, so its "
+        "version isn't listed here"
+    )
 
-    for name in packages:
-        try:
-            click.echo(f"  {name}: {dist_version(name)}")
-        except PackageNotFoundError:
-            click.echo(f"  {name}: not installed")
+    # Research packages print only when installed, so a base install doesn't
+    # look broken.
+    research = [
+        (name, number)
+        for name in (
+            "openadapt-ml",
+            "openadapt-evals",
+            "openadapt-viewer",
+            "openadapt-grounding",
+            "openadapt-retrieval",
+        )
+        if (number := installed(name))
+    ]
+    if research:
+        click.echo("\nResearch (optional):")
+        for name, number in research:
+            click.echo(f"  {name}: {number}")
 
 
 @main.command()
