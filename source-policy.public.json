@@ -11,6 +11,10 @@
   ],
   "enforcement": {
     "built_artifacts": {
+      "content_patterns": [
+        "deployment[_-]derived\\s+threshold\\s*=",
+        "oracle[_-]recipe[_-]id\\s*[:=]"
+      ],
       "path_prefixes": [
         "docs/validation/adversary_corpus",
         "openadapt_flow/validation/adversary_corpus"
@@ -70,8 +74,8 @@
     }
   },
   "generated_from": "OpenAdaptAI/openadapt-internal:source-policy.yaml",
-  "policy_digest": "sha256:d626f2ad18d2111c1b0cc0f715b1aa8b3a9d73dbb4723a2b2776cce0a9d47199",
-  "policy_last_updated": "2026-08-27",
+  "policy_digest": "sha256:183f653281a0f9792f7c54c3831f1a2ea8338a5a8a0af812ba47526d542c4843",
+  "policy_last_updated": "2026-09-03",
   "policy_version": 1,
   "public_repositories": {
     ".github": {
@@ -138,6 +142,19 @@
         "tuned_adversary_params"
       ],
       "slug": "OpenAdaptAI/PydanticPrompt"
+    },
+    "ehr-integration-directory": {
+      "classification": "public",
+      "must_not_contain": [
+        "control_plane",
+        "deployment_thresholds",
+        "enterprise_productionized",
+        "grown_corpus",
+        "oracle_recipes",
+        "real_emr_datasets",
+        "tuned_adversary_params"
+      ],
+      "slug": "OpenAdaptAI/ehr-integration-directory"
     },
     "openadapt-agent": {
       "classification": "public",
