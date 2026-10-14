@@ -24,6 +24,7 @@ Usage:
     openadapt doctor
 """
 
+import os
 import platform
 import re
 import shlex
@@ -720,6 +721,11 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
     click.echo(f"  openadapt-flow: {flow_version}")
     click.echo(f"  requested backend: {backend}")
 
+    # [MISSING] and [UNSUPPORTED] items fail the preflight. [SETUP] items are
+    # ones this command can't check, so their count turns a pass into
+    # "incomplete" instead of failing a host that may be ready.
+    failures = []
+    setup_pending = 0
     bad_refs = [value for value in secret_ref if not _SECRET_REFERENCE.fullmatch(value)]
     click.echo("\nSecret references:")
     if not secret_ref:
@@ -727,8 +733,22 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
     for value in secret_ref:
         if value in bad_refs:
             click.echo("  [INVALID] rejected secret reference (value hidden)")
+        elif value.startswith("env:"):
+            # Flow refuses an unset or empty variable, so this does too. Only
+            # the reference is printed, never the value.
+            if os.environ.get(value[len("env:") :]):
+                click.echo(f"  [OK] {value} is set in this environment")
+            else:
+                failures.append(value)
+                click.echo(
+                    f"  [MISSING] {value} is not set (or is empty) in this environment"
+                )
         else:
-            click.echo(f"  [OK] {value}")
+            setup_pending += 1
+            click.echo(
+                f"  [SETUP] {value}: this preflight can't check that the "
+                "keychain item exists"
+            )
     if bad_refs:
         raise click.UsageError(
             "Secret references must use env:NAME or keychain:service/item; "
@@ -749,7 +769,6 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
             "Preflight failed. Reinstall OpenAdapt with Python 3.10\u20133.12 "
             "as shown above, and then run this command again."
         )
-    failures = []
     flow_importable = find_spec("openadapt_flow") is not None
     flow_version_ready = flow_version != "not installed" and _supported_flow_version(
         flow_version
@@ -792,6 +811,7 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
         if status != "OK":
             failures.append(backend)
         click.echo(f"  [{status}] {message}")
+        setup_pending += 1
         click.echo(
             f"  [SETUP] {backend} target readiness is checked by Flow when the "
             "configured target opens; this guide does not claim it is ready."
@@ -812,9 +832,17 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
             "above before service setup."
         )
 
-    click.echo(
-        "\nPreflight passed for the installed components. No service was started."
-    )
+    if setup_pending:
+        items = "item" if setup_pending == 1 else "items"
+        click.echo(
+            "\nPreflight incomplete. The installed components passed, but this "
+            f"command can't check the {setup_pending} [SETUP] {items} above. "
+            "No service was started."
+        )
+    else:
+        click.echo(
+            "\nPreflight passed for the installed components. No service was started."
+        )
     click.echo("\nGuided deployment path:")
     click.echo(
         "  1. Re-run full host diagnostics: openadapt doctor --backend " + backend

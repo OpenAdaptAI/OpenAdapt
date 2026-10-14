@@ -547,7 +547,11 @@ def test_deploy_native_backend_passes_with_its_platform_extra(
 
     assert result.exit_code == 0, result.output
     assert f"[OK] {backend}" in result.output
-    assert "Preflight passed" in result.output
+    # Flow checks the target itself only when it opens, so this stays a
+    # [SETUP] item and the preflight can't call the host ready (B021).
+    assert f"[SETUP] {backend} target readiness" in result.output
+    assert "Preflight incomplete" in result.output
+    assert "Preflight passed" not in result.output
 
 
 def test_doctor_rdp_fails_without_transport_dependency(monkeypatch):
@@ -678,6 +682,7 @@ def test_deploy_preflight_composes_existing_flow_interfaces_without_secrets(
         ),
     )
     monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.35.0")
+    monkeypatch.setenv("BYOC_CONNECTOR_TOKEN", "connector-token-value")
     result = CliRunner().invoke(
         cli_main,
         ["deploy", "--backend", "rdp", "--secret-ref", "env:BYOC_CONNECTOR_TOKEN"],
@@ -685,7 +690,8 @@ def test_deploy_preflight_composes_existing_flow_interfaces_without_secrets(
 
     assert result.exit_code == 0, result.output
     assert "Environment fingerprint" in result.output
-    assert "env:BYOC_CONNECTOR_TOKEN" in result.output
+    assert "[OK] env:BYOC_CONNECTOR_TOKEN is set" in result.output
+    assert "connector-token-value" not in result.output
     assert "dashboard/settings/connectors" in result.output
     assert "connector enroll" not in result.output
     assert "connector run" in result.output
