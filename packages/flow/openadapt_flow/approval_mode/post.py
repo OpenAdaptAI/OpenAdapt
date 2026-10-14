@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Optional
 
 from openadapt_flow.approval_mode.model import (
+    UI_READBACK_PILOT,
     CheckOutcome,
     ItemDecisionKind,
     OffReason,
@@ -144,6 +145,8 @@ def check_verified(
                 return fail("read_back_not_confirmed_first_time")
             if item.reconciliation_completed or item.reconciliation_actions:
                 return fail("read_back_reconciled")
+            if item.verification_tier == 2:
+                return fail(UI_READBACK_PILOT)
             if item.verification_tier != 1:
                 return fail("read_back_not_system_of_record")
             if item.verifier_identity is None:

@@ -261,6 +261,14 @@ the Standard and Regulated profiles a tier-2 confirmation can end `VERIFIED`,
 as before. The `regulated` policy pack needs tier 1, so this check doesn't
 qualify a workflow for it.
 
+**Pilot: with per-entry approval only.** While a person approves each entry
+(`approval_mode: each_item`, the default), a confirmed UI read-back is record
+evidence for that entry. It never lets an entry save without a person: under
+`problems_only`, a save whose record check is the UI read-back goes to a person
+with the detail `ui_readback_pilot_each_item_only`, and it doesn't count toward
+the readiness test. Whether it can ever do more will be decided after it has
+been measured on one real clinic's record page.
+
 ```yaml
 effects:
   kind: ui_readback

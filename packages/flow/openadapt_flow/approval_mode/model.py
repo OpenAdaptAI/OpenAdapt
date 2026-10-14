@@ -154,6 +154,12 @@ ITEM_APPROVAL_PAUSE_MARKER = (
 #: The message prefix the gate uses when a person declined a save.
 ITEM_DECLINED_MARKER = "Approval mode: a person declined this save"
 
+#: Check detail when the record check is the separate-session UI read-back
+#: (tier 2). That read-back is a pilot: it counts as record evidence while a
+#: person approves each entry (each_item), and it never lets an entry save
+#: without a person under problems_only.
+UI_READBACK_PILOT = "ui_readback_pilot_each_item_only"
+
 #: Closed decline reasons a person picks in Desktop (design 9.1).
 DeclineReason = Literal["wrong_values", "wrong_record", "screen_problem"]
 DECLINE_REASONS: tuple[str, ...] = ("wrong_values", "wrong_record", "screen_problem")

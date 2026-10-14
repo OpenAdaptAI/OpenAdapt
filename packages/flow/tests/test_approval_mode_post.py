@@ -135,7 +135,7 @@ def test_r1_passes_on_a_first_read_system_of_record_confirmation():
         ({"observed_effect": "conflicting"}, "read_back_not_confirmed_first_time"),
         ({"reconciliation_completed": True}, "read_back_reconciled"),
         ({"reconciliation_actions": 1}, "read_back_reconciled"),
-        ({"verification_tier": 2}, "read_back_not_system_of_record"),
+        ({"verification_tier": 2}, "ui_readback_pilot_each_item_only"),
         ({"verification_tier": 3}, "read_back_not_system_of_record"),
         ({"verifier_identity": None}, "verifier_identity_missing"),
         ({"verifier_identity": "sha256:" + "9" * 64}, "verifier_identity_not_bound"),

@@ -52,6 +52,7 @@ from openadapt_flow.approval_mode.item_approval import (
 from openadapt_flow.approval_mode.model import (
     ITEM_APPROVAL_PAUSE_MARKER,
     ITEM_DECLINED_MARKER,
+    UI_READBACK_PILOT,
     ApprovalMode,
     ApprovalModeItemEvidence,
     CheckOutcome,
@@ -1181,6 +1182,11 @@ class ApprovalGate:
         for _path, effects in iter_effect_paths(ctx.step):
             for effect in effects:
                 tier = verifier_effect_tier(verifier, effect)
+                if tier is VerificationTier.INDEPENDENT_SESSION:
+                    # Separate-session UI read-back is a pilot: it is record
+                    # evidence while a person approves each entry, and never
+                    # lets an entry save without one.
+                    return fail(UI_READBACK_PILOT)
                 if tier is not VerificationTier.INDEPENDENT_SYSTEM:
                     return fail("read_back_not_system_of_record")
         candidates = getattr(verifier, "_candidates", None) or (verifier,)

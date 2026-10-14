@@ -606,9 +606,19 @@ def test_no_verifier_or_another_verifier_stops(tmp_path):
     assert h2.before_save().checks[-1].detail == "verifier_identity_changed"
 
 
-def test_a_weaker_read_back_tier_stops(tmp_path):
+def test_the_ui_read_back_pilot_never_saves_without_a_person(tmp_path):
     h = Harness(tmp_path)
     h.verifier.verification_tier = VerificationTier.INDEPENDENT_SESSION
+    h.begin()
+    verdict = h.before_save()
+    assert not verdict.proceed
+    assert verdict.decision.needs_person
+    assert verdict.checks[-1].detail == "ui_readback_pilot_each_item_only"
+
+
+def test_a_weaker_read_back_tier_stops(tmp_path):
+    h = Harness(tmp_path)
+    h.verifier.verification_tier = VerificationTier(3)
     h.begin()
     assert h.before_save().checks[-1].detail == "read_back_not_system_of_record"
 
