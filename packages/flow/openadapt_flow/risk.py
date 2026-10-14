@@ -499,6 +499,45 @@ def presumed_commit_step_ids(steps: Iterable[Step]) -> tuple[str, ...]:
     return tuple(step.id for step in tail if _is_icon_only_pointer(step))
 
 
+_CONFIRMATION_LABEL = re.compile(r"\b(confirm|yes)\b", re.IGNORECASE)
+
+
+def confirmation_opener_step_ids(steps: Iterable[Step]) -> tuple[tuple[str, str], ...]:
+    """Return ``(opener_id, confirm_id)`` for clicks that only open a confirmation.
+
+    Many systems put a confirmation dialog between the form and the save:
+    OpenEMR's "Create New Patient" only opens "Confirm Create New Patient",
+    and the record is created by that dialog's Confirm button. Per-step
+    inference marks both clicks irreversible from their labels, so the opener
+    is counted as the save and the record check lands on the wrong step.
+
+    A pair matches only when a labelled click inferred irreversible, with no
+    effect or API binding of its own, is followed directly by a click whose
+    label says "Confirm" or "Yes" and that is itself inferred irreversible.
+    The confirm click stays the save and keeps every safeguard. If the dialog
+    doesn't appear at run time, the confirm click can't be found and the run
+    stops before saving. Labels such as "OK" or "Close" never match, because
+    they often acknowledge a save that already happened.
+    """
+
+    ordered = list(steps)
+    pairs: list[tuple[str, str]] = []
+    for opener, confirm in zip(ordered, ordered[1:]):
+        if (
+            opener.action in _POINTER_ACTIONS
+            and confirm.action in _POINTER_ACTIONS
+            and opener.risk == "irreversible"
+            and confirm.risk == "irreversible"
+            and not opener.effects
+            and opener.api_binding is None
+            and not _is_icon_only_pointer(opener)
+            and _CONFIRMATION_LABEL.search(step_text(confirm)) is not None
+            and _CONFIRMATION_LABEL.search(step_text(opener)) is None
+        ):
+            pairs.append((opener.id, confirm.id))
+    return tuple(pairs)
+
+
 def step_text(step: Step) -> str:
     """The text a click step's risk is inferred from: its intent plus its
     target's retained OCR and structural-accessibility labels (the intent

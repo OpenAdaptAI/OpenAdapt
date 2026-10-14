@@ -48,6 +48,7 @@ from openadapt_flow.ir import (
 )
 from openadapt_flow.risk import (
     PRESUMED_COMMIT_EXPLANATION,
+    confirmation_opener_step_ids,
     infer_step_risk,
     is_meaningful_label,
     presumed_commit_step_ids,
@@ -2458,6 +2459,21 @@ def compile_recording(
         presumed.risk = "irreversible"
         presumed.risk_explanation = PRESUMED_COMMIT_EXPLANATION
         presumed.risk_review_required = False
+
+    # A click that only opens a confirmation dialog is not the save: the
+    # dialog's Confirm click is. Explicit risk_overrides below still win.
+    by_step_id = {step.id: step for step in steps}
+    for opener_id, confirm_id in confirmation_opener_step_ids(steps):
+        opener = by_step_id[opener_id]
+        opener.risk = "reversible"
+        opener.risk_explanation = (
+            f"opens a confirmation dialog; the save is the next click ({confirm_id})"
+        )
+        opener.risk_review_required = False
+        confirm = by_step_id[confirm_id]
+        confirm.risk_explanation = (
+            f"confirms the dialog opened by {opener_id}; this click saves"
+        )
 
     if risk_overrides:
         by_id = {step.id: step for step in steps}
