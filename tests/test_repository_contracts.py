@@ -1,7 +1,13 @@
 """Static contracts for repository integration workflows."""
 
 import re
+import shutil
+import subprocess
+import sys
+import textwrap
 from pathlib import Path
+
+import pytest
 
 ROOT = Path(__file__).parents[1]
 
@@ -173,3 +179,107 @@ def test_live_release_gate_job_set_matches_the_live_workflow() -> None:
     produced = set(re.findall(r"^    name: (.+)$", workflow, flags=re.M))
 
     assert produced == set(EXPECTED_LIVE_QUALIFICATION_JOBS)
+
+
+def _step_script(workflow: str, step_name: str) -> str:
+    """Return the ``run: |`` block of the named workflow step."""
+    lines = workflow[workflow.index(f"- name: {step_name}\n") :].splitlines()
+    start = next(i for i, line in enumerate(lines) if line.strip() == "run: |") + 1
+    indent = len(lines[start]) - len(lines[start].lstrip())
+    body = []
+    for line in lines[start:]:
+        if line.strip() and len(line) - len(line.lstrip()) < indent:
+            break
+        body.append(line)
+    return textwrap.dedent("\n".join(body)) + "\n"
+
+
+def _select_live_lanes(tmp_path: Path, event: str, platform: str = "", **runners: str):
+    workflow = (ROOT / ".github/workflows/live-qualification.yml").read_text(encoding="utf-8")
+    script = tmp_path / "select.sh"
+    script.write_text(
+        _step_script(workflow, "Bind the candidate and available runners"), encoding="utf-8"
+    )
+    output = tmp_path / "github_output"
+    output.write_text("", encoding="utf-8")
+    sha = "a" * 40
+    env = {
+        "PATH": "/usr/bin:/bin",
+        "GITHUB_EVENT_NAME": event,
+        "GITHUB_SHA": sha,
+        "GITHUB_OUTPUT": str(output),
+        "REQUESTED_SHA": sha if event == "workflow_dispatch" else "",
+        "REQUESTED_PLATFORM": platform,
+        "LINUX_RUNNERS": runners.get("linux", ""),
+        "MACOS_RUNNERS": runners.get("macos", ""),
+        "WINDOWS_RUNNERS": runners.get("windows", ""),
+    }
+    completed = subprocess.run(
+        [shutil.which("bash") or "bash", str(script)],
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    outputs = dict(
+        line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines() if line
+    )
+    return completed, outputs
+
+
+live_lane_selection = pytest.mark.skipif(
+    sys.platform == "win32", reason="the selection step runs on ubuntu-latest"
+)
+
+
+@live_lane_selection
+@pytest.mark.parametrize(
+    ("event", "platform"), [("schedule", ""), ("workflow_dispatch", "all")]
+)
+def test_live_qualification_fails_when_no_lane_can_run(tmp_path, event, platform) -> None:
+    """A run that qualifies nothing must not conclude success."""
+    completed, outputs = _select_live_lanes(tmp_path, event, platform)
+
+    assert completed.returncode != 0
+    assert "::error::" in completed.stdout
+    assert outputs.get("run_any") != "true"
+
+
+@live_lane_selection
+def test_scheduled_live_qualification_names_each_lane_it_skips(tmp_path) -> None:
+    completed, outputs = _select_live_lanes(tmp_path, "schedule", linux="1")
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert outputs["run_any"] == "true"
+    assert outputs["run_linux"] == "true"
+    assert outputs["run_macos"] == "false"
+    assert outputs["run_windows"] == "false"
+    warnings = [line for line in completed.stdout.splitlines() if line.startswith("::warning::")]
+    assert len(warnings) == 2
+    assert any("macOS" in line for line in warnings)
+    assert any("Windows" in line for line in warnings)
+
+
+@live_lane_selection
+def test_release_dispatch_selects_only_the_linux_lane(tmp_path) -> None:
+    completed, outputs = _select_live_lanes(
+        tmp_path, "workflow_dispatch", "linux", linux="1", macos="1", windows="1"
+    )
+
+    assert completed.returncode == 0, completed.stdout + completed.stderr
+    assert (outputs["run_linux"], outputs["run_macos"], outputs["run_windows"]) == (
+        "true",
+        "false",
+        "false",
+    )
+    assert "::warning::" not in completed.stdout
+
+
+def test_ci_runs_every_test_file() -> None:
+    """CI once skipped the browser bridge tests with --ignore while they hung."""
+    workflow = (ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8")
+    runs = re.findall(r"^\s*run: (?:.* )?uv run(?: --no-sync)? pytest .*$", workflow, flags=re.M)
+
+    assert runs
+    assert not [run for run in runs if "--ignore" in run or "--deselect" in run]

@@ -23,8 +23,8 @@ uv add openadapt-capture
 # Install with on-device transcription support (large download)
 uv add "openadapt-capture[transcribe-fast]"
 
-# Run tests (exclude browser bridge tests which need websockets fixtures)
-uv run pytest tests/ -v --ignore=tests/test_browser_bridge.py
+# Run tests
+uv run pytest tests/ -v
 
 # Run slow integration tests (requires accessibility permissions)
 uv run pytest tests/ -v -m slow
@@ -101,13 +101,13 @@ SQLAlchemy-based per-capture databases:
 
 ```bash
 # Fast tests (unit + integration, no recording)
-uv run pytest tests/ -v --ignore=tests/test_browser_bridge.py -m "not slow"
+uv run pytest tests/ -v -m "not slow"
 
 # Slow tests (full native recording pipeline with synthetic input)
 uv run pytest tests/ -v -m slow
 
 # All tests
-uv run pytest tests/ -v --ignore=tests/test_browser_bridge.py
+uv run pytest tests/ -v
 ```
 
 ## Related Projects

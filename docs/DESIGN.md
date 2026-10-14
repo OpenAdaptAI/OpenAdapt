@@ -328,6 +328,10 @@ Each lane uses a separate repository variable. Set the applicable variable to
 - `CAPTURE_SELF_HOSTED_QUALIFIED_MACOS_RUNNERS`; or
 - `CAPTURE_SELF_HOSTED_QUALIFIED_WINDOWS_RUNNERS`.
 
+A weekly run, or a dispatch for all platforms, warns for each lane whose
+variable is not `1`. It fails when no variable is `1`, because a run that
+qualified nothing must not report success.
+
 ## Known boundaries
 
 - A visible logged-in desktop session and operating-system permissions are
