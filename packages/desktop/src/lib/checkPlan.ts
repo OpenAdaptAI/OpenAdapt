@@ -18,6 +18,8 @@ export interface WriteStep {
   id: string;
   caption: string;
   effects: string[];
+  /** Flow's executable risk; "irreversible" is a floor a confirmation can't lower. */
+  executableRisk: "reversible" | "irreversible";
   confirmed: boolean;
   identityArmed: boolean;
   canArm: boolean;
@@ -35,10 +37,22 @@ export interface CaseView {
   faultStepId: string | null;
 }
 
+/** A step the program can't yet prove leaves the record alone. */
+export interface UnprovenStep {
+  id: string;
+  caption: string;
+}
+
 export interface CheckPlan {
   hasProject: boolean;
   writes: WriteStep[];
+  /** Steps Flow has classified as read-only: they only read or move around. */
   readCount: number;
+  /**
+   * Steps that aren't known to save but aren't proven read-only either.
+   * Check it never calls a task read-only while any remain.
+   */
+  unproven: UnprovenStep[];
   changes: StepState;
   rightRecord: StepState;
   recordCheck: StepState;
@@ -146,6 +160,14 @@ function caseView(
   };
 }
 
+/**
+ * Graph node kinds whose steps the graph itself shows: an action is a step,
+ * and a loop's body is drawn inline. Anything else (a sub-task call, a child
+ * program, a kind this version doesn't know) may run steps Check it can't see.
+ */
+const SHOWN_NODE_KINDS = new Set(["action", "terminal", "branch", "loop", "business_decision"]);
+const HIDDEN_STEPS_CAPTION = "Runs a part of the task that isn't shown step by step here";
+
 /** Derive the short path from one qualification projection. */
 export function checkPlan(response: QualificationProject): CheckPlan {
   const actions = response.graph.nodes.filter(
@@ -153,18 +175,31 @@ export function checkPlan(response: QualificationProject): CheckPlan {
   );
   const controls = response.controls.actions;
   const writes: WriteStep[] = [];
+  const unproven: UnprovenStep[] = [];
+  let readCount = 0;
   for (const node of actions) {
     const control = controls[node.id];
     const classification = control?.classification?.classification;
-    // A step that saves to the record. A "state_changing" step (typing into
-    // a search box, opening a tab) changes the screen, not the record.
+    // A step that saves to the record. Flow requires a record check for every
+    // state-changing, consequential, or irreversible step, so all three count.
     const isWrite =
       node.risk === "irreversible" ||
       node.effects.length > 0 ||
       (control?.effects.length ?? 0) > 0 ||
+      classification === "state_changing" ||
       classification === "consequential" ||
       classification === "irreversible";
-    if (!isWrite) continue;
+    if (!isWrite) {
+      // Only a confirmed read-only classification proves a step leaves the
+      // record alone. An unknown or unreviewed step may still save, so it is
+      // never counted among the steps that "only read".
+      if (classification === "read_only" && control?.classification?.operator_confirmed) {
+        readCount += 1;
+      } else {
+        unproven.push({ id: node.id, caption: plainStep(node.title || node.action || node.id) });
+      }
+      continue;
+    }
     const signals = control?.identity.policy?.signals ?? [];
     const params = signals.flatMap((signal) => signal.params ?? []).map(humanizeInput);
     const identityArmed = Boolean(control?.identity.armed || node.identity?.armed);
@@ -177,7 +212,10 @@ export function checkPlan(response: QualificationProject): CheckPlan {
       caption: plainStep(node.title || node.action || node.id),
       effects: effects.length
         ? effects.map(describeEffect)
-        : node.effects.map((effect) => sentenceCase(effect.summary || "Saves an entry.")),
+        : node.effects.length
+          ? node.effects.map((effect) => sentenceCase(effect.summary || "Saves an entry."))
+          : ["OpenAdapt doesn't know yet what this step saves."],
+      executableRisk: node.risk === "irreversible" ? "irreversible" : "reversible",
       confirmed: Boolean(control?.classification?.operator_confirmed),
       identityArmed,
       canArm: Boolean(control?.identity.can_arm),
@@ -192,6 +230,28 @@ export function checkPlan(response: QualificationProject): CheckPlan {
   }
   const project = response.project;
   const report = response.report;
+  // The graph draws a call into a reusable sub-task as one node, without the
+  // steps inside it, so a save there never reaches the loop above. Flow's
+  // report still counts and checks every step the program can run. A step
+  // Flow knows about but Check it can't see is never proven read-only.
+  for (const node of response.graph.nodes) {
+    if (!SHOWN_NODE_KINDS.has(node.kind)) {
+      unproven.push({ id: node.id, caption: HIDDEN_STEPS_CAPTION });
+    }
+  }
+  const seen = new Set(actions.map((node) => controls[node.id]?.step_id ?? node.id));
+  const hidden = new Set(
+    (report.refusals ?? [])
+      .map((refusal) => refusal.step_id)
+      .filter((id): id is string => typeof id === "string" && id !== "" && !seen.has(id)),
+  );
+  const unseen = Math.max(
+    hidden.size,
+    typeof report.action_count === "number" ? report.action_count - seen.size : 0,
+  );
+  if (unseen > 0 && !unproven.some((step) => step.caption === HIDDEN_STEPS_CAPTION)) {
+    unproven.push({ id: "__unseen_steps__", caption: HIDDEN_STEPS_CAPTION });
+  }
   const firstWrite = writes[0]?.id ?? null;
   const cases = project
     ? project.cases.map((item) => caseView(project, item, firstWrite))
@@ -200,19 +260,31 @@ export function checkPlan(response: QualificationProject): CheckPlan {
   const drills = cases.filter((item) => !isPractice(item.kind));
   const hasProject = Boolean(project) && !response.draft_environment;
 
-  const changes: StepState =
-    writes.length === 0 ? "not_needed" : hasProject && writes.every((step) => step.confirmed) ? "done" : "todo";
-  const rightRecord: StepState =
-    writes.length === 0
-      ? "not_needed"
+  // "Not needed" is a claim that the task can't change a record. Make it only
+  // when every step is proven read-only. With no known save but unproven
+  // steps left, the honest answer is that a person still has to say.
+  const provenReadOnly = writes.length === 0 && unproven.length === 0;
+  const unknownWrites = writes.length === 0 && unproven.length > 0;
+  const changes: StepState = provenReadOnly
+    ? "not_needed"
+    : unknownWrites
+      ? "missing"
+      : hasProject && writes.every((step) => step.confirmed)
+        ? "done"
+        : "todo";
+  const rightRecord: StepState = provenReadOnly
+    ? "not_needed"
+    : unknownWrites
+      ? "missing"
       : writes.every((step) => step.identityArmed)
         ? hasProject ? "done" : "todo"
         : writes.some((step) => !step.identityArmed && !step.canArm)
           ? "missing"
           : "todo";
-  const recordCheck: StepState =
-    writes.length === 0
-      ? "not_needed"
+  const recordCheck: StepState = provenReadOnly
+    ? "not_needed"
+    : unknownWrites
+      ? "missing"
       : writes.every((step) => step.checked)
         ? hasProject ? "done" : "todo"
         : "missing";
@@ -220,7 +292,9 @@ export function checkPlan(response: QualificationProject): CheckPlan {
     practice?.status === "passed" ? "done" : "todo";
   const drillsState: StepState =
     drills.length === 0
-      ? "not_needed"
+      ? unknownWrites
+        ? "todo"
+        : "not_needed"
       : drills.every((item) => item.status === "passed")
         ? "done"
         : "todo";
@@ -228,7 +302,8 @@ export function checkPlan(response: QualificationProject): CheckPlan {
   return {
     hasProject,
     writes,
-    readCount: actions.length - writes.length,
+    readCount,
+    unproven,
     changes,
     rightRecord,
     recordCheck,

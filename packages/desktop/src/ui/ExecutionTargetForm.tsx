@@ -211,24 +211,46 @@ function TargetFields({
   switch (target.backend) {
     case "web":
       return (
-        <Field
-          label="Page URL"
-          hint="Leave blank to use Flow's bundled local demonstration."
-          htmlFor={`${idPrefix}-web-url`}
-          hintId={`${idPrefix}-web-url-hint`}
-        >
-          <input
-            id={`${idPrefix}-web-url`}
-            className="input"
-            type="url"
-            value={target.url ?? ""}
-            disabled={disabled}
-            aria-describedby={`${idPrefix}-web-url-hint`}
-            onChange={(event) => setField("url", event.target.value)}
-            placeholder="https://your-app.example"
-            spellCheck={false}
-          />
-        </Field>
+        <>
+          <Field
+            label="Page URL"
+            hint="Leave blank to use Flow's bundled local demonstration."
+            htmlFor={`${idPrefix}-web-url`}
+            hintId={`${idPrefix}-web-url-hint`}
+          >
+            <input
+              id={`${idPrefix}-web-url`}
+              className="input"
+              type="url"
+              value={target.url ?? ""}
+              disabled={disabled}
+              aria-describedby={`${idPrefix}-web-url-hint`}
+              onChange={(event) => setField("url", event.target.value)}
+              placeholder="https://your-app.example"
+              spellCheck={false}
+            />
+          </Field>
+          <Field
+            label="Signed-in browser (optional)"
+            hint="The local debugging address of the browser you're signed in to. Runs then start there, already signed in, instead of in a new browser at the sign-in page."
+            htmlFor={`${idPrefix}-web-cdp`}
+            hintId={`${idPrefix}-web-cdp-hint`}
+          >
+            <input
+              id={`${idPrefix}-web-cdp`}
+              className="input"
+              type="url"
+              value={target.browser_cdp_endpoint ?? ""}
+              disabled={disabled}
+              aria-describedby={`${idPrefix}-web-cdp-hint`}
+              onChange={(event) =>
+                setField("browser_cdp_endpoint", event.target.value)
+              }
+              placeholder="http://127.0.0.1:9222"
+              spellCheck={false}
+            />
+          </Field>
+        </>
       );
     case "windows":
       return (

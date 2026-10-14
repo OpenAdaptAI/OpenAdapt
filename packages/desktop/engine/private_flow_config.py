@@ -23,6 +23,8 @@ from engine.targets import ExecutionTarget
 
 _PHI_CAPABLE_BACKEND_KEYS = {
     "url",
+    "browser_cdp_endpoint",
+    "browser_page_url",
     "agent_url",
     "macos_app",
     "macos_window_title",
@@ -35,7 +37,7 @@ _PHI_CAPABLE_BACKEND_KEYS = {
 }
 
 _BACKEND_FIELDS_BY_KIND: dict[str, set[str]] = {
-    "web": {"url", "headed"},
+    "web": {"url", "headed", "browser_cdp_endpoint", "browser_page_url"},
     "windows": {"agent_url", "agent_token", "agent_tls_pin"},
     "macos": {"macos_app", "macos_window_title"},
     "linux": {
@@ -93,6 +95,30 @@ class PreparedPrivateYaml:
     redactions: tuple[str, ...]
     remote_decisions: bool = False
     remote_decision_runner_id: str | None = None
+    #: The staged config asks Flow to run in the person's signed-in browser,
+    #: whether the address came from the Desktop target or from the
+    #: operator's own config file. Read from the same snapshot as ``payload``.
+    attached_browser: bool = False
+
+
+def _attached_browser(deployment: Mapping[str, Any]) -> bool:
+    """Whether a merged config names a signed-in browser for a web run.
+
+    Flow releases without attached runs ignore these keys and launch a new,
+    signed-out browser, so Desktop must know about them no matter which file
+    supplied them.
+    """
+
+    backend = deployment.get("backend")
+    if not isinstance(backend, Mapping):
+        return False
+    kind = backend.get("kind")
+    if kind is not None and str(kind).strip().lower() != "web":
+        return False
+    return any(
+        backend.get(key) is not None and str(backend.get(key)).strip() != ""
+        for key in ("browser_cdp_endpoint", "browser_page_url")
+    )
 
 
 def _load_mapping(source: Path | None) -> dict[str, Any]:
@@ -221,6 +247,7 @@ def prepare_flow_config(
         redactions=_redactions_for_mapping(deployment),
         remote_decisions=remote_decisions,
         remote_decision_runner_id=remote_decision_runner_id,
+        attached_browser=_attached_browser(deployment),
     )
 
 

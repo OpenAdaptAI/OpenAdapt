@@ -280,3 +280,106 @@ def test_remote_decisions_defaults_to_off_and_is_never_inferred(tmp_path, deploy
     prepared = prepare_flow_config(source, None)
     assert prepared is not None
     assert prepared.remote_decisions is False
+
+
+# --- B274: runs start from the signed-in session the task uses --------------
+
+
+def test_signed_in_browser_target_reaches_flow_only_in_the_private_config(
+    tmp_path: Path,
+) -> None:
+    target = ExecutionTarget(
+        backend="web",
+        url="http://127.0.0.1:9401/front/claim/healthFacilities/claim",
+        browser_cdp_endpoint="http://127.0.0.1:9334",
+    )
+
+    prepared = prepare_flow_config(None, target)
+    assert prepared is not None
+    backend = yaml.safe_load(prepared.payload)["backend"]
+    assert backend == {
+        "kind": "web",
+        "url": "http://127.0.0.1:9401/front/claim/healthFacilities/claim",
+        "browser_cdp_endpoint": "http://127.0.0.1:9334",
+    }
+    # The endpoint and URL are redacted from Flow's log lines.
+    assert "http://127.0.0.1:9334" in prepared.redactions
+    # Recording in the same browser is what lets later runs start signed in.
+    args = target.record_args(tmp_path / "rec")
+    assert args[args.index("--browser-cdp-endpoint") + 1] == "http://127.0.0.1:9334"
+
+
+def test_signed_in_browser_fields_are_cleared_when_another_backend_is_selected(
+    tmp_path: Path,
+) -> None:
+    source = tmp_path / "deployment.yaml"
+    source.write_text(
+        "backend:\n  kind: web\n  browser_cdp_endpoint: http://127.0.0.1:9334\n"
+    )
+    prepared = prepare_flow_config(
+        source, ExecutionTarget(backend="windows", agent_url="http://localhost:5001")
+    )
+    assert prepared is not None
+    assert "browser_cdp_endpoint" not in yaml.safe_load(prepared.payload)["backend"]
+
+
+@pytest.mark.parametrize(
+    "endpoint",
+    [
+        "http://10.0.0.5:9222",
+        "http://example.com:9222",
+        "http://127.0.0.1",
+        "http://user:pw@127.0.0.1:9222",
+        "ftp://127.0.0.1:9222",
+    ],
+)
+def test_signed_in_browser_address_must_be_explicit_loopback(endpoint: str) -> None:
+    with pytest.raises(ValueError):
+        ExecutionTarget(backend="web", url="http://127.0.0.1:9301", browser_cdp_endpoint=endpoint)
+
+
+def test_signed_in_browser_fields_are_web_only_and_page_needs_an_endpoint() -> None:
+    with pytest.raises(ValueError):
+        ExecutionTarget(backend="windows", browser_cdp_endpoint="http://127.0.0.1:9222")
+    with pytest.raises(ValueError):
+        ExecutionTarget(
+            backend="web",
+            url="http://127.0.0.1:9301",
+            browser_page_url="http://127.0.0.1:9301/work",
+        )
+    blank = ExecutionTarget(backend="web", url="http://127.0.0.1:9301", browser_cdp_endpoint="  ")
+    assert blank.browser_cdp_endpoint is None
+
+
+def test_staged_config_says_when_it_names_a_signed_in_browser(tmp_path: Path) -> None:
+    """Desktop refuses an attached run on a Flow that would ignore it, so it
+    must know from the staged snapshot itself, whichever file supplied it."""
+
+    web = ExecutionTarget(backend="web", url="http://127.0.0.1:9401/front/")
+    from_file = tmp_path / "deployment.yaml"
+    from_file.write_text(
+        "backend:\n  kind: web\n  browser_cdp_endpoint: http://127.0.0.1:9334\n"
+    )
+    plain = tmp_path / "plain.yaml"
+    plain.write_text("backend:\n  kind: web\n")
+
+    file_only = prepare_flow_config(from_file, web)
+    assert file_only is not None and file_only.attached_browser is True
+    config_only = prepare_flow_config(from_file, None)
+    assert config_only is not None and config_only.attached_browser is True
+    target_only = prepare_flow_config(
+        plain,
+        ExecutionTarget(
+            backend="web",
+            url="http://127.0.0.1:9401/front/",
+            browser_cdp_endpoint="http://127.0.0.1:9334",
+        ),
+    )
+    assert target_only is not None and target_only.attached_browser is True
+
+    neither = prepare_flow_config(plain, web)
+    assert neither is not None and neither.attached_browser is False
+    other_backend = prepare_flow_config(
+        from_file, ExecutionTarget(backend="windows", agent_url="http://localhost:5001")
+    )
+    assert other_backend is not None and other_backend.attached_browser is False

@@ -645,6 +645,80 @@ def test_inspection_exposes_durable_target_evidence_without_flattening_to_coordi
     assert "click_point" not in node["resolution"]
 
 
+def test_inspection_reports_a_save_the_graph_hides_inside_a_sub_task(
+    tmp_path: Path,
+) -> None:
+    """Pin the engine shape Check it relies on to refuse a read-only claim.
+
+    The program graph draws a sub-task call as one node and leaves out the
+    steps inside it. The only visible action node is a wait, which Flow
+    classifies read-only on its own. Check it must therefore see the hidden
+    Save through Flow's report (its step count and the refusals that name
+    the step), never through the graph alone.
+    """
+
+    from openadapt_flow.ir import ProgramGraph, State, StateKind, Transition
+
+    save = Step(
+        id="save",
+        intent="click 'Save claim'",
+        action=ActionKind.CLICK,
+        risk="irreversible",
+    )
+    wait = Step(id="settle", intent="Wait for the form", action=ActionKind.WAIT)
+    commit = ProgramGraph(
+        entry="s1",
+        states={
+            "s1": State(
+                id="s1",
+                kind=StateKind.ACTION,
+                step=save,
+                transitions=[Transition(target="s_end")],
+            ),
+            "s_end": State(id="s_end", kind=StateKind.TERMINAL, outcome="success"),
+        },
+    )
+    program = ProgramGraph(
+        entry="w",
+        states={
+            "w": State(
+                id="w",
+                kind=StateKind.ACTION,
+                step=wait,
+                transitions=[Transition(target="call")],
+            ),
+            "call": State(
+                id="call",
+                kind=StateKind.SUBFLOW_CALL,
+                subflow="commit",
+                transitions=[Transition(target="done")],
+            ),
+            "done": State(id="done", kind=StateKind.TERMINAL, outcome="success"),
+        },
+    )
+    bundle = tmp_path / "bundle"
+    Workflow(name="sub-task-save", program=program, subflows={"commit": commit}).save(bundle)
+    _initialize(bundle)
+
+    inspected = inspect_bundle(bundle, workflow_id="wf-1")
+
+    actions = [node for node in inspected["graph"]["nodes"] if node["kind"] == "action"]
+    assert [node["id"] for node in actions] == ["w"]
+    assert "subflow_call" in {node["kind"] for node in inspected["graph"]["nodes"]}
+    shown = inspected["controls"]["actions"]["w"]
+    assert shown["step_id"] == "settle"
+    # The visible wait is proven read-only on its own...
+    assert shown["classification"]["classification"] == "read_only"
+    assert shown["classification"]["operator_confirmed"] is True
+    # ...so only Flow's report reveals the Save Check it would otherwise miss.
+    assert "save" not in {
+        control["step_id"] for control in inspected["controls"]["actions"].values()
+    }
+    assert inspected["report"]["action_count"] == 2
+    assert inspected["report"]["consequential_action_count"] >= 1
+    assert "save" in {refusal.get("step_id") for refusal in inspected["report"]["refusals"]}
+
+
 def test_encrypted_bundle_inspect_mutate_and_reseal_stays_ciphertext_only(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

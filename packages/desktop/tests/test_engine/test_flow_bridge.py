@@ -587,6 +587,21 @@ class TestFlowBridgeInvocation:
 
         assert [command[1:] for command, _env in calls] == [["push", "--help"]]
 
+    @pytest.mark.parametrize(
+        ("help_text", "supported"),
+        [("--browser-cdp-endpoint URL", True), ("--profile {demo,standard}", False)],
+    )
+    def test_attached_browser_support_is_probed_once_from_run_help(
+        self, monkeypatch, help_text: str, supported: bool
+    ) -> None:
+        monkeypatch.setattr("engine.flow_bridge.shutil.which", lambda _: "/usr/bin/openadapt-flow")
+        calls: list = []
+        bridge = FlowBridge(runner=_runner(calls, stdout=help_text))
+
+        assert bridge.supports_attached_browser_runs() is supported
+        assert bridge.supports_attached_browser_runs() is supported
+        assert [command[1:] for command, _env in calls] == [["run", "--help"]]
+
 
 class TestReportParsing:
     def test_read_report_missing(self, tmp_path: Path) -> None:

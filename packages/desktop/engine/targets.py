@@ -14,6 +14,7 @@ wrong substrate.  Secret-bearing Flow fields such as ``agent_token`` and
 
 from __future__ import annotations
 
+import ipaddress
 from pathlib import Path
 from typing import Literal
 from urllib.parse import urlsplit
@@ -24,6 +25,8 @@ TargetBackend = Literal["web", "windows", "macos", "linux", "rdp", "citrix"]
 
 _TARGET_FIELDS = {
     "url",
+    "browser_cdp_endpoint",
+    "browser_page_url",
     "agent_url",
     "macos_app",
     "macos_window_title",
@@ -37,7 +40,7 @@ _TARGET_FIELDS = {
 }
 
 _FIELDS_BY_BACKEND: dict[str, set[str]] = {
-    "web": {"url"},
+    "web": {"url", "browser_cdp_endpoint", "browser_page_url"},
     "windows": {"agent_url"},
     "macos": {"macos_app", "macos_window_title"},
     "linux": {
@@ -66,6 +69,12 @@ class ExecutionTarget(BaseModel):
 
     backend: TargetBackend = "web"
     url: str | None = None
+    # The person's running, signed-in Chromium (loopback DevTools endpoint).
+    # Runs attach to it and start from the screen it shows, so a task that was
+    # recorded after sign-in starts signed in. Only the address is kept; the
+    # session stays in that browser and no credential is stored.
+    browser_cdp_endpoint: str | None = None
+    browser_page_url: str | None = None
     agent_url: str | None = None
     macos_app: str | None = None
     macos_window_title: str | None = None
@@ -79,6 +88,8 @@ class ExecutionTarget(BaseModel):
 
     @field_validator(
         "url",
+        "browser_cdp_endpoint",
+        "browser_page_url",
         "agent_url",
         "macos_app",
         "macos_window_title",
@@ -106,6 +117,52 @@ class ExecutionTarget(BaseModel):
             raise ValueError("web target URL must be an HTTP(S) page URL")
         return value
 
+    @field_validator("browser_page_url")
+    @classmethod
+    def _validate_browser_page_url(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        parsed = urlsplit(value)
+        if parsed.scheme not in {"http", "https"} or not parsed.hostname:
+            raise ValueError("browser page URL must be an HTTP(S) page URL")
+        return value
+
+    @field_validator("browser_cdp_endpoint")
+    @classmethod
+    def _validate_browser_cdp_endpoint(cls, value: str | None) -> str | None:
+        """Accept only an explicit loopback DevTools endpoint.
+
+        A DevTools endpoint is a remote-control channel for every page in that
+        browser. Flow refuses a non-loopback one too; refusing it here keeps a
+        mistyped host from ever reaching the private config.
+        """
+
+        if value is None:
+            return None
+        try:
+            parsed = urlsplit(value)
+            port = parsed.port
+        except ValueError as exc:
+            raise ValueError("signed-in browser address is not a valid URL") from exc
+        if parsed.scheme not in {"http", "https", "ws", "wss"}:
+            raise ValueError("signed-in browser address must use http, https, ws, or wss")
+        if parsed.username or parsed.password or parsed.query or parsed.fragment:
+            raise ValueError(
+                "signed-in browser address must not contain credentials, a query, or a fragment"
+            )
+        host = (parsed.hostname or "").lower()
+        loopback = host == "localhost"
+        if not loopback:
+            try:
+                loopback = ipaddress.ip_address(host).is_loopback
+            except ValueError:
+                loopback = False
+        if not loopback:
+            raise ValueError("signed-in browser address must be on this computer (loopback)")
+        if port is None:
+            raise ValueError("signed-in browser address must include a port")
+        return value
+
     @model_validator(mode="after")
     def _reject_cross_backend_fields(self) -> "ExecutionTarget":
         relevant = _FIELDS_BY_BACKEND[self.backend]
@@ -119,6 +176,8 @@ class ExecutionTarget(BaseModel):
             raise ValueError(
                 f"target fields do not apply to backend {self.backend!r}: " + ", ".join(irrelevant)
             )
+        if self.browser_page_url and not self.browser_cdp_endpoint:
+            raise ValueError("browser_page_url requires browser_cdp_endpoint")
         if self.backend == "rdp" and self.rdp_host and (self.rdp_window or self.rdp_window_title):
             raise ValueError(
                 "RDP target must select one connection: rdp_host (network) or "
@@ -179,7 +238,11 @@ class ExecutionTarget(BaseModel):
         overrides: dict[str, object] = {"kind": self.backend}
         values: tuple[tuple[str, str | None], ...]
         if self.backend == "web":
-            values = (("url", self.url),)
+            values = (
+                ("url", self.url),
+                ("browser_cdp_endpoint", self.browser_cdp_endpoint),
+                ("browser_page_url", self.browser_page_url),
+            )
         elif self.backend == "windows":
             values = (("agent_url", self.agent_url),)
         elif self.backend == "macos":
@@ -237,7 +300,13 @@ class ExecutionTarget(BaseModel):
 
         values: tuple[tuple[str, str | None], ...]
         if self.backend == "web":
-            values = (("--url", self.url),)
+            # Recording in the signed-in browser is what lets every later run
+            # start from that same session (Flow's attach mode).
+            values = (
+                ("--url", self.url),
+                ("--browser-cdp-endpoint", self.browser_cdp_endpoint),
+                ("--browser-page-url", self.browser_page_url),
+            )
         elif self.backend == "windows":
             values = (("--agent-url", self.agent_url),)
         elif self.backend == "macos":

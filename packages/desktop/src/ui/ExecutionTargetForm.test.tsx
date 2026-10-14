@@ -135,3 +135,17 @@ it("maps every capability state to a pill and unknown input to neutral", () => {
   expect(capabilityPill(report().surfaces.citrix).label).toBe("Driver required");
   expect(capabilityPill(report().surfaces.linux).label).toBe("Not on this host");
 });
+
+it("lets a browser task name the signed-in browser its runs start from", () => {
+  const onChange = vi.fn();
+  renderForm({ backend: "web", url: "http://127.0.0.1:9401/front/" }, report(), onChange);
+
+  const field = screen.getByLabelText("Signed-in browser (optional)");
+  fireEvent.change(field, { target: { value: "http://127.0.0.1:9334" } });
+
+  expect(onChange).toHaveBeenCalledWith({
+    backend: "web",
+    url: "http://127.0.0.1:9401/front/",
+    browser_cdp_endpoint: "http://127.0.0.1:9334",
+  });
+});

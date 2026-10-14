@@ -20,6 +20,14 @@ export type TargetBackend =
 export interface ExecutionTarget {
   backend: TargetBackend;
   url?: string;
+  /**
+   * Web only: loopback DevTools address of the person's running, signed-in
+   * Chromium. Runs attach to it and start from the screen it shows, so a task
+   * recorded after sign-in starts signed in. No credential is stored.
+   */
+  browser_cdp_endpoint?: string;
+  /** Web only: exact URL of the tab to use when several share the origin. */
+  browser_page_url?: string;
   agent_url?: string;
   macos_app?: string;
   macos_window_title?: string;

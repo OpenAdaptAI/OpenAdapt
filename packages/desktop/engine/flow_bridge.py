@@ -477,6 +477,7 @@ class FlowBridge:
         self._runner = runner
         self._popen = popen
         self._run_auth_support: bool | None = None
+        self._attached_browser_support: bool | None = None
         self._push_json_support: bool | None = None
 
     @staticmethod
@@ -888,6 +889,22 @@ class FlowBridge:
         if url:
             args += ["--url", url]
         return self._run(args, out_dir=out_dir, env_overrides=env_overrides)
+
+    def supports_attached_browser_runs(self) -> bool:
+        """Probe (once) whether Flow can run in an attached signed-in browser.
+
+        Flow releases before attached runs ignore ``backend.browser_cdp_endpoint``
+        in a deployment config and launch a new, signed-out browser instead.
+        """
+        if self._attached_browser_support is None:
+            try:
+                result = self._run(["run", "--help"])
+                self._attached_browser_support = "--browser-cdp-endpoint" in (
+                    result.stdout or ""
+                )
+            except Exception:
+                self._attached_browser_support = False
+        return self._attached_browser_support
 
     def run_supports_authorization(self) -> bool:
         """Probe (once) whether the installed flow CLI accepts ``--authorization-file``."""
