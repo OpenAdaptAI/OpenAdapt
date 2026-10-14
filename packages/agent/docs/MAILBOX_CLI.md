@@ -12,10 +12,10 @@ Canonical in this package:
 openadapt-agent authoring connect '<openadapt://runner?pack=…&bind=oab_…&origin=https://openadapt.ai>'
 ```
 
-Playwright web (fresh Chromium, empty cookies):
+Playwright web (fresh Chromium, empty cookies, visible so you can sign in):
 
 ```bash
-openadapt-agent authoring connect '<runner-link>' --url https://example.invalid/app
+openadapt-agent authoring connect '<runner-link>' --url https://example.invalid/app --headed
 ```
 
 Rejected alternative: `openadapt-agent serve --authoring --mailbox`. `serve` is stdio MCP. Mixing it with an outbound poll loop would look like this package grew a hosted transport. The mailbox client is a separate verb.
@@ -52,7 +52,7 @@ Flow `AuthoringSession` / `Recorder` is the actuation engine when importable. Ov
 - Print Allow (`Allow ChatGPT to drive this job?` / replace-account copy). stdin `y/n`.
 - Pause: print `Sign in in the app, then press Enter`. Do not ask for a password. Do not `type_text` the secret.
 - Continue → `record_observed` on the pause-target node.
-- `--url` pins Playwright Chromium with **empty cookies**. No debug-port attach.
+- `--url` pins Playwright Chromium with **empty cookies**. No debug-port attach. It needs `--headed` so the person can sign in in that window. Without `--headed`, or when the browser can't open, the command stops before it claims the runner link, so the same link still works.
 - Unique-window fail-closed: macOS / Linux without a unique frontmost title is coach-only. Windows native / Citrix / RDP are coach-only. Never spawn `win_agent`.
 - Allow-per-`sub` before observe / click / halt.
 - GET handshake is not actuation (the CLI does not GET the pack page to click).

@@ -44,6 +44,11 @@ PAUSE_PROMPT = "Sign in in the app, then press Enter"
 BOUND_SENTENCE = (
     "OpenAdapt is installed on this computer, so an agent can drive only through OpenAdapt."
 )
+RUNNER_LINK_UNUSED = "The runner link was not used, so you can run the command again."
+URL_NEEDS_HEADED = (
+    "--url opens a new Chromium window with no saved sign-in. Add --headed so "
+    "you can sign in to the app in that window. " + RUNNER_LINK_UNUSED
+)
 ENQUEUE_REQUIRING_ALLOW = frozenset(
     {
         "observe",
@@ -381,7 +386,8 @@ class MailboxClient:
 
     def _pin(self) -> tuple[str, bool]:
         if self._url:
-            return "web", False
+            # Without an open browser session nothing can be driven here.
+            return "web", self.session is None
         plat = self._platform
         if plat == "win32" or plat.startswith("win"):
             return "windows", True
@@ -723,7 +729,11 @@ def _open_session(*, url: Optional[str], headed: bool, platform: Optional[str]) 
         return CoachOnlySession("windows")
     try:
         return open_authoring_session(url=url, headed=headed, platform=platform)
-    except AuthoringError:
+    except AuthoringError as exc:
+        if url:
+            # Refuse before the one-use runner link is claimed.
+            detail = str(exc).rstrip(". ")
+            raise MailboxError(f"{detail}. {RUNNER_LINK_UNUSED}") from exc
         if (plat == "win32" or plat.startswith("win")) and not url:
             return CoachOnlySession("windows")
         return None
@@ -758,6 +768,8 @@ def connect_mailbox(
             "this pack URL is not a runner link; paste the Connect this computer "
             "command (openadapt://runner?pack=…&bind=oab_…)"
         )
+    if url and not headed and session is None:
+        raise MailboxError(URL_NEEDS_HEADED)
     transport = open_mailbox_transport(origin=parsed["origin"], post=post)
     opened = session
     if opened is None:

@@ -20,11 +20,15 @@ fail-closed with a local fallback.
 
 from __future__ import annotations
 
+import contextlib
 import json
+import queue
 import re
 import sys
+import threading
+from concurrent.futures import Future
 from pathlib import Path
-from typing import Any, Mapping, Optional
+from typing import Any, Callable, Mapping, Optional
 
 from openadapt_agent.bridge import BridgeError, ToolSpec
 
@@ -36,6 +40,7 @@ __all__ = [
     "MAX_AUTHORING_WIRE_BYTES",
     "NODE_ID_RE",
     "OBSERVE_SCHEMA_VERSION",
+    "ThreadOwnedSession",
     "discover_desktop_authoring_ipc",
     "open_authoring_session",
     "pin_local_backend",
@@ -266,6 +271,131 @@ class CoachOnlySession:
         return {"status": "halted"}
 
 
+_OWNER_STOP = object()
+_OWNER_STOP_TIMEOUT_S = 30.0
+
+
+class _BackendOwnerThread:
+    """One daemon thread that launches, drives, and closes a browser backend.
+
+    Playwright's sync API binds its objects to the thread that started it and
+    leaves its own event loop marked running on that thread. Keeping the
+    browser on this thread lets ``anyio.run`` start on the caller's thread,
+    and lets MCP worker threads use the session through :meth:`call`.
+    """
+
+    def __init__(self) -> None:
+        self._jobs: queue.SimpleQueue = queue.SimpleQueue()
+        self._lock = threading.Lock()
+        self._stopped = False
+        self._thread = threading.Thread(
+            target=self._run, name="openadapt-authoring-backend", daemon=True
+        )
+        self._thread.start()
+
+    @property
+    def stopped(self) -> bool:
+        return self._stopped
+
+    def _run(self) -> None:
+        while True:
+            job = self._jobs.get()
+            if job is _OWNER_STOP:
+                return
+            future, fn, args, kwargs = job
+            if not future.set_running_or_notify_cancel():
+                continue
+            try:
+                result = fn(*args, **kwargs)
+            except BaseException as exc:
+                future.set_exception(exc)
+            else:
+                future.set_result(result)
+
+    def call(self, fn: Callable[..., Any], /, *args: Any, **kwargs: Any) -> Any:
+        if threading.current_thread() is self._thread:
+            return fn(*args, **kwargs)
+        future: Future = Future()
+        with self._lock:
+            if self._stopped:
+                raise AuthoringError("the authoring session is closed")
+            self._jobs.put((future, fn, args, kwargs))
+        return future.result()
+
+    def stop(self) -> None:
+        with self._lock:
+            if self._stopped:
+                return
+            self._stopped = True
+            self._jobs.put(_OWNER_STOP)
+        if threading.current_thread() is not self._thread:
+            self._thread.join(timeout=_OWNER_STOP_TIMEOUT_S)
+
+
+class _OwnedCall:
+    """A session method that runs on the backend owner thread."""
+
+    __slots__ = ("_owner", "target")
+
+    def __init__(self, owner: _BackendOwnerThread, target: Callable[..., Any]):
+        self._owner = owner
+        self.target = target
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        return self._owner.call(self.target, *args, **kwargs)
+
+
+class ThreadOwnedSession:
+    """Authoring session whose every call runs on its backend owner thread.
+
+    Attribute reads, method calls, and attribute writes (such as the mailbox
+    guard that swaps out ``type_text`` during Continue) all reach the wrapped
+    session on the thread that owns its browser.
+    """
+
+    __slots__ = ("_owner", "_session")
+
+    def __init__(self, owner: _BackendOwnerThread, session: object):
+        object.__setattr__(self, "_owner", owner)
+        object.__setattr__(self, "_session", session)
+
+    def __getattr__(self, name: str) -> Any:
+        if name in ThreadOwnedSession.__slots__:
+            raise AttributeError(name)
+        value = self._owner.call(getattr, self._session, name)
+        if callable(value):
+            return _OwnedCall(self._owner, value)
+        return value
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        if isinstance(value, _OwnedCall):
+            value = value.target
+        self._owner.call(setattr, self._session, name, value)
+
+    def __delattr__(self, name: str) -> None:
+        self._owner.call(delattr, self._session, name)
+
+    def close(self) -> None:
+        """Close the browser on its owner thread, then stop that thread."""
+
+        if self._owner.stopped:
+            return
+        try:
+            closer = self._owner.call(getattr, self._session, "close", None)
+            if callable(closer):
+                self._owner.call(closer)
+        finally:
+            self._owner.stop()
+
+
+def _is_coach_only_session(session: object) -> bool:
+    """True for the coach-only stand-in, even behind its owner thread."""
+
+    if isinstance(session, ThreadOwnedSession):
+        session = object.__getattribute__(session, "_session")
+    return isinstance(session, CoachOnlySession)
+
+
 def discover_desktop_authoring_ipc(*, home: Optional[Path] = None) -> Optional[dict[str, Any]]:
     """Return Desktop authoring IPC discovery when D2 has advertised it.
 
@@ -427,6 +557,41 @@ def open_authoring_session(
         ) from exc
     discover_desktop_authoring_ipc()
     work_dir = Path(out_dir) if out_dir is not None else Path("runs") / "authoring"
+    options = dict(
+        work_dir=work_dir,
+        url=url,
+        headed=headed,
+        backend=backend,
+        backend_kind=backend_kind,
+        platform=platform,
+        **kwargs,
+    )
+    if backend is None and backend_kind is None and url:
+        # --url pins sync Playwright. Launch, use, and close it on one owner
+        # thread: it leaves an event loop marked running on the thread that
+        # started it (anyio.run then refuses to start), and its objects fail
+        # when MCP worker threads call them.
+        owner = _BackendOwnerThread()
+        try:
+            session = owner.call(_open_pinned_session, flow_authoring, **options)
+        except BaseException:
+            owner.stop()
+            raise
+        return ThreadOwnedSession(owner, session)
+    return _open_pinned_session(flow_authoring, **options)
+
+
+def _open_pinned_session(
+    flow_authoring: Any,
+    *,
+    work_dir: Path,
+    url: Optional[str],
+    headed: bool,
+    backend: Any,
+    backend_kind: Optional[str],
+    platform: Optional[str],
+    **kwargs: Any,
+) -> object:
     close = None
     kind = backend_kind
     pinned = backend
@@ -479,6 +644,10 @@ def open_authoring_session(
         if code == "COACH_ONLY" or type(exc).__name__ == "CoachOnlyError":
             session = CoachOnlySession(kind)
         else:
+            if close is not None:
+                # Do not leave the pinned browser running behind a refusal.
+                with contextlib.suppress(Exception):
+                    close()
             if isinstance(exc, AuthoringError):
                 raise
             raise AuthoringError(str(exc), code=code if isinstance(code, str) else None) from exc
@@ -754,7 +923,7 @@ class AuthoringBridge:
         self._out_dir = Path(out_dir) if out_dir is not None else None
         self._last_tool: Optional[str] = None
         self._last_result: Optional[dict[str, Any]] = None
-        self._coach_only = isinstance(session, CoachOnlySession)
+        self._coach_only = _is_coach_only_session(session)
         self._nodes: dict[str, dict[str, Any]] = {}
         self._coach_hint: Optional[str] = None
 

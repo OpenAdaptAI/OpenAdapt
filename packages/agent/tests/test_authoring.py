@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
+import threading
 from pathlib import Path
 
 import anyio
@@ -14,6 +16,7 @@ from openadapt_agent.authoring import (
     AuthoringError,
     CoachOnlySession,
     MAX_AUTHORING_WIRE_BYTES,
+    ThreadOwnedSession,
     discover_desktop_authoring_ipc,
     open_authoring_session,
     pin_local_backend,
@@ -759,6 +762,7 @@ def test_open_authoring_session_uses_f1_constructor_when_present(monkeypatch, tm
             captured["out_dir"] = Path(out_dir)
             captured["backend_kind"] = backend_kind
             captured["app_url"] = app_url
+            captured["thread"] = threading.get_ident()
 
     import types
     import sys
@@ -773,7 +777,10 @@ def test_open_authoring_session_uses_f1_constructor_when_present(monkeypatch, tm
         lambda **kwargs: ("backend-obj", "web", None),
     )
     session = open_authoring_session(out_dir=tmp_path, url="https://example.invalid/")
-    assert isinstance(session, Session)
+    # A --url session is built and driven on its browser owner thread.
+    assert isinstance(session, ThreadOwnedSession)
+    assert captured["thread"] != threading.get_ident()
+    session.close()
     assert captured["backend"] == "backend-obj"
     assert captured["backend_kind"] == "web"
     assert captured["app_url"] == "https://example.invalid/"
@@ -822,3 +829,308 @@ def test_open_authoring_session_maps_f1_coach_only_error(monkeypatch, tmp_path):
         out_dir=tmp_path, backend=object(), backend_kind="web"
     )
     assert isinstance(session, CoachOnlySession)
+
+
+class _ThreadBoundBackend:
+    """Stands in for sync Playwright: every call must come from its own thread."""
+
+    def __init__(self, owner: int):
+        self.owner = owner
+        self.calls: list[str] = []
+
+    def check(self, name: str) -> None:
+        if threading.get_ident() != self.owner:
+            raise AssertionError(f"{name} ran off the thread that launched the browser")
+        self.calls.append(name)
+
+
+def install_fake_playwright_flow(monkeypatch) -> dict:
+    """Fake Flow whose browser launch behaves like sync_playwright().start().
+
+    Like the real launch, it leaves an event loop marked running on the
+    calling thread and returns objects bound to that thread.
+    """
+
+    import sys
+    import types
+
+    launched: dict = {}
+
+    class PlaywrightBackend:
+        @classmethod
+        def launch(cls, url, headless=True):
+            loop = asyncio.new_event_loop()
+            asyncio._set_running_loop(loop)
+            owner = threading.get_ident()
+            backend = _ThreadBoundBackend(owner)
+            launched.update(url=url, headless=headless, thread=owner, loop=loop, backend=backend)
+
+            def close():
+                backend.check("close")
+                asyncio._set_running_loop(None)
+                loop.close()
+                launched["closed"] = True
+
+            return backend, close
+
+    class Session:
+        backend_kind = "web"
+
+        def __init__(self, backend):
+            self._backend = backend
+
+        def observe(self):
+            self._backend.check("observe")
+            return {"backend": "web", "provider": "playwright_ax", "tree": []}
+
+        def start_record(self):
+            self._backend.check("start_record")
+            return None
+
+        def halt(self):
+            self._backend.check("halt")
+            return None
+
+    def open_session(backend, out_dir, *, backend_kind, app_url=None):
+        backend.check("open_session")
+        return Session(backend)
+
+    fake_flow = types.ModuleType("openadapt_flow")
+    fake_authoring = types.ModuleType("openadapt_flow.authoring")
+    fake_authoring.open_session = open_session
+    fake_backends = types.ModuleType("openadapt_flow.backends")
+    fake_playwright = types.ModuleType("openadapt_flow.backends.playwright_backend")
+    fake_playwright.PlaywrightBackend = PlaywrightBackend
+    monkeypatch.setitem(sys.modules, "openadapt_flow", fake_flow)
+    monkeypatch.setitem(sys.modules, "openadapt_flow.authoring", fake_authoring)
+    monkeypatch.setitem(sys.modules, "openadapt_flow.backends", fake_backends)
+    monkeypatch.setitem(
+        sys.modules, "openadapt_flow.backends.playwright_backend", fake_playwright
+    )
+    return launched
+
+
+def tool_is_error(result) -> bool:
+    """Read isError the same way on both MCP SDK generations."""
+
+    return result.model_dump(by_alias=True, mode="json")["isError"] is True
+
+
+def release_main_thread_loop(launched: dict) -> None:
+    """Undo a launch that ran on this thread so later tests can start anyio."""
+
+    if launched.get("thread") == threading.get_ident() and not launched.get("closed"):
+        asyncio._set_running_loop(None)
+        launched["loop"].close()
+
+
+def test_url_session_keeps_playwright_on_one_owner_thread_under_anyio(
+    monkeypatch, tmp_path, mcp_client
+):
+    launched = install_fake_playwright_flow(monkeypatch)
+    try:
+        session = open_authoring_session(
+            out_dir=tmp_path, url="http://127.0.0.1:9/", headed=True
+        )
+        server = build_server(authoring=AuthoringBridge(session, out_dir=tmp_path))
+
+        async def drive():
+            async with mcp_client(server) as client:
+                return [
+                    await client.call_tool(name, {})
+                    for name in ("observe", "start_record", "halt")
+                ]
+
+        # anyio refuses to start on a thread where Playwright left its loop.
+        results = anyio.run(drive)
+        assert [tool_is_error(result) for result in results] == [False, False, False], [
+            result.content[0].text for result in results
+        ]
+        assert launched["thread"] != threading.get_ident()
+        assert launched["headless"] is False
+        with pytest.raises(RuntimeError):
+            asyncio.get_running_loop()
+        session.close()
+        assert launched["closed"] is True
+        assert launched["backend"].calls == [
+            "open_session",
+            "observe",
+            "start_record",
+            "halt",
+            "close",
+        ]
+        with pytest.raises(AuthoringError, match="closed"):
+            session.observe()
+        session.close()
+    finally:
+        release_main_thread_loop(launched)
+
+
+def test_authoring_url_headed_serve_starts_and_dispatches_tools(
+    monkeypatch, tmp_path, capsys, mcp_client
+):
+    from openadapt_agent.cli import main
+
+    launched = install_fake_playwright_flow(monkeypatch)
+    captured: dict = {}
+
+    async def fake_run_stdio(bridge, authoring=None):
+        # Same anyio.run entry as stdio serve, with an in-memory client.
+        server = build_server(bridge, authoring=authoring)
+        async with mcp_client(server) as client:
+            captured["observe"] = await client.call_tool("observe", {})
+            captured["start_record"] = await client.call_tool("start_record", {})
+
+    monkeypatch.setattr("openadapt_agent.mcp._run_stdio", fake_run_stdio)
+    try:
+        result = main(
+            [
+                "serve",
+                "--authoring",
+                "--url",
+                "http://127.0.0.1:9/",
+                "--headed",
+                "--runs-dir",
+                str(tmp_path / "runs"),
+            ]
+        )
+        err = capsys.readouterr().err
+        assert result == 0, err
+        assert "Already running asyncio" not in err
+        assert tool_is_error(captured["observe"]) is False
+        assert tool_is_error(captured["start_record"]) is False
+        assert launched["closed"] is True
+    finally:
+        release_main_thread_loop(launched)
+
+
+def test_url_session_refusal_stops_the_owner_thread(monkeypatch, tmp_path):
+    install_fake_playwright_flow(monkeypatch)
+    before = {thread.name for thread in threading.enumerate()}
+    with pytest.raises(AuthoringError, match="empty cookies"):
+        open_authoring_session(out_dir=tmp_path, url="http://127.0.0.1:9/", headed=False)
+    assert {thread.name for thread in threading.enumerate()} <= before
+
+
+def test_url_coach_only_fallback_still_refuses_type_behind_owner_thread(
+    monkeypatch, tmp_path
+):
+    """Windows --url that cannot pin a browser stays coach-only, not "recorded"."""
+
+    install_fake_playwright_flow(monkeypatch)
+    session = open_authoring_session(
+        out_dir=tmp_path, url="http://127.0.0.1:9/", headed=False, platform="win32"
+    )
+    try:
+        bridge = AuthoringBridge(session, out_dir=tmp_path)
+        with pytest.raises(AuthoringError, match="COACH_ONLY"):
+            bridge.dispatch("type", {"text": "hello"})
+        with pytest.raises(AuthoringError, match="COACH_ONLY"):
+            bridge.dispatch("click", {"x": 1, "y": 2})
+    finally:
+        closer = getattr(session, "close", None)
+        if callable(closer):
+            closer()
+
+
+def test_url_session_construction_failure_closes_the_browser(monkeypatch, tmp_path):
+    import sys
+
+    launched = install_fake_playwright_flow(monkeypatch)
+
+    def broken_open_session(backend, out_dir, *, backend_kind, app_url=None):
+        raise RuntimeError("recorder unavailable")
+
+    monkeypatch.setattr(
+        sys.modules["openadapt_flow.authoring"], "open_session", broken_open_session
+    )
+    before = {thread.name for thread in threading.enumerate()}
+    try:
+        with pytest.raises(AuthoringError, match="recorder unavailable"):
+            open_authoring_session(out_dir=tmp_path, url="http://127.0.0.1:9/", headed=True)
+        assert launched["closed"] is True
+        assert {thread.name for thread in threading.enumerate()} <= before
+    finally:
+        release_main_thread_loop(launched)
+
+
+_DEMO_PAGE = b"""<!doctype html><html><head><title>Demo</title></head><body>
+<label for="note">Note</label><input id="note" aria-label="Note">
+<button id="save">Save</button></body></html>"""
+
+
+def test_real_url_session_serves_tools_under_anyio(monkeypatch, tmp_path, mcp_client):
+    """Real Playwright Chromium behind serve --authoring --url --headed.
+
+    Skips when the browser extra or Chromium is missing. Never downloads a
+    browser. Chromium runs headless here so the test needs no display.
+    """
+
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    pytest.importorskip("playwright")
+    try:
+        from openadapt_flow import authoring as _flow_authoring  # noqa: F401
+        from openadapt_flow._browser_setup import NO_AUTO_INSTALL_ENV, _chromium_present
+        from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+    except ImportError:
+        pytest.skip("Flow authoring with the browser extra is not installed")
+    monkeypatch.setenv(NO_AUTO_INSTALL_ENV, "1")
+    try:
+        present = _chromium_present()
+    except Exception:
+        present = False
+    if not present:
+        pytest.skip("Playwright Chromium is not installed")
+
+    launch = PlaywrightBackend.launch.__func__
+
+    def headless_launch(cls, url, headless=True, **kwargs):
+        return launch(cls, url, headless=True, **kwargs)
+
+    monkeypatch.setattr(PlaywrightBackend, "launch", classmethod(headless_launch))
+
+    class DemoPage(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            self.wfile.write(_DEMO_PAGE)
+
+        def log_message(self, *args):
+            return None
+
+    site = ThreadingHTTPServer(("127.0.0.1", 0), DemoPage)
+    threading.Thread(target=site.serve_forever, daemon=True).start()
+    try:
+        session = open_authoring_session(
+            out_dir=tmp_path,
+            url=f"http://127.0.0.1:{site.server_port}/",
+            headed=True,
+        )
+        try:
+            server = build_server(authoring=AuthoringBridge(session, out_dir=tmp_path))
+
+            async def drive():
+                async with mcp_client(server) as client:
+                    observed = await client.call_tool("observe", {})
+                    tree = json.loads(observed.content[0].text)["tree"]
+                    button = next(node for node in tree if node["role"] == "button")
+                    results = [
+                        observed,
+                        await client.call_tool("start_record", {}),
+                        await client.call_tool("click", {"node_id": button["node_id"]}),
+                        await client.call_tool("halt", {}),
+                    ]
+                    return tree, results
+
+            tree, results = anyio.run(drive)
+        finally:
+            session.close()
+    finally:
+        site.shutdown()
+        site.server_close()
+    assert [tool_is_error(result) for result in results] == [False] * 4, [
+        result.content[0].text for result in results
+    ]
+    assert {node["role"] for node in tree} >= {"button", "text_input"}

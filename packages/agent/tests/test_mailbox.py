@@ -316,6 +316,49 @@ def test_continue_records_observed_never_type_text() -> None:
     assert "value" not in last["result"]
 
 
+def test_continue_guard_reaches_a_browser_owner_thread_session() -> None:
+    """A --url session lives on its browser thread; Continue still cannot type."""
+
+    import threading
+
+    from openadapt_agent.authoring import ThreadOwnedSession, _BackendOwnerThread
+
+    class TypingContinue:
+        backend_kind = "web"
+
+        def __init__(self) -> None:
+            self.typed: list[str] = []
+            self.continue_thread: int | None = None
+
+        def pause_for_input(self, *, param, secret=False, node_id=None):
+            return None
+
+        def type_text(self, text, param=None):
+            self.typed.append(text)
+
+        def continue_input(self):
+            self.continue_thread = threading.get_ident()
+            self.type_text("must not be typed")
+            return {"recorded": True, "param": "note"}
+
+    owner = _BackendOwnerThread()
+    inner = owner.call(TypingContinue)
+    session = ThreadOwnedSession(owner, inner)
+    try:
+        mock = MockMailbox()
+        client, _out = _client(mock, session=session)
+        client.claim(PACK, BIND)
+        client.handle_envelope(_envelope("bind_pack"))
+        result = client.handle_envelope(_envelope("pause_for_input", args={"param": "note"}))
+        assert result == {"status": "error", "error": "error"}
+        assert inner.typed == []
+        assert inner.continue_thread is not None
+        assert inner.continue_thread != threading.get_ident()
+        assert inner.type_text.__func__ is TypingContinue.type_text
+    finally:
+        session.close()
+
+
 def test_secret_continue_has_no_text() -> None:
     mock = MockMailbox()
     recorder = FakeRecorder()
@@ -520,3 +563,81 @@ def test_connect_help_does_not_name_mockmed(capsys) -> None:
     assert "Allow" in out
     assert "MockMed" not in out
     assert "password" not in out.lower()
+
+
+def _connect_url(mock: MockMailbox, *, headed: bool) -> int:
+    return connect_mailbox(
+        URI,
+        url="https://example.invalid/app",
+        headed=headed,
+        post=mock.post,
+        prompt=lambda _message: True,
+        pause_wait=lambda: None,
+        sleep=lambda _seconds: None,
+        max_polls=3,
+        stdout=io.StringIO(),
+        platform="darwin",
+    )
+
+
+def test_connect_url_without_headed_refuses_before_claim(monkeypatch) -> None:
+    opened: list[dict[str, Any]] = []
+    monkeypatch.setattr(
+        "openadapt_agent.mailbox.open_authoring_session",
+        lambda **kwargs: opened.append(kwargs),
+    )
+    mock = MockMailbox(poll_bodies=[_envelope("bind_pack"), _envelope("observe")])
+    with pytest.raises(MailboxError, match="--headed"):
+        _connect_url(mock, headed=False)
+    # The one-use bind is still unclaimed, so the same runner link works again.
+    assert mock.requests == []
+    assert opened == []
+
+
+def test_connect_url_refuses_before_claim_when_the_browser_cannot_open(monkeypatch) -> None:
+    from openadapt_agent.authoring import AuthoringError
+
+    def no_browser(**kwargs):
+        raise AuthoringError(
+            "Playwright web pin requires openadapt-flow with the browser extra "
+            "(openadapt-agent[tutorial])"
+        )
+
+    monkeypatch.setattr("openadapt_agent.mailbox.open_authoring_session", no_browser)
+    mock = MockMailbox(poll_bodies=[_envelope("bind_pack"), _envelope("observe")])
+    with pytest.raises(MailboxError, match="browser extra"):
+        _connect_url(mock, headed=True)
+    assert not any(path.endswith("/runner/claim") for path, _body, _headers in mock.requests)
+
+
+def test_url_client_without_a_session_is_coach_only_not_error() -> None:
+    mock = MockMailbox()
+    client = MailboxClient(
+        MailboxTransport(origin=ORIGIN, post=mock.post),
+        session=None,
+        prompt=lambda _message: True,
+        sleep=lambda _seconds: None,
+        stdout=io.StringIO(),
+        url="https://example.invalid/app",
+        platform="darwin",
+    )
+    client.claim(PACK, BIND)
+    client.handle_envelope(_envelope("bind_pack"))
+    observed = client.handle_envelope(_envelope("observe"))
+    assert observed["coach_only"] is True
+    assert observed["agent_drive"] is False
+    client.handle_envelope(_envelope("start_record"))
+    callback = [item[1] for item in mock.requests if item[0].endswith("/callback")][-1]
+    assert callback["result"]["error"] == "COACH_ONLY"
+
+
+def test_documented_url_connect_commands_pass_headed() -> None:
+    root = Path(__file__).resolve().parents[1]
+    commands = []
+    for doc in [root / "README.md", root / "llms.txt", *sorted((root / "docs").glob("*.md"))]:
+        text = doc.read_text(encoding="utf-8").replace("\\\n", " ")
+        for line in text.splitlines():
+            if "authoring connect" in line and "--url" in line:
+                commands.append((doc.name, line.strip()))
+    assert commands, "expected a documented authoring connect --url example"
+    assert [item for item in commands if "--headed" not in item[1]] == []
