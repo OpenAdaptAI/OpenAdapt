@@ -503,7 +503,9 @@ def quickstart(
 
 
 _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]+)$")
-_SUPPORTED_FLOW_RANGE = ">=1.29.0,<2.0.0"
+# Flow 1.33 and 1.34 probe four X11 libraries in the wrong case, so on Linux
+# they refuse to download Chromium on hosts that have them. 1.35.0 fixed it.
+_SUPPORTED_FLOW_RANGE = ">=1.35.0,<2.0.0"
 _RDP_INSTALL_COMMAND = "python -m pip install 'openadapt[rdp]'"
 _CHROMIUM_SYSTEM_LIBS_COMMAND = (
     f"{shlex.quote(sys.executable)} -m playwright install-deps chromium"
@@ -513,7 +515,7 @@ _CHROMIUM_SYSTEM_LIBS_COMMAND = (
 def _supported_flow_version(value: str) -> bool:
     """Return whether a stable Flow version is in the launcher's supported range."""
     parsed = _release_tuple(value)
-    return parsed is not None and (1, 29, 0) <= parsed < (2, 0, 0)
+    return parsed is not None and (1, 35, 0) <= parsed < (2, 0, 0)
 
 
 # The Python modules each native or remote Flow backend imports when its
