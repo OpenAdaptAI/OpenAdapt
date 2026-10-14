@@ -2,7 +2,9 @@
 name = "openadapt"
 version = "1.16.0"
 description = "Enters approved information into the apps your team already uses, checks that it saved, and stops for a person when something doesn't match."
-readme = "README.md"
+# The package description is README.md with its lifecycle block swapped for a
+# link to the live record; see hatch_build.py.
+dynamic = ["readme"]
 requires-python = ">=3.10"
 license = "MIT"
 authors = [
@@ -155,6 +157,8 @@ Repository = "https://github.com/OpenAdaptAI/openadapt"
 requires = ["hatchling==1.32.0"]
 build-backend = "hatchling.build"
 
+[tool.hatch.metadata.hooks.custom]
+
 [tool.hatch.build.targets.wheel]
 packages = ["openadapt"]
 
@@ -164,6 +168,7 @@ packages = ["openadapt"]
 [tool.hatch.build.targets.sdist]
 include = [
     "/openadapt",
+    "/hatch_build.py",
     "/README.md",
     "/LICENSE",
     "/CHANGELOG.md",

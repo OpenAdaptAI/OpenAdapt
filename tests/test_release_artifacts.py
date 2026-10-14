@@ -96,6 +96,7 @@ def _metadata(
     version: str,
     requires_python: str = ">=3.10,<3.13",
     lifecycle_classifier: str | None = None,
+    description: str = "",
 ) -> bytes:
     classifier = f"Classifier: {lifecycle_classifier}\n" if lifecycle_classifier else ""
     return (
@@ -105,6 +106,7 @@ def _metadata(
         "Summary: OpenAdapt launcher\n"
         f"Requires-Python: {requires_python}\n"
         f"{classifier}\n"
+        f"{description}"
     ).encode()
 
 
@@ -113,6 +115,7 @@ def _release_tree(
     artifact_version: str = "2.0.0",
     artifact_requires_python: str = ">=3.10,<3.13",
     lifecycle_classifier: str | None = None,
+    description: str = "",
 ) -> tuple[Path, Path]:
     (tmp_path / "pyproject.toml").write_text(
         "[project]\n"
@@ -132,6 +135,7 @@ def _release_tree(
                 artifact_version,
                 artifact_requires_python,
                 lifecycle_classifier,
+                description,
             ),
         )
 
@@ -140,6 +144,7 @@ def _release_tree(
         artifact_version,
         artifact_requires_python,
         lifecycle_classifier,
+        description,
     )
     info = tarfile.TarInfo("openadapt-2.0.0/PKG-INFO")
     info.size = len(raw)
@@ -210,6 +215,47 @@ def test_release_artifacts_reject_static_lifecycle_metadata(tmp_path: Path):
 
     with pytest.raises(ValueError, match="static lifecycle classifier"):
         verify_release_artifacts(dist, root=tmp_path)
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        "# OpenAdapt\n\n<!-- BEGIN PRODUCTION LIFECYCLE -->\nState.\n"
+        "<!-- END PRODUCTION LIFECYCLE -->\n",
+        "The signed ledger has seven active target admissions.\n",
+        "`pip install openadapt` is the admitted runtime (launcher 1.16.0).\n",
+        "Current OpenAdapt admission state: **Not actively admitted.**\n",
+        "The exact signed ledger has no active admission for this target.\n",
+    ],
+)
+def test_release_artifacts_reject_a_frozen_lifecycle_description(
+    tmp_path: Path, description: str
+):
+    """PyPI freezes the description at release, so it must not state admissions.
+
+    The 1.16.0 page still says "Not actively admitted" while the GitHub README
+    names active admissions. Only the live signed record can state this.
+    """
+
+    dist, _ = _release_tree(tmp_path, description=description)
+
+    with pytest.raises(ValueError, match="description states a lifecycle state"):
+        verify_release_artifacts(dist, root=tmp_path)
+
+
+def test_release_artifacts_accept_a_description_that_links_the_live_record(
+    tmp_path: Path,
+):
+    dist, _ = _release_tree(
+        tmp_path,
+        description=(
+            "# OpenAdapt\n\nA named person admits a program before production use.\n"
+            "[Live signed Production record]"
+            "(https://docs.openadapt.ai/production-lifecycle.json)\n"
+        ),
+    )
+
+    verify_release_artifacts(dist, root=tmp_path)
 
 
 @pytest.mark.parametrize(

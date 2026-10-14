@@ -81,6 +81,23 @@ def _lifecycle(metadata: Message) -> list[str]:
     ]
 
 
+# PyPI keeps a release's description forever, so it must not state an
+# admission. hatch_build.py replaces the README's generated lifecycle block
+# with a link to the live signed record.
+_FROZEN_LIFECYCLE_STATE = re.compile(
+    r"PRODUCTION LIFECYCLE|not actively admitted|active (?:target )?admissions?"
+    r"|is the admitted runtime",
+    re.IGNORECASE,
+)
+
+
+def _description(metadata: Message) -> str:
+    body = metadata.get_payload()
+    return "\n".join(
+        part for part in (metadata.get("Description"), body) if isinstance(part, str)
+    )
+
+
 def _specifier_terms(value: str) -> set[str]:
     return {term.strip() for term in value.split(",") if term.strip()}
 
@@ -155,6 +172,12 @@ def verify_release_artifacts(
             raise ValueError(
                 f"{source} publishes a static lifecycle classifier; "
                 "use the signed public Production record"
+            )
+        frozen = _FROZEN_LIFECYCLE_STATE.search(_description(metadata))
+        if frozen:
+            raise ValueError(
+                f"{source} description states a lifecycle state "
+                f"({frozen.group(0)!r}); link the signed public Production record"
             )
 
     comparable_fields = ("Name", "Version", "Summary", "Requires-Python")
