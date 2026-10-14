@@ -28,7 +28,8 @@ from the reference apps.
    bind to the run's governed parameters. Contracts are substrate-neutral.
 2. **The deployment declares WHERE truth lives** — the `effects:` section of
    `deployment.yaml` wires one `EffectVerifier` (REST / GraphQL / FHIR / SQL /
-   file / email / document / document-hash, or a registered plugin adapter)
+   file / email / document / document-hash, the separate-session UI read-back
+   when none of those is reachable, or a registered plugin adapter)
    plus its secret-isolated auth. When more than one reviewed read boundary is
    available, `candidates:` selects the strongest verification class for each
    resolved effect before input. It does not downgrade after input. An unavailable
@@ -43,9 +44,9 @@ from the reference apps.
    when the declared oracle is the same page session, screenshot, or banner as
    the acting surface). A policy that sets
    `require_effects_for_irreversible: true` turns a missing contract into a
-   certification **failure** (warn-vs-fail is the policy's choice). Independent
-   API, SQL, second-session, and file reads are channel-disjoint; on-screen
-   success is not.
+   certification **failure** (warn-vs-fail is the policy's choice). API, SQL,
+   file, and separate-session (`ui_readback`) reads are channel-disjoint;
+   on-screen success is not.
 
 ## The selector names the subject
 
@@ -139,6 +140,7 @@ environment-assigned surrogate key is the right choice for it.
 | `effects.kind` | Verifier | Probe | Proven how |
 |---|---|---|---|
 | `onscreen` | `OnScreenReadbackVerifier` | re-OCR the saved value off the live screen — the **no-API default** for GUI-only recordings; auto-derived from the demonstration. **Different-path** (re-open the record) is default-eligible; **same-surface** (re-read the write's own form) is opt-in only | measured in `benchmark/effect_readback/` — different-path false-CONFIRM 0, same-surface > 0. **A read-back CONFIRMED is a consistency signal, NOT transactional proof** (`docs/LIMITS.md`) |
+| `ui_readback` | `SeparateSessionReadbackVerifier` | the application's own record page, opened by identifier in a separate browser with its own sign-in, read-only, fields read from the page structure. **Tier 2: not a system-of-record read** | CI against MockMed's server-rendered record pages in a real browser; measured in `benchmark/ui_readback/` (see [the section below](#separate-session-ui-read-back-ui_readback)) |
 | `rest` | `RestRecordVerifier` | GET a JSON records document (templatable path, secret-isolated auth headers) | live in CI against the MockMed transactional back end; Frappe-shaped read in the reference matrix (PR #131) |
 | `fhir` | `FhirEffectVerifier` | FHIR R4 search → flattened resources | CI against a byte-faithful fake FHIR server; **opt-in live test** against a real local OpenEMR |
 | `graphql` | `GraphQLRecordVerifier` | ONE read-only GraphQL query (a `mutation`/`subscription` refuses to construct), records extracted at a dotted path; optional freshness window → STALE demotion | **contract-proven in CI against a fake session** -- read-only guard, entity binding, error-body handling, staleness; not live-proven against a production GraphQL endpoint |
@@ -228,6 +230,113 @@ Frappe Lending reference matrix (`benchmark/frappe_lending/fixture.py`, PR
 every other audited table by exactly 0. This is a harness-level companion to
 the verifier (it brackets a whole run, not one step).
 
+## Separate-session UI read-back (`ui_readback`)
+
+Use it when the workflow has no API, database, or export that Flow can read,
+which is the usual case for a legacy GUI. After the save, Flow:
+
+1. starts its own browser, never the one that typed, with a new, empty
+   context (no cookies, storage, or service workers);
+2. signs in with the read-back account named in `sign_in`;
+3. opens `record_url` for the record's identifier;
+4. checks that the page shows that identifier (`identity`);
+5. reads each declared field from the page structure (`fields`: element text,
+   or an attribute such as `title` when the visible text is shortened); and
+6. judges the effect contract with the shared judge, so counts, duplicates,
+   lost updates, and field values are judged as for every other substrate.
+
+After sign-in the session can't write. A script installed in every page
+refuses fetch, XHR, beacon, and form requests that aren't reads before they're
+sent, and a network guard aborts any request other than GET, HEAD, or
+OPTIONS. A refused request makes the read uncertain, so the step halts.
+`read_post_paths` lists read endpoints that use POST (a GraphQL query, say)
+when a page needs one.
+
+The check declares tier 2 (`INDEPENDENT_SESSION`; Seal oracle tier 1,
+"separate read-only session"). It doesn't go through the session that typed,
+and it isn't a system-of-record read: the adapter sets
+`independent_system_of_record = False`, its verdicts say "record page", and a
+halt message names the read as a record page read in a separate session. Under
+the Standard and Regulated profiles a tier-2 confirmation can end `VERIFIED`,
+as before. The `regulated` policy pack needs tier 1, so this check doesn't
+qualify a workflow for it.
+
+```yaml
+effects:
+  kind: ui_readback
+  ui_readback:
+    record_url: "https://app.example.org/patients/{patient}/encounters"
+    url_params: { patient: { param: patient_id } }
+    sign_in:
+      url: https://app.example.org/login
+      username_selector: "#username"
+      password_selector: "#password"
+      submit_selector: "button[type=submit]"
+      signed_in_selector: "#user-menu"
+      username_env: APP_READER_USERNAME
+      password_env: APP_READER_PASSWORD
+    ready_selector: "#encounters"
+    empty_selector: "#no-encounters"
+    row_selector: "tr.encounter"
+    fields:
+      id: { attribute: data-id }
+      type: { selector: "td.type" }
+      note: { selector: "td.note", attribute: title }
+    identity:
+      reader: { selector: "#patient-mrn" }
+      value: { param: patient_id }
+      field: patient_id
+```
+
+| The record page shows | Verdict |
+|---|---|
+| the saved values | CONFIRMED |
+| a different value, a missing or duplicated row, or a row that was there before the save and is gone | REFUTED. The run ends `RECONCILIATION_REQUIRED`: a row the page doesn't show is never taken as proof that nothing was saved, because pages can hide rows |
+| another record, no readable identifier, rows the selectors no longer match, a shortened or unparseable value in a field the contract reads, a refused request, or a failed sign-in | INDETERMINATE (halt) |
+
+Values are compared after collapsing whitespace, because HTML rendering
+collapses it. `date_format` parses a displayed date into ISO 8601 and
+`casefold` compares case-insensitively; both apply to the expected value too.
+
+**Measured.** [`benchmark/ui_readback/RESULTS.md`](../benchmark/ui_readback/RESULTS.md)
+runs the repository's fault list (`benchmark/effect_e2e` and
+`benchmark/fault_model`) with the same effect contracts read three ways: on the
+screen that typed, through this check, and through the API. In a real
+browser replay it caught all 7 wrong saves that the screen showed as saved;
+the same-screen check caught none and the API read caught 7. On the API-write
+list it caught 5 of 7 and the API read 6 (the two misses are under Limits).
+It stopped none of the correct saves in either list. Of nine probes that
+change only how the record page displays a correct save, it stopped on five:
+text the page shortens, a replica slower than the effect timeout, a redesign
+that breaks the selectors, a page that posts when it loads, and a wrong
+read-back password. The last two stopped before the save, so nothing was
+written. These are counts over a small, hand-written fault list on synthetic
+fixtures, not production rates.
+
+### Limits
+
+- It sees only what the record page shows. A wrong write to a field or table
+  the page doesn't display passes (`collateral_unaudited`, a stray billing
+  row; the encounters API read missed it too).
+- It's only as independent as the page's own read path. A record page that
+  renders from a cache the failed write filled shows the save, and the check
+  passes (`page_cache`). The API read caught that case.
+- Display changes stop it: text the page shortens, a replica slower than the
+  effect's `timeout_s`, a redesign that breaks the selectors, a page that
+  posts when it loads, or a failed sign-in. Each is a stop, never a pass, and
+  each costs a person's time. Read full values from attributes where the page
+  has them, set `timeout_s` above the replica lag, and declare
+  `empty_selector`.
+- A whitespace-only difference is invisible, because both sides are compared
+  with whitespace collapsed.
+- The record needs a URL that an identifier the run already knows can fill. A
+  record whose identifier is assigned at save can't be opened this way yet.
+- It needs its own account. Signing in as the account the workflow types with
+  can end the acting session in applications that allow one session per user.
+  Single sign-on and multi-factor sign-in aren't supported.
+- A duplicate that lands after the check has read isn't seen. That's true of
+  every read after the save.
+
 ## Configuration reference (`deployment.yaml` → `effects:`)
 
 Complete commented example: [`docs/deployment.example.yaml`](./deployment.example.yaml).
@@ -262,6 +371,7 @@ Per-kind required fields:
 | kind | required | optional highlights |
 |---|---|---|
 | `onscreen` | (none — auto-derived from the demo) | `readback_region`, `readback_min_ratio` (hand-config fallback) |
+| `ui_readback` | `ui_readback` section: `record_url`, `sign_in` (env-var names for the read-back account), `ready_selector`, `row_selector`, `fields`, `identity` | `url_params`, `empty_selector`, `not_found_selector`, `read_post_paths`, per-field `attribute` / `date_format` / `casefold`, `truncation_markers`, `navigation_timeout_s` |
 | `rest` | `base_url` | `records_path` (may contain `{placeholder}`s), `records_key`, `path_params`, `auth` |
 | `graphql` | `base_url` + `graphql_query` | `graphql_variables` (`{param: ...}` entity binding), `graphql_records_path`, `graphql_freshness_field` + `graphql_freshness_window_s`, `auth` |
 | `fhir` | `base_url` | `resource_type`, `search_params`, `search_param_exprs`, `field_paths`, `access_token_env`, `verify_tls` |
@@ -279,8 +389,8 @@ below).
 
 A database connection is not required. Configure the strongest qualified
 read boundary that the workflow has: REST/FHIR/GraphQL, read-only SQL, a file
-or report export, a separately authenticated read-only session through a
-plugin, or a persisted-state re-acquisition. Do not configure a same-surface
+or report export, the separate-session UI read-back (`ui_readback`), or a
+persisted-state re-acquisition. Do not configure a same-surface
 screen read-back as proof of a consequential write.
 
 For more than one reviewed boundary, use `effects.candidates` instead of
@@ -378,7 +488,7 @@ profiles gate on the tier, never on prose:
 | Tier | Label | What it proves | Adapters |
 |---|---|---|---|
 | 1 | `independent-system` | a read through the SoR's own API/DB/store -- independent proof | `rest`, `graphql`, `fhir`, `sql`, `file`, `email`, `document`, `document-hash` |
-| 2 | `independent-session` | same app, separately authenticated read-only session | customer adapter through the plugin interface |
+| 2 | `independent-session` | same app, read through its record page in a separate, separately signed-in, read-only session. **Not a system-of-record read** | `ui_readback`; a plugin may also declare it |
 | 3 | `reacquired-state` | the app's own UI re-navigated to re-fetch persisted state | `onscreen` with a different-path read-back |
 | 4 | `screen-consistency` | the same surface the write drove still shows the value | `onscreen` same-surface |
 
@@ -400,6 +510,7 @@ the measured false-CONFIRM evidence behind the demotion.
 | maildir / SMTP-capture email delivery | **supported** | `email`; delivery to the capture point |
 | document / report arrival + parse | **supported** | `document` |
 | document store (exact bytes) | **supported** | `document-hash` |
+| separate-session UI read-back | **supported** | `ui_readback`; tier 2, not a system-of-record read |
 | on-screen read-back | **supported (demoted)** | `onscreen`; tiers 3-4, consistency only |
 | customer plugin | **supported (SDK seam)** | any kind via the entry-point group below |
 

@@ -14,6 +14,10 @@ Public surface:
 
 - Types: :class:`Effect`, :class:`EffectKind`, :class:`EffectState`,
   :class:`EffectVerdict`, :class:`Verdict`, :class:`EffectVerifier`.
+- Separate-session read-back (NOT a system-of-record read, tier 2):
+  :class:`SeparateSessionReadbackVerifier` reads the saved record from the
+  application's own record page in a separately signed-in, read-only
+  browser session, for teams with no API or database access.
 - Verifiers: :class:`RestRecordVerifier` (JSON REST SoR, e.g. MockMed
   ``/api/db``), :class:`GraphQLRecordVerifier` (read-only GraphQL query),
   :class:`FhirEffectVerifier` (OpenEMR FHIR R4, primary),
@@ -125,6 +129,10 @@ from openadapt_flow.runtime.effects.sql import (  # noqa: F401
     audit_table_deltas,
     capture_table_counts,
 )
+from openadapt_flow.runtime.effects.ui_readback import (  # noqa: F401
+    SeparateSessionReadbackVerifier,
+    UiReadbackSpec,
+)
 
 __all__ = [
     # adapter platform
@@ -186,4 +194,6 @@ __all__ = [
     "capture_table_counts",
     "FileArrivalVerifier",
     "ArrivalTransport",
+    "SeparateSessionReadbackVerifier",
+    "UiReadbackSpec",
 ]

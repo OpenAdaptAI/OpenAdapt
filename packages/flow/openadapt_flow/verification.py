@@ -50,24 +50,50 @@ class VerificationTier(IntEnum):
     never infer it from class names, substrate labels, or prose.
     """
 
+    #: A read through the system of record's own API, database, or store
+    #: (REST, GraphQL, FHIR, SQL, file, email, document). Seal oracle tier 2.
     INDEPENDENT_SYSTEM = 1
+    #: The same application read through its own record page in a separate,
+    #: separately signed-in, read-only session (``ui_readback``). Independent
+    #: of the session that acted; NOT a system-of-record read. Seal oracle
+    #: tier 1.
     INDEPENDENT_SESSION = 2
+    #: The acting session re-navigates to the record and re-reads it.
     PERSISTED_STATE_REACQUISITION = 3
+    #: The acting screen still shows the value.
     IMMEDIATE_SCREEN = 4
 
     def satisfies(self, minimum: "VerificationTier") -> bool:
         return int(self) <= int(minimum)
 
-    def is_independent_system_of_record(self) -> bool:
-        """True when the read does not share the actuation pixel surface.
+    def reads_system_of_record(self) -> bool:
+        """True only for a read through the system of record (tier 1)."""
 
-        Tiers 1 and 2 are REST/FHIR/SQL/file/session reads. Tiers 3 and 4
-        are on-screen read-back (different-path or same-surface). A
-        pixel-only Citrix run with no system-of-record read cannot be
-        ``VERIFIED``.
+        return self is VerificationTier.INDEPENDENT_SYSTEM
+
+    def is_independent_of_actuation(self) -> bool:
+        """True when the read does not go through the session that acted.
+
+        Tier 1 reads the system of record. Tier 2 reads the application's
+        record page in a separate signed-in session. Tiers 3 and 4 re-read
+        through the acting session (different-path or same-surface). A
+        pixel-only Citrix run with neither tier 1 nor tier 2 evidence cannot
+        be ``VERIFIED``.
         """
 
         return int(self) <= int(VerificationTier.INDEPENDENT_SESSION)
+
+    def is_independent_system_of_record(self) -> bool:
+        """Deprecated name; use :meth:`reads_system_of_record`.
+
+        Until the separate-session read-back existed this returned True for
+        tier 2 as well, which labeled a second application session as a
+        system-of-record read. It now returns True for tier 1 only. Nothing in
+        Flow's runtime calls it; outcome gating uses
+        :data:`VERIFIED_EFFECT_TIER`, which is unchanged.
+        """
+
+        return self.reads_system_of_record()
 
 
 def oracle_tier_from_verification_tier(
@@ -92,18 +118,21 @@ def oracle_tier_from_verification_tier(
 #: Production ``VERIFIED`` requires this floor or stronger (lower int).
 #: The Standard *gate* still admits persisted-state read-back so a
 #: pixel-only run can execute with halt-on-doubt; the outcome classifier
-#: refuses ``VERIFIED`` unless an independent system-of-record read
-#: confirmed every consequential effect.
+#: refuses ``VERIFIED`` unless a read independent of the acting session
+#: (tier 1 system of record, or tier 2 separate-session read-back) confirmed
+#: every consequential effect. Policies that need a system-of-record read
+#: (the ``regulated`` policy pack) set their own tier-1 floor.
 VERIFIED_EFFECT_TIER = VerificationTier.INDEPENDENT_SESSION
 
 
 def declared_effect_is_independent_read(effect: Any) -> bool:
     """True when a compiled effect oracle is not the acting surface.
 
-    Static counterpart of :meth:`VerificationTier.is_independent_system_of_record`.
+    Static counterpart of :meth:`VerificationTier.is_independent_of_actuation`.
     An on-screen read-back (same page session, screenshot, or banner) shares
-    the actuation channel. Unbound placeholders are not a read. Independent
-    API, SQL, second-session, and file contracts have no ``readback`` spec.
+    the actuation channel. Unbound placeholders are not a read. API, SQL,
+    file, and separate-session (``ui_readback``) contracts have no
+    ``readback`` spec.
     """
 
     if getattr(effect, "readback", None) is not None:

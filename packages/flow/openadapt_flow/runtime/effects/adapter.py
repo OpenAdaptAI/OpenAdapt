@@ -64,8 +64,11 @@ Every adapter advertises a :class:`~openadapt_flow.verification.VerificationTier
 
 - tier 1 ``independent-system``: a read through the system of record's own
   API/DB/store -- independent proof.
-- tier 2 ``independent-session``: same application, separately authenticated
-  read-only session -- independent-ish, weaker isolation.
+- tier 2 ``independent-session``: same application, read through its own
+  record page in a separately signed-in, read-only browser session
+  (``ui_readback``). Independent of the session that acted, NOT a
+  system-of-record read: the adapter declares
+  ``independent_system_of_record = False``.
 - tier 3 ``reacquired-state``: the app's own UI re-navigated to re-fetch
   persisted state (different-path screen read-back).
 - tier 4 ``screen-consistency``: same-surface screen read-back. This is a

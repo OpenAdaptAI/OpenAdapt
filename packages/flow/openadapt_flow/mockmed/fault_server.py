@@ -38,6 +38,16 @@ Fault modes (selected by ``?fault=`` on the write POST, forwarded by the app):
                      a double-submit / double-delivered click writes TWO rows.
 - ``idempotent``  -- like ``duplicate`` but the app sends an idempotency key
                      and the server de-duplicates on it (the RECOMMENDED fix).
+- ``wrong_record`` -- the write is accepted but lands on patient ``p2``.
+- ``no_persist``  -- the write returns 200 and nothing is persisted.
+
+The last two are used by the separate-session read-back benchmark
+(``benchmark/ui_readback/``); the fault-model study does not run them.
+
+The server also serves server-rendered record pages under ``/chart/`` with
+their own sign-in (:mod:`openadapt_flow.mockmed.chart_pages`), rendered from
+this same store. The SPA keeps saved encounters in page memory, so these pages
+are what a second, separately signed-in browser session can read.
 
 A ``DELETE /api/encounter/<id>`` route (additive; never used by a
 ``?fault=`` path) lets the EffectVerifier compensation hook reconcile a
@@ -56,6 +66,8 @@ from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from typing import Callable, Optional
 from urllib.parse import parse_qs, urlparse
+
+from openadapt_flow.mockmed.chart_pages import ChartPages
 
 STATIC_DIR = Path(__file__).resolve().parent / "static"
 
@@ -80,6 +92,9 @@ class FaultDB:
         self._records: list[dict] = []
         self._seq = 0
         self.rejected_writes = 0  # optimistic-mode rejections observed
+        #: The ``/chart/`` record pages served from this store (set by
+        #: :func:`serve`); tests change their display through it.
+        self.chart: Optional[ChartPages] = None
 
     def reset(self, *, seed_concurrent: bool = False) -> None:
         with self._lock:
@@ -160,8 +175,22 @@ class FaultDB:
                 "rejected_writes": self.rejected_writes,
             }
 
+    def rows_for_patient(self, patient_id: str) -> Optional[list[dict]]:
+        """The saved encounters for one patient, for the ``/chart/`` pages.
 
-def _make_handler(db: FaultDB, directory: str):
+        Returns None for a patient id MockMed does not know.
+        """
+        if patient_id not in KNOWN_PATIENTS:
+            return None
+        with self._lock:
+            return [dict(r) for r in self._records if r["patient_id"] == patient_id]
+
+
+#: Patient ids the MockMed referral list can show (``static/app.js``).
+KNOWN_PATIENTS = frozenset({"p0", "p1", "p2", "p3", "g1", "g2", "g3", "g4"})
+
+
+def _make_handler(db: FaultDB, directory: str, chart: ChartPages):
     class _Handler(SimpleHTTPRequestHandler):
         """Serves the static MockMed app and a small fault-injection API."""
 
@@ -189,6 +218,8 @@ def _make_handler(db: FaultDB, directory: str):
 
         # -- routing ------------------------------------------------------
         def do_GET(self) -> None:  # noqa: N802
+            if chart.handle_get(self):
+                return
             path = urlparse(self.path).path
             if path == "/api/db":
                 self._send_json(200, db.snapshot())
@@ -196,6 +227,8 @@ def _make_handler(db: FaultDB, directory: str):
             super().do_GET()
 
         def do_POST(self) -> None:  # noqa: N802
+            if chart.handle_post(self):
+                return
             parsed = urlparse(self.path)
             path = parsed.path
             if path == "/api/reset":
@@ -260,6 +293,15 @@ def _make_handler(db: FaultDB, directory: str):
                 time.sleep(TIMEOUT_HANG_S)
                 self._send_json(200, {"ok": True, "id": rec["id"]})
                 return
+            if fault == "wrong_record":
+                # Accepted, but the row lands on another patient.
+                rec = db.add("p2", enc_type, note, key=key)
+                self._send_json(200, {"ok": True, "id": rec["id"]})
+                return
+            if fault == "no_persist":
+                # 2xx, and nothing is persisted (phantom write).
+                self._send_json(200, {"ok": True})
+                return
             if fault == "stale":
                 # Last-write-wins over a concurrently-modified row.
                 rec = db.add(
@@ -290,7 +332,9 @@ def serve(
         ``stop()`` shuts the server down and joins its thread.
     """
     db = FaultDB()
-    handler = _make_handler(db, str(STATIC_DIR))
+    chart = ChartPages(rows_for=db.rows_for_patient)
+    db.chart = chart
+    handler = _make_handler(db, str(STATIC_DIR), chart)
     httpd = ThreadingHTTPServer((host, port), handler)
     actual_port = httpd.server_address[1]
     thread = threading.Thread(

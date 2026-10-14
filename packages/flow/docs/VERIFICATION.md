@@ -12,7 +12,7 @@
 
 ## What is bound to required CI vs. being validated
 
-- **Bound to required CI pass evidence (12):** `web-supported`, `deterministic-zero-model-replay`, `effect-verification-silent-writes`, `identity-gate-halt-armed`, `identifier-crop-compile-emission`, `halt-teach-promote`, `typed-business-decisions-supported`, `reviewed-judgment-cases-supported`, `qualified-remote-decision-v2-supported`, `mockmed-benchmark-ci-reproducible`, `substrate-runtime-validation-supported`, `compose-recorded-bundles`
+- **Bound to required CI pass evidence (13):** `web-supported`, `deterministic-zero-model-replay`, `effect-verification-silent-writes`, `ui-readback-separate-session`, `identity-gate-halt-armed`, `identifier-crop-compile-emission`, `halt-teach-promote`, `typed-business-decisions-supported`, `reviewed-judgment-cases-supported`, `qualified-remote-decision-v2-supported`, `mockmed-benchmark-ci-reproducible`, `substrate-runtime-validation-supported`, `compose-recorded-bundles`
 - **Being validated — opt-in / infra-gated or field (8):** `effect-verifier-kit`, `windows-desktop-validating`, `macos-native-validating`, `linux-native-validating`, `rdp-validating`, `desktop-recording-validating`, `citrix-pixel-validating`, `openemr-field-benchmark`
 - **Roadmap / research (1):** `win32-window-replay-roadmap`
 
@@ -109,6 +109,24 @@
 **Caveats (honest limits):**
 
 - CONTRACT-PROVEN, not live-proven: the SQL verifier is exercised against sqlite fixtures (no production MariaDB/Postgres), the SFTP arrival path against a fake transport (no real SFTP server), and the worked-example configs are templates — only the FHIR substrate has an additional opt-in live-OpenEMR test. Per-verifier claims are exactly as strong as these tests.
+
+### `ui-readback-separate-session` — supported — bound to required CI pass evidence
+
+> With no API or database access, a save can be checked through the application's own record page: a separate browser with a new, empty context and its own sign-in opens the record by identifier, confirms the page shows that identifier, reads the saved fields from the page structure, and judges them with the shared effect judge. After sign-in the session refuses every request that is not a read. The check declares tier 2 (a separate session) and is never labeled a system-of-record read.
+
+- Surfaces: README.md, docs
+- Strongest evidence strength: **supported** (tier is `supported`)
+
+| Backing evidence | Kind | Gating / CI stage | Strength | Proves |
+|---|---|---|---|---|
+| `tests/test_ui_readback_verifier.py` | test | ci (required PR gate (test)) | supported | The verdict rules without a browser: confirms, refutes partial, duplicate and lost-update saves, never claims absence as proof that nothing was saved, halts on another record's page, a refused request, a changed layout, a shortened value, an unfresh session or a failed sign-in, declares tier 2, and keeps every existing verifier identity digest unchanged. |
+| `tests/test_ui_readback_browser.py` | test | ci (required PR gate (test)) | supported | In a real browser against MockMed's server-rendered record pages: its own sign-in even when another session is signed in, refuted wrong saves, fetch/beacon/XHR/form posts refused with none reaching the server, display changes that stop rather than pass, and tier-2 evidence through the real replayer. |
+| `tests/test_ui_readback_benchmark.py` | test | ci (required PR gate (test)) | supported | A subset of the measurement: the same-screen check misses accepted wrong saves, the UI read-back catches partial, wrong-record and lost-update saves, and the measured blind spots stay blind. |
+| `benchmark/ui_readback` | benchmark | artifact (doc/benchmark) | roadmap | The full measurement next to a same-screen check and an API read, on the GUI replay and API-write fault lists plus display probes. |
+
+**Caveats (honest limits):**
+
+- Measured on synthetic fixtures (MockMed and the effect_e2e record service) whose record pages were written for these tests, not on a production application's record pages. The check sees only what a record page shows and is only as independent as the page's own read path.
 
 ### `identity-gate-halt-armed` — supported — bound to required CI pass evidence
 

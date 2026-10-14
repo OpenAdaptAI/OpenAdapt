@@ -267,6 +267,7 @@ jobs:
             openadapt_flow/runtime/effects/onscreen.py \
             openadapt_flow/runtime/effects/rest.py \
             openadapt_flow/runtime/effects/sql.py \
+            openadapt_flow/runtime/effects/ui_readback.py \
             openadapt_flow/compiler/compile.py \
             openadapt_flow/compiler/codegen.py \
             openadapt_flow/compiler/annotate.py \

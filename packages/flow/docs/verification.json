@@ -486,6 +486,71 @@
       "errors": []
     },
     {
+      "id": "ui-readback-separate-session",
+      "claim": "With no API or database access, a save can be checked through the application's own record page: a separate browser with a new, empty context and its own sign-in opens the record by identifier, confirms the page shows that identifier, reads the saved fields from the page structure, and judges them with the shared effect judge. After sign-in the session refuses every request that is not a read. The check declares tier 2 (a separate session) and is never labeled a system-of-record read.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "README.md",
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "Measured on synthetic fixtures (MockMed and the effect_e2e record service) whose record pages were written for these tests, not on a production application's record pages. The check sees only what a record page shows and is only as independent as the page's own read path."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_ui_readback_verifier.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "The verdict rules without a browser: confirms, refutes partial, duplicate and lost-update saves, never claims absence as proof that nothing was saved, halts on another record's page, a refused request, a changed layout, a shortened value, an unfresh session or a failed sign-in, declares tier 2, and keeps every existing verifier identity digest unchanged."
+        },
+        {
+          "path": "tests/test_ui_readback_browser.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "In a real browser against MockMed's server-rendered record pages: its own sign-in even when another session is signed in, refuted wrong saves, fetch/beacon/XHR/form posts refused with none reaching the server, display changes that stop rather than pass, and tier-2 evidence through the real replayer."
+        },
+        {
+          "path": "tests/test_ui_readback_benchmark.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "A subset of the measurement: the same-screen check misses accepted wrong saves, the UI read-back catches partial, wrong-record and lost-update saves, and the measured blind spots stay blind."
+        },
+        {
+          "path": "benchmark/ui_readback",
+          "kind": "benchmark",
+          "exists": true,
+          "strength": "roadmap",
+          "gating": "artifact (doc/benchmark)",
+          "node": null,
+          "node_found": null,
+          "ci_job": null,
+          "junit_status": null,
+          "proves": "The full measurement next to a same-screen check and an API read, on the GUI replay and API-write fault lists plus display probes."
+        }
+      ],
+      "errors": []
+    },
+    {
       "id": "identity-gate-halt-armed",
       "claim": "On ambiguity the runtime halts instead of guessing, and an identity gate refuses a wrong-entity (wrong-patient) click \u2014 on ARMED steps only.",
       "tier": "supported",

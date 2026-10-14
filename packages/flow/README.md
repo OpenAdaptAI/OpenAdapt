@@ -165,10 +165,12 @@ declared. Each workflow needs two things:
    draft checks nothing until a person edits it.
 2. A second way to read the record. A database connection isn't required.
    A read-only REST, FHIR, or GraphQL API works, and so does a read-only SQL
-   query, a file, report, or email the app exports, or a separate read-only
-   login to the same app through an adapter you register. You configure it
-   once in `deploy.yaml`, and nothing changes in the app. See
-   [docs/EFFECT_KIT.md](docs/EFFECT_KIT.md).
+   query, a file, report, or email the app exports, or, when you have none
+   of those, the app's own record page opened in a separate signed-in
+   browser session
+   ([`ui_readback`](docs/EFFECT_KIT.md#separate-session-ui-read-back-ui_readback),
+   a weaker check). You configure it once in `deploy.yaml`, and nothing
+   changes in the app. See [docs/EFFECT_KIT.md](docs/EFFECT_KIT.md).
 
 Reading the screen the run just used doesn't count, because an app can show
 "Saved" and drop the write, as the demo shows. Without a second read, Flow can

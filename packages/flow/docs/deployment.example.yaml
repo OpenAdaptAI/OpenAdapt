@@ -40,11 +40,15 @@ actuation:
   timeout_s: 5.0
 
 # -- effects: the system of record consequential writes are verified against -
-# kind: none | rest | graphql | fhir | sql | file | email | document |
-#       document-hash | a registered plugin kind
+# kind: none | ui_readback | rest | graphql | fhir | sql | file | email |
+#       document | document-hash | a registered plugin kind
 #   none          -> no verifier (Standard/Regulated refuse consequential
 #                    writes; Demo may use an exact explicit approval, recorded
 #                    as approved-unverified; direct API writes still refuse)
+#   ui_readback   -> no API or database access: read the saved record from
+#                    the app's own record page in a separate, freshly
+#                    signed-in, read-only browser session (tier 2; NOT a
+#                    system-of-record read). Needs the `browser` extra.
 #   rest          -> JSON REST SoR (e.g. MockMed /api/db, Frappe REST)
 #   graphql       -> a READ-ONLY GraphQL query against the SoR (mutations
 #                    refuse to construct)
@@ -85,6 +89,30 @@ effects:
   # records_path: "/api/resource/Loan Application?filters=[[\"applicant\",\"=\",\"{applicant}\"]]"
   # path_params:
   #   applicant: { param: applicant }
+
+  # ui_readback (used when kind: ui_readback) --------------------------------
+  # ui_readback:
+  #   record_url: "https://app.example.org/patients/{patient}/encounters"
+  #   url_params: { patient: { param: patient_id } }
+  #   sign_in:                             # the read-back account, not the
+  #     url: https://app.example.org/login #   account the workflow types as
+  #     username_selector: "#username"
+  #     password_selector: "#password"
+  #     submit_selector: "button[type=submit]"
+  #     signed_in_selector: "#user-menu"   # present only after sign-in
+  #     username_env: APP_READER_USERNAME  # env var NAMES, never values
+  #     password_env: APP_READER_PASSWORD
+  #   ready_selector: "#encounters"        # present once the page loaded
+  #   empty_selector: "#no-encounters"     # "no rows" marker (recommended)
+  #   row_selector: "tr.encounter"
+  #   fields:                              # record field -> how to read it
+  #     id: { attribute: data-id }
+  #     type: { selector: "td.type" }
+  #     note: { selector: "td.note", attribute: title }  # full, unshortened
+  #   identity:                            # the page must show this record
+  #     reader: { selector: "#patient-mrn" }
+  #     value: { param: patient_id }
+  #     field: patient_id                  # added to every row for matching
 
   # fhir (used when kind: fhir) ----------------------------------------------
   # base_url: https://openemr.example.org/apis/default/fhir

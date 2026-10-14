@@ -26,6 +26,14 @@ distinct is the whole point:
    reads, modelled as an endpoint so the screen arm is exercised through the
    same verifier machinery as the effect arm.
 
+4. **The record page** -- ``GET /chart/patient/<id>`` after its own sign-in
+   (:mod:`openadapt_flow.mockmed.chart_pages`). The application's own record
+   page, rendered from the encounters table on every request. This is what
+   the separate-session UI read-back (``effects.kind: ui_readback``) reads in
+   ``benchmark/ui_readback/``. ``_Store.chart_source = "write_cache"`` makes
+   the page render from the app's own write echo instead, which models a
+   record page served from a cache that a failed write populated.
+
 The independent GROUND TRUTH (path (c) in the harness) does NOT go through this
 service at all: it opens the sqlite FILE directly, read-only, on its own
 connection, and inspects EVERY table. A bug or lie in the service's read
@@ -55,6 +63,8 @@ from pathlib import Path
 from typing import Any, Callable, Optional
 from urllib.parse import parse_qs, urlparse
 
+from openadapt_flow.mockmed.chart_pages import ChartPages
+
 #: How long ``timeout`` mode hangs after committing, in seconds. The API
 #: actuator's per-request timeout fires well before this, so the write is
 #: known-committed server-side while the client sees an unknown outcome and
@@ -74,6 +84,10 @@ class ServiceHandle:
     base_url: str
     db_path: Path
     stop: Callable[[], None]
+    #: The ``/chart/`` record pages (display options, sign-in counts).
+    chart: Optional[ChartPages] = None
+    #: The write-side store (``chart_source`` selects what the page renders).
+    store: Optional["_Store"] = None
 
 
 def _init_db(path: Path) -> None:
@@ -121,6 +135,9 @@ class _Store:
     def __init__(self, path: Path) -> None:
         self.path = path
         self._lock = threading.Lock()
+        #: What the ``/chart/`` record page renders: ``"encounters"`` (the
+        #: persisted rows) or ``"write_cache"`` (the app's own write echo).
+        self.chart_source = "encounters"
 
     def _connect(self) -> sqlite3.Connection:
         return sqlite3.connect(str(self.path), timeout=5.0)
@@ -271,6 +288,29 @@ class _Store:
         finally:
             conn.close()
 
+    def rows_for_patient(self, patient_id: str) -> Optional[list[dict[str, Any]]]:
+        """The rows the record page shows for one patient (None if unknown)."""
+        if patient_id not in ("p1", "p2", "p3"):
+            return None
+        conn = self._connect()
+        try:
+            conn.row_factory = sqlite3.Row
+            if self.chart_source == "write_cache":
+                rows = conn.execute(
+                    "SELECT id, patient_id, type, note FROM banner "
+                    "WHERE patient_id = ? ORDER BY id",
+                    (patient_id,),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT id, patient_id, type, note FROM encounters "
+                    "WHERE patient_id = ? ORDER BY id",
+                    (patient_id,),
+                ).fetchall()
+            return [dict(r) for r in rows]
+        finally:
+            conn.close()
+
     def read_banner(self) -> list[dict[str, Any]]:
         conn = self._connect()
         try:
@@ -283,7 +323,7 @@ class _Store:
             conn.close()
 
 
-def _make_handler(store: _Store):
+def _make_handler(store: _Store, chart: ChartPages):
     class _Handler(BaseHTTPRequestHandler):
         def log_message(self, fmt: str, *args: object) -> None:  # noqa: A002
             pass
@@ -315,6 +355,8 @@ def _make_handler(store: _Store):
                 return {}
 
         def do_GET(self) -> None:  # noqa: N802
+            if chart.handle_get(self):
+                return
             path = urlparse(self.path).path
             if path == "/api/records":
                 # The out-of-band effect oracle read path (encounters only).
@@ -327,6 +369,8 @@ def _make_handler(store: _Store):
             self._send_json(404, {"ok": False, "error": "not found"})
 
         def do_POST(self) -> None:  # noqa: N802
+            if chart.handle_post(self):
+                return
             parsed = urlparse(self.path)
             if parsed.path == "/api/reset":
                 body = self._read_body()
@@ -359,7 +403,8 @@ def serve(db_path: Path, *, host: str = "127.0.0.1", port: int = 0) -> ServiceHa
     """
     _init_db(db_path)
     store = _Store(db_path)
-    handler = _make_handler(store)
+    chart = ChartPages(rows_for=store.rows_for_patient)
+    handler = _make_handler(store, chart)
     httpd = ThreadingHTTPServer((host, port), handler)
     actual_port = httpd.server_address[1]
     thread = threading.Thread(
@@ -373,5 +418,9 @@ def serve(db_path: Path, *, host: str = "127.0.0.1", port: int = 0) -> ServiceHa
         thread.join(timeout=5)
 
     return ServiceHandle(
-        base_url=f"http://{host}:{actual_port}", db_path=db_path, stop=stop
+        base_url=f"http://{host}:{actual_port}",
+        db_path=db_path,
+        stop=stop,
+        chart=chart,
+        store=store,
     )

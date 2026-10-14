@@ -1375,8 +1375,9 @@ def classify_execution_outcome(
     tier and :data:`~openadapt_flow.verification.VERIFIED_EFFECT_TIER`.
     Therefore an approved-unverified, immediate-screen, or persisted-state
     (on-screen different-path) result can never be reported as ``VERIFIED``
-    under either production profile. A pixel-only Citrix run with no
-    independent system-of-record read cannot be ``VERIFIED``.
+    under either production profile. A pixel-only Citrix run with neither a
+    system-of-record read nor a separate-session read-back cannot be
+    ``VERIFIED``.
     """
 
     resolved = resolve_execution_profile(profile)
@@ -1997,7 +1998,8 @@ def classify_execution_outcome(
             )
             # The Standard gate still admits persisted-state so a pixel-only
             # Citrix run can execute with halt-on-doubt. VERIFIED itself
-            # requires an independent system-of-record read (tier 1 or 2).
+            # requires a read independent of the acting session: tier 1
+            # (system of record) or tier 2 (separate-session read-back).
             required_tier = VerificationTier(
                 min(int(required_tier), int(VERIFIED_EFFECT_TIER))
             )

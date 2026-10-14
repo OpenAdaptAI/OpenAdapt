@@ -129,9 +129,23 @@ def test_halt_before_delivery_is_not_verified() -> None:
 
 def test_verified_effect_tier_is_independent_session() -> None:
     assert VERIFIED_EFFECT_TIER is VerificationTier.INDEPENDENT_SESSION
-    assert VerificationTier.INDEPENDENT_SYSTEM.is_independent_system_of_record()
-    assert VerificationTier.INDEPENDENT_SESSION.is_independent_system_of_record()
+    assert VerificationTier.INDEPENDENT_SYSTEM.is_independent_of_actuation()
+    assert VerificationTier.INDEPENDENT_SESSION.is_independent_of_actuation()
     assert not (
-        VerificationTier.PERSISTED_STATE_REACQUISITION.is_independent_system_of_record()
+        VerificationTier.PERSISTED_STATE_REACQUISITION.is_independent_of_actuation()
     )
-    assert not VerificationTier.IMMEDIATE_SCREEN.is_independent_system_of_record()
+    assert not VerificationTier.IMMEDIATE_SCREEN.is_independent_of_actuation()
+
+
+def test_only_tier_one_is_called_a_system_of_record_read() -> None:
+    # A separate application session (tier 2) is independent of the acting
+    # session but is not a read of the system of record.
+    assert VerificationTier.INDEPENDENT_SYSTEM.reads_system_of_record()
+    for tier in (
+        VerificationTier.INDEPENDENT_SESSION,
+        VerificationTier.PERSISTED_STATE_REACQUISITION,
+        VerificationTier.IMMEDIATE_SCREEN,
+    ):
+        assert not tier.reads_system_of_record()
+        assert not tier.is_independent_system_of_record()
+    assert VerificationTier.INDEPENDENT_SYSTEM.is_independent_system_of_record()

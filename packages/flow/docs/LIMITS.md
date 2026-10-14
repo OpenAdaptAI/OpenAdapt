@@ -278,9 +278,13 @@ transactional guarantee. The ultimate safety net is never the read-back: it is
 the **identity gate** (right record) plus **halt-on-ambiguity** (never guess a
 target), with read-back as additive assurance on top.
 
-**Without an independent system-of-record read, the run cannot be
-`VERIFIED`.** A pixel-only Citrix or RDP session with no REST, FHIR, SQL,
-file, or separately authenticated session read is that case. The on-screen
+**Without a read that is independent of the acting session, the run cannot
+be `VERIFIED`.** That read is either a system-of-record read (REST, FHIR, SQL,
+file; tier 1) or the application's record page read in a separate signed-in
+browser session (`ui_readback`; tier 2). The second goes through the same
+application, so it is not a system-of-record read and has its own limits
+([`EFFECT_KIT.md`](EFFECT_KIT.md#separate-session-ui-read-back-ui_readback)).
+A pixel-only Citrix or RDP session with neither is that case. The on-screen
 oracle can still halt when the region is unreadable or wrong. If a
 consequential write may already have been delivered, the production
 `transaction_outcome` is `RECONCILIATION_REQUIRED`, never `VERIFIED`.

@@ -105,7 +105,8 @@ def build_reconciliation_task(
         )
     if verdict.verdict is Verdict.INDETERMINATE:
         suggested = (
-            "restore read access to the system of record, then re-verify the "
+            "restore the verifier's read access (the system of record, or the "
+            "record page for a separate-session read-back), then re-verify the "
             "contract before resuming (never assume the write landed)"
         )
     elif (
@@ -246,8 +247,8 @@ def reconcile_or_escalate(
         return _escalate(
             effect,
             verdict,
-            "system of record is unreadable -- cannot compensate blindly; "
-            "durably halt and escalate to a human",
+            "the verifier could not read the effect (unavailable or uncertain) "
+            "-- cannot compensate blindly; durably halt and escalate to a human",
         )
     if effect.risk != "irreversible":
         return _escalate(

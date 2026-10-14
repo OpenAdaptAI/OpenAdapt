@@ -34,12 +34,14 @@ properties are mandatory for this execution.
 Low-level flags can strengthen a profile. They cannot weaken a selected
 Standard or Regulated contract. In particular:
 
-- Standard and Regulated require an independent system-of-record read
-  (REST, FHIR, SQL, file, or a separately authenticated session) before
-  `VERIFIED`. An operator approval, a green banner, or an on-screen
-  different-path read-back cannot turn a pixel-only Citrix write into
-  `VERIFIED`; the production transaction is halt or
-  `RECONCILIATION_REQUIRED`. The Standard gate can still admit
+- Standard and Regulated require a read that does not go through the acting
+  session before `VERIFIED`: a system-of-record read (REST, FHIR, SQL, file;
+  tier 1) or the application's record page read in a separate signed-in
+  session (`ui_readback`; tier 2, not a system-of-record read). The
+  `regulated` policy pack raises the floor to tier 1. An operator approval, a
+  green banner, or an on-screen different-path read-back cannot turn a
+  pixel-only Citrix write into `VERIFIED`; the production transaction is halt
+  or `RECONCILIATION_REQUIRED`. The Standard gate can still admit
   persisted-state read-back so the run executes with halt-on-doubt.
 - Regulated refuses `--allow-unencrypted` and requires
   `OPENADAPT_BUNDLE_KEY`; the same key seals its durable checkpoints. Standard

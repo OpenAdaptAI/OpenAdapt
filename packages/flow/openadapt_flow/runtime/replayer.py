@@ -437,6 +437,26 @@ def _all_workflow_steps(workflow: Workflow):
                 yield state.step
 
 
+def _effect_read_wording(tier: Any) -> tuple[str, str]:
+    """Name an effect check in a halt message by its evidence tier.
+
+    A separate-session record-page read (tier 2) and a screen read-back
+    (tiers 3 and 4) are not system-of-record reads, so their halt messages
+    must not call them that. Untyped legacy verifiers keep the old wording.
+    """
+
+    from openadapt_flow.verification import VerificationTier
+
+    if tier is VerificationTier.INDEPENDENT_SESSION:
+        return "Effect verification", "record page read in a separate session"
+    if tier in (
+        VerificationTier.PERSISTED_STATE_REACQUISITION,
+        VerificationTier.IMMEDIATE_SCREEN,
+    ):
+        return "Effect verification", "screen read-back"
+    return "System-of-record effect verification", "system of record"
+
+
 class EgressNotPermitted(RuntimeError):
     """Raised when an egress-capable model component (a grounder / identity-VLM
     / state-verifier that could send a screenshot off the box) is wired without
@@ -7911,11 +7931,12 @@ class Replayer:
                     f"{verdict.verdict.value.upper()} → "
                     f"{comp.outcome.value.upper()} — {comp.reason}"
                 )
+                prefix, read = _effect_read_wording(tier)
                 return (
-                    f"System-of-record effect verification HALTED step "
+                    f"{prefix} HALTED step "
                     f"'{step.id}' ({step.intent}): {effect.kind.value} "
                     f"{verdict.verdict.value} against the {verdict.substrate} "
-                    f"system of record and could not be reconciled "
+                    f"{read} and could not be reconciled "
                     f"({comp.outcome.value}) — "
                     f"{comp.escalation or comp.reason} — run aborted"
                 )
@@ -7937,11 +7958,12 @@ class Replayer:
                 f"[{verdict.substrate}] {effect.kind.value}: "
                 f"{verdict.verdict.value.upper()} — {verdict.reason}"
             )
+            prefix, read = _effect_read_wording(tier)
             return (
-                f"System-of-record effect verification HALTED step "
+                f"{prefix} HALTED step "
                 f"'{step.id}' ({step.intent}): {effect.kind.value} "
                 f"{verdict.verdict.value} against the {verdict.substrate} "
-                f"system of record (the screen indicated completion but the "
+                f"{read} (the screen indicated completion but the "
                 f"declared outcome is contradicted or unverifiable) — "
                 f"{verdict.reason} — run aborted"
             )

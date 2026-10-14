@@ -35,6 +35,7 @@ from openadapt_flow.remote_frame_contract import RemoteFrameContract
 # with the exact ``{param: ...}`` / ``{literal: ...}`` form bundles use.
 from openadapt_flow.runtime.effects.auth import AuthRef
 from openadapt_flow.runtime.effects.effect import Region, ValueExpr
+from openadapt_flow.runtime.effects.ui_readback import UiReadbackSpec
 
 
 class BackendConfig(BaseModel):
@@ -186,8 +187,9 @@ class EffectsConfig(BaseModel):
       bound to the record each run actually writes.
     """
 
-    #: ``none`` | ``onscreen`` | ``rest`` | ``graphql`` | ``fhir`` | ``sql`` |
-    #: ``file`` | ``email`` | ``document`` | ``document-hash``, or a PLUGIN
+    #: ``none`` | ``onscreen`` | ``ui_readback`` | ``rest`` | ``graphql`` |
+    #: ``fhir`` | ``sql`` | ``file`` | ``email`` | ``document`` |
+    #: ``document-hash``, or a PLUGIN
     #: kind registered under the
     #: ``openadapt_flow.effect_verifiers`` entry-point group (the customer
     #: adapter SDK seam -- see docs/EFFECT_KIT.md). ``onscreen`` is the no-API
@@ -195,6 +197,10 @@ class EffectsConfig(BaseModel):
     #: recordings); it reads the saved value off the live backend, so it needs
     #: no external system of record -- and it is explicitly the
     #: LOWER-CONFIDENCE consistency tier, never independent proof.
+    #: ``ui_readback`` reads the saved record back through the application's
+    #: own record page in a separate, freshly signed-in, read-only browser
+    #: session (tier 2, ``INDEPENDENT_SESSION``): independent of the session
+    #: that typed, but not a system-of-record read.
     kind: str = "none"
 
     #: Reviewed alternatives for the same effect contract.  This is useful
@@ -219,6 +225,13 @@ class EffectsConfig(BaseModel):
     readback_region: Optional[Region] = None
     #: Fuzzy-match floor for accepting an OCR read-back as the expected value.
     readback_min_ratio: float = 0.9
+
+    # -- ui_readback (separate-session read of the application's record page)
+    #: Where the record page is, how the read-back session signs in, and how
+    #: to read each field. See ``runtime/effects/ui_readback.py`` and
+    #: ``docs/EFFECT_KIT.md``. Required for ``kind: ui_readback``; ignored
+    #: otherwise.
+    ui_readback: Optional[UiReadbackSpec] = None
 
     # -- rest (JSON REST system of record, e.g. MockMed /api/db) -------------
     base_url: Optional[str] = None
@@ -1135,6 +1148,16 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
             return [sanitized(item) for item in value]
         return value
 
+    config = cfg.model_dump(mode="json")
+    # Fields added after identities were first issued enter the digest only
+    # when they are set, so every existing verifier keeps its identity.
+    for added in ("ui_readback",):
+        if config.get(added) is None:
+            config.pop(added, None)
+    for candidate in config.get("candidates") or []:
+        for added in ("ui_readback",):
+            if isinstance(candidate, dict) and candidate.get(added) is None:
+                candidate.pop(added, None)
     payload = {
         "schema": "openadapt.effect-verifier-identity/v1",
         "implementation": (
@@ -1142,7 +1165,7 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
         ),
         "implementation_version": getattr(verifier, "adapter_version", None),
         "substrate": getattr(verifier, "substrate", None),
-        "config": sanitized(cfg.model_dump(mode="json")),
+        "config": sanitized(config),
     }
     digest = hashlib.sha256(
         json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
@@ -1169,6 +1192,22 @@ def _build_effect_verifier_unredacted(
             backend=None,
             region=cfg.readback_region,
             min_ratio=cfg.readback_min_ratio,
+        )
+
+    if kind in ("ui_readback", "ui-readback"):
+        if cfg.ui_readback is None:
+            raise ValueError(
+                "effects.kind 'ui_readback' requires an effects.ui_readback section"
+            )
+        from openadapt_flow.runtime.effects.ui_readback import (
+            build_ui_readback_verifier,
+        )
+
+        return build_ui_readback_verifier(
+            cfg.ui_readback,
+            params,
+            timeout_s=cfg.timeout_s,
+            poll_interval_s=cfg.poll_interval_s,
         )
 
     if kind == "rest":
@@ -1364,8 +1403,8 @@ def _build_effect_verifier_unredacted(
 
     raise ValueError(
         f"unknown effects.kind {cfg.kind!r} "
-        "(expected: none | onscreen | rest | graphql | fhir | sql | file | "
-        "email | document | document-hash, or a registered plugin kind)"
+        "(expected: none | onscreen | ui_readback | rest | graphql | fhir | sql | "
+        "file | email | document | document-hash, or a registered plugin kind)"
     )
 
 
