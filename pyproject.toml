@@ -223,6 +223,15 @@ patch_tags = ["fix", "perf"]
 [tool.uv.workspace]
 members = ["packages/*"]
 
+[tool.uv]
+# One lock serves every member, so a version that one package's tests depend
+# on is pinned here for all of them. packages/capture regenerates its committed
+# recording.db fixtures byte for byte only with the SQLAlchemy release its
+# reference builder names (REQUIRED_SQLALCHEMY_VERSION in
+# packages/capture/scripts/generate_synthetic_captures.py). With any other
+# release those byte checks skip. Change both together.
+constraint-dependencies = ["sqlalchemy==2.0.52"]
+
 [tool.uv.sources]
 openadapt-agent = { workspace = true }
 openadapt-capture = { workspace = true }
