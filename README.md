@@ -261,14 +261,18 @@ Do not pass `--backend`. With no `--url`, record captures this OS. Pass
 
 ```bash
 openadapt flow record --out rec
-openadapt flow record --url https://your-app.example --out rec
+openadapt flow record --url https://staging.your-app.example --out rec
 openadapt flow compile rec --out bundle --name my-workflow
-openadapt flow replay bundle --url https://your-app.example --run-dir run
+openadapt flow replay bundle --url https://staging.your-app.example --run-dir run
 ```
 
-These commands record one surface and run a permissive local rehearsal.
-They do not certify the bundle. One bundle uses one execution surface and does
-not switch between browser, native, RDP, or Citrix backends.
+`replay` drives the real app at `--url` and performs every recorded action,
+including saves you can't undo. It doesn't ask first, it isn't a dry run, and
+it doesn't certify the bundle. Point `--url` at a test or staging copy of the
+app, never at production data.
+
+One bundle uses one execution surface and does not switch between browser,
+native, RDP, or Citrix backends.
 
 If the task crosses a browser and a native app, or otherwise changes backend,
 record one bundle per surface. `openadapt flow compose` sequences the compiled
