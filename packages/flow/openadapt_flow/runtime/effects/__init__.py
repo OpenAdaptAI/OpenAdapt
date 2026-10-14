@@ -37,7 +37,8 @@ Public surface:
   ``openadapt_flow.effect_verifiers`` entry-point group).
 - SQL table-delta audit (promoted from the Frappe Lending reference matrix):
   :func:`capture_table_counts`, :func:`audit_table_deltas`.
-- Secret-isolated auth for declarative configs: :class:`AuthRef`.
+- Secret-isolated auth for declarative configs: :class:`AuthRef`, and
+  :class:`ResolvedSecrets` for a plugin record check's ``secret_env`` slots.
 - Compensation / reconciliation: :func:`reconcile_or_escalate`,
   :class:`Compensator`, :class:`RestCompensator`, :class:`CompensationResult`,
   :class:`ReconciliationTask`, :func:`build_reconciliation_task`.
@@ -75,6 +76,7 @@ from openadapt_flow.runtime.effects.adapter import (  # noqa: F401
 )
 from openadapt_flow.runtime.effects.auth import (  # noqa: F401
     AuthRef,
+    ResolvedSecrets,
 )
 from openadapt_flow.runtime.effects.compensation import (  # noqa: F401
     CompensationAction,
@@ -188,6 +190,7 @@ __all__ = [
     "build_reconciliation_task",
     "record_digest",
     "AuthRef",
+    "ResolvedSecrets",
     "SqlRecordVerifier",
     "assert_read_only_sql",
     "audit_table_deltas",

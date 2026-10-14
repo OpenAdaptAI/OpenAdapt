@@ -554,6 +554,90 @@ platform obligation), qualified in `tests/test_verifier_adapter_platform.py`.
    entity, duplicate rows, settlement timeout, credential failure ->
    UNAVAILABLE) -- copy the per-adapter test modules as the template.
 
+### Configuring a record-check pack: `options`, `option_params`, `secret_env`
+
+A per-system record check (which endpoint to read, how to flatten its records,
+how to sign in to a separate read-only session) is application knowledge, so
+it ships as a plugin kind outside this repository. Its deployment section
+uses three plugin-only fields. Built-in kinds refuse them rather than ignore
+them.
+
+```yaml
+effects:
+  kind: acme-claims-readback          # registered by the pack
+  base_url: https://claims.example.invalid
+  options:                            # non-secret, JSON-safe, reviewed
+    records: {path: /api/claims, page_size: 50}
+  option_params:                      # run-parameter bindings, resolved at build
+    claim_code: {param: claim_no}
+  secret_env:                         # slot -> environment variable NAME
+    username: ACME_READER_USER
+    password: ACME_READER_PASSWORD
+```
+
+Inside the factory, `plugin_options(cfg, params)` returns a copy of `options`
+with each `option_params` entry resolved (an unresolved reference fails loud),
+and `plugin_secrets(cfg)` returns a `ResolvedSecrets` mapping, which fails
+loud on a missing variable and never prints its values. An option key that
+names a credential (its last word is `password`, `secret`, `token` or
+`credential`, or it ends in `api_key`) is refused at load time, so
+`client_secret` is refused while `token_path` and `password_env` are allowed.
+A `secret_env` value must look like a variable name. The options enter the verifier's deployment
+identity, so a changed option is a changed verifier. Configs that do not use
+these fields keep a byte-identical identity.
+
+The pack should sign in through its own read-only session (a separate client
+or account whose server-side permissions only allow reads), and never share
+the session that the program drives.
+
+### Binding record checks to a compiled program
+
+A GUI-only demonstration often never observes the system of record, so the
+compiled save step carries no contract (or a placeholder that the gate
+refuses). `bind-record-checks` attaches a reviewed contract afterwards:
+
+```bash
+openadapt-flow bind-record-checks bundle/ --binding record-checks.yaml --check
+openadapt-flow bind-record-checks bundle/ --binding record-checks.yaml --out bundle-checked/
+```
+
+```yaml
+schema: openadapt.record-check-binding/v1
+workflow_name: claim-intake
+source_content_digest: <optional pin to the exact compiled program>
+steps:
+  - step: step_012
+    intent: "click 'Save'"            # optional guard against a recompiled program
+    effects:
+      - {kind: record_written, match: {code: {param: claim_no}}, expected_count: 1, count_new_only: true}
+      - {kind: field_equals, match: {code: {param: claim_no}}, field: member_no, value: {param: member_no}}
+not_compared:
+  visit_note: "free text the system stores in a different form"
+```
+
+What it does and refuses:
+
+- It writes a new bundle at `--out` (which must not exist), re-seals its
+  manifest, and leaves the source untouched. An encrypted source stays
+  encrypted.
+- It only adds contracts. A step's action, target, postconditions, identity
+  contract, risk label, and review flag are unchanged. Confirmed contracts the
+  step already has are kept. Compiler placeholders are replaced.
+- Each bound step needs a change claim (`record_written` with
+  `count_new_only`, or `exact_new_set`), and each `record_written` /
+  `field_equals` contract must select its record through a run parameter.
+- Every non-secret parameter the program enters must be compared by some
+  contract or listed under `not_compared` with a reason. `--check` prints the
+  per-field coverage without writing anything.
+- A contract that references a secret parameter is refused.
+- A prior certification or qualification decision is invalidated, because the
+  program changed. Binding certifies nothing and approves nothing: the new
+  bundle still goes through lint, qualification, and the run gate.
+
+`record-check-binding.json` in the new bundle records the binding digest, the
+source program digest, and the coverage. The contracts themselves are in
+`workflow.json`, covered by the sealed content digest.
+
 ## Reconciliation tasks (interface only — deliberately no engine)
 
 When verification cannot be reconciled, `reconcile_or_escalate` returns a

@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import base64
 import os
-from typing import Mapping, Optional
+from typing import Iterator, Mapping, Optional
 
 from pydantic import BaseModel, model_validator
 
@@ -90,3 +90,68 @@ class AuthRef(BaseModel):
             return {"Authorization": f"Basic {encoded}"}
         assert self.header is not None and self.value_env is not None
         return {self.header: _require(self.value_env)}
+
+
+class ResolvedSecrets(Mapping[str, str]):
+    """Credential values resolved from environment-variable references.
+
+    The plugin half of the kit's secret convention: a deployment names, per
+    logical slot (``username``, ``password``, ``client_id``), the environment
+    variable that holds the value, and a plugin factory resolves them here at
+    construction. Missing or empty variables fail LOUD with the variable NAME
+    (never a value). ``repr`` / ``str`` show slot names only, so logging the
+    mapping, or an object holding it, cannot leak a credential.
+    """
+
+    __slots__ = ("_values",)
+
+    def __init__(self, values: Mapping[str, str]) -> None:
+        self._values = dict(values)
+
+    @classmethod
+    def from_env(
+        cls,
+        slots: Mapping[str, str],
+        *,
+        env: Optional[Mapping[str, str]] = None,
+        what: str = "secret_env",
+    ) -> "ResolvedSecrets":
+        """Resolve ``slot -> ENV_VAR_NAME`` references from ``env``.
+
+        Raises:
+            ValueError: When any referenced variable is absent or empty. Every
+                missing variable is named, so an operator fixes them in one go.
+        """
+        source = os.environ if env is None else env
+        values: dict[str, str] = {}
+        missing: list[str] = []
+        for slot, name in slots.items():
+            value = source.get(name, "")
+            if not value:
+                missing.append(f"{slot} ({name})")
+            else:
+                values[slot] = value
+        if missing:
+            raise ValueError(
+                f"{what} references environment variable(s) that are not set "
+                "(or empty): " + ", ".join(missing) + " -- refusing to wire a "
+                "record check that cannot authenticate"
+            )
+        return cls(values)
+
+    def __getitem__(self, key: str) -> str:
+        return self._values[key]
+
+    def __iter__(self) -> Iterator[str]:
+        return iter(self._values)
+
+    def __len__(self) -> int:
+        return len(self._values)
+
+    def __repr__(self) -> str:
+        return f"ResolvedSecrets(slots={sorted(self._values)!r})"
+
+    __str__ = __repr__
+
+    def __reduce__(self):  # pragma: no cover - defensive
+        raise TypeError("ResolvedSecrets cannot be pickled")

@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from pathlib import Path
 from typing import Any, Callable, Literal, Mapping, Optional
 
@@ -33,7 +34,7 @@ from openadapt_flow.remote_frame_contract import RemoteFrameContract
 # Import-light (pydantic only): the effect CONTRACT types double as the
 # declarative config vocabulary, so a deployment YAML binds run parameters
 # with the exact ``{param: ...}`` / ``{literal: ...}`` form bundles use.
-from openadapt_flow.runtime.effects.auth import AuthRef
+from openadapt_flow.runtime.effects.auth import AuthRef, ResolvedSecrets
 from openadapt_flow.runtime.effects.effect import Region, ValueExpr
 from openadapt_flow.runtime.effects.ui_readback import UiReadbackSpec
 
@@ -162,6 +163,73 @@ class BackendConfig(BaseModel):
     # Exact reviewed geometry for derived remote settle comparisons. The
     # enclosing DeploymentConfig serialization binds this value at admission.
     remote_frame_contract: Optional[RemoteFrameContract] = None
+
+
+#: ``effects.kind`` values served by the engine itself. A plugin can never
+#: shadow one of these (see ``build_effect_verifier``), and the plugin-only
+#: fields (``options`` / ``option_params`` / ``secret_env``) are refused on them.
+BUILTIN_EFFECT_KINDS = frozenset(
+    {
+        "",
+        "none",
+        "onscreen",
+        "rest",
+        "graphql",
+        "fhir",
+        "sql",
+        "file",
+        "email",
+        "document",
+        "document-hash",
+    }
+)
+
+_SECRET_SLOT = re.compile(r"[a-z][a-z0-9_]{0,63}")
+_ENV_VAR_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,127}")
+#: An option key whose last word is one of these names a credential
+#: (``password``, ``client_secret``, ``bearer_token``); ``token_path`` or
+#: ``password_env`` do not. ``*_env`` keys carry a variable NAME, the same
+#: convention as ``sql_password_env``.
+_SECRET_KEY_WORDS = frozenset(
+    {"password", "passwd", "passphrase", "secret", "token", "credential", "credentials"}
+)
+_SECRET_KEY_SUFFIXES = ("api_key", "apikey", "private_key")
+
+
+def _names_a_credential(key: str) -> bool:
+    lowered = key.lower()
+    words = [word for word in re.split(r"[_\-.\s]+", lowered) if word]
+    if not words or words[-1] == "env":
+        return False
+    return words[-1] in _SECRET_KEY_WORDS or lowered.endswith(_SECRET_KEY_SUFFIXES)
+
+
+def _check_plugin_option_value(path: str, value: Any, *, depth: int = 0) -> None:
+    """Refuse non-JSON values and credential-named keys in plugin options."""
+    if depth > 16:
+        raise ValueError(f"{path} nests deeper than 16 levels")
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            _check_plugin_option_value(f"{path}[{index}]", item, depth=depth + 1)
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if not isinstance(key, str) or not key:
+                raise ValueError(f"{path} keys must be non-empty strings")
+            if _names_a_credential(key):
+                raise ValueError(
+                    f"{path}[{key!r}] names a credential; plugin options are "
+                    "non-secret data. Put the environment variable NAME in "
+                    "effects.secret_env instead"
+                )
+            _check_plugin_option_value(f"{path}[{key!r}]", item, depth=depth + 1)
+        return
+    raise ValueError(
+        f"{path} holds a {type(value).__name__}; plugin options must be JSON "
+        "values (string, number, boolean, null, list, mapping)"
+    )
 
 
 class EffectsConfig(BaseModel):
@@ -333,15 +401,64 @@ class EffectsConfig(BaseModel):
     root: Optional[str] = None
     glob: str = "*"
 
+    # -- plugin record-check packs (registered kinds only) --------------------
+    #: Non-secret settings for a PLUGIN verifier kind: the per-system record
+    #: check a private pack implements (which read endpoint, which record
+    #: fields, which normalization). Built-in kinds refuse a non-empty value
+    #: rather than silently ignore it. Values must be JSON-safe. A key that
+    #: names a credential (its last word is ``password``, ``secret``,
+    #: ``token``, ``credential``, or it ends in ``api_key``) is refused:
+    #: credentials go in :attr:`secret_env`. The options enter the verifier's
+    #: deployment identity, so a changed option is a changed verifier.
+    options: dict[str, Any] = Field(default_factory=dict)
+    #: Run-parameter bindings for a plugin kind, in the same ``{param: ...}`` /
+    #: ``{literal: ...}`` form as ``path_params``. Resolved at construction by
+    #: :func:`plugin_options`; an unresolved reference fails loud. A key may
+    #: not also appear in :attr:`options`.
+    option_params: dict[str, ValueExpr] = Field(default_factory=dict)
+    #: Credential slots for a plugin kind: logical name -> NAME of the
+    #: environment variable (staged by the operator or a secret manager) that
+    #: holds the value. Never the value itself. Resolved at construction by
+    #: :func:`plugin_secrets`, which fails loud on a missing variable. Only the
+    #: slot names and variable names are part of the config; the resolved
+    #: values never enter configs, reports, identities, or contract hashes.
+    secret_env: dict[str, str] = Field(default_factory=dict)
+
     # -- shared --------------------------------------------------------------
     timeout_s: float = 5.0
     poll_interval_s: float = 0.2
+
+    @field_validator("options")
+    @classmethod
+    def _validate_plugin_options(cls, v: dict[str, Any]) -> dict[str, Any]:
+        """Options are JSON-safe, non-secret data (fail loud otherwise)."""
+        _check_plugin_option_value("effects.options", v)
+        return v
+
+    @field_validator("secret_env")
+    @classmethod
+    def _validate_secret_env(cls, v: dict[str, str]) -> dict[str, str]:
+        """Each slot names an environment variable, never a literal value."""
+        for slot, env_name in v.items():
+            if not _SECRET_SLOT.fullmatch(str(slot)):
+                raise ValueError(
+                    f"effects.secret_env slot {slot!r} must be a lowercase "
+                    "identifier (letters, digits, underscore)"
+                )
+            if not isinstance(env_name, str) or not _ENV_VAR_NAME.fullmatch(env_name):
+                raise ValueError(
+                    f"effects.secret_env[{slot!r}] must be the NAME of an "
+                    "environment variable (for example OPENEMR_READER_PASSWORD), "
+                    "never the credential itself"
+                )
+        return v
 
     @field_validator(
         "path_params",
         "search_param_exprs",
         "sql_query_params",
         "graphql_variables",
+        "option_params",
         mode="before",
     )
     @classmethod
@@ -353,6 +470,25 @@ class EffectsConfig(BaseModel):
                 for k, val in v.items()
             }
         return v
+
+    @model_validator(mode="after")
+    def _validate_plugin_fields(self) -> "EffectsConfig":
+        """Plugin-only fields never ride along on a built-in kind."""
+        kind = (self.kind or "none").strip().lower()
+        uses_plugin_fields = bool(self.options or self.option_params or self.secret_env)
+        if uses_plugin_fields and kind in BUILTIN_EFFECT_KINDS:
+            raise ValueError(
+                f"effects.options / option_params / secret_env configure a "
+                f"registered plugin kind; built-in kind {kind!r} does not read "
+                "them (use its own fields, for example auth or sql_password_env)"
+            )
+        overlap = sorted(set(self.options) & set(self.option_params))
+        if overlap:
+            raise ValueError(
+                "effects.option_params keys must not repeat effects.options keys: "
+                + ", ".join(overlap)
+            )
+        return self
 
     @model_validator(mode="after")
     def _validate_candidates(self) -> "EffectsConfig":
@@ -1035,6 +1171,35 @@ def _require_env(name: str, what: str) -> str:
     return value
 
 
+def plugin_options(
+    cfg: EffectsConfig, params: Optional[Mapping[str, object]] = None
+) -> dict[str, Any]:
+    """Return a plugin kind's options with its ``option_params`` resolved.
+
+    For use inside a registered verifier factory (``(cfg, params) -> verifier``).
+    ``options`` is deep-copied, so a factory can never mutate the reviewed
+    config, and each ``option_params`` entry is resolved against the governed
+    run parameters exactly like ``path_params``: a reference the run did not
+    supply fails loud.
+    """
+    resolved: dict[str, Any] = json.loads(json.dumps(cfg.options))
+    resolved.update(_resolve_config_exprs("option_params", cfg.option_params, params))
+    return resolved
+
+
+def plugin_secrets(
+    cfg: EffectsConfig, env: Optional[Mapping[str, str]] = None
+) -> ResolvedSecrets:
+    """Resolve a plugin kind's ``secret_env`` slots from the environment.
+
+    Every slot must resolve to a non-empty value, or construction fails loud
+    (a record check is never wired half-authenticated). The returned mapping
+    hides its values from ``repr`` / ``str`` so a factory that logs it leaks
+    only slot names.
+    """
+    return ResolvedSecrets.from_env(cfg.secret_env, env=env, what="effects.secret_env")
+
+
 def build_effect_verifier(
     cfg: EffectsConfig, params: Optional[Mapping[str, object]] = None
 ) -> Optional[Any]:
@@ -1128,6 +1293,26 @@ def build_effect_verifier(
     return verifier
 
 
+_PLUGIN_ONLY_FIELDS = ("options", "option_params", "secret_env")
+
+
+def _identity_config_dump(cfg: EffectsConfig) -> dict[str, Any]:
+    """Serialize ``cfg`` for the verifier identity.
+
+    Unused plugin-only fields are left out, so every config written before
+    they existed keeps a byte-identical identity digest.
+    """
+
+    def prune(dumped: dict[str, Any]) -> dict[str, Any]:
+        for name in _PLUGIN_ONLY_FIELDS:
+            if not dumped.get(name):
+                dumped.pop(name, None)
+        dumped["candidates"] = [prune(item) for item in dumped.get("candidates", [])]
+        return dumped
+
+    return prune(cfg.model_dump(mode="json"))
+
+
 def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
     """Hash the non-secret deployment fields that identify one verifier."""
 
@@ -1148,7 +1333,7 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
             return [sanitized(item) for item in value]
         return value
 
-    config = cfg.model_dump(mode="json")
+    config = _identity_config_dump(cfg)
     # Fields added after identities were first issued enter the digest only
     # when they are set, so every existing verifier keeps its identity.
     for added in ("ui_readback",):

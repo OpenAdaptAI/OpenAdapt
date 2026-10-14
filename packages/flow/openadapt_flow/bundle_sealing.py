@@ -164,14 +164,18 @@ def _publish_no_replace(staging: Path, destination: Path) -> None:
     raise OSError(error, os.strerror(error), destination)
 
 
-def _invalidate_prior_certification(workflow: Workflow) -> bool:
-    """Expire decisions bound to the pre-encryption workflow contract.
+def _invalidate_prior_certification(
+    workflow: Workflow,
+    *,
+    reason: str = "at-rest sealing changed the workflow contract",
+) -> bool:
+    """Expire decisions bound to the prior workflow contract.
 
     ``Workflow.encrypted`` is sealed into the workflow contract and content
     digest.  Turning it on therefore creates a new artifact contract even when
     executable intent is unchanged.  Retain the prior policy and timestamp as
     provenance, but never carry its success bit or qualification decision into
-    the new encrypted artifact.
+    the new artifact.  Record-check binding reuses this with its own ``reason``.
     """
     provenance = workflow.manifest.provenance if workflow.manifest else None
     qualification = workflow.qualification
@@ -199,9 +203,7 @@ def _invalidate_prior_certification(workflow: Workflow) -> bool:
         provenance.certification_status = "expired"
         provenance.expires_at = invalidated_at
         provenance.certification_invalidated_at = invalidated_at
-        provenance.certification_invalidation_reason = (
-            "at-rest sealing changed the workflow contract"
-        )
+        provenance.certification_invalidation_reason = reason
     return True
 
 

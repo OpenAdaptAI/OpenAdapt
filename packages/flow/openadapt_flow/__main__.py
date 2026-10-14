@@ -3217,6 +3217,54 @@ def _cmd_seal(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_bind_record_checks(args: argparse.Namespace) -> int:
+    from openadapt_flow.record_check_binding import (
+        RecordCheckBinding,
+        RecordCheckBindingError,
+        bind_record_checks,
+        check_record_checks,
+    )
+
+    try:
+        binding = RecordCheckBinding.load(Path(args.binding))
+        if args.check:
+            coverage = check_record_checks(Path(args.bundle), binding)
+            if args.json:
+                print(coverage.model_dump_json(indent=2))
+            else:
+                print("bind-record-checks: binding is valid (nothing written)")
+                print(coverage.render())
+            return 0
+        if not args.out:
+            print("bind-record-checks REFUSED: --out is required unless --check")
+            return 2
+        result = bind_record_checks(Path(args.bundle), binding, Path(args.out))
+    except RecordCheckBindingError as exc:
+        print(f"bind-record-checks {exc}")
+        return 2
+    except FileExistsError as exc:
+        print(f"bind-record-checks REFUSED: {exc}")
+        return 2
+    if args.json:
+        print(result.model_dump_json(indent=2))
+        return 0
+    print(f"Bound bundle: {result.bundle_dir}")
+    print(f"Content digest: sha256:{result.content_digest}")
+    for step_id, count in result.bound_effects.items():
+        print(f"  {step_id}: {count} record check(s) bound")
+    print(result.coverage.render())
+    if result.certification_invalidated:
+        print(
+            "Prior certification invalidated: the program changed, so it needs "
+            "a fresh certification and qualification decision."
+        )
+    print(
+        "Next: review the bound contracts, then lint and qualify the new bundle; "
+        "a run verifies them only with a configured system-of-record verifier."
+    )
+    return 0
+
+
 def _qualification_workflow(args: argparse.Namespace):
     from openadapt_flow.ir import Workflow
 
@@ -6698,6 +6746,34 @@ def build_parser() -> argparse.ArgumentParser:
         help="New destination directory (must not already exist)",
     )
     p.set_defaults(func=_cmd_seal)
+
+    p = sub.add_parser(
+        "bind-record-checks",
+        help=(
+            "Attach reviewed record checks (system-of-record effect contracts) "
+            "to a compiled program's save step, in a new bundle; reports which "
+            "entered fields they compare"
+        ),
+    )
+    p.add_argument("bundle", help="Compiled workflow bundle directory (not modified)")
+    p.add_argument(
+        "--binding",
+        required=True,
+        help="Record-check binding file (openadapt.record-check-binding/v1, JSON or YAML)",
+    )
+    p.add_argument(
+        "-o",
+        "--out",
+        default=None,
+        help="New bundle directory to publish (must not exist); required unless --check",
+    )
+    p.add_argument(
+        "--check",
+        action="store_true",
+        help="Validate the binding and print entered-field coverage; write nothing",
+    )
+    p.add_argument("--json", action="store_true", help="Print the result as JSON")
+    p.set_defaults(func=_cmd_bind_record_checks)
 
     p = sub.add_parser(
         "certify",
