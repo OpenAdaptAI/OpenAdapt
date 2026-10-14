@@ -352,7 +352,7 @@ def test_doctor_lists_quickstart_dependencies_as_core_not_extras(monkeypatch):
         assert extra_pkg not in core_section
     assert "[MISSING]" not in optional_section
     # Optional section tells the user how to install extras.
-    assert "pip install openadapt[" in optional_section
+    assert 'pip install "openadapt[' in optional_section
 
 
 def test_launcher_flow_and_substrate_extras_metadata():
@@ -453,11 +453,11 @@ MAC_MODULES = {"AppKit", "Quartz", "ApplicationServices"}
 
 # backend, host, modules its surface imports there, install command
 NATIVE_BACKEND_CASES = [
-    ("macos", "darwin", MAC_MODULES, "python -m pip install 'openadapt[macos]'"),
-    ("linux", "linux", {"gi"}, "python -m pip install 'openadapt[linux]'"),
-    ("windows", "darwin", {"requests"}, "python -m pip install 'openadapt[windows]'"),
-    ("windows", "linux", {"requests"}, "python -m pip install 'openadapt[windows]'"),
-    ("citrix", "darwin", MAC_MODULES, "python -m pip install 'openadapt[macos]'"),
+    ("macos", "darwin", MAC_MODULES, 'python -m pip install "openadapt[macos]"'),
+    ("linux", "linux", {"gi"}, 'python -m pip install "openadapt[linux]"'),
+    ("windows", "darwin", {"requests"}, 'python -m pip install "openadapt[windows]"'),
+    ("windows", "linux", {"requests"}, 'python -m pip install "openadapt[windows]"'),
+    ("citrix", "darwin", MAC_MODULES, 'python -m pip install "openadapt[macos]"'),
 ]
 
 
@@ -557,7 +557,7 @@ def test_doctor_rdp_fails_without_transport_dependency(monkeypatch):
 
     assert result.exit_code != 0
     assert "[MISSING] rdp" in result.output
-    assert "python -m pip install 'openadapt[rdp]'" in result.output
+    assert 'python -m pip install "openadapt[rdp]"' in result.output
     assert "System check failed" in result.output
 
 
@@ -706,7 +706,7 @@ def test_deploy_base_hosted_install_gives_conditional_console_setup(monkeypatch)
 
     assert result.exit_code == 0, result.output
     assert "optional local operator console is not installed" in result.output
-    assert "python -m pip install 'openadapt-flow[console]==1.35.0'" in result.output
+    assert 'python -m pip install "openadapt-flow[console]==1.35.0"' in result.output
     assert "openadapt flow console --bundles" not in result.output
     assert "Re-run this preflight" in result.output
 
@@ -727,7 +727,7 @@ def test_deploy_console_requires_openadapt_types(monkeypatch):
 
     assert result.exit_code == 0, result.output
     assert "optional local operator console is not installed" in result.output
-    assert "python -m pip install 'openadapt-flow[console]==1.35.0'" in result.output
+    assert 'python -m pip install "openadapt-flow[console]==1.35.0"' in result.output
     assert "openadapt flow console --bundles" not in result.output
 
 
@@ -776,7 +776,7 @@ def test_deploy_preflight_fails_without_rdp_transport(monkeypatch):
 
     assert result.exit_code != 0
     assert "[MISSING] RDP transport dependency" in result.output
-    assert "python -m pip install 'openadapt[rdp]'" in result.output
+    assert 'python -m pip install "openadapt[rdp]"' in result.output
     assert "Preflight failed" in result.output
     assert "Preflight passed" not in result.output
 

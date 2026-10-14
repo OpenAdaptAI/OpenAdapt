@@ -275,15 +275,52 @@ _DEFAULT_QUICKSTART_DIR = "openadapt-quickstart"
 # tests/test_python_support.py keeps this range, the dependency markers, the
 # classifiers, and the CI guard matrix in step.
 _SUPPORTED_PYTHON = ((3, 10), (3, 12))
-_PYTHON_FIX = (
-    "Install OpenAdapt with uv, which downloads Python 3.12 if you don't "
-    "have it:\n"
-    "  curl -LsSf https://astral.sh/uv/install.sh | sh\n"
-    "  uv tool install --python 3.12 openadapt\n"
-    "Then run: openadapt quickstart --break-it\n"
-    "Or use the installer script: https://raw.githubusercontent.com/"
-    "OpenAdaptAI/openadapt-flow/main/scripts/install.sh"
-)
+
+
+def _host_platform() -> str:
+    return sys.platform
+
+
+def _python_fix() -> str:
+    """Return the uv install steps for the shell this host uses."""
+    if _host_platform() == "win32":
+        # cmd and PowerShell can't run `curl ... | sh` or the POSIX script.
+        installer = (
+            '  powershell -ExecutionPolicy ByPass -c "irm '
+            'https://astral.sh/uv/install.ps1 | iex"\n'
+        )
+        script = ""
+    else:
+        installer = "  curl -LsSf https://astral.sh/uv/install.sh | sh\n"
+        script = (
+            "\nOr use the installer script: https://raw.githubusercontent.com/"
+            "OpenAdaptAI/openadapt-flow/main/scripts/install.sh"
+        )
+    return (
+        "Install OpenAdapt with uv, which downloads Python 3.12 if you don't "
+        "have it:\n"
+        f"{installer}"
+        "  uv tool install --python 3.12 openadapt\n"
+        f"Then run: openadapt quickstart --break-it{script}"
+    )
+
+
+def _shell_quote(value) -> str:
+    """Quote one argument for pasting into this host's usual shell.
+
+    POSIX shells get ``shlex.quote``. Windows gets the double quotes that cmd
+    and PowerShell both read; single quotes reach the program literally there.
+    """
+    import subprocess
+
+    if _host_platform() == "win32":
+        return subprocess.list2cmdline([str(value)])
+    return shlex.quote(str(value))
+
+
+def _pip_install(spec: str) -> str:
+    """Return a pip command whose bracketed spec survives cmd, PowerShell and zsh."""
+    return f'python -m pip install "{spec}"'
 
 
 def _python_minor() -> tuple[int, int]:
@@ -313,7 +350,7 @@ def _python_remedy() -> str:
             f"{current}, which the OpenAdapt engine doesn't support yet, so "
             "only the launcher is installed."
         )
-    return f"{reason}\n{_PYTHON_FIX}"
+    return f"{reason}\n{_python_fix()}"
 
 
 def _echo_python_remedy() -> None:
@@ -548,23 +585,25 @@ def quickstart(
         )
         click.echo(f"Caught-fault evidence: {root / 'run-broken' / 'REPORT.md'}")
         click.echo(_halted_rerun_result(root / "run-broken"))
-    click.echo(f"Inspect qualification gaps: openadapt flow lint {root / 'bundle'}")
+    click.echo(
+        f"Inspect qualification gaps: openadapt flow lint {_shell_quote(root / 'bundle')}"
+    )
     if not break_it:
         click.echo(
             "Watch it catch a lie: openadapt quickstart --break-it --out "
-            f"{root}-break-it"
+            f"{_shell_quote(f'{root}-break-it')}"
         )
     # The tutorial bundle is recorded against MockMed's fault server, and
     # `replay --drift` serves plain MockMed, so replaying that bundle halts at
     # the login screen with or without drift. Record a demo on plain MockMed.
     drift = Path(f"{root}-drift")
-    rec, bundle = (shlex.quote(str(drift / name)) for name in ("rec", "bundle"))
+    rec, bundle = (_shell_quote(drift / name) for name in ("rec", "bundle"))
     click.echo("See it stop when the screen changes (a separate MockMed demo):")
     click.echo(f"  openadapt flow demo-record --out {rec}")
     click.echo(f"  openadapt flow compile {rec} --out {bundle} --name drift-demo")
     click.echo(
         f"  openadapt flow replay {bundle} --drift modal --run-dir "
-        f"{shlex.quote(str(drift / 'run'))}"
+        f"{_shell_quote(drift / 'run')}"
     )
     if _agent_serves_tutorial():
         click.echo("Give a local agent the run tool (synthetic MockMed, no frames):")
@@ -583,7 +622,7 @@ _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]
 # Flow 1.33 and 1.34 probe four X11 libraries in the wrong case, so on Linux
 # they refuse to download Chromium on hosts that have them. 1.35.0 fixed it.
 _SUPPORTED_FLOW_RANGE = ">=1.35.0,<2.0.0"
-_RDP_INSTALL_COMMAND = "python -m pip install 'openadapt[rdp]'"
+_RDP_INSTALL_COMMAND = _pip_install("openadapt[rdp]")
 _CHROMIUM_SYSTEM_LIBS_COMMAND = (
     f"{shlex.quote(sys.executable)} -m playwright install-deps chromium"
 )
@@ -610,10 +649,6 @@ _NATIVE_BACKENDS: dict[str, tuple[dict[str, tuple[str, ...]], str]] = {
 _HOST_NAMES = {"darwin": "macOS", "linux": "Linux", "win32": "Windows"}
 
 
-def _host_platform() -> str:
-    return sys.platform
-
-
 def _native_backend_status(backend: str) -> tuple[str, str]:
     """Check one native or remote backend's Python dependencies on this host.
 
@@ -638,7 +673,7 @@ def _native_backend_status(backend: str) -> tuple[str, str]:
         return (
             "MISSING",
             f"{backend}: {', '.join(missing)} not installed. "
-            f"Run: python -m pip install 'openadapt[{extra}]'",
+            f"Run: {_pip_install(f'openadapt[{extra}]')}",
         )
     return (
         "OK",
@@ -706,7 +741,7 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
             f"  [UNSUPPORTED] Python {platform.python_version()}; the OpenAdapt "
             "engine supports Python 3.10\u20133.12"
         )
-        for line in _PYTHON_FIX.splitlines():
+        for line in _python_fix().splitlines():
             click.echo(f"     {line}")
         # The engine and Playwright can't install on this interpreter, so the
         # later checks would only suggest a reinstall that can't help here.
@@ -805,9 +840,7 @@ def deploy(backend: str, secret_ref: tuple[str, ...]) -> None:
         )
     else:
         click.echo("  4. Optional local console setup:")
-        click.echo(
-            f"     python -m pip install 'openadapt-flow[console]=={flow_version}'"
-        )
+        click.echo("     " + _pip_install(f"openadapt-flow[console]=={flow_version}"))
         click.echo(
             "     Re-run this preflight after installation before you start the console."
         )
@@ -1562,7 +1595,7 @@ def doctor(backend: str | None):
     # Optional packages: opt-in extras the base install intentionally
     # excludes. A missing extra is expected, not a failure — report how to
     # install it rather than flagging it. Maps import name -> extra name.
-    click.echo("\nOptional packages (install with `pip install openadapt[...]`):")
+    click.echo('\nOptional packages (install with `pip install "openadapt[...]"`):')
     optional = [
         ("openadapt_capture", "capture"),
         ("openadapt_ml", "ml"),
@@ -1578,7 +1611,7 @@ def doctor(backend: str | None):
         else:
             click.echo(
                 f"  [--] {pkg} (optional; install with "
-                f"`pip install openadapt[{extra}]`)"
+                f'`pip install "openadapt[{extra}]"`)'
             )
 
     # A GPU and model API keys matter only to the research extras (`openadapt
