@@ -29,7 +29,7 @@ def _deploy(monkeypatch, args, installed=READY_WEB, host=None):
         "importlib.util.find_spec",
         lambda name: object() if name in installed else None,
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.35.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.0.0")
     return CliRunner().invoke(cli_main, ["deploy", *args])
 
 
