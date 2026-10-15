@@ -295,12 +295,32 @@ def test_identity_sentence_is_shared() -> None:
     assert "serve --authoring" in llms
     assert "authoring connect" in readme
     assert "authoring connect" in llms
-    assert "openadapt connect" in readme
     assert "https://openadapt.ai/start" in readme
     assert "https://openadapt.ai/start" in llms
     assert "openadapt flow tutorial" in readme
     assert "openadapt quickstart --break-it" in readme
     assert "name: computer-use" not in readme.lower()
+
+
+# The launcher's `openadapt connect` is Cloud pairing. It takes no positional
+# argument, so `openadapt connect '<runner-link>'` exits 2.
+_CLOUD_PAIRING_WITH_RUNNER_LINK = re.compile(r"(?<![\w-])openadapt connect\s+['\"<]")
+
+
+def test_runner_link_docs_do_not_use_cloud_pairing_command() -> None:
+    # B088: docs told pip users to pass a runner link to `openadapt connect`.
+    docs = [README, LLMS_TXT, *sorted((REPO_ROOT / "docs").rglob("*.md"))]
+    docs += sorted((REPO_ROOT / "skills").rglob("*.md"))
+    docs += sorted((REPO_ROOT / "src" / "openadapt_agent").rglob("*.py"))
+    offenders = [
+        f"{path.relative_to(REPO_ROOT)}:{number}"
+        for path in docs
+        for number, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1)
+        if _CLOUD_PAIRING_WITH_RUNNER_LINK.search(line)
+    ]
+    assert offenders == []
+    mailbox = (REPO_ROOT / "docs" / "MAILBOX_CLI.md").read_text(encoding="utf-8")
+    assert "pip: openadapt-agent authoring connect '<runner-link>'" in mailbox
 
 
 def test_readme_leads_with_the_partner_contract() -> None:
@@ -398,3 +418,37 @@ def test_mcpb_checker_allows_skill_markdown_not_bundles() -> None:
     assert not module._is_skill_markdown(
         "skills/openadapt-gui-write/bundle/workflow.json"
     )
+
+
+def _section(text: str, heading: str) -> str:
+    start = text.index(heading)
+    end = text.find("\n#", start + len(heading))
+    return text[start:] if end == -1 else text[start:end]
+
+
+def test_docs_list_every_authoring_tool() -> None:
+    # B087: the docs named 6 of the 14 tools `serve --authoring` registers.
+    from openadapt_agent.authoring import AUTHORING_TOOLS
+
+    design = (REPO_ROOT / "docs" / "DESIGN.md").read_text(encoding="utf-8")
+    table = _section(design, "### Recording tools")
+    listed = re.findall(r"^\| `([a-z_]+)` \|", table, flags=re.MULTILINE)
+    assert listed == list(AUTHORING_TOOLS)
+    readme = _section(README.read_text(encoding="utf-8"), "### Record a first workflow")
+    assert "docs/DESIGN.md#recording-tools" in readme
+    assert f"all {len(AUTHORING_TOOLS)}" in readme
+
+
+def test_listings_carry_no_beta_label() -> None:
+    # B087: PyPI and the MCP registry showed "Beta" for 2.0.1. Keep it gone.
+    project = tomllib.loads(PYPROJECT.read_text(encoding="utf-8"))["project"]
+    assert not [c for c in project["classifiers"] if c.startswith("Development Status")]
+    server = json.loads(SERVER_JSON.read_text(encoding="utf-8"))
+    manifest = json.loads(MCPB_MANIFEST.read_text(encoding="utf-8"))
+    for text in (
+        project["description"],
+        server["description"],
+        manifest["description"],
+        manifest.get("long_description", ""),
+    ):
+        assert "beta" not in text.lower()

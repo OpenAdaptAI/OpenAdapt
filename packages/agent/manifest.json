@@ -36,6 +36,7 @@
         "OPENADAPT_AGENT_ALLOW_RUN": "${user_config.allow_run}",
         "OPENADAPT_AGENT_ALLOW_ATTENDED_ACTIONS": "${user_config.allow_attended_actions}",
         "OPENADAPT_AGENT_DEPLOYMENT_CONFIG": "${user_config.deployment_config}",
+        "OPENADAPT_AGENT_POLICY": "${user_config.policy}",
         "OPENADAPT_AGENT_HEADED": "${user_config.headed}",
         "OPENADAPT_AGENT_BUNDLE_KEY": "${user_config.bundle_key}"
       }
@@ -117,14 +118,20 @@
     "allow_attended_actions": {
       "type": "boolean",
       "title": "Allow Needs Attention decisions",
-      "description": "Add Reject, Teach, and Escalate. Reject dispatches no new action, but earlier run effects still require protected local review. A qualified deployment config also enables Continue and Skip with live revalidation.",
+      "description": "Add Reject, Teach, and Escalate. Reject dispatches no new action, but earlier run effects still require protected local review. A qualified deployment config also enables Continue and Skip with live revalidation. Needs an MCP client that supports form elicitation, so a person confirms each decision; other clients don't see these tools, so use Flow's attended console there.",
       "required": false,
       "default": false
     },
     "deployment_config": {
       "type": "file",
       "title": "Qualified deployment config",
-      "description": "Optional OpenAdapt deployment YAML used for live Continue and Skip verification.",
+      "description": "Optional OpenAdapt deployment YAML used for runs, certification, and live Continue and Skip verification. A policy in this file also certifies workflows.",
+      "required": false
+    },
+    "policy": {
+      "type": "string",
+      "title": "Certifying policy",
+      "description": "Optional name or path of the policy that certifies workflows and their runs, such as clinical-write. Without a policy or a deployment config, get_workflow says certification was not evaluated.",
       "required": false
     },
     "headed": {

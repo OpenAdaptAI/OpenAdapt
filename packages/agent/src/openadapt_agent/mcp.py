@@ -34,7 +34,7 @@ from openadapt_agent.attended import ATTENDED_TOOLS
 from openadapt_agent.authoring import AuthoringBridge
 from openadapt_agent.bridge import AgentBridge, BridgeError
 
-__all__ = ["build_server", "serve"]
+__all__ = ["HUMAN_CONFIRMED_TOOLS", "build_server", "serve"]
 
 SERVER_NAME = "openadapt-agent"
 _LOG = logging.getLogger(__name__)
@@ -68,29 +68,49 @@ _CONFIRMATION_COPY = {
 }
 
 
-async def _confirm_attended_action(context: Any, name: str) -> None:
-    """Require a second, protocol-native human confirmation before mutation."""
+#: Tools that change state only after a person confirms in the client's own
+#: form. A model-supplied argument never stands in for that answer.
+HUMAN_CONFIRMED_TOOLS = frozenset({*ATTENDED_TOOLS, "admit"})
+
+
+def client_supports_form_elicitation(session: Any) -> bool:
+    """Whether the connected client said it can show an elicitation form.
+
+    MCP 2025-11-25 treats an empty ``elicitation`` object as form support, and
+    clients written for 2025-06-18 (which had no ``form``/``url`` keys) always
+    send it that way. Only a client that declares ``url`` alone, or no
+    elicitation at all, can't show a form.
+    """
+    params = getattr(session, "client_params", None)
+    capabilities = getattr(params, "capabilities", None)
+    elicitation = getattr(capabilities, "elicitation", None)
+    if elicitation is None or not getattr(session, "can_send_request", True):
+        return False
+    form = getattr(elicitation, "form", None)
+    url = getattr(elicitation, "url", None)
+    return form is not None or url is None
+
+
+async def _confirm_with_person(
+    context: Any,
+    message: str,
+    *,
+    title: str,
+    unsupported: str,
+    declined: str,
+) -> None:
+    """Ask the person through protocol-native form elicitation, or refuse."""
     session = context.session
-    params = session.client_params
-    elicitation = params.capabilities.elicitation if params is not None else None
-    if (
-        elicitation is None
-        or elicitation.form is None
-        or not getattr(session, "can_send_request", True)
-    ):
-        raise BridgeError(
-            "attended actions require an MCP client with form elicitation so "
-            "the local operator can confirm this exact decision; use Flow's "
-            "attended console/CLI when the client does not support elicitation"
-        )
+    if not client_supports_form_elicitation(session):
+        raise BridgeError(unsupported)
     result = await session.elicit_form(
-        _CONFIRMATION_COPY[name],
+        message,
         {
             "type": "object",
             "properties": {
                 "confirmed": {
                     "type": "boolean",
-                    "title": "I confirm this attended action",
+                    "title": title,
                 }
             },
             "required": ["confirmed"],
@@ -99,9 +119,37 @@ async def _confirm_attended_action(context: Any, name: str) -> None:
     )
     content = result.content or {}
     if result.action != "accept" or content.get("confirmed") is not True:
-        raise BridgeError(
-            "the local operator declined or cancelled; no attended action was submitted"
-        )
+        raise BridgeError(declined)
+
+
+async def _confirm_attended_action(context: Any, name: str) -> None:
+    """Require a second, protocol-native human confirmation before mutation."""
+    await _confirm_with_person(
+        context,
+        _CONFIRMATION_COPY[name],
+        title="I confirm this attended action",
+        unsupported=(
+            "attended actions require an MCP client with form elicitation so "
+            "the local operator can confirm this exact decision; use Flow's "
+            "attended console/CLI when the client does not support elicitation"
+        ),
+        declined="the local operator declined or cancelled; no attended action was submitted",
+    )
+
+
+async def _confirm_admit(context: Any, authoring: AuthoringBridge) -> None:
+    """A person, not the calling agent, accepts a compiled draft."""
+    await _confirm_with_person(
+        context,
+        authoring.admit_confirmation_message(),
+        title="I reviewed this draft and accept it",
+        unsupported=(
+            "admit requires an MCP client with form elicitation so a person "
+            "can accept the draft; no draft was accepted. Use a client that "
+            "supports elicitation, or Flow's own authoring tools"
+        ),
+        declined="the person declined or cancelled; no draft was accepted",
+    )
 
 
 def _server_instructions(
@@ -115,7 +163,9 @@ def _server_instructions(
             "run_workflow with a workflow name, its inputs, and your own "
             "request_id for this piece of work. Act on the outcome: done means "
             "saved and checked; needs_review means it stopped before saving and "
-            "a person decides, so don't start the same work again; "
+            "a person decides, so don't start the same work again (reason "
+            "waiting_for_approval means a person must approve the next save "
+            "first); "
             "not_sure_if_saved means a person must check the record, so never "
             "retry it; did_not_run means this call wrote nothing, so fix the "
             "problem and retry only when safe_to_retry is true, and after "
@@ -149,8 +199,10 @@ def _server_instructions(
             "and halt over this same local stdio process. Local stdio may also "
             "type through the recorder; hosted MCP has no type tool. Human type "
             "during pause_for_input is record_observed, never type_text. "
-            "compile returns needs_human_admit; admit is the one-token human "
-            "ok. An agent click never paints VERIFIED. --authoring does not "
+            "compile returns needs_human_admit; admit then asks the person "
+            "to accept the draft in the client's own form, and an agent can't "
+            "accept it for them. An agent click never paints VERIFIED. "
+            "--authoring does not "
             "enable run tools. This process must not be port-forwarded or "
             "served over HTTP."
         )
@@ -171,7 +223,12 @@ def build_server(
             *(authoring.list_tool_specs() if authoring is not None else ()),
         )
 
-    async def _list_tools() -> list[types.Tool]:
+    async def _list_tools(context: Any = None) -> list[types.Tool]:
+        # A client that can't show a confirmation form would only ever get a
+        # refusal from an attended decision tool, so it isn't offered one.
+        # The call-time check in _call_tool still applies.
+        session = getattr(context, "session", None)
+        hide_attended = session is not None and not client_supports_form_elicitation(session)
         return [
             types.Tool(
                 name=spec.name,
@@ -186,6 +243,7 @@ def build_server(
                 **({"_meta": spec.meta} if spec.meta is not None else {}),
             )
             for spec in _tool_specs()
+            if not (hide_attended and spec.name in ATTENDED_TOOLS)
         ]
 
     async def _call_tool(
@@ -205,12 +263,18 @@ def build_server(
                     getattr(spec, "usage", None)
                     or "tool arguments do not match the input schema"
                 ) from None
+            human_confirmed = False
             if name in ATTENDED_TOOLS:
                 await _confirm_attended_action(context, name)
+            elif name == "admit" and authoring is not None and authoring.handles(name):
+                await _confirm_admit(context, authoring)
+                human_confirmed = True
 
             def call() -> dict[str, Any]:
                 payload = dict(arguments or {})
                 if authoring is not None and authoring.handles(name):
+                    if human_confirmed:
+                        return authoring.dispatch(name, payload, human_confirmed=True)
                     return authoring.dispatch(name, payload)
                 if bridge is None:
                     raise BridgeError("unknown tool name")
@@ -256,12 +320,17 @@ def build_server(
         return types.CallToolResult(content=text)
 
     if hasattr(Server, "list_tools"):
+        # Without version=, MCP 1 reports its own SDK version as serverInfo.
         server = Server(
             SERVER_NAME,
             version=__version__,
             instructions=_server_instructions(authoring, bridge),
         )
-        server.list_tools()(_list_tools)
+
+        async def _list_v1() -> list[types.Tool]:
+            return await _list_tools(server.request_context)
+
+        server.list_tools()(_list_v1)
 
         async def _call_v1(name: str, arguments: dict[str, Any] | None):
             return await _call_tool(server.request_context, name, arguments)
@@ -271,11 +340,12 @@ def build_server(
     else:
 
         async def _list_v2(context: Any, params: Any) -> types.ListToolsResult:
-            return types.ListToolsResult(tools=await _list_tools())
+            return types.ListToolsResult(tools=await _list_tools(context))
 
         async def _call_v2(context: Any, params: types.CallToolRequestParams):
             return await _call_tool(context, params.name, params.arguments)
 
+        # Without version=, MCP 2 reports an empty serverInfo.version.
         server = Server(
             SERVER_NAME,
             version=__version__,

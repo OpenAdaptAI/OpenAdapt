@@ -279,46 +279,82 @@ def test_compile_returns_needs_human_admit_never_verified():
     assert "success" not in result
 
 
-def test_admit_empty_confirm_and_ok_work_without_type_text():
+@pytest.mark.parametrize(
+    "arguments",
+    [{}, {"confirm": "ok"}, {"confirm": ""}, {"confirm": True}, {"confirm": "yes"}],
+)
+def test_admit_without_host_confirmation_refuses(arguments):
+    # B074: a model-supplied confirm (or none) is not a person's consent.
     session = FakeAuthoringSession()
     bridge = AuthoringBridge(session)
-    empty = bridge.dispatch("admit", {})
-    assert empty == {"status": "admitted", "workflow_id": "wf_demo0001"}
-    assert ("admit", None) in session.calls
-    ok = bridge.dispatch("admit", {"confirm": "ok"})
-    assert ok["status"] == "admitted"
+    bridge.dispatch("compile", {})
+    with pytest.raises(AuthoringError) as exc_info:
+        bridge.dispatch("admit", arguments)
+    assert exc_info.value.code == "admit_requires_host_confirmation"
+    assert all(not (isinstance(call, tuple) and call[0] == "admit") for call in session.calls)
+
+
+def test_admit_schema_does_not_invite_self_confirmation():
+    specs = AuthoringBridge(FakeAuthoringSession()).list_tool_specs()
+    spec = next(s for s in specs if s.name == "admit")
+    assert "confirm" not in spec.input_schema.get("properties", {})
+    assert spec.input_schema["additionalProperties"] is False
+    assert "ok, yes" not in spec.description
+    assert "one-token" not in spec.description
+    assert "person" in spec.description
+
+
+def test_admit_after_host_confirmation_works_without_type_text():
+    session = FakeAuthoringSession()
+    bridge = AuthoringBridge(session)
+    compiled = bridge.dispatch("compile", {})
+    assert compiled["status"] == "needs_human_admit"
+    assert "wf_demo0001" in bridge.admit_confirmation_message()
+    admitted = bridge.dispatch("admit", {}, human_confirmed=True)
+    assert admitted == {"status": "admitted", "workflow_id": "wf_demo0001"}
     assert ("admit", "ok") in session.calls
-    blank = bridge.dispatch("admit", {"confirm": ""})
-    assert blank["status"] == "admitted"
-    assert ("admit", "") in session.calls
-    true_ok = bridge.dispatch("admit", {"confirm": True})
-    assert true_ok["status"] == "admitted"
-    assert ("admit", True) in session.calls
-    for token in ("yes", "y", "enter", "OK"):
-        accepted = bridge.dispatch("admit", {"confirm": token})
-        assert accepted["status"] == "admitted"
-        assert ("admit", token) in session.calls
     assert session.typed_via_backend == []
     assert all(
         call[0] != "type_text" if isinstance(call, tuple) else call != "type_text"
         for call in session.calls
     )
-    compiled = bridge.dispatch("compile", {})
-    assert compiled["status"] == "needs_human_admit"
-    assert "VERIFIED" not in json.dumps(compiled)
-    assert "VERIFIED" not in json.dumps(empty)
-    assert "title" not in json.dumps(empty)
+    assert "VERIFIED" not in json.dumps(admitted)
+    assert "title" not in json.dumps(admitted)
 
 
-def test_admit_garbage_confirm_refuses():
+def test_admit_records_confirmation_channel_when_flow_accepts_it():
+    class ChannelSession(FakeAuthoringSession):
+        def admit(self, confirm=None, confirmation_channel=None):
+            self.calls.append(("admit", confirm, confirmation_channel))
+            return {"status": "accepted", "workflow_id": "wf_demo0001"}
+
+    session = ChannelSession()
+    bridge = AuthoringBridge(session)
+    bridge.dispatch("admit", {}, human_confirmed=True)
+    assert ("admit", "ok", "mcp_form_elicitation") in session.calls
+
+
+def test_admit_calls_flow_once_even_when_flow_raises_type_error():
+    class BrokenSession(FakeAuthoringSession):
+        def admit(self, confirm=None):
+            self.calls.append(("admit", confirm))
+            raise TypeError("bug inside Flow admit")
+
+    session = BrokenSession()
+    bridge = AuthoringBridge(session)
+    with pytest.raises(AuthoringError, match="bug inside Flow admit"):
+        bridge.dispatch("admit", {}, human_confirmed=True)
+    assert [call for call in session.calls if isinstance(call, tuple) and call[0] == "admit"] == [
+        ("admit", "ok")
+    ]
+
+
+def test_admit_extra_arguments_refuse_even_after_confirmation():
     session = FakeAuthoringSession()
     bridge = AuthoringBridge(session)
-    with pytest.raises(AuthoringError, match="one-token ok"):
-        bridge.dispatch("admit", {"confirm": "ship-it"})
-    with pytest.raises(AuthoringError, match="one-token ok"):
-        bridge.dispatch("admit", {"confirm": False})
-    assert all(call != ("admit", "ship-it") for call in session.calls)
-    assert all(call != ("admit", False) for call in session.calls)
+    with pytest.raises(AuthoringError, match="schema"):
+        bridge.dispatch("admit", {"confirm": "ship-it"}, human_confirmed=True)
+    assert all(not (isinstance(call, tuple) and call[0] == "admit") for call in session.calls)
     assert session.typed_via_backend == []
 
 
@@ -336,7 +372,7 @@ def test_admit_fails_closed_without_session_admit():
     assert compiled["status"] == "needs_human_admit"
     assert "VERIFIED" not in json.dumps(compiled)
     with pytest.raises(AuthoringError, match="does not implement admit") as exc_info:
-        bridge.dispatch("admit", {"confirm": "ok"})
+        bridge.dispatch("admit", {}, human_confirmed=True)
     message = str(exc_info.value)
     assert "Seal" in message
     assert "unsigned" in message
@@ -1134,3 +1170,173 @@ def test_real_url_session_serves_tools_under_anyio(monkeypatch, tmp_path, mcp_cl
         result.content[0].text for result in results
     ]
     assert {node["role"] for node in tree} >= {"button", "text_input"}
+
+
+# -- B077: serve --authoring without --url on macOS ----------------------------
+
+
+class _FakeMacWindow:
+    def __init__(self, window_id, owner, title):
+        self.window_id = window_id
+        self.owner = owner
+        self.title = title
+
+
+class _FakeMacWindowClient:
+    """Flow's MacWindowClient semantics: exact, case-insensitive owner match."""
+
+    windows = [
+        _FakeMacWindow(7, "Google Chrome", "Inbox - Clinic"),
+        _FakeMacWindow(8, "Google Chrome", "Schedule"),
+        _FakeMacWindow(9, "Finder", "Downloads"),
+    ]
+    front = 7
+
+    def frontmost_window_id(self):
+        return self.front
+
+    def find_windows(self, owner, title):
+        return [
+            window
+            for window in self.windows
+            if window.owner.casefold() == owner.casefold()
+            and (title is None or window.title.casefold() == title.casefold())
+        ]
+
+
+class _FakeMacOSBackend:
+    def __init__(self, client, *, app, window_title=None):
+        self.client = client
+        self.app = app
+        self.window_title = window_title
+
+
+def _fake_quartz(windows):
+    import importlib.machinery
+    import types as pytypes
+
+    module = pytypes.ModuleType("Quartz")
+    module.__spec__ = importlib.machinery.ModuleSpec("Quartz", None)
+    module.kCGWindowListOptionIncludingWindow = 8
+    module.kCGNullWindowID = 0
+
+    def copy_window_info(option, window_id):
+        assert option == module.kCGWindowListOptionIncludingWindow
+        return [
+            {
+                "kCGWindowNumber": window.window_id,
+                "kCGWindowOwnerName": window.owner,
+                "kCGWindowName": window.title,
+                "kCGWindowLayer": 0,
+            }
+            for window in windows
+            if window.window_id == window_id
+        ]
+
+    module.CGWindowListCopyWindowInfo = copy_window_info
+    return module
+
+
+@pytest.fixture()
+def fake_mac(monkeypatch):
+    import sys as _sys
+
+    monkeypatch.setattr(
+        "openadapt_flow.backends.remote_display.MacWindowClient", _FakeMacWindowClient
+    )
+    monkeypatch.setattr(
+        "openadapt_flow.backends.macos_backend.MacOSBackend", _FakeMacOSBackend
+    )
+    monkeypatch.setitem(_sys.modules, "Quartz", _fake_quartz(_FakeMacWindowClient.windows))
+    return _FakeMacWindowClient
+
+
+def test_tutorial_extra_includes_macos_deps():
+    import re
+
+    text = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+    block = text.split("[project.optional-dependencies]", 1)[1].split("\n[", 1)[0]
+    tutorial = block.split("tutorial = [", 1)[1].split("]\n", 1)[0]
+    extras = re.search(r"openadapt-flow\[([^\]]+)\]", tutorial)
+    assert extras is not None
+    assert "macos" in {item.strip() for item in extras.group(1).split(",")}
+
+
+def test_pin_native_darwin_resolves_frontmost(fake_mac):
+    backend, kind, close = pin_local_backend(platform="darwin")
+    assert kind == "macos"
+    assert close is None
+    assert isinstance(backend, _FakeMacOSBackend)
+    assert backend.app == "Google Chrome"
+    assert backend.window_title == "Inbox - Clinic"
+
+
+def test_pin_native_darwin_refuses_a_shared_title(fake_mac, monkeypatch):
+    import sys as _sys
+
+    windows = [
+        _FakeMacWindow(7, "Google Chrome", "New Tab"),
+        _FakeMacWindow(8, "Google Chrome", "New Tab"),
+    ]
+    monkeypatch.setattr(fake_mac, "windows", windows)
+    monkeypatch.setitem(_sys.modules, "Quartz", _fake_quartz(windows))
+    with pytest.raises(AuthoringError, match="same title") as exc_info:
+        pin_local_backend(platform="darwin")
+    assert "New Tab" not in str(exc_info.value)
+
+
+def test_pin_native_darwin_names_screen_recording_when_titles_are_hidden(
+    fake_mac, monkeypatch
+):
+    import sys as _sys
+
+    windows = [
+        _FakeMacWindow(7, "Google Chrome", ""),
+        _FakeMacWindow(8, "Google Chrome", ""),
+    ]
+    monkeypatch.setattr(fake_mac, "windows", windows)
+    monkeypatch.setitem(_sys.modules, "Quartz", _fake_quartz(windows))
+    with pytest.raises(AuthoringError, match="Screen Recording"):
+        pin_local_backend(platform="darwin")
+
+
+def test_pin_native_darwin_without_a_front_window_says_so(fake_mac, monkeypatch):
+    monkeypatch.setattr(fake_mac, "front", None)
+    with pytest.raises(AuthoringError, match="No app window is in front"):
+        pin_local_backend(platform="darwin")
+
+
+def test_pin_native_darwin_missing_quartz_names_dependency(fake_mac, monkeypatch):
+    import importlib.util
+
+    real_find_spec = importlib.util.find_spec
+
+    def find_spec(name, *args, **kwargs):
+        if name == "Quartz":
+            return None
+        return real_find_spec(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib.util, "find_spec", find_spec)
+    with pytest.raises(AuthoringError) as exc_info:
+        pin_local_backend(platform="darwin")
+    message = str(exc_info.value)
+    assert "pyobjc" in message
+    assert "openadapt-flow[macos]" in message
+
+
+def test_pin_native_darwin_front_window_not_listed_is_not_called_a_shared_title(
+    fake_mac, monkeypatch
+):
+    # find_windows skips windows with no size, so the front window can be
+    # missing from its app's list. That isn't "more than one window".
+    class _HidesFront(fake_mac):
+        def find_windows(self, owner, title):
+            return [w for w in super().find_windows(owner, title) if w.window_id != self.front]
+
+    monkeypatch.setattr(
+        "openadapt_flow.backends.remote_display.MacWindowClient", _HidesFront
+    )
+    with pytest.raises(AuthoringError, match="didn't list the frontmost window") as exc_info:
+        pin_local_backend(platform="darwin")
+    assert "same title" not in str(exc_info.value)
+    assert "Inbox - Clinic" not in str(exc_info.value)

@@ -21,13 +21,15 @@ Subcommands:
 from __future__ import annotations
 
 import argparse
+import os
 import shlex
 import sys
 from pathlib import Path
 from typing import Optional, Sequence
 
 from openadapt_agent import __version__
-from openadapt_agent.runner import RunnerConfig
+from openadapt_agent.contract import APPROVAL_MODES
+from openadapt_agent.runner import RunnerConfig, default_runs_dir
 
 __all__ = ["build_parser", "main"]
 
@@ -165,8 +167,10 @@ def build_parser() -> argparse.ArgumentParser:
         "--runs-dir",
         default=None,
         help=(
-            "Directory for run records and evidence (default: ./runs; the "
-            "sandbox uses ~/.openadapt/agent-sandbox)"
+            "Directory for run records and evidence (default: "
+            "$OPENADAPT_AGENT_RUNS_DIR, else ~/.openadapt/runs; the sandbox "
+            "uses ~/.openadapt/agent-sandbox). Never relative to the folder "
+            "the client starts the server in."
         ),
     )
     p.add_argument(
@@ -175,6 +179,19 @@ def build_parser() -> argparse.ArgumentParser:
         default=600.0,
         metavar="SECONDS",
         help="Per-call timeout for each governed run (default: 600)",
+    )
+    p.add_argument(
+        "--approval-mode",
+        choices=APPROVAL_MODES,
+        default=None,
+        help=(
+            "Per-save approval passed to every `openadapt-flow run`. Unset "
+            "(the default): Flow decides, and under the Standard and Regulated "
+            "profiles a person approves each save (each_item); a run waiting "
+            "for that approval reports needs_review. not_gated turns the pause "
+            "off for every run this server starts, and each run's result and "
+            "Flow's report record that. Callers can't change it."
+        ),
     )
     p.add_argument(
         "--allow-url-override",
@@ -315,6 +332,24 @@ def _resolve_mode(args: argparse.Namespace) -> Optional[str]:
     return "sandbox"
 
 
+def _legacy_runs_dir(args: argparse.Namespace) -> Optional[Path]:
+    """An earlier version's implicit ``./runs`` that this default would skip.
+
+    Before ~/.openadapt/runs, the default was ./runs in whatever folder the
+    client started the server. Its request-id ledger and pauses live there;
+    silently using a new folder would let a resent request_id run again. Only
+    checked when the operator named no folder.
+    """
+    if args.runs_dir or os.environ.get("OPENADAPT_AGENT_RUNS_DIR", "").strip():
+        return None
+    legacy = Path("runs").resolve()
+    if not (legacy / "openadapt-agent").is_dir():
+        return None
+    if legacy == default_runs_dir().expanduser().resolve():
+        return None
+    return legacy
+
+
 def _cmd_serve(args: argparse.Namespace) -> int:
     from openadapt_agent.bridge import AgentBridge
     from openadapt_agent.flow_service import open_attended_service
@@ -358,9 +393,40 @@ def _cmd_serve(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
+    if args.approval_mode and mode not in {"production", "attended"}:
+        print(
+            "serve: --approval-mode applies to runs of your workflows; it needs "
+            "--mode production or --mode attended with --bundles",
+            file=sys.stderr,
+        )
+        return 2
+    if args.approval_mode and not args.flow_cli:
+        from openadapt_agent import approval
+
+        if not approval.flow_supports_approval_modes():
+            print(
+                "serve: --approval-mode needs an openadapt-flow with approval "
+                "modes; the one installed here has none, so its runs have no "
+                "per-save pause to set",
+                file=sys.stderr,
+            )
+            return 2
     if args.allow_synthetic_recorded_defaults and not (args.allow_run and args.bundles):
         print(
             "serve: --allow-synthetic-recorded-defaults requires --allow-run",
+            file=sys.stderr,
+        )
+        return 2
+    legacy = _legacy_runs_dir(args) if mode in {"production", "attended"} else None
+    if legacy is not None:
+        default = default_runs_dir().expanduser().resolve()
+        print(
+            f"serve: {legacy} holds run records from an earlier version, which "
+            "kept them in the folder the server started in. This version keeps "
+            f"them in {default}, so it wouldn't know the request_ids sent before "
+            f"and could enter one of those requests again. Pass --runs-dir "
+            f"{legacy} to keep using that folder, or --runs-dir {default} to "
+            "start a new one.",
             file=sys.stderr,
         )
         return 2
@@ -379,7 +445,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
 
                 authoring_root = default_sandbox_dir()
             else:
-                authoring_root = Path("runs")
+                authoring_root = default_runs_dir()
             authoring_dir = authoring_root.expanduser().resolve() / "authoring"
             try:
                 authoring_bridge = AuthoringBridge(
@@ -436,15 +502,21 @@ def _cmd_serve(args: argparse.Namespace) -> int:
             return 0
 
         extra_run_args = list(args.extra_run_arg)
+        # Resolve once, so every part of the server (runs, pauses, the
+        # request-id ledger) uses the same absolute folder.
+        runs_dir = (
+            Path(args.runs_dir) if args.runs_dir else default_runs_dir()
+        ).expanduser().resolve()
         runner_config = RunnerConfig(
             flow_cli=(tuple(shlex.split(args.flow_cli)) if args.flow_cli else default_flow_cli()),
-            runs_dir=Path(args.runs_dir or "runs"),
+            runs_dir=runs_dir,
             url=args.url,
             deployment_config=args.config,
             policy=args.policy,
             timeout_s=args.timeout,
             allow_url_override=args.allow_url_override,
             extra_run_args=tuple(extra_run_args),
+            approval_mode=args.approval_mode,
         )
         with open_attended_service(
             enabled=args.allow_attended_actions,
@@ -475,7 +547,14 @@ def _cmd_serve(args: argparse.Namespace) -> int:
                 f"{'ENABLED' if args.allow_protected_export else 'disabled'}; "
                 "synthetic recorded defaults "
                 f"{'ENABLED' if args.allow_synthetic_recorded_defaults else 'disabled'}; "
-                f"authoring {'enabled' if authoring_bridge is not None else 'disabled'}",
+                f"authoring {'enabled' if authoring_bridge is not None else 'disabled'}; "
+                + (
+                    f"approval mode {args.approval_mode} (chosen with --approval-mode); "
+                    if args.approval_mode
+                    else "approval mode set by Flow (a person approves each save "
+                    "under the Standard and Regulated profiles); "
+                )
+                + f"runs folder {runs_dir}",
                 file=sys.stderr,
             )
             _serve(serve, bridge, authoring_bridge)

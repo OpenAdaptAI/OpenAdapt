@@ -147,7 +147,7 @@ computer that runs it, then reads the record back to check that it saved.
 | outcome | What happened | What to do |
 | --- | --- | --- |
 | `done` | Saved and checked. | Nothing more for this request. |
-| `needs_review` | Stopped before saving. Nothing was written. A person decides. | Don't start the same work again. Check back with `get_run`. |
+| `needs_review` | Stopped before a save. A person decides. Nothing was written, unless `record_changed` is `unknown`: a run waiting for a person to approve a save may have made an earlier one. | Don't start the same work again. Check back with `get_run`. |
 | `not_sure_if_saved` | It may or may not have saved. | Never retry. A person checks the record. |
 | `did_not_run` | This call wrote nothing. After `request_id_conflict`, an earlier request with the same `request_id` may have saved. | Fix the problem in `what_happened`, then retry with the same `request_id` if `safe_to_retry` is true. |
 

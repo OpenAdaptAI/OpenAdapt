@@ -20,7 +20,7 @@ from openadapt_agent.runner import RunOutcome
 
 
 def _run(monkeypatch, runner_config, stub, **kwargs):
-    monkeypatch.setattr(runner_mod.subprocess, "run", stub)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
     return FlowRunner(runner_config).run(
         workflow="demo_triage",
         bundle_dir=kwargs.pop("bundle_dir"),
@@ -331,7 +331,7 @@ def test_url_override_honoured_with_flag(monkeypatch, tmp_path, bundle_dir, succ
         allow_url_override=True,
     )
     stub = FlowCliStub(exit_code=0, report=success_report)
-    monkeypatch.setattr(runner_mod.subprocess, "run", stub)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
     outcome = FlowRunner(config).run(
         workflow="demo_triage",
         bundle_dir=bundle_dir,
@@ -353,7 +353,7 @@ def test_operator_fixed_args_forwarded(monkeypatch, tmp_path, bundle_dir, succes
         extra_run_args=("--strict-templates",),
     )
     stub = FlowCliStub(exit_code=0, report=success_report)
-    monkeypatch.setattr(runner_mod.subprocess, "run", stub)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
     FlowRunner(config).run(workflow="w", bundle_dir=bundle_dir, params={})
     cmd = stub.calls[0]
     assert cmd[cmd.index("--url") + 1] == "https://app.example"

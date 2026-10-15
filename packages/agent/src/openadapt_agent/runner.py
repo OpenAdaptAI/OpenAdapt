@@ -21,6 +21,12 @@ Results are derived by :mod:`openadapt_agent.contract` from Flow's
 ``transaction_outcome``. A halt or refusal is never success, a verified run
 is never an error, and an uncertain save is never "nothing changed". Even an
 exit code of 0 is cross-checked against the persisted ``report.json``.
+
+Under Flow's approval modes a run can wait for a person to approve a save.
+That time doesn't count toward the per-run timeout (Flow bounds its own
+wait), so the server never kills a run because a person took time to
+answer. This server passes ``--approval-mode`` only when the operator chose
+one at server start.
 """
 
 from __future__ import annotations
@@ -32,11 +38,13 @@ import re
 import subprocess
 import sys
 import tempfile
+import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
+from openadapt_agent.approval import MAX_PERSON_WAIT_S, report_approval, waiting_for_person
 from openadapt_agent.contract import (
     REASONS,
     TRANSACTION_REASONS,
@@ -52,6 +60,7 @@ __all__ = [
     "classify_outcome",
     "classify_report_status",
     "default_flow_cli",
+    "default_runs_dir",
     "is_safe_run_id",
     "legacy_reason",
     "new_run_id",
@@ -137,18 +146,37 @@ def default_flow_cli() -> tuple[str, ...]:
     return (sys.executable, "-m", "openadapt_flow")
 
 
+def default_runs_dir() -> Path:
+    """One stable per-user folder for run records and Flow's evidence.
+
+    Never a path relative to the working directory: an MCP client starts the
+    server wherever the user's project is, and run evidence (reports, frames,
+    entered values) must not land in a repository where it can be committed,
+    nor scatter durable pauses across folders. ``OPENADAPT_AGENT_RUNS_DIR``
+    overrides it; the MCPB manifest sets that variable.
+    """
+    base = os.environ.get("OPENADAPT_AGENT_RUNS_DIR", "").strip()
+    if base:
+        return Path(base).expanduser()
+    return Path.home() / ".openadapt" / "runs"
+
+
 @dataclass(frozen=True)
 class RunnerConfig:
     """Operator-fixed execution settings (set at server start, not per call)."""
 
     flow_cli: tuple[str, ...] = field(default_factory=default_flow_cli)
-    runs_dir: Path = Path("runs")
+    runs_dir: Path = field(default_factory=default_runs_dir)
     url: Optional[str] = None
     deployment_config: Optional[str] = None  # --config YAML
     policy: Optional[str] = None  # --policy NAME-OR-PATH
     timeout_s: float = 600.0
     allow_url_override: bool = False
     extra_run_args: tuple[str, ...] = ()
+    #: ``--approval-mode`` for every run, chosen by the operator at server
+    #: start. None passes nothing, so Flow's default applies (a person
+    #: approves each save under the Standard and Regulated profiles).
+    approval_mode: Optional[str] = None
 
 
 @dataclass
@@ -178,6 +206,8 @@ class RunOutcome:
     refused_before_start: bool = False
     timed_out: bool = False
     process_started: Optional[bool] = True
+    #: The approval mode the run used (Flow's report), else the operator's.
+    approval_mode: Optional[str] = None
 
     def seal_verified(self) -> bool:
         """True only when a Cloud Seal on this run verifies (openadapt_agent.seal)."""
@@ -239,6 +269,7 @@ class RunOutcome:
                 if isinstance(total_ms, (int, float)) and not isinstance(total_ms, bool)
                 else None
             ),
+            approval_mode=self.approval_mode,
         )
 
     def to_dict(self, *, include_protected: bool = False) -> dict:
@@ -282,6 +313,8 @@ class RunOutcome:
             result["execution_outcome"] = self.execution_outcome
         if self.transaction_outcome is not None:
             result["transaction_outcome"] = self.transaction_outcome
+        if self.approval_mode is not None:
+            result["approval_mode"] = self.approval_mode
         if include_protected:
             result["protected"] = {
                 "workflow": self.workflow,
@@ -473,6 +506,7 @@ def classify_outcome(
         transaction = report.get("transaction_outcome")
         if isinstance(transaction, str):
             outcome.transaction_outcome = transaction
+        outcome.approval_mode, _decision = report_approval(report)
 
     refused = exit_code == 2 and not isinstance(report, dict)
     outcome.refused_before_start = refused
@@ -560,6 +594,8 @@ class FlowRunner:
             cmd += ["--config", self.config.deployment_config]
         if self.config.policy:
             cmd += ["--policy", self.config.policy]
+        if self.config.approval_mode:
+            cmd += ["--approval-mode", self.config.approval_mode]
         cmd += list(self.config.extra_run_args)
         return cmd
 
@@ -599,7 +635,8 @@ class FlowRunner:
             url = url_override
 
         runs_root = Path(self.config.runs_dir)
-        runs_root.mkdir(parents=True, exist_ok=True)
+        # Run evidence can hold entered values and screenshots: owner-only.
+        runs_root.mkdir(parents=True, exist_ok=True, mode=0o700)
         run_dir = runs_root / run_id
         report_path = run_dir / "report.json"
 
@@ -612,13 +649,14 @@ class FlowRunner:
             try:
                 # Decode with replacement: a strict decode error would surface
                 # after Flow already ran and read as a launch failure.
-                proc = subprocess.run(
+                proc = _run_flow_process(
                     cmd,
                     capture_output=True,
                     text=True,
                     encoding="utf-8",
                     errors="replace",
                     timeout=self.config.timeout_s,
+                    awaiting_person=lambda: waiting_for_person(run_dir),
                 )
             except subprocess.TimeoutExpired as exc:
                 return RunOutcome(
@@ -679,7 +717,7 @@ class FlowRunner:
             except (OSError, json.JSONDecodeError):
                 report = None
 
-        return classify_outcome(
+        outcome = classify_outcome(
             workflow,
             proc.returncode,
             report,
@@ -689,6 +727,9 @@ class FlowRunner:
             stdout=proc.stdout or "",
             stderr=proc.stderr or "",
         )
+        if outcome.approval_mode is None:
+            outcome.approval_mode = self.config.approval_mode
+        return outcome
 
     def certify(self, bundle_dir: Path) -> dict:
         """Evaluate certification status via ``openadapt-flow certify``.
@@ -712,7 +753,7 @@ class FlowRunner:
         if self.config.deployment_config:
             cmd += ["--config", self.config.deployment_config]
         try:
-            proc = subprocess.run(
+            proc = _run_flow_process(
                 cmd, capture_output=True, text=True, timeout=self.config.timeout_s
             )
         except subprocess.TimeoutExpired:
@@ -730,6 +771,68 @@ class FlowRunner:
             "exit_code": proc.returncode,
             "detail": _tail(proc.stdout or "") or _tail(proc.stderr or ""),
         }
+
+
+#: How often a running Flow process is checked for a waiting approval.
+_POLL_S = 0.25
+
+
+def _run_flow_process(
+    cmd: list[str],
+    *,
+    timeout: Optional[float] = None,
+    awaiting_person: Optional[Any] = None,
+    capture_output: bool = False,
+    **popen_kwargs: Any,
+) -> subprocess.CompletedProcess:
+    """``subprocess.run`` for Flow, except a person's approval time is free.
+
+    ``timeout`` bounds the time Flow spends working. While
+    ``awaiting_person()`` says a save is waiting for a person's answer, the
+    clock stops: Flow bounds that wait itself, and killing the run then would
+    cut the person's time short and lose the pause they are answering. In
+    all, a person's waits may add at most ``MAX_PERSON_WAIT_S``. Raises
+    ``subprocess.TimeoutExpired`` after killing the process, as
+    ``subprocess.run`` does.
+    """
+    if capture_output:
+        popen_kwargs.setdefault("stdout", subprocess.PIPE)
+        popen_kwargs.setdefault("stderr", subprocess.PIPE)
+    with subprocess.Popen(cmd, **popen_kwargs) as process:
+        working = 0.0
+        waiting = 0.0
+        last = time.monotonic()
+        try:
+            while True:
+                try:
+                    stdout, stderr = process.communicate(
+                        timeout=None if timeout is None else _POLL_S
+                    )
+                    break
+                except subprocess.TimeoutExpired:
+                    now = time.monotonic()
+                    elapsed, last = now - last, now
+                    person = False
+                    if awaiting_person is not None:
+                        try:
+                            person = bool(awaiting_person())
+                        except Exception:  # an unreadable state counts as work
+                            _LOG.debug("approval state check failed", exc_info=True)
+                    if person:
+                        waiting += elapsed
+                    else:
+                        working += elapsed
+                    if working >= timeout or waiting >= MAX_PERSON_WAIT_S:
+                        process.kill()
+                        stdout, stderr = process.communicate()
+                        raise subprocess.TimeoutExpired(
+                            cmd, timeout, output=stdout, stderr=stderr
+                        ) from None
+        except BaseException:
+            if process.poll() is None:
+                process.kill()
+            raise
+        return subprocess.CompletedProcess(cmd, process.returncode, stdout, stderr)
 
 
 def _text(value: object) -> str:

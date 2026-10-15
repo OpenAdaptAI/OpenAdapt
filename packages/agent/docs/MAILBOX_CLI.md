@@ -20,13 +20,9 @@ openadapt-agent authoring connect '<runner-link>' --url https://example.invalid/
 
 Rejected alternative: `openadapt-agent serve --authoring --mailbox`. `serve` is stdio MCP. Mixing it with an outbound poll loop would look like this package grew a hosted transport. The mailbox client is a separate verb.
 
-Job-page / meta-package alias (not implemented here; `openadapt` wraps this package):
+There is no launcher alias for this command. The launcher's `openadapt connect` pairs a computer with OpenAdapt Cloud and doesn't accept a runner link. Given one, it exits with a usage error. Don't reuse that name for runner links, because it would put two different sign-in flows behind one command.
 
-```bash
-openadapt connect '<runner-link-or-pack-url>'
-```
-
-The pack “Connect this computer” control should offer that command next to **Open OpenAdapt**. Do not implement the web page in this repository. GET `/j/{id}` stays presence. It is not actuation.
+The pack “Connect this computer” control should offer `openadapt-agent authoring connect '<runner-link>'` next to **Open OpenAdapt**. Do not implement the web page in this repository. GET `/j/{id}` stays presence. It is not actuation.
 
 ## Shared engine
 
@@ -87,7 +83,7 @@ Pip is not a worse cousin for the **mailbox protocol**. It is a worse cousin for
 Do not edit web 462 from this repository. The pack “Connect this computer” should eventually show, next to Open OpenAdapt:
 
 ```text
-pip: openadapt connect '<runner-link>'
+pip: openadapt-agent authoring connect '<runner-link>'
 ```
 
 Desktop users keep the `openadapt://runner` button. Pip users paste the same bind into this command.

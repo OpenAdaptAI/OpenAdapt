@@ -128,13 +128,15 @@ pause, and a consistency check of the persisted report:
 |---|---|---|
 | consistent `VERIFIED`, exit 0 | `saved_and_checked` | `done` |
 | `HALTED_BEFORE_EFFECT` | from the pause category, for example `record_not_confirmed` | `needs_review` |
+| a proven-no-effect outcome whose report says the item stopped for a person's approval (`approval.decision: approval_required`) | `approval_needed` | `needs_review` |
+| a run still going whose save waits for a person's approval (an unanswered `item-approval` request) | `waiting_for_approval`, `record_changed: "unknown"`, never stored as the result | `needs_review` |
 | `REJECTED_POLICY`, `CANCELED`, `FAILED_PLATFORM` with an open durable pause | from the pause category | `needs_review` |
 | the same with no open pause | `policy_refused`, `canceled`, `platform_error` | `did_not_run` |
 | any proven-no-effect outcome whose pause a person rejected | `stopped_by_person` | `did_not_run` (no retry) |
 | `RECONCILIATION_REQUIRED` | `save_not_confirmed` | `not_sure_if_saved` |
 | `COMPLETED_UNVERIFIED` | `not_checked` | `not_sure_if_saved` |
 | `ROLLED_BACK` | `change_reversed` | `not_sure_if_saved` |
-| timeout after start, inconsistent or missing report, coarse `HALTED` alone | `timed_out`, `result_unreadable` | `not_sure_if_saved` |
+| timeout after start (time a person spends approving doesn't count), inconsistent or missing report, coarse `HALTED` alone | `timed_out`, `result_unreadable` | `not_sure_if_saved` |
 | a server that stopped mid-run | `interrupted` | `not_sure_if_saved` |
 | exit 2 before execution | `not_ready_to_run` with closed `failed_checks` | `did_not_run` |
 | Flow could not be launched | `platform_error` | `did_not_run` |
@@ -234,17 +236,40 @@ operation:
   use demonstrated values. It requires run authority and is only for
   synthetic demos; it never places those values in a tool schema.
 
+### Recording tools
+
 `--authoring` registers first-demo tools over the same local stdio
 server. Probe names match hosted MCP: `observe`, `start_record`,
-`click`, `halt`. Local stdio may also include `type` for agent-driven
-typing through Flow's Recorder. Hosted MCP remains pause-only. Human
+`click`, `halt`. The rest are local stdio only. `AUTHORING_TOOLS` in
+`openadapt_agent.authoring` is the source of truth, in this order:
+
+| Tool | Group | What it does |
+| --- | --- | --- |
+| `observe` | probe | Returns a PHI-safe tree of the pinned window: no values, titles, URLs, screenshots, or pixels. |
+| `start_record` | probe | Starts a Flow Recorder session. Refused for Windows native, Citrix, and RDP, which are coach-only. |
+| `click` | probe | Clicks one observed node. Local stdio also accepts x,y pixels. |
+| `halt` | probe | Ends the authoring session without compiling. It isn't a governed run halt. |
+| `type` | local | Types text the agent supplies through `Recorder.type_text`. Not for secrets or for text a person typed. |
+| `pause_for_input` | local | Pauses so a person can type in the app. A secret pause stores no text. |
+| `continue_input` | local | Stands in for overlay Continue and saves the person's input with `Recorder.record_observed`. |
+| `stop_record` | local | Finishes the Recorder session without compiling. |
+| `compile` | local | Wraps Flow `compile_recording` and returns `needs_human_admit`. |
+| `admit` | local | Asks the person to accept the draft in a form-elicitation prompt. Refused when the client can't show one. |
+| `get_command_result` | local | Returns the last in-process result, for clients that expect the hosted `command_id` shape. |
+| `set_coach` | local | Stores a PHI-safe coach hint of up to 80 characters in this process. |
+| `get_coach` | local | Returns the last coach hint. |
+| `bind_status` | local | Reports local bind status. A stdio server is already on the machine, so there's no pack mailbox. |
+
+Hosted MCP remains pause-only: it has no `type`. Human
 type during `pause_for_input` is persisted with `Recorder.record_observed`
 on the pause-target node, never `type_text`. `compile` wraps Flow
 `compile_recording` and returns `needs_human_admit`; an agent click never
-paints `VERIFIED`. `admit` is the one-token human ok of the pre-filled
-draft; the human does not fill schema, authority, effect, environment, or
-digest. If the Flow session has no `admit`, the tool fails closed and does
-not mint a Seal or write an unsigned ledger row.
+paints `VERIFIED`. `admit` asks the person to accept the pre-filled
+draft through MCP form elicitation; the human does not fill schema,
+authority, effect, environment, or digest. The tool takes no arguments, so
+the calling agent can't supply the acceptance, and a client without form
+elicitation is refused. If the Flow session has no `admit`, the tool fails
+closed and does not mint a Seal or write an unsigned ledger row.
 
 `--authoring` does not imply `--allow-run`. `--bundles` is optional iff
 `--authoring` (or the sandbox). The
@@ -511,8 +536,8 @@ Tests cover:
   and local `type`; observe projection drops values/titles/screenshots
   and extra keys, caps the wire at 32 KiB, and uses `n_` + 8 hex node
   ids; pause Continue uses `record_observed` rather than `type_text`;
-  compile returns `needs_human_admit`; `admit` is the one-token human
-  ok; `--authoring` does not enable
+  compile returns `needs_human_admit`; `admit` needs the person's answer
+  in a form-elicitation prompt; `--authoring` does not enable
   run tools; `server.json` stays stdio with `--bundles` required;
   `authoring connect` parses `openadapt://runner` / pack URLs, claims
   `oab_`, polls `wait_seconds: 0`, prompts Allow-per-`sub`, and Continue

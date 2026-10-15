@@ -19,10 +19,12 @@ import os
 import re
 import socket
 import threading
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping, Optional, Protocol
 
+from openadapt_agent.approval import report_approval, waiting_for_person
 from openadapt_agent.cards import WorkflowCard, coerce_inputs, input_problems
 from openadapt_agent.contract import REASONS, build_result, reason_for_run
 from openadapt_agent.runner import FlowRunner, is_safe_run_id
@@ -49,6 +51,8 @@ MAX_WAIT_SECONDS = 600
 DEFAULT_WAIT_SECONDS = 60
 #: Outcomes a person can still change after the run reports.
 _REFRESHABLE = {"needs_review"}
+#: How often a waiting call checks whether the run now waits for a person.
+_PERSON_POLL_S = 0.25
 
 
 class ServiceError(Exception):
@@ -67,6 +71,8 @@ class EngineResult:
     model_calls: Optional[int] = None
     seconds: Optional[float] = None
     sandbox: Optional[dict[str, str]] = None
+    #: The per-save approval mode the run used, or the operator chose.
+    approval_mode: Optional[str] = None
 
 
 class Engine(Protocol):
@@ -136,11 +142,23 @@ class FlowCliEngine:
             needs_attention_id=(attention or {}).get("id"),
             model_calls=summary.get("model_calls"),
             seconds=total_ms / 1000.0 if isinstance(total_ms, (int, float)) else None,
+            approval_mode=outcome.approval_mode,
         )
 
     def refresh(self, entry: CatalogEntry, run_id: str) -> Optional[EngineResult]:
         """Re-read a reviewed run: a person may have continued or ended it."""
-        return reason_from_run_dir(self.attended, Path(self.runner.config.runs_dir) / run_id)
+        update = reason_from_run_dir(self.attended, Path(self.runner.config.runs_dir) / run_id)
+        if update is not None and update.approval_mode is None:
+            update.approval_mode = self.runner.config.approval_mode
+        return update
+
+    def awaiting_person(self, entry: CatalogEntry, run_id: str) -> bool:
+        """Whether this still-running run waits for a person to approve a save."""
+        return waiting_for_person(Path(self.runner.config.runs_dir) / run_id)
+
+    def approval_mode(self) -> Optional[str]:
+        """The approval mode the operator chose for every run, if any."""
+        return self.runner.config.approval_mode
 
 
 def _owned_elsewhere(record: Mapping[str, Any]) -> bool:
@@ -175,6 +193,7 @@ def reason_from_run_dir(attended: Any, run_dir: Path) -> Optional[EngineResult]:
         execution_outcome=execution if isinstance(execution, str) else None,
         transaction_outcome=transaction if isinstance(transaction, str) else None,
         needs_attention_id=(attention or {}).get("id"),
+        approval_mode=report_approval(report)[0],
     )
 
 
@@ -342,6 +361,7 @@ class RunService:
                     model_calls=outcome.model_calls,
                     seconds=outcome.seconds,
                     sandbox=outcome.sandbox,
+                    approval_mode=outcome.approval_mode,
                 )
                 self.store.finish(
                     record, result, transaction_outcome=outcome.transaction_outcome
@@ -366,7 +386,7 @@ class RunService:
         with self._lock:
             event = self._active.get(run_id)
         if event is not None:
-            event.wait(self._wait_seconds(wait_seconds, DEFAULT_WAIT_SECONDS))
+            self._wait_for(event, run_id, self._wait_seconds(wait_seconds, DEFAULT_WAIT_SECONDS))
         # Check activity BEFORE reading the record. A worker writes its result
         # and only then leaves the active set, so "not active" followed by an
         # unfinished record really means nobody in this process is running it.
@@ -378,7 +398,17 @@ class RunService:
         if record.get("state") != "finished":
             other_process = _owned_elsewhere(record)
             if active or other_process:
-                result = self._result("running", record)
+                # A run waiting for a person to approve a save is needs_review
+                # now, not "running" until Flow gives up: a person decides.
+                # This live result is never stored as the run's result.
+                if self._awaiting_person(record):
+                    result = self._result(
+                        "waiting_for_approval",
+                        record,
+                        approval_mode=self._approval_mode(record),
+                    )
+                else:
+                    result = self._result("running", record)
                 if replayed:
                     result["replayed"] = True
                 return result
@@ -392,6 +422,52 @@ class RunService:
         if replayed:
             result["replayed"] = True
         return result
+
+    def _engine_hook(self, record: Mapping[str, Any], name: str) -> Any:
+        entry = self.catalog.get(record.get("workflow") or "")
+        return entry, getattr(getattr(entry, "engine", None), name, None)
+
+    def _awaiting_person(self, record: Mapping[str, Any]) -> bool:
+        entry, hook = self._engine_hook(record, "awaiting_person")
+        if entry is None or hook is None:
+            return False
+        try:
+            return bool(hook(entry, record["run_id"]))
+        except Exception:
+            _LOG.exception("could not read whether a run waits for an approval")
+            return False
+
+    def _approval_mode(self, record: Mapping[str, Any]) -> Optional[str]:
+        _entry, hook = self._engine_hook(record, "approval_mode")
+        try:
+            return hook() if hook is not None else None
+        except Exception:
+            return None
+
+    def _wait_for(self, event: threading.Event, run_id: str, seconds: float) -> None:
+        """Wait for the run to finish, or until it starts waiting for a person.
+
+        A call that finds the run already waiting for a person keeps waiting
+        for the answer (up to ``seconds``), so a caller polling get_run
+        doesn't spin; a call that sees the wait begin returns at once, so the
+        caller learns a person is needed.
+        """
+        record = {"run_id": run_id, "workflow": None}
+        stored = self.store.read(run_id)
+        if stored is not None:
+            record["workflow"] = stored.get("workflow")
+        _entry, hook = self._engine_hook(record, "awaiting_person")
+        if hook is None or self._awaiting_person(record):
+            event.wait(seconds)
+            return
+        deadline = time.monotonic() + seconds
+        while not event.is_set():
+            if self._awaiting_person(record):
+                return
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                return
+            event.wait(min(_PERSON_POLL_S, remaining))
 
     def _refresh(self, record: dict[str, Any], result: dict[str, Any]) -> dict[str, Any]:
         entry = self.catalog.get(record.get("workflow") or "")
@@ -418,6 +494,7 @@ class RunService:
             transaction_outcome=update.transaction_outcome,
             needs_attention_id=update.needs_attention_id,
             sandbox=result.get("sandbox"),
+            approval_mode=update.approval_mode,
         )
         self.store.update_result(record, fresh)
         return fresh

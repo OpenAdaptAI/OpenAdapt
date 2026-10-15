@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from openadapt_agent.cli import build_parser, main
@@ -300,3 +302,108 @@ def test_tutorial_rejects_private_bundle_path(tmp_path, capsys):
     )
     assert result == 2
     assert "cannot be combined" in capsys.readouterr().err
+
+
+# -- B082: run evidence never lands in the client's working directory ----------
+
+
+def test_serve_default_runs_dir_is_not_cwd(monkeypatch, bundles_root, tmp_path, capsys):
+    from contextlib import contextmanager
+
+    from test_authoring import FakeAuthoringSession
+
+    project = tmp_path / "proj"
+    project.mkdir()
+    home = tmp_path / "home"
+    monkeypatch.chdir(project)
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.delenv("OPENADAPT_AGENT_RUNS_DIR", raising=False)
+
+    @contextmanager
+    def fake_attended(**kwargs):
+        yield None
+
+    sessions: dict = {}
+
+    def fake_session(**kwargs):
+        sessions.update(kwargs)
+        return FakeAuthoringSession()
+
+    monkeypatch.setattr("openadapt_agent.flow_service.open_attended_service", fake_attended)
+    monkeypatch.setattr("openadapt_agent.authoring.open_authoring_session", fake_session)
+    captured = _capture_serve(monkeypatch)
+    expected = (home / ".openadapt" / "runs").resolve()
+
+    assert main(["serve", "--mode", "production", "--bundles", str(bundles_root)]) == 0
+    runs_dir = Path(captured["bridge"].runner_config.runs_dir)
+    assert runs_dir.is_absolute()
+    assert runs_dir == expected
+    assert str(expected) in capsys.readouterr().err
+
+    def fake_serve(bridge, authoring=None):
+        captured["authoring"] = authoring
+
+    monkeypatch.setattr("openadapt_agent.mcp.serve", fake_serve)
+    assert main(["serve", "--authoring"]) == 0
+    assert Path(sessions["out_dir"]) == expected / "authoring"
+    assert not (project / "runs").exists()
+
+
+def test_runner_config_default_is_absolute_per_user_dir(monkeypatch, tmp_path):
+    from openadapt_agent.runner import RunnerConfig, default_runs_dir
+
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("OPENADAPT_AGENT_RUNS_DIR", raising=False)
+    assert default_runs_dir() == tmp_path / "home" / ".openadapt" / "runs"
+    assert RunnerConfig().runs_dir == default_runs_dir()
+    monkeypatch.setenv("OPENADAPT_AGENT_RUNS_DIR", str(tmp_path / "evidence"))
+    assert default_runs_dir() == tmp_path / "evidence"
+
+
+def test_explicit_runs_dir_is_resolved_once(monkeypatch, bundles_root, tmp_path):
+    from contextlib import contextmanager
+
+    @contextmanager
+    def fake_attended(**kwargs):
+        yield None
+
+    monkeypatch.setattr("openadapt_agent.flow_service.open_attended_service", fake_attended)
+    monkeypatch.chdir(tmp_path)
+    captured = _capture_serve(monkeypatch)
+    argv = ["serve", "--mode", "production", "--bundles", str(bundles_root), "--runs-dir", "ev"]
+    assert main(argv) == 0
+    assert Path(captured["bridge"].runner_config.runs_dir) == (tmp_path / "ev").resolve()
+
+
+def test_serve_refuses_to_skip_an_earlier_versions_runs_folder(
+    monkeypatch, bundles_root, tmp_path, capsys
+):
+    # B082 upgrade: the old default kept the request-id ledger in ./runs. A
+    # server that silently used ~/.openadapt/runs instead would not know the
+    # request_ids sent before and could enter one of them again.
+    from contextlib import contextmanager
+
+    @contextmanager
+    def fake_attended(**kwargs):
+        yield None
+
+    project = tmp_path / "proj"
+    (project / "runs" / "openadapt-agent").mkdir(parents=True)
+    monkeypatch.chdir(project)
+    monkeypatch.setenv("HOME", str(tmp_path / "home"))
+    monkeypatch.delenv("OPENADAPT_AGENT_RUNS_DIR", raising=False)
+    monkeypatch.setattr("openadapt_agent.flow_service.open_attended_service", fake_attended)
+    captured = _capture_serve(monkeypatch)
+    argv = ["serve", "--mode", "production", "--bundles", str(bundles_root)]
+
+    assert main(argv) == 2
+    err = capsys.readouterr().err
+    assert str((project / "runs").resolve()) in err
+    assert "--runs-dir" in err
+    assert "bridge" not in captured
+
+    # Naming a folder, either one, is the operator's explicit choice.
+    assert main([*argv, "--runs-dir", str(project / "runs")]) == 0
+    assert Path(captured["bridge"].runner_config.runs_dir) == (project / "runs").resolve()
+    monkeypatch.setenv("OPENADAPT_AGENT_RUNS_DIR", str(tmp_path / "home" / "new"))
+    assert main(argv) == 0

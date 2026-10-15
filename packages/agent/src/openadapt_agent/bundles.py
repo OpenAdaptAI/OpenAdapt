@@ -24,6 +24,7 @@ __all__ = [
     "load_workflow_info",
     "slugify",
     "tool_input_schema",
+    "url_override_key",
     "workflow_public_id",
 ]
 
@@ -192,6 +193,23 @@ def workflow_public_id(
     return f"workflow_{opaque}"
 
 
+def url_override_key(info: WorkflowInfo) -> str:
+    """The run-tool argument that carries a target app URL override.
+
+    ``url`` unless the workflow declares its own ``url`` parameter. Then the
+    override gets a name that no declared parameter uses, so a demonstrated
+    URL value always reaches the workflow and never the app address.
+    """
+    if "url" not in info.params:
+        return "url"
+    key = "target_url_override"
+    suffix = 2
+    while key in info.params:
+        key = f"target_url_override_{suffix}"
+        suffix += 1
+    return key
+
+
 def tool_input_schema(
     info: WorkflowInfo,
     *,
@@ -202,8 +220,8 @@ def tool_input_schema(
 
     Recorded demonstration values never enter the schema. Parameters are
     required unless the operator explicitly enabled synthetic recorded-default
-    reuse when starting the server. ``url`` is present only under the separate
-    URL-override opt-in.
+    reuse when starting the server. The URL override is present only under
+    the separate URL-override opt-in, under :func:`url_override_key`.
     """
     properties: dict[str, dict] = {}
     for name in info.params:
@@ -212,7 +230,7 @@ def tool_input_schema(
             "description": f"Value for the declared {name!r} workflow parameter.",
         }
     if allow_url_override:
-        properties["url"] = {
+        properties[url_override_key(info)] = {
             "type": "string",
             "description": (
                 "Optional target app URL override. Only honoured because the "

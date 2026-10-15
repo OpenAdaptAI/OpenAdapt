@@ -70,9 +70,11 @@ jobs:
         run: pip install -e ".[dev,tutorial]"
       - name: Install Chromium
         run: python -m playwright install --with-deps chromium
+      # test_approval_flow.py skips until the installed openadapt-flow has
+      # approval modes.
       - name: Run every sandbox case through openadapt-flow
         env:
           OPENADAPT_AGENT_E2E: "1"
           DO_NOT_TRACK: "1"
           OPENADAPT_TELEMETRY: "0"
-        run: pytest -q tests/test_sandbox_flow.py
+        run: pytest -q tests/test_sandbox_flow.py tests/test_approval_flow.py

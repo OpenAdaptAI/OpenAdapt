@@ -57,7 +57,7 @@ def test_only_a_verifying_seal_counts() -> None:
 def test_runner_reports_sealed_only_with_pinned_keys(monkeypatch, tmp_path, runner_config, bundle_dir, success_report) -> None:
     private, entry = _key()
     success_report.update({"execution_profile": "standard", "execution_outcome": "VERIFIED", "production_eligible": True})
-    monkeypatch.setattr(runner_mod.subprocess, "run", FlowCliStub(exit_code=0, report=success_report))
+    monkeypatch.setattr(runner_mod, "_run_flow_process", FlowCliStub(exit_code=0, report=success_report))
     outcome = FlowRunner(runner_config).run(workflow="demo_triage", bundle_dir=bundle_dir, params={"note": "hello"})
     assert outcome.status == "success"
     outcome.report = dict(outcome.report or {}, execute_receipt=_sealed_receipt(private, entry, execution_id=outcome.run_id))

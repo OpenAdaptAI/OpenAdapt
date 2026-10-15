@@ -15,3 +15,4 @@ SECURITY.md
 llms.txt
 server.json
 source-policy.public.json
+.gitleaks.toml

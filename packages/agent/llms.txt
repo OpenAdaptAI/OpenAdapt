@@ -15,7 +15,7 @@ Every result has `outcome`, `safe_to_retry`, `what_happened` (one plain sentence
 ## Outcomes (the honesty rules)
 
 - `done`: saved and checked by reading the record back. `proof` is `local` (checked on the customer's computer), `sealed` (signed receipt), or `simulated` (sandbox, no app opened). A verified local run is done; it is never reported as an error.
-- `needs_review`: stopped before saving; nothing was written; a person decides. Don't start the same work again.
+- `needs_review`: stopped before a save; a person decides. Nothing was written, unless `record_changed` is `unknown` (a run waiting for a person to approve a save may have made an earlier one). Don't start the same work again.
 - `not_sure_if_saved`: a save may have gone through. Never retry. A person checks the record. Never tell the user nothing changed.
 - `did_not_run`: this call wrote nothing. Fix the cause and retry with the same `request_id` when `safe_to_retry` is true. After `request_id_conflict`, an earlier request with the same `request_id` may have saved; call `get_run` with `first_run_id` to see it.
 

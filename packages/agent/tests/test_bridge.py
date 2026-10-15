@@ -153,7 +153,7 @@ def test_run_success_and_report_roundtrip_are_phi_safe(
     stub = FlowCliStub(exit_code=0, report=success_report)
     stub.stdout = secret
     stub.stderr = secret
-    monkeypatch.setattr(runner_mod.subprocess, "run", stub)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
     bridge = make_bridge(bundles_root, runner_config, allow_run=True)
     result = bridge.dispatch(run_tool(bridge), {"note": "custom note"})
     assert result["status"] == "success"
@@ -214,7 +214,7 @@ def test_run_and_report_lookup_use_the_same_public_outcome_message(
         }
     )
     stub = FlowCliStub(exit_code=0, report=success_report)
-    monkeypatch.setattr(runner_mod.subprocess, "run", stub)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
     bridge = make_bridge(bundles_root, runner_config, allow_run=True)
 
     result = bridge.dispatch(run_tool(bridge), {"note": "custom note"})
@@ -254,7 +254,7 @@ def test_run_halt_returns_safe_card_not_raw_evidence(
     stub = FlowCliStub(exit_code=1, report=halt_report)
     stub.stdout = secret
     stub.stderr = secret
-    monkeypatch.setattr(runner_mod.subprocess, "run", stub)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
     bridge = make_bridge(bundles_root, runner_config, allow_run=True)
     result = bridge.dispatch(run_tool(bridge), {"note": "fresh note"})
     assert result["status"] == "halt"
@@ -272,7 +272,7 @@ def test_missing_or_unknown_parameters_refuse_before_execution(
     runner_config,
 ):
     stub = FlowCliStub(exit_code=0)
-    monkeypatch.setattr(runner_mod.subprocess, "run", stub)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
     bridge = make_bridge(bundles_root, runner_config, allow_run=True)
     tool = run_tool(bridge)
     with pytest.raises(BridgeError, match="declared workflow parameter schema"):
@@ -291,7 +291,7 @@ def test_synthetic_recorded_default_reuse_is_separate_explicit_mode(
     success_report,
 ):
     stub = FlowCliStub(exit_code=0, report=success_report)
-    monkeypatch.setattr(runner_mod.subprocess, "run", stub)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
     bridge = make_bridge(
         bundles_root,
         runner_config,
@@ -315,7 +315,7 @@ def test_protected_export_is_explicit_and_preserves_local_detail(
     halt_report["halt"]["reason"] = secret
     stub = FlowCliStub(exit_code=1, report=halt_report)
     stub.stderr = secret
-    monkeypatch.setattr(runner_mod.subprocess, "run", stub)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
     bridge = make_bridge(
         bundles_root,
         runner_config,
@@ -426,7 +426,7 @@ def test_tool_result_is_json_serializable(
     halt_report,
 ):
     stub = FlowCliStub(exit_code=1, report=halt_report)
-    monkeypatch.setattr(runner_mod.subprocess, "run", stub)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
     bridge = make_bridge(bundles_root, runner_config, allow_run=True)
     result = bridge.dispatch(run_tool(bridge), {"note": "fresh"})
     json.dumps(result)
@@ -445,7 +445,7 @@ def test_certify_result_is_fixed_copy_unless_protected_export_enabled(
     )
     stub = FlowCliStub(exit_code=2)
     stub.stdout = secret
-    monkeypatch.setattr(runner_mod.subprocess, "run", stub)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
     bridge = AgentBridge(bundles_root, config)
     workflow = workflow_id(bridge)
     info = bridge.dispatch("get_workflow", {"workflow": workflow})
@@ -490,3 +490,131 @@ def test_workflow_names_intents_recorded_values_and_paths_never_default_export(
     assert secret not in serialized
     assert str(bundle) not in serialized
     assert "patient_id" in serialized
+
+
+# -- B084: a workflow parameter named "url" ------------------------------------
+
+
+class _ParamsCapturingStub(FlowCliStub):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.params: list[dict] = []
+
+    def __call__(self, cmd, *args, **kwargs):
+        from pathlib import Path
+
+        self.params.append(json.loads(Path(cmd[cmd.index("--params-file") + 1]).read_text()))
+        return super().__call__(cmd, *args, **kwargs)
+
+
+@pytest.fixture()
+def url_param_bundle(tmp_path):
+    from openadapt_flow.ir import ActionKind, Step, Workflow
+
+    bundle = tmp_path / "bundles" / "claims-lookup"
+    Workflow(
+        name="Claims lookup",
+        params={"url": "https://recorded.example/claims", "member": "M00"},
+        steps=[
+            Step(id="s1", intent="Open the claims page", action=ActionKind.TYPE,
+                 text="https://recorded.example/claims", param="url"),
+            Step(id="s2", intent="Type the member id", action=ActionKind.TYPE,
+                 text="M00", param="member"),
+        ],
+    ).save(bundle)
+    return bundle
+
+
+def _url_config(tmp_path, **kwargs):
+    return RunnerConfig(flow_cli=("openadapt-flow-stub",), runs_dir=tmp_path / "runs", **kwargs)
+
+
+def test_declared_url_param_does_not_collide_with_override(
+    monkeypatch, tmp_path, url_param_bundle, success_report
+):
+    stub = _ParamsCapturingStub(exit_code=0, report=success_report)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
+    bridge = AgentBridge(url_param_bundle, _url_config(tmp_path), allow_run=True)
+    tool = run_tool(bridge)
+    spec = next(s for s in bridge.list_tool_specs() if s.name == tool)
+    assert set(spec.input_schema["properties"]) == {"url", "member"}
+    assert spec.input_schema["required"] == ["member", "url"]
+
+    result = bridge.dispatch(tool, {"url": "https://t.example", "member": "M42"})
+    assert result["status"] == "success"
+    assert stub.params == [{"url": "https://t.example", "member": "M42"}]
+    assert "--url" not in stub.calls[0]
+
+
+def test_url_override_gets_its_own_key_when_url_is_a_parameter(
+    monkeypatch, tmp_path, url_param_bundle, success_report
+):
+    stub = _ParamsCapturingStub(exit_code=0, report=success_report)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
+    bridge = AgentBridge(
+        url_param_bundle, _url_config(tmp_path, allow_url_override=True), allow_run=True
+    )
+    tool = run_tool(bridge)
+    properties = next(s for s in bridge.list_tool_specs() if s.name == tool).input_schema[
+        "properties"
+    ]
+    assert "target_url_override" in properties
+    assert properties["url"]["description"] != properties["target_url_override"]["description"]
+    assert "declared" in properties["url"]["description"]
+
+    result = bridge.dispatch(
+        tool,
+        {
+            "url": "https://t.example",
+            "member": "M42",
+            "target_url_override": "https://staging.example",
+        },
+    )
+    assert result["status"] == "success"
+    assert stub.params == [{"url": "https://t.example", "member": "M42"}]
+    cmd = stub.calls[0]
+    assert cmd[cmd.index("--url") + 1] == "https://staging.example"
+
+
+def test_url_param_is_never_taken_as_override_with_recorded_defaults(
+    monkeypatch, tmp_path, url_param_bundle, success_report
+):
+    stub = _ParamsCapturingStub(exit_code=0, report=success_report)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
+    bridge = AgentBridge(
+        url_param_bundle,
+        _url_config(tmp_path),
+        allow_run=True,
+        allow_recorded_defaults=True,
+    )
+    result = bridge.dispatch(run_tool(bridge), {"url": "https://t.example"})
+    assert result["status"] == "success"
+    assert stub.params == [{"url": "https://t.example"}]
+    assert "--url" not in stub.calls[0]
+
+
+def test_plain_workflow_keeps_the_url_override_name(
+    monkeypatch, bundles_root, tmp_path, success_report
+):
+    stub = FlowCliStub(exit_code=0, report=success_report)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
+    bridge = AgentBridge(
+        bundles_root, _url_config(tmp_path, allow_url_override=True), allow_run=True
+    )
+    tool = run_tool(bridge)
+    properties = next(s for s in bridge.list_tool_specs() if s.name == tool).input_schema[
+        "properties"
+    ]
+    assert "url" in properties and "target_url_override" not in properties
+    result = bridge.dispatch(tool, {"note": "n", "url": "https://staging.example"})
+    assert result["status"] == "success"
+    cmd = stub.calls[0]
+    assert cmd[cmd.index("--url") + 1] == "https://staging.example"
+
+
+def test_certification_without_a_policy_says_how_to_set_one(bundles_root, runner_config):
+    # B086: an MCPB install without a policy got an unexplained "not evaluated".
+    bridge = AgentBridge(bundles_root, runner_config)
+    info = bridge.dispatch("get_workflow", {"workflow": workflow_id(bridge)})
+    assert info["certification"]["certified"] is None
+    assert "--policy" in info["certification"]["message"]

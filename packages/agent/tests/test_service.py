@@ -48,7 +48,7 @@ def test_verified_run_is_done_and_the_same_request_never_runs_twice(
     monkeypatch, bundles_root, runner_config, success_report
 ):
     stub = FlowCliStub(exit_code=0, report=success_report)
-    monkeypatch.setattr(runner_mod.subprocess, "run", stub)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
     bridge = make_bridge(bundles_root, runner_config)
 
     first = run(bridge)
@@ -81,7 +81,7 @@ def test_invalid_input_did_not_run_and_leaves_a_retrievable_record(
     monkeypatch, bundles_root, runner_config
 ):
     stub = FlowCliStub(exit_code=0)
-    monkeypatch.setattr(runner_mod.subprocess, "run", stub)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
     bridge = make_bridge(bundles_root, runner_config)
     secret = "Jane Roe MRN 8812345"
     result = run(bridge, inputs={"note": 5, "patient": secret})
@@ -114,7 +114,7 @@ def test_refusal_is_retryable_with_the_same_request_id(
 ):
     stub = FlowCliStub(exit_code=2, report=None)
     stub.stdout = "  [REFUSE] Certification passed: 8 violations\n"
-    monkeypatch.setattr(runner_mod.subprocess, "run", stub)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
     bridge = make_bridge(bundles_root, runner_config)
     refused = run(bridge)
     assert refused["outcome"] == "did_not_run"
@@ -135,7 +135,7 @@ def test_uncertain_or_reviewed_runs_are_never_run_again(
 ):
     halt_report["transaction_outcome"] = transaction
     stub = FlowCliStub(exit_code=1, report=halt_report)
-    monkeypatch.setattr(runner_mod.subprocess, "run", stub)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
     bridge = make_bridge(bundles_root, runner_config)
     first = run(bridge)
     assert first["safe_to_retry"] is False
@@ -149,7 +149,7 @@ def test_reused_request_id_with_new_inputs_is_refused(
     monkeypatch, bundles_root, runner_config, success_report
 ):
     monkeypatch.setattr(
-        runner_mod.subprocess, "run", FlowCliStub(exit_code=0, report=success_report)
+        runner_mod, "_run_flow_process", FlowCliStub(exit_code=0, report=success_report)
     )
     bridge = make_bridge(bundles_root, runner_config)
     first = run(bridge)
@@ -171,7 +171,7 @@ def test_slow_run_returns_running_then_get_run_waits_for_it(
         time.sleep(0.5)
         return stub(*args, **kwargs)
 
-    monkeypatch.setattr(runner_mod.subprocess, "run", slow)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", slow)
     bridge = make_bridge(bundles_root, runner_config)
     started = run(bridge, wait=0)
     assert started["outcome"] == "running"
@@ -196,7 +196,7 @@ def test_run_left_by_a_dead_server_reads_as_interrupted(bundles_root, runner_con
 def test_review_resolved_by_a_person_updates_get_run(
     monkeypatch, bundles_root, runner_config, halt_report, success_report
 ):
-    monkeypatch.setattr(runner_mod.subprocess, "run", FlowCliStub(exit_code=1, report=halt_report))
+    monkeypatch.setattr(runner_mod, "_run_flow_process", FlowCliStub(exit_code=1, report=halt_report))
     bridge = make_bridge(bundles_root, runner_config)
     paused = run(bridge)
     assert paused["outcome"] == "needs_review"
@@ -221,7 +221,7 @@ def test_continued_pause_never_turns_into_a_retryable_result(
     """
     halt_report["transaction_outcome"] = "REJECTED_POLICY"
     stub = FlowCliStub(exit_code=1, report=halt_report)
-    monkeypatch.setattr(runner_mod.subprocess, "run", stub)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
     bridge = make_bridge(bundles_root, runner_config)
     pause = {
         "item": {"id": "a1", "status": "pending", "durably_paused": True, "category": "identity"}
@@ -265,7 +265,7 @@ def test_mcp_returns_structured_content_that_the_client_validates(
     monkeypatch, bundles_root, runner_config, success_report, mcp_client
 ):
     monkeypatch.setattr(
-        runner_mod.subprocess, "run", FlowCliStub(exit_code=0, report=success_report)
+        runner_mod, "_run_flow_process", FlowCliStub(exit_code=0, report=success_report)
     )
     bridge = make_bridge(bundles_root, runner_config)
     server = build_server(bridge)
@@ -293,7 +293,7 @@ def test_mcp_returns_structured_content_that_the_client_validates(
 
 def test_records_hold_no_input_values(monkeypatch, bundles_root, runner_config, success_report):
     monkeypatch.setattr(
-        runner_mod.subprocess, "run", FlowCliStub(exit_code=0, report=success_report)
+        runner_mod, "_run_flow_process", FlowCliStub(exit_code=0, report=success_report)
     )
     bridge = make_bridge(bundles_root, runner_config)
     secret = "Jane Roe MRN 8812345"
@@ -348,7 +348,7 @@ def test_bad_request_id_is_refused_before_anything_runs(
     monkeypatch, bundles_root, runner_config, request_id
 ):
     stub = FlowCliStub(exit_code=0)
-    monkeypatch.setattr(runner_mod.subprocess, "run", stub)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
     bridge = make_bridge(bundles_root, runner_config)
     with pytest.raises(BridgeError, match="request_id"):
         bridge.dispatch(
@@ -371,7 +371,7 @@ def test_a_run_finishing_during_get_is_never_marked_interrupted(
         gate.wait(10)
         return stub(*args, **kwargs)
 
-    monkeypatch.setattr(runner_mod.subprocess, "run", held)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", held)
     bridge = make_bridge(bundles_root, runner_config)
     started = run(bridge, wait=0)
     service = bridge.service
@@ -398,7 +398,7 @@ def test_same_request_id_while_a_run_is_starting_waits_instead_of_interrupting(
     import threading
 
     stub = FlowCliStub(exit_code=0, report=success_report)
-    monkeypatch.setattr(runner_mod.subprocess, "run", stub)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
     bridge = make_bridge(bundles_root, runner_config)
     service = bridge.service
     real_start = service._start

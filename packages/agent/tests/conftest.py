@@ -2,9 +2,10 @@
 
 The bundle is written with openadapt-flow's own IR (``Workflow.save``), so
 schema drift in flow surfaces here instead of being masked by hand-rolled
-JSON. Execution is NEVER real in unit tests: ``subprocess.run`` is
-monkeypatched with a stub that emulates the ``openadapt-flow run``
-exit-code contract (0 success / 1 halt / 2 governed refusal).
+JSON. Execution is NEVER real in unit tests: ``runner._run_flow_process``
+(the runner's ``subprocess.run`` stand-in) is monkeypatched with a stub that
+emulates the ``openadapt-flow run`` exit-code contract (0 success / 1 halt /
+2 governed refusal).
 """
 
 from __future__ import annotations

@@ -37,6 +37,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
+from openadapt_agent.approval import report_approval
 from openadapt_agent.attended import (
     ATTENDED_TOOLS,
     AttendedBridge,
@@ -47,6 +48,7 @@ from openadapt_agent.bundles import (
     WorkflowInfo,
     discover_bundles,
     tool_input_schema,
+    url_override_key,
 )
 from openadapt_agent.cards import card_for_bundle, inputs_schema
 from openadapt_agent.contract import (
@@ -640,6 +642,11 @@ class AgentBridge:
             message = "The configured policy certification passed."
         elif certified is False:
             message = "The configured policy certification did not pass."
+        elif not (self.runner_config.policy or self.runner_config.deployment_config):
+            message = (
+                "Certification was not evaluated: this server has no certifying "
+                "policy. The operator sets one with --policy or --config."
+            )
         else:
             message = "Certification was not evaluated by this server."
         result = {"certified": certified, "message": message}
@@ -686,6 +693,7 @@ class AgentBridge:
             transaction_outcome=transaction if isinstance(transaction, str) else None,
             reason=reason,
             summary=public_report_summary(report),
+            approval_mode=report_approval(report)[0] or self.runner_config.approval_mode,
         )
         result = outcome.to_dict()
         result.pop("workflow_id", None)
@@ -734,7 +742,9 @@ class AgentBridge:
                 )
             raise BridgeError("the selected workflow could not be loaded safely")
         arguments = dict(arguments)
-        url_override = arguments.pop("url", None)
+        # A declared "url" parameter stays a workflow input; the override then
+        # has its own argument name (see bundles.url_override_key).
+        url_override = arguments.pop(url_override_key(info), None)
         unknown = set(arguments) - set(info.params)
         missing = set(info.params) - set(arguments)
         invalid_types = any(not isinstance(value, str) for value in arguments.values()) or (

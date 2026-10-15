@@ -60,8 +60,9 @@ dev = [
 tutorial = [
     # The sandbox's real engine drives MockMed through Flow's tutorial entry
     # query, added in openadapt-flow 1.29.0. Older Flow falls back to the
-    # simulated engine.
-    "openadapt-flow[browser]>=1.29.0,<2",
+    # simulated engine. Flow's macos extra (pyobjc, darwin-only markers) lets
+    # `serve --authoring` without --url pin the frontmost macOS window.
+    "openadapt-flow[browser,macos]>=1.29.0,<2",
 ]
 
 [project.scripts]

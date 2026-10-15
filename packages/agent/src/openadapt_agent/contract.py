@@ -23,7 +23,9 @@ Safety rules this module enforces by construction:
   earlier attempt under that ``request_id`` may have saved, so it reports
   ``record_changed: "unknown"``.
 - A run with an open durable pause is ``needs_review``: a person holds the
-  decision, so the caller must not start the same work again.
+  decision, so the caller must not start the same work again. So is a run
+  waiting for a person to approve a save: it is never reported as a timeout
+  or a failure.
 - Every sentence is fixed copy keyed by a closed reason code. No observed screen
   text, recorded value, input value, or local path can reach a result.
 """
@@ -35,6 +37,7 @@ from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Optional
 
 __all__ = [
+    "APPROVAL_MODES",
     "CONTRACT_VERSION",
     "FAILED_CHECKS",
     "LABELS",
@@ -84,6 +87,8 @@ NEXT_STEPS = (
 PROOF = ("sealed", "local", "simulated", "none")
 #: What is known about the target record after this run.
 RECORD_CHANGED = ("yes", "no", "unknown")
+#: Per-save approval modes ``openadapt-flow run --approval-mode`` accepts.
+APPROVAL_MODES = ("each_item", "problems_only", "not_gated")
 
 #: Flow ``TransactionOutcome`` values this bridge understands.
 TRANSACTION_OUTCOMES = frozenset(
@@ -137,6 +142,12 @@ _WAIT_FOR_PERSON = (
     "A person reviews this run on the computer that ran it. Call get_run "
     "later to see their decision. Don't start another run for this work "
     "until they finish."
+)
+_APPROVE_SAVE = (
+    "Ask a person at the computer that runs OpenAdapt to approve or decline "
+    "this save. `openadapt-flow item-approval show` lists it there for this "
+    "run_id. Call get_run later for the result. Don't start another run for "
+    "this work."
 )
 
 REASONS: dict[str, Reason] = {
@@ -193,6 +204,31 @@ REASONS: dict[str, Reason] = {
         "wait_for_person",
         "Stopped before saving because something didn't match, so nothing was written.",
         _WAIT_FOR_PERSON,
+    ),
+    "approval_needed": Reason(
+        "needs_review",
+        False,
+        "no",
+        "wait_for_person",
+        "Stopped before saving because the save needs a person's approval "
+        "first, so nothing was written.",
+        "A person at the computer that runs OpenAdapt decides what happens "
+        "next: approve the save and resume the run, or end it. Call get_run "
+        "later to see their decision. Don't start another run for this work "
+        "until they finish.",
+    ),
+    # The run is still going: Flow is waiting before a save. Earlier saves in
+    # the same run may have been made, so nothing is claimed about the record.
+    "waiting_for_approval": Reason(
+        "needs_review",
+        False,
+        "unknown",
+        "wait_for_person",
+        "Waiting for a person to approve a save before OpenAdapt makes it. "
+        "That save hasn't been made. If nobody answers in time, the run stops "
+        "before saving.",
+        _APPROVE_SAVE,
+        label="Waiting for approval",
     ),
     # -- not_sure_if_saved: a person checks the record --------------------
     "save_not_confirmed": Reason(
@@ -550,6 +586,12 @@ def pause_state(attention: Optional[Mapping[str, Any]]) -> Optional[str]:
     return None
 
 
+def _stopped_for_approval(report: Mapping[str, Any]) -> bool:
+    """Whether Flow's report says the item stopped to wait for a person."""
+    block = report.get("approval")
+    return isinstance(block, Mapping) and block.get("decision") == "approval_required"
+
+
 def reason_for_run(
     *,
     exit_code: Optional[int],
@@ -594,6 +636,8 @@ def reason_for_run(
             return "stopped_by_person"
         category = attention.get("category") if isinstance(attention, Mapping) else None
         if state == "open" or tx == "HALTED_BEFORE_EFFECT":
+            if _stopped_for_approval(report):
+                return "approval_needed"
             return _ATTENTION_REASONS.get(category or "", "stopped_for_review")
         return _NO_EFFECT_DID_NOT_RUN[tx]
     return TRANSACTION_REASONS.get(tx, "result_unreadable")
@@ -624,6 +668,10 @@ def ledger_outcome(reason: str, transaction_outcome: Optional[str] = None) -> Op
     """Return the Flow ``TransactionOutcome`` value to record for a reason."""
     if transaction_outcome in TRANSACTION_OUTCOMES:
         return transaction_outcome
+    if reason == "waiting_for_approval":
+        # A live state, never a final one; if it is ever recorded, it must
+        # not read as "nothing was written".
+        return "RECONCILIATION_REQUIRED"
     spec = REASONS.get(reason)
     if spec is not None and spec.outcome == "needs_review":
         return "HALTED_BEFORE_EFFECT"
@@ -652,8 +700,13 @@ def build_result(
     seconds: Optional[float] = None,
     model_calls: Optional[int] = None,
     sandbox: Optional[Mapping[str, str]] = None,
+    approval_mode: Optional[str] = None,
 ) -> dict[str, Any]:
-    """Render one PHI-safe result object from a closed reason code."""
+    """Render one PHI-safe result object from a closed reason code.
+
+    ``approval_mode`` is the per-save approval mode the run used (Flow's
+    report) or that the operator chose; it is recorded under ``technical``.
+    """
     spec = REASONS.get(reason)
     if spec is None:
         reason = "result_unreadable"
@@ -717,6 +770,8 @@ def build_result(
         technical["execution_outcome"] = execution_outcome
     if transaction_outcome in TRANSACTION_OUTCOMES:
         technical["transaction_outcome"] = transaction_outcome
+    if approval_mode in APPROVAL_MODES:
+        technical["approval_mode"] = approval_mode
     if technical:
         result["technical"] = technical
     return result
@@ -788,7 +843,14 @@ RUN_RESULT_SCHEMA: dict[str, Any] = {
                 "engine": {"type": "string", "enum": ["flow", "simulated"]},
             },
         },
-        "technical": {"type": "object"},
+        "technical": {
+            "type": "object",
+            "properties": {
+                "execution_outcome": {"type": "string"},
+                "transaction_outcome": {"type": "string"},
+                "approval_mode": {"type": "string", "enum": list(APPROVAL_MODES)},
+            },
+        },
     },
     "required": [
         "outcome",

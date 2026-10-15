@@ -7,6 +7,7 @@ import sys
 from collections.abc import Mapping
 
 from openadapt_agent.cli import main as cli_main
+from openadapt_agent.runner import default_runs_dir
 
 _TRUE = frozenset({"1", "true", "yes", "on"})
 _FALSE = frozenset({"", "0", "false", "no", "off"})
@@ -28,7 +29,7 @@ def build_argv(environ: Mapping[str, str]) -> list[str]:
     if not bundles_dir:
         raise ValueError("Choose a workflow bundle directory before starting OpenAdapt")
 
-    runs_dir = environ.get("OPENADAPT_AGENT_RUNS_DIR", "").strip() or "runs"
+    runs_dir = environ.get("OPENADAPT_AGENT_RUNS_DIR", "").strip() or str(default_runs_dir())
     argv = ["serve", "--bundles", bundles_dir, "--runs-dir", runs_dir]
 
     if _boolean(environ, "OPENADAPT_AGENT_ALLOW_RUN"):
@@ -39,6 +40,9 @@ def build_argv(environ: Mapping[str, str]) -> list[str]:
     deployment_config = environ.get("OPENADAPT_AGENT_DEPLOYMENT_CONFIG", "").strip()
     if deployment_config:
         argv.extend(("--config", deployment_config))
+    policy = environ.get("OPENADAPT_AGENT_POLICY", "").strip()
+    if policy:
+        argv.extend(("--policy", policy))
     if _boolean(environ, "OPENADAPT_AGENT_HEADED"):
         argv.append("--headed")
 
