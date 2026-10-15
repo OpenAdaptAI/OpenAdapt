@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import hashlib
 import importlib.util
 import json
@@ -9,13 +10,11 @@ from pathlib import Path
 import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
-SCRIPT = ROOT / "scripts" / "prepare_flow_admission_candidate.py"
+SCRIPT = ROOT / "scripts" / "flow_admission.py"
 sys.path.insert(0, str(ROOT / "scripts"))
 from release_platform_versions import COMPONENT_PACKAGES  # noqa: E402
 
-SPEC = importlib.util.spec_from_file_location(
-    "prepare_flow_admission_candidate", SCRIPT
-)
+SPEC = importlib.util.spec_from_file_location("flow_admission", SCRIPT)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
 sys.modules[SPEC.name] = MODULE
@@ -84,38 +83,6 @@ def _payloads() -> dict[str, bytes]:
     }
 
 
-def _registry(entry: dict | None = None) -> dict:
-    return {
-        "$schema": "schemas/evidence-registry.schema.json",
-        "schema_version": "openadapt.production-evidence-registry/v2",
-        "repository": "OpenAdaptAI/.github",
-        "repository_id": "858454062",
-        "repository_owner_id": "132681217",
-        "revision": 4,
-        "previous_registry_head_sha256": "sha256:" + "a" * 64,
-        "registry_head_sha256": "sha256:" + "b" * 64,
-        "signer_registry": {},
-        "signer_registry_history": [],
-        "entries": [] if entry is None else [entry],
-    }
-
-
-def _admission_entry() -> dict:
-    return {
-        "registry_entry_sha256": "sha256:" + "1" * 64,
-        "kind": "qualification-release",
-        "object_schema_version": "openadapt.qualification-release/v2",
-        "object_media_type": "application/vnd.openadapt.qualification-release+json;version=2",
-        "object_path": "production-evidence/objects/sha256/22/"
-        + "2" * 64
-        + ".qualification-release.json",
-        "object_sha256": "sha256:" + "2" * 64,
-        "semantic_identity_sha256": "sha256:" + "3" * 64,
-        "size_bytes": 1200,
-        "subject_sha256": None,
-    }
-
-
 def test_stages_exact_flow_bytes_and_closed_inventory(tmp_path: Path) -> None:
     payloads = _payloads()
     candidate = MODULE.load_flow_candidate(_manifest(tmp_path, payloads), "2.0.0")
@@ -178,50 +145,105 @@ def test_refuses_downloaded_bytes_that_differ_from_the_manifest(tmp_path: Path) 
         )
 
 
-def test_selects_the_last_registered_release_admission() -> None:
-    older = _admission_entry()
-    older["object_sha256"] = "sha256:" + "4" * 64
-    latest = _admission_entry()
-    registry = _registry()
-    registry["entries"] = [older, latest]
+def _signed_root(tmp_path: Path):
+    """A launcher root with a manifest, a fresh test key, and a signed admission."""
 
-    reference = MODULE.select_release_admission_reference(registry, "c" * 40)
+    root = tmp_path / "launcher"
+    root.mkdir(parents=True)
+    manifest = _manifest(root, _payloads())
+    candidate = MODULE.load_flow_candidate(manifest, "2.0.0")
+    digests = {item.name: item.sha256 for item in candidate.artifacts}
+    key = tmp_path / "test-admission-key.pem"
+    MODULE.sign_admission(root, candidate, key, pypi_digests=lambda _v: digests)
+    return root, candidate, key
 
-    assert reference["schema_version"] == (
-        "openadapt.production-evidence-object-reference/v2"
+
+def test_sign_then_verify_round_trip(tmp_path: Path) -> None:
+    root, candidate, key = _signed_root(tmp_path)
+
+    assert oct(key.stat().st_mode & 0o777) == "0o600"
+    signer = MODULE.verify_admission(root, candidate)
+    keys = json.loads((root / "release-admission/trusted-keys.json").read_text())
+    assert [entry["key_id"] for entry in keys["keys"]] == [signer]
+    assert "PRIVATE" not in (root / "release-admission/trusted-keys.json").read_text()
+
+
+def test_resigning_with_the_same_key_does_not_duplicate_it(tmp_path: Path) -> None:
+    root, candidate, key = _signed_root(tmp_path)
+    digests = {item.name: item.sha256 for item in candidate.artifacts}
+    MODULE.sign_admission(root, candidate, key, pypi_digests=lambda _v: digests)
+    keys = json.loads((root / "release-admission/trusted-keys.json").read_text())
+    assert len(keys["keys"]) == 1
+
+
+def test_refuses_a_missing_admission(tmp_path: Path) -> None:
+    root, candidate, _ = _signed_root(tmp_path)
+    (root / "release-admission/flow-1.35.0.json").unlink()
+    with pytest.raises(ValueError, match="no signed admission"):
+        MODULE.verify_admission(root, candidate)
+
+
+def test_refuses_when_no_trusted_key_is_committed(tmp_path: Path) -> None:
+    root, candidate, _ = _signed_root(tmp_path)
+    (root / "release-admission/trusted-keys.json").write_text(
+        json.dumps({"schema_version": MODULE.TRUSTED_KEYS_SCHEMA, "keys": []})
     )
-    assert reference["registry_source_commit"] == "c" * 40
-    assert reference["registry_revision"] == 4
-    assert reference["object_sha256"] == latest["object_sha256"]
+    with pytest.raises(ValueError, match="no trusted admission key"):
+        MODULE.verify_admission(root, candidate)
 
 
-def test_refuses_a_registry_without_a_release_admission() -> None:
-    with pytest.raises(ValueError, match="no registered Flow release admission"):
-        MODULE.select_release_admission_reference(_registry(), "c" * 40)
+def test_refuses_an_admission_for_different_bytes(tmp_path: Path) -> None:
+    root, _, _ = _signed_root(tmp_path)
+    manifest = root / "platform-manifest.json"
+    document = json.loads(manifest.read_text())
+    document["components"]["flow"]["artifacts"][0]["sha256"] = "f" * 64
+    manifest.write_text(json.dumps(document))
+    other = MODULE.load_flow_candidate(manifest, "2.0.0")
+    with pytest.raises(ValueError, match="does not match the exact Flow release"):
+        MODULE.verify_admission(root, other)
 
 
-def test_refuses_extra_release_admission_entry_fields() -> None:
-    entry = _admission_entry()
-    entry["registry_source_commit"] = "d" * 40
+def test_refuses_a_tampered_signature(tmp_path: Path) -> None:
+    root, candidate, _ = _signed_root(tmp_path)
+    path = root / "release-admission/flow-1.35.0.json"
+    document = json.loads(path.read_text())
+    raw = bytearray(base64.b64decode(document["signature"]["value"]))
+    raw[0] ^= 1
+    document["signature"]["value"] = base64.b64encode(bytes(raw)).decode()
+    path.write_text(json.dumps(document))
+    with pytest.raises(ValueError, match="does not verify"):
+        MODULE.verify_admission(root, candidate)
 
-    with pytest.raises(ValueError, match="entry fields differ"):
-        MODULE.select_release_admission_reference(_registry(entry), "c" * 40)
 
-
-def test_github_outputs_are_single_line_canonical_json(tmp_path: Path) -> None:
-    output = tmp_path / "github-output"
-    MODULE._write_github_outputs(
-        output,
-        {
-            "document": json.dumps(
-                {"b": 2, "a": 1}, sort_keys=True, separators=(",", ":")
-            )
-        },
+def test_refuses_a_signature_from_an_untrusted_key(tmp_path: Path) -> None:
+    root, candidate, _ = _signed_root(tmp_path)
+    other_root, _, _ = _signed_root(tmp_path / "other")
+    # Same payload, signed by a different key that this root does not trust.
+    (root / "release-admission/flow-1.35.0.json").write_text(
+        (other_root / "release-admission/flow-1.35.0.json").read_text()
     )
+    with pytest.raises(ValueError, match="not trusted"):
+        MODULE.verify_admission(root, candidate)
 
-    assert output.read_text(encoding="utf-8") == 'document={"a":1,"b":2}\n'
+
+def test_sign_refuses_when_pypi_digests_differ(tmp_path: Path) -> None:
+    root = tmp_path / "launcher"
+    root.mkdir()
+    candidate = MODULE.load_flow_candidate(_manifest(root, _payloads()), "2.0.0")
+    with pytest.raises(ValueError, match="PyPI digest differs"):
+        MODULE.sign_admission(
+            root, candidate, tmp_path / "k.pem", pypi_digests=lambda _v: {}
+        )
+    assert not (tmp_path / "k.pem").exists()
 
 
-def test_refuses_multiline_github_output(tmp_path: Path) -> None:
-    with pytest.raises(ValueError, match="line break"):
-        MODULE._write_github_outputs(tmp_path / "output", {"bad": "one\ntwo"})
+def test_verify_cli_fails_closed_without_an_admission(tmp_path: Path, capsys) -> None:
+    root = tmp_path / "launcher"
+    root.mkdir()
+    _manifest(root, _payloads())
+    (root / "pyproject.toml").write_text('[project]\nversion = "2.0.0"\n')
+    code = MODULE.main(
+        ["verify", "--root", str(root), "--artifact-root", str(tmp_path / "a")]
+    )
+    assert code == 1
+    assert "FAIL" in capsys.readouterr().err

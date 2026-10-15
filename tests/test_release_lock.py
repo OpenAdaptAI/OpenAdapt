@@ -101,12 +101,8 @@ def test_release_workflow_pins_actions_and_separates_permissions():
         "cancel-in-progress": False,
     }
     jobs = document["jobs"]
-    assert jobs["stage-flow-admission"]["permissions"] == {"contents": "read"}
-    assert jobs["verify-flow-admission"]["permissions"] == {
-        "contents": "read",
-        "attestations": "read",
-        "id-token": "write",
-    }
+    assert "stage-flow-admission" not in jobs
+    assert jobs["verify-flow-admission"]["permissions"] == {"contents": "read"}
     assert jobs["create-release-tag"]["permissions"] == {"contents": "read"}
     assert jobs["build-and-attest"]["permissions"] == {
         "contents": "read",
@@ -260,30 +256,15 @@ def test_release_workflow_requires_the_exact_flow_admission_before_tag_or_publis
     workflow = workflow_path.read_text(encoding="utf-8")
     jobs = document["jobs"]
 
-    stage = jobs["stage-flow-admission"]
-    candidate = next(step for step in stage["steps"] if step.get("id") == "candidate")
-    transfer = next(
-        step
-        for step in stage["steps"]
-        if step["name"] == "Transfer the exact Flow admission candidate"
-    )
-    assert "scripts/prepare_flow_admission_candidate.py" in candidate["run"]
-    assert "--manifest platform-manifest.json" in candidate["run"]
-    assert candidate["env"]["GH_TOKEN"] == "${{ github.token }}"
-    assert transfer["with"]["name"] == "flow-admission-candidate"
-    assert transfer["with"]["retention-days"] == 1
-
     verify = jobs["verify-flow-admission"]
-    central = "c05ff5c0633e0a1f63d9af74eeb69c31dac3e9ba"
-    assert verify["uses"] == (
-        "OpenAdaptAI/.github/.github/workflows/"
-        f"verify-production-release-admission.yml@{central}"
+    step = next(
+        step
+        for step in verify["steps"]
+        if step["name"] == "Verify the exact Flow bytes and their signed admission"
     )
-    assert verify["with"]["central_verifier_sha"] == central
-    assert verify["with"]["expected_target"] == "flow"
-    assert verify["with"]["expected_repository"] == "OpenAdaptAI/openadapt-flow"
-    assert verify["with"]["expected_repository_id"] == "1291376938"
-    assert verify["with"]["candidate_artifact_name"] == (transfer["with"]["name"])
+    assert "python scripts/flow_admission.py verify" in step["run"]
+    assert "uses" not in verify
+    assert "secrets" not in workflow.split("create-release-tag:")[0]
 
     create = jobs["create-release-tag"]
     build = jobs["build-and-attest"]
@@ -295,7 +276,6 @@ def test_release_workflow_requires_the_exact_flow_admission_before_tag_or_publis
         "Create and push only the annotated release tag"
     )
     report = jobs["report-release-failure"]
-    assert "needs.stage-flow-admission.result == 'failure'" in report["if"]
     assert "needs.verify-flow-admission.result == 'failure'" in report["if"]
 
 
