@@ -15,6 +15,41 @@
 
 <!-- version list -->
 
+## v2.0.0 (2026-10-15)
+
+### ⚠ Breaking change: every saving run is gated by default
+
+- `openadapt-flow run` now uses the `each_item` approval mode unless the run names a mode ([#497](https://github.com/OpenAdaptAI/openadapt-flow/pull/497)). Before 2.0.0 only the Standard and Regulated profiles were gated by default; a Demo or profile-less run saved without asking.
+- What you will notice: a run that reaches a consequential save now pauses until a person approves that entry (`openadapt-flow item-approval`, Desktop, or an attended agent), instead of saving straight away.
+- To keep the old behavior for a run, opt out explicitly: `openadapt-flow run BUNDLE --approval-mode not_gated`, or set `runtime.approval_mode: not_gated` in the deployment config (`--config`). The run report records that the run was not gated. `--approval-mode problems_only` sends only problems to a person.
+- A resumed run keeps its own recorded mode.
+
+### Features
+
+- Attach Cloud's signed Execute receipt (the Seal) to a VERIFIED run report: `run --cloud-execution-id` and `attach-seal` ([#506](https://github.com/OpenAdaptAI/openadapt-flow/pull/506)).
+- Send repair candidates to Cloud review and take decisions back ([#502](https://github.com/OpenAdaptAI/openadapt-flow/pull/502)).
+- DOM page-structure identity for form fields ([#503](https://github.com/OpenAdaptAI/openadapt-flow/pull/503)).
+- A click that only opens a confirmation dialog is not the save ([#499](https://github.com/OpenAdaptAI/openadapt-flow/pull/499)).
+- Identify web apps by address and signed-in session ([#498](https://github.com/OpenAdaptAI/openadapt-flow/pull/498)).
+- Run the UI read-back as a pilot under per-entry approval only ([#500](https://github.com/OpenAdaptAI/openadapt-flow/pull/500)).
+- A person approves each save; readiness drills run from Desktop ([#486](https://github.com/OpenAdaptAI/openadapt-flow/pull/486)).
+- Bind an unlabeled Save to the form it submits ([#496](https://github.com/OpenAdaptAI/openadapt-flow/pull/496)).
+- Let a private pack check the saved record through deployment config ([#495](https://github.com/OpenAdaptAI/openadapt-flow/pull/495)).
+- Check a save through the app's record page in a separate session ([#492](https://github.com/OpenAdaptAI/openadapt-flow/pull/492)).
+- One-command demo page and truthful first-run wording ([#483](https://github.com/OpenAdaptAI/openadapt-flow/pull/483)).
+
+### Performance
+
+- About 29% faster OpenEMR referral replay without weakening checks ([#501](https://github.com/OpenAdaptAI/openadapt-flow/pull/501)).
+
+### Bug Fixes
+
+- Carry the recorded fix target and place the fix after a step that acted ([#494](https://github.com/OpenAdaptAI/openadapt-flow/pull/494)).
+- Size the attached test browser's real window ([#493](https://github.com/OpenAdaptAI/openadapt-flow/pull/493)).
+- Fail closed on uncertain run outcomes and redact emitted skills ([#484](https://github.com/OpenAdaptAI/openadapt-flow/pull/484)).
+- Treat an icon-only Save as a save; start runs in the signed-in browser ([#487](https://github.com/OpenAdaptAI/openadapt-flow/pull/487)).
+- Stop false right-record halts on changed names; repair the OpenEMR harness ([#485](https://github.com/OpenAdaptAI/openadapt-flow/pull/485)).
+
 ## v1.35.1 (2026-09-08)
 
 ### Bug Fixes
