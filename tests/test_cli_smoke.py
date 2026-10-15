@@ -370,30 +370,30 @@ def test_launcher_flow_and_substrate_extras_metadata():
 
     assert (
         metadata["dependencies"].count(
-            f"openadapt-flow[browser,hosted]>=1.35.0,<2.0.0; {supported}"
+            f"openadapt-flow[browser,hosted]>=2.0.0,<3.0.0; {supported}"
         )
         == 1
     )
     assert (
-        metadata["dependencies"].count(f"openadapt-agent>=2.0.1,<3; {supported}") == 1
+        metadata["dependencies"].count(f"openadapt-agent>=2.1.0,<3; {supported}") == 1
     )
-    assert extras["flow"] == [f"openadapt-flow>=1.35.0,<2.0.0; {supported}"]
-    assert extras["agent"] == [f"openadapt-agent>=2.0.1,<3; {supported}"]
-    assert extras["browser"] == [f"openadapt-flow[browser]>=1.35.0,<2.0.0; {supported}"]
-    assert extras["privacy"] == [f"openadapt-flow[privacy]>=1.35.0,<2.0.0; {supported}"]
+    assert extras["flow"] == [f"openadapt-flow>=2.0.0,<3.0.0; {supported}"]
+    assert extras["agent"] == [f"openadapt-agent>=2.1.0,<3; {supported}"]
+    assert extras["browser"] == [f"openadapt-flow[browser]>=2.0.0,<3.0.0; {supported}"]
+    assert extras["privacy"] == [f"openadapt-flow[privacy]>=2.0.0,<3.0.0; {supported}"]
     assert extras["capture"] == [
         "openadapt-capture>=1.2.0,<2.0.0",
-        f"openadapt-flow[capture]>=1.35.0,<2.0.0; {supported}",
+        f"openadapt-flow[capture]>=2.0.0,<3.0.0; {supported}",
     ]
-    assert extras["windows"] == [f"openadapt-flow[windows]>=1.35.0,<2.0.0; {supported}"]
+    assert extras["windows"] == [f"openadapt-flow[windows]>=2.0.0,<3.0.0; {supported}"]
     assert extras["macos"] == [
-        "openadapt-flow[macos]>=1.35.0,<2.0.0; "
+        "openadapt-flow[macos]>=2.0.0,<3.0.0; "
         f"sys_platform == 'darwin' and {supported}"
     ]
     assert extras["linux"] == [
-        f"openadapt-flow[linux]>=1.35.0,<2.0.0; sys_platform == 'linux' and {supported}"
+        f"openadapt-flow[linux]>=2.0.0,<3.0.0; sys_platform == 'linux' and {supported}"
     ]
-    assert extras["rdp"] == [f"openadapt-flow[rdp]>=1.35.0,<2.0.0; {supported}"]
+    assert extras["rdp"] == [f"openadapt-flow[rdp]>=2.0.0,<3.0.0; {supported}"]
     assert extras["all"] == [
         "openadapt[browser,core,grounding,retrieval,privacy,flow,windows,rdp,agent]",
         "openadapt[macos]; sys_platform == 'darwin'",
@@ -796,7 +796,7 @@ def test_deploy_preflight_fails_for_unsupported_flow(monkeypatch, flow_version):
 
     assert result.exit_code != 0
     assert "[UNSUPPORTED]" in result.output
-    assert ">=1.35.0,<2.0.0" in result.output
+    assert ">=2.0.0,<3.0.0" in result.output
     assert "Preflight passed" not in result.output
 
 

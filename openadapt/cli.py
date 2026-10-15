@@ -622,7 +622,7 @@ def quickstart(
 _SECRET_REFERENCE = re.compile(r"^(?:env:[A-Z][A-Z0-9_]*|keychain:[^/\s]+/[^/\s]+)$")
 # Flow 1.33 and 1.34 probe four X11 libraries in the wrong case, so on Linux
 # they refuse to download Chromium on hosts that have them. 1.35.0 fixed it.
-_SUPPORTED_FLOW_RANGE = ">=1.35.0,<2.0.0"
+_SUPPORTED_FLOW_RANGE = ">=2.0.0,<3.0.0"
 _RDP_INSTALL_COMMAND = _pip_install("openadapt[rdp]")
 _CHROMIUM_SYSTEM_LIBS_COMMAND = (
     f"{shlex.quote(sys.executable)} -m playwright install-deps chromium"
