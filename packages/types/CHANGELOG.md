@@ -1,6 +1,80 @@
 # CHANGELOG
 
 
+## v0.20.0 (2026-10-15)
+
+### Chores
+
+- Sync the published source policy ([#42](https://github.com/OpenAdaptAI/openadapt-types/pull/42),
+  [`c9113b8`](https://github.com/OpenAdaptAI/openadapt-types/commit/c9113b82b75d73b96dce34b1a09cdf7865276ce1))
+
+Replace source-policy.public.json with the render of the canonical policy on openadapt-internal main
+  (policy_last_updated 2026-09-03).
+
+Co-authored-by: Claude Opus 5.5 <noreply@anthropic.com>
+
+### Documentation
+
+- Lead the README with what the package does and a quick start
+  ([#43](https://github.com/OpenAdaptAI/openadapt-types/pull/43),
+  [`49a3b59`](https://github.com/OpenAdaptAI/openadapt-types/commit/49a3b59f51a4f34820e187cecf5f765d9913a0c8))
+
+* docs: lead the README with what the package does and a quick start
+
+The README now opens with what the models describe, who they are for, and a quick start that runs as
+  written against the PyPI release (0.19.0). The contract table (admission registry, process
+  receipts, Execute, authoring, clinic, reward) moves to an index at the top of docs/CONTRACTS.md,
+  which the README links once. The README also stops claiming that the grounding and privacy
+  packages use these types, and that the screen model covers RDP and Citrix, since the code doesn't
+  support either claim.
+
+Links in the README are absolute GitHub URLs, because PyPI shows the same page and doesn't resolve
+  relative links. docs/CONTRACTS.md had a broken relative link to examples/execute; it now points
+  one level up.
+
+New checks in tests/test_readme_claims.py: - every Python block in the README runs, and prints what
+  its comments say - the README passes the vocabulary lint at the business level - the README has no
+  relative links - the docs/CONTRACTS.md index names every shipped schema file
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+* docs: correct README claims found by running it from PyPI
+
+A first run of the README against openadapt-types 0.19.0 turned up claims the code doesn't support:
+
+- The converter example imported from_benchmark_action from _compat. The package exports a
+  different, public from_benchmark_action that detects normalized coordinates; the _compat one
+  treats {"x": 0.5, "y": 0.3} as pixels. The example now uses the public function and prints
+  is_normalized. - "Every model round-trips through JSON" fails for a ComputerState that holds
+  screenshot_png bytes, and so does Episode.to_json(). Limits now says so and names screenshot_path
+  and screenshot_base64. - The parse_action() section recommends node_id targets, but the
+  NAME(arg=value) form drops node_id and description. Limits now says so. - plain_outcome() maps
+  OpenAdapt run statuses, not any run's. The section and the PlainOutcomeV1 row now say OpenAdapt. -
+  The forty files under schemas/ are not all JSON Schema: one is OpenAPI and two are test vectors.
+  The README and docs/CONTRACTS.md now say so.
+
+The package docstring's quick start used ActionTarget without importing it. It now imports it, and a
+  test runs it. Two more tests fail when a fix removes a limit the README still lists.
+
+---------
+
+Co-authored-by: Claude Opus 5.5 <noreply@anthropic.com>
+
+### Features
+
+- **execute**: Optional Cloud issuer seal_signature on ExecuteEvidenceReceiptV1
+  ([#44](https://github.com/OpenAdaptAI/openadapt-types/pull/44),
+  [`0de097a`](https://github.com/OpenAdaptAI/openadapt-types/commit/0de097af8210227f96aaac5923880382ac244fca))
+
+Adds openadapt_types.seal: SealSignatureV1 (openadapt.seal-signature/v1), key registry parsing, and
+  fail-closed verify_seal_signature / verify_sealed_receipt, byte-compatible with Cloud's
+  sealSignature.ts (a TypeScript-generated test vector verifies in Python). The receipt gains an
+  optional seal_signature; existing receipts stay valid and are unsigned. Verification needs
+  cryptography and refuses without it.
+
+Signed-off-by: Richard Abrich <richard.abrich@mldsai.com>
+
+
 ## v0.19.0 (2026-10-14)
 
 ### Features
