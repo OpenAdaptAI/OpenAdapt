@@ -103,6 +103,8 @@ class ExecuteWebhookEventTypeV1(str, Enum):
     EXECUTION_STATE_CHANGED = "execution.state_changed"
     EXECUTION_TERMINAL = "execution.terminal"
     DECISION_REQUIRED = "execution.decision_required"
+    # Opt-in per endpoint: delivered only to endpoints subscribed to it.
+    EXECUTION_HALTED = "execution.halted"
 
 
 class ExecuteAuthorizationContextV1(_StrictContract):
@@ -283,6 +285,26 @@ class ExecuteTerminalWebhookV1(_SignedExecuteWebhookV1):
     receipt: ExecuteEvidenceReceiptV1
 
 
+class ExecuteHaltedWebhookV1(_SignedExecuteWebhookV1):
+    """A run stopped before any effect.
+
+    Carries the same receipt as ``execution.terminal``. Cloud sends it only to
+    endpoints that subscribed to ``execution.halted``; it never replaces the
+    terminal event.
+    """
+
+    event_type: Literal[ExecuteWebhookEventTypeV1.EXECUTION_HALTED] = (
+        ExecuteWebhookEventTypeV1.EXECUTION_HALTED
+    )
+    receipt: ExecuteEvidenceReceiptV1
+
+    @model_validator(mode="after")
+    def _halted_receipt(self) -> "ExecuteHaltedWebhookV1":
+        if self.receipt.outcome is not ExecuteTerminalOutcomeV1.HALTED_BEFORE_EFFECT:
+            raise ValueError("execution.halted requires a halted_before_effect receipt")
+        return self
+
+
 ExecuteDecisionTaskV1: TypeAlias = Annotated[
     HumanDecisionTaskV1 | BusinessDecisionTaskV1,
     Field(discriminator="schema_version"),
@@ -301,6 +323,7 @@ ExecuteWebhookV1: TypeAlias = (
     ExecuteStateChangedWebhookV1
     | ExecuteTerminalWebhookV1
     | ExecuteDecisionRequiredWebhookV1
+    | ExecuteHaltedWebhookV1
 )
 
 
@@ -314,6 +337,7 @@ def sign_execute_webhook_hmac(
         ExecuteWebhookEventTypeV1.EXECUTION_STATE_CHANGED: ExecuteStateChangedWebhookV1,
         ExecuteWebhookEventTypeV1.EXECUTION_TERMINAL: ExecuteTerminalWebhookV1,
         ExecuteWebhookEventTypeV1.DECISION_REQUIRED: ExecuteDecisionRequiredWebhookV1,
+        ExecuteWebhookEventTypeV1.EXECUTION_HALTED: ExecuteHaltedWebhookV1,
     }
     try:
         model = model_by_event[ExecuteWebhookEventTypeV1(event_type)]

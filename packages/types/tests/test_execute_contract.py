@@ -194,6 +194,33 @@ def test_webhook_signature_binds_the_closed_state_payload() -> None:
     assert not webhook.model_copy(update={"delivery_attempt": 2}).verify_hmac(key)
 
 
+def test_halted_webhook_carries_only_a_halted_before_effect_receipt() -> None:
+    key = b"k" * 32
+    halted = _receipt(
+        outcome=ExecuteTerminalOutcomeV1.HALTED_BEFORE_EFFECT,
+        contracts=_contract(
+            effect_passed=False, postcondition_passed=False, observed_effect_strength=None
+        ),
+        oracle_tier=0,
+    )
+    fields = {
+        "event_type": ExecuteWebhookEventTypeV1.EXECUTION_HALTED,
+        "event_id": "event_12345678",
+        "delivery_attempt": 1,
+        "issued_at": "2026-07-29T12:00:00Z",
+        "issuer_key_id": "webhook_key_12345678",
+        "receipt": halted.model_dump(mode="json"),
+    }
+    webhook = sign_execute_webhook_hmac(key=key, fields=fields)
+    assert webhook.event_type is ExecuteWebhookEventTypeV1.EXECUTION_HALTED
+    assert webhook.verify_hmac(key)
+    with pytest.raises(ValueError):
+        sign_execute_webhook_hmac(
+            key=key, fields={**fields, "receipt": _receipt().model_dump(mode="json")}
+        )
+    assert "executionHalted" in execute_openapi_document()["webhooks"]
+
+
 def test_packaged_openapi_is_the_generated_public_contract() -> None:
     generated = execute_openapi_document()
     packaged = files("openadapt_types.schemas").joinpath("execute-v1-openapi.json")

@@ -624,6 +624,63 @@
         "title": "ExecuteEvidenceReceiptV1",
         "type": "object"
       },
+      "ExecuteHaltedWebhookV1": {
+        "additionalProperties": false,
+        "description": "A run stopped before any effect.\n\nCarries the same receipt as ``execution.terminal``. Cloud sends it only to\nendpoints that subscribed to ``execution.halted``; it never replaces the\nterminal event.",
+        "properties": {
+          "delivery_attempt": {
+            "maximum": 100,
+            "minimum": 1,
+            "title": "Delivery Attempt",
+            "type": "integer"
+          },
+          "event_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Event Id",
+            "type": "string"
+          },
+          "event_type": {
+            "const": "execution.halted",
+            "default": "execution.halted",
+            "title": "Event Type",
+            "type": "string"
+          },
+          "issued_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d{1,9})?(Z|[+-]\\d{2}:\\d{2})$",
+            "title": "Issued At",
+            "type": "string"
+          },
+          "issuer_key_id": {
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+            "title": "Issuer Key Id",
+            "type": "string"
+          },
+          "receipt": {
+            "$ref": "#/components/schemas/ExecuteEvidenceReceiptV1"
+          },
+          "schema_version": {
+            "const": "openadapt.execute-webhook/v1",
+            "default": "openadapt.execute-webhook/v1",
+            "title": "Schema Version",
+            "type": "string"
+          },
+          "signature": {
+            "pattern": "^hmac-sha256:[0-9a-f]{64}$",
+            "title": "Signature",
+            "type": "string"
+          }
+        },
+        "required": [
+          "event_id",
+          "delivery_attempt",
+          "issued_at",
+          "issuer_key_id",
+          "signature",
+          "receipt"
+        ],
+        "title": "ExecuteHaltedWebhookV1",
+        "type": "object"
+      },
       "ExecuteLifecycleStateV1": {
         "enum": [
           "queued",
@@ -1472,6 +1529,27 @@
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ExecuteDecisionRequiredWebhookV1"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "204": {
+            "description": "Accepted by endpoint."
+          }
+        },
+        "security": []
+      }
+    },
+    "executionHalted": {
+      "post": {
+        "description": "Opt-in: sent only to endpoints subscribed to execution.halted, alongside execution.terminal, when a run stops before any effect. Verify the body HMAC with the published Execute v1 webhook contract before accepting this delivery.",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ExecuteHaltedWebhookV1"
               }
             }
           },

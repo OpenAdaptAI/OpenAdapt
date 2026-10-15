@@ -14,6 +14,7 @@ from openadapt_types.execute import (
     ExecuteRequestV1,
     ExecuteStateChangedWebhookV1,
     ExecuteStatusV1,
+    ExecuteHaltedWebhookV1,
     ExecuteTerminalWebhookV1,
 )
 
@@ -30,6 +31,7 @@ def execute_openapi_document() -> dict[str, Any]:
             (ExecuteStateChangedWebhookV1, "validation"),
             (ExecuteTerminalWebhookV1, "validation"),
             (ExecuteDecisionRequiredWebhookV1, "validation"),
+            (ExecuteHaltedWebhookV1, "validation"),
         ],
         ref_template="#/components/schemas/{model}",
     )
@@ -166,6 +168,29 @@ def execute_openapi_document() -> dict[str, Any]:
                             "application/json": {
                                 "schema": {
                                     "$ref": "#/components/schemas/ExecuteDecisionRequiredWebhookV1"
+                                }
+                            }
+                        },
+                    },
+                    "responses": {"204": {"description": "Accepted by endpoint."}},
+                }
+            },
+            "executionHalted": {
+                "post": {
+                    "security": [],
+                    "description": (
+                        "Opt-in: sent only to endpoints subscribed to "
+                        "execution.halted, alongside execution.terminal, when a "
+                        "run stops before any effect. Verify the body HMAC with "
+                        "the published Execute v1 webhook contract before "
+                        "accepting this delivery."
+                    ),
+                    "requestBody": {
+                        "required": True,
+                        "content": {
+                            "application/json": {
+                                "schema": {
+                                    "$ref": "#/components/schemas/ExecuteHaltedWebhookV1"
                                 }
                             }
                         },

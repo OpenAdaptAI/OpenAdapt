@@ -92,7 +92,9 @@ Cloud control-plane internals.
 The generated OpenAPI document is packaged at
 `openadapt_types/schemas/execute-v1-openapi.json`. It defines asynchronous
 execution submission, lifecycle status, terminal evidence receipts, and signed
-decision and terminal webhooks. It keeps `waiting_for_reconciliation` as a
+decision and terminal webhooks, plus the opt-in `execution.halted` webhook.
+Cloud sends `execution.halted` only to endpoints subscribed to it, next to
+`execution.terminal`, when a run stops before any effect. It keeps `waiting_for_reconciliation` as a
 lifecycle state and `reconciliation_required` as a terminal outcome. A
 `verified` receipt needs an oracle read at tier 2 or 3 (see
 [Oracle tiers](#oracle-tiers)).
