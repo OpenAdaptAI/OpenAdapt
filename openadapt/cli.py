@@ -939,6 +939,32 @@ def agent(command_ctx: click.Context) -> None:
     sys.exit(int(agent_main(list(command_ctx.args)) or 0))
 
 
+@main.command(
+    "seal",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def seal(command_ctx: click.Context) -> None:
+    """Check an OpenAdapt Seal offline: `openadapt seal verify <file|url>`.
+
+    Also `openadapt seal keys pin` to pin Cloud's Seal keys after a person
+    confirms them. Every argument passes to `openadapt-agent seal` unchanged.
+    """
+    _require_supported_python()
+    try:
+        from openadapt_agent import seal_cli  # noqa: F401
+        from openadapt_agent.cli import main as agent_main
+    except ImportError:
+        click.echo("Error: this openadapt-agent cannot check Seals.", err=True)
+        click.echo("Upgrade with: pip install --upgrade openadapt-agent", err=True)
+        sys.exit(1)
+    sys.exit(int(agent_main(["seal", *command_ctx.args]) or 0))
+
+
 @main.command("connect")
 @click.option(
     "--pairing", default=None, help="Five-minute pairing code from Cloud settings"
