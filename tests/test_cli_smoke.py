@@ -387,7 +387,8 @@ def test_launcher_flow_and_substrate_extras_metadata():
     ]
     assert extras["windows"] == [f"openadapt-flow[windows]>=2.0.0,<3.0.0; {supported}"]
     assert extras["macos"] == [
-        f"openadapt-flow[macos]>=2.0.0,<3.0.0; sys_platform == 'darwin' and {supported}"
+        "openadapt-flow[macos]>=2.0.0,<3.0.0; "
+        f"sys_platform == 'darwin' and {supported}"
     ]
     assert extras["linux"] == [
         f"openadapt-flow[linux]>=2.0.0,<3.0.0; sys_platform == 'linux' and {supported}"

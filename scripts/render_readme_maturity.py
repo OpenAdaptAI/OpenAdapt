@@ -473,7 +473,11 @@ def require_readme_claims(projection: Mapping[str, Any]) -> None:
                 )
         if target_id == "desktop":
             artifacts = (latest.get("release") or {}).get("artifacts") or []
-            names = [item.get("name") for item in artifacts if isinstance(item, dict)]
+            names = [
+                item.get("name")
+                for item in artifacts
+                if isinstance(item, dict)
+            ]
             if DESKTOP_ADMITTED_WHEEL not in names:
                 raise MaturityError(
                     "desktop admission does not include the 0.16.0 wheel"
