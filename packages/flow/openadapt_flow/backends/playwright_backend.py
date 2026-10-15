@@ -437,6 +437,82 @@ _REGISTER_FILLED_FIELD_JS = (
 }"""
 )
 
+# Page-structure identity of a FORM FIELD that sits in no record row.
+#
+# A data-entry form (OpenEMR's new-patient page, most CRUD screens) lays its
+# fields out in label/control groups (``.form-group.row`` and the like), not
+# table rows, so the row rule above abstains and identity used to fall to the
+# OCR band read across the field's visual row. This mirrors that band in the
+# DOM: the nearest small ancestor group that carries label text, rendered as
+# its label text plus the CURRENT VALUE of every OTHER control in the group
+# (the field values typed earlier in the run, which the OCR band also reads),
+# with the clicked control itself excluded (its own value is about to be
+# overwritten; that is mutable evidence, exactly like the OCR band's excluded
+# target crop). Select controls contribute only their selected option, never
+# the option list. Password and hidden inputs contribute nothing. Returns null
+# when the hit is not a form control or no bounded labeled group exists, so
+# identity stays on the OCR tier.
+_FIELD_GROUP_IDENTITY_JS = r"""(hit) => {
+    const clean = (value) => (value || '').replace(/\s+/g, ' ').trim();
+    const CONTROLS = 'input, select, textarea';
+    const target = hit && hit.closest ? hit.closest(CONTROLS) : null;
+    if (!target) return null;
+    const tType = (target.getAttribute('type') || '').toLowerCase();
+    if (['hidden', 'password', 'submit', 'button', 'reset', 'image']
+            .includes(tType)) {
+        return null;
+    }
+    const render = (group) => {
+        const originals = Array.from(group.querySelectorAll(CONTROLS));
+        const clone = group.cloneNode(true);
+        const copies = Array.from(clone.querySelectorAll(CONTROLS));
+        if (copies.length !== originals.length) return null;
+        for (let i = 0; i < originals.length; i += 1) {
+            const el = originals[i];
+            const type = (el.getAttribute('type') || '').toLowerCase();
+            let text = '';
+            if (el === target || type === 'hidden' || type === 'password') {
+                text = '';
+            } else if (el.localName === 'select') {
+                const opt = el.selectedOptions && el.selectedOptions[0];
+                text = opt ? clean(opt.textContent) : '';
+            } else if (type === 'checkbox' || type === 'radio') {
+                text = el.checked ? '[x]' : '[ ]';
+            } else if (typeof el.value === 'string') {
+                text = el.value;
+            }
+            copies[i].replaceWith(document.createTextNode(' ' + text + ' '));
+        }
+        for (const junk of clone.querySelectorAll('script, style, template')) {
+            junk.remove();
+        }
+        return clean(clone.textContent);
+    };
+    const labelText = (group) => {
+        const clone = group.cloneNode(true);
+        for (const c of clone.querySelectorAll(
+                CONTROLS + ', script, style, template, option')) {
+            c.remove();
+        }
+        return clean(clone.textContent);
+    };
+    let cursor = target.parentElement;
+    for (let depth = 0; cursor && depth < 4; depth += 1) {
+        const tag = cursor.localName;
+        if (tag === 'body' || tag === 'html' || tag === 'form' ||
+                tag === 'fieldset') {
+            return null;
+        }
+        if (cursor.querySelectorAll(CONTROLS).length > 8) return null;
+        if (labelText(cursor)) {
+            const identity = render(cursor);
+            return identity && identity.length <= 512 ? identity : null;
+        }
+        cursor = cursor.parentElement;
+    }
+    return null;
+}"""
+
 _STRUCTURED_TEXT_AT_JS = (
     r"""([px, py]) => {
     const el = document.elementFromPoint(px, py);
@@ -444,7 +520,12 @@ _STRUCTURED_TEXT_AT_JS = (
     const describe = """
     + _DESCRIBE_TARGET_JS
     + r""";
-    return describe(el).rowIdentity || null;
+    const rowIdentity = describe(el).rowIdentity;
+    if (rowIdentity) return rowIdentity;
+    const fieldGroupIdentity = """
+    + _FIELD_GROUP_IDENTITY_JS
+    + r""";
+    return fieldGroupIdentity(el);
 }"""
 )
 
@@ -1260,6 +1341,12 @@ class PlaywrightBackend:
         cells (MRN, name, DOB, ...). A point with NO row-like ancestor -- a
         standalone control whose own text is a mutable, healable label --
         returns None (identity for such controls stays on the OCR / heal path).
+        The one exception is a data-entry FORM FIELD (input / select /
+        textarea, never a button) inside a small labeled group: its identity
+        is the group's label text plus the current values of the group's
+        OTHER controls, excluding the field itself (see
+        ``_FIELD_GROUP_IDENTITY_JS``) -- the DOM counterpart of the OCR band
+        read across the field's row.
         Whitespace is collapsed. Returns None when nothing is under the point
         or on any evaluation failure (never raises) -- the identity ladder then
         falls back to the OCR tier.
