@@ -11,6 +11,8 @@ Subcommands:
 - ``authoring connect`` — outbound mailbox client for hosted ChatGPT.com /
   Claude.ai (claim ``oab_``, poll wait=0, Allow-per-sub). Not an HTTP
   listener. Overlay chrome stays Desktop-only.
+- ``seal verify`` / ``seal keys pin`` — check a Seal offline against keys a
+  person pinned (trust on first use, explicit rotation).
 - ``emit-skill`` — write a PHI-safe Agent Skill for one workflow from its
   card: purpose, inputs, and how to read the four outcomes.
 
@@ -301,6 +303,10 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.set_defaults(func=_cmd_emit_skill)
+
+    from openadapt_agent.seal_cli import add_seal_parser
+
+    add_seal_parser(sub)
 
     return parser
 

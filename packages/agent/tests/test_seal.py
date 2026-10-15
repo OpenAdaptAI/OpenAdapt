@@ -72,3 +72,14 @@ def test_runner_reports_sealed_only_with_pinned_keys(monkeypatch, tmp_path, runn
     monkeypatch.setenv("OPENADAPT_SEAL_KEYS_PATH", str(keys))
     payload = outcome.to_dict()
     assert payload["sealed"] is True and payload["proof"] == "sealed" and payload["outcome"] == "done"
+
+
+def test_cloud_execution_binding() -> None:
+    private, entry = _key()
+    registry = parse_registry({"keys": [entry]})
+    cloud = "0d9c1d7e-5b8a-4f7e-9a51-3f1c2b7d9e10"
+    report = {"cloud_execution_id": cloud, "execute_receipt": _sealed_receipt(private, entry, execution_id=cloud)}
+    assert run_is_sealed(report, run_id=RUN, execution_outcome="VERIFIED", registry=registry)
+    # A Seal for some other Cloud execution does not seal this run.
+    other = dict(report, cloud_execution_id="another-execution")
+    assert not run_is_sealed(other, run_id=RUN, execution_outcome="VERIFIED", registry=registry)

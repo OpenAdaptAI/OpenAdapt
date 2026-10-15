@@ -577,7 +577,12 @@ class FlowRunner:
         self.config = config
 
     def _build_command(
-        self, bundle_dir: Path, run_dir: Path, params_file: Path, url: Optional[str]
+        self,
+        bundle_dir: Path,
+        run_dir: Path,
+        params_file: Path,
+        url: Optional[str],
+        cloud_execution_id: Optional[str] = None,
     ) -> list[str]:
         cmd = [
             *self.config.flow_cli,
@@ -596,6 +601,10 @@ class FlowRunner:
             cmd += ["--policy", self.config.policy]
         if self.config.approval_mode:
             cmd += ["--approval-mode", self.config.approval_mode]
+        if cloud_execution_id:
+            # Flow fetches Cloud's signed receipt after a VERIFIED outcome and
+            # writes it into report.json (needs OPENADAPT_EXECUTE_API_KEY).
+            cmd += ["--cloud-execution-id", cloud_execution_id]
         cmd += list(self.config.extra_run_args)
         return cmd
 
@@ -607,6 +616,7 @@ class FlowRunner:
         params: dict[str, str],
         url_override: Optional[str] = None,
         run_id: Optional[str] = None,
+        cloud_execution_id: Optional[str] = None,
     ) -> RunOutcome:
         """Run the bundle once. Params travel via ``--params-file`` (never argv).
 
@@ -645,7 +655,9 @@ class FlowRunner:
         try:
             with os.fdopen(params_fd, "w") as fh:
                 json.dump({k: str(v) for k, v in (params or {}).items()}, fh)
-            cmd = self._build_command(Path(bundle_dir), run_dir, params_file, url)
+            cmd = self._build_command(
+                Path(bundle_dir), run_dir, params_file, url, cloud_execution_id
+            )
             try:
                 # Decode with replacement: a strict decode error would surface
                 # after Flow already ran and read as a launch failure.

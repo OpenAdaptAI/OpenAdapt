@@ -360,13 +360,36 @@ It claims the job, polls openadapt.ai over outgoing HTTPS, and asks you in the t
 
 Report vulnerabilities as described in [SECURITY.md](SECURITY.md).
 
+## Seals
+
+A Seal is OpenAdapt Cloud's Ed25519 signature on an Execute receipt. The agent reports `sealed: true` only when all of this holds:
+
+1. The run is connected to a Cloud Execute execution: `FlowRunner.run(..., cloud_execution_id=...)`, or `openadapt-flow run --cloud-execution-id ID`, with `OPENADAPT_EXECUTE_API_KEY` set. After a VERIFIED outcome Flow fetches Cloud's receipt and writes it into `report.json` as `execute_receipt`. `openadapt-flow attach-seal RUN_DIR --execution-id ID` does the same later.
+2. The receipt's signature verifies against keys a person pinned on this computer. The agent never fetches keys while it checks a run.
+
+Pin the keys once. Compare the printed fingerprint with the one OpenAdapt publishes before you type the key id back:
+
+```bash
+openadapt-agent seal keys pin          # fetches https://app.openadapt.ai/api/public/seal-keys
+openadapt-agent seal keys show
+```
+
+Run `pin` again when OpenAdapt rotates its key. A new key needs the same confirmation. A key that Cloud revokes is marked revoked without asking. A key Cloud stops listing stays pinned.
+
+Anyone can check a Seal offline (a receipt, a run report, or a webhook body):
+
+```bash
+openadapt-agent seal verify runs/<run_id>/report.json
+openadapt-agent seal verify https://example.com/receipt.json --json
+```
+
 ## Limits
 
 - Your agent, or a program acting for it, has to run on your customer's computer.
 - Nobody is notified when a run stops. Someone has to check `list_needs_attention` or Flow's console.
 - The check that stops a second entry covers one runs folder. Pass the same absolute `--runs-dir` every time.
 - If the server exits during a run, the run reads as `not_sure_if_saved`, and Flow may still finish it.
-- This server issues no signed receipts, so `proof` is never `sealed`.
+- This server issues no signed receipts itself. `proof` is `sealed` only when a run is connected to OpenAdapt Cloud Execute, Cloud signed its receipt, and that signature verifies against keys you pinned (see [Seals](#seals)).
 - Each call carries one request. There's no batch call.
 - Accounts, separation between customers, fleet policy, and hosted runs belong to OpenAdapt Cloud.
 

@@ -8,9 +8,12 @@ is verified. Everything else is ``sealed: false``; a verified local run is
 still done with ``proof: "local"``.
 
 The registry is the JSON from ``GET https://app.openadapt.ai/api/public/seal-keys``
-saved locally and named by ``OPENADAPT_SEAL_KEYS_PATH`` (or inline in
-``OPENADAPT_SEAL_KEYS_JSON``). It is never fetched at verification time, so a
-network attacker cannot substitute keys. Byte-compatible with
+pinned by a person with ``openadapt-agent seal keys pin`` (trust on first use,
+explicit confirmation) to ``~/.openadapt/seal-keys.json``, or named by
+``OPENADAPT_SEAL_KEYS_PATH`` (or inline in ``OPENADAPT_SEAL_KEYS_JSON``). It is
+never fetched at verification time, so a network attacker cannot substitute
+keys. A Cloud-connected run's receipt names the Cloud execution; Flow records
+that id as ``cloud_execution_id`` when it attaches the receipt. Byte-compatible with
 ``openadapt_types.seal`` and Cloud ``src/lib/sealSignature.ts``.
 """
 
@@ -67,28 +70,46 @@ def parse_registry(document: Any) -> list[dict]:
     return keys
 
 
+def default_keys_path() -> Path:
+    """Where ``openadapt-agent seal keys pin`` stores the pinned registry."""
+    return Path.home() / ".openadapt" / "seal-keys.json"
+
+
+def pinned_keys_path(env: Optional[Mapping[str, str]] = None) -> Path:
+    env = os.environ if env is None else env
+    named = env.get("OPENADAPT_SEAL_KEYS_PATH", "").strip()
+    return Path(named).expanduser() if named else default_keys_path()
+
+
 def load_pinned_registry(env: Optional[Mapping[str, str]] = None) -> list[dict]:
     """The pinned registry, or ``[]`` (which makes every Seal unverifiable)."""
     env = os.environ if env is None else env
     try:
         path = env.get("OPENADAPT_SEAL_KEYS_PATH", "").strip()
         if path:
-            return parse_registry(json.loads(Path(path).read_text(encoding="utf-8")))
+            return parse_registry(json.loads(Path(path).expanduser().read_text(encoding="utf-8")))
         inline = env.get("OPENADAPT_SEAL_KEYS_JSON", "").strip()
         if inline:
             return parse_registry(json.loads(inline))
-    except (OSError, ValueError):
+        default = default_keys_path()
+        if default.is_file():
+            return parse_registry(json.loads(default.read_text(encoding="utf-8")))
+    except (OSError, ValueError, TypeError, AttributeError):
         return []
     return []
 
 
-def verify_receipt_seal(receipt: Any, registry: Sequence[Mapping[str, Any]]) -> Optional[str]:
-    """Return the verifying key id, or ``None`` for any failure."""
+def explain_receipt_seal(
+    receipt: Any, registry: Sequence[Mapping[str, Any]]
+) -> tuple[Optional[str], str]:
+    """Return ``(key_id, "verified")`` or ``(None, closed refusal reason)``."""
     if not isinstance(receipt, Mapping):
-        return None
+        return None, "malformed"
     sig = receipt.get("seal_signature")
+    if sig is None:
+        return None, "unsigned"
     if not isinstance(sig, Mapping) or set(sig) != set(_FIELDS):
-        return None
+        return None, "malformed"
     if (
         sig["schema"] != SEAL_SIGNATURE_SCHEMA
         or sig["issuer"] != "openadapt-cloud"
@@ -98,16 +119,18 @@ def verify_receipt_seal(receipt: Any, registry: Sequence[Mapping[str, Any]]) -> 
         or not isinstance(sig["issued_at"], str) or not _ISO.match(sig["issued_at"])
         or not isinstance(sig["signature"], str)
     ):
-        return None
+        return None, "malformed"
     if sig["receipt_sha256"] != receipt_sha256(receipt):
-        return None
+        return None, "receipt_mismatch"
     if sig["run_id"] != receipt.get("execution_id"):
-        return None
+        return None, "receipt_mismatch"
+    if not registry:
+        return None, "no_pinned_keys"
     key = next((k for k in registry if k.get("key_id") == sig["key_id"]), None)
     if key is None:
-        return None
+        return None, "unknown_key"
     if key["status"] == "revoked" and (not key.get("revoked_at") or sig["issued_at"] >= key["revoked_at"]):
-        return None
+        return None, "revoked_key"
     try:
         from cryptography.exceptions import InvalidSignature
         from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
@@ -115,8 +138,51 @@ def verify_receipt_seal(receipt: Any, registry: Sequence[Mapping[str, Any]]) -> 
         payload = _DOMAIN + _canonical({k: v for k, v in sig.items() if k != "signature"}).encode("utf-8")
         Ed25519PublicKey.from_public_bytes(key["raw"]).verify(base64.b64decode(sig["signature"], validate=True), payload)
     except (ImportError, InvalidSignature, ValueError):
+        return None, "bad_signature"
+    return str(key["key_id"]), "verified"
+
+
+def verify_receipt_seal(receipt: Any, registry: Sequence[Mapping[str, Any]]) -> Optional[str]:
+    """Return the verifying key id, or ``None`` for any failure."""
+    return explain_receipt_seal(receipt, registry)[0]
+
+
+def receipt_from_document(document: Any) -> Optional[Mapping[str, Any]]:
+    """Find the Execute receipt in a receipt, run report, webhook, or wrapper."""
+    if not isinstance(document, Mapping):
         return None
-    return str(key["key_id"])
+    if "seal_signature" in document or document.get("schema_version") == "openadapt.execute-evidence-receipt/v1":
+        return document
+    for key in ("execute_receipt", "receipt"):
+        inner = document.get(key)
+        if isinstance(inner, Mapping):
+            return inner
+    return None
+
+
+def verify_document(document: Any, registry: Sequence[Mapping[str, Any]]) -> dict:
+    """Plain verdict for ``openadapt-agent seal verify``. Offline; pinned keys only."""
+    receipt = receipt_from_document(document)
+    if receipt is None:
+        return {"verified": False, "reason": "no_receipt"}
+    key_id, reason = explain_receipt_seal(receipt, registry)
+    verdict: dict = {
+        "verified": key_id is not None,
+        "reason": reason,
+        "execution_id": receipt.get("execution_id"),
+        "outcome": receipt.get("outcome"),
+        "receipt_sha256": receipt_sha256(receipt),
+    }
+    if key_id is not None:
+        verdict["key_id"] = key_id
+        sig = receipt.get("seal_signature") or {}
+        verdict["issued_at"] = sig.get("issued_at")
+        if receipt.get("outcome") not in _SEALABLE:
+            # A genuine signature over a non-verified outcome is not a Seal of success.
+            verdict["verified_outcome"] = False
+        else:
+            verdict["verified_outcome"] = True
+    return verdict
 
 
 def run_is_sealed(
@@ -132,7 +198,13 @@ def run_is_sealed(
     receipt = report.get("execute_receipt")
     if not isinstance(receipt, Mapping):
         return False
-    if receipt.get("execution_id") != run_id or receipt.get("outcome") not in _SEALABLE:
+    # The receipt names either this run or the Cloud execution Flow recorded
+    # when it attached the receipt to this run's report.
+    bound_ids = {run_id}
+    cloud_execution_id = report.get("cloud_execution_id")
+    if isinstance(cloud_execution_id, str) and cloud_execution_id:
+        bound_ids.add(cloud_execution_id)
+    if receipt.get("execution_id") not in bound_ids or receipt.get("outcome") not in _SEALABLE:
         return False
     registry = load_pinned_registry() if registry is None else registry
     return verify_receipt_seal(receipt, registry) is not None
