@@ -2253,6 +2253,57 @@ def _bind_approval_mode(args: argparse.Namespace) -> Optional[int]:
     return None
 
 
+def _attach_cloud_seal(args: argparse.Namespace) -> None:
+    """After a run connected to Cloud Execute, attach Cloud's signed receipt.
+
+    Only a VERIFIED report with an explicit Cloud execution id is touched;
+    any failure leaves the report and the exit code exactly as they were.
+    """
+    import os
+
+    execution_id = (
+        getattr(args, "cloud_execution_id", None)
+        or os.environ.get("OPENADAPT_CLOUD_EXECUTION_ID", "").strip()
+    )
+    run_dir = getattr(args, "run_dir", None)
+    if not execution_id or not run_dir or getattr(args, "dry_run", False):
+        return
+    from openadapt_flow.cloud_seal import attach_from_cloud
+
+    result = attach_from_cloud(Path(run_dir), execution_id=execution_id)
+    if result.attached:
+        print(
+            f"Cloud Seal attached for execution {execution_id} (report.json execute_receipt)."
+        )
+    elif result.code != "local_not_verified":
+        print(
+            f"Cloud Seal not attached ({result.code}); the run result is unchanged.",
+            file=sys.stderr,
+        )
+
+
+def _cmd_seal(args: argparse.Namespace) -> int:
+    """``attach-seal``: fetch Cloud's signed receipt into a VERIFIED run report."""
+    from openadapt_flow.cloud_seal import attach_from_cloud
+
+    result = attach_from_cloud(
+        Path(args.run_dir),
+        execution_id=args.execution_id,
+        cloud_url=args.cloud_url,
+    )
+    if result.attached:
+        print(
+            f"attached: report.json now carries the Cloud receipt for {result.execution_id}"
+        )
+        print(
+            "Check it with: openadapt-agent seal verify "
+            + str(Path(args.run_dir) / "report.json")
+        )
+        return 0
+    print(f"not attached: {result.code}", file=sys.stderr)
+    return 1
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     """Execute a bundle under a named deployment profile -- FAIL-CLOSED.
 
@@ -2644,7 +2695,9 @@ def _cmd_run(args: argparse.Namespace) -> int:
     # Admitted. A deployment run is not the drift-demo; force it off and delegate
     # to the shared replay executor (which reads all deployment wiring itself).
     args.drift = None
-    return _cmd_replay(args)
+    exit_code = _cmd_replay(args)
+    _attach_cloud_seal(args)
+    return exit_code
 
 
 def _resume_approval_mode(args: argparse.Namespace, authorization):
@@ -7029,8 +7082,31 @@ def build_parser() -> argparse.ArgumentParser:
             "OPENADAPT_FLOW_REPORT_RUN=1)"
         ),
     )
+    p.add_argument(
+        "--cloud-execution-id",
+        default=None,
+        help=(
+            "OpenAdapt Cloud Execute execution this run belongs to (or "
+            "OPENADAPT_CLOUD_EXECUTION_ID). After a VERIFIED outcome, Cloud's "
+            "signed receipt is fetched with OPENADAPT_EXECUTE_API_KEY and "
+            "written into report.json as execute_receipt."
+        ),
+    )
     _add_approval_flags(p)
     p.set_defaults(func=_cmd_run)
+
+    sa = sub.add_parser(
+        "attach-seal",
+        help="Attach Cloud's signed Execute receipt (the Seal) to a VERIFIED run report",
+    )
+    sa.add_argument("run_dir", help="Run directory holding a VERIFIED report.json")
+    sa.add_argument("--execution-id", required=True, help="Cloud Execute execution id")
+    sa.add_argument(
+        "--cloud-url",
+        default=None,
+        help="Cloud base URL (or OPENADAPT_CLOUD_URL; default https://app.openadapt.ai)",
+    )
+    sa.set_defaults(func=_cmd_seal)
 
     p = sub.add_parser(
         "resume",
