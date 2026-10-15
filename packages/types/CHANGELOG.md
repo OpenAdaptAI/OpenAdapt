@@ -1,6 +1,20 @@
 # CHANGELOG
 
 
+## v0.21.0 (2026-10-15)
+
+### Features
+
+- **execute**: Opt-in execution.halted webhook
+  ([#45](https://github.com/OpenAdaptAI/openadapt-types/pull/45),
+  [`af38df7`](https://github.com/OpenAdaptAI/openadapt-types/commit/af38df737c1235e6c1d91ec9bc9c1cd597bacf17))
+
+ExecuteHaltedWebhookV1 carries the terminal receipt of a run that stopped before any effect. Cloud
+  sends it only to endpoints subscribed to it.
+
+Signed-off-by: Richard Abrich <richard.abrich@mldsai.com>
+
+
 ## v0.20.0 (2026-10-15)
 
 ### Chores
