@@ -214,7 +214,8 @@ jobs:
             --manifest platform-manifest.json \
             --report docs/platform-compatibility-report.md \
             --offline \
-            --require-compatible
+            --require-compatible \
+            --launcher-candidate
           python scripts/check_source_boundary.py
           python scripts/verify_release_hosting.py \
             --repository "$GITHUB_REPOSITORY" \
@@ -330,7 +331,8 @@ jobs:
             --manifest platform-manifest.json \
             --report docs/platform-compatibility-report.md \
             --offline \
-            --require-compatible
+            --require-compatible \
+            --launcher-candidate
 
       - name: Install uv
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0

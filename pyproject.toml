@@ -1,6 +1,6 @@
 [project]
 name = "openadapt"
-version = "1.16.0"
+version = "1.17.0"
 description = "Enters approved information into the apps your team already uses, checks that it saved, and stops for a person when something doesn't match."
 # The package description is README.md with its lifecycle block swapped for a
 # link to the live record; see hatch_build.py.

@@ -2,6 +2,23 @@
 
 <!-- version list -->
 
+## v1.17.0 (2026-10-15)
+
+### Breaking Changes
+
+- Require openadapt-flow 2 (`>=2.0.0,<3.0.0`). Flow 2 gates every run that
+  saves anything for approval by default; opt out with
+  `--approval-mode not_gated` or `runtime.approval_mode: not_gated`.
+
+### Features
+
+- `openadapt seal verify <file|url>` checks an OpenAdapt Execute Seal
+  ([#1158](https://github.com/OpenAdaptAI/OpenAdapt/pull/1158)).
+- Require openadapt-agent 2.1.0, which pins keys for Seals and reports
+  approval waits.
+- Releases verify a founder-signed admission for the exact Flow release
+  committed in `release-admission/`.
+
 ## v1.16.0 (2026-08-26)
 
 ### Bug Fixes
