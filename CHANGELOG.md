@@ -16,8 +16,10 @@
   ([#1158](https://github.com/OpenAdaptAI/OpenAdapt/pull/1158)).
 - Require openadapt-agent 2.1.0, which pins keys for Seals and reports
   approval waits.
-- Releases verify a founder-signed admission for the exact Flow release
-  committed in `release-admission/`.
+- Releases verify the pinned Flow and agent releases against PyPI (versions
+  exist, digests match the manifest, bytes match) instead of the inactive
+  central admission issuer
+  ([#1159](https://github.com/OpenAdaptAI/OpenAdapt/pull/1159)).
 
 ## v1.16.0 (2026-08-26)
 
