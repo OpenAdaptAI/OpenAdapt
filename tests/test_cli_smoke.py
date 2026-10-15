@@ -387,8 +387,7 @@ def test_launcher_flow_and_substrate_extras_metadata():
     ]
     assert extras["windows"] == [f"openadapt-flow[windows]>=2.0.0,<3.0.0; {supported}"]
     assert extras["macos"] == [
-        "openadapt-flow[macos]>=2.0.0,<3.0.0; "
-        f"sys_platform == 'darwin' and {supported}"
+        f"openadapt-flow[macos]>=2.0.0,<3.0.0; sys_platform == 'darwin' and {supported}"
     ]
     assert extras["linux"] == [
         f"openadapt-flow[linux]>=2.0.0,<3.0.0; sys_platform == 'linux' and {supported}"
@@ -424,12 +423,12 @@ def test_released_flow_x11_sonames_are_case_corrected(monkeypatch):
     )
 
 
-@pytest.mark.parametrize("version", ["1.35.0", "1.35.1", "1.99.0"])
+@pytest.mark.parametrize("version", ["2.0.0", "2.0.1", "2.99.0"])
 def test_launcher_accepts_flow_versions_in_the_supported_range(version):
     assert _supported_flow_version(version)
 
 
-@pytest.mark.parametrize("version", ["1.28.9", "1.34.0", "2.0.0", "invalid"])
+@pytest.mark.parametrize("version", ["1.28.9", "1.35.1", "3.0.0", "invalid"])
 def test_launcher_rejects_flow_versions_outside_the_supported_range(version):
     assert not _supported_flow_version(version)
 
@@ -524,7 +523,7 @@ def test_deploy_native_backend_fails_without_its_platform_extra(
     monkeypatch, backend, host, modules, install
 ):
     _host(monkeypatch, host, {"openadapt_flow"})
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.35.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.0.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", backend])
 
@@ -541,7 +540,7 @@ def test_deploy_native_backend_passes_with_its_platform_extra(
     monkeypatch, backend, host, modules, install
 ):
     _host(monkeypatch, host, {"openadapt_flow"} | modules)
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.35.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.0.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", backend])
 
@@ -681,7 +680,7 @@ def test_deploy_preflight_composes_existing_flow_interfaces_without_secrets(
             else None
         ),
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.35.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.0.0")
     monkeypatch.setenv("BYOC_CONNECTOR_TOKEN", "connector-token-value")
     result = CliRunner().invoke(
         cli_main,
@@ -706,13 +705,13 @@ def test_deploy_base_hosted_install_gives_conditional_console_setup(monkeypatch)
         "importlib.util.find_spec",
         lambda name: object() if name in {"openadapt_flow", "aardwolf"} else None,
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.35.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.0.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", "rdp"])
 
     assert result.exit_code == 0, result.output
     assert "optional local operator console is not installed" in result.output
-    assert 'python -m pip install "openadapt-flow[console]==1.35.0"' in result.output
+    assert 'python -m pip install "openadapt-flow[console]==2.0.0"' in result.output
     assert "openadapt flow console --bundles" not in result.output
     assert "Re-run this preflight" in result.output
 
@@ -727,13 +726,13 @@ def test_deploy_console_requires_openadapt_types(monkeypatch):
             else None
         ),
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.35.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.0.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", "rdp"])
 
     assert result.exit_code == 0, result.output
     assert "optional local operator console is not installed" in result.output
-    assert 'python -m pip install "openadapt-flow[console]==1.35.0"' in result.output
+    assert 'python -m pip install "openadapt-flow[console]==2.0.0"' in result.output
     assert "openadapt flow console --bundles" not in result.output
 
 
@@ -758,7 +757,7 @@ def test_deploy_preflight_fails_without_web_runtime(monkeypatch):
         "importlib.util.find_spec",
         lambda name: object() if name == "openadapt_flow" else None,
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.35.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.0.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", "web"])
 
@@ -776,7 +775,7 @@ def test_deploy_preflight_fails_without_rdp_transport(monkeypatch):
         "importlib.util.find_spec",
         lambda name: object() if name == "openadapt_flow" else None,
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.35.0")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.0.0")
 
     result = CliRunner().invoke(cli_main, ["deploy", "--backend", "rdp"])
 
@@ -787,7 +786,7 @@ def test_deploy_preflight_fails_without_rdp_transport(monkeypatch):
     assert "Preflight passed" not in result.output
 
 
-@pytest.mark.parametrize("flow_version", ["1.28.9", "2.0.0", "2.1.0", "invalid"])
+@pytest.mark.parametrize("flow_version", ["1.35.1", "3.0.0", "3.1.0", "invalid"])
 def test_deploy_preflight_fails_for_unsupported_flow(monkeypatch, flow_version):
     monkeypatch.setattr("importlib.util.find_spec", lambda _name: object())
     monkeypatch.setattr("importlib.metadata.version", lambda _name: flow_version)

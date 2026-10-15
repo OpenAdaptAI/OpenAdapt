@@ -116,12 +116,12 @@ def test_deploy_console_hint_is_double_quoted(monkeypatch, supported_python):
         "importlib.util.find_spec",
         lambda name, *args: object() if name in present else None,
     )
-    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.35.1")
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "2.0.1")
 
     result = CliRunner().invoke(cli_main, ["deploy"])
 
     assert result.exit_code == 0, result.output
-    assert '"openadapt-flow[console]==1.35.1"' in result.output
+    assert '"openadapt-flow[console]==2.0.1"' in result.output
     assert not _UNQUOTED_SPEC.search(result.output), result.output
 
 
