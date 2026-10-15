@@ -34,7 +34,7 @@ The sandbox serves one synthetic workflow, `add_triage_note`. Its `sandbox_case`
 claude mcp add openadapt -- uvx --python 3.12 --from git+https://github.com/OpenAdaptAI/openadapt-agent openadapt-agent serve
 ```
 
-PyPI has openadapt-agent 2.0.1, which predates the sandbox. From version 2.0.2 on, this shorter line does the same:
+PyPI has openadapt-agent 2.0.1, which predates the sandbox. From version 2.1.0 on, this shorter line does the same:
 
 ```bash
 claude mcp add openadapt -- uvx --python 3.12 openadapt-agent serve

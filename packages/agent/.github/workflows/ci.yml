@@ -34,7 +34,7 @@ jobs:
         if: matrix.dependency-set == 'floor'
         run: >-
           pip install -e ".[dev]"
-          "openadapt-flow==1.26.0"
+          "openadapt-flow==2.0.0"
           "mcp==1.28.0"
       - name: Install MCP 2 floor
         if: matrix.dependency-set == 'mcp2-floor'

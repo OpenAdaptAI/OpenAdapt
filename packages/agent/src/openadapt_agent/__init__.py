@@ -21,6 +21,6 @@ evidence stays local unless the operator explicitly enables protected export
 for a trusted client in the same data boundary.
 """
 
-__version__ = "2.0.2"
+__version__ = "2.1.0"
 
 __all__ = ["__version__"]

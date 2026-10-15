@@ -88,7 +88,7 @@ The result looks like this (some fields left out):
 
 This install simulates each run without opening MockMed, and every result says so. To watch the real engine do the work, see [Drive MockMed with the real engine](#drive-mockmed-with-the-real-engine).
 
-PyPI has version 2.0.1, which came out before the sandbox. After 2.0.2 is on PyPI, step 1 can be `claude mcp add openadapt -- uvx --python 3.12 openadapt-agent serve`.
+PyPI has version 2.0.1, which came out before the sandbox. After 2.1.0 is on PyPI, step 1 can be `claude mcp add openadapt -- uvx --python 3.12 openadapt-agent serve`.
 
 ### See every outcome
 
@@ -115,7 +115,7 @@ claude mcp add openadapt -- uvx --python 3.12 --from 'openadapt-agent[tutorial] 
 
 When the server starts, Flow records the workflow once and, if needed, downloads a browser (about 300 MB). The first request waits for that. In our test on a Mac, the first request took about 80 seconds. The call returned `running` after 60 seconds, and the agent called `get_run` for the result. If setup takes more than 15 minutes, the request ends `did_not_run`. With Flow, a `done` result has `proof: "local"` instead of `"simulated"`.
 
-Until 2.0.2 is on PyPI, use the command above. The simulated sandbox suggests the same command in its `list_workflows` result. A command that installs `openadapt-agent[tutorial]` from PyPI gets 2.0.1, which has no sandbox: the server exits with an error that `--bundles` is required.
+Until 2.1.0 is on PyPI, use the command above. The simulated sandbox suggests the same command in its `list_workflows` result. A command that installs `openadapt-agent[tutorial]` from PyPI gets 2.0.1, which has no sandbox: the server exits with an error that `--bundles` is required.
 
 ## What your agent gets back
 
@@ -390,12 +390,13 @@ openadapt-agent seal verify https://example.com/receipt.json --json
 - The check that stops a second entry covers one runs folder. Pass the same absolute `--runs-dir` every time.
 - If the server exits during a run, the run reads as `not_sure_if_saved`, and Flow may still finish it.
 - This server issues no signed receipts itself. `proof` is `sealed` only when a run is connected to OpenAdapt Cloud Execute, Cloud signed its receipt, and that signature verifies against keys you pinned (see [Seals](#seals)).
+- With openadapt-flow 2, every save waits for a person's approval unless the operator names another mode (`serve --approval-mode problems_only` or `not_gated`). Your agent gets `needs_review` with the reason `waiting_for_approval`, and a person approves on the computer that runs OpenAdapt. Nothing is saved without that answer.
 - Each call carries one request. There's no batch call.
 - Accounts, separation between customers, fleet policy, and hosted runs belong to OpenAdapt Cloud.
 
 ## Release status
 
-The [signed production record](https://openadapt.ai/production-lifecycle.json) says whether a release of this package is admitted for production use. An admission lasts at most 30 days and can be revoked, and a release without a valid one is "not actively admitted." On 2026-10-14, no release of this package was admitted. The admission for 2.0.1 was issued on 2026-09-02 and is past the 30-day limit, and the version on GitHub (2.0.2) has none. Check the record before you use a release with real patient data.
+The [signed production record](https://openadapt.ai/production-lifecycle.json) says whether a release of this package is admitted for production use. An admission lasts at most 30 days and can be revoked, and a release without a valid one is "not actively admitted." On 2026-10-14, no release of this package was admitted. The admission for 2.0.1 was issued on 2026-09-02 and is past the 30-day limit, and the version on GitHub (2.1.0) has none. Check the record before you use a release with real patient data.
 
 Under Flow's `standard` and `regulated` profiles, each workflow version also needs its own admission (see [Get a workflow ready to run](#get-a-workflow-ready-to-run)). On 2026-10-14, every entry in the [public list of workflow admissions](https://openadapt.ai/production-workflow-admissions.json) came from synthetic tests (`remote-safe-synthetic`).
 

@@ -5,7 +5,7 @@ run -> VERIFIED -> Cloud signs the receipt -> Flow writes it into report.json
 
 The fake Cloud signs exactly as Cloud's src/lib/sealSignature.ts does
 (openadapt.seal-signature/v1 over the canonical receipt without
-seal_signature). Skips until the installed openadapt-flow ships cloud_seal.
+seal_signature). Always runs: openadapt-flow>=2.0.0 ships cloud_seal.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ import openadapt_agent.runner as runner_mod
 from openadapt_agent.runner import FlowRunner
 from openadapt_agent.seal import _canonical, _key_id, receipt_sha256
 
-cloud_seal = pytest.importorskip("openadapt_flow.cloud_seal")
+from openadapt_flow import cloud_seal  # noqa: E402  (Flow >=2.0 ships it; never skip)
 
 EXEC = "0d9c1d7e-5b8a-4f7e-9a51-3f1c2b7d9e10"
 API_KEY = "oa_exec_test_only"

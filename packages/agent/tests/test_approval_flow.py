@@ -75,12 +75,14 @@ def _records(base_url: str) -> list:
         return list(json.loads(response.read()).get("records", []))
 
 
-def _bridge(mockmed, name: str, *, approval_wait: str, timeout_s: float) -> AgentBridge:
+def _bridge(
+    mockmed, name: str, *, approval_wait: str, timeout_s: float, approval_mode="each_item"
+) -> AgentBridge:
     config = RunnerConfig(
         runs_dir=mockmed["work"] / name,
         url=mockmed["entry_url"],
         timeout_s=timeout_s,
-        approval_mode="each_item",
+        approval_mode=approval_mode,
         extra_run_args=(
             "--durable",
             "--approval-wait",
@@ -197,3 +199,28 @@ def test_a_person_approves_and_the_run_saves_once(mockmed):
     assert final["outcome"] != "running", final
     assert final["reason"] not in {"waiting_for_approval", "timed_out"}, final
     assert len(_records(mockmed["base_url"])) == 1
+
+
+def test_flow_2_gates_a_default_run_and_the_agent_reports_the_wait(mockmed):
+    """Flow 2.0 gates every saving run by default. With no --approval-mode
+    from the operator, the agent must surface the wait, not hang or save."""
+    import urllib.request
+
+    urllib.request.urlopen(
+        urllib.request.Request(f"{mockmed['base_url']}api/reset", data=b"{}", method="POST"),
+        timeout=10,
+    ).close()
+    bridge = _bridge(mockmed, "default", approval_wait="15", timeout_s=20.0, approval_mode=None)
+    started = time.monotonic()
+    waiting = _run(bridge, "approval-default-0001", wait=120)
+    assert waiting["outcome"] == "needs_review", waiting
+    assert waiting["reason"] == "waiting_for_approval"
+    print("default run:", waiting)
+    # The operator named no mode, so the agent does not claim one Flow may
+    # have taken from deployment config; it only reports a named mode.
+    assert waiting.get("technical", {}).get("approval_mode") in (None, "each_item")
+    assert time.monotonic() - started < 60
+    stopped = bridge.dispatch("get_run", {"run_id": waiting["run_id"], "wait_seconds": 120})
+    print("default run stopped:", stopped)
+    assert stopped["outcome"] not in {"running", "done"}, stopped
+    assert _records(mockmed["base_url"]) == []

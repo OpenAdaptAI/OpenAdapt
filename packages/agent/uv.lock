@@ -481,7 +481,7 @@ wheels = [
 
 [[package]]
 name = "openadapt-agent"
-version = "2.0.2"
+version = "2.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
@@ -508,8 +508,8 @@ requires-dist = [
     { name = "cryptography", specifier = ">=50.0.0" },
     { name = "jsonschema", specifier = ">=4.20.0" },
     { name = "mcp", specifier = ">=1.28,<3" },
-    { name = "openadapt-flow", specifier = ">=1.26.0,<2" },
-    { name = "openadapt-flow", extras = ["browser", "macos"], marker = "extra == 'tutorial'", specifier = ">=1.29.0,<2" },
+    { name = "openadapt-flow", specifier = ">=2.0.0,<3" },
+    { name = "openadapt-flow", extras = ["browser", "macos"], marker = "extra == 'tutorial'", specifier = ">=2.0.0,<3" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4.0" },
 ]
@@ -517,13 +517,14 @@ provides-extras = ["dev", "tutorial"]
 
 [[package]]
 name = "openadapt-flow"
-version = "1.34.0"
+version = "2.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
     { name = "httpx" },
     { name = "idna" },
     { name = "numpy" },
+    { name = "openadapt-types" },
     { name = "opencv-python" },
     { name = "pillow" },
     { name = "pydantic" },
@@ -531,9 +532,9 @@ dependencies = [
     { name = "rapidocr-onnxruntime" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/18/27/aa3986b135964f7a6f4992a08873922d36bbb64a83a126f272497668fec4/openadapt_flow-1.34.0.tar.gz", hash = "sha256:a941a70015fe91897e655bfc9bf83e6cf8fbcf8bd4e4c7206ffb133c505203f8", size = 20440838, upload-time = "2026-08-28T14:23:46.17Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/52/9f/2cc42951965b3ef28da85bc065d0894d726365e0a04bf63f40bb8bdab782/openadapt_flow-2.0.0.tar.gz", hash = "sha256:76a18d19f390e4ef3ab1520f5d248a51f2b8086963b69057a293bdfe2fae10d9", size = 22244078, upload-time = "2026-10-15T09:01:06.322Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/23/4b/22e115d8fde6f562c7debf896351d7a8a3bc14483ca246abc3ca180d9077/openadapt_flow-1.34.0-py3-none-any.whl", hash = "sha256:56d32818989cb3a92830080ead39e10b08718c55e00988117f22cbfeaac98854", size = 1928194, upload-time = "2026-08-28T14:23:44.184Z" },
+    { url = "https://files.pythonhosted.org/packages/c0/31/9dbe102c481edd4d5e6de0b77434708199a13b5c5fa2cf829c00415f8257/openadapt_flow-2.0.0-py3-none-any.whl", hash = "sha256:3db9f5b956304ebac54d554c999cba4feece6513d27b43f4c969134deeeca6b3", size = 2303072, upload-time = "2026-10-15T09:01:03.354Z" },
 ]
 
 [package.optional-dependencies]
@@ -544,6 +545,18 @@ macos = [
     { name = "pyobjc-framework-applicationservices", marker = "sys_platform == 'darwin'" },
     { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin'" },
     { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin'" },
+]
+
+[[package]]
+name = "openadapt-types"
+version = "0.18.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "pydantic" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/88/e5/214616a76371df51e3d32b1ff9087eb73fbceec54cef1273b356875d732c/openadapt_types-0.18.0.tar.gz", hash = "sha256:39947771692b9e869fdc1636cd073f4bc1ed18758661f40f15b436f09fee9fa8", size = 231751, upload-time = "2026-09-03T21:39:20.418Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/74/93/872926437f9b127c2e945881476d6378f5b7e6623dfce7eb75186edeb275/openadapt_types-0.18.0-py3-none-any.whl", hash = "sha256:20addebfcccf6052e199af96ff0304197d65fcdae61f3614af51c4f7e1b3ff0a", size = 168883, upload-time = "2026-09-03T21:39:19.024Z" },
 ]
 
 [[package]]

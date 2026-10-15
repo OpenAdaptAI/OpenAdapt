@@ -372,7 +372,7 @@ def test_retired_unsafe_claims_never_come_back() -> None:
 
 
 def test_tutorial_command_installs_a_version_with_the_sandbox() -> None:
-    """Until 2.0.2 is on PyPI, the tutorial extra comes from GitHub."""
+    """Until 2.1.0 is on PyPI, the tutorial extra comes from GitHub."""
     readme = README.read_text(encoding="utf-8")
     assert TUTORIAL_SERVE_COMMAND in readme
     assert "--from 'openadapt-agent[tutorial]' " not in readme
