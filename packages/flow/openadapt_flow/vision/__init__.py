@@ -37,8 +37,10 @@ from openadapt_flow.vision.ocr import (
 )
 from openadapt_flow.vision.settle import (
     SettleResult,
+    SettleSeed,
     wait_settled,
     wait_settled_result,
+    wait_settled_seeded,
 )
 
 
@@ -180,4 +182,6 @@ __all__ = [
     "upscale_png",
     "wait_settled",
     "wait_settled_result",
+    "wait_settled_seeded",
+    "SettleSeed",
 ]

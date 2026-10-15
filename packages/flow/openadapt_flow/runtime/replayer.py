@@ -807,6 +807,13 @@ class Replayer:
         # caller that injects a facade without that readiness signal HALTs
         # before action rather than silently degrading to proceed-anyway.
         self.require_settled = require_settled
+        # Settle reuse (speed, not a gate): the after-action settled frame of
+        # the previous step, valid as the first frame of the next step's
+        # before-settle only while no input has been delivered since. Every
+        # backend input crosses ``_deliver_backend_call``, which bumps the
+        # epoch and so invalidates the seed.
+        self._actuation_epoch = 0
+        self._settle_seed: Optional[tuple[Any, int]] = None
         # One settle poll owns this complete bound. The replayer does not wrap
         # it in an outer retry loop, avoiding unaccounted blind retries.
         self.settle_readiness_timeout_s = settle_readiness_timeout_s
@@ -5873,9 +5880,7 @@ class Replayer:
         # capture only a raw diagnostic frame here so it is not preceded by an
         # unobservable proceed-anyway settle attempt.
         before_png = (
-            self.backend.screenshot()
-            if self.require_settled
-            else self.vision.wait_settled(self.backend)
+            self.backend.screenshot() if self.require_settled else self._settle_seeded()
         )
         result.before_png = self._save_step_png(
             run_dir, evidence_step_id, "before", before_png
@@ -6586,7 +6591,7 @@ class Replayer:
 
             if error is None:
                 try:
-                    after_png = self.vision.wait_settled(self.backend)
+                    after_png = self._settle_seeded()
                     last_frame = after_png
                     self._emit_control_overlay_phase(
                         "verifying",
@@ -9218,6 +9223,41 @@ class Replayer:
         )
         return resolution, region, error
 
+    def _settle_seeded(self) -> bytes:
+        """``vision.wait_settled`` that can extend the last settled run.
+
+        Same contract as ``vision.wait_settled``: a fresh frame is always
+        captured and returned, and it counts as settled only after a run of
+        identical frames polled at the normal interval. When the previous
+        settle on this backend ended settled and no input was delivered since
+        (every input crosses ``_deliver_backend_call``, which bumps the
+        epoch), an identical fresh frame extends that already-observed run
+        instead of starting a new one, saving one poll interval. A changed
+        frame starts over exactly as before.
+        """
+
+        seed_entry = getattr(self, "_settle_seed", None)
+        self._settle_seed = None
+        epoch = getattr(self, "_actuation_epoch", 0)
+        seeded = getattr(self.vision, "wait_settled_seeded", None)
+        seed_type = getattr(self.vision, "SettleSeed", None)
+        if seeded is None or seed_type is None:
+            return self.vision.wait_settled(self.backend)
+        seed = None
+        if seed_entry is not None and seed_entry[1] == epoch:
+            seed = seed_entry[0]
+        result = seeded(self.backend, seed)
+        if result.settled and result.phash:
+            self._settle_seed = (
+                seed_type(
+                    phash=result.phash,
+                    stable_frames=result.stable_frames,
+                    captured_at=result.captured_at,
+                ),
+                epoch,
+            )
+        return result.png
+
     def _deliver_backend_call(
         self,
         result: StepResult,
@@ -9231,6 +9271,8 @@ class Replayer:
         been crossed and the step must not enter the pre-delivery retry loop.
         """
 
+        self._actuation_epoch = getattr(self, "_actuation_epoch", 0) + 1
+        self._settle_seed = None
         attempted_before = result.delivery_attempted
         acknowledgers = self._active_delivery_acknowledgers
         self._active_delivery_acknowledgers = ()
@@ -12758,7 +12800,7 @@ class Replayer:
             region's pixels changed at all (the caller's retry decision:
             retyping is only safe when nothing changed).
         """
-        after_png = self.vision.wait_settled(self.backend)
+        after_png = self._settle_seeded()
         region = self._field_region(field_point, field_region)
         if baseline_field_value is not None:
             expected = baseline_field_value + text

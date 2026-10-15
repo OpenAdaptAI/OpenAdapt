@@ -9,7 +9,9 @@ a ``region`` restricts the OCR input.
 from __future__ import annotations
 
 import difflib
+import hashlib
 import threading
+from collections import OrderedDict
 from typing import Any
 
 import cv2
@@ -76,7 +78,58 @@ def _decode_bgr(png: bytes) -> np.ndarray:
     return img
 
 
+_OCR_MEMO_MAX = 16
+_ocr_memo: OrderedDict[tuple[str, Region | None], tuple[Any, tuple[OcrLine, ...]]] = (
+    OrderedDict()
+)
+_ocr_memo_lock = threading.Lock()
+
+
+def clear_ocr_memo() -> None:
+    """Drop every memoized OCR result."""
+
+    with _ocr_memo_lock:
+        _ocr_memo.clear()
+
+
 def ocr(screen_png: bytes, *, region: Region | None = None) -> list[OcrLine]:
+    """Run OCR on a screenshot (optionally restricted to a region).
+
+    Memoized on the SHA-256 of the exact PNG bytes, the region, and the
+    engine object: OCR is a pure function of those, and replay asks it about
+    the same frame several times per step (identity, landmark, postcondition).
+    One changed pixel is a different key, so a memo hit is never stale.
+    Callers always receive fresh copies.
+
+    Args:
+        screen_png: Full-frame screenshot as PNG bytes.
+        region: Optional ``(x, y, w, h)`` sub-region to OCR (clamped to the
+            frame). Returned line regions are offset back into full-screen
+            coordinates.
+
+    Returns:
+        Recognized lines in engine order; empty list if nothing was found.
+    """
+
+    engine = _get_engine()
+    key = (hashlib.sha256(screen_png).hexdigest(), region)
+    with _ocr_memo_lock:
+        hit = _ocr_memo.get(key)
+        if hit is not None and hit[0] is engine:
+            _ocr_memo.move_to_end(key)
+            return [line.model_copy() for line in hit[1]]
+    lines = _ocr_uncached(engine, screen_png, region=region)
+    with _ocr_memo_lock:
+        _ocr_memo[key] = (engine, tuple(line.model_copy() for line in lines))
+        _ocr_memo.move_to_end(key)
+        while len(_ocr_memo) > _OCR_MEMO_MAX:
+            _ocr_memo.popitem(last=False)
+    return lines
+
+
+def _ocr_uncached(
+    engine: Any, screen_png: bytes, *, region: Region | None = None
+) -> list[OcrLine]:
     """Run OCR on a screenshot (optionally restricted to a region).
 
     Args:
@@ -98,7 +151,7 @@ def ocr(screen_png: bytes, *, region: Region | None = None) -> list[OcrLine]:
         off_x, off_y, rw, rh = clamped
         img = img[off_y : off_y + rh, off_x : off_x + rw]
 
-    result, _elapse = _get_engine()(img)
+    result, _elapse = engine(img)
     lines: list[OcrLine] = []
     if not result:
         return lines
