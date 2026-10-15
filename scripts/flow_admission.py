@@ -515,10 +515,13 @@ def sign_admission(
 
 
 def _project_version(root: Path) -> str:
-    import tomllib
-
-    with (root / "pyproject.toml").open("rb") as stream:
-        return tomllib.load(stream)["project"]["version"]
+    # Python 3.10 has no tomllib; the [project] version line is enough here.
+    text = (root / "pyproject.toml").read_text(encoding="utf-8")
+    project = text.split("[project]", 1)[-1].split("\n[", 1)[0]
+    match = re.search(r'(?m)^version\s*=\s*"([^"]+)"', project)
+    if match is None:
+        raise ValueError("pyproject.toml has no [project] version")
+    return match.group(1)
 
 
 def main(argv: list[str] | None = None) -> int:
