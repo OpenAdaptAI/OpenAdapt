@@ -583,6 +583,17 @@
             "title": "Schema Version",
             "type": "string"
           },
+          "seal_signature": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SealSignatureV1"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null
+          },
           "workflow_digest": {
             "pattern": "^sha256:[0-9a-f]{64}$",
             "title": "Workflow Digest",
@@ -1275,7 +1286,66 @@
         "title": "HumanDecisionTaskV1",
         "type": "object"
       },
-      "JsonValue": {}
+      "JsonValue": {},
+      "SealSignatureV1": {
+        "additionalProperties": false,
+        "description": "Issuer signature over one receipt hash.",
+        "properties": {
+          "algorithm": {
+            "const": "ed25519",
+            "default": "ed25519",
+            "title": "Algorithm",
+            "type": "string"
+          },
+          "issued_at": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$",
+            "title": "Issued At",
+            "type": "string"
+          },
+          "issuer": {
+            "const": "openadapt-cloud",
+            "default": "openadapt-cloud",
+            "title": "Issuer",
+            "type": "string"
+          },
+          "key_id": {
+            "pattern": "^seal-ed25519-[a-f0-9]{16}$",
+            "title": "Key Id",
+            "type": "string"
+          },
+          "receipt_sha256": {
+            "pattern": "^[a-f0-9]{64}$",
+            "title": "Receipt Sha256",
+            "type": "string"
+          },
+          "run_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Run Id",
+            "type": "string"
+          },
+          "schema": {
+            "const": "openadapt.seal-signature/v1",
+            "default": "openadapt.seal-signature/v1",
+            "title": "Schema",
+            "type": "string"
+          },
+          "signature": {
+            "pattern": "^[A-Za-z0-9+/]+={0,2}$",
+            "title": "Signature",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key_id",
+          "receipt_sha256",
+          "run_id",
+          "issued_at",
+          "signature"
+        ],
+        "title": "SealSignatureV1",
+        "type": "object"
+      }
     },
     "securitySchemes": {
       "bearerAuth": {

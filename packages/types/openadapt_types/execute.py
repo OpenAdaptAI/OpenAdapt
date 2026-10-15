@@ -31,6 +31,7 @@ from pydantic import (
 
 from openadapt_types.business_decision import BusinessDecisionTaskV1
 from openadapt_types.human_decision import HumanDecisionTaskV1
+from openadapt_types.seal import SealSignatureV1
 from openadapt_types.oracle import (
     oracle_tier_from_effect_strength,
     production_seal_allowed,
@@ -187,6 +188,9 @@ class ExecuteEvidenceReceiptV1(_StrictContract):
     compensation_effect_verified: StrictBool = False
     evidence_digest: StrictStr = Field(pattern=_SHA256_PATTERN)
     issued_at: StrictStr = Field(pattern=_TIMESTAMP_PATTERN)
+    # Optional, additive: Cloud issuer signature over this receipt's canonical
+    # hash (openadapt_types.seal). Absent means unsigned, never sealed.
+    seal_signature: SealSignatureV1 | None = None
 
     @model_validator(mode="after")
     def _validate_proof(self) -> "ExecuteEvidenceReceiptV1":

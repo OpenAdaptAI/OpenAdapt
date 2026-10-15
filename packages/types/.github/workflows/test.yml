@@ -19,6 +19,8 @@ jobs:
           version: "0.11.29"
       - run: uv sync --locked --extra dev
       - run: uv run pytest
+      - name: Seal signature verification (needs cryptography)
+        run: uv run --with 'cryptography>=42' pytest tests/test_seal.py
       - name: Build and verify the public distribution boundary
         run: |
           uv build

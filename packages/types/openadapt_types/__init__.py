@@ -251,6 +251,13 @@ from openadapt_types.execute import (
     ExecuteWebhookV1,
     sign_execute_webhook_hmac,
 )
+from openadapt_types.seal import (
+    SealPublicKey,
+    SealSignatureV1,
+    SealVerification,
+    verify_seal_signature,
+    verify_sealed_receipt,
+)
 from openadapt_types.execute_client import ExecuteApiError, ExecuteClient
 from openadapt_types.execute_openapi import execute_openapi_document
 from openadapt_types.oracle import (
@@ -624,6 +631,11 @@ __all__ = [  # noqa: RUF022
     "ExecuteDecisionTaskV1",
     "ExecuteEvidenceContractV1",
     "ExecuteEvidenceReceiptV1",
+    "SealSignatureV1",
+    "SealPublicKey",
+    "SealVerification",
+    "verify_seal_signature",
+    "verify_sealed_receipt",
     "ExecuteLifecycleStateV1",
     "ExecuteRequestV1",
     "ExecuteStateChangedWebhookV1",
