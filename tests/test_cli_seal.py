@@ -26,3 +26,10 @@ def test_seal_explains_an_old_agent(monkeypatch):
     result = CliRunner().invoke(main, ["seal", "verify", "x.json"])
     assert result.exit_code == 1
     assert "pip install --upgrade openadapt-agent" in result.output
+
+
+def test_seal_help_works_with_an_old_agent(monkeypatch):
+    monkeypatch.setitem(sys.modules, "openadapt_agent.seal_cli", None)
+    result = CliRunner().invoke(main, ["seal", "--help"])
+    assert result.exit_code == 0
+    assert "openadapt seal verify" in result.output

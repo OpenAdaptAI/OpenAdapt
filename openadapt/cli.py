@@ -959,6 +959,14 @@ def seal(command_ctx: click.Context) -> None:
         from openadapt_agent import seal_cli  # noqa: F401
         from openadapt_agent.cli import main as agent_main
     except ImportError:
+        args = list(command_ctx.args)
+        if not args or args[0] in ("--help", "-h"):
+            click.echo("Usage: openadapt seal verify <file|url|->")
+            click.echo("       openadapt seal keys pin | keys show")
+            click.echo("")
+            click.echo("Seal checks need a newer openadapt-agent:")
+            click.echo("  pip install --upgrade openadapt-agent")
+            sys.exit(0)
         click.echo("Error: this openadapt-agent cannot check Seals.", err=True)
         click.echo("Upgrade with: pip install --upgrade openadapt-agent", err=True)
         sys.exit(1)
