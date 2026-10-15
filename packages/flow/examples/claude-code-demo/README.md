@@ -106,3 +106,7 @@ Everything the scripts create goes into `work/`, `.venv/`, and `mcp.json`.
 
 To make new recordings after `./demo.sh`, run `vhs demo.tape` and
 `vhs halt.tape`.
+
+## With openadapt-flow 2
+
+Flow 2 asks a person to approve each save by default. When Claude Code calls the tool, the result is `needs_review` with the reason `waiting_for_approval` until someone approves on this computer (`openadapt-flow item-approval show <run_dir>`, then `approve`). The recordings above were made with Flow 1.35, before that default. To run the demo unattended, as they show, start the server with `--approval-mode not_gated`. The run report records that choice.

@@ -96,6 +96,11 @@ def _run(built: dict, run_dir: Path, params: dict[str, str]) -> tuple[int, dict]
             "--run-dir",
             str(run_dir),
             "--allow-unencrypted",
+            # Flow 2 gates every saving run by default and would wait for a
+            # person here. This test checks the example's record check, so
+            # it opts out explicitly; the report records not_gated.
+            "--approval-mode",
+            "not_gated",
         ],
         capture_output=True,
         text=True,
@@ -170,15 +175,25 @@ def test_agent_bridge_runs_the_bundle(built: dict, tmp_path: Path) -> None:
             runs_dir=tmp_path / "runs",
             deployment_config=str(layout.deployment),
             extra_run_args=("--allow-unencrypted",),
+            # Explicit opt-out of Flow 2's default per-save approval.
+            approval_mode="not_gated",
         ),
         allow_run=True,
+        mode="production",
     )
-    (tool,) = [
-        spec.name for spec in bridge.list_tool_specs() if spec.name.startswith("run_")
-    ]
     params = {"description": "Taxi to the airport", "amount": "41.20"}
-    result = bridge.dispatch(tool, params)
+    result = bridge.dispatch(
+        "run_workflow",
+        {
+            "workflow": next(iter(bridge.catalog)),
+            "inputs": params,
+            "request_id": "claude-code-demo-0001",
+            "wait_seconds": 120,
+        },
+    )
 
-    assert result["status"] == "success"
-    assert result["summary"]["model_calls"] == 0
+    # Unprofiled, so the agent reads the run as finished but not checked;
+    # the example's own database is the check that it saved exactly once.
+    assert result["outcome"] in {"done", "not_sure_if_saved"}, result
+    assert result.get("model_calls", 0) == 0
     assert _rows(built["db"]).count((params["description"], params["amount"])) == 1
