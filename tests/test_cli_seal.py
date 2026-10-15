@@ -15,7 +15,11 @@ def test_seal_forwards_to_agent(monkeypatch):
     cli_mod = types.ModuleType("openadapt_agent.cli")
     cli_mod.main = lambda argv: calls.append(argv) or 0
     monkeypatch.setitem(sys.modules, "openadapt_agent.cli", cli_mod)
-    monkeypatch.setitem(sys.modules, "openadapt_agent.seal_cli", types.ModuleType("openadapt_agent.seal_cli"))
+    monkeypatch.setitem(
+        sys.modules,
+        "openadapt_agent.seal_cli",
+        types.ModuleType("openadapt_agent.seal_cli"),
+    )
     result = CliRunner().invoke(main, ["seal", "verify", "report.json", "--json"])
     assert result.exit_code == 0, result.output
     assert calls == [["seal", "verify", "report.json", "--json"]]

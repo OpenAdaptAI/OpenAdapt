@@ -52,7 +52,6 @@ from generate_platform_manifest import (  # noqa: E402
     _version_satisfies,
 )
 from validate_platform_manifest import (  # noqa: E402
-    launcher_candidate_failures,
     Report,
     _locked_openadapt_versions,
     check_against_pypi,
@@ -63,6 +62,7 @@ from validate_platform_manifest import (  # noqa: E402
     check_structure,
     compare_component_to_pypi,
     compare_launcher_to_pyproject,
+    launcher_candidate_failures,
 )
 
 MANIFEST_PATH = REPO_ROOT / "platform-manifest.json"
@@ -579,9 +579,7 @@ def test_launcher_candidate_is_judged_by_its_own_pins() -> None:
             "flow": {"package": "openadapt-flow", "version": "2.0.0"},
             "types": {"package": "openadapt-types", "version": "0.18.0"},
         },
-        "compatibility": {
-            "launcher_requires": {"openadapt-flow": [">=2.0.0,<3.0.0"]}
-        },
+        "compatibility": {"launcher_requires": {"openadapt-flow": [">=2.0.0,<3.0.0"]}},
         "compatibility_status": {
             "status": "dependency-incompatible",
             "failures": [
