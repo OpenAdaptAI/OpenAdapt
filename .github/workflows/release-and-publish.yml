@@ -30,12 +30,12 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  # Fail closed before any tag or publish: the exact Flow release selected by
-  # platform-manifest.json must carry a founder-signed admission committed in
-  # this candidate (release-admission/flow-<version>.json), verified against a
-  # public key in release-admission/trusted-keys.json. The private key stays
-  # offline on the founder's machine. See docs/release-admission.md.
-  verify-flow-admission:
+  # Fail closed before any tag or publish: the exact openadapt-flow and
+  # openadapt-agent releases pinned in platform-manifest.json must exist on
+  # PyPI with digests equal to the manifest's, and their downloaded bytes must
+  # hash to the same values. Publication then runs in the protected `pypi`
+  # environment with Trusted Publishing.
+  verify-pinned-components:
     if: >-
       (github.event_name == 'workflow_dispatch') ||
       (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v'))
@@ -55,17 +55,14 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Verify the exact Flow bytes and their signed admission
-        run: |
-          set -euo pipefail
-          python scripts/flow_admission.py verify \
-            --artifact-root "$RUNNER_TEMP/flow-admission-candidate"
+      - name: Verify the pinned Flow and agent releases against PyPI
+        run: python scripts/verify_release_components.py
 
   create-release-tag:
-    needs: verify-flow-admission
+    needs: verify-pinned-components
     if: >-
       github.event_name == 'workflow_dispatch' &&
-      needs.verify-flow-admission.result == 'success'
+      needs.verify-pinned-components.result == 'success'
     runs-on: ubuntu-latest
     environment: release-identity
     permissions:
@@ -203,11 +200,11 @@ jobs:
           git push origin "refs/tags/$RELEASE_TAG"
 
   build-and-attest:
-    needs: verify-flow-admission
+    needs: verify-pinned-components
     if: >-
       github.event_name == 'push' &&
       startsWith(github.ref, 'refs/tags/v') &&
-      needs.verify-flow-admission.result == 'success'
+      needs.verify-pinned-components.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -807,7 +804,7 @@ jobs:
 
   report-release-failure:
     needs:
-      - verify-flow-admission
+      - verify-pinned-components
       - create-release-tag
       - build-and-attest
       - preflight-github
@@ -816,7 +813,7 @@ jobs:
       - verify-publication
     if: >-
       ${{ always() &&
-          (needs.verify-flow-admission.result == 'failure' ||
+          (needs.verify-pinned-components.result == 'failure' ||
            needs.create-release-tag.result == 'failure' ||
            needs.build-and-attest.result == 'failure' ||
            needs.preflight-github.result == 'failure' ||
@@ -832,7 +829,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           CREATE_TAG_RESULT: ${{ needs.create-release-tag.result }}
-          FLOW_ADMISSION_RESULT: ${{ needs.verify-flow-admission.result }}
+          COMPONENTS_RESULT: ${{ needs.verify-pinned-components.result }}
           BUILD_RESULT: ${{ needs.build-and-attest.result }}
           GITHUB_PREFLIGHT_RESULT: ${{ needs.preflight-github.result }}
           PYPI_RESULT: ${{ needs.publish-pypi.result }}
@@ -843,7 +840,7 @@ jobs:
           TITLE="Release workflow failed"
           BODY="The release workflow failed: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
 
-          flow-admission=${FLOW_ADMISSION_RESULT}, create-tag=${CREATE_TAG_RESULT}, build-and-attest=${BUILD_RESULT}, preflight-github=${GITHUB_PREFLIGHT_RESULT}, publish-pypi=${PYPI_RESULT}, publish-github=${GITHUB_RESULT}, verify-publication=${VERIFY_RESULT}.
+          pinned-components=${COMPONENTS_RESULT}, create-tag=${CREATE_TAG_RESULT}, build-and-attest=${BUILD_RESULT}, preflight-github=${GITHUB_PREFLIGHT_RESULT}, publish-pypi=${PYPI_RESULT}, publish-github=${GITHUB_RESULT}, verify-publication=${VERIFY_RESULT}.
 
           If the annotated tag exists, rerun only the failed jobs in this run with gh run rerun ${{ github.run_id }} --failed. Do not start a new full run or create a recovery tag."
           existing="$(gh issue list --repo "$GITHUB_REPOSITORY" --state open \
