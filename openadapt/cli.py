@@ -912,6 +912,36 @@ def flow(command_ctx: click.Context) -> None:
 
 
 @main.command(
+    "pull",
+    context_settings={
+        "ignore_unknown_options": True,
+        "allow_extra_args": True,
+        "help_option_names": [],
+    },
+)
+@click.pass_context
+def pull(command_ctx: click.Context) -> None:
+    """Download a packaged workflow: `openadapt pull openemr/new-referral`.
+
+    `openadapt pull --list` shows what is available. Every argument passes to
+    `openadapt-flow pull` unchanged.
+    """
+    _require_supported_python()
+    if "pull" not in _flow_verbs():
+        args = list(command_ctx.args)
+        if not args or args[0] in ("--help", "-h"):
+            click.echo("Usage: openadapt pull <app>/<task> [--out DIR] | --list")
+            click.echo("")
+            click.echo("Pulling workflows needs a newer openadapt-flow:")
+            click.echo("  pip install --upgrade openadapt-flow")
+            sys.exit(0)
+        click.echo("Error: this openadapt-flow has no `pull` command.", err=True)
+        click.echo("Upgrade with: pip install --upgrade openadapt-flow", err=True)
+        sys.exit(1)
+    _run_flow(["pull", *command_ctx.args])
+
+
+@main.command(
     "agent",
     context_settings={
         "ignore_unknown_options": True,
