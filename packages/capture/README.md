@@ -16,6 +16,16 @@ to study how a task gets done. [OpenAdapt](https://github.com/OpenAdaptAI/OpenAd
 uses it to record the demonstrations that it compiles into replayable
 programs.
 
+**Status:** maintained. OpenAdapt uses it to record the demonstrations it
+compiles. Everything stays in a local folder.
+
+| Platform | Records | Notes |
+|---|---|---|
+| macOS | Mouse, keyboard, screen video, accessibility | Needs Screen Recording, Input Monitoring, and Accessibility permissions |
+| Windows | Mouse, keyboard, screen video, accessibility | Needs a signed-in desktop session |
+| Linux | Mouse, keyboard, screen video; accessibility with the `linux` extra | X11 only, not Wayland |
+| Remote desktop | Pixels only | No accessibility data across the connection |
+
 ## Quick start
 
 You need Python 3.10 or later, and before the first recording:
