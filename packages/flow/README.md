@@ -5,8 +5,8 @@
 [![Python](https://img.shields.io/pypi/pyversions/openadapt-flow)](https://pypi.org/project/openadapt-flow/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-openadapt-flow records a task you do once in a web or desktop app and compiles
-it into a program that runs on your own machine. A healthy run makes no AI
+openadapt-flow records a task in a web or desktop app, done by a person or by
+an AI agent, and compiles it into a program that runs on your own machine. A healthy run makes no AI
 model calls. It's built for data entry that repeats every week and has to be
 right, such as claims, referrals, eligibility checks, and invoice posting.
 
@@ -64,7 +64,7 @@ tells the runs apart. To watch each stage in the terminal instead, run
 
 | | Playwright codegen | Model-driven agent (browser-use, computer use) | openadapt-flow |
 |---|---|---|---|
-| Authoring | Record in a browser, then edit and maintain the generated script | Write the task in plain language | Record once, then declare what each write changes and how to read it back |
+| Authoring | Record in a browser, then edit and maintain the generated script | Write the task in plain language | Record the task, then declare what each write changes and how to read it back |
 | Surfaces | Browsers | Browser or desktop, depending on the agent | Browsers; Windows, macOS, and Linux apps; RDP; Citrix by pixels |
 | Model calls per run | None | One for each step | None on a healthy run |
 | Median time per run, bundled clinic app | Not measured | 37.5 s | 4.9 s |
@@ -132,8 +132,12 @@ saw. Neither run makes a model call. The run artifacts are in
 
 ## Try it on your app
 
-Record the task once against a test copy of your web app, compile it, and
-replay it:
+Record the task against a test copy of your web app, compile it, and replay
+it. An agent can drive the recording through the authoring tools; a person
+accepts the result, and agent recording is refused on native Windows, Citrix
+and RDP. With several recordings of the same task, `induce` finds which values
+change, which steps repeat and which are optional, or refuses if they
+disagree.
 
 ```bash
 pip install 'openadapt-flow[browser]'
