@@ -15,6 +15,20 @@
 
 <!-- version list -->
 
+## v2.1.0 (2026-10-16)
+
+### Features
+
+- A calling agent can demonstrate the fix for a halted run; the result is a governed repair candidate (review, replay and fault campaigns, human approval) with provenance, scrubbed-screen evidence and the screen-share mode recorded. `run --hold-on-halt` keeps a halted browser page open for that repair ([#504](https://github.com/OpenAdaptAI/openadapt-flow/pull/504)).
+
+### Performance
+
+- Browser replay settles on page signals (DOM, network, animation quiescence), reuses the settled frame when nothing changed, and checks text and dropdown values through the DOM before OCR ([#505](https://github.com/OpenAdaptAI/openadapt-flow/pull/505)). On the local OpenEMR referral benchmark (warm, DOM-identity bundle, alternated blocks) median wall clock went from 29.8 s to 25.1 s, 34 of 35 runs saved correctly on each engine.
+
+### Tests
+
+- The Claude Code demo opts out of the default approval explicitly ([#508](https://github.com/OpenAdaptAI/openadapt-flow/pull/508)).
+
 ## v2.0.0 (2026-10-15)
 
 ### ⚠ Breaking change: every saving run is gated by default
