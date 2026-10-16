@@ -6,14 +6,44 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
-**OpenAdapt enters approved information into the systems your team already uses, and then it checks that the entry saved.**
+**A person or an agent shows OpenAdapt a task in your EHR, portal, or desktop app. It becomes a program on your computer that repeats the same steps with new details, with no model calls.**
 
-It handles this last manual step in EMRs, payer portals, and desktop apps,
-including apps your staff reach through Citrix or remote desktop. When
-something doesn't match, it stops and asks a person instead of guessing.
+By default, a person approves each save. Where your system allows a
+second read, OpenAdapt reads the saved record back. When something doesn't
+match, it stops and asks a person instead of guessing.
 
 To watch it work first, open the [live demo](https://app.openadapt.ai/demo).
 It shows recorded runs that use synthetic data.
+
+**Status:** the engine is free, MIT-licensed, and installs from PyPI. Each
+workflow is tested on its own app and environment before it runs on real
+records.
+
+| Platform | How OpenAdapt drives it | Tested so far |
+|---|---|---|
+| Web apps | Playwright (Chromium) | Every change in CI; OpenEMR benchmark below |
+| Windows apps | UI Automation | 3 of 3 trials on an in-tree WinForms app |
+| macOS apps | Accessibility | 3 of 3 trials on TextEdit, one Mac |
+| Linux apps | AT-SPI on X11 | A GTK3 app in CI; Wayland needs a portal session |
+| Remote desktop (RDP) | Screen pixels, keyboard, mouse | 3 of 3 trials into Windows 11 over a real network |
+| Citrix | Screen pixels, keyboard, mouse | A stand-in without a live Citrix session |
+
+[What works today](https://docs.openadapt.ai/get-started/what-works-today/)
+has the details for each platform.
+
+## One referral, three ways
+
+| | By hand | AI agent | OpenAdapt |
+|---|---|---|---|
+| Median time per referral | Not timed* | 36.5 s | 29.7 s |
+| Correct saves, all warm runs | Not scored | 69 of 70 | 103 of 105 |
+| Model fees per referral | None | about $0.08 (median) | $0 |
+| Screens sent to a model | None | 10 (median) | None |
+| Path | Up to the person | 48 actions (median), varies | Same 41 steps |
+
+*By hand: one baseline run of a test script at a person's pace (not timed across repeated runs). AI agent: Claude Sonnet 5.5, list price.
+
+Same test OpenEMR, same synthetic referrals, 14 and 15 Oct 2026. Times run from sign-in to a saved record that a separate database query read back, 12 of 12 fields. The medians are over 62 timed warm runs each (the first block of each arm is left out because another process shared the CPU then), so OpenAdapt was about 19% faster. The two OpenAdapt misses stopped without saving a chart; the agent miss finished without saving one. Engine certification was off in this benchmark, so these runs end "finished, not checked" by the engine's own label; the separate read-back is what scored them. [How we measured](https://openadapt.ai/compare/computer-use-agents).
 
 <!--
   IMAGE PLACEHOLDER for the design wave. Replace this comment with the image.
@@ -105,8 +135,29 @@ the app shows that it saved. The record check finds no saved record, so the
 run stops and leaves the record for a person to check. On Python 3.13 or
 newer, install with `uv tool install --python 3.12 openadapt` instead.
 
+To start from a packaged workflow instead of a recording, run
+`openadapt pull --list`, then for example `openadapt pull openemr/new-referral`.
+Registry bundles are labeled `example` until they pass certification.
+
 The [developer guide](#developer-guide) below covers authoring your own
 workflow, and [Evidence](#evidence) lists what we've measured so far.
+
+## Give your agent a program, not a mouse
+
+Your agent decides what to enter. Instead of sending screenshots to a model
+and clicking, it calls a taught workflow as one tool and gets back an outcome:
+done and checked, stopped before saving, check the record, or didn't run.
+
+```bash
+openadapt agent serve --mode production --bundles <bundle or directory of bundles>
+openadapt agent emit-skill <bundle> --out ~/.claude/skills
+```
+
+`serve` starts an MCP server over stdio; leave out `--mode production` to let
+the client list workflows without starting them. `emit-skill` writes an Agent
+Skill that tells the agent how to call the workflow. See
+[Give an agent the run tool](#give-an-agent-the-run-tool) and the
+[`openadapt-agent` README](https://github.com/OpenAdaptAI/openadapt-agent).
 
 ---
 
@@ -408,12 +459,12 @@ paywalled.
 
 | Evidence | Result |
 |---|---|
-| Public OpenEMR field test, measured 2026-07-08 on a Flow 0.1.0 development checkout | Compiled replay passed the saved-row OCR check on 19 of 20 runs at a 39.2 s median with 0 model API calls, and run 20 halted safely. A computer-use agent finished 10 of 10 at about $0.55 a run at July 2026 list prices. This was a shared public demo and a small sample. |
+| OpenEMR referral benchmark, 14 and 15 Oct 2026 | See [One referral, three ways](#one-referral-three-ways): median 29.7 s for OpenAdapt and 36.5 s for a Claude Sonnet agent over 62 warm runs each, with $0 model fees for OpenAdapt. Read-back matched 12 of 12 fields on each correct save; engine certification was off. |
 | Fault test on a local test record system, measured 2026-07-21 | 72 of 90 runs left the record wrong: missing, partial, duplicated, or on the wrong record. A check that trusted the success banner passed 54 of those 72. One separate read of the record passed 9 of the 72, all of one kind: a write to a billing table that the read didn't cover. Every check also stopped 9 of the 18 runs that had saved correctly, because the client never got the reply. We chose these faults and injected them on our own test server, so this is a coverage test over a fixed fault list, not a real-world error rate. |
 
 Each result belongs to its named task and environment. Qualifying a new
 workflow is what decides what can be claimed about it. Sources:
-[OpenEMR results](https://github.com/OpenAdaptAI/openadapt-flow/blob/aee094193b232f472f991be6fa9b33c3c4b3f9be/benchmark/openemr/results.json),
+[how we measured the OpenEMR benchmark](https://openadapt.ai/compare/computer-use-agents),
 [fault test method and caveats](https://github.com/OpenAdaptAI/openadapt-flow/blob/aee094193b232f472f991be6fa9b33c3c4b3f9be/benchmark/effect_e2e/EFFECT_E2E.md),
 and the [comparison](https://openadapt.ai/compare).
 OpenAdapt isn't affiliated with the OpenEMR project.

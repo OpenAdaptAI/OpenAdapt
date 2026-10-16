@@ -62,6 +62,7 @@ from validate_platform_manifest import (  # noqa: E402
     check_structure,
     compare_component_to_pypi,
     compare_launcher_to_pyproject,
+    launcher_candidate_failures,
 )
 
 MANIFEST_PATH = REPO_ROOT / "platform-manifest.json"
@@ -395,7 +396,8 @@ def test_runtime_requirements_come_from_selected_release_metadata(
     }
     assert actual == expected
 
-    assert len(manifest["dependency_edges"]) == 11
+    # Launcher 1.17.0 adds its openadapt-agent edge.
+    assert len(manifest["dependency_edges"]) == 12
     components = deepcopy(manifest["components"])
     components["capture"]["version"] = "0.0.1"
     edges = _dependency_edges(components, manifest["runtime_units"])
@@ -569,3 +571,34 @@ def test_native_lock_digest_is_verified(
     report = Report()
     check_desktop_sidecar_lock(manifest, report, require_network=True)
     assert any("lock sha256 drift" in error for error in report.errors)
+
+
+def test_launcher_candidate_is_judged_by_its_own_pins() -> None:
+    manifest = {
+        "components": {
+            "launcher": {"package": "openadapt", "version": "1.16.0"},
+            "flow": {"package": "openadapt-flow", "version": "2.0.0"},
+            "types": {"package": "openadapt-types", "version": "0.18.0"},
+        },
+        "compatibility": {"launcher_requires": {"openadapt-flow": [">=2.0.0,<3.0.0"]}},
+        "compatibility_status": {
+            "status": "dependency-incompatible",
+            "failures": [
+                {
+                    "source_role": "launcher",
+                    "target_role": "flow",
+                    "package": "openadapt-flow",
+                    "requires": "<2.0.0,>=1.29.0",
+                    "resolved": "2.0.0",
+                }
+            ],
+        },
+    }
+    assert launcher_candidate_failures(manifest) == []
+
+    manifest["compatibility"]["launcher_requires"]["openadapt-flow"] = ["<2"]
+    assert [f["requires"] for f in launcher_candidate_failures(manifest)] == ["<2"]
+
+    other = {"source_role": "flow", "package": "openadapt-types"}
+    manifest["compatibility_status"]["failures"].append(other)
+    assert other in launcher_candidate_failures(manifest)

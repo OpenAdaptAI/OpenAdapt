@@ -98,6 +98,7 @@ from generate_platform_manifest import (
     _schema_compatibility,
     _substrates_from_status,
     _supported_os_from_status,
+    _version_satisfies,
 )
 from render_platform_versions import render_markdown
 
@@ -514,6 +515,52 @@ def check_structure(manifest: dict, report: Report) -> None:
         report.error("substrate_drivers must be a non-empty list")
     elif any(set(row) != {"name", "delivery"} for row in substrates):
         report.error("substrate_drivers has an invalid row")
+
+
+def launcher_candidate_failures(manifest: dict) -> list[dict]:
+    """Compatibility failures for the in-repo launcher candidate.
+
+    The manifest records only the PUBLISHED launcher, so a launcher release that
+    moves a component across a major version (for example Flow 1 -> 2) always
+    shows the published launcher's old pins as failures. At a release gate the
+    candidate being released is this checkout, whose openadapt-* pins are
+    recorded (and checked against pyproject.toml) in
+    compatibility.launcher_requires. Replace the published launcher's edges with
+    the candidate's pins against the exact selected component versions.
+    """
+
+    status = manifest.get("compatibility_status", {})
+    failures = [
+        failure
+        for failure in status.get("failures", [])
+        if failure.get("source_role") != "launcher"
+    ]
+    components = manifest.get("components", {})
+    by_package = {
+        component.get("package"): (role, component.get("version"))
+        for role, component in components.items()
+        if isinstance(component, dict)
+    }
+    requires = manifest.get("compatibility", {}).get("launcher_requires", {})
+    for package, specifiers in sorted(requires.items()):
+        if package not in by_package or package == "openadapt":
+            continue
+        role, version = by_package[package]
+        for specifier in specifiers:
+            if not isinstance(version, str) or not _version_satisfies(
+                version, specifier
+            ):
+                failures.append(
+                    {
+                        "scope": "launcher-candidate",
+                        "source_role": "launcher",
+                        "target_role": role,
+                        "package": package,
+                        "requires": specifier,
+                        "resolved": version,
+                    }
+                )
+    return failures
 
 
 def check_compatibility_status(manifest: dict, report: Report) -> None:
@@ -1084,6 +1131,15 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--launcher-candidate",
+        action="store_true",
+        help=(
+            "With --require-compatible at a launcher release gate: judge the "
+            "launcher by this checkout's pins (compatibility.launcher_requires) "
+            "instead of the published launcher's metadata."
+        ),
+    )
+    parser.add_argument(
         "--offline",
         action="store_true",
         help="Skip network checks against PyPI and status.json.",
@@ -1119,7 +1175,14 @@ def main() -> int:
     check_against_pyproject(manifest, report)
     check_compatibility_status(manifest, report)
     check_generated_report(manifest, report, args.report)
-    if (
+    if args.require_compatible and args.launcher_candidate:
+        for failure in launcher_candidate_failures(manifest):
+            report.error(
+                f"{failure['source_role']} -> {failure['package']} requires "
+                f"{failure['requires']}; the selected version is "
+                f"{failure['resolved']}"
+            )
+    elif (
         args.require_compatible
         and manifest.get("compatibility_status", {}).get("status")
         != "dependency-compatible"

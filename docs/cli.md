@@ -150,3 +150,15 @@ An exit status of zero means that the requested command completed. It does not
 by itself prove a business effect. Read `report.json` and the transaction
 outcome. A production success requires a `VERIFIED` outcome from the complete
 configured contract.
+
+## Check a Seal
+
+A Seal is OpenAdapt Cloud's Ed25519 signature on an Execute receipt. Check one offline against keys you pinned:
+
+```bash
+openadapt seal keys pin                        # once; compare the fingerprint before you type the key id
+openadapt seal verify runs/<run_id>/report.json
+openadapt seal verify https://example.com/receipt.json --json
+```
+
+`verify` never downloads keys. It exits 0 only for a genuine Seal over a verified outcome. Run `keys pin` again when OpenAdapt rotates its key; a new key needs your confirmation, and a revoked key stops verifying Seals issued after its revocation.

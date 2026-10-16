@@ -77,6 +77,9 @@ def _fetch_url(url: str, limit: int) -> bytes:
     return body
 
 
+ATTESTATION_SUFFIX = ".publish.attestation"
+
+
 def _local_artifacts(directory: Path) -> dict[str, Artifact]:
     if not directory.is_dir() or directory.is_symlink():
         raise ReleaseVerificationError(
@@ -84,7 +87,19 @@ def _local_artifacts(directory: Path) -> dict[str, Artifact]:
         )
 
     artifacts: dict[str, Artifact] = {}
-    for path in sorted(directory.iterdir()):
+    entries = sorted(directory.iterdir())
+    names = {path.name for path in entries}
+    for path in entries:
+        # pypa/gh-action-pypi-publish writes "<dist>.publish.attestation" next to
+        # each uploaded file. Skip only a regular file that names a sibling
+        # distribution in this directory; anything else is still unexpected.
+        if (
+            path.name.endswith(ATTESTATION_SUFFIX)
+            and path.is_file()
+            and not path.is_symlink()
+            and path.name[: -len(ATTESTATION_SUFFIX)] in names
+        ):
+            continue
         if not path.is_file() or path.is_symlink():
             raise ReleaseVerificationError(
                 f"unexpected local distribution: {path.name}"
