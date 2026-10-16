@@ -73,6 +73,11 @@ class EngineResult:
     sandbox: Optional[dict[str, str]] = None
     #: The per-save approval mode the run used, or the operator chose.
     approval_mode: Optional[str] = None
+    #: Where the run halted, for a repair token. Never sent to the client
+    #: except as the step id inside ``needs_repair``.
+    halt_step_id: Optional[str] = None
+    run_dir: Optional[str] = None
+    bundle_dir: Optional[str] = None
 
 
 class Engine(Protocol):
@@ -115,16 +120,21 @@ def attention_for(attended: Any, run_dir: Any) -> Optional[dict[str, Any]]:
 class FlowCliEngine:
     """Run an operator bundle through the governed ``openadapt-flow run`` CLI."""
 
-    def __init__(self, runner: FlowRunner, attended: Any) -> None:
+    def __init__(self, runner: FlowRunner, attended: Any, repair_desk: Any = None) -> None:
         self.runner = runner
         self.attended = attended
+        self.repair_desk = repair_desk
 
     def execute(
         self, entry: CatalogEntry, run_id: str, inputs: dict[str, str], raw: Mapping[str, Any]
     ) -> EngineResult:
+        bundle_dir = Path(entry.info.bundle_dir)
+        if self.repair_desk is not None:
+            # A person-approved repair, once activated, replaces the bundle.
+            bundle_dir = self.repair_desk.active_bundle(entry.name, bundle_dir)
         outcome = self.runner.run(
             workflow=entry.legacy_id or entry.name,
-            bundle_dir=entry.info.bundle_dir,
+            bundle_dir=bundle_dir,
             params=inputs,
             run_id=run_id,
         )
@@ -143,6 +153,9 @@ class FlowCliEngine:
             model_calls=summary.get("model_calls"),
             seconds=total_ms / 1000.0 if isinstance(total_ms, (int, float)) else None,
             approval_mode=outcome.approval_mode,
+            halt_step_id=_halt_step(outcome.halt),
+            run_dir=str(outcome.run_dir) if outcome.run_dir else None,
+            bundle_dir=str(bundle_dir),
         )
 
     def refresh(self, entry: CatalogEntry, run_id: str) -> Optional[EngineResult]:
@@ -159,6 +172,16 @@ class FlowCliEngine:
     def approval_mode(self) -> Optional[str]:
         """The approval mode the operator chose for every run, if any."""
         return self.runner.config.approval_mode
+
+
+def _halt_step(halt: Any) -> Optional[str]:
+    if not isinstance(halt, Mapping):
+        return None
+    for key in ("state_id", "step_id"):
+        value = halt.get(key)
+        if isinstance(value, str) and 0 < len(value) <= 256:
+            return value
+    return None
 
 
 def _owned_elsewhere(record: Mapping[str, Any]) -> bool:
@@ -208,7 +231,9 @@ class RunService:
         mode: str,
         allow_run: bool,
         require_all_inputs: bool = True,
+        repair_desk: Any = None,
     ) -> None:
+        self.repair_desk = repair_desk
         self.store = store
         self.catalog = dict(catalog)
         self.mode = mode
@@ -363,6 +388,7 @@ class RunService:
                     sandbox=outcome.sandbox,
                     approval_mode=outcome.approval_mode,
                 )
+                self._offer_repair(entry, record, outcome, result)
                 self.store.finish(
                     record, result, transaction_outcome=outcome.transaction_outcome
                 )
@@ -375,6 +401,36 @@ class RunService:
 
         thread = threading.Thread(target=work, name=f"openadapt-run-{run_id}", daemon=True)
         thread.start()
+
+    def _offer_repair(
+        self,
+        entry: CatalogEntry,
+        record: Mapping[str, Any],
+        outcome: EngineResult,
+        result: dict[str, Any],
+    ) -> None:
+        """Add ``needs_repair`` to a run that halted before it saved anything."""
+        from openadapt_agent.repair import REPAIRABLE_OUTCOMES
+
+        if (
+            self.repair_desk is None
+            or result.get("outcome") not in REPAIRABLE_OUTCOMES
+            or not outcome.halt_step_id
+            or not outcome.run_dir
+            or not outcome.bundle_dir
+        ):
+            return
+        try:
+            result["needs_repair"] = self.repair_desk.open(
+                run_id=record["run_id"],
+                workflow=entry.name,
+                step_id=outcome.halt_step_id,
+                halt_reason=outcome.reason,
+                bundle_dir=outcome.bundle_dir,
+                run_dir=outcome.run_dir,
+            )
+        except Exception:
+            _LOG.exception("could not open a repair for a halted run")
 
     # -- get_run -----------------------------------------------------------
 

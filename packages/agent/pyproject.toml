@@ -60,6 +60,11 @@ dev = [
     "pytest>=8.0.0",
     "ruff>=0.4.0",
 ]
+repair-screens = [
+    # Scrubs screens before a calling agent sees them during a repair. Without
+    # it, scrubbed_only and ask_each_time share no screen.
+    "openadapt-privacy[presidio]>=1.1.2",
+]
 tutorial = [
     # The sandbox's real engine drives MockMed through Flow's tutorial entry
     # query, added in openadapt-flow 1.29.0. Older Flow falls back to the

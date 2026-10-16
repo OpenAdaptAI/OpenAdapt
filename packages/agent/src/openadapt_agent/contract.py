@@ -851,6 +851,35 @@ RUN_RESULT_SCHEMA: dict[str, Any] = {
                 "approval_mode": {"type": "string", "enum": list(APPROVAL_MODES)},
             },
         },
+        "needs_repair": {
+            "type": "object",
+            "description": (
+                "Present when the run stopped at a step before saving anything. "
+                "Never carries a screen. teach_repair_available says whether "
+                "you may help; a person still approves any fix."
+            ),
+            "properties": {
+                "halt_reason": {"type": "string", "enum": sorted(REASONS)},
+                "step_id": {"type": "string"},
+                "repair_token": {"type": "string"},
+                "token_id": {"type": "string"},
+                "screen_access": {
+                    "type": "string",
+                    "enum": ["off", "scrubbed_only", "ask_each_time", "allow_unscrubbed"],
+                },
+                "teach_repair_available": {"type": "boolean"},
+                "human_approval_required": {"type": "boolean"},
+                "next_action": {"type": "string"},
+            },
+            "required": [
+                "halt_reason",
+                "step_id",
+                "repair_token",
+                "screen_access",
+                "teach_repair_available",
+                "human_approval_required",
+            ],
+        },
     },
     "required": [
         "outcome",

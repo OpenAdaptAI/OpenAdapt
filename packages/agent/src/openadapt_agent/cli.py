@@ -240,7 +240,63 @@ def build_parser() -> argparse.ArgumentParser:
             "--extra-run-arg=--allow-unencrypted for a demo bundle)"
         ),
     )
+    p.add_argument(
+        "--repair-access",
+        default=None,
+        metavar="FILE",
+        help=(
+            "Screen access setting for repairs, written by `openadapt-agent "
+            "repair access`. Without it, halted runs still return needs_repair "
+            "but no screens, and teach_repair is not offered."
+        ),
+    )
+    p.add_argument(
+        "--repair-dir",
+        default=None,
+        metavar="DIR",
+        help="Where repair tokens, approvals, and candidates live (default RUNS_DIR/.repair).",
+    )
+    p.add_argument(
+        "--hold-on-halt",
+        type=float,
+        default=300.0,
+        metavar="SECONDS",
+        help=(
+            "With --repair-access, keep a halted browser run's page open this "
+            "long so teach_repair acts on it (default 300; 0 turns it off)."
+        ),
+    )
     p.set_defaults(func=_cmd_serve)
+
+    repair = sub.add_parser(
+        "repair",
+        help="Control whether calling agents may help repair halted runs (local only).",
+    )
+    repair_sub = repair.add_subparsers(dest="repair_command", required=True)
+    access = repair_sub.add_parser(
+        "access",
+        help="Set screen access for repairs for one workflow or the whole organization.",
+    )
+    scope = access.add_mutually_exclusive_group(required=True)
+    scope.add_argument("--workflow", help="Workflow name from list_workflows")
+    scope.add_argument("--org", action="store_true", help="Default for every workflow")
+    access.add_argument(
+        "--screens",
+        required=True,
+        choices=("off", "scrubbed_only", "ask_each_time", "allow_unscrubbed"),
+    )
+    access.add_argument("--by", required=True, help="Your name, recorded with the setting")
+    access.add_argument("--file", required=True, help="The --repair-access file")
+    access.set_defaults(func=_cmd_repair_access)
+    approve = repair_sub.add_parser(
+        "approve-screen",
+        help="Look at the exact screen a calling agent would get for one repair, and approve it.",
+    )
+    approve.add_argument("token_id", help="token_id from the needs_repair result")
+    approve.add_argument("--by", required=True, help="Your name, recorded with the approval")
+    approve.add_argument("--repair-access", required=True, metavar="FILE")
+    approve.add_argument("--repair-dir", required=True, metavar="DIR")
+    approve.set_defaults(func=_cmd_repair_approve)
 
     authoring = sub.add_parser(
         "authoring",
@@ -523,6 +579,9 @@ def _cmd_serve(args: argparse.Namespace) -> int:
             allow_url_override=args.allow_url_override,
             extra_run_args=tuple(extra_run_args),
             approval_mode=args.approval_mode,
+            hold_on_halt_s=(
+                max(0.0, min(args.hold_on_halt, 1800.0)) if args.repair_access else 0.0
+            ),
         )
         with open_attended_service(
             enabled=args.allow_attended_actions,
@@ -540,6 +599,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
                 allow_protected_export=args.allow_protected_export,
                 allow_recorded_defaults=args.allow_synthetic_recorded_defaults,
                 mode=mode,
+                repair_desk=_repair_desk(args, runner_config.runs_dir),
             )
             n = len(bridge.workflows)
             print(
@@ -613,6 +673,90 @@ def _cmd_emit_skill(args: argparse.Namespace) -> int:
         print(f"emit-skill: {exc}", file=sys.stderr)
         return 2
     print(f"Wrote Agent Skill folder: {skill_dir}")
+    return 0
+
+
+def _repair_desk(args: argparse.Namespace, runs_dir: Path):
+    from openadapt_agent.repair import LazyBackendDemonstrator, RepairAccessPolicy, RepairDesk
+
+    if not args.repair_access:
+        policy = RepairAccessPolicy(None)
+        demonstrator = None
+    else:
+        policy = RepairAccessPolicy(args.repair_access)
+        demonstrator = LazyBackendDemonstrator(url=args.url, headed=args.headed)
+    return RepairDesk(
+        Path(args.repair_dir) if args.repair_dir else Path(runs_dir) / ".repair",
+        policy,
+        demonstrator=demonstrator,
+    )
+
+
+def _cmd_repair_access(args: argparse.Namespace) -> int:
+    from openadapt_agent.repair import RepairError, confirm_at_terminal, set_access
+
+    if args.screens == "allow_unscrubbed" and not confirm_at_terminal(
+        "Calling agents will see screens with names, dates of birth, and record "
+        "numbers left in. Type 'share unscrubbed' to confirm: ",
+        "share unscrubbed",
+    ):
+        print("Not changed. allow_unscrubbed needs confirmation at a terminal.", file=sys.stderr)
+        return 1
+    try:
+        set_access(
+            args.file,
+            workflow=None if args.org else args.workflow,
+            mode=args.screens,
+            enabled_by=args.by,
+        )
+    except RepairError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    target = "every workflow" if args.org else args.workflow
+    print(f"Screen access for repairs on {target}: {args.screens} (set by {args.by}).")
+    return 0
+
+
+def _cmd_repair_approve(args: argparse.Namespace) -> int:
+    from openadapt_agent.repair import (
+        LazyBackendDemonstrator,
+        RepairAccessPolicy,
+        RepairDesk,
+        RepairError,
+        confirm_at_terminal,
+    )
+
+    desk = RepairDesk(
+        args.repair_dir,
+        RepairAccessPolicy(args.repair_access),
+        demonstrator=LazyBackendDemonstrator(),
+    )
+    try:
+        sha, record = desk.find(args.token_id)
+        if desk.policy.for_workflow(record["workflow"]).mode != "ask_each_time":
+            raise RepairError("this workflow isn't set to ask_each_time; nothing to approve")
+        image, evidence = desk.prepare_preview(sha, record)
+    except RepairError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    preview = Path(args.repair_dir) / "approvals" / f"preview-{args.token_id}.png"
+    preview.parent.mkdir(parents=True, exist_ok=True)
+    preview.write_bytes(image)
+    os.chmod(preview, 0o600)
+    print(f"The calling agent would get exactly this image: {preview}")
+    print(f"Personal data removed: {'yes' if evidence else 'NO'}.")
+    if not confirm_at_terminal(
+        f"Type the token id ({args.token_id}) to share it for this one repair: ",
+        args.token_id,
+    ):
+        print("Not approved. Nothing was shared.", file=sys.stderr)
+        return 1
+    try:
+        desk.approve_screen(sha, approved_by=args.by, image=image, evidence=evidence)
+    except RepairError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print("Approved for this repair only.")
     return 0
 
 

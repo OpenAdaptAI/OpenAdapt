@@ -169,7 +169,9 @@ class AgentBridge:
         sandbox: Optional[Any] = None,
         mode: Optional[str] = None,
         store: Optional[RunStore] = None,
+        repair_desk: Optional[Any] = None,
     ):
+        self.repair_desk = repair_desk
         self.bundles_dir = Path(bundles_dir) if bundles_dir is not None else None
         self.sandbox = sandbox
         self.allow_run = allow_run or sandbox is not None
@@ -210,7 +212,7 @@ class AgentBridge:
             for entry in sandbox.entries():
                 self.catalog[entry.name] = entry
         else:
-            engine = FlowCliEngine(self.runner, self.attended)
+            engine = FlowCliEngine(self.runner, self.attended, repair_desk=repair_desk)
             for workflow_id, info in self.workflows.items():
                 card = card_for_bundle(info, default_name=workflow_id)
                 name = card.name
@@ -241,6 +243,7 @@ class AgentBridge:
                 mode=self.mode,
                 allow_run=self.allow_run,
                 require_all_inputs=not self.allow_recorded_defaults,
+                repair_desk=self.repair_desk,
             )
         return self._service
 
@@ -347,7 +350,80 @@ class AgentBridge:
                 usage=_GET_RUN_USAGE,
             )
         )
+        specs.extend(self._repair_specs())
         return specs
+
+    def _repair_tools_enabled(self) -> bool:
+        from openadapt_agent.repair import teach_supported
+
+        desk = self.repair_desk
+        return bool(
+            self.allow_run
+            and desk is not None
+            and desk.demonstrator is not None
+            and teach_supported()
+            and desk.policy.any_enabled()
+        )
+
+    def _repair_specs(self) -> list[ToolSpec]:
+        """Listed only after a person turned on screen access for repairs."""
+        if not self._repair_tools_enabled():
+            return []
+        token = {
+            "type": "string",
+            "minLength": 16,
+            "maxLength": 128,
+            "description": "repair_token from a needs_repair result.",
+        }
+        return [
+            ToolSpec(
+                name="get_repair_screen",
+                description=(
+                    "Get the screen where a run stopped, as a PNG, so you can "
+                    "decide what one click gets past that step. Personal data "
+                    "is removed first unless the operator chose otherwise. "
+                    "Refused when the operator didn't turn on screen access, "
+                    "when a person hasn't approved sharing yet, or when "
+                    "scrubbing fails."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {"repair_token": token},
+                    "required": ["repair_token"],
+                    "additionalProperties": False,
+                },
+                annotations=_READ_ONLY_ANNOTATIONS,
+            ),
+            ToolSpec(
+                name="teach_repair",
+                description=(
+                    "Show OpenAdapt the one click that gets a halted run past "
+                    "its stuck step. OpenAdapt performs and records the click "
+                    "and proposes a repair. You can't approve it: a person "
+                    "reviews and tests it first, and until then the workflow "
+                    "still stops at that step. Each repair_token works once."
+                ),
+                input_schema={
+                    "type": "object",
+                    "properties": {
+                        "repair_token": token,
+                        "demonstration": {
+                            "type": "object",
+                            "properties": {
+                                "action": {"type": "string", "enum": ["click"]},
+                                "x": {"type": "integer", "minimum": 0},
+                                "y": {"type": "integer", "minimum": 0},
+                            },
+                            "required": ["action", "x", "y"],
+                            "additionalProperties": False,
+                        },
+                    },
+                    "required": ["repair_token", "demonstration"],
+                    "additionalProperties": False,
+                },
+                annotations=_RUN_ANNOTATIONS,
+            ),
+        ]
 
     def list_tool_specs(self) -> list[ToolSpec]:
         specs = self._contract_specs()
@@ -512,6 +588,19 @@ class AgentBridge:
                     arguments.get("wait_seconds", DEFAULT_WAIT_SECONDS),
                 )
             except ServiceError as exc:
+                raise BridgeError(str(exc)) from exc
+        if name in ("get_repair_screen", "teach_repair"):
+            if not self._repair_tools_enabled():
+                raise BridgeError("repair tools are off on this server")
+            from openadapt_agent.repair import RepairError
+
+            try:
+                if name == "get_repair_screen":
+                    return self.repair_desk.screen(arguments.get("repair_token"))
+                return self.repair_desk.teach(
+                    arguments.get("repair_token"), arguments.get("demonstration")
+                )
+            except RepairError as exc:
                 raise BridgeError(str(exc)) from exc
         if not self.legacy_tools:
             raise BridgeError("unknown tool name")
