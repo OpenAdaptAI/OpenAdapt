@@ -295,3 +295,48 @@ requests that carry the secret. The hold ends on `release` or after the given
 time, at most 1800 seconds. Then the socket, its directory, and the hold file
 are removed and the browser closes. `openadapt-agent serve --repair-access`
 passes this flag and releases the hold after `teach_repair`.
+
+## Branches taught from several halts
+
+`openadapt-flow teach` learns a fix from one halted run. Its condition is text
+that was new where that run stopped, so it can key on details of that one run,
+such as a payer name or a reference number. `openadapt-flow teach-branch`
+learns the same kind of branch from two or more halts that a person resolved
+the same way:
+
+```bash
+openadapt-flow teach-branch \
+  --example runs/halt-1 fixes/dismiss --example runs/halt-2 fixes/dismiss \
+  --normal-run runs/ok-1 \
+  --bundle bundles/save-encounter --out bundles/save-encounter-branch
+```
+
+- **Same place, same fix.** Every example must stop at the same step in the
+  same way and have the same corrective steps. Otherwise it refuses.
+- **Shared screen signature.** The condition is text that was new on every
+  example's halt screen: a whole line, or a run of at least two words (for
+  example, "Prior Auth Required" from "Prior Auth Required - Aetna ref 4471"
+  and "Prior Auth Required - Cigna ref 9032").
+- **Narrowing by a parameter.** A `--normal-run` is a run that went the usual
+  way. If the signature also appears in a normal run, the condition must also
+  compare one declared enum or boolean parameter (for example, `payer_type`)
+  that has one value in every example and a different one in every such
+  normal run. Secret and free-text parameters are never used. If no single
+  parameter separates them, it refuses.
+- **The same governed learn loop.** All example corrections and the normal runs
+  go through induction, the regression gate and held-out validation together.
+  After promotion, each example and each normal run must still be explained by
+  the learned program. Only then is a bundle written.
+- **A candidate, not an active bundle.** The output carries
+  `repair/candidate.json` (source `teach`) and `repair/branch_induction.json`
+  (example count, the stopped step, the fix, and a digest of the condition).
+  It goes through the same campaigns, human approval and canary as any repair.
+
+At runtime the branch is an ordinary guarded state: an OCR text check and, when
+narrowed, a parameter compare. It makes no model calls. Limits: only one new
+corrective step is spliced (as with `teach`), the condition is text or text
+plus one parameter, and a parameter alone (with no shared screen text) is not
+accepted. When a run's earlier frames can't be read, all of its halt-screen
+text counts as new, so text that every screen shows could become the
+condition; pass a `--normal-run` to rule that out. Tests: `tests/test_teach_branch.py` (MockMed save scenario on the
+fake backend; no browser).

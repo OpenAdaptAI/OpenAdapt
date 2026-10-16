@@ -5919,6 +5919,27 @@ def _cmd_teach(args: argparse.Namespace) -> int:
     return 1
 
 
+def _cmd_teach_branch(args: argparse.Namespace) -> int:
+    """Learn one guarded branch from two or more resolved halts."""
+    from openadapt_flow.learning.branch_teach import BranchExample, teach_branch
+    from openadapt_flow.learning.teach import TeachError
+
+    try:
+        result = teach_branch(
+            [BranchExample(run_dir=Path(r), fix=Path(f)) for r, f in args.example],
+            Path(args.out),
+            bundle=Path(args.bundle),
+            negatives=[Path(n) for n in args.normal_run or []],
+            skill_id=args.skill_id,
+            library_dir=Path(args.library) if args.library else None,
+        )
+    except TeachError as e:
+        print(f"teach-branch cannot run: {e}")
+        return 2
+    print(result.summary())
+    return 0 if result.promoted else 1
+
+
 def _cmd_repair(args: argparse.Namespace) -> int:
     """Governed repair promotion lifecycle (see docs/REPAIR_LIFECYCLE.md).
 
@@ -8117,6 +8138,36 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.set_defaults(func=_cmd_teach)
+
+    p = sub.add_parser(
+        "teach-branch",
+        help=(
+            "Learn a guarded branch from two or more halts resolved the same "
+            "way. The branch keys on the screen text they share (narrowed by "
+            "an enum parameter when normal runs show that text too) and is "
+            "written as a repair candidate that needs approval"
+        ),
+    )
+    p.add_argument(
+        "--example",
+        nargs=2,
+        action="append",
+        required=True,
+        metavar=("RUN_DIR", "FIX"),
+        help="A halted run directory and its fix (recording or .json spec). "
+        "Pass at least twice",
+    )
+    p.add_argument(
+        "--normal-run",
+        action="append",
+        metavar="RUN_DIR",
+        help="A run of the bundle that went the normal way (repeatable)",
+    )
+    p.add_argument("--bundle", required=True, help="The base bundle that halted")
+    p.add_argument("--out", required=True, help="Where to write the candidate bundle")
+    p.add_argument("--skill-id", default=None)
+    p.add_argument("--library", default=None)
+    p.set_defaults(func=_cmd_teach_branch)
 
     p = sub.add_parser(
         "repair",
