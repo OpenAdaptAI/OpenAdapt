@@ -145,12 +145,12 @@ and clicking, it calls a taught workflow as one tool and gets back an outcome:
 done and checked, stopped before saving, check the record, or didn't run.
 
 ```bash
-openadapt agent serve --bundles <bundle or directory of bundles> --allow-run
+openadapt agent serve --mode production --bundles <bundle or directory of bundles>
 openadapt agent emit-skill <bundle> --out ~/.claude/skills
 ```
 
-`serve` starts an MCP server over stdio; leave out `--allow-run` to let the
-client inspect workflows without starting them. `emit-skill` writes an Agent
+`serve` starts an MCP server over stdio; leave out `--mode production` to let
+the client list workflows without starting them. `emit-skill` writes an Agent
 Skill that tells the agent how to call the workflow. See
 [Give an agent the run tool](#give-an-agent-the-run-tool) and the
 [`openadapt-agent` README](https://github.com/OpenAdaptAI/openadapt-agent).
