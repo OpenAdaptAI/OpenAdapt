@@ -164,13 +164,22 @@ def _fault_unexpected_dialog(image: Image.Image, region: Region) -> Image.Image:
     return out
 
 
-def _fault_verifier_failure(image: Image.Image, region: Region) -> Image.Image:
-    """Make the identity band unreadable while the target stays present."""
+def _fault_verifier_failure(
+    image: Image.Image, region: Region, identifier_region: Optional[Region] = None
+) -> Image.Image:
+    """Make the identity evidence unreadable while the target stays present.
+
+    Grays the target's rows and, when the anchor reads its identity from a
+    marked region (a table row or an enclosing dialog), that whole region too.
+    """
     out = image.copy()
     band = _band_region(region, out.size)
     x, y, w, h = band
     draw = ImageDraw.Draw(out)
     draw.rectangle((x, y, x + w, y + h), fill=(128, 128, 128))
+    if identifier_region is not None:
+        ix, iy, iw, ih = identifier_region
+        draw.rectangle((ix, iy, ix + iw, iy + ih), fill=(128, 128, 128))
     tx, ty, tw, th = region
     out.paste(image.crop((tx, ty, tx + tw, ty + th)), (tx, ty))
     return out
@@ -202,6 +211,8 @@ def fault_battery(
             except ValueError as exc:
                 drifted = image
                 construction_error = str(exc)
+        elif kind == FaultKind.VERIFIER_FAILURE:
+            drifted = _fault_verifier_failure(image, region, anchor.identifier_region)
         else:
             drifted = builders[kind](image, region)
         cases.append(

@@ -2021,14 +2021,20 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             "omit --url to use it (drift your own app for real)."
         )
 
+    held_backend: list = []
+    hold_s = min(max(float(getattr(args, "hold_on_halt", 0.0) or 0.0), 0.0), 1800.0)
+    held_exit: list[int] = []
+
     def run_on_page(page, *, entry_url: Optional[str]):
         # The browser backend is built through the same factory as the
         # desktop backends; the grounding / identity / deployment wiring and
         # the run are shared (see _build_and_run_replayer). ``--drift`` (a
         # MockMed teaching aid) forces the visual floor so the healing ladder
         # is exercised instead of the structural rung resolving it.
+        backend = build_backend(backend_cfg, page=page)
+        held_backend.append(backend)
         return _build_and_run_replayer(
-            build_backend(backend_cfg, page=page),
+            backend,
             workflow=workflow,
             params=params,
             worklists=worklists,
@@ -2115,6 +2121,23 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             page.goto(url)
             try:
                 report = run_on_page(page, entry_url=url)
+                if hold_s > 0 and not report.success and held_backend:
+                    # Report first, so the caller can act on the halt while
+                    # the page stays open for a repair demonstration.
+                    held_exit.append(
+                        _finish_replay(
+                            run_dir,
+                            report,
+                            args,
+                            backend_kind=_report_backend_kind(backend_cfg.kind),
+                        )
+                    )
+                    sys.stdout.flush()
+                    from openadapt_flow.repair.hold import hold_for_repair
+
+                    hold_for_repair(
+                        held_backend[-1], run_dir, hold_s, exit_code=held_exit[0]
+                    )
             finally:
                 video_path = None
                 if context is not None:
@@ -2130,6 +2153,8 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         if stop is not None:
             stop()
 
+    if held_exit:
+        return held_exit[0]
     return _finish_replay(
         run_dir, report, args, backend_kind=_report_backend_kind(backend_cfg.kind)
     )
@@ -6934,6 +6959,18 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--headed", action="store_true", help="Run the browser headed")
     p.add_argument(
         "--record-video", default=None, metavar="DIR", help=argparse.SUPPRESS
+    )
+    p.add_argument(
+        "--hold-on-halt",
+        type=float,
+        default=0.0,
+        metavar="SECONDS",
+        help=(
+            "When a browser run halts, keep its page open for up to SECONDS "
+            "so openadapt-agent can record a repair on it (see "
+            "openadapt_flow.repair.hold). 0, the default, closes it at once. "
+            "Max 1800."
+        ),
     )
     _add_backend_flags(p)
     _add_browser_session_flags(p)

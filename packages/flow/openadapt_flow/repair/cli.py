@@ -14,7 +14,7 @@ import getpass
 from pathlib import Path
 from typing import Optional
 
-from openadapt_flow.ir import Anchor, Point, RunReport, Workflow
+from openadapt_flow.ir import Anchor, Point, RunReport, Step, Workflow
 from openadapt_flow.repair.campaign import (
     merge_campaign_results,
     run_fault_campaign,
@@ -38,6 +38,23 @@ from openadapt_flow.repair.registration import (
 )
 
 DEFAULT_STORE = "repair-store"
+
+
+def all_steps(workflow: Workflow) -> dict[str, Step]:
+    """Every step in a bundle by id: linear steps plus program-graph states.
+
+    A taught bundle carries its steps in the program graph (and subflows),
+    not in ``workflow.steps``.
+    """
+    steps = {step.id: step for step in workflow.steps}
+    graphs = [workflow.program, *workflow.subflows.values()]
+    for graph in graphs:
+        if graph is None:
+            continue
+        for state in graph.states.values():
+            if state.step is not None:
+                steps.setdefault(state.step.id, state.step)
+    return steps
 
 
 def _store(args: argparse.Namespace) -> RepairStore:
@@ -153,8 +170,11 @@ def _campaign_inputs(
     run_dir = Path(candidate.evidence_run_dir)
     bundle = Path(candidate.proposed_bundle_path)
     workflow = Workflow.load(bundle)
-    steps = {step.id: step for step in workflow.steps}
-    changed_ids = sorted({change.step_id for change in candidate.binding_changes})
+    steps = all_steps(workflow)
+    changed_ids = sorted(
+        {change.step_id for change in candidate.binding_changes}
+        | {taught.step_id for taught in candidate.taught_steps}
+    )
     inputs: list[tuple[str, Anchor, bytes, Optional[bytes]]] = []
     for step_id in changed_ids:
         step = steps.get(step_id)

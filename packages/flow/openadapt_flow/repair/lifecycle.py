@@ -88,6 +88,18 @@ def _require_human(actor: Actor, operation: str) -> None:
         )
 
 
+def _refuse_self_review(
+    candidate: RepairCandidate, actor: Actor, operation: str
+) -> None:
+    """The agent that taught a repair may not review or approve it."""
+    provenance = candidate.provenance
+    if provenance is not None and actor.id == provenance.agent_id:
+        raise RepairLifecycleError(
+            f"refused: {actor.id!r} taught this repair and may not perform "
+            f"{operation}. A different person must review and approve it."
+        )
+
+
 #: Legal transitions. Anything absent here is refused.
 _ALLOWED: dict[RepairState, tuple[RepairState, ...]] = {
     "candidate": ("reviewed", "rejected"),
@@ -282,6 +294,7 @@ class RepairStore:
         """A human reviewed the candidate's diff (candidate -> reviewed)."""
         _require_human(actor, "repair review")
         candidate = self.load_candidate(candidate_id)
+        _refuse_self_review(candidate, actor, "repair review")
         candidate.reviewed_by = actor.id
         return self._transition(candidate, "reviewed", actor, note="diff reviewed")
 
@@ -363,6 +376,7 @@ class RepairStore:
         """
         _require_human(actor, "repair approval")
         candidate = self.load_candidate(candidate_id)
+        _refuse_self_review(candidate, actor, "repair approval")
         if candidate.state != "fault_passed":
             raise RepairLifecycleError(
                 f"refused: candidate {candidate_id} is in state "

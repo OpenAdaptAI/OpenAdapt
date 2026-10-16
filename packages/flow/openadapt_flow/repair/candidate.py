@@ -24,7 +24,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 from openadapt_flow.qualification import EvidenceRef
 
@@ -208,6 +208,79 @@ class CanaryRunObservation(BaseModel):
     detail: str = Field(default="", max_length=512)
 
 
+ScreenShareMode = Literal["scrubbed_only", "ask_each_time", "allow_unscrubbed"]
+
+
+class ScreenScrubEvidence(BaseModel):
+    """What scrubbed the screens a calling agent saw during a repair.
+
+    Copied from ``openadapt_privacy.ScrubbingProvider.evidence()``. Holds no
+    screen content.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    provider: str = Field(min_length=1, max_length=128)
+    package_version: str = Field(min_length=1, max_length=64)
+    policy_sha256: Optional[str] = Field(default=None, max_length=128)
+
+
+class RepairProvenance(BaseModel):
+    """Who demonstrated a repair, and under which permissions.
+
+    Set when a calling agent (an MCP client of ``openadapt-agent``) taught the
+    fix for a halted run. The agent named in ``agent_id`` may not review or
+    approve this candidate. The screen-sharing fields come from the operator's
+    setting and OpenAdapt's own approval surface, never from the agent.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    repaired_by: Literal["calling_agent"] = "calling_agent"
+    agent_id: str = Field(min_length=1, max_length=256)
+    halted_run_id: str = Field(min_length=1, max_length=256)
+    halted_step_id: str = Field(min_length=1, max_length=256)
+    repair_token_sha256: str = Field(pattern=_SHA256)
+    #: The person who turned on screen access for this workflow or org.
+    screen_access_enabled_by: str = Field(min_length=1, max_length=256)
+    #: The admin-set sharing mode in force for this repair.
+    screen_share_mode: ScreenShareMode = "scrubbed_only"
+    screens_shared: int = Field(default=0, ge=0)
+    screens_scrubbed: bool = True
+    scrub_evidence: Optional[ScreenScrubEvidence] = None
+    #: The person who approved sharing for this one repair token
+    #: (``ask_each_time`` only).
+    screen_share_approved_by: Optional[str] = Field(default=None, max_length=256)
+
+    @model_validator(mode="after")
+    def _consistent(self) -> "RepairProvenance":
+        if self.screens_shared:
+            if self.screens_scrubbed and self.scrub_evidence is None:
+                raise ValueError("scrubbed screens need scrub evidence")
+            if (
+                not self.screens_scrubbed
+                and self.screen_share_mode != "allow_unscrubbed"
+            ):
+                raise ValueError(
+                    "unscrubbed screens are only allowed in allow_unscrubbed mode"
+                )
+            if self.screen_share_mode == "ask_each_time":
+                if not self.screen_share_approved_by:
+                    raise ValueError("ask_each_time sharing needs a named approver")
+                if self.screen_share_approved_by == self.agent_id:
+                    raise ValueError("the calling agent cannot approve its own sharing")
+        return self
+
+
+class TaughtStep(BaseModel):
+    """A step a teach added, with the frame its campaigns replay against."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    step_id: str = Field(min_length=1, max_length=256)
+    frame_sha256: str = Field(pattern=_SHA256)
+
+
 class TransitionRecord(BaseModel):
     """One audited lifecycle transition."""
 
@@ -253,6 +326,10 @@ class RepairCandidate(BaseModel):
     #: Run directory holding the heal frames the campaigns replay against.
     evidence_run_dir: Optional[str] = None
     contract_weakenings: list[ContractWeakening] = Field(default_factory=list)
+    #: Steps a teach added. Their evidence frames live at
+    #: ``evidence_run_dir/heals/<step_id>/screen.png``, like heal evidence.
+    taught_steps: list[TaughtStep] = Field(default_factory=list)
+    provenance: Optional[RepairProvenance] = None
 
     state: RepairState = "candidate"
     history: list[TransitionRecord] = Field(default_factory=list)
@@ -287,6 +364,24 @@ class RepairCandidate(BaseModel):
             f"  prior    {self.prior_content_digest}",
             f"  proposed {self.proposed_content_digest}",
         ]
+        if self.provenance is not None:
+            lines.append(
+                f"  taught by calling agent {self.provenance.agent_id!r} for run "
+                f"{self.provenance.halted_run_id} at step "
+                f"{self.provenance.halted_step_id}"
+            )
+            prov = self.provenance
+            lines.append(
+                f"  screens shared with the agent: {prov.screens_shared} "
+                f"(mode {prov.screen_share_mode}, "
+                f"scrubbed {'yes' if prov.screens_scrubbed else 'NO'}"
+                + (
+                    f", approved by {prov.screen_share_approved_by}"
+                    if prov.screen_share_approved_by
+                    else ""
+                )
+                + ")"
+            )
         if self.contract_weakenings:
             lines.append(
                 "  contract weakenings (require a new qualification revision):"
