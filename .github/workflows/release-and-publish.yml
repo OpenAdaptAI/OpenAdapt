@@ -168,7 +168,8 @@ jobs:
             --manifest platform-manifest.json \
             --report docs/platform-compatibility-report.md \
             --offline \
-            --require-compatible
+            --require-compatible \
+            --launcher-candidate
           python scripts/check_source_boundary.py
           python scripts/verify_release_hosting.py \
             --repository "$GITHUB_REPOSITORY" \
@@ -284,10 +285,11 @@ jobs:
             --manifest platform-manifest.json \
             --report docs/platform-compatibility-report.md \
             --offline \
-            --require-compatible
+            --require-compatible \
+            --launcher-candidate
 
       - name: Install uv
-        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
         with:
           version: "0.11.29"
           enable-cache: false
@@ -383,7 +385,7 @@ jobs:
           persist-credentials: false
 
       - name: Download attested release artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-dists-${{ github.ref_name }}
           path: dist/
@@ -441,7 +443,7 @@ jobs:
           python-version: "3.12"
 
       - name: Download attested release artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-dists-${{ github.ref_name }}
           path: dist/
@@ -683,7 +685,7 @@ jobs:
           python-version: "3.12"
 
       - name: Download the attested source artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: release-dists-${{ github.ref_name }}
           path: dist/

@@ -226,6 +226,22 @@ def test_local_release_requires_only_one_wheel_and_one_sdist(tmp_path: Path) -> 
         verify_pypi_release(directory, VERSION, fetch=_fetch(bodies))
 
 
+def test_publish_attestations_beside_distributions_are_ignored(tmp_path: Path) -> None:
+    directory, bodies = _fixture(tmp_path)
+    for path in list(directory.iterdir()):
+        (directory / f"{path.name}.publish.attestation").write_text("{}")
+
+    verify_pypi_release(directory, VERSION, fetch=_fetch(bodies))
+
+
+def test_orphan_publish_attestation_is_refused(tmp_path: Path) -> None:
+    directory, bodies = _fixture(tmp_path)
+    (directory / "other-1.0.0.whl.publish.attestation").write_text("{}")
+
+    with pytest.raises(ReleaseVerificationError, match="unexpected local"):
+        verify_pypi_release(directory, VERSION, fetch=_fetch(bodies))
+
+
 def test_local_distribution_names_must_identify_exact_version(tmp_path: Path) -> None:
     directory, bodies = _fixture(tmp_path)
     wheel = next(directory.glob("*.whl"))

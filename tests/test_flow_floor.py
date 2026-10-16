@@ -24,7 +24,9 @@ except ModuleNotFoundError:  # pragma: no cover - exercised on Python 3.10 CI
     import tomli as tomllib
 
 ROOT = Path(__file__).resolve().parents[1]
-BELOW_FLOOR = ["1.29.0", "1.33.0", "1.34.0", "1.34.9"]
+# Launcher 1.17 requires Flow 2 (approval by default), so 1.x is below the floor.
+BELOW_FLOOR = ["1.29.0", "1.33.0", "1.34.0", "1.34.9", "1.35.0", "1.35.1"]
+ACCEPTED = "2.0.0"
 
 
 def _flow_requirements() -> list[Requirement]:
@@ -50,7 +52,7 @@ def test_flow_requirements_exclude_releases_below_the_floor(version: str) -> Non
 
 def test_flow_requirements_accept_the_fixed_release() -> None:
     for requirement in _flow_requirements():
-        assert requirement.specifier.contains("1.35.0"), str(requirement)
+        assert requirement.specifier.contains(ACCEPTED), str(requirement)
 
 
 @pytest.mark.parametrize("version", BELOW_FLOOR)
@@ -64,7 +66,8 @@ def test_doctor_and_deploy_treat_releases_below_the_floor_as_unsupported(
 
 
 def test_doctor_and_deploy_accept_the_fixed_release() -> None:
-    assert _supported_flow_version("1.35.0")
+    assert _supported_flow_version(ACCEPTED)
     assert Requirement(f"openadapt-flow{_SUPPORTED_FLOW_RANGE}").specifier.contains(
-        "1.35.0"
+        ACCEPTED
     )
+    assert not _supported_flow_version("3.0.0")
