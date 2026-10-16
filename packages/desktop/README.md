@@ -6,8 +6,9 @@
 
 OpenAdapt Desktop automates repeated data entry in the apps your team already
 uses: web apps, electronic medical records (EMRs), insurance portals, desktop
-apps, and apps reached over RDP or Citrix. You do a task once while OpenAdapt
-records it. It compiles the recording into a program that runs on your computer
+apps, and apps reached over RDP or Citrix. You, or an AI agent, do the task
+while OpenAdapt records it. An agent can't drive the recording in native
+Windows apps or over RDP or Citrix; a person does it there. It compiles the recording into a program that runs on your computer
 and repeats the task for each item on a list. Before it types, it checks that
 the screen shows the right record. After it saves, it reads the record back to
 confirm the save, once you've told it how. When something doesn't match, it
@@ -62,8 +63,8 @@ takes several minutes.
 
 ## How it works
 
-1. **Show it.** Do the task once, on a test record, in the app where you
-   already do it.
+1. **Show it.** Do the task, or let an AI agent do it, on a test record, in
+   the app where you already do it.
 2. **Check it.** Confirm what the task changes, how OpenAdapt makes sure it's
    on the right record, and how it confirms the save. Run one practice item,
    then approve the task.
@@ -111,7 +112,7 @@ elements or the accessibility tree) when there is one, then the target's
 appearance, its text, and its position on screen. When a layout, label, or
 theme changes, the run tries them in that order and continues on a valid
 match. If nothing matches, it stops at that step instead of clicking something
-that looks close, and a person can show OpenAdapt the right way once from
+that looks close, and a person can show OpenAdapt the right way from
 **Needs you**. OpenAdapt records each fallback as a proposed repair and never
 changes the task on its own.
 
