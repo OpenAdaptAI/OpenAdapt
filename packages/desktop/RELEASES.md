@@ -19,7 +19,7 @@ imply Production acceptance before central activation.
 
 | Lane | Tag | Trigger | Marked as | Assets |
 | --- | --- | --- | --- | --- |
-| Engine (Python package) | `vX.Y.Z` | Explicit `Release and PyPI Publish` dispatch from reviewed, green `main` | Regular release ("Latest") | Wheel, sdist, an attested engine-release provenance receipt, and PyPI publish attestations. A later successful native release mirrors its matching installer set here. |
+| Engine (Python package) | `vX.Y.Z` | Automatic `Release and PyPI Publish` run on every push to `main`, after that exact head's Test and Build pass (manual dispatch still works) | Regular release ("Latest") | Wheel, sdist, an attested engine-release provenance receipt, and PyPI publish attestations. A later successful native release mirrors its matching installer set here. |
 | Native installers | `desktop-vX.Y.Z` | Explicit `Native Installer Release` dispatch from reviewed, green `main` | Published **prerelease candidate** | Candidate installers, platform metadata, SBOM, website manifest, signed build provenance, and `SHA256SUMS` |
 | Candidate native channel | `desktop-channel` | Final candidate-index step in the same native dispatch | Published **prerelease index** | The attested, strictly monotonic `openadapt-desktop-channel.json` descriptor |
 | Production derived cache | `desktop-production-channel` | Separate manual dispatch after central admission activation | Published **prerelease cache** | One append-only descriptor for each exact active central admission |

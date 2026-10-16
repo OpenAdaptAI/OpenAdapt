@@ -950,7 +950,8 @@ def test_developer_override_is_explicit_and_labelled(
 ) -> None:
     from openadapt_desktop import flow_bridge
 
-    dev = tmp_path / "openadapt-flow"
+    # Windows resolves only PATHEXT names, so the fake program needs .exe there.
+    dev = tmp_path / ("openadapt-flow.exe" if sys.platform == "win32" else "openadapt-flow")
     dev.write_text("#!/bin/sh\n")
     dev.chmod(0o755)
     monkeypatch.setattr(flow_bridge, "_is_frozen", lambda: False)

@@ -1,14 +1,17 @@
 name: Release and PyPI Publish
 
-# Two explicit paths, both dispatched from protected main:
-#   semantic-release     -> coalesce reviewed commits into one version, tag,
-#                           PyPI package, and GitHub Release.
+# Two paths, both from protected main:
+#   semantic-release     -> runs on every push to main (and on dispatch). It
+#                           waits for the exact head's Test and Build to pass,
+#                           then coalesces releasable commits into one version,
+#                           tag, PyPI package, and GitHub Release. Commits with
+#                           no feat/fix/perf change publish nothing.
 #   publish-existing-ref -> rebuild and publish an existing main-contained ref
 #                           to PyPI (recovery when its tag exists but publish
 #                           failed).
 #
-# Ordinary merges run Test and Build artifacts only. Publication is a separate,
-# deliberate operation after the release train's exact main commit is green.
+# A push whose head is superseded before its checks finish refuses to publish;
+# the newer push's run releases instead.
 # Publication creates an unadmitted release candidate. It never changes the
 # admission-driven Production channel.
 #
@@ -16,6 +19,8 @@ name: Release and PyPI Publish
 # and tag through branch protection. PyPI publication uses Trusted Publishing.
 
 on:
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       operation:
@@ -39,9 +44,10 @@ jobs:
   semantic-release:
     name: Version, tag, and publish the green main release train
     if: >-
-      github.event_name == 'workflow_dispatch' &&
-      inputs.operation == 'semantic-release' &&
-      github.ref == 'refs/heads/main'
+      github.ref == 'refs/heads/main' &&
+      (github.event_name == 'push' ||
+       (github.event_name == 'workflow_dispatch' &&
+        inputs.operation == 'semantic-release'))
     runs-on: ubuntu-latest
     permissions:
       actions: read

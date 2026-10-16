@@ -217,7 +217,7 @@ def test_release_workflow_uses_matching_pinned_actions() -> None:
     assert "- name: Build package" not in workflow
 
 
-def test_release_is_manual_and_gated_on_exact_test_and_build_heads() -> None:
+def test_release_runs_on_main_and_is_gated_on_exact_test_and_build_heads() -> None:
     workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
     triggers = workflow[workflow.index("\non:\n") : workflow.index("\njobs:\n")]
     semantic = workflow[workflow.index("\n  semantic-release:") :]
@@ -225,7 +225,7 @@ def test_release_is_manual_and_gated_on_exact_test_and_build_heads() -> None:
     head_index = semantic.index("- name: Require dispatched head to remain current protected main")
     release_index = semantic.index("- name: Python Semantic Release")
 
-    assert "  push:" not in triggers
+    assert "  push:\n    branches: [main]\n" in triggers
     assert "  workflow_dispatch:" in triggers
     assert "operation:" in triggers
     assert "- semantic-release" in triggers
@@ -255,7 +255,6 @@ def test_dev_semantic_release_floor_matches_the_pinned_v10_action() -> None:
     )
     assert "# v10.6.2" in workflow
     assert "python-semantic-release>=9" not in "\n".join(dev)
-    assert "  push:" not in workflow[workflow.index("\non:\n") : workflow.index("\njobs:\n")]
     uv = pyproject["tool"]["uv"]
     assert "click>=8.3.3" in uv["constraint-dependencies"]
 
