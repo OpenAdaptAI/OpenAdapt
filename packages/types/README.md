@@ -49,7 +49,7 @@ JSON, and gives you a JSON Schema from `model_json_schema()`.
 OpenAdapt's benchmark harness
 ([openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals)) and
 training code ([openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml))
-use these types. If you want to show a task once and have it run again on its
+use these types. If you want to show a task and have it run again on its
 own, install [OpenAdapt](https://github.com/OpenAdaptAI/OpenAdapt)
 (`pip install openadapt`) instead.
 
