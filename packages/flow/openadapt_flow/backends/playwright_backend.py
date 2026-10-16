@@ -20,6 +20,8 @@ from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
 from urllib.parse import urlsplit
 
+from openadapt_flow.backends._page_quiescence import PageQuiescence
+
 if TYPE_CHECKING:  # pragma: no cover
     from playwright.sync_api import Page
 
@@ -513,6 +515,80 @@ _FIELD_GROUP_IDENTITY_JS = r"""(hit) => {
     return null;
 }"""
 
+# Visible-text candidates in ONE document: the deepest elements whose RENDERED
+# text (innerText: display/visibility-aware) contains the normalized target,
+# that are not transparent and intersect this document's viewport. Returns
+# the frame-local center of each candidate's visible box. The caller still
+# hit-tests every candidate through the real frame chain (occlusion, clipping
+# by the parent frame) before believing it.
+_VISIBLE_TEXT_CANDIDATES_JS = r"""(target) => {
+    const norm = (v) => (v || '').replace(/\s+/g, '').toLowerCase();
+    const want = norm(target);
+    if (!want || !document.body) return [];
+    const out = [];
+    const vw = window.innerWidth, vh = window.innerHeight;
+    const opaque = (el) => {
+        for (let c = el; c && c.nodeType === 1; c = c.parentElement) {
+            const s = getComputedStyle(c);
+            if (s.visibility === 'hidden' || s.display === 'none') return false;
+            if (parseFloat(s.opacity) < 0.1) return false;
+        }
+        const s = getComputedStyle(el);
+        const m = /rgba?\(([^)]+)\)/.exec(s.color || '');
+        if (m) {
+            const parts = m[1].split(',').map((x) => parseFloat(x));
+            if (parts.length === 4 && parts[3] < 0.1) return false;
+        }
+        return parseFloat(s.fontSize) >= 6;
+    };
+    const visit = (el) => {
+        if (!norm(el.textContent).includes(want)) return;
+        let deeper = false;
+        for (const child of el.children) {
+            if (norm(child.textContent).includes(want)) { deeper = true; visit(child); }
+        }
+        if (deeper || out.length >= 8) return;
+        if (!norm(el.innerText).includes(want)) return;
+        if (!opaque(el)) return;
+        for (const r of el.getClientRects()) {
+            const x0 = Math.max(0, r.left), y0 = Math.max(0, r.top);
+            const x1 = Math.min(vw, r.right), y1 = Math.min(vh, r.bottom);
+            if (x1 - x0 < 2 || y1 - y0 < 2) continue;
+            out.push([(x0 + x1) / 2, (y0 + y1) / 2]);
+            break;
+        }
+    };
+    visit(document.body);
+    return out;
+}"""
+
+# At a hit-tested point: is the topmost element (or an ancestor) the one whose
+# rendered text contains the target? Proves the text is not covered.
+_TEXT_AT_POINT_JS = r"""([px, py, target]) => {
+    const norm = (v) => (v || '').replace(/\s+/g, '').toLowerCase();
+    const want = norm(target);
+    // The topmost element at the point, or one of its ancestors, must be a
+    // DEEPEST holder of the text (no child holds it too). Climbing to a big
+    // container that merely contains the text elsewhere does not count.
+    let el = document.elementFromPoint(px, py);
+    for (let i = 0; el && i < 6; i += 1, el = el.parentElement) {
+        if (!norm(el.innerText).includes(want)) continue;
+        for (const child of el.children) {
+            if (norm(child.textContent).includes(want)) return false;
+        }
+        return true;
+    }
+    return false;
+}"""
+
+_FOCUSED_SELECT_AT_JS = r"""([px, py]) => {
+    const hit = document.elementFromPoint(px, py);
+    const sel = hit && hit.closest ? hit.closest('select') : null;
+    if (!sel || sel !== document.activeElement) return null;
+    const opt = sel.selectedOptions && sel.selectedOptions[0];
+    return opt ? (opt.label || opt.textContent || '') : null;
+}"""
+
 _STRUCTURED_TEXT_AT_JS = (
     r"""([px, py]) => {
     const el = document.elementFromPoint(px, py);
@@ -937,6 +1013,10 @@ class PlaywrightBackend:
         self._qualification_input_guard: Optional[Callable[[], None]] = None
         self._presentation_viewport_loaded = False
         self._presentation_viewport: Optional[tuple[int, int, float]] = None
+        # DOM + network quiescence signal for the browser settle (see
+        # openadapt_flow.backends._page_quiescence). Armed at construction:
+        # network requests issued before this point are not tracked.
+        self._quiescence = PageQuiescence(page)
 
     @property
     def viewport(self) -> tuple[int, int]:
@@ -2593,6 +2673,111 @@ class PlaywrightBackend:
         return len(left) == len(right) and all(
             before is after for before, after in zip(left, right)
         )
+
+    def focused_select_label_at(self, x: int, y: int) -> Optional[str]:
+        """Selected option label of the FOCUSED ``<select>`` under ``(x, y)``.
+
+        ``None`` unless the hit-tested element at the point (through the real
+        frame chain) is a select that also holds focus. Used to verify typed
+        input into a dropdown without OCR; never raises.
+        """
+        try:
+            point = self._frame_point(int(x), int(y))
+            if point is None:
+                return None
+            out = point.scope.evaluate(_FOCUSED_SELECT_AT_JS, [point.x, point.y])
+        except Exception:
+            return None
+        return out if isinstance(out, str) else None
+
+    def page_change_marker(self) -> Optional[str]:
+        """Marker of the last change seen by the latest quiet probe, or None.
+
+        Two quiet probes with the same marker prove nothing in the page (DOM,
+        events, network, frames) changed between them.
+        """
+        tracker = getattr(self, "_quiescence", None)
+        return getattr(tracker, "marker", None) if tracker is not None else None
+
+    def visible_text_present(self, text: str) -> Optional[bool]:
+        """Is ``text`` rendered visibly in the viewport, per the DOM?
+
+        Returns ``True`` only when some element's rendered text (``innerText``)
+        contains ``text`` as an exact case-insensitive substring once all
+        whitespace is removed (the OCR tier's squash; recorded OCR texts often
+        lose spaces), and
+        that element is not hidden or transparent, intersects its document's
+        viewport, AND a hit test through the real frame chain at that point
+        lands on it (so text under a dialog, clipped by its frame, or scrolled
+        out of view does not count). Otherwise ``None``: the DOM could not
+        prove presence, and the caller must fall back to its visual check. It
+        never answers ``False``; a DOM miss is not evidence of absence (text
+        can be painted by canvas or images). Never raises.
+        """
+        if not isinstance(text, str) or not text.strip():
+            return None
+        try:
+            frames = [f for f in self.page.frames if not f.is_detached()]
+        except Exception:
+            return None
+        main = self.page.main_frame
+        for frame in frames:
+            try:
+                candidates = frame.evaluate(_VISIBLE_TEXT_CANDIDATES_JS, text)
+            except Exception:
+                continue
+            if not candidates:
+                continue
+            offset = (0.0, 0.0)
+            if frame is not main:
+                try:
+                    handle = frame.frame_element()
+                    box = handle.bounding_box()
+                    inner = handle.evaluate(
+                        "el => [el.clientLeft + parseFloat(getComputedStyle(el)"
+                        ".paddingLeft || 0), el.clientTop + parseFloat("
+                        "getComputedStyle(el).paddingTop || 0)]"
+                    )
+                except Exception:
+                    continue
+                if not box:
+                    continue
+                offset = (box["x"] + float(inner[0]), box["y"] + float(inner[1]))
+            for cx, cy in candidates:
+                x = int(round(cx + offset[0]))
+                y = int(round(cy + offset[1]))
+                try:
+                    point = self._frame_point(x, y)
+                except Exception:
+                    point = None
+                if point is None:
+                    continue
+                scope_frame = main if point.scope is self.page else point.scope
+                if scope_frame != frame:
+                    continue
+                try:
+                    if point.scope.evaluate(
+                        _TEXT_AT_POINT_JS, [point.x, point.y, text]
+                    ):
+                        return True
+                except Exception:
+                    continue
+        return None
+
+    def page_quiescent(self, window_s: float) -> Optional[bool]:
+        """Has the page been quiet (DOM, events, animations, network) for
+        ``window_s``, with the result rendered?
+
+        ``True`` only when every frame and the network were quiet for the whole
+        window with at least two frames rendered since the last change; ``False``
+        while anything is still changing; ``None`` when the page cannot be
+        judged from page signals (visible canvas/video, evaluation failure),
+        in which case the caller must use the screenshot settle. Never raises.
+        """
+        tracker = getattr(self, "_quiescence", None)
+        if tracker is None:
+            return None
+        return tracker.probe(window_s)
 
     def screenshot(self) -> bytes:
         """Return a stable current full-viewport frame as PNG bytes."""
