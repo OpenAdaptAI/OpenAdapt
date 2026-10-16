@@ -10,7 +10,8 @@ readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"
 authors = [
-    { name = "OpenAdapt AI", email = "hello@openadapt.ai" },
+    { name = "MLDSAI Inc." },
+    { email = "hello@openadapt.ai" },
 ]
 keywords = ["desktop", "recording", "workflow-authoring", "human-in-the-loop", "automation"]
 classifiers = [
