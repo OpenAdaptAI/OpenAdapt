@@ -14,6 +14,17 @@ Use it if your agent reads referrals, intake forms, or authorizations and works 
 
 Pick one task your agent hands to staff today and [talk to us about connecting it](https://openadapt.ai/qualify?why=embed). Engineers can [try the sandbox](#try-it-in-three-steps) first.
 
+## Give your agent a program, not a mouse
+
+Your agent doesn't send screenshots to a model and click. It calls a taught workflow as one typed tool, OpenAdapt runs the same steps every time, and by default your agent gets back an outcome and counts, not screens or recorded values.
+
+```bash
+openadapt-agent serve --mode production --bundles <bundle or directory of bundles>
+openadapt-agent emit-skill <bundle> --out ~/.claude/skills
+```
+
+[Try it in three steps](#try-it-in-three-steps) runs a sandbox with no account. [Serve your own workflows](#serve-your-own-workflows) and [Write an Agent Skill](#write-an-agent-skill) cover both commands.
+
 ## What changes for your customer's team
 
 | Step | Today | With OpenAdapt |
@@ -88,7 +99,7 @@ The result looks like this (some fields left out):
 
 This install simulates each run without opening MockMed, and every result says so. To watch the real engine do the work, see [Drive MockMed with the real engine](#drive-mockmed-with-the-real-engine).
 
-PyPI has version 2.0.1, which came out before the sandbox. After 2.1.0 is on PyPI, step 1 can be `claude mcp add openadapt -- uvx --python 3.12 openadapt-agent serve`.
+Version 2.1.0 on PyPI includes the sandbox, so step 1 can also be `claude mcp add openadapt -- uvx --python 3.12 openadapt-agent serve`.
 
 ### See every outcome
 
@@ -115,7 +126,7 @@ claude mcp add openadapt -- uvx --python 3.12 --from 'openadapt-agent[tutorial] 
 
 When the server starts, Flow records the workflow once and, if needed, downloads a browser (about 300 MB). The first request waits for that. In our test on a Mac, the first request took about 80 seconds. The call returned `running` after 60 seconds, and the agent called `get_run` for the result. If setup takes more than 15 minutes, the request ends `did_not_run`. With Flow, a `done` result has `proof: "local"` instead of `"simulated"`.
 
-Until 2.1.0 is on PyPI, use the command above. The simulated sandbox suggests the same command in its `list_workflows` result. A command that installs `openadapt-agent[tutorial]` from PyPI gets 2.0.1, which has no sandbox: the server exits with an error that `--bundles` is required.
+The simulated sandbox suggests the same command in its `list_workflows` result.
 
 ## What your agent gets back
 
@@ -397,7 +408,7 @@ openadapt-agent seal verify https://example.com/receipt.json --json
 
 ## Release status
 
-The [signed production record](https://openadapt.ai/production-lifecycle.json) says whether a release of this package is admitted for production use. An admission lasts at most 30 days and can be revoked, and a release without a valid one is "not actively admitted." On 2026-10-14, no release of this package was admitted. The admission for 2.0.1 was issued on 2026-09-02 and is past the 30-day limit, and the version on GitHub (2.1.0) has none. Check the record before you use a release with real patient data.
+Check the [signed production record](https://openadapt.ai/production-lifecycle.json) before you use a release with real patient data. An admission lasts at most 30 days and can be revoked.
 
 Under Flow's `standard` and `regulated` profiles, each workflow version also needs its own admission (see [Get a workflow ready to run](#get-a-workflow-ready-to-run)). On 2026-10-14, every entry in the [public list of workflow admissions](https://openadapt.ai/production-workflow-admissions.json) came from synthetic tests (`remote-safe-synthetic`).
 
