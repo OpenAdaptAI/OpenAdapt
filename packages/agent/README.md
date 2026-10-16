@@ -7,7 +7,7 @@ Your AI agent decides what to enter. OpenAdapt enters it in the app and checks t
 
 Use it if your agent reads referrals, intake forms, or authorizations and works out what belongs in the record, but a person still types the result into an app with no usable API. Examples are an electronic medical record (EMR) and a payer portal. This package is the tool your agent calls to do that typing.
 
-- A person records the task once in the real app. OpenAdapt replays those steps, and by default a run makes no AI model calls.
+- A person or your agent shows OpenAdapt the task in the real app. OpenAdapt replays those steps, and by default a run makes no AI model calls.
 - Before it types, OpenAdapt checks that the right record is open. After it saves, it reads the record back.
 - Your agent gets one of four outcomes: done and checked, stopped before saving, check the record, or didn't run. When OpenAdapt can't confirm a save, it says so, and a person checks the record.
 - It runs on your customer's computer, one that can already open the app. Your agent, or a small program acting for it, has to run on that computer too, since it starts OpenAdapt and talks to it directly. If your agent runs in your own cloud, ask us about a hosted route.
@@ -47,7 +47,7 @@ flowchart LR
 | What your product does with each outcome | One result per request, and no second entry when your agent repeats a `request_id` |
 | Your tests against the four outcomes | A sandbox that returns each outcome on demand |
 
-Your customer provides the computer and a person for runs that stop. Someone who does the task today records it once. Your agent can guide that recording (see [Record a first workflow](#record-a-first-workflow)), or [talk to us](https://openadapt.ai/qualify?why=embed) about setting it up.
+Your customer provides the computer and a person for runs that stop. Someone who does the task today records it, or your agent drives the recording. A person accepts the result before it runs, and on native Windows apps, Citrix and remote desktop a person has to do the recording. Your agent can guide that recording (see [Record a first workflow](#record-a-first-workflow)), or [talk to us](https://openadapt.ai/qualify?why=embed) about setting it up.
 
 ## Try it in three steps
 
