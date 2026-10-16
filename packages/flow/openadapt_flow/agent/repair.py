@@ -713,7 +713,7 @@ class RepairDesk:
             }
         store = RepairStore(self.store_for(record["workflow"]))
         candidate = store.add_candidate(result.candidate)
-        return {
+        response: dict[str, Any] = {
             "status": "pending_approval",
             "candidate_id": candidate.candidate_id,
             "what_happened": (
@@ -722,6 +722,58 @@ class RepairDesk:
                 "then, this workflow still stops at this step."
             ),
         }
+        branch_id = self._teach_branch(record, recording, work, store, agent_teach, provenance)
+        if branch_id is not None:
+            response["branch_candidate_id"] = branch_id
+            response["what_happened"] += (
+                " This step has now been repaired more than once, so OpenAdapt "
+                "also proposed one branch that covers these cases. It needs "
+                "the same review and approval."
+            )
+        return response
+
+    def _demos_path(self, record: dict[str, Any]) -> Path:
+        key = _sha(f"{record['workflow']}\0{record['step_id']}")[:16]
+        return self.root / "demos" / f"{key}.json"
+
+    def _teach_branch(
+        self,
+        record: dict[str, Any],
+        recording: Path,
+        work: Path,
+        store: Any,
+        agent_teach: Any,
+        provenance: Any,
+    ) -> Optional[str]:
+        """Remember this demonstration; with two or more, propose a branch.
+
+        The branch is a separate repair candidate. If Flow refuses it, the
+        single-step candidate stands on its own.
+        """
+        path = self._demos_path(record)
+        demos = (_read_json(path) or {}).get("demos", [])
+        demos = [d for d in demos if isinstance(d, dict) and d.get("run_dir") != record["run_dir"]]
+        demos.append({"run_dir": record["run_dir"], "recording": str(recording)})
+        _write_json(path, {"demos": demos})
+        usable = [
+            (d["run_dir"], d["recording"])
+            for d in demos
+            if Path(d["run_dir"]).is_dir() and Path(d["recording"]).is_dir()
+        ]
+        teach_branch = getattr(agent_teach, "teach_branch_from_calling_agent", None)
+        if len(usable) < 2 or teach_branch is None:
+            return None
+        try:
+            result = teach_branch(
+                usable,
+                work / "branch",
+                bundle=record["bundle_dir"],
+                provenance=provenance,
+            )
+        except Exception as exc:
+            _LOG.info("branch from several demonstrations refused: %s", exc)
+            return None
+        return str(store.add_candidate(result.candidate).candidate_id)
 
     def active_bundle(self, workflow: str, default: Path) -> Path:
         """The approved repaired bundle, when a person activated one."""
