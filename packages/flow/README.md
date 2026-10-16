@@ -167,6 +167,21 @@ openadapt-flow lint bundle
 openadapt-flow replay bundle --url https://your-test-app.example
 ```
 
+The same path from Python:
+
+```python
+from openadapt_flow import api
+
+url = "https://your-test-app.example"
+rec = api.record(url, out="rec")  # do the task once, then close the browser
+bundle = api.compile(rec, out="bundle", name="my-task", accept_params=["note"])
+report = api.replay(bundle, url, params={"note": "Follow-up in 2 weeks"})
+print(report.transaction_outcome)  # COMPLETED_UNVERIFIED: a rehearsal
+```
+
+`accept_params` names the field-label proposals to turn into parameters (see
+`bundle/param_proposals.json`); unlisted ones stay recorded constants.
+
 Python 3.10 through 3.12 is supported. On Windows `cmd.exe`, use double
 quotes: `pip install "openadapt-flow[browser]"`.
 
