@@ -5,10 +5,22 @@
 [![Python](https://img.shields.io/pypi/pyversions/openadapt-flow)](https://pypi.org/project/openadapt-flow/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
-openadapt-flow records a task in a web or desktop app, done by a person or by
-an AI agent, and compiles it into a program that runs on your own machine. A healthy run makes no AI
-model calls. It's built for data entry that repeats every week and has to be
-right, such as claims, referrals, eligibility checks, and invoice posting.
+A person or an agent shows openadapt-flow a task in a web or desktop app. It
+compiles the task into a program that runs on your own machine and repeats the
+same steps with new details. A healthy run makes no AI model calls. It's built
+for data entry that repeats every week and has to be right, such as claims,
+referrals, eligibility checks, and invoice posting.
+
+```bash
+pip install 'openadapt-flow[browser]'
+openadapt-flow record --backend web --url https://your-test-app.example --out rec   # 1. record
+openadapt-flow compile rec --out bundle --name my-task                               # 2. compile
+openadapt-flow replay bundle --url https://your-test-app.example                     # 3. run
+```
+
+`replay` is a rehearsal that doesn't read the record back. A production run
+(`openadapt-flow run`) also checks each save; see
+[Try it on your app](#try-it-on-your-app).
 
 Two checks guard the writes. Before a click on a record, the run compares the
 text around the target, such as the patient name in that row, with the
@@ -19,7 +31,8 @@ entered.
 
 It drives web apps through Playwright; Windows, macOS, and Linux apps through
 their accessibility APIs; and Citrix or remote desktops through screen pixels.
-Agents can call a compiled workflow as a tool over MCP.
+Agents can call a compiled workflow as one tool over MCP; see
+[Give your agent a program, not a mouse](#give-your-agent-a-program-not-a-mouse).
 
 [Docs](https://docs.openadapt.ai) ·
 [Try it in your browser](https://app.openadapt.ai/demo) ·
@@ -77,13 +90,20 @@ bundled fake clinic app: 100 compiled runs and 20 agent runs, all scored by the
 same OCR check of the final screen
 ([method](benchmark/BENCHMARK.md)). The agent was `claude-sonnet-5` with the
 computer-use tool, driving the same browser through screenshots, and cost is
-model API usage at list price. On the public OpenEMR demo, compiled replay
-completed 19 of 20 runs (the 20th stopped before saving) with a 39.2 s median;
-the agent completed 10 of 10 with a 70.4 s median at about $0.55 per run
-([method](benchmark/openemr/BENCHMARK.md)). Both comparisons ran on 2026-07-08
+model API usage at list price. That comparison ran on 2026-07-08
 with Flow 0.1.0. The Playwright column describes Playwright's documented
 behavior: we haven't timed a codegen script on the same task or run one
-through our UI-change fixtures. A side-by-side comparison with UiPath, Power
+through our UI-change fixtures.
+
+A newer test on a local OpenEMR copy (14 and 15 Oct 2026, synthetic
+referrals) compared compiled replay with a Claude Sonnet agent over 62 timed
+warm runs each. Replay took 29.7 s median from sign-in to saved record, the
+agent 36.5 s, so replay was about 19% faster, with no model calls against the
+agent's median of about $0.08 per run. A separate database read-back matched
+12 of 12 fields on each correct save; engine certification was off, so the
+engine labeled these runs finished, not checked. Method:
+[openadapt.ai/compare/computer-use-agents](https://openadapt.ai/compare/computer-use-agents).
+A side-by-side comparison with UiPath, Power
 Automate, and browser agents is at
 [openadapt.ai/compare](https://openadapt.ai/compare).
 
@@ -231,7 +251,21 @@ per surface and chain them with `openadapt-flow compose`. Each child starts
 only after the one before it ends with a checked save, unless you allow a
 specific stop with `--allow-halt`.
 
-## Call a workflow from an agent
+## Give your agent a program, not a mouse
+
+Instead of sending screenshots to a model and clicking, your agent calls a
+compiled workflow as one tool and gets back an outcome. The
+[openadapt-agent](https://github.com/OpenAdaptAI/openadapt-agent) package
+serves bundles to an MCP client over stdio and writes Agent Skills:
+
+```bash
+pip install openadapt-agent
+openadapt-agent serve --mode production --bundles ./bundles
+openadapt-agent emit-skill ./bundle --out ~/.claude/skills
+```
+
+Leave out `--mode production` to let the client list workflows without
+starting them. For a networked service with signed results, use `serve-execute`:
 
 ```bash
 pip install 'openadapt-flow[execute]'
@@ -319,9 +353,9 @@ browser workflows. Desktop and Citrix runs are self-hosted
   be tested on its own Citrix setup.
 - A stop isn't a rollback. Steps before the stop may already have changed the
   app.
-- The comparison numbers above are from July 2026, on Flow 0.1.0, with 20
-  or fewer agent runs per task. They haven't been measured again on a later
-  release.
+- The MockMed comparison numbers above are from July 2026, on Flow 0.1.0,
+  with 20 agent runs. The OpenEMR numbers are from October 2026 on one local
+  test copy with synthetic data.
 
 The full list, capability by capability: [docs/LIMITS.md](docs/LIMITS.md).
 
@@ -353,10 +387,8 @@ download. A minimal host may need a one-time system-library install. Flow stops
 before the download and prints a command for the exact Python environment that
 runs it.
 
-Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md). For a first
-contribution, pick a module off the mypy type-debt list
-(`[[tool.mypy.overrides]]` in `pyproject.toml`), tighten its annotations, and
-delete it from the list.
+Contributions are welcome; see [CONTRIBUTING.md](CONTRIBUTING.md), which also
+suggests first contributions.
 
 The demo GIF is generated from real run artifacts by
 `scripts/make_demo_gif.py`. The proof image at the top of this page comes from
