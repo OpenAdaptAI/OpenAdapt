@@ -41,7 +41,7 @@ has the details for each platform.
 | Screens sent to a model | None | 10 (median) | None |
 | Path | Up to the person | 48 actions (median), varies | Same 41 steps |
 
-*One baseline run at a person's pace, not timed across repeated runs. By hand: one run of a test script at a person's pace. AI agent: Claude Sonnet, list price.
+*By hand: one baseline run of a test script at a person's pace (not timed across repeated runs). AI agent: Claude Sonnet 5.5, list price.
 
 Same test OpenEMR, same synthetic referrals, 14 and 15 Oct 2026. Times run from sign-in to a saved record that a separate database query read back, 12 of 12 fields. The medians are over 62 timed warm runs each (the first block of each arm is left out because another process shared the CPU then), so OpenAdapt was about 19% faster. The two OpenAdapt misses stopped without saving a chart; the agent miss finished without saving one. Engine certification was off in this benchmark, so these runs end "finished, not checked" by the engine's own label; the separate read-back is what scored them. [How we measured](https://openadapt.ai/compare/computer-use-agents).
 
