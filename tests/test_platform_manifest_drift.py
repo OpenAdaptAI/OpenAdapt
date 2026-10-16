@@ -396,7 +396,8 @@ def test_runtime_requirements_come_from_selected_release_metadata(
     }
     assert actual == expected
 
-    assert len(manifest["dependency_edges"]) == 11
+    # Launcher 1.17.0 adds its openadapt-agent edge.
+    assert len(manifest["dependency_edges"]) == 12
     components = deepcopy(manifest["components"])
     components["capture"]["version"] = "0.0.1"
     edges = _dependency_edges(components, manifest["runtime_units"])
