@@ -350,20 +350,19 @@ class ReadBackTier(IntEnum):
     """How a save was checked, coarse and customer-facing. Lower is stronger.
 
     The names and :attr:`label` values are RFC-0002's ``verification_tier``
-    (``independent_readback``, ``screen_readback``, ``unchecked``), and the
-    mapping from Flow's ``VerificationTier`` follows it: weakest wins.
+    (``independent_readback``, ``screen_readback``, ``unchecked``). When a
+    save has several checks, the weakest wins.
 
-    * ``INDEPENDENT_READBACK``: a read independent of the acting screen:
-      the system of record itself (API, FHIR, database, file, report
-      export; Flow tier 1) or a separate session (Flow tier 2).
-    * ``SCREEN_READBACK``: the acting session re-read the record (Flow
-      tier 3) or the acting screen showed it (Flow tier 4).
+    * ``INDEPENDENT_READBACK``: a read of the system of record that doesn't
+      go through the UI: REST, SQL, FHIR, GraphQL or a file export (Flow
+      tier 1).
+    * ``SCREEN_READBACK``: any read through the UI, in a separate session
+      (Flow tier 2), the acting session (tier 3) or the acting screen
+      (tier 4).
     * ``UNCHECKED``: nothing read the saved result back, the store was
       unreachable or stale, or no tier was declared.
 
-    ``INDEPENDENT_READBACK`` is necessary for a clean save, not sufficient:
-    as in RFC-0002, only a system-of-record read can make one clean. Pass
-    the fine-grained ``strength`` to :func:`per_item_review_reason`.
+    Only a confirmed ``INDEPENDENT_READBACK`` can make a save clean.
     """
 
     INDEPENDENT_READBACK = 1
@@ -430,7 +429,8 @@ _TIER_BY_STRENGTH: Mapping[str, ReadBackTier] = {
     "screen_readback": ReadBackTier.SCREEN_READBACK,
     "independent_system_of_record": ReadBackTier.INDEPENDENT_READBACK,
     "independent_system": ReadBackTier.INDEPENDENT_READBACK,
-    "independent_session": ReadBackTier.INDEPENDENT_READBACK,
+    # A UI read in a separate session is still a screen read.
+    "independent_session": ReadBackTier.SCREEN_READBACK,
     "persisted_state_reacquisition": ReadBackTier.SCREEN_READBACK,
     "immediate_screen_confirmation": ReadBackTier.SCREEN_READBACK,
     "immediate_screen": ReadBackTier.SCREEN_READBACK,
@@ -439,10 +439,6 @@ _TIER_BY_STRENGTH: Mapping[str, ReadBackTier] = {
     "counterparty": ReadBackTier.INDEPENDENT_READBACK,
     "visual": ReadBackTier.SCREEN_READBACK,
 }
-
-#: Strength names that are independent of the acting screen but are not a
-#: read of the system of record (Flow tier 2, a separate session).
-_SEPARATE_SESSION = frozenset({"independent_session"})
 
 
 def _strength_names(strength: object) -> list[str]:
@@ -481,7 +477,6 @@ ReviewReason = Literal[
     "read_back_refuted",
     "read_back_indeterminate",
     "screen_readback_only",
-    "separate_session_only",
     "not_checked",
     "below_minimum_tier",
 ]
@@ -492,15 +487,11 @@ def per_item_review_reason(
     outcome: ReadBackOutcome,
     *,
     minimum: Optional[ReadBackTier] = None,
-    strength: object = None,
 ) -> Optional[ReviewReason]:
     """Why a save must be reviewed on its own, or ``None`` when it is clean.
 
-    Only an independent read-back that confirmed the save is clean, and,
-    when the fine-grained ``strength`` is given, only one of the system of
-    record: a separate-session read returns ``separate_session_only``, as
-    RFC-0002 lets only a system-of-record read yield ``verified``.
-    A refuted or indeterminate read-back, a screen-only read-back and no
+    Only an independent read-back (not through the UI) that confirmed the
+    save is clean. A refuted or indeterminate read-back, a screen-only read-back and no
     check at all each return a reason, whatever the policy minimum is.
     ``below_minimum_tier`` means the check was weaker than the policy's
     ``minimum``, which callers treat as a stop, not only a review.
@@ -516,17 +507,13 @@ def per_item_review_reason(
         return "below_minimum_tier"
     if tier is ReadBackTier.SCREEN_READBACK:
         return "screen_readback_only"
-    if any(name in _SEPARATE_SESSION for name in _strength_names(strength)):
-        return "separate_session_only"
     return None
 
 
-def counts_as_clean(
-    tier: ReadBackTier, outcome: ReadBackOutcome, *, strength: object = None
-) -> bool:
-    """True only for a confirmed independent read-back (see above)."""
+def counts_as_clean(tier: ReadBackTier, outcome: ReadBackOutcome) -> bool:
+    """True only for a confirmed independent read-back (not through the UI)."""
 
-    return per_item_review_reason(tier, outcome, strength=strength) is None
+    return per_item_review_reason(tier, outcome) is None
 
 
 # --------------------------------------------------------------------------

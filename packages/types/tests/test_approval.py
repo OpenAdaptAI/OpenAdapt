@@ -248,14 +248,14 @@ def test_below_minimum() -> None:
             EffectStrengthV1.INDEPENDENT_SYSTEM_OF_RECORD,
             ReadBackTier.INDEPENDENT_READBACK,
         ),
-        (EffectStrengthV1.INDEPENDENT_SESSION, ReadBackTier.INDEPENDENT_READBACK),
+        (EffectStrengthV1.INDEPENDENT_SESSION, ReadBackTier.SCREEN_READBACK),
         (EffectStrengthV1.PERSISTED_STATE_REACQUISITION, ReadBackTier.SCREEN_READBACK),
         (EffectStrengthV1.IMMEDIATE_SCREEN_CONFIRMATION, ReadBackTier.SCREEN_READBACK),
         (
             EffectVerificationTier.INDEPENDENT_SYSTEM_INTERFACE,
             ReadBackTier.INDEPENDENT_READBACK,
         ),
-        (EffectVerificationTier.INDEPENDENT_SESSION, ReadBackTier.INDEPENDENT_READBACK),
+        (EffectVerificationTier.INDEPENDENT_SESSION, ReadBackTier.SCREEN_READBACK),
         (
             EffectVerificationTier.IMMEDIATE_SCREEN_CONFIRMATION,
             ReadBackTier.SCREEN_READBACK,
@@ -418,7 +418,7 @@ def test_unknown_tier_label_is_unchecked() -> None:
     ("flow_tier", "expected"),
     [
         (EffectVerificationTier.INDEPENDENT_SYSTEM_INTERFACE, "independent_readback"),
-        (EffectVerificationTier.INDEPENDENT_SESSION, "independent_readback"),
+        (EffectVerificationTier.INDEPENDENT_SESSION, "screen_readback"),
         (EffectVerificationTier.PERSISTED_STATE_REACQUISITION, "screen_readback"),
         (EffectVerificationTier.IMMEDIATE_SCREEN_CONFIRMATION, "screen_readback"),
     ],
@@ -427,21 +427,15 @@ def test_flow_tiers_map_as_rfc_0002_says(flow_tier, expected) -> None:
     assert read_back_tier(flow_tier).label == expected
 
 
-def test_a_separate_session_read_is_not_clean() -> None:
-    """RFC-0002: only a system-of-record read can yield ``verified``."""
+def test_a_separate_session_ui_read_is_a_screen_read() -> None:
+    """Independent means not through the UI; a separate UI session isn't."""
 
     tier = read_back_tier(EffectVerificationTier.INDEPENDENT_SESSION)
-    outcome = ReadBackOutcome.CONFIRMED
-    assert (
-        per_item_review_reason(
-            tier, outcome, strength=EffectVerificationTier.INDEPENDENT_SESSION
-        )
-        == "separate_session_only"
-    )
+    assert tier is ReadBackTier.SCREEN_READBACK
+    assert not counts_as_clean(tier, ReadBackOutcome.CONFIRMED)
     assert counts_as_clean(
-        ReadBackTier.INDEPENDENT_READBACK,
-        outcome,
-        strength=EffectStrengthV1.INDEPENDENT_SYSTEM_OF_RECORD,
+        read_back_tier(EffectStrengthV1.INDEPENDENT_SYSTEM_OF_RECORD),
+        ReadBackOutcome.CONFIRMED,
     )
 
 
