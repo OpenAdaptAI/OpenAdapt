@@ -166,10 +166,10 @@ def import_patch(
         detached = destination / DETACHED_CANDIDATE_RELPATH
         detached.parent.mkdir(parents=True, exist_ok=True)
         detached.write_text(candidate.model_dump_json(indent=2))
+        registered = store.add_candidate(candidate)
     except Exception:
         shutil.rmtree(destination, ignore_errors=True)
         raise
-    registered = store.add_candidate(candidate)
     return ImportResult(
         candidate=registered,
         proposed_bundle=destination,

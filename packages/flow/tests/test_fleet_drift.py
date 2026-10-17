@@ -797,6 +797,28 @@ def test_patch_for_another_app_version_is_refused(fleet_with_patch):
     _assert_refused(tenant, patch, error=PatchImportError)
 
 
+def test_a_failed_registration_leaves_no_bundle_copy(fleet_with_patch, monkeypatch):
+    fleet, patch = fleet_with_patch
+    tenant = _receiver(fleet, "register-fails")
+    out_dir = tenant.root / "bundles" / "patched"
+
+    def refuse(self, candidate):
+        raise RepairLifecycleError("store refused")
+
+    monkeypatch.setattr(RepairStore, "add_candidate", refuse)
+    with pytest.raises(RepairLifecycleError):
+        import_patch(
+            tenant.store,
+            patch,
+            trust=tenant.trust,
+            opt_in=tenant.opt_in,
+            tenant_bundle=tenant.bundle,
+            tenant_app=tenant.app(),
+            out_dir=out_dir,
+        )
+    assert not out_dir.exists()
+
+
 def test_import_is_off_until_an_admin_allows_the_app(fleet_with_patch):
     fleet, patch = fleet_with_patch
     tenant = _receiver(fleet, "not-opted-in", opt_in=False)
