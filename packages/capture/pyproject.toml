@@ -30,7 +30,7 @@ dependencies = [
     "pydantic-settings>=2.12.0",
     # Recording-pipeline dependencies (carried forward from OpenAdapt record.py)
     "sqlalchemy>=2.0.54",
-    "alembic>=1.0.0",
+    "alembic>=1.20.0",
     "loguru>=0.7.0",
     "psutil>=5.0.0",
     "pympler>=1.0.0",
