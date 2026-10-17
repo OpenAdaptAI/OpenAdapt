@@ -15,6 +15,34 @@
 
 <!-- version list -->
 
+## v2.2.0 (2026-10-17)
+
+First release from the [OpenAdapt monorepo](https://github.com/OpenAdaptAI/OpenAdapt) (`packages/flow`). The shared contracts (`openadapt_flow.contracts`) and the MCP agent server (`openadapt_flow.agent`) now ship inside this package; `openadapt-types` and `openadapt-agent` are thin compatibility packages over them.
+
+### Features
+
+- Multi-tab, popup, and backend-switching surfaces: a workflow can follow a popup or a new tab, switch between bound surfaces with an identity check, and answer browser dialogs by identity ([#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197), from [openadapt-flow#533](https://github.com/OpenAdaptAI/openadapt-flow/pull/533)).
+- `openadapt-flow verify-run` judges any executor's write from the system of record and emits an RFC-0002 effect receipt; it reads the same `verify.yaml` as qualify and accepts `--remediates` and `--correlation-id` ([#1198](https://github.com/OpenAdaptAI/OpenAdapt/pull/1198)).
+- Declarative qualify from `verify.yaml` ([#1186](https://github.com/OpenAdaptAI/OpenAdapt/pull/1186), from [openadapt-flow#532](https://github.com/OpenAdaptAI/openadapt-flow/pull/532)).
+- Delegated approvers, read-back field checks, triage, and eligibility ([#1190](https://github.com/OpenAdaptAI/OpenAdapt/pull/1190), from [openadapt-flow#534](https://github.com/OpenAdaptAI/openadapt-flow/pull/534)); approver identity, approver policy, and an approval record in the shared contracts ([#1187](https://github.com/OpenAdaptAI/OpenAdapt/pull/1187)).
+- The MCP server reads the approval mode and can answer a waiting save as a delegated agent ([#1192](https://github.com/OpenAdaptAI/OpenAdapt/pull/1192)); it proposes a branch after a step is repaired more than once ([#1188](https://github.com/OpenAdaptAI/OpenAdapt/pull/1188)).
+- Native OCR on macOS and Windows, with no OpenCV on that path ([#1194](https://github.com/OpenAdaptAI/OpenAdapt/pull/1194), from [openadapt-flow#531](https://github.com/OpenAdaptAI/openadapt-flow/pull/531)).
+- An agent can drive recording on native Windows apps and over RDP and Citrix sessions; remote sessions are screen-only and the agent works from the client window's pixels ([openadapt-flow#527](https://github.com/OpenAdaptAI/openadapt-flow/pull/527)).
+- Learn from an agent demonstration, with replay fixes from the learn and zero-DOM benchmarks ([openadapt-flow#525](https://github.com/OpenAdaptAI/openadapt-flow/pull/525)).
+- Teach a branch from several calling-agent demonstrations ([openadapt-flow#521](https://github.com/OpenAdaptAI/openadapt-flow/pull/521)).
+- Read marked fields from the page structure ([openadapt-flow#522](https://github.com/OpenAdaptAI/openadapt-flow/pull/522)).
+- A workflow registry and `openadapt-flow pull` ([openadapt-flow#517](https://github.com/OpenAdaptAI/openadapt-flow/pull/517)).
+- OpenEMR qualification path: verifier, fault driver, and six cases for the local registration bundle ([openadapt-flow#518](https://github.com/OpenAdaptAI/openadapt-flow/pull/518)).
+
+### Performance
+
+- The demo uses the installed browser, one browser process, and an early OpenCV load ([#1189](https://github.com/OpenAdaptAI/OpenAdapt/pull/1189), from [openadapt-flow#528](https://github.com/OpenAdaptAI/openadapt-flow/pull/528)); native OCR starts faster and the OCR prewarm works ([#1199](https://github.com/OpenAdaptAI/OpenAdapt/pull/1199), from [openadapt-flow#535](https://github.com/OpenAdaptAI/openadapt-flow/pull/535)).
+
+### Fixes
+
+- Benchmarks fetch the openIMIS and OpenEMR compose files from upstream at run time ([openadapt-flow#523](https://github.com/OpenAdaptAI/openadapt-flow/pull/523)).
+- uv.lock bumps fsspec, urllib3, mako, and oauthlib for open Dependabot alerts ([openadapt-flow#524](https://github.com/OpenAdaptAI/openadapt-flow/pull/524)).
+
 ## v2.1.0 (2026-10-16)
 
 ### Features
