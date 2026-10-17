@@ -50,7 +50,7 @@
       "id": "recording",
       "business_term": "showing the task",
       "also_business": ["recording"],
-      "meaning": "A person does the task once while OpenAdapt watches.",
+      "meaning": "A person or an agent shows the task, one or more times, while OpenAdapt watches.",
       "technical": [
         {"term": "demonstration", "pattern": "\\bdemonstrat(e|es|ed|ion|ions)\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"},
         {"term": "capture", "pattern": "\\bcaptures?\\b", "case_sensitive": false, "min_level": "detail", "severity": "warn"},

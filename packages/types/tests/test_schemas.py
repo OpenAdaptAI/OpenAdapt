@@ -1,6 +1,5 @@
 """Tests for openadapt-types schemas."""
 
-import json
 
 import pytest
 
@@ -15,7 +14,6 @@ from openadapt_types import (
     Episode,
     FailureCategory,
     FailureRecord,
-    ProcessInfo,
     Step,
     UINode,
 )

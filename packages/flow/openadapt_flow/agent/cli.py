@@ -106,8 +106,9 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="URL",
         help=(
             "With --authoring: drive a native Windows app through the Flow "
-            "Windows agent server you started on this computer (for example "
-            "http://localhost:5001). "
+            "Windows agent server running on the Windows computer (for example "
+            "http://localhost:5001, or an SSH-forwarded port from another "
+            "computer). "
             "The agent's input goes through the same synthetic-input path "
             "replay uses. The token comes from OAFLOW_AGENT_TOKEN."
         ),

@@ -30,7 +30,6 @@ from openadapt_types.reward import (
     RewardEvidenceReceiptV1,
     RewardOutcomeV1,
     RewardScoringClassV1,
-    RewardScoringPolicyV1,
     RewardUncertaintyStateV1,
     certificate_state,
     refuse_development_certification,

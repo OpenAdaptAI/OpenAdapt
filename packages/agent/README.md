@@ -53,12 +53,12 @@ flowchart LR
 
 | You build | OpenAdapt provides |
 | --- | --- |
-| The agent that reads documents and decides what to enter | A workflow built from one recording of a person doing the task in the real app |
+| The agent that reads documents and decides what to enter | A workflow learned from one or more demonstrations in the real app, where a person or an agent shows the task |
 | The call to `run_workflow`, with your own `request_id` | The run on your customer's computer, with a right-record check before it types and a record check after it saves |
 | What your product does with each outcome | One result per request, and no second entry when your agent repeats a `request_id` |
 | Your tests against the four outcomes | A sandbox that returns each outcome on demand |
 
-Your customer provides the computer and a person for runs that stop. Someone who does the task today records it, or your agent drives the recording, in web apps, native Windows apps, and over Citrix or remote desktop. A person accepts the result before it runs. See [Record a first workflow](#record-a-first-workflow), or [talk to us](https://openadapt.ai/qualify?why=embed) about setting it up.
+Your customer provides the computer and a person for runs that stop. A person or an agent shows the task, in web apps, native Windows apps, and over Citrix or remote desktop. A person accepts the result before it runs. See [Record a first workflow](#record-a-first-workflow), or [talk to us](https://openadapt.ai/qualify?why=embed) about setting it up.
 
 ## Try it in three steps
 
@@ -336,7 +336,7 @@ If a workflow's name would come out as either one, emit-skill names the skill `o
 
 ### Record a first workflow
 
-`serve --authoring` adds recording tools, such as `observe`, `start_record`, `click`, `pause_for_input`, `stop_record`, `compile`, and `admit`. [docs/DESIGN.md](docs/DESIGN.md#recording-tools) lists all 14. Your agent uses them to record a task with a person: in a web app, a native Windows app, or an RDP or Citrix session. The recording server doesn't turn on runs.
+`serve --authoring` adds recording tools, such as `observe`, `start_record`, `click`, `pause_for_input`, `stop_record`, `compile`, and `admit`. [docs/DESIGN.md](docs/DESIGN.md#recording-tools) lists all 14. A person or your agent shows the task with them, in a web app, a native Windows app, or an RDP or Citrix session, and a person stays at the computer to sign in and accept the result. A task can be learned from one or more demonstrations. The recording server doesn't turn on runs.
 
 1. Add a recording server. `--url` opens the app in a new Chromium window with no saved sign-ins, and `--headed` keeps that window visible so the person can sign in.
 
@@ -351,9 +351,11 @@ If a workflow's name would come out as either one, emit-skill names the skill `o
 
 Use `--url URL --headed` for a web app on every platform. Without `--url`, the server exits on Linux, and on macOS it uses whatever window is in front when the client starts the server, or exits.
 
-For a native Windows app, start Flow's Windows agent server in the signed-in desktop session on that computer (`python -m openadapt_flow.backends.win_agent.server --port 5001`; see [its README](https://github.com/OpenAdaptAI/openadapt-flow/tree/main/openadapt_flow/backends/win_agent)) and pass `--windows-agent-url http://localhost:5001`. Your agent's clicks and keys go through the same synthetic-input path that replay uses, and the recording keeps each clicked control's UI Automation id when Windows reports one. Set `OAFLOW_AGENT_TOKEN` if the server uses a token.
+For a native Windows app, start Flow's Windows agent server in the signed-in desktop session on the Windows computer (`python -m openadapt_flow.backends.win_agent.server --port 5001`) and pass `--windows-agent-url http://localhost:5001`. The agent can run on that computer or on another one, such as a Mac. The server listens only on the Windows computer by default, so from another computer forward the port over SSH or serve it over HTTPS. Your agent's clicks and keys go through the same synthetic-input path that replay uses, and the recording keeps each clicked control's UI Automation id when Windows reports one. Set `OAFLOW_AGENT_TOKEN` to the same value for the server and the agent.
 
 For an RDP or Citrix session, pass `--remote-window APP` (the client app, for example `"Microsoft Remote Desktop"`) or `--citrix`, and `--remote-window-title` when the app has more than one window. A remote session is screen-only: there's no DOM or UI Automation tree, so `observe` returns no nodes and your agent clicks x,y pixels in the client window and presses keys, the way a person would. To let your agent see that window, add `--authoring-screens scrubbed`, which turns on a `screen` tool that returns the frame with identifiers scrubbed and shares nothing if scrubbing fails. `--authoring-screens unscrubbed` skips scrubbing. Screens are off by default.
+
+[Recording on Windows, RDP and Citrix](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/docs/RECORDING_ON_WINDOWS_RDP_CITRIX.md) explains the Windows agent server, why it's needed when the agent runs on another computer, how to start it, the token, and the RDP and Citrix pixel path.
 
 The recording marks every step as the agent's or the person's (`actor` in `events.jsonl`, `demonstrated_by` in `meta.json`), and a person still accepts the result. On Windows with none of these flags, the tools can only tell the person what to click.
 

@@ -34,7 +34,7 @@ the engineering level, so engineers and auditors keep the exact name.
 | Plain term | Technical terms one level deeper | Meaning |
 |---|---|---|
 | workflow | | The task you hand off, such as entering a referral. |
-| showing the task, or recording | demonstration, capture, trace | A person does the task once while OpenAdapt watches. |
+| showing the task, or recording | demonstration, capture, trace | A person or an agent shows the task, one or more times, while OpenAdapt watches. |
 | the automation | program, compiled program, bundle, compile | What OpenAdapt builds from the recording. |
 | run | replay | One time the automation does the task. |
 | Done and checked | VERIFIED | It saved the entry and read the record back to confirm it. |
