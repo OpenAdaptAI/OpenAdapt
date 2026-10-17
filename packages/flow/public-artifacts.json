@@ -253,7 +253,7 @@
     },
     {
       "path": "benchmark/environments/environments.json",
-      "sha256": "b027ef15225195388741e7089fe75cfd4cbcc61badb93bd02438bafd16533383"
+      "sha256": "2868f8472dbfad5c6faa6b02e0041f5c27e6c4b044953664262532c8a10d2b95"
     },
     {
       "path": "benchmark/environments/verification.json",
@@ -352,24 +352,8 @@
       "sha256": "14981f7552e8dba82bf7e9020c7959780845a455a02192150cedfa297c038aa8"
     },
     {
-      "path": "benchmark/openemr_local/compose.yml",
-      "sha256": "e6fe7ff38bc8e66cbf358a5f728de847e7e815225965b58619a976649445e23a"
-    },
-    {
       "path": "benchmark/openemr_local/environment.lock.json",
-      "sha256": "e57fed9e8dd810892760bbc98200debfebbc92e984fefbe0b871dcf3d61de9bd"
-    },
-    {
-      "path": "benchmark/openimis_claims/compose.yml",
-      "sha256": "6077478524bccb8b77c277b80d11b8749971257db79ffe9296718154ea3c03d2"
-    },
-    {
-      "path": "benchmark/openimis_claims/conf/nginx/openimis.conf",
-      "sha256": "cb52a65b81c6501ce84ebd9e1a719cb7026d2c018a58788a5368ec5f86df9762"
-    },
-    {
-      "path": "benchmark/openimis_claims/conf/nginx/variables/var.conf",
-      "sha256": "75a5c2831c1f8703d1ec3efbdadd64d3797ac5377370edab44b518caa4de704d"
+      "sha256": "026dab7a2059332f8a62a7e5a24ed22ed94c14dc37a42c73eec7b1a10b4b6a19"
     },
     {
       "path": "benchmark/openimis_claims/deployment.eligibility.yaml",
@@ -377,7 +361,7 @@
     },
     {
       "path": "benchmark/openimis_claims/environment.lock.json",
-      "sha256": "98c8008eb7b34371379fb54b968299070c51f760152f36a4d13bdd2e25cdb4ab"
+      "sha256": "9861e1e01d48d2b68916adbde8071595d2bb21205af4f92155a129eb707c8a8e"
     },
     {
       "path": "benchmark/openimis_claims/submit_binding_probe.json",

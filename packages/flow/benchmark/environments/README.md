@@ -131,11 +131,13 @@ source into an MIT wheel/sdist is.** This groundwork stays on the safe side:
 
 - **OpenEMR (GPL-3.0)** and **Frappe/ERPNext/Lending (GPL-3.0)** — the official
   images are **pulled (Frappe: built from pinned bases) at runtime by digest**.
-  No OpenEMR/Frappe source is vendored into this repo. The `compose.yml` files
-  are OpenAdapt's own (adapted, attributed).
-- **openIMIS (AGPL-3.0)** — images pulled at runtime by digest; the adapted
-  `compose.yml` + `conf/nginx/` templates are **AGPL-3.0-only, repo-only**, carry
-  SPDX headers, and are recorded in the root `THIRD_PARTY_NOTICES.md`.
+  No OpenEMR/Frappe source is vendored into this repo. OpenEMR's compose file
+  is derived at run time from its pinned, hash-checked production compose
+  (`openemr_local/upstream.py`); Frappe's `compose.yml` is OpenAdapt's own.
+- **openIMIS (AGPL-3.0)** — images pulled at runtime by digest; the compose
+  topology and `conf/nginx/` templates are **fetched at run time** from the
+  pinned openimis-dist_dkr commit and hash-checked (`openimis_claims/upstream.py`).
+  None of that material is stored in this repo.
 - **Package boundary — enforced, not just asserted.** The wheel packages only
   `openadapt_flow/`, so top-level `benchmark/` (every containerized environment)
   is excluded by construction. The sdist additionally `exclude`s

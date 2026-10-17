@@ -29,9 +29,10 @@ from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 from urllib.request import Request, urlopen
 
+from .upstream import UpstreamFetchError, prepare_compose
+
 HERE = Path(__file__).resolve().parent
 LOCK_PATH = HERE / "environment.lock.json"
-COMPOSE_PATH = HERE / "compose.yml"
 
 # Exact cardinality contracts measured against the pinned image and reviewed
 # against its source paths. The counts include OpenEMR's own immutable audit,
@@ -240,6 +241,18 @@ class OpenEMRFixture:
             )
         return completed
 
+    def _compose_path(self) -> Path:
+        """Fetch, verify and render the pinned upstream compose file once."""
+
+        cached = getattr(self, "_compose_file", None)
+        if cached is None:
+            try:
+                cached = prepare_compose(self.lock, out_dir=HERE / "out")
+            except UpstreamFetchError as exc:
+                raise FixtureError(str(exc)) from exc
+            self._compose_file = cached
+        return cached
+
     def _compose(
         self, *args: str, input_bytes: bytes | None = None, timeout_s: float = 300.0
     ) -> subprocess.CompletedProcess[bytes]:
@@ -251,7 +264,7 @@ class OpenEMRFixture:
                 "--env-file",
                 str(self.runtime_env),
                 "-f",
-                str(COMPOSE_PATH),
+                str(self._compose_path()),
                 "-p",
                 self.lock["project"],
                 *args,

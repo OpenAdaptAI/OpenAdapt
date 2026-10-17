@@ -51,7 +51,7 @@
       "vertical": "healthcare",
       "substrate": "web",
       "lock_relpath": "benchmark/openemr_local/environment.lock.json",
-      "compose_relpath": "benchmark/openemr_local/compose.yml",
+      "compose_relpath": "benchmark/openemr_local/upstream.py",
       "ci_fast": false,
       "requires_docker": true,
       "ui_urls": {
@@ -157,7 +157,7 @@
       "vertical": "insurance",
       "substrate": "web",
       "lock_relpath": "benchmark/openimis_claims/environment.lock.json",
-      "compose_relpath": "benchmark/openimis_claims/compose.yml",
+      "compose_relpath": "benchmark/openimis_claims/upstream.py",
       "ci_fast": false,
       "requires_docker": true,
       "ui_urls": {

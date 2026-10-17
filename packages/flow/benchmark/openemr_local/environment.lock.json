@@ -5,7 +5,12 @@
     "openemr": {
       "url": "https://github.com/openemr/openemr.git",
       "ref": "v8_0_0_3",
-      "commit": "7c96c8eefe460d6fadbccbe93d0fa6bf819acd69"
+      "commit": "7c96c8eefe460d6fadbccbe93d0fa6bf819acd69",
+      "license": "GPL-3.0",
+      "note": "Fetched at run time by benchmark/openemr_local/upstream.py and checked against these SHA-256 values; never stored in this repository.",
+      "files": {
+        "docker/production/docker-compose.yml": "8ffb1c64ebfc2c1da429fbe6180bd84ad87f8b5b71f5690e32e745cafee239b9"
+      }
     }
   },
   "services": {

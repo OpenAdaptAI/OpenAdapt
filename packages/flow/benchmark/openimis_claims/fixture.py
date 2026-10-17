@@ -35,6 +35,8 @@ from typing import Any
 from urllib.error import HTTPError, URLError
 from urllib.request import urlopen
 
+from .upstream import UpstreamFetchError, prepare_compose
+
 HERE = Path(__file__).resolve().parent
 
 COMPOSE_PROJECT = "openadapt-openimis-claims"
@@ -236,6 +238,18 @@ class OpenIMISFixture:
             "OPENIMIS_DB_PORT": str(self.db_port),
         }
 
+    def _compose_path(self) -> Path:
+        """Fetch, verify and render the pinned upstream compose file once."""
+
+        cached = getattr(self, "_compose_file", None)
+        if cached is None:
+            try:
+                cached = prepare_compose(self.lock, out_dir=HERE / "out")
+            except UpstreamFetchError as exc:
+                raise FixtureError(str(exc)) from exc
+            self._compose_file = cached
+        return cached
+
     def _compose(self, *args: str, input_text: str | None = None) -> str:
         import os
 
@@ -245,7 +259,7 @@ class OpenIMISFixture:
             "--project-name",
             self.project_name,
             "-f",
-            str(HERE / "compose.yml"),
+            str(self._compose_path()),
             *args,
         ]
         proc = subprocess.run(

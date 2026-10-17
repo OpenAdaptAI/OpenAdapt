@@ -11,7 +11,6 @@ from dataclasses import replace
 from pathlib import Path
 
 import pytest
-import yaml
 
 from benchmark.openemr_local.fixture import (
     ACTOR_SCOPE,
@@ -139,6 +138,16 @@ def test_lock_pins_exact_release_image_source_and_runtime_proofs() -> None:
         "url": "https://github.com/openemr/openemr.git",
         "ref": "v8_0_0_3",
         "commit": "7c96c8eefe460d6fadbccbe93d0fa6bf819acd69",
+        "license": "GPL-3.0",
+        "note": (
+            "Fetched at run time by benchmark/openemr_local/upstream.py and "
+            "checked against these SHA-256 values; never stored in this repository."
+        ),
+        "files": {
+            "docker/production/docker-compose.yml": (
+                "8ffb1c64ebfc2c1da429fbe6180bd84ad87f8b5b71f5690e32e745cafee239b9"
+            )
+        },
     }
     assert lock["services"]["openemr"].endswith(
         "@sha256:0aa4d3d52b22fa69986c087e7c99e9854d8dfd70440634eb7c8af0e08f19f3ab"
@@ -160,15 +169,16 @@ def test_lock_pins_exact_release_image_source_and_runtime_proofs() -> None:
     OpenEMRFixture(Path("/tmp/unused-openemr-fixture"))._validate_lock()
 
 
-def test_compose_is_loopback_only_and_uses_only_pinned_variables() -> None:
-    compose = yaml.safe_load((ROOT / "compose.yml").read_text())
-    ports = compose["services"]["openemr"]["ports"]
-    assert ports == [
-        "127.0.0.1:${OPENEMR_HTTP_PORT:-9301}:80",
-        "127.0.0.1:${OPENEMR_HTTPS_PORT:-9300}:443",
+def test_compose_is_not_stored_and_its_upstream_is_pinned() -> None:
+    # OpenEMR's GPL-3.0 production compose is fetched at run time and
+    # rendered by benchmark/openemr_local/upstream.py; see
+    # tests/test_pinned_upstream_fixtures.py for the rendered contract.
+    assert not (ROOT / "compose.yml").exists()
+    upstream = json.loads((ROOT / "environment.lock.json").read_text())["upstreams"][
+        "openemr"
     ]
-    assert compose["services"]["openemr"]["image"].startswith("${OPENEMR_IMAGE:")
-    assert compose["services"]["db"]["image"].startswith("${MARIADB_IMAGE:")
+    assert upstream["commit"] == "7c96c8eefe460d6fadbccbe93d0fa6bf819acd69"
+    assert set(upstream["files"]) == {"docker/production/docker-compose.yml"}
 
 
 def test_local_image_identity_refuses_missing_locked_repo_digest(

@@ -438,9 +438,14 @@ def test_oracle_role_bootstrap_revokes_accumulated_privileges_before_granting() 
     # PUBLIC revokes do not strand the reference app: the isolated database is
     # created under IMISuser, which retains owner privileges independently of
     # grants made to PUBLIC.
-    compose = (REPO_ROOT / "benchmark/openimis_claims/compose.yml").read_text()
-    assert "POSTGRES_DB=IMIS" in compose
-    assert "POSTGRES_USER=IMISuser" in compose
+    from openimis_claims import upstream as oi_upstream
+
+    assert oi_upstream.DB_ENV["POSTGRES_DB"] == "IMIS"
+    assert oi_upstream.DB_ENV["POSTGRES_USER"] == "IMISuser"
+    assert (
+        "DB_USER" in oi_upstream.API_ENV
+        and oi_upstream.API_ENV["DB_USER"] == "IMISuser"
+    )
 
 
 def test_oracle_role_bootstrap_fails_closed_on_unexpected_effective_privilege() -> None:

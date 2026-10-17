@@ -206,41 +206,29 @@ acceptable for a demonstrated read-only check.
 ## Pinning
 
 `environment.lock.json` pins every image by digest (openIMIS 25.10 backend /
-frontend / demo-dataset PostgreSQL, plus Redis and RabbitMQ). `compose.yml`
-refuses to start without those digests supplied, and the driver script
-supplies them from the lock file. The compose topology and the vendored
+frontend / demo-dataset PostgreSQL, plus Redis and RabbitMQ) and every
+upstream configuration file by SHA-256. The compose topology and the
 `conf/nginx/` templates come from openIMIS's own distribution repo
 ([openimis-dist_dkr](https://github.com/openimis/openimis-dist_dkr) commit
-`cd6220d1f0578e56a589c47953250c2ad3d0caa5`), trimmed to the services the
-claims workflow needs (no OpenSearch/dashboards/certbot). openIMIS source and
-configuration remain attributed to the upstream project under AGPL-3.0.
+`cd6220d1f0578e56a589c47953250c2ad3d0caa5`). They are not stored here:
+[`upstream.py`](upstream.py) fetches them at run time, refuses any file whose
+hash differs from the lock, caches them under `out/upstream/` (git-ignored),
+and derives the local compose file from them: only the services the claims
+workflow needs (no OpenSearch/dashboards/certbot), every image from a
+required digest-pinned variable, loopback-only ports, and generated secrets.
+The nginx templates are mounted unmodified. Set `OPENADAPT_UPSTREAM_CACHE` to
+reuse a cache elsewhere.
 
 The 25.10 images publish `linux/amd64` only; on Apple Silicon they run under
 Docker Desktop's Rosetta emulation (verified 2026-07-17: first bring-up
 including migrations and demo-dataset load completed in a few minutes).
 
-## Mixed-license boundary
+## License boundary
 
-OpenAdapt Flow's original code remains MIT-licensed under the repository-root
-`LICENSE`. The local `compose.yml` topology and four configuration files under
-`conf/nginx/` are adapted from the openIMIS Docker distribution at exact
-commit `cd6220d1f0578e56a589c47953250c2ad3d0caa5` and remain licensed under
-`AGPL-3.0-only`:
-
-* `compose.yml` (from upstream `compose.base.yml`, `compose.postgresql.yml`,
-  and `compose.cache.yml`)
-* `conf/nginx/openimis.conf`
-* `conf/nginx/locations/backend.loc`
-* `conf/nginx/locations/frontend.loc`
-* `conf/nginx/variables/var.conf`
-
-Each file carries its exact upstream path and SPDX identifier. The complete
-license is included at
-[`conf/nginx/LICENSE-AGPL-3.0.md`](conf/nginx/LICENSE-AGPL-3.0.md), and the
-aggregate Git-checkout/GitHub-generated-source-archive boundary is recorded in
-the root
-[`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md). The MIT license
-does not relicense those adapted files.
+This directory contains only OpenAdapt-authored, MIT-licensed code. The
+openIMIS distribution files (`AGPL-3.0-only`) are fetched from upstream at run
+time and never committed; see [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md).
+Running or automating the AGPL application does not change Flow's license.
 
 ## Reproduction commands
 
@@ -276,7 +264,7 @@ pinned image pull, and the repo's `.venv`.
 - [openIMIS](https://openimis.org/) and the
   [openimis GitHub organization](https://github.com/openimis)
 - [openimis-dist_dkr](https://github.com/openimis/openimis-dist_dkr) — the
-  Docker distribution this compose file is adapted from
+  Docker distribution the compose file is derived from at run time
 - Image provenance: [ghcr.io/openimis/openimis-be](https://github.com/openimis/openimis-be_py/pkgs/container/openimis-be),
   [ghcr.io/openimis/openimis-fe](https://github.com/openimis/openimis-fe_js/pkgs/container/openimis-fe),
   [ghcr.io/openimis/openimis-pgsql](https://github.com/openimis/database_postgresql/pkgs/container/openimis-pgsql),
