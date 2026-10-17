@@ -5903,7 +5903,9 @@ class Replayer:
         self.backend = backend
         self._settle_seed = None
         self._actuation_epoch += 1
-        self._readback_verifier = None
+        # The on-screen read-back verifier is bound to one backend; drop it so
+        # the next step builds one for the new surface.
+        vars(self).pop("_readback_verifier", None)
         self._last_click_point = None
         self._last_click_region = None
         self._control_overlay_last_observation_png = None

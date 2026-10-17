@@ -76,6 +76,10 @@ Flow selects the sole open HTTP or HTTPS tab on the `--url` origin. It does not
 navigate the tab. It also does not close the tab or browser when recording
 finishes.
 
+This recorder owns one tab and refuses popups and new tabs. A workflow that
+spans them is recorded with the scripted `Recorder`; see
+[MULTI_SURFACE.md](MULTI_SURFACE.md).
+
 If two or more open tabs have that origin, Flow refuses to guess. Supply the
 exact current URL:
 

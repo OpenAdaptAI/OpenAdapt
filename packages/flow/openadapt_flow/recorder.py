@@ -245,7 +245,7 @@ class Recorder:
     def finish(self) -> Path:
         """Write ``meta.json`` and return the recording directory."""
         viewport = self._primary_backend.viewport
-        meta = {
+        meta: dict[str, Any] = {
             "id": uuid.uuid4().hex,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "viewport": [int(viewport[0]), int(viewport[1])],

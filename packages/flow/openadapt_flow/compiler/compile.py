@@ -1624,7 +1624,7 @@ def _surfaces_from_meta(
         sid = entry.get("id")
         kind = entry.get("kind")
         if "opened_by_event" not in entry:
-            specs.append(SurfaceSpec(id=sid, kind=kind))
+            specs.append(SurfaceSpec.model_validate({"id": sid, "kind": kind}))
             continue
         event_index = int(entry["opened_by_event"])
         if event_index not in step_id_for_event:
@@ -1637,16 +1637,20 @@ def _surfaces_from_meta(
                 "cannot identify that page at replay"
             )
         specs.append(
-            SurfaceSpec(
-                id=sid,
-                kind=kind,
-                opened_by_step=step_id_for_event[event_index],
-                opener=entry.get("opener"),
-                open_order=int(entry.get("open_order", 0)),
-                opener_link=entry.get("opener_link"),
-                origin=origin,
-                url_pattern=_surface_url_pattern(url, exclude_texts),
-                title_pattern=_surface_title_pattern(entry.get("title"), exclude_texts),
+            SurfaceSpec.model_validate(
+                {
+                    "id": sid,
+                    "kind": kind,
+                    "opened_by_step": step_id_for_event[event_index],
+                    "opener": entry.get("opener"),
+                    "open_order": int(entry.get("open_order", 0)),
+                    "opener_link": entry.get("opener_link"),
+                    "origin": origin,
+                    "url_pattern": _surface_url_pattern(url, exclude_texts),
+                    "title_pattern": _surface_title_pattern(
+                        entry.get("title"), exclude_texts
+                    ),
+                }
             )
         )
     return specs
@@ -2610,9 +2614,10 @@ def compile_recording(
             # would mean nothing.
             if step_after is not None:
                 switch_next: Optional[list[OcrLine]] = None
-                if j + 1 < len(pending) and pending[j + 1][1] is not None:
+                switch_next_before = pending[j + 1][1] if j + 1 < len(pending) else None
+                if switch_next_before is not None:
                     switch_next = cached_lines(
-                        int(pending[j + 1][3]["i"]), "before", pending[j + 1][1]
+                        int(pending[j + 1][3]["i"]), "before", switch_next_before
                     )
                 text_pc = _new_text_postcondition(
                     [],

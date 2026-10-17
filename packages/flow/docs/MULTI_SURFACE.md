@@ -201,7 +201,25 @@ surface map into the governed authorization and the durable checkpoint.
   launched browser). It has no way yet to name backends for backend surfaces,
   so a bundle that switches to one halts at that switch with "no backend was
   supplied". The deployment config needs a per-surface backend map.
-- Qualification, governed runs, and durable resume are refused (above).
+- Qualification, governed runs, and durable resume are refused (above). So a
+  multi-surface run ends at most `COMPLETED_UNVERIFIED`: every step's own
+  checks held, but `VERIFIED` needs a governed run with confirmed effects.
+- The interactive browser recorder (`openadapt-flow record --url`) still owns
+  one tab and refuses popups; multi-surface recordings come from `Recorder`.
+
+## Tests
+
+- `tests/test_multi_surface_e2e.py`: a local app that opens a popup
+  (`window.open`) and a `target=_blank` tab. It records, compiles, and replays
+  across both with zero model calls. It also halts on an undeclared popup, on a
+  declared popup that never opens, and on a popup at a different URL. Halt
+  messages quote no URL or title.
+- `tests/test_multi_surface_backends.py`: web, then the MockWaa Windows
+  backend, in one bundle. It halts at the switch, before any Windows input,
+  when no backend is supplied, when the backend is the wrong kind, or when the
+  Windows screen is a different app.
+- `tests/test_multi_surface_contract.py`: IR contract validation and the
+  replayer's refusals.
 
 ## Audit of origin/main (f21281fa)
 

@@ -87,7 +87,9 @@ windows belong to one synthetic fixture process, and the repository does not
 contain a completed campaign result. A real deployment needs its own
 qualification.
 
-The boundary is one backend per bundle. Worklists repeat that bundle over input
+The boundary for production is one backend per bundle. A bundle that declares
+several surfaces ([MULTI_SURFACE.md](MULTI_SURFACE.md)) is refused for governed,
+qualified, and durable runs. Worklists repeat that bundle over input
 records, and subflows reuse steps inside it. Neither one switches backends.
 Browser recording owns one tab and refuses popups or new tabs. Browser attach
 mode stays on one origin. macOS and Linux bind one exact app and window, while a

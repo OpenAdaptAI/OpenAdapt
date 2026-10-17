@@ -1239,11 +1239,11 @@ def surface_contract_errors(workflow: "Workflow") -> list[str]:
                 f"opened by it are {declared!r} (in open_order)"
             )
         for order, sid in enumerate(step.opens):
-            spec = by_id.get(sid)
-            if spec is not None and spec.open_order != order:
+            opened = by_id.get(sid)
+            if opened is not None and opened.open_order != order:
                 errors.append(f"surface {sid!r} open_order does not match step")
-            if spec is not None and step.action is not ActionKind.SWITCH_SURFACE:
-                if spec.opener != (step.surface or primary.id):
+            if opened is not None and step.action is not ActionKind.SWITCH_SURFACE:
+                if opened.opener != (step.surface or primary.id):
                     errors.append(
                         f"surface {sid!r} opener is not the surface step "
                         f"{step.id!r} runs on"
