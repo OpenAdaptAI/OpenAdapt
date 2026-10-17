@@ -163,7 +163,7 @@ jobs:
           )
 
       - name: Upload the exact candidate
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: capture-candidate-${{ needs.runner-availability.outputs.candidate_sha }}
           path: dist/
@@ -273,7 +273,7 @@ jobs:
 
       - name: Upload interactive qualification evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: capture-interactive-linux-${{ needs.runner-availability.outputs.candidate_sha }}
           path: evidence/
@@ -378,7 +378,7 @@ jobs:
 
       - name: Upload interactive qualification evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: capture-interactive-macos-${{ needs.runner-availability.outputs.candidate_sha }}
           path: evidence/
@@ -494,7 +494,7 @@ jobs:
 
       - name: Upload interactive qualification evidence
         if: always()
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: capture-interactive-windows-${{ needs.runner-availability.outputs.candidate_sha }}
           path: evidence/
