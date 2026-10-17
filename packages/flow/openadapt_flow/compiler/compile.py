@@ -1644,6 +1644,7 @@ def compile_recording(
     annotator: Optional["StepAnnotator"] = None,
     target_surface: Optional[ExecutionTargetKind] = None,
     pixel_verify_enabled: bool = False,
+    bind_effect_params: bool = False,
 ) -> Workflow:
     """Compile a recording directory into a workflow bundle.
 
@@ -1724,6 +1725,11 @@ def compile_recording(
             or nothing (with an honest "no verifiable effect derivable" log).
             Default False keeps the bundle byte-identical to before; even when
             True a bundle is unchanged wherever mining derives nothing.
+        bind_effect_params: With ``mine_effects``, a mined ``field_equals``
+            whose value is a parameter's demonstrated value reads back that
+            parameter at run time instead of the demonstrated literal, so a
+            run with a new value can verify. A value shared by two parameters
+            stays literal. Default False keeps the mined contract as before.
         admit_api_bindings: Opt-in compile-time REST ``ApiBinding``
             certification (``compiler.binding_admission``). For each
             consequential write whose Effect was mined from an observed
@@ -2594,8 +2600,20 @@ def compile_recording(
             mine_step_effects,
         )
 
+        bindings: dict[str, str] = {}
+        if bind_effect_params:
+            by_value: dict[str, list[str]] = {}
+            for pname, pvalue in params.items():
+                if pvalue:
+                    by_value.setdefault(pvalue, []).append(pname)
+            bindings = {v: names[0] for v, names in by_value.items() if len(names) == 1}
         for step, _sb, _sa, event in pending:
-            mined = mine_step_effects(event, step, exclude_texts=exclude_texts)
+            mined = mine_step_effects(
+                event,
+                step,
+                exclude_texts=exclude_texts,
+                param_bindings=bindings or None,
+            )
             if mined.effects:
                 step.effects = mined.effects
             log = logger.info if mined.disposition != "none" else logger.debug
@@ -2717,6 +2735,9 @@ def compile_recording(
         "secret_param_steps": sorted(secret_param_steps or ()),
         "target_surface": target_surface,
     }
+    if bind_effect_params:
+        # Recorded only when set, so every existing compile keeps its digest.
+        compiler_config["bind_effect_params"] = True
     compiler_config_sha256 = hashlib.sha256(
         json.dumps(
             compiler_config,

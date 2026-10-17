@@ -55,7 +55,7 @@ import re
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Mapping, Optional, TypedDict
+from typing import Any, Callable, Literal, Mapping, Optional, TypedDict
 
 from openadapt_flow.compiler.compile import compile_recording
 from openadapt_flow.recorder import Recorder
@@ -471,6 +471,10 @@ class AuthoringSession:
         settle_interval_s: Recorder frame-settle poll interval.
         settle_stable_frames: Consecutive stable frames required to settle.
         settle_timeout_s: Max seconds to wait for the frame to settle.
+        system_of_record_reader: Optional read-only snapshot of the system of
+            record, passed to :class:`Recorder`. Each event then keeps the
+            record delta, and ``compile(mine_effects=True)`` proposes an effect
+            contract from it. The proposal still needs a person to admit it.
     """
 
     def __init__(
@@ -484,6 +488,9 @@ class AuthoringSession:
         settle_stable_frames: int = 2,
         settle_timeout_s: float = 3.0,
         backend_hints: Optional[Mapping[str, Any]] = None,
+        system_of_record_reader: Optional[
+            Callable[[], Optional[list[dict[str, Any]]]]
+        ] = None,
     ) -> None:
         kind = _normalize_backend_kind(backend_kind)
         if kind in _COACH_ONLY_KINDS:
@@ -501,6 +508,7 @@ class AuthoringSession:
         self._settle_interval_s = settle_interval_s
         self._settle_stable_frames = settle_stable_frames
         self._settle_timeout_s = settle_timeout_s
+        self._system_of_record_reader = system_of_record_reader
         self._recorder: Optional[Recorder] = None
         self._recording_dir: Optional[Path] = None
         self._nodes: dict[str, _NodePixels] = {}
@@ -511,6 +519,7 @@ class AuthoringSession:
         self._draft: Optional[CompileResult] = None
         self._draft_digest: Optional[str] = None
         self._draft_bundle: Optional[Path] = None
+        self._compiled_dir: Optional[Path] = None
         self._check_start: Optional[int] = None
         self._check_fields: list[Any] = []
         self._check_reset: Any = None
@@ -544,6 +553,12 @@ class AuthoringSession:
     @property
     def recording_dir(self) -> Optional[Path]:
         return self._recording_dir
+
+    @property
+    def compiled_recording_dir(self) -> Optional[Path]:
+        """The recording ``compile`` compiled: the distilled copy, or the original."""
+
+        return self._compiled_dir
 
     def remember_node(
         self,
@@ -616,6 +631,7 @@ class AuthoringSession:
             settle_interval_s=self._settle_interval_s,
             settle_stable_frames=self._settle_stable_frames,
             settle_timeout_s=self._settle_timeout_s,
+            system_of_record_reader=self._system_of_record_reader,
         )
         self._actors = {}
 
@@ -929,6 +945,7 @@ class AuthoringSession:
         *,
         name: str = "authoring",
         distill: bool = True,
+        mine_effects: bool = False,
     ) -> CompileResult:
         """Compile via :func:`compile_recording`; never paints ``VERIFIED``.
 
@@ -940,6 +957,10 @@ class AuthoringSession:
         With ``distill`` (the default), steps that had no visible effect are
         removed first (:func:`~openadapt_flow.compiler.distill.distill_recording`)
         and the distilled copy is compiled. The original recording is kept.
+
+        ``mine_effects`` proposes an effect contract from the system-of-record
+        delta the recording kept (see ``system_of_record_reader``). It is a
+        proposal: compile still returns ``needs_human_admit``.
         """
 
         self._require_not_halted()
@@ -988,7 +1009,12 @@ class AuthoringSession:
         from openadapt_flow.compiler.readback_authoring import CheckError
 
         try:
-            workflow = compile_recording(compile_dir, out_bundle, name=name)
+            if mine_effects:
+                workflow = compile_recording(
+                    compile_dir, out_bundle, name=name, mine_effects=True
+                )
+            else:
+                workflow = compile_recording(compile_dir, out_bundle, name=name)
         except CheckError as exc:
             raise AuthoringError(str(exc), code="check_refused") from exc
         recording_id = workflow.recording_id or uuid.uuid4().hex
@@ -1009,6 +1035,7 @@ class AuthoringSession:
         ]
         if pending:
             result["check_needs_admission"] = pending
+        self._compiled_dir = compile_dir
         digest = None
         manifest = getattr(workflow, "manifest", None)
         raw_digest = getattr(manifest, "content_digest", None)
