@@ -1840,6 +1840,10 @@
       "sha256": "4174eb2b784c375083a2fc2c70ae41f97347d346fedaa9bbef04e6a0ccd75e2d"
     },
     {
+      "path": "docs/validation/decision_triage_synthetic.json",
+      "sha256": "35c64a73c0915db9a50afd49d8494d9e081288a902deb0230f358a90b0b4cadb"
+    },
+    {
       "path": "docs/verification.json",
       "sha256": "3180937cfabea39634fabb5afc51f0e8f003a4042f076be94d65e495de4ce6c7"
     },
