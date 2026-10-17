@@ -108,7 +108,7 @@ Every run ends with one of these results:
 To hand off a task your team repeats, tell us about it at
 [openadapt.ai/contact](https://openadapt.ai/contact).
 
-1. You show us the task once, on your own system.
+1. A person or an agent shows the task, on your own system.
 2. We build the automation and test it with your own cases before it goes
    live.
 3. We keep it working. When a screen changes, we propose a fix and a person on

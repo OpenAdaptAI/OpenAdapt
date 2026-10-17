@@ -159,7 +159,7 @@ configured contract.
 A Seal is OpenAdapt Cloud's Ed25519 signature on an Execute receipt. Check one offline against keys you pinned:
 
 ```bash
-openadapt seal keys pin                        # once; compare the fingerprint before you type the key id
+openadapt seal keys pin                        # first; compare the fingerprint before you type the key id
 openadapt seal verify runs/<run_id>/report.json
 openadapt seal verify https://example.com/receipt.json --json
 ```

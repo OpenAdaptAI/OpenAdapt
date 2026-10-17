@@ -1,7 +1,7 @@
 """Unified CLI for OpenAdapt ecosystem.
 
 Usage:
-    openadapt flow record --url <app> --out rec   # record a workflow once
+    openadapt flow record --url <app> --out rec   # record a workflow
     openadapt flow compile rec --out bundle        # compile it
     openadapt flow replay bundle                    # run it, local, $0
     openadapt flow lint bundle
@@ -1638,7 +1638,7 @@ def doctor(backend: str | None):
                             f"libraries: {', '.join(missing_system_libs)}"
                         )
                         click.echo(
-                            "  Install them once: " + _CHROMIUM_SYSTEM_LIBS_COMMAND
+                            "  Install them: " + _CHROMIUM_SYSTEM_LIBS_COMMAND
                         )
                     else:
                         try:
