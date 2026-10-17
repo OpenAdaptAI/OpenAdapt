@@ -72,6 +72,14 @@ from openadapt_flow.ir import (
 _NEW_PAGE_LOAD_TIMEOUT_S = 10.0
 
 
+def _has_window_opener(page: Any) -> bool:
+    """Whether the page's own ``window.opener`` is set (False for noopener)."""
+
+    from openadapt_flow.runtime.surfaces import page_has_window_opener
+
+    return bool(page_has_window_opener(page))
+
+
 def _phash(png: bytes) -> str:
     """Perceptual hash of a PNG frame."""
     with Image.open(io.BytesIO(png)) as img:
@@ -412,7 +420,7 @@ class Recorder:
                 live_opener = page.opener()
             except Exception:
                 live_opener = None
-            link = "window_opener" if live_opener is opener_page else "none"
+            link = "window_opener" if _has_window_opener(page) else "none"
             if live_opener is not None and live_opener is not opener_page:
                 raise RuntimeError(
                     "a recorded page was opened by a page that is not the "

@@ -79,6 +79,20 @@ def _browser_page(backend: Any) -> Any:
     return page
 
 
+def page_has_window_opener(page: Any) -> Optional[bool]:
+    """The page's own ``window.opener`` relation; None if unreadable.
+
+    ``window.open`` keeps the opener; a ``target=_blank`` link (implicit
+    ``noopener``) or ``rel=noopener`` clears it. The browser still reports the
+    page that created it (``page.opener()``), which is checked separately.
+    """
+
+    try:
+        return bool(page.evaluate("() => window.opener !== null"))
+    except Exception:
+        return None
+
+
 def _page_closed(page: Any) -> bool:
     try:
         return bool(page.is_closed())
@@ -263,19 +277,13 @@ class SurfaceRouter:
         )
         opener_page = _browser_page(self.backends.get(spec.opener or "", None))
         try:
-            live_opener = page.opener()
+            creator = page.opener()
         except Exception:
-            live_opener = None
-        if spec.opener_link == "window_opener":
-            if opener_page is None or live_opener is not opener_page:
-                return (
-                    f"{prefix}, but its window.opener is not the page of "
-                    f"surface '{spec.opener}' as recorded; run halted"
-                )
-        elif live_opener is not None:
+            creator = None
+        if creator is not None and creator is not opener_page:
             return (
-                f"{prefix} with a window.opener, but the recorded page had "
-                "none; run halted"
+                f"{prefix}, but the browser reports it was opened by a page "
+                f"other than surface '{spec.opener}'; run halted"
             )
         assert spec.url_pattern is not None
         url_re = re.compile(spec.url_pattern)
@@ -313,6 +321,13 @@ class SurfaceRouter:
             return (
                 f"{prefix}, but its title does not match the recorded pattern; "
                 "run halted"
+            )
+        link = page_has_window_opener(page)
+        expected_link = spec.opener_link == "window_opener"
+        if link is None or link != expected_link:
+            return (
+                f"{prefix}, but its window.opener relation differs from the "
+                "recording; run halted"
             )
         self._claimed[spec.id] = page
         self._remember(page)
