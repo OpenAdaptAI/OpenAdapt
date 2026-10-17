@@ -36,6 +36,7 @@ from openadapt_flow.fleet.policy import (
     verify_policy,
 )
 from openadapt_flow.fleet.signing import FleetTrust, SoftwareKeyCustody, public_key_b64
+from openadapt_flow.fleet.status import FleetStatusStateError, StatusHighWater
 
 TRUST_FILE = "trust.json"
 
@@ -79,6 +80,15 @@ def _cmd_status(args: argparse.Namespace) -> int:
                 "security_official": policy.security_official.official_name,
                 "sha256": policy.policy_sha256(),
             }
+    try:
+        seen = StatusHighWater.in_dir(root).load()
+    except FleetStatusStateError as exc:
+        report["status_sequences"] = f"unreadable ({exc}): auto-promotion is off"
+    else:
+        report["status_sequences"] = {
+            "revocation_list": seen.revocation_sequence,
+            "kill_switch": seen.kill_switch_sequence,
+        }
     trust_path = root / TRUST_FILE
     report["trusted_roots"] = (
         sorted(FleetTrust.model_validate_json(trust_path.read_text()).roots)

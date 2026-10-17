@@ -90,7 +90,10 @@ from openadapt_flow.fleet.signing import (  # noqa: F401
     issue_signer_certificate,
 )
 from openadapt_flow.fleet.status import (  # noqa: F401
+    STATUS_STATE_FILE,
     FleetStatus,
+    FleetStatusStateError,
+    StatusHighWater,
     read_fleet_status,
 )
 
@@ -137,6 +140,9 @@ __all__ = [
     "issue_signer_certificate",
     "process_imported_patch",
     "read_fleet_status",
+    "STATUS_STATE_FILE",
+    "FleetStatusStateError",
+    "StatusHighWater",
     "register_fingerprint",
     "run_qualification_canary",
     "sign_policy",

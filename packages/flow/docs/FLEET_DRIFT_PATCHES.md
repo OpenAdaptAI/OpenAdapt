@@ -249,6 +249,20 @@ switch disabled auto-promotion, the candidate waits for a person
 states. A person can still review and approve a candidate when status is
 stale; only automatic promotion stops.
 
+**Replay protection.** Each tenant keeps `status-state.json` in its fleet
+directory (`StatusHighWater`), with the highest revocation-list sequence and
+the highest kill-switch sequence it has accepted. `read_fleet_status`
+refuses a revocation list with a lower sequence than the recorded one, and
+refuses kill-switch history whose newest entry is lower than the recorded
+one, which is what a feed that dropped a recent kill switch looks like. It
+raises the recorded numbers only for status it accepts, and never lowers
+them. The file is replaced atomically. If it exists but cannot be read or
+parsed, or cannot be written, status is not fresh and auto-promotion stops
+until an admin repairs it; the damaged file is not overwritten. A missing
+file means the tenant has accepted nothing yet. `process_imported_patch`
+requires the state (`status_state`); without it, the candidate waits for a
+person. `openadapt-flow fleet status` shows the recorded sequences.
+
 ## Fleet hub
 
 `fleet/hub.py`, `FleetHub`.
@@ -271,7 +285,9 @@ tenant share no field that names the source, so a receiver cannot link them.
 distributes a patch only when at least `MIN_INDEPENDENT_TENANTS` (3)
 distinct contributor certificate subjects have registered the patch's
 `app_before` fingerprint. Earlier contributions are held, and
-`release_held` distributes them once the third tenant registers. This keeps
+`release_held` distributes them once the third tenant registers. The hub
+maps each contributor certificate subject to an organisation at onboarding,
+so two subjects of one organisation do not count as two tenants. This keeps
 a patch for an application only one or two tenants run, which could reveal
 who they are, from leaving the hub.
 
@@ -366,7 +382,7 @@ who added it and when. A missing file means both lists are empty.
 
 | Command | What it does |
 |---|---|
-| `status [--json]` | Shows the allowlists, roles, policy and trust settings |
+| `status [--json]` | Shows the allowlists, roles, policy, recorded status sequences and trust settings |
 | `allow --export\|--import --app-family F\|--domain D --admin NAME` | Adds an allowlist entry |
 | `disallow ...` | Removes one |
 | `roles --author ID` / `roles --approver ID --public-key KEY` | Registers a workflow author or a policy approver; refuses a person in both roles |
@@ -422,18 +438,18 @@ directory rather than in `~/.openadapt/durable-authority`.
   adds steps, or changes effects is not exportable.
 - There is no HSM adapter and no hub server. The hub runs in process over a
   file feed.
-- A tenant does not remember the highest status sequence it has seen, so a
-  replayed older revocation list is accepted until it expires (at most 24
-  hours).
 - The security official's authorisation is asserted by the approver, not
-  signed by the official.
+  signed by the official. Planned follow-up: the security official
+  co-signs the policy with their own key, registered in the role registry,
+  and `verify_policy` checks both signatures.
 - The role registry is a local admin file and is not signed.
 - The name-like check is a heuristic. A single PascalCase word such as
   `[data-qa=Smith]` cannot be told apart from a control name and is
   accepted; the export leak check still refuses it if the bundle's own data
   contains that word.
-- "Independent tenants" means distinct contributor certificate subjects. The
-  hub cannot tell whether two subjects belong to the same organisation.
+- The code counts distinct contributor certificate subjects as independent
+  tenants. That two subjects are two organisations rests on the onboarding
+  mapping, not on anything the code can check.
 
 ## Open privacy and legal questions
 
@@ -459,5 +475,6 @@ real tenant boundary:
 - **Liability.** If a promoted patch causes a wrong write on a receiving
   tenant, which party is responsible: the source tenant, us, or the tenant
   whose policy promoted it?
-- **Policy authority.** Whether the security official should countersign
-  the policy with their own key instead of being attested by the approver.
+- **Policy authority.** Which roles may act as policy approver and as
+  security official at each tenant. (A co-signature by the security
+  official is a planned follow-up; see Limits.)

@@ -82,7 +82,7 @@ from openadapt_flow.fleet.signing import (
     SoftwareKeyCustody,
     issue_signer_certificate,
 )
-from openadapt_flow.fleet.status import read_fleet_status
+from openadapt_flow.fleet.status import StatusHighWater, read_fleet_status
 from openadapt_flow.ir import (
     ActionDeliveryReceipt,
     ActionKind,
@@ -565,6 +565,11 @@ class SimulatedTenant:
         return RepairStore(self.root / "repair-store")
 
     @property
+    def status_state(self) -> StatusHighWater:
+        """The tenant's record of the highest fleet-status sequences it accepted."""
+        return StatusHighWater.in_dir(self.root / "fleet")
+
+    @property
     def bundle(self) -> Path:
         return self.root / "bundles" / "active"
 
@@ -925,7 +930,7 @@ def receive(
     fleet: Fleet, tenant: SimulatedTenant, patch: SignedStructuralPatch
 ) -> PromotionDecision:
     """Import one patch on ``tenant`` and let its signed policy decide."""
-    status = read_fleet_status(fleet.feed, tenant.trust)
+    status = read_fleet_status(fleet.feed, tenant.trust, high_water=tenant.status_state)
     result = import_patch(
         tenant.store,
         patch,
@@ -943,6 +948,7 @@ def receive(
         roles=tenant.roles,
         trust=tenant.trust,
         status_source=fleet.feed,
+        status_state=tenant.status_state,
         runner=tenant,
         cases=tenant.cases(),
         work_dir=tenant.root / "canary" / patch.patch_id[:12],
@@ -1043,7 +1049,8 @@ def _run_scenario(root: Path, *, log: Any) -> dict[str, Any]:
     )
     for tenant in (east, west):
         changed = apply_fleet_kill_switches(
-            tenant.store, read_fleet_status(fleet.feed, tenant.trust)
+            tenant.store,
+            read_fleet_status(fleet.feed, tenant.trust, high_water=tenant.status_state),
         )
         log(
             f"{tenant.name} after the kill switch: {', '.join(changed) or 'nothing to do'}"

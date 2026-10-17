@@ -16,13 +16,25 @@ unreachable, missing, unverifiable, or stale revocation list, or a kill-switch
 entry that does not verify, each produce a reason, and any reason stops
 auto-promotion (:mod:`openadapt_flow.fleet.policy`). A person can still
 approve the patch through the ordinary repair lifecycle.
+
+Replay protection: a :class:`StatusHighWater` file on the tenant records the
+highest revocation-list and kill-switch sequence numbers the tenant has
+accepted. A revocation list with a lower sequence, or a kill-switch history
+whose newest entry is lower than the recorded one, is refused, so an old
+list cannot be replayed to undo a revocation. If the file exists but cannot
+be read or parsed, or cannot be written, status is not fresh. A missing file
+means the tenant has accepted nothing yet.
 """
 
 from __future__ import annotations
 
 import hashlib
+import json
+import os
+import tempfile
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from typing import Final, Literal, Optional, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -50,8 +62,16 @@ _SHA256 = r"^[a-f0-9]{64}$"
 _KEY_ID = r"^[a-f0-9]{32}$"
 
 
+#: File name of the tenant's sequence high-water mark, in its fleet directory.
+STATUS_STATE_FILE: Final[str] = "status-state.json"
+
+
 class FleetStatusUnavailable(RuntimeError):
     """The feed could not serve a status document."""
+
+
+class FleetStatusStateError(RuntimeError):
+    """The persisted sequence high-water mark cannot be read or written."""
 
 
 def _utc(value: str) -> datetime:
@@ -197,6 +217,7 @@ class FleetStatus:
     #: Reasons auto-promotion must not proceed. Empty means fresh and verified.
     problems: list[str] = field(default_factory=list)
     revocation_sequence: Optional[int] = None
+    kill_switch_sequence: Optional[int] = None
     revoked_key_ids: frozenset[str] = frozenset()
     revoked_serials: frozenset[str] = frozenset()
     auto_promotion_disabled: bool = False
@@ -212,6 +233,92 @@ class FleetStatus:
         )
 
 
+class StatusHighWaterState(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["openadapt.fleet.status-state/v1"] = (
+        "openadapt.fleet.status-state/v1"
+    )
+    revocation_sequence: int = Field(default=0, ge=0)
+    kill_switch_sequence: int = Field(default=0, ge=0)
+    updated_at: Optional[str] = None
+
+
+class StatusHighWater:
+    """The highest status sequence numbers this tenant has accepted.
+
+    Stored as JSON in ``path`` and replaced atomically. :meth:`load` raises
+    :class:`FleetStatusStateError` for a file that exists but is unreadable
+    or invalid; :func:`read_fleet_status` turns that into a problem, so
+    auto-promotion stops until an admin repairs or removes the file.
+    """
+
+    def __init__(self, path: Path) -> None:
+        self.path = Path(path)
+
+    @classmethod
+    def in_dir(cls, fleet_dir: Path) -> "StatusHighWater":
+        return cls(Path(fleet_dir) / STATUS_STATE_FILE)
+
+    def load(self) -> StatusHighWaterState:
+        try:
+            raw = self.path.read_text(encoding="utf-8")
+        except FileNotFoundError:
+            return StatusHighWaterState()
+        except OSError as exc:
+            raise FleetStatusStateError(
+                f"cannot read {self.path.name} ({type(exc).__name__})"
+            ) from exc
+        try:
+            return StatusHighWaterState.model_validate(json.loads(raw))
+        except (ValueError, TypeError) as exc:
+            raise FleetStatusStateError(f"{self.path.name} is not valid") from exc
+
+    def advance(
+        self,
+        *,
+        revocation_sequence: Optional[int],
+        kill_switch_sequence: Optional[int],
+        now: datetime,
+    ) -> StatusHighWaterState:
+        """Raise the recorded sequences; never lower them."""
+        current = self.load()
+        state = StatusHighWaterState(
+            revocation_sequence=max(
+                current.revocation_sequence, revocation_sequence or 0
+            ),
+            kill_switch_sequence=max(
+                current.kill_switch_sequence, kill_switch_sequence or 0
+            ),
+            updated_at=now.isoformat(),
+        )
+        if (
+            state.revocation_sequence == current.revocation_sequence
+            and (state.kill_switch_sequence == current.kill_switch_sequence)
+            and self.path.exists()
+        ):
+            return current
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            fd, tmp = tempfile.mkstemp(
+                dir=self.path.parent, prefix=f".{self.path.name}.", suffix=".tmp"
+            )
+            try:
+                with os.fdopen(fd, "w", encoding="utf-8") as handle:
+                    handle.write(state.model_dump_json(indent=2))
+                    handle.flush()
+                    os.fsync(handle.fileno())
+                os.replace(tmp, self.path)
+            except BaseException:
+                Path(tmp).unlink(missing_ok=True)
+                raise
+        except OSError as exc:
+            raise FleetStatusStateError(
+                f"cannot write {self.path.name} ({type(exc).__name__})"
+            ) from exc
+        return state
+
+
 def _verify_status_chain(
     chain: CertificateChain, trust: FleetTrust, now: datetime
 ) -> None:
@@ -224,10 +331,24 @@ def read_fleet_status(
     *,
     now: Optional[datetime] = None,
     max_age: timedelta = DEFAULT_MAX_STATUS_AGE,
+    high_water: Optional[StatusHighWater] = None,
 ) -> FleetStatus:
-    """Read and verify the revocation list and kill switches. Never raises."""
+    """Read and verify the revocation list and kill switches. Never raises.
+
+    With ``high_water``, refuse status older than what this tenant already
+    accepted, and record what it accepts now.
+    """
     current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     status = FleetStatus(checked_at=current)
+    floor: Optional[StatusHighWaterState] = None
+    if high_water is not None:
+        try:
+            floor = high_water.load()
+        except FleetStatusStateError as exc:
+            status.problems.append(
+                f"persisted fleet-status state is unreadable: {exc}; failing closed"
+            )
+    accepted_revocation: Optional[int] = None
 
     try:
         rl = source.revocation_list()
@@ -249,6 +370,7 @@ def read_fleet_status(
         except PatchSignatureError as exc:
             status.problems.append(f"revocation list does not verify: {exc}")
         else:
+            before = len(status.problems)
             issued, due = _utc(rl.payload.issued_at), _utc(rl.payload.next_update)
             if issued > current + CLOCK_SKEW:
                 status.problems.append("revocation list is dated in the future")
@@ -264,6 +386,14 @@ def read_fleet_status(
             own = status.revocation_reason(rl.chain)
             if own is not None:
                 status.problems.append(f"revocation list signer: {own}")
+            if floor is not None and rl.payload.sequence < floor.revocation_sequence:
+                status.problems.append(
+                    f"revocation list sequence {rl.payload.sequence} is lower "
+                    f"than {floor.revocation_sequence}, already accepted; "
+                    "refusing a replayed list"
+                )
+            if len(status.problems) == before:
+                accepted_revocation = rl.payload.sequence
 
     try:
         switches = source.kill_switches()
@@ -294,6 +424,29 @@ def read_fleet_status(
         for entry in verified:
             ids.update(entry.payload.rollback_patch_ids)
         status.rollback_patch_ids = frozenset(ids)
+        status.kill_switch_sequence = latest.payload.sequence
+    accepted_kill: Optional[int] = None
+    if floor is not None:
+        newest = status.kill_switch_sequence or 0
+        if newest < floor.kill_switch_sequence:
+            status.problems.append(
+                f"newest kill-switch sequence {newest} is lower than "
+                f"{floor.kill_switch_sequence}, already accepted; refusing "
+                "replayed kill-switch history"
+            )
+        else:
+            accepted_kill = status.kill_switch_sequence
+    if high_water is not None and floor is not None:
+        try:
+            high_water.advance(
+                revocation_sequence=accepted_revocation,
+                kill_switch_sequence=accepted_kill,
+                now=current,
+            )
+        except FleetStatusStateError as exc:
+            status.problems.append(
+                f"cannot record fleet-status state: {exc}; failing closed"
+            )
     return status
 
 
@@ -301,12 +454,16 @@ __all__ = [
     "DEFAULT_MAX_STATUS_AGE",
     "FleetStatus",
     "FleetStatusSource",
+    "FleetStatusStateError",
     "FleetStatusUnavailable",
     "KillSwitchPayload",
     "MAX_REVOCATION_LIST_VALIDITY",
     "RevocationListPayload",
     "SignedKillSwitch",
+    "STATUS_STATE_FILE",
     "SignedRevocationList",
+    "StatusHighWater",
+    "StatusHighWaterState",
     "read_fleet_status",
     "sign_kill_switch",
     "sign_revocation_list",

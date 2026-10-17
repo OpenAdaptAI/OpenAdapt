@@ -65,6 +65,7 @@ from openadapt_flow.fleet.signing import (
 from openadapt_flow.fleet.status import (
     FleetStatus,
     FleetStatusSource,
+    StatusHighWater,
     read_fleet_status,
 )
 from openadapt_flow.repair.candidate import Actor, RepairCandidate
@@ -327,9 +328,22 @@ def _read_status(
     trust: FleetTrust,
     policy: Optional[FleetPromotionPolicy],
     now: Optional[datetime],
+    high_water: Optional[StatusHighWater],
 ) -> FleetStatus:
     hours = policy.max_status_age_hours if policy is not None else 24
-    return read_fleet_status(source, trust, now=now, max_age=timedelta(hours=hours))
+    status = read_fleet_status(
+        source,
+        trust,
+        now=now,
+        max_age=timedelta(hours=hours),
+        high_water=high_water,
+    )
+    if high_water is None:
+        status.problems.append(
+            "no persisted fleet-status state, so a replayed list cannot be "
+            "detected; failing closed"
+        )
+    return status
 
 
 def process_imported_patch(
@@ -340,6 +354,7 @@ def process_imported_patch(
     roles: RoleRegistry,
     trust: FleetTrust,
     status_source: FleetStatusSource,
+    status_state: Optional[StatusHighWater],
     runner: TenantCanaryRunner,
     cases: Sequence[QualificationCase],
     work_dir: Path,
@@ -367,7 +382,7 @@ def process_imported_patch(
             person.append(f"the promotion policy does not verify: {exc}")
     person += _pre_canary_reasons(verified, candidate)
 
-    status = _read_status(status_source, trust, verified, now)
+    status = _read_status(status_source, trust, verified, now, status_state)
     fleet = candidate.fleet_patch
     if fleet is not None and fleet.patch_id in status.rollback_patch_ids:
         candidate = store.reject(
@@ -393,7 +408,7 @@ def process_imported_patch(
     person += person_after
     if not person:
         # Fresh check right before the approval: the canary takes time.
-        status = _read_status(status_source, trust, verified, now)
+        status = _read_status(status_source, trust, verified, now, status_state)
         person += _status_reasons(status, candidate)
         if candidate.fleet_patch is not None and (
             candidate.fleet_patch.patch_id in status.rollback_patch_ids

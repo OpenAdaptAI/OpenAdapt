@@ -63,8 +63,11 @@ from openadapt_flow.fleet.patch import (
 )
 from openadapt_flow.fleet.signing import sign_document
 from openadapt_flow.fleet.status import (
+    STATUS_STATE_FILE,
+    FleetStatusStateError,
     KillSwitchPayload,
     RevocationListPayload,
+    StatusHighWater,
     sign_kill_switch,
     sign_revocation_list,
 )
@@ -185,13 +188,14 @@ def _receive(fleet, tenant, patch, *, status_source=None):
             roles=tenant.roles,
             trust=tenant.trust,
             status_source=status_source,
+            status_state=tenant.status_state,
             runner=tenant,
             cases=tenant.cases(),
             work_dir=tenant.root / "canary" / patch.patch_id[:12],
         )
 
 
-def _status_feed(fleet: sim.Fleet, path: Path) -> FilePatchFeed:
+def _status_feed(fleet: sim.Fleet, path: Path, *, sequence: int = 1) -> FilePatchFeed:
     """A separate status feed signed by the fleet's real status key."""
     feed = FilePatchFeed(path)
     signer, chain = fleet.hub._status
@@ -199,7 +203,7 @@ def _status_feed(fleet: sim.Fleet, path: Path) -> FilePatchFeed:
     feed.publish_revocation_list(
         sign_revocation_list(
             RevocationListPayload(
-                sequence=1,
+                sequence=sequence,
                 issued_at=now.isoformat(),
                 next_update=(now + timedelta(hours=12)).isoformat(),
             ),
@@ -952,6 +956,97 @@ def test_fleet_status_fails_closed(tmp_path, core):
     assert any("kill-switch entry does not verify" in p for p in status.problems)
 
 
+def test_status_high_water_refuses_a_replayed_revocation_list(tmp_path, core):
+    trust = core.trust
+    state = StatusHighWater(tmp_path / "tenant" / STATUS_STATE_FILE)
+    assert state.load().revocation_sequence == 0  # nothing accepted yet
+
+    new = _status_feed(core, tmp_path / "new", sequence=5)
+    old = _status_feed(core, tmp_path / "old", sequence=2)
+    assert read_fleet_status(new, trust, high_water=state).fresh
+    assert state.load().revocation_sequence == 5
+
+    replayed = read_fleet_status(old, trust, high_water=state)
+    assert not replayed.fresh
+    assert any("refusing a replayed list" in p for p in replayed.problems)
+    assert state.load().revocation_sequence == 5  # never lowered
+    # The same sequence again is fine; without state there is no check.
+    assert read_fleet_status(new, trust, high_water=state).fresh
+    assert read_fleet_status(old, trust).fresh
+
+
+def test_status_high_water_refuses_older_kill_switch_history(tmp_path, core):
+    trust = core.trust
+    state = StatusHighWater.in_dir(tmp_path / "tenant")
+    feed = _status_feed(core, tmp_path / "feed", sequence=1)
+    _kill(core, feed, sequence=3, disable=True, reason="incident")
+    status = read_fleet_status(feed, trust, high_water=state)
+    assert status.fresh and status.auto_promotion_disabled
+    assert state.load().kill_switch_sequence == 3
+
+    # A feed that dropped the newest entry would turn auto-promotion back on.
+    rolled_back = _status_feed(core, tmp_path / "rolled-back", sequence=1)
+    _kill(core, rolled_back, sequence=2, disable=False, reason="resume")
+    status = read_fleet_status(rolled_back, trust, high_water=state)
+    assert not status.fresh
+    assert any("kill-switch history" in p for p in status.problems)
+    no_entries = _status_feed(core, tmp_path / "none", sequence=1)
+    assert not read_fleet_status(no_entries, trust, high_water=state).fresh
+    assert state.load().kill_switch_sequence == 3
+
+
+@pytest.mark.parametrize(
+    "damage",
+    [
+        "not json",
+        '{"schema_version": "openadapt.fleet.status-state/v1", '
+        '"revocation_sequence": -1}',
+        '{"revocation_sequence": 1, "unexpected": true}',
+        "directory",
+    ],
+)
+def test_unreadable_status_state_fails_closed(tmp_path, core, damage):
+    path = tmp_path / "tenant" / STATUS_STATE_FILE
+    path.parent.mkdir()
+    if damage == "directory":
+        path.mkdir()
+    else:
+        path.write_text(damage)
+    state = StatusHighWater(path)
+    with pytest.raises(FleetStatusStateError):
+        state.load()
+    status = read_fleet_status(core.feed, core.trust, high_water=state)
+    assert not status.fresh
+    assert any("unreadable" in p for p in status.problems)
+    # The damaged file is left for an admin; it is not overwritten.
+    if damage != "directory":
+        assert path.read_text() == damage
+
+
+def test_auto_promotion_needs_persisted_status_state(fleet_with_patch, tmp_path):
+    fleet, patch = fleet_with_patch
+    # The tenant already accepted revocation list 7; the feed now serves 1.
+    tenant = _receiver(fleet, "status-replayed")
+    tenant.status_state.advance(
+        revocation_sequence=7, kill_switch_sequence=0, now=datetime.now(timezone.utc)
+    )
+    feed = _status_feed(fleet, tmp_path / "replayed", sequence=1)
+    decision = _receive(fleet, tenant, patch, status_source=feed)
+    assert decision.outcome == "needs_person"
+    assert any("replayed" in r for r in decision.reasons)
+    assert tenant.store.active_pointer() is None
+
+    # Damaged state: auto-promotion stops even with a fresh, newer list.
+    damaged = _receiver(fleet, "status-damaged")
+    damaged.status_state.path.parent.mkdir(parents=True, exist_ok=True)
+    damaged.status_state.path.write_text("{")
+    feed = _status_feed(fleet, tmp_path / "fresh", sequence=9)
+    decision = _receive(fleet, damaged, patch, status_source=feed)
+    assert decision.outcome == "needs_person"
+    assert any("unreadable" in r for r in decision.reasons)
+    assert damaged.store.active_pointer() is None
+
+
 def test_auto_promotion_aborts_without_fresh_status_or_under_a_kill_switch(
     fleet_with_patch, tmp_path
 ):
@@ -1195,6 +1290,7 @@ def test_canary_failure_blocks_the_patch(fleet_with_patch):
             roles=east.roles,
             trust=east.trust,
             status_source=fleet.feed,
+            status_state=east.status_state,
             runner=_BrokenRunner(east),
             cases=east.cases(),
             work_dir=east.root / "canary",
