@@ -57,6 +57,30 @@ _HASHES = {"sha256": 32, "sha384": 48, "sha512": 64}
 Transport = Callable[[str, bytes], "tuple[int, bytes]"]
 
 
+#: Default RFC 3161 service: Sigstore's public-good timestamp authority. It
+#: is free, its tokens state 1-second accuracy, and it receives only the
+#: 32-byte digest and a nonce.
+SIGSTORE_TSA_URL = "https://timestamp.sigstore.dev/api/v1/timestamp"
+#: Sigstore's TSA root, shipped with Flow and pinned by default when the
+#: verifier passes no ``--tsa-cert``. Fetched from
+#: ``https://timestamp.sigstore.dev/api/v1/timestamp/certchain`` on
+#: 2026-10-17. SHA-256 fingerprint 2A:CA:8F:EA:5D:3C:E4:8B:01:CC:77:07:62:93:
+#: C2:80:E6:C2:3F:FE:44:03:47:57:EE:78:33:CA:9F:45:D6:33. Valid until 2035-04-06.
+SIGSTORE_TSA_ROOT_RESOURCE = "trust/sigstore-tsa-root.pem"
+
+
+def sigstore_tsa_root_pem() -> bytes:
+    """The bundled Sigstore TSA root certificate (PEM)."""
+
+    from importlib import resources
+
+    return (
+        resources.files("openadapt_flow.notary")
+        .joinpath(SIGSTORE_TSA_ROOT_RESOURCE)
+        .read_bytes()
+    )
+
+
 class TimestampError(RuntimeError):
     """A closed reason a timestamp could not be obtained."""
 

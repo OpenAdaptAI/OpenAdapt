@@ -72,20 +72,24 @@ def _read_document(path: str) -> tuple[Any, list[Any]]:
 
 
 def _tsa_pem(paths: Sequence[str]) -> Optional[bytes]:
+    """Pinned TSA certificates: ``--tsa-cert`` files, else the Sigstore root."""
+
     if not paths:
-        return None
+        from openadapt_flow.notary.tsa import sigstore_tsa_root_pem
+
+        return sigstore_tsa_root_pem()
     return b"".join(Path(p).expanduser().read_bytes() for p in paths)
 
 
 def _authority(args: argparse.Namespace) -> tuple[Any, Optional[bytes]]:
-    from openadapt_flow.notary.tsa import HttpTsa, LocalTsa
+    from openadapt_flow.notary.tsa import SIGSTORE_TSA_URL, HttpTsa, LocalTsa
 
-    if getattr(args, "tsa_url", None):
-        return HttpTsa(args.tsa_url), None
+    if getattr(args, "no_timestamp", False):
+        return None, None
     if getattr(args, "tsa_local", None):
         tsa = LocalTsa.load_or_create(Path(args.tsa_local).expanduser())
         return tsa, tsa.certificate_pem()
-    return None, None
+    return HttpTsa(getattr(args, "tsa_url", None) or SIGSTORE_TSA_URL), None
 
 
 def _write_out(path: str, value: Any) -> None:
@@ -160,7 +164,7 @@ def cmd_notarize(args: argparse.Namespace) -> int:
         print(f"Salts and values are in the vault: {vault.root / rsha}")
         print("Delete the fields file once you have checked the vault copy.")
     if tsa is None:
-        print("No timestamp requested (--tsa-url or --tsa-local).")
+        print("No timestamp requested (--no-timestamp).")
     return 0
 
 
@@ -171,7 +175,8 @@ def cmd_timestamp_baseline(args: argparse.Namespace) -> int:
     tsa, tsa_pem = _authority(args)
     if tsa is None:
         print(
-            "timestamp-baseline REFUSED: pass --tsa-url or --tsa-local", file=sys.stderr
+            "timestamp-baseline REFUSED: it needs a timestamp; drop --no-timestamp",
+            file=sys.stderr,
         )
         return 2
     if args.baseline_sha256:
@@ -292,7 +297,15 @@ def cmd_dossier(args: argparse.Namespace) -> int:
 
 def _add_tsa(p: argparse.ArgumentParser) -> None:
     g = p.add_mutually_exclusive_group()
-    g.add_argument("--tsa-url", help="RFC 3161 TSA URL. Only a 32-byte digest is sent")
+    g.add_argument(
+        "--tsa-url",
+        help="RFC 3161 TSA URL (default: Sigstore's timestamp.sigstore.dev). Only a 32-byte digest is sent",
+    )
+    g.add_argument(
+        "--no-timestamp",
+        action="store_true",
+        help="Do not request a timestamp (offline use)",
+    )
     g.add_argument(
         "--tsa-local",
         metavar="DIR",
@@ -308,7 +321,7 @@ def _add_trust(p: argparse.ArgumentParser) -> None:
         "--tsa-cert",
         action="append",
         metavar="PEM",
-        help="Pinned TSA certificate or CA (repeatable). Certificates inside the document are never trusted",
+        help="Pinned TSA certificate or CA (repeatable; default: the bundled Sigstore TSA root). Certificates inside the document are never trusted",
     )
     p.add_argument(
         "--disclosure",

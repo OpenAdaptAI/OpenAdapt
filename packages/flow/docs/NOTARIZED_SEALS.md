@@ -78,21 +78,19 @@ after a dispute started.
 ```bash
 # 1. Before the executor runs: timestamp the baseline read for this run.
 openadapt-flow notary timestamp-baseline --baseline baseline.json \
-  --read-at 2026-10-17T04:58:00Z --nonce "$RUN_NONCE" \
-  --tsa-url http://timestamp.digicert.com -o baseline-ts.json
+  --read-at 2026-10-17T04:58:00Z --nonce "$RUN_NONCE" -o baseline-ts.json
 
 # 2. After the receipt exists: commit fields, timestamp, countersign.
 openadapt-flow notary notarize receipt.json -o notarized.json \
-  --fields-file fields.json --baseline-timestamp baseline-ts.json \
-  --tsa-url http://timestamp.digicert.com
+  --fields-file fields.json --baseline-timestamp baseline-ts.json
 
 # 3. Check it. Exit 0 only for a genuine Seal on a verified outcome.
-openadapt-flow notary verify notarized.json --tsa-cert digicert-root-g4.pem
+openadapt-flow notary verify notarized.json
 
 # 4. In a dispute: reveal one field, then export a dossier.
 openadapt-flow notary disclose notarized.json --field f-1a2b3c4d -o mrn.disclosure.json
 openadapt-flow notary dossier notarized.json --disclosure mrn.disclosure.json \
-  --tsa-cert digicert-root-g4.pem -o dossier.html
+  -o dossier.html
 ```
 
 `openadapt-flow seal` already encrypts bundles, so these commands live under
@@ -102,6 +100,12 @@ openadapt-flow notary dossier notarized.json --disclosure mrn.disclosure.json \
 `{"mrn": "004217"}`. Values never go on the command line, because shell
 history and process lists would keep them. Delete the file once the vault
 copy is in place.
+
+Timestamps come from Sigstore's public timestamp service
+(`https://timestamp.sigstore.dev/api/v1/timestamp`) unless you pass
+`--tsa-url` for another RFC 3161 service, such as a paid eIDAS-qualified one.
+It is free, its tokens state 1-second accuracy, and it receives only the
+32-byte digest and a nonce. `--no-timestamp` skips the timestamp.
 
 `--tsa-local DIR` uses an offline TSA that keeps its key in `DIR`. Its time
 is this machine's clock, so its tokens prove nothing about time to anyone
@@ -154,6 +158,10 @@ Verification reads only what the holder pinned:
   `OPENADAPT_SEAL_KEYS_PATH`, `OPENADAPT_SEAL_KEYS_JSON`, or
   `~/.openadapt/seal-keys.json`. Nothing is fetched.
 - TSA trust comes from `--tsa-cert`: the TSA's certificate or a CA above it.
+  Without it, the verifier pins Sigstore's TSA root, shipped in
+  `openadapt_flow/notary/trust/sigstore-tsa-root.pem` (SHA-256 fingerprint
+  `2A:CA:8F:EA:...:D6:33`, valid until 2035-04-06). A token from another TSA
+  then fails until you pin that TSA's certificate.
   A certificate inside the token or the document is used to build the path,
   never as an anchor. Each link must be valid at the token's `genTime`, and
   the TSA certificate must carry the critical `timeStamping` extended key
@@ -238,15 +246,17 @@ It does not prove:
   Revocation (CRL or OCSP) is not checked offline, and a token signed after
   the TSA key's compromise date verifies the same. Long-term validity needs
   archive timestamps (RFC 4998 or CAdES-A), which this does not implement.
-- that the time is precise. DigiCert's tokens state no accuracy, and the
-  local TSA claims one second.
+- that the time is precise. Sigstore and the local TSA claim one
+  second; DigiCert's tokens state no accuracy.
 
 A token from `--tsa-local` proves only what this machine's clock said.
 
 ## Tests
 
 `tests/test_notary.py` runs offline. It covers brute-force resistance over a
-small MRN domain, wrong disclosed values, a real DigiCert token
+small MRN domain, wrong disclosed values, a real Sigstore token
+(`tests/fixtures/notary/sigstore-token.der`) checked against the bundled
+root, a real DigiCert token
 (`tests/fixtures/notary/digicert-token.der`, captured on 2026-10-17 with
 `openssl ts -query`) checked against DigiCert Trusted Root G4, `openssl ts
 -verify` on local tokens, tampering after notarization, baseline nonce

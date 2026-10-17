@@ -863,3 +863,47 @@ def test_cli_notarize_disclose_verify_dossier(issuer, tmp_path, capsys, monkeypa
         )
         == 0
     )
+
+
+# -- Sigstore default TSA ----------------------------------------------------
+
+
+def test_sigstore_token_verifies_offline_against_bundled_root():
+    """A real token from timestamp.sigstore.dev (captured 2026-10-17)."""
+
+    import hashlib
+    from pathlib import Path
+
+    from openadapt_flow.notary.tsa import (
+        load_pem_certificates,
+        sigstore_tsa_root_pem,
+        verify_timestamp_token,
+    )
+
+    token = (
+        Path(__file__).parent / "fixtures" / "notary" / "sigstore-token.der"
+    ).read_bytes()
+    digest = hashlib.sha256(b"openadapt sigstore probe").digest()
+    roots = load_pem_certificates(sigstore_tsa_root_pem())
+    result = verify_timestamp_token(token, digest, roots)
+    assert result.ok and result.reason == "verified"
+    assert result.tsa_subject == "CN=sigstore-tsa,O=sigstore.dev"
+    assert result.accuracy_seconds == 1.0
+    wrong = verify_timestamp_token(token, hashlib.sha256(b"x").digest(), roots)
+    assert not wrong.ok and wrong.reason == "imprint_mismatch"
+
+
+def test_default_authority_is_sigstore_and_no_timestamp_opts_out():
+    import argparse
+
+    from openadapt_flow.notary.cli import _authority, _tsa_pem
+    from openadapt_flow.notary.tsa import (
+        SIGSTORE_TSA_URL,
+        HttpTsa,
+        sigstore_tsa_root_pem,
+    )
+
+    tsa, pem = _authority(argparse.Namespace(tsa_url=None, tsa_local=None))
+    assert isinstance(tsa, HttpTsa) and tsa.url == SIGSTORE_TSA_URL and pem is None
+    assert _authority(argparse.Namespace(no_timestamp=True)) == (None, None)
+    assert _tsa_pem([]) == sigstore_tsa_root_pem()
