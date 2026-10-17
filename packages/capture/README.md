@@ -183,6 +183,15 @@ nothing unless you run `capture share` or set `send_profile=True`. The
 `privacy` extra installs `openadapt-privacy` but doesn't remove anything from
 a recording by itself.
 
+Shadow-mode pattern mining, which notices repeated tasks and offers a draft,
+is off by default, needs the person's acknowledgement to turn on, and keeps
+no typed values. Its encrypted buffer lives in the unsynced app-data folder
+and is cleared, with its key destroyed, at least every 24 hours and when
+shadow mode stops. OpenAdapt never sends shadow mode data off the computer,
+but OS backup, sync, and endpoint security tools can still copy local files.
+See
+[docs/SHADOW_MINING.md](https://github.com/OpenAdaptAI/openadapt-capture/blob/main/docs/SHADOW_MINING.md).
+
 How Capture handles sensitive data, its licensing boundaries, and how releases
 are qualified are covered in [docs/COMPLIANCE.md](https://github.com/OpenAdaptAI/openadapt-capture/blob/main/docs/COMPLIANCE.md).
 

@@ -44,6 +44,33 @@ truncated, so a consumer never treats half a string as exact identity
 evidence. Flow refuses desktop `--secret` authoring until its source-time
 field-redaction contract can prove the sensitive value was never retained.
 
+## Shadow-mode pattern mining
+
+Shadow mining (`openadapt_capture.shadow`) is off by default. It turns on only
+in code, for the person being observed, after that person acknowledges a
+notice; the acknowledgement time is recorded locally. It keeps value-free
+symbols in an encrypted buffer in the platform's app-data folder, and refuses
+to start if that folder is inside a known sync root (Documents, Desktop,
+iCloud, OneDrive, Dropbox, and similar). The key lives in the OS credential
+store, or only in memory, and is destroyed with the buffer at least every 24
+hours, when shadow mode is turned off, and on a clean exit, so a digest of a
+short identifier can't be tested later; a buffer left by a crash is deleted at
+the next start. A saved review draft and the ignore list outlive the buffer
+until the person turns shadow mode off, and the notice says so. The notice
+also says the record may include personal, confidential, or health
+information, that IT administrators and endpoint security or backup tools on
+a managed computer could inspect or copy it, and that the person should pause
+it before viewing sensitive material. URL segments and labels
+that could carry identifiers are scrubbed before storage, and only allowlisted
+work domains are recorded. It never reads window titles, the clipboard, or
+the screen, opens no network connection, and has no remote or admin switch. OpenAdapt
+never sends its data off the computer; that is the only promise made,
+because other software on the computer can copy local files.
+Its export carries no keyed digest. Because it observes activity across
+applications over time, an employer deployment can count as workplace
+monitoring and may need employee notice, a data protection impact assessment,
+or works-council agreement. See [SHADOW_MINING.md](SHADOW_MINING.md).
+
 ## Microphone narration
 
 Microphone narration (`capture record --audio`, or `RECORD_AUDIO`) is off by

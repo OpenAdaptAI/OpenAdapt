@@ -79,6 +79,7 @@ from openadapt_capture.input_observer import (
     add_exception_note,
     create_input_observer,
 )
+from openadapt_capture.live import LiveEventTap, publish_live
 from openadapt_capture.structural import (
     StructuralObservationRequest,
     StructuralObserver,
@@ -945,6 +946,7 @@ def process_events(
     num_video_events: multiprocessing.Value,
     producers_finished: threading.Event | None = None,
     processing_aborted: threading.Event | None = None,
+    live_event_tap: LiveEventTap | None = None,
 ) -> None:
     """Process events from the event queue and write them to write queues.
 
@@ -969,6 +971,9 @@ def process_events(
             boundary instead of racing the shared stop signal.
         processing_aborted: Stop without publishing a completed journal after a
             startup failure leaves a producer alive.
+        live_event_tap: Optional opt-in tap. Each retained action, window,
+            and browser event is copied to it after it is queued for writing.
+            None (the default) publishes nothing.
     """
     logger.info("Starting")
 
@@ -998,6 +1003,7 @@ def process_events(
             perf_q,
         )
         num_action_events.value += 1
+        publish_live(live_event_tap, action_event)
 
     def bind_pending_actions(
         after_screen_event: Event,
@@ -1148,6 +1154,7 @@ def process_events(
                     perf_q,
                 )
                 num_window_events.value += 1
+                publish_live(live_event_tap, prev_window_event)
                 prev_saved_window_timestamp = prev_window_event.timestamp
                 prev_saved_window_ordinal = prev_window_event.source_ordinal or 0
         elif event.type == "window":
@@ -1160,6 +1167,7 @@ def process_events(
                 perf_q,
             )
             num_window_events.value += 1
+            publish_live(live_event_tap, event)
             prev_saved_window_timestamp = event.timestamp
             prev_saved_window_ordinal = event.source_ordinal or 0
         elif event.type == "browser":
@@ -1172,6 +1180,7 @@ def process_events(
                     perf_q,
                 )
                 num_browser_events.value += 1
+                publish_live(live_event_tap, event)
         elif event.type == "action":
             if prev_screen_event is None:
                 raise WindowCaptureError("a native action arrived before its initial frame")
@@ -2841,6 +2850,7 @@ def record(
     structural_observer: StructuralObserver | None = None,
     child_registry: dict[str, Any] | None = None,
     authentication: AuthenticationHandoffController | None = None,
+    live_event_tap: LiveEventTap | None = None,
 ) -> int | None:
     """Record native screenshots, action events, and window events.
 
@@ -2862,6 +2872,9 @@ def record(
         child_registry: Optional dict the caller owns, filled with every task
             this recording starts. It lets the caller reap surviving child
             processes even when this function raises.
+        live_event_tap: Optional opt-in :class:`~openadapt_capture.live.LiveEventTap`
+            that receives a copy of each retained action, window, and browser
+            event. None (the default) publishes nothing.
     """
     if config.RECORD_BROWSER_EVENTS:
         # Fail before encoder checks, display access, database creation, or any
@@ -3155,6 +3168,7 @@ def record(
             num_video_events,
             producers_finished,
             processing_aborted,
+            live_event_tap,
         )
         event_processor = threading.Thread(
             target=_run_task_fail_loud,
@@ -3598,6 +3612,7 @@ class Recorder:
         structural_observer: StructuralObserver | None = None,
         control_enabled: bool = True,
         control_runtime_dir: str | None = None,
+        live_event_tap: LiveEventTap | None = None,
     ) -> None:
         from pathlib import Path
 
@@ -3668,6 +3683,7 @@ class Recorder:
         self._worker_error: BaseException | None = None
         self._worker_error_lock = threading.Lock()
         self._structural_observer = structural_observer
+        self._live_event_tap = live_event_tap
         self._authentication = AuthenticationHandoffController()
         self._control_server = None
         self._control_state_lock = threading.RLock()
@@ -4099,6 +4115,7 @@ class Recorder:
                     structural_observer=self._structural_observer,
                     child_registry=self._child_registry,
                     authentication=self._authentication,
+                    live_event_tap=self._live_event_tap,
                 )
             if last_source_ordinal is not None:
                 self._last_source_ordinal = last_source_ordinal
