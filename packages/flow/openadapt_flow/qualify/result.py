@@ -5,15 +5,18 @@ without ``workflow_name`` (free text), with refusal codes only, plus what the
 campaign itself observed:
 
 - ``verify_config_sha256``: the read-back contract the cases were judged
-  against, SHA-256 over ``{"verifier_identity", "effects"}`` (the save's
-  effects as bound for the campaign), the same form as an effect receipt's
+  against, SHA-256 over ``{"verifier_identity", "effects"}``. ``effects`` is
+  the effective list bound to the save step for the campaign: the
+  ``effects`` from verify.yaml, the expansion of ``record``, or the effects
+  the compiler mined, after the duplicate key is applied and before input
+  values are substituted. It is the same form as an effect receipt's
   ``workflow_digest``;
 - ``verifier_identity``: ``openadapt.effect-verifier-identity/v1`` digest;
 - ``fault_driver``: which driver staged the faults;
 - ``cases``: one entry per trial, each verdict taken from the independent
   read-back, never from the run report;
 - ``silent_incorrect_success_count`` (must be 0), ``over_halt_count`` and
-  ``model_calls``.
+  ``executor_model_calls`` and ``verifier_model_calls``.
 
 Signing adds no scheme. ``certify`` binds the result's digest into the
 existing ``openadapt.qualification-admission/v1`` envelope
@@ -92,12 +95,30 @@ def verify_config_sha256(verifier_identity: str, effects: list[Any]) -> str:
     return f"sha256:{sha256_hex(payload)}"
 
 
-def readback_tier(tier: Optional[VerificationTier], independent: bool) -> str:
-    """RFC-0002 ``verification_tier`` for one trial's read."""
+#: Verifier substrates that read through the application's UI. A separate
+#: signed-in UI session (``ui_readback``) is still the UI.
+UI_SUBSTRATES = frozenset({"ui-readback", "ui_readback", "onscreen"})
+
+
+def readback_tier(
+    tier: Optional[VerificationTier],
+    independent: bool,
+    substrate: Optional[str] = None,
+) -> str:
+    """RFC-0002 ``verification_tier`` for one trial's read.
+
+    ``independent_readback`` only for a read of the system of record that does
+    not go through the UI (REST, SQL, FHIR, GraphQL, a file export): Flow tier
+    1 from a non-UI substrate. Any other read, including a separate UI
+    session, is ``screen_readback``. No read is ``unchecked``.
+    """
 
     if tier is None or not independent:
         return "unchecked"
-    if tier.is_independent_of_actuation():
+    if (
+        tier is VerificationTier.INDEPENDENT_SYSTEM
+        and (substrate or "").lower() not in UI_SUBSTRATES
+    ):
         return "independent_readback"
     return "screen_readback"
 
@@ -119,12 +140,10 @@ def observed_verdict(oracle: Mapping[str, Any]) -> Verdict:
     return "INDETERMINATE"
 
 
-def _outcome(verdict: Verdict, tier: str, landed: str, strongest: bool) -> str:
+def _outcome(verdict: Verdict, tier: str, landed: str) -> str:
     if verdict == "CONFIRMED":
         return (
-            "verified"
-            if tier == "independent_readback" and strongest
-            else "reconciliation_required"
+            "verified" if tier == "independent_readback" else "reconciliation_required"
         )
     if verdict == "REFUTED" and landed == "none":
         return "halted_before_effect"
@@ -139,12 +158,17 @@ def case_entry(
     oracle: Mapping[str, Any],
     verifier_tier: Optional[VerificationTier],
     report_path: Path,
+    verifier_substrate: Optional[str] = None,
 ) -> dict[str, Any]:
     """One ``cases[]`` entry. The verdict never reads the run report."""
 
     expected = EXPECTED_VERDICT[case_id]
     observed = observed_verdict(oracle)
-    tier = readback_tier(verifier_tier, oracle.get("independent", True) is not False)
+    tier = readback_tier(
+        verifier_tier,
+        oracle.get("independent", True) is not False,
+        verifier_substrate,
+    )
     landed = oracle.get("landed") or (
         "none" if oracle.get("observed") == "no_mutation" else "some"
     )
@@ -156,20 +180,21 @@ def case_entry(
         "expected_verdict": expected,
         "observed_verdict": observed,
         "verification_tier": tier,
-        "outcome": _outcome(
-            observed,
-            tier,
-            landed,
-            verifier_tier is VerificationTier.INDEPENDENT_SYSTEM,
-        ),
+        "outcome": _outcome(observed, tier, landed),
         # The run report is the record this trial produced today. An
         # openadapt.effect-receipt/v1 replaces it once openadapt-types ships it.
         "receipt_sha256": hashlib.sha256(report_path.read_bytes()).hexdigest(),
         "evidence_digest": f"sha256:{sha256_hex(dict(oracle))}",
         "engine_outcome": report.execution_outcome,
-        "model_calls": int(report.model_calls or 0),
+        "executor_model_calls": int(report.model_calls or 0),
     }
-    entry["passed"] = bool(observed == expected and tier == "independent_readback")
+    # The normal case must reach ``verified``; a fault must match its verdict.
+    # Both only at independent_readback.
+    entry["passed"] = bool(
+        observed == expected
+        and tier == "independent_readback"
+        and (expected != "CONFIRMED" or entry["outcome"] == "verified")
+    )
     entry["silent_incorrect_success"] = bool(
         (expected != "CONFIRMED" and observed == "CONFIRMED")
         or (report.success and observed != expected)
@@ -188,7 +213,7 @@ def build_result(
     verifier_identity: str,
     fault_driver_version: str,
     cases: list[dict[str, Any]],
-    judge_model_calls: int = 0,
+    verifier_model_calls: int = 0,
 ) -> dict[str, Any]:
     """``openadapt.qualification-result/v1`` from the project's report."""
 
@@ -229,8 +254,11 @@ def build_result(
         "cases": cases,
         "silent_incorrect_success_count": silent,
         "over_halt_count": over_halt,
-        "model_calls": judge_model_calls
-        + sum(int(c.get("model_calls", 0)) for c in cases),
+        "executor_model_calls": sum(
+            int(c.get("executor_model_calls", 0)) for c in cases
+        ),
+        # Calls made while judging. A read-back verifier makes none.
+        "verifier_model_calls": verifier_model_calls,
     }
 
 

@@ -95,7 +95,15 @@ def _report(outcome: str, success: bool) -> SimpleNamespace:
     return SimpleNamespace(execution_outcome=outcome, success=success, model_calls=0)
 
 
-def _entry(tmp_path: Path, case_id: str, outcome: str, oracle: dict, trial=1):
+def _entry(
+    tmp_path: Path,
+    case_id: str,
+    outcome: str,
+    oracle: dict,
+    trial=1,
+    tier=VerificationTier.INDEPENDENT_SYSTEM,
+    substrate="rest",
+):
     path = tmp_path / f"{case_id}-{trial}.json"
     path.write_text("{}")
     return case_entry(
@@ -103,8 +111,9 @@ def _entry(tmp_path: Path, case_id: str, outcome: str, oracle: dict, trial=1):
         trial=trial,
         report=_report(outcome, outcome == "VERIFIED"),
         oracle=oracle,
-        verifier_tier=VerificationTier.INDEPENDENT_SYSTEM,
+        verifier_tier=tier,
         report_path=path,
+        verifier_substrate=substrate,
     )
 
 
@@ -194,7 +203,9 @@ def test_result_drops_free_text_and_counts(tmp_path):
     assert result["passed"]
     assert result["silent_incorrect_success_count"] == 0
     assert result["over_halt_count"] == 0
-    assert result["model_calls"] == 0
+    assert result["executor_model_calls"] == 0
+    assert result["verifier_model_calls"] == 0
+    assert "model_calls" not in result
     assert len(result["cases"]) == 18
     changed = {**result, "generated_at": "2030-01-01T00:00:00Z"}
     assert result_sha256(changed) == result_sha256(result)
@@ -244,3 +255,87 @@ def test_admission_refuses_fewer_than_three_trials(tmp_path):
             effect_contract_sha256=H,
             identity_contract_sha256=None,
         )
+
+
+@pytest.mark.parametrize("substrate", ["rest", "sql", "fhir", "graphql", "document"])
+def test_system_of_record_reads_are_independent(tmp_path, substrate):
+    entry = _entry(tmp_path, "representative", "VERIFIED", EXACT, substrate=substrate)
+    assert entry["verification_tier"] == "independent_readback"
+    assert entry["outcome"] == "verified" and entry["passed"]
+
+
+def test_a_separate_ui_session_is_screen_readback(tmp_path):
+    """Flow #492 ui_readback reads through the UI: never independent_readback."""
+
+    entry = _entry(
+        tmp_path,
+        "representative",
+        "VERIFIED",
+        EXACT,
+        tier=VerificationTier.INDEPENDENT_SESSION,
+        substrate="ui-readback",
+    )
+    assert entry["verification_tier"] == "screen_readback"
+    assert entry["outcome"] == "reconciliation_required"
+    assert not entry["passed"]
+    # A plugin that claims tier 1 but reads through the UI is still the screen.
+    plugin = _entry(
+        tmp_path, "representative", "VERIFIED", EXACT, substrate="ui_readback"
+    )
+    assert plugin["verification_tier"] == "screen_readback" and not plugin["passed"]
+
+
+def test_certification_needs_the_normal_case_verified_at_independent_readback(tmp_path):
+    cases = [
+        _entry(
+            tmp_path,
+            "representative",
+            "VERIFIED",
+            EXACT,
+            tier=VerificationTier.INDEPENDENT_SESSION,
+            substrate="ui-readback",
+        )
+    ] + [
+        _entry(tmp_path, case_id, "HALTED", NONE)
+        for case_id in (
+            "fault-ambiguity",
+            "fault-wrong-identity",
+            "fault-stale-identity",
+            "fault-weak-effect",
+            "fault-missing-effect",
+        )
+    ]
+    result = build_result(
+        report=_qreport(passed=True),
+        verify_sha256="sha256:" + H,
+        verifier_identity="sha256:" + H,
+        fault_driver_version="abc",
+        cases=cases,
+    )
+    assert not result["passed"]
+
+
+def test_digest_is_over_the_effective_effects_not_the_file():
+    """A record shorthand and its expanded effects list are one contract."""
+
+    from openadapt_flow.qualify.campaign import record_effects
+
+    record = parse_verify_config(
+        {
+            **BASE,
+            "record": {
+                "match": ["email"],
+                "duplicate_key": "email",
+                "fields": {"email": "email", "lname": "lname"},
+            },
+        },
+        env={},
+    )
+    expanded = record_effects(record)
+    listed = parse_verify_config(
+        {**BASE, "effects": [e.model_dump(mode="json") for e in expanded]}, env={}
+    )
+    identity = "sha256:" + H
+    assert verify_config_sha256(identity, expanded) == verify_config_sha256(
+        identity, listed.effects
+    )

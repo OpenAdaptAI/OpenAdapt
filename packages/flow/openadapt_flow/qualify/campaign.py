@@ -1127,6 +1127,7 @@ def qualify(
                     oracle=oracle,
                     verifier_tier=verifier_tier,
                     report_path=ctx.run_dir / "report.json",
+                    verifier_substrate=getattr(probe_verifier, "substrate", None),
                 )
             )
             rows.append(row)
@@ -1212,7 +1213,9 @@ def qualify(
         f"qualification-result/v1 {result_sha256(qresult)[:16]}: passed="
         f"{qresult['passed']} silent_incorrect_success="
         f"{qresult['silent_incorrect_success_count']} over_halt="
-        f"{qresult['over_halt_count']} model_calls={qresult['model_calls']}"
+        f"{qresult['over_halt_count']} executor_model_calls="
+        f"{qresult['executor_model_calls']} verifier_model_calls="
+        f"{qresult['verifier_model_calls']}"
     )
     admission_note: Optional[str] = None
     if certify is not None and qreport.passed and qresult["passed"]:
