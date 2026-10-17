@@ -61,7 +61,7 @@ _ANSWER = {
 GET_MODE_DESCRIPTION = (
     "Say how saves are approved on this server: the approval mode the "
     "operator chose (each_item, problems_only, not_gated, or flow_default, "
-    "where a person approves each save), and whether you may answer a "
+    "where each save waits for approval), and whether you may answer a "
     "waiting save yourself. You can't change either."
 )
 LIST_DESCRIPTION = (

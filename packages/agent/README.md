@@ -276,7 +276,7 @@ Flow's [execution profiles](https://github.com/OpenAdaptAI/openadapt-flow/blob/m
 | `--config YAML` | Flow's deployment config ([example](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/docs/deployment.example.yaml)), which sets the profile and whether model grounding is allowed. |
 | `--policy NAME-OR-PATH` | The policy Flow certifies against, such as `clinical-write` or `permissive`. |
 | `--timeout SECONDS` | How long one run may work (default 600). Time a person spends approving a save doesn't count. A run stopped at the limit is `not_sure_if_saved`. |
-| `--approval-mode MODE` | Whether a person approves each save. Without it, Flow decides: under `standard` and `regulated` a run stops before each save until a person approves it (`each_item`). `not_gated` turns that off for every run this server starts; each result records it under `technical.approval_mode`. |
+| `--approval-mode MODE` | Whether each save waits for approval. Without it, Flow decides: under `standard` and `regulated` a run stops before each save until it's approved (`each_item`). `not_gated` turns that off for every run this server starts; each result records it under `technical.approval_mode`. |
 | `--delegate-approvals AGENT_ID` | Lets your agent answer a waiting save as `AGENT_ID` (an opaque id such as `agent:intake-bot`), with `list_approval_requests` and `answer_approval_request`. Flow accepts the answer only where the run's approver policy allows an agent for that step, and records the agent as the approver. By default only a person may answer. Needs an openadapt-flow with delegated approvers (not released yet). |
 | `--headed` | Shows the browser. A person needs it to continue or skip a stopped run in a web app. |
 | `--extra-run-arg ARG`, `--flow-cli CMD` | Change how Flow is called. Either one can relax Flow's checks, for example `--extra-run-arg=--allow-unencrypted`. |
@@ -410,7 +410,7 @@ openadapt-agent seal verify https://example.com/receipt.json --json
 - The check that stops a second entry covers one runs folder. Pass the same absolute `--runs-dir` every time.
 - If the server exits during a run, the run reads as `not_sure_if_saved`, and Flow may still finish it.
 - This server issues no signed receipts itself. `proof` is `sealed` only when a run is connected to OpenAdapt Cloud Execute, Cloud signed its receipt, and that signature verifies against keys you pinned (see [Seals](#seals)).
-- With openadapt-flow 2, every save waits for a person's approval unless the operator names another mode (`serve --approval-mode problems_only` or `not_gated`). Your agent gets `needs_review` with the reason `waiting_for_approval`, and a person approves on the computer that runs OpenAdapt. Nothing is saved without that answer. `get_approval_mode` tells your agent which mode applies; no tool changes it.
+- With openadapt-flow 2, each save waits for approval unless the operator names another mode (`serve --approval-mode problems_only` or `not_gated`). Your agent gets `needs_review` with the reason `waiting_for_approval`. A person answers on the computer that runs OpenAdapt, or your agent does when the server runs with `--delegate-approvals` and the run's approver policy allows an agent for that step. Nothing is saved without that answer. `get_approval_mode` tells your agent which mode applies; no tool changes it.
 - Each call carries one request. There's no batch call.
 - Accounts, separation between customers, fleet policy, and hosted runs belong to OpenAdapt Cloud.
 

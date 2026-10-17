@@ -236,7 +236,7 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Per-save approval passed to every `openadapt-flow run`. Unset "
             "(the default): Flow decides, and under the Standard and Regulated "
-            "profiles a person approves each save (each_item); a run waiting "
+            "profiles each save waits for approval (each_item); a run waiting "
             "for that approval reports needs_review. not_gated turns the pause "
             "off for every run this server starts, and each run's result and "
             "Flow's report record that. Callers can't change it."
@@ -736,7 +736,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
                 + (
                     f"approval mode {args.approval_mode} (chosen with --approval-mode); "
                     if args.approval_mode
-                    else "approval mode set by Flow (a person approves each save "
+                    else "approval mode set by Flow (each save waits for approval "
                     "under the Standard and Regulated profiles); "
                 )
                 + f"runs folder {runs_dir}",
