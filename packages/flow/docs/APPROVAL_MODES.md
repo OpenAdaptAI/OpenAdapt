@@ -249,6 +249,8 @@ strict expected-failure tests for them.
   case kind.
 - A Cloud status client, switch records, spot checks, incidents and the
   Desktop list queue.
+  [`DECISION_TRIAGE.md`](DECISION_TRIAGE.md) describes the engine part that
+  orders a list's verified saves for review.
 - Desktop's screens for the approval request, and openadapt-agent passing
   `not_gated` explicitly. Until the agent does, an agent run under the
   Standard or Regulated profile waits for a person and then stops before
