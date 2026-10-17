@@ -2219,7 +2219,7 @@ requires-dist = [
     { name = "fire", specifier = ">=0.7.1" },
     { name = "loguru", specifier = ">=0.7.0" },
     { name = "magic-wormhole", marker = "extra == 'share'", specifier = ">=0.17.0" },
-    { name = "matplotlib", specifier = ">=3.10.8" },
+    { name = "matplotlib", specifier = ">=3.10.9" },
     { name = "mss", specifier = ">=6.0.0" },
     { name = "numpy", specifier = ">=1.26.0" },
     { name = "numpy", marker = "extra == 'dev'", specifier = ">=1.21.0" },
