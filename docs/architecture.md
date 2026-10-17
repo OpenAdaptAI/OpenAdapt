@@ -4,13 +4,14 @@
 > [docs.openadapt.ai/concepts](https://docs.openadapt.ai/concepts/) for the
 > maintained design and trust-boundary documentation.
 
-OpenAdapt is a governed demonstration compiler. A human demonstrates a task.
+OpenAdapt is a governed demonstration compiler. A person or an agent shows a
+task, one or more times.
 The engine retains evidence, compiles a deterministic program, qualifies it
 against a policy, and runs it through a fail-closed runtime.
 
 ```mermaid
 flowchart LR
-    H[Human demonstration] --> R[Surface recorder]
+    H[Demonstration by a person or an agent] --> R[Surface recorder]
     R --> C[openadapt-flow compiler]
     C --> B[Inspectable bundle]
     B --> Q[Qualification and certification]
