@@ -33,6 +33,36 @@ records.
 [What works today](https://docs.openadapt.ai/get-started/what-works-today/)
 has the details for each platform.
 
+## How it works
+
+```mermaid
+flowchart TD
+    D["One or more demonstrations:<br/>a person or an agent shows the task"] --> C["Compile an inspectable program"]
+    C --> CE["Certify: check it against a policy"]
+    CE --> Q["Qualify: test it on your system with your cases"]
+    Q --> I
+    subgraph RUN["Each run"]
+        direction LR
+        I["Identity check:<br/>right record?"] --> A["Act:<br/>enter the data"]
+        A --> E["Effect check:<br/>read the result back"]
+    end
+    E --> V(["VERIFIED"])
+    E --> R(["RECONCILIATION_REQUIRED"])
+    A --> R
+    I --> H(["HALTED"])
+    E --> H
+    V --> S["Receipt, or a signed Seal"]
+    H -.->|"a person resolves it<br/>and can show the fix"| C
+```
+
+`HALTED` means a check failed, so the run stopped and asked a person.
+`RECONCILIATION_REQUIRED` means a save may have gone through, so a person
+checks the record before anything is retried. A fix that a person shows after
+a halt becomes a new candidate program, and it must pass qualification again
+before it replaces the old one. [How a run ends](#how-a-run-ends) lists every
+outcome, and the [glossary](https://docs.openadapt.ai/reference/glossary/)
+defines each step.
+
 ## One referral, three ways
 
 | | By hand | AI agent | OpenAdapt |
@@ -516,12 +546,16 @@ open new ones here.
 
 In their own repositories:
 
-- **[`openadapt-capture`](https://github.com/OpenAdaptAI/openadapt-capture):**
-  native screen, mouse, keyboard, timing, and window-scope capture.
-- **[`openadapt-privacy`](https://github.com/OpenAdaptAI/openadapt-privacy):**
-  local sanitization and review for approved derivatives.
-- **[Desktop](https://github.com/OpenAdaptAI/openadapt-desktop):** the native
-  record, inspect, qualify, execute, and review application.
+| Repository | PyPI package | What it is | How you get it |
+|---|---|---|---|
+| [`openadapt-desktop`](https://github.com/OpenAdaptAI/openadapt-desktop) | [`openadapt-desktop`](https://pypi.org/project/openadapt-desktop/) | The Desktop app: record, inspect, qualify, run, and review. | Installer from [openadapt.ai/download](https://openadapt.ai/download) |
+| [`openadapt-capture`](https://github.com/OpenAdaptAI/openadapt-capture) | [`openadapt-capture`](https://pypi.org/project/openadapt-capture/) | Native screen, mouse, keyboard, timing, and window-scope capture. | `pip install "openadapt[capture]"` |
+| [`openadapt-privacy`](https://github.com/OpenAdaptAI/openadapt-privacy) | [`openadapt-privacy`](https://pypi.org/project/openadapt-privacy/) | Finds and redacts personal and health data before it is stored or sent. | `pip install "openadapt[privacy]"` |
+| [`openadapt-evals`](https://github.com/OpenAdaptAI/openadapt-evals) | [`openadapt-evals`](https://pypi.org/project/openadapt-evals/) | Research: benchmark evaluation for GUI agents. The compiler doesn't use it. | `pip install "openadapt[evals]"` |
+
+`pip install openadapt` installs the launcher, `openadapt-flow`, and
+`openadapt-agent`. The [Packages](https://docs.openadapt.ai/get-started/packages/)
+page in the docs has the same map.
 
 <details>
 <summary><strong>Research packages and the pre-1.0 monolith</strong></summary>
