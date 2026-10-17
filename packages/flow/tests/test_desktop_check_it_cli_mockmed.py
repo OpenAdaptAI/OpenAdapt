@@ -44,6 +44,13 @@ from openadapt_flow.backends.playwright_backend import PlaywrightBackend  # noqa
 from openadapt_flow.compiler import compile_recording  # noqa: E402
 from openadapt_flow.ir import RunReport, Workflow  # noqa: E402
 from openadapt_flow.mockmed.fault_server import serve  # noqa: E402
+from openadapt_flow.qualify.environment import (  # noqa: E402
+    WEB_OBSERVER_CONTRACT_SHA256,
+    WEB_OBSERVER_ID,
+    WebEnvironmentObserver,
+    web_environment_digest,
+    web_environment_payload,
+)
 from openadapt_flow.qualification import (  # noqa: E402
     ActionRiskClass,
     ActionRiskClassification,
@@ -197,10 +204,13 @@ def check_it(tmp_path_factory: pytest.TempPathFactory):
         )
         save = consequential_step(workflow)
         app_digest = demo._tree_digest(REPO_ROOT / "openadapt_flow" / "mockmed")
+        app_version = f"sha256:{app_digest}"
         entry_url = f"{base_url.rstrip('/')}/{TUTORIAL_ENTRY_QUERY}"
         backend, close = PlaywrightBackend.launch(entry_url, headless=True)
         try:
-            payload = demo._environment_payload(backend=backend, app_digest=app_digest)
+            payload = web_environment_payload(
+                backend, application_version=app_version, headless=True
+            )
         finally:
             close()
         init_project(
@@ -209,12 +219,10 @@ def check_it(tmp_path_factory: pytest.TempPathFactory):
                 target_kind="web",
                 application="OpenAdapt MockMed synthetic reference",
                 application_identity=demo._origin(base_url),
-                application_version=f"sha256:{app_digest}",
-                environment_observer_id=demo.ENVIRONMENT_OBSERVER_ID,
-                environment_observer_contract_sha256=(
-                    demo.ENVIRONMENT_OBSERVER_CONTRACT_SHA256
-                ),
-                environment_digest=demo._sha256_bytes(demo._canonical_json(payload)),
+                application_version=app_version,
+                environment_observer_id=WEB_OBSERVER_ID,
+                environment_observer_contract_sha256=WEB_OBSERVER_CONTRACT_SHA256,
+                environment_digest=web_environment_digest(payload),
                 runtime_version=demo.FLOW_VERSION,
                 required_capabilities=[
                     "headless_chromium",
@@ -307,11 +315,11 @@ def check_it(tmp_path_factory: pytest.TempPathFactory):
         assert drills.returncode == 0, drills.stdout + drills.stderr
         campaign = json.loads(drills.stdout)
 
-        # MockMed's own environment observer stands in for the generic one.
+        # The declarative web observer stands in for the generic one.
         observer_patch.setattr(
             "openadapt_flow.qualification_environment."
             "BackendQualificationEnvironmentObserver",
-            lambda _backend: demo._MockMedEnvironmentObserver(app_digest=app_digest),
+            lambda _backend: WebEnvironmentObserver(application_version=app_version),
         )
 
         def run_case(case_id: str) -> SimpleNamespace:

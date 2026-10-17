@@ -1617,7 +1617,12 @@ def _cmd_compile(args: argparse.Namespace) -> int:
     from openadapt_flow.compiler import compile_recording
     from openadapt_flow.compiler import param_confirm as pc
 
-    workflow = compile_recording(Path(args.recording), Path(args.out), name=args.name)
+    workflow = compile_recording(
+        Path(args.recording),
+        Path(args.out),
+        name=args.name,
+        pixel_verify_enabled=bool(getattr(args, "pixel_verify_enabled", False)),
+    )
     print(
         f"Compiled {len(workflow.steps)} steps into {args.out} "
         f"(workflow: {workflow.name!r})"
@@ -2307,7 +2312,7 @@ def _attach_cloud_seal(args: argparse.Namespace) -> None:
         )
 
 
-def _cmd_seal(args: argparse.Namespace) -> int:
+def _cmd_attach_seal(args: argparse.Namespace) -> int:
     """``attach-seal``: fetch Cloud's signed receipt into a VERIFIED run report."""
     from openadapt_flow.cloud_seal import attach_from_cloud
 
@@ -6290,6 +6295,110 @@ def _package_version() -> str:
         return __version__
 
 
+QUALIFY_DEFINITION = (
+    "Qualify: before a compiled workflow may run unattended on a real system, "
+    "run it against the normal case and deliberate faults, and confirm it is "
+    "verified by reading back the system of record and halts on every fault."
+)
+QUALIFY_HELP = """The faults are a duplicated save button, a relabeled save button, a blanked
+screen, and a weak or missing check that the write happened. Certifying
+(--certify) signs the result under a policy such as clinical-write; you get a
+signed report and a certified bundle the runner will admit. A certificate
+covers only the environment the workflow was qualified in.
+
+Definitions of qualify and certify:
+  docs/QUALIFICATION_TERMS.md
+Certification policies (built-in clinical-write and permissive, or your own
+YAML file passed to --certify):
+  docs/QUALIFICATION_TERMS.md#certification-policy
+How to write verify.yaml:
+  docs/QUALIFY_A_WORKFLOW.md
+"""
+
+
+def _definition_first(parser: argparse.ArgumentParser) -> None:
+    """Make ``--help`` open with the one-line definition, before usage."""
+
+    original = parser.format_help
+
+    def format_help() -> str:
+        return QUALIFY_DEFINITION + "\n\n" + original()
+
+    parser.format_help = format_help  # type: ignore[method-assign]
+
+
+def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
+    import json
+    import os
+    import time
+    from pathlib import Path
+
+    from openadapt_flow.qualify import (
+        QualifyConfigError,
+        QualifyError,
+        load_verify_config,
+        qualify,
+    )
+
+    # verify.yaml may name module:function hooks importable from here.
+    if os.getcwd() not in sys.path:
+        sys.path.insert(0, os.getcwd())
+    try:
+        config = load_verify_config(args.verify)
+    except QualifyConfigError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    certify = (
+        config.campaign.policy if args.certify == "__from_verify__" else args.certify
+    )
+    run_params = None
+    if args.run_params:
+        run_params = json.loads(Path(args.run_params).read_text())
+        if not isinstance(run_params, dict):
+            print("--run-params must hold a JSON object", file=sys.stderr)
+            return 2
+    bundle = Path(args.bundle)
+    out = (
+        Path(args.out)
+        if args.out
+        else Path("runs")
+        / f"qualify-{bundle.resolve().name}-{time.strftime('%Y%m%d-%H%M%S')}"
+    )
+    try:
+        result = qualify(
+            bundle,
+            config,
+            out=out,
+            cases=args.cases,
+            trials=args.trials,
+            certify=certify,
+            run_params=run_params,
+            campaign_id=args.campaign_id,
+        )
+    except QualifyConfigError as exc:
+        print(str(exc), file=sys.stderr)
+        return 2
+    except QualifyError as exc:
+        print(f"qualify REFUSED: {exc}\nEvidence so far: {out}", file=sys.stderr)
+        return 1
+    if not result.passed and result.partial:
+        print(
+            f"\nqualify PARTIAL: {len(result.rows)} trial(s) behaved as required in "
+            f"{result.timing['campaign_wall_s']} s; qualifying needs all six cases."
+        )
+        return 0
+    verdict = "PASS" if result.passed else "FAIL"
+    print(
+        f"\nqualify {verdict}: {len(result.rows)} trial(s) in {result.timing['campaign_wall_s']} s"
+    )
+    if result.certified:
+        print(f"Certified under {result.policy}. Bundle: {result.bundle_dir}")
+    elif certify is None:
+        print("Not certified (pass --certify to sign the result under a policy).")
+    print(f"Report: {result.out / 'QUALIFICATION.md'}")
+    return 0 if result.passed else 1
+
+
 def build_parser() -> argparse.ArgumentParser:
     """Build the top-level argument parser."""
     from openadapt_flow.cli_hints import command
@@ -6628,6 +6737,17 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Skip the interactive parameter review even on a TTY; flagged "
             "proposals stay demonstrated constants."
+        ),
+    )
+    p.add_argument(
+        "--pixel-verify-enabled",
+        action="store_true",
+        help=(
+            "The runtime that will run this bundle sets "
+            "runtime.pixel_verify_enabled. Lets the compiler give an unlabeled "
+            "button a pixel identifier crop as its identity check. Without it "
+            "the compiler doesn't, because a crop that can't be verified halts "
+            "an irreversible step on every run."
         ),
     )
     p.set_defaults(func=_cmd_compile)
@@ -7164,7 +7284,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Cloud base URL (or OPENADAPT_CLOUD_URL; default https://app.openadapt.ai)",
     )
-    sa.set_defaults(func=_cmd_seal)
+    sa.set_defaults(func=_cmd_attach_seal)
 
     p = sub.add_parser(
         "resume",
@@ -7567,12 +7687,78 @@ def build_parser() -> argparse.ArgumentParser:
 
     p = sub.add_parser(
         "qualify",
+        help=QUALIFY_DEFINITION
+        + " Also: create, edit, test, explain and certify the qualification "
+        "project sealed into a bundle.",
+        description=QUALIFY_HELP,
+        usage=(
+            "%(prog)s <bundle> --verify verify.yaml [--cases ...] [--out DIR] "
+            "[--certify [POLICY]] [--run-params FILE]\n"
+            "       %(prog)s <command> ..."
+        ),
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _definition_first(p)
+    qsub = p.add_subparsers(dest="qualify_cmd", required=True)
+
+    q = qsub.add_parser(
+        "campaign",
         help=(
-            "Create, edit, test, explain, and certify the versioned "
-            "qualification project sealed into a workflow bundle"
+            "Qualify a bundle from verify.yaml (also the default form: "
+            "`qualify <bundle> --verify verify.yaml`)"
+        ),
+        description=QUALIFY_HELP,
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    _definition_first(q)
+    q.add_argument("bundle", help="Compiled workflow bundle directory")
+    q.add_argument(
+        "--verify",
+        required=True,
+        metavar="YAML",
+        help="verify.yaml: the per-workflow read-back, field mapping, save step and inputs",
+    )
+    q.add_argument(
+        "--cases",
+        nargs="+",
+        default=None,
+        metavar="CASE",
+        help=(
+            "Run only these cases (representative, fault-ambiguity, "
+            "fault-wrong-identity, fault-stale-identity, fault-weak-effect, "
+            "fault-missing-effect). Certification needs all six."
         ),
     )
-    qsub = p.add_subparsers(dest="qualify_cmd", required=True)
+    q.add_argument(
+        "--trials",
+        type=int,
+        default=None,
+        help="Trials per case (default: verify.yaml, 3)",
+    )
+    q.add_argument("--out", default=None, metavar="DIR", help="New output directory")
+    q.add_argument(
+        "--certify",
+        nargs="?",
+        const="__from_verify__",
+        default=None,
+        metavar="POLICY",
+        help=(
+            "Certify under this policy (default: campaign.policy in verify.yaml, "
+            "usually clinical-write). See docs/QUALIFICATION_TERMS.md#policies."
+        ),
+    )
+    q.add_argument(
+        "--run-params",
+        default=None,
+        metavar="JSON",
+        help="After certifying, run the certified bundle once with these inputs",
+    )
+    q.add_argument(
+        "--campaign-id",
+        default=None,
+        help="Campaign id (default: verify.yaml or generated)",
+    )
+    q.set_defaults(func=_cmd_qualify_campaign)
 
     q = qsub.add_parser("schema", help="Print the qualification-project JSON Schema")
     q.set_defaults(func=_cmd_qualify)
@@ -9583,10 +9769,27 @@ def _cmd_business_decisions_serve(args: argparse.Namespace) -> int:
     return 0
 
 
+def _qualify_default_form(argv: list[str]) -> list[str]:
+    """``qualify <bundle> --verify ...`` means ``qualify campaign <bundle> ...``."""
+
+    if len(argv) >= 2 and argv[0] == "qualify" and not argv[1].startswith("-"):
+        verbs = set()
+        for action in build_parser()._subparsers._group_actions:  # type: ignore[union-attr]
+            qualify_parser = getattr(action, "choices", {}).get("qualify")
+            if qualify_parser is not None:
+                for sub_action in qualify_parser._subparsers._group_actions:  # type: ignore[union-attr]
+                    verbs |= set(getattr(sub_action, "choices", {}) or {})
+        if argv[1] not in verbs:
+            return [argv[0], "campaign", *argv[1:]]
+    return argv
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point. Returns a process exit code."""
     from openadapt_flow._browser_setup import BrowserSupportMissing
 
+    argv = list(sys.argv[1:] if argv is None else argv)
+    argv = _qualify_default_form(argv)
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)
