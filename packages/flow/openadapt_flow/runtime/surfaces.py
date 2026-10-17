@@ -367,7 +367,8 @@ class SurfaceRouter:
             if backend is None:
                 return None, (
                     f"{prefix}: no backend was supplied for surface '{sid}' "
-                    f"(kind {spec.kind}); run halted"
+                    f"(kind {spec.kind}); bind one with --surface {sid}=KIND[:TARGET] or "
+                    "the config's surfaces: map; run halted"
                 )
             kinds = backend_surface_kinds(backend)
             if spec.kind not in kinds:
