@@ -15,11 +15,10 @@ Package roles do not assign a lifecycle state. Use the
 [signed Production record](https://docs.openadapt.ai/production-lifecycle.json)
 for the current admission state of each product target.
 
-Install the launcher and run the browser tutorial:
+Run the browser tutorial with one command (uv fetches Python 3.12):
 
 ```bash
-python -m pip install --upgrade openadapt
-openadapt flow tutorial
+uvx --python 3.12 openadapt flow tutorial
 ```
 
 Install a native or remote capability:

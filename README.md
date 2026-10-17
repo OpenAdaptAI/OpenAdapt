@@ -121,19 +121,22 @@ result. See [OpenAdapt Execute](https://openadapt.ai/execute).
 
 ### Run it yourself
 
-The engine is free and open source under the MIT license. With Python 3.10,
-3.11, or 3.12, run:
+The engine is free and open source under the MIT license. Run it with one
+command on any operating system and any installed Python:
 
 ```bash
-python -m pip install --upgrade openadapt
-openadapt quickstart --break-it
+uvx --python 3.12 openadapt quickstart --break-it
 ```
+
+[uv](https://docs.astral.sh/uv/getting-started/installation/) fetches Python
+3.12 for the run. With Python 3.10, 3.11, or 3.12 already active,
+`python -m pip install --upgrade openadapt` followed by
+`openadapt quickstart --break-it` does the same.
 
 This runs a synthetic clinic task twice on your computer. The first run is
 done and checked. In the second run, the test server rejects the save after
 the app shows that it saved. The record check finds no saved record, so the
-run stops and leaves the record for a person to check. On Python 3.13 or
-newer, install with `uv tool install --python 3.12 openadapt` instead.
+run stops and leaves the record for a person to check.
 
 To start from a packaged workflow instead of a recording, run
 `openadapt pull --list`, then for example `openadapt pull openemr/new-referral`.
@@ -194,15 +197,15 @@ compiled programs to an agent over MCP.
 A solutions engineer gets `VERIFIED` on synthetic MockMed:
 
 ```bash
-python -m pip install --upgrade openadapt
-openadapt doctor --backend web
-openadapt flow tutorial
+uvx --python 3.12 openadapt flow tutorial
 ```
 
-OpenAdapt supports Python 3.10 through 3.12. The engine doesn't install on
-Python 3.13 or newer yet. There, use `uv tool install --python 3.12 openadapt`,
-which fetches Python 3.12 for you. The local tutorial needs no account or API
-key. The base install includes Playwright. On the first browser action,
+uv fetches Python 3.12 for the run, whatever Python your system has. To keep
+`openadapt` on your PATH, install it with
+`uv tool install --python 3.12 openadapt`, or with
+`python -m pip install --upgrade openadapt` on Python 3.10, 3.11, or 3.12.
+Then run `openadapt doctor --backend web` and `openadapt flow tutorial`. The
+local tutorial needs no account or API key. The base install includes Playwright. On the first browser action,
 OpenAdapt asks Playwright to download its matching Chromium build. That
 download needs network access.
 
