@@ -123,6 +123,7 @@ What each part does:
   save's checks from the demonstration.
 - **minimum_effect_strength**: `independent_system_of_record` (default) or
   `independent_session`. `qualify` refuses a verifier that reads weaker.
+  Certification needs more than the minimum, though: see below.
 - **save_step**: `auto` picks the single irreversible step. If there are none
   or several, `qualify` says so and asks you to name one.
 - **inputs**: the test inputs. `recorded` reuses the demonstration's values;
@@ -153,9 +154,33 @@ runs/qual-1/
 
 `result.json` has one entry per trial: what the case expected the system of
 record to show (`CONFIRMED` for the normal case, `REFUTED` for a fault), what
-the independent read-back showed, and digests of the trial's run report and
-read-back. It counts silent incorrect successes (must be 0), over-halts and
-model calls. It holds no record values, workflow names or reason text.
+the read-back showed, how it was read, and digests of the trial's run report
+and read-back. It counts silent incorrect successes (must be 0) and
+over-halts, and reports model calls in two numbers: `executor_model_calls`
+(calls the replay made; qualification requires 0) and `verifier_model_calls`
+(calls made while judging; a read-back makes none). It holds no record
+values, workflow names or reason text.
+
+How each read is labelled (`verification_tier`):
+
+- `independent_readback`: the system of record read without going through
+  the UI: `rest`, `sql`, `fhir`, `graphql`, or a file export.
+- `screen_readback`: anything that reads through the application's UI,
+  including `ui_readback`, which signs in to a separate UI session.
+- `unchecked`: no read happened.
+
+To certify, the normal case must reach `verified` at `independent_readback`,
+and every fault case must show `REFUTED` (nothing landed) at
+`independent_readback`. A workflow whose only read-back is `ui_readback` can
+run the cases but cannot be certified.
+
+`verify_config_sha256` identifies the contract the cases were judged
+against. It is SHA-256 over the verifier's identity and the effective effects
+list bound to the save step for the campaign: the `effects` you wrote, the
+expansion of `record`, or the checks the compiler mined from the
+demonstration, after the duplicate key is applied and before input values are
+filled in. It is not a hash of the file, so the same contract written two
+ways (an `effects` list or the equivalent `record`) gets the same digest.
 
 With `--certify`, its digest is bound into the existing
 `openadapt.qualification-admission/v1` envelope (`campaign.outcomes_sha256`;
