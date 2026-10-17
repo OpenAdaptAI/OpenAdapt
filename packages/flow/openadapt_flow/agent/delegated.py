@@ -79,9 +79,13 @@ ANSWER_DESCRIPTION = (
 )
 
 
-def mode_view(approval_mode: Optional[str], delegate_id: Optional[str]) -> dict[str, Any]:
+def mode_view(
+    approval_mode: Optional[str], delegate_id: Optional[str]
+) -> dict[str, Any]:
     return {
-        "approval_mode": approval_mode if approval_mode in APPROVAL_MODES else "flow_default",
+        "approval_mode": approval_mode
+        if approval_mode in APPROVAL_MODES
+        else "flow_default",
         "delegated_approvals": delegate_id is not None,
         "delegate_id": delegate_id,
     }
@@ -138,9 +142,13 @@ def answer_args(arguments: dict[str, Any], delegate_id: str) -> tuple[str, list[
     decision = arguments.get("decision")
     reason = arguments.get("decline_reason")
     if not isinstance(request_id, str) or not re.match(_REQUEST_ID, request_id):
-        raise DelegationRefused("request_id must be the 32-hex id from list_approval_requests")
+        raise DelegationRefused(
+            "request_id must be the 32-hex id from list_approval_requests"
+        )
     if not isinstance(digest, str) or not re.match(_SHA256, digest):
-        raise DelegationRefused("request_sha256 must be the digest from list_approval_requests")
+        raise DelegationRefused(
+            "request_sha256 must be the digest from list_approval_requests"
+        )
     if decision not in ("approve", "decline"):
         raise DelegationRefused("decision must be approve or decline")
     if (decision == "decline") != (reason is not None):

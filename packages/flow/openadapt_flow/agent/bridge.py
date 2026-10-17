@@ -369,7 +369,11 @@ class AgentBridge:
             ToolSpec(
                 name="get_approval_mode",
                 description=delegated.GET_MODE_DESCRIPTION,
-                input_schema={"type": "object", "properties": {}, "additionalProperties": False},
+                input_schema={
+                    "type": "object",
+                    "properties": {},
+                    "additionalProperties": False,
+                },
                 annotations=_READ_ONLY_ANNOTATIONS,
             )
         ]
@@ -414,7 +418,9 @@ class AgentBridge:
 
     def _approval_dispatch(self, name: str, arguments: dict) -> dict:
         if name == "get_approval_mode":
-            return delegated.mode_view(self.runner_config.approval_mode, self._delegate_id())
+            return delegated.mode_view(
+                self.runner_config.approval_mode, self._delegate_id()
+            )
         delegate_id = self._delegate_id()
         if delegate_id is None:
             raise BridgeError(
@@ -423,7 +429,9 @@ class AgentBridge:
             )
         run_dir = self._safe_run_dir(str(arguments.get("run_id", "")))
         if name == "list_approval_requests":
-            return delegated.project_requests(self.runner.item_approval("show", run_dir, []))
+            return delegated.project_requests(
+                self.runner.item_approval("show", run_dir, [])
+            )
         try:
             verb, args = delegated.answer_args(arguments, delegate_id)
         except delegated.DelegationRefused as exc:
@@ -671,7 +679,11 @@ class AgentBridge:
                 )
             except ServiceError as exc:
                 raise BridgeError(str(exc)) from exc
-        if name in ("get_approval_mode", "list_approval_requests", "answer_approval_request"):
+        if name in (
+            "get_approval_mode",
+            "list_approval_requests",
+            "answer_approval_request",
+        ):
             if not any(spec.name == name for spec in self._approval_specs()):
                 raise BridgeError("unknown tool name")
             return self._approval_dispatch(name, arguments)

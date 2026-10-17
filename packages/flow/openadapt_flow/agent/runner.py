@@ -870,7 +870,11 @@ class FlowRunner:
             payload = json.loads(proc.stdout or "")
         except ValueError:
             return {"ok": False, "code": "flow_unreadable"}
-        return payload if isinstance(payload, dict) else {"ok": False, "code": "flow_unreadable"}
+        return (
+            payload
+            if isinstance(payload, dict)
+            else {"ok": False, "code": "flow_unreadable"}
+        )
 
     def certify(self, bundle_dir: Path) -> dict:
         """Evaluate certification status via ``openadapt-flow certify``.
