@@ -87,6 +87,7 @@ from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
+    Callable,
     Iterator,
     Literal,
     Mapping,
@@ -1533,6 +1534,25 @@ def _print_break_it_narrative(broken: "BreakItResult") -> None:
     )
 
 
+def _demo_progress() -> Callable[[str], None]:
+    """Print one short line per demo stage as it starts, flushed at once."""
+    import re
+
+    stage = re.compile(r"^\[(\d)/5\] (.+)$")
+    seen_break = False
+
+    def echo(message: str) -> None:
+        nonlocal seen_break
+        match = stage.match(message)
+        if match:
+            print(f"  {match.group(1)}/5  {match.group(2)}", flush=True)
+        elif message.startswith("[break-it]") and not seen_break:
+            seen_break = True
+            print("  Run 2: the same task against an app that lies", flush=True)
+
+    return echo
+
+
 def _cmd_demo(args: argparse.Namespace) -> int:
     """Run the checked run and the lying-app run, then write one proof page.
 
@@ -1581,7 +1601,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
         result = run_tutorial(
             out_dir,
             headed=bool(args.headed),
-            echo=print if args.verbose else None,
+            echo=print if args.verbose else _demo_progress(),
             break_it=True,
         )
     except TutorialError as exc:

@@ -553,12 +553,12 @@ def run_tutorial(
 
     import contextlib
 
-    from openadapt_flow.backends.playwright_backend import shared_browser
-    from openadapt_flow.vision.ocr import prewarm as prewarm_ocr
+    from openadapt_flow import _prewarm as prewarm
+    from openadapt_flow.backends._browser_process import shared_browser
 
-    # Load the OCR models while the browser starts and the demonstration is
-    # recorded; the compiler and the runtime need them right after.
-    prewarm_ocr()
+    # Load OpenCV and the OCR models while the browser starts; recording,
+    # compiling, and replay all need them.
+    prewarm.start()
     visible = headed or interactive_record or delay > 0
     with contextlib.ExitStack() as browsers:
         if not interactive_record:

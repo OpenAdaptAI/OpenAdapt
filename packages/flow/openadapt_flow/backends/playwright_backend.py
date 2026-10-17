@@ -8,7 +8,6 @@ deviceScaleFactor=1 so CSS pixels equal screenshot pixels.
 
 from __future__ import annotations
 
-import contextlib
 import hashlib
 import hmac
 import json
@@ -18,7 +17,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, Iterator, Literal, Optional
+from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
 from urllib.parse import urlsplit
 
 from openadapt_flow.backends._page_quiescence import PageQuiescence
@@ -3159,45 +3158,8 @@ class PlaywrightBackend:
         return backend, close
 
 
-#: Browsers kept open by :func:`shared_browser`, keyed by ``headless``.
-_SHARED_BROWSER: dict[bool, tuple[Any, Any]] = {}
-
-
-def _start_browser(headless: bool) -> tuple[Any, Any]:
-    """Start Playwright and the selected Chromium (see _browser_setup)."""
-    from openadapt_flow._browser_setup import launch_chromium, require_browser_support
-
-    require_browser_support()
-    from playwright.sync_api import sync_playwright
-
-    pw = sync_playwright().start()
-    try:
-        browser = launch_chromium(pw.chromium, headless=headless)
-    except Exception:
-        pw.stop()
-        raise
-    return pw, browser
-
-
-@contextlib.contextmanager
-def shared_browser(headless: bool = True) -> Iterator[None]:
-    """Reuse one browser process for every ``PlaywrightBackend.launch`` inside.
-
-    Each launch still gets a fresh browser context (no cookies, storage, or
-    cache from an earlier run), exactly as a separate browser would; only the
-    process start and shutdown are paid once. Single-threaded use only, like
-    Playwright's sync API.
-    """
-    if headless in _SHARED_BROWSER:
-        yield
-        return
-    pw, browser = _start_browser(headless)
-    _SHARED_BROWSER[headless] = (pw, browser)
-    try:
-        yield
-    finally:
-        _SHARED_BROWSER.pop(headless, None)
-        try:
-            browser.close()
-        finally:
-            pw.stop()
+from openadapt_flow.backends._browser_process import (  # noqa: E402
+    _SHARED_BROWSER,
+    _start_browser,
+    shared_browser,  # noqa: F401 - re-exported
+)
