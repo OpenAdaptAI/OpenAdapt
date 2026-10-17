@@ -49,7 +49,7 @@ RULE = ApproverIdentityV1(
     kind=ApproverKind.RULE,
     auth=ApproverAuth.POLICY,
     id="rule:amount-under-500",
-    policy_sha256=DIGEST,
+    policy_ref=DIGEST,
 )
 SYSTEM = ApproverIdentityV1(
     kind=ApproverKind.SYSTEM, auth=ApproverAuth.SIGNED_WEBHOOK, id="sys:workflow-tool"
@@ -78,12 +78,6 @@ def test_unauthenticated_person_names_no_one() -> None:
         {"kind": "agent", "auth": "cloud_user", "id": "a", "auth_method": "cloud_aal1"},
         {"kind": "rule", "auth": "policy", "id": "r"},  # no policy digest
         {"kind": "person", "auth": "cloud_user", "id": "u"},  # no sign-in method
-        {
-            "kind": "system",
-            "auth": "signed_webhook",
-            "id": "s",
-            "policy_sha256": DIGEST,
-        },
         {"kind": "person", "auth": "local_cli", "id": "u", "on_behalf_of": "org"},
         {"kind": "agent", "auth": "mcp_session", "id": "Robert Smith"},  # not opaque
     ],
@@ -201,21 +195,21 @@ def test_only_confirmed_independent_system_read_back_is_clean() -> None:
         for outcome in ReadBackOutcome
         if counts_as_clean(tier, outcome)
     ]
-    assert clean == [(ReadBackTier.INDEPENDENT_SYSTEM, ReadBackOutcome.CONFIRMED)]
+    assert clean == [(ReadBackTier.INDEPENDENT_READBACK, ReadBackOutcome.CONFIRMED)]
 
 
 @pytest.mark.parametrize(
     ("tier", "outcome", "reason"),
     [
         (
-            ReadBackTier.SCREEN_READ_BACK,
+            ReadBackTier.SCREEN_READBACK,
             ReadBackOutcome.CONFIRMED,
-            "screen_read_back_only",
+            "screen_readback_only",
         ),
         (ReadBackTier.UNCHECKED, ReadBackOutcome.NONE, "not_checked"),
-        (ReadBackTier.INDEPENDENT_SYSTEM, ReadBackOutcome.REFUTED, "read_back_refuted"),
+        (ReadBackTier.INDEPENDENT_READBACK, ReadBackOutcome.REFUTED, "read_back_refuted"),
         (
-            ReadBackTier.INDEPENDENT_SYSTEM,
+            ReadBackTier.INDEPENDENT_READBACK,
             ReadBackOutcome.INDETERMINATE,
             "read_back_indeterminate",
         ),
@@ -228,20 +222,20 @@ def test_review_reasons(tier, outcome, reason) -> None:
 def test_screen_read_back_is_never_clean_even_when_the_minimum_allows_it() -> None:
     assert (
         per_item_review_reason(
-            ReadBackTier.SCREEN_READ_BACK,
+            ReadBackTier.SCREEN_READBACK,
             ReadBackOutcome.CONFIRMED,
-            minimum=ReadBackTier.SCREEN_READ_BACK,
+            minimum=ReadBackTier.SCREEN_READBACK,
         )
-        == "screen_read_back_only"
+        == "screen_readback_only"
     )
 
 
 def test_below_minimum() -> None:
     assert (
         per_item_review_reason(
-            ReadBackTier.SCREEN_READ_BACK,
+            ReadBackTier.SCREEN_READBACK,
             ReadBackOutcome.CONFIRMED,
-            minimum=ReadBackTier.INDEPENDENT_SYSTEM,
+            minimum=ReadBackTier.INDEPENDENT_READBACK,
         )
         == "below_minimum_tier"
     )
@@ -252,24 +246,24 @@ def test_below_minimum() -> None:
     [
         (
             EffectStrengthV1.INDEPENDENT_SYSTEM_OF_RECORD,
-            ReadBackTier.INDEPENDENT_SYSTEM,
+            ReadBackTier.INDEPENDENT_READBACK,
         ),
-        (EffectStrengthV1.INDEPENDENT_SESSION, ReadBackTier.SCREEN_READ_BACK),
-        (EffectStrengthV1.PERSISTED_STATE_REACQUISITION, ReadBackTier.SCREEN_READ_BACK),
-        (EffectStrengthV1.IMMEDIATE_SCREEN_CONFIRMATION, ReadBackTier.SCREEN_READ_BACK),
+        (EffectStrengthV1.INDEPENDENT_SESSION, ReadBackTier.INDEPENDENT_READBACK),
+        (EffectStrengthV1.PERSISTED_STATE_REACQUISITION, ReadBackTier.SCREEN_READBACK),
+        (EffectStrengthV1.IMMEDIATE_SCREEN_CONFIRMATION, ReadBackTier.SCREEN_READBACK),
         (
             EffectVerificationTier.INDEPENDENT_SYSTEM_INTERFACE,
-            ReadBackTier.INDEPENDENT_SYSTEM,
+            ReadBackTier.INDEPENDENT_READBACK,
         ),
-        (EffectVerificationTier.INDEPENDENT_SESSION, ReadBackTier.SCREEN_READ_BACK),
+        (EffectVerificationTier.INDEPENDENT_SESSION, ReadBackTier.INDEPENDENT_READBACK),
         (
             EffectVerificationTier.IMMEDIATE_SCREEN_CONFIRMATION,
-            ReadBackTier.SCREEN_READ_BACK,
+            ReadBackTier.SCREEN_READBACK,
         ),
-        (OracleTier.SYSTEM_OF_RECORD, ReadBackTier.INDEPENDENT_SYSTEM),
-        (OracleTier.VISUAL, ReadBackTier.SCREEN_READ_BACK),
-        ("independent_system", ReadBackTier.INDEPENDENT_SYSTEM),
-        ("immediate_screen", ReadBackTier.SCREEN_READ_BACK),
+        (OracleTier.SYSTEM_OF_RECORD, ReadBackTier.INDEPENDENT_READBACK),
+        (OracleTier.VISUAL, ReadBackTier.SCREEN_READBACK),
+        ("independent_system", ReadBackTier.INDEPENDENT_READBACK),
+        ("immediate_screen", ReadBackTier.SCREEN_READBACK),
         (None, ReadBackTier.UNCHECKED),
         ("made_up", ReadBackTier.UNCHECKED),
         (4, ReadBackTier.UNCHECKED),
@@ -383,3 +377,84 @@ def test_packaged_schemas_match_models(model: object, filename: str) -> None:
         files("openadapt_types.schemas").joinpath(filename).read_text(encoding="utf-8")
     )
     assert packaged == model.model_json_schema()
+
+
+# -- RFC-0002 alignment ------------------------------------------------------
+
+
+def test_any_approver_may_name_the_policy_that_allowed_it() -> None:
+    """RFC-0002 ``authorization.approver.policy_ref`` applies to every kind."""
+
+    system = ApproverIdentityV1(
+        kind=ApproverKind.SYSTEM,
+        auth=ApproverAuth.SIGNED_WEBHOOK,
+        id="system:acme",
+        policy_ref=DIGEST,
+    )
+    dumped = system.model_dump(mode="json")
+    assert {"kind", "id", "policy_ref"} <= set(dumped)
+    assert dumped["kind"] == "system" and dumped["policy_ref"] == DIGEST
+
+
+@pytest.mark.parametrize(
+    ("tier", "label"),
+    [
+        (ReadBackTier.INDEPENDENT_READBACK, "independent_readback"),
+        (ReadBackTier.SCREEN_READBACK, "screen_readback"),
+        (ReadBackTier.UNCHECKED, "unchecked"),
+    ],
+)
+def test_tier_labels_are_the_rfc_0002_wire_values(tier, label) -> None:
+    assert tier.label == label
+    assert ReadBackTier.from_label(label) is tier
+    assert read_back_tier(label) is tier
+
+
+def test_unknown_tier_label_is_unchecked() -> None:
+    assert ReadBackTier.from_label("independent") is ReadBackTier.UNCHECKED
+
+
+@pytest.mark.parametrize(
+    ("flow_tier", "expected"),
+    [
+        (EffectVerificationTier.INDEPENDENT_SYSTEM_INTERFACE, "independent_readback"),
+        (EffectVerificationTier.INDEPENDENT_SESSION, "independent_readback"),
+        (EffectVerificationTier.PERSISTED_STATE_REACQUISITION, "screen_readback"),
+        (EffectVerificationTier.IMMEDIATE_SCREEN_CONFIRMATION, "screen_readback"),
+    ],
+)
+def test_flow_tiers_map_as_rfc_0002_says(flow_tier, expected) -> None:
+    assert read_back_tier(flow_tier).label == expected
+
+
+def test_a_separate_session_read_is_not_clean() -> None:
+    """RFC-0002: only a system-of-record read can yield ``verified``."""
+
+    tier = read_back_tier(EffectVerificationTier.INDEPENDENT_SESSION)
+    outcome = ReadBackOutcome.CONFIRMED
+    assert (
+        per_item_review_reason(
+            tier, outcome, strength=EffectVerificationTier.INDEPENDENT_SESSION
+        )
+        == "separate_session_only"
+    )
+    assert counts_as_clean(
+        ReadBackTier.INDEPENDENT_READBACK,
+        outcome,
+        strength=EffectStrengthV1.INDEPENDENT_SYSTEM_OF_RECORD,
+    )
+
+
+@pytest.mark.parametrize(
+    ("verdict", "outcome"),
+    [
+        ("CONFIRMED", ReadBackOutcome.CONFIRMED),
+        ("REFUTED", ReadBackOutcome.REFUTED),
+        ("INDETERMINATE", ReadBackOutcome.INDETERMINATE),
+        ("confirmed", ReadBackOutcome.CONFIRMED),
+        (None, ReadBackOutcome.NONE),
+        ("maybe", ReadBackOutcome.NONE),
+    ],
+)
+def test_effect_verdicts_parse(verdict, outcome) -> None:
+    assert ReadBackOutcome.from_effect_verdict(verdict) is outcome

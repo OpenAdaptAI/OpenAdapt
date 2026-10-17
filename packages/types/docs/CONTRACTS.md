@@ -289,14 +289,20 @@ consequential step, when a step waits, and how a save was checked.
 - `ApprovalRecordV1` is one decision as the audit trail and receipt carry
   it. `training_label` is true only when a person decided; rule, agent and
   system decisions are recorded and never learned from.
-- `ReadBackTier` is the customer-facing check ladder: `INDEPENDENT_SYSTEM`
-  (a read of the system of record, such as an API, FHIR, a database or a
-  report export), `SCREEN_READ_BACK` (the saved record reopened and read
-  from the screen) and `UNCHECKED`. `read_back_tier` maps the finer
-  strength names onto it, and anything unknown maps to `UNCHECKED`.
-  `per_item_review_reason` returns a reason for every save except a
-  confirmed independent system read-back, so a screen-only or missing check
-  always goes to a person.
+- `ReadBackTier` is the customer-facing check ladder. Its labels are
+  RFC-0002's `verification_tier` values: `independent_readback` (the system
+  of record, such as an API, FHIR, a database or a report export, or a
+  separate session), `screen_readback` (the acting session or screen read
+  it) and `unchecked`. `read_back_tier` maps Flow tiers and the finer
+  strength names onto it, weakest wins, and anything unknown maps to
+  `unchecked`. `per_item_review_reason` returns a reason for every save
+  except a confirmed independent read-back; given the fine `strength`, it
+  also refuses a separate-session read (`separate_session_only`), since only
+  a system-of-record read is clean. A screen-only or missing check always
+  goes to a person.
+- `ApproverIdentityV1` carries RFC-0002's `authorization.approver` fields
+  (`kind`, opaque `id`, `policy_ref`), plus `auth`, `auth_method` and
+  `on_behalf_of`, which say how the approver was identified.
 - `AutonomyEligibilityV1` and `AutonomyEligibilityProvider` are the evidence
   a workflow needs before `problems_only`: a pinned calibration artifact and
   an audit miss-rate bound under the target, with at least 1% of clean saves

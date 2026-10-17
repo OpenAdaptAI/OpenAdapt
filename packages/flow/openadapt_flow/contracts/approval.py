@@ -92,7 +92,7 @@ class ApproverAuth(str, Enum):
     CLOUD_USER = "cloud_user"
     #: A person who approved in Desktop while signed out. No id.
     UNAUTHENTICATED = "unauthenticated"
-    #: A rule evaluated by the runtime. ``policy_sha256`` pins the rule set.
+    #: A rule evaluated by the runtime. ``policy_ref`` pins the rule set.
     POLICY = "policy"
     #: A local command on the runner, run by the named principal.
     LOCAL_CLI = "local_cli"
@@ -131,8 +131,10 @@ class ApproverIdentityV1(_Strict):
     auth: ApproverAuth
     id: Optional[StrictStr] = Field(default=None, pattern=_OPAQUE_ID)
     auth_method: ApproverAuthMethod = "none"
-    #: The rule set a ``rule`` approver evaluated.
-    policy_sha256: Optional[StrictStr] = Field(default=None, pattern=_SHA256)
+    #: ``sha256:<hex>`` of the policy or rule that allowed this approver to
+    #: decide (RFC-0002 ``authorization.approver.policy_ref``). Required for
+    #: a ``rule`` approver, whose rule set it pins; optional for the others.
+    policy_ref: Optional[StrictStr] = Field(default=None, pattern=_SHA256)
     #: The person or organisation an agent or system acts for, when known.
     on_behalf_of: Optional[StrictStr] = Field(default=None, pattern=_OPAQUE_ID)
 
@@ -149,8 +151,8 @@ class ApproverIdentityV1(_Strict):
             raise ValueError(f"a {self.kind.value} approver needs an id")
         if (self.auth is ApproverAuth.CLOUD_USER) != (self.auth_method != "none"):
             raise ValueError("only a Cloud user has a Cloud sign-in method")
-        if (self.kind is ApproverKind.RULE) != (self.policy_sha256 is not None):
-            raise ValueError("a rule approver, and only a rule, pins a policy digest")
+        if self.kind is ApproverKind.RULE and self.policy_ref is None:
+            raise ValueError("a rule approver pins its rule set in policy_ref")
         if self.on_behalf_of is not None and self.kind is ApproverKind.PERSON:
             raise ValueError("a person approves for themselves")
         return self
@@ -347,20 +349,54 @@ class ApproverPolicyV1(_Strict):
 class ReadBackTier(IntEnum):
     """How a save was checked, coarse and customer-facing. Lower is stronger.
 
-    * ``INDEPENDENT_SYSTEM``: a read of the system of record itself (API,
-      FHIR, database, file, report export), separate from the screen that
-      made the save.
-    * ``SCREEN_READ_BACK``: the saved record reopened in the app and its
-      fields read from the screen, in the acting session or a separate one.
-    * ``UNCHECKED``: nothing read the saved result back.
+    The names and :attr:`label` values are RFC-0002's ``verification_tier``
+    (``independent_readback``, ``screen_readback``, ``unchecked``), and the
+    mapping from Flow's ``VerificationTier`` follows it: weakest wins.
+
+    * ``INDEPENDENT_READBACK``: a read independent of the acting screen:
+      the system of record itself (API, FHIR, database, file, report
+      export; Flow tier 1) or a separate session (Flow tier 2).
+    * ``SCREEN_READBACK``: the acting session re-read the record (Flow
+      tier 3) or the acting screen showed it (Flow tier 4).
+    * ``UNCHECKED``: nothing read the saved result back, the store was
+      unreachable or stale, or no tier was declared.
+
+    ``INDEPENDENT_READBACK`` is necessary for a clean save, not sufficient:
+    as in RFC-0002, only a system-of-record read can make one clean. Pass
+    the fine-grained ``strength`` to :func:`per_item_review_reason`.
     """
 
-    INDEPENDENT_SYSTEM = 1
-    SCREEN_READ_BACK = 2
+    INDEPENDENT_READBACK = 1
+    SCREEN_READBACK = 2
     UNCHECKED = 3
+
+    @property
+    def label(self) -> VerificationTierLabel:
+        """The RFC-0002 wire value, such as ``independent_readback``."""
+
+        return _TIER_LABELS[self]
+
+    @classmethod
+    def from_label(cls, label: str) -> "ReadBackTier":
+        """Parse an RFC-0002 ``verification_tier``. Unknown means unchecked."""
+
+        for tier, text in _TIER_LABELS.items():
+            if text == label:
+                return tier
+        return cls.UNCHECKED
 
     def satisfies(self, minimum: "ReadBackTier") -> bool:
         return int(self) <= int(minimum)
+
+
+#: RFC-0002 ``verification_tier`` wire values.
+VerificationTierLabel = Literal["independent_readback", "screen_readback", "unchecked"]
+
+_TIER_LABELS: Mapping[ReadBackTier, VerificationTierLabel] = {
+    ReadBackTier.INDEPENDENT_READBACK: "independent_readback",
+    ReadBackTier.SCREEN_READBACK: "screen_readback",
+    ReadBackTier.UNCHECKED: "unchecked",
+}
 
 
 class ReadBackOutcome(str, Enum):
@@ -374,21 +410,50 @@ class ReadBackOutcome(str, Enum):
     #: No read-back ran.
     NONE = "none"
 
+    @classmethod
+    def from_effect_verdict(cls, verdict: Optional[str]) -> "ReadBackOutcome":
+        """Parse RFC-0002 ``effect_verdict`` (``CONFIRMED``...) or a Flow
+        verdict (``confirmed``...). Anything else is ``NONE``."""
+
+        text = (verdict or "").strip().lower()
+        for member in cls:
+            if member.value == text:
+                return member
+        return cls.NONE
+
 
 #: Fine-grained strength names (``EffectStrengthV1``, ``RunnerCapability``,
 #: Flow's ``VerificationTier`` names) onto the coarse ladder.
 _TIER_BY_STRENGTH: Mapping[str, ReadBackTier] = {
-    "independent_system_of_record": ReadBackTier.INDEPENDENT_SYSTEM,
-    "independent_system": ReadBackTier.INDEPENDENT_SYSTEM,
-    "independent_session": ReadBackTier.SCREEN_READ_BACK,
-    "persisted_state_reacquisition": ReadBackTier.SCREEN_READ_BACK,
-    "immediate_screen_confirmation": ReadBackTier.SCREEN_READ_BACK,
-    "immediate_screen": ReadBackTier.SCREEN_READ_BACK,
+    # RFC-0002 labels.
+    "independent_readback": ReadBackTier.INDEPENDENT_READBACK,
+    "screen_readback": ReadBackTier.SCREEN_READBACK,
+    "independent_system_of_record": ReadBackTier.INDEPENDENT_READBACK,
+    "independent_system": ReadBackTier.INDEPENDENT_READBACK,
+    "independent_session": ReadBackTier.INDEPENDENT_READBACK,
+    "persisted_state_reacquisition": ReadBackTier.SCREEN_READBACK,
+    "immediate_screen_confirmation": ReadBackTier.SCREEN_READBACK,
+    "immediate_screen": ReadBackTier.SCREEN_READBACK,
     # ``OracleTier`` names (the Seal ladder).
-    "system_of_record": ReadBackTier.INDEPENDENT_SYSTEM,
-    "counterparty": ReadBackTier.INDEPENDENT_SYSTEM,
-    "visual": ReadBackTier.SCREEN_READ_BACK,
+    "system_of_record": ReadBackTier.INDEPENDENT_READBACK,
+    "counterparty": ReadBackTier.INDEPENDENT_READBACK,
+    "visual": ReadBackTier.SCREEN_READBACK,
 }
+
+#: Strength names that are independent of the acting screen but are not a
+#: read of the system of record (Flow tier 2, a separate session).
+_SEPARATE_SESSION = frozenset({"independent_session"})
+
+
+def _strength_names(strength: object) -> list[str]:
+    names: list[str] = []
+    if isinstance(strength, Enum):
+        names.append(str(strength.name).lower())
+        if isinstance(strength.value, str):
+            names.append(strength.value)
+    elif isinstance(strength, str):
+        names.append(strength)
+    return names
 
 
 def read_back_tier(strength: object) -> ReadBackTier:
@@ -403,16 +468,9 @@ def read_back_tier(strength: object) -> ReadBackTier:
         return ReadBackTier.UNCHECKED
     if isinstance(strength, ReadBackTier):
         return strength
-    candidates: list[str] = []
-    if isinstance(strength, Enum):
-        candidates.append(str(strength.name).lower())
-        if isinstance(strength.value, str):
-            candidates.append(strength.value)
-    elif isinstance(strength, str):
-        candidates.append(strength)
-    for name in candidates:
+    for name in _strength_names(strength):
         if name == "independent_system_interface":
-            return ReadBackTier.INDEPENDENT_SYSTEM
+            return ReadBackTier.INDEPENDENT_READBACK
         if name in _TIER_BY_STRENGTH:
             return _TIER_BY_STRENGTH[name]
     return ReadBackTier.UNCHECKED
@@ -422,7 +480,8 @@ def read_back_tier(strength: object) -> ReadBackTier:
 ReviewReason = Literal[
     "read_back_refuted",
     "read_back_indeterminate",
-    "screen_read_back_only",
+    "screen_readback_only",
+    "separate_session_only",
     "not_checked",
     "below_minimum_tier",
 ]
@@ -433,10 +492,14 @@ def per_item_review_reason(
     outcome: ReadBackOutcome,
     *,
     minimum: Optional[ReadBackTier] = None,
+    strength: object = None,
 ) -> Optional[ReviewReason]:
     """Why a save must be reviewed on its own, or ``None`` when it is clean.
 
-    Only an independent system read-back that confirmed the save is clean.
+    Only an independent read-back that confirmed the save is clean, and,
+    when the fine-grained ``strength`` is given, only one of the system of
+    record: a separate-session read returns ``separate_session_only``, as
+    RFC-0002 lets only a system-of-record read yield ``verified``.
     A refuted or indeterminate read-back, a screen-only read-back and no
     check at all each return a reason, whatever the policy minimum is.
     ``below_minimum_tier`` means the check was weaker than the policy's
@@ -451,15 +514,19 @@ def per_item_review_reason(
         return "not_checked"
     if minimum is not None and not tier.satisfies(minimum):
         return "below_minimum_tier"
-    if tier is ReadBackTier.SCREEN_READ_BACK:
-        return "screen_read_back_only"
+    if tier is ReadBackTier.SCREEN_READBACK:
+        return "screen_readback_only"
+    if any(name in _SEPARATE_SESSION for name in _strength_names(strength)):
+        return "separate_session_only"
     return None
 
 
-def counts_as_clean(tier: ReadBackTier, outcome: ReadBackOutcome) -> bool:
-    """True only for a confirmed independent system read-back."""
+def counts_as_clean(
+    tier: ReadBackTier, outcome: ReadBackOutcome, *, strength: object = None
+) -> bool:
+    """True only for a confirmed independent read-back (see above)."""
 
-    return per_item_review_reason(tier, outcome) is None
+    return per_item_review_reason(tier, outcome, strength=strength) is None
 
 
 # --------------------------------------------------------------------------
@@ -605,6 +672,7 @@ __all__ = [
     "LegacyApproverRefused",
     "ReadBackOutcome",
     "ReadBackTier",
+    "VerificationTierLabel",
     "ReviewReason",
     "StepClass",
     "approver_from_legacy",

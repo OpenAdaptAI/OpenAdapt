@@ -71,7 +71,7 @@
           "default": null,
           "title": "On Behalf Of"
         },
-        "policy_sha256": {
+        "policy_ref": {
           "anyOf": [
             {
               "pattern": "^sha256:[0-9a-f]{64}$",
@@ -82,7 +82,7 @@
             }
           ],
           "default": null,
-          "title": "Policy Sha256"
+          "title": "Policy Ref"
         },
         "schema_version": {
           "const": "openadapt.approver-identity/v1",
