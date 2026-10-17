@@ -9,9 +9,10 @@ admitted task are cache hits: Flow runs the compiled program under the
 standard profile, reads the system of record back through the verifier, and
 makes no model calls.
 
-A draft becomes ADMITTED through :meth:`~CompiledAgent.review`,
-:meth:`~CompiledAgent.canary` and :meth:`~CompiledAgent.admit`, each by a
-named person (see :mod:`openadapt_flow.jit.lifecycle`).
+A draft becomes ADMITTED through :meth:`~CompiledAgent.confirm_params`,
+:meth:`~CompiledAgent.review`, :meth:`~CompiledAgent.canary` and
+:meth:`~CompiledAgent.admit`, each by a named person (see
+:mod:`openadapt_flow.jit.lifecycle`).
 
 What it never does:
 
@@ -60,7 +61,8 @@ CANDIDATE_FILE = lifecycle.CANDIDATE_FILE
 ADMIT_FILE = lifecycle.ADMISSION_FILE
 NEEDS_HUMAN_ADMIT = "needs_human_admit"
 
-#: Shown before every recording starts, before the browser opens.
+#: Printed to stderr before every recording starts, before the browser opens.
+#: An ``on_warning`` callback gets it too; it can't replace the print.
 RECORDING_WARNING = (
     "Before you record: the recording keeps every screen the agent sees and "
     "every value it types, and the trace may contain sensitive data such as "
@@ -195,7 +197,9 @@ class Recording:
                 "draft to record again"
             )
         owner._check_model_key()
-        owner.on_warning(RECORDING_WARNING)
+        _print_warning(RECORDING_WARNING)
+        if owner.on_warning is not None:
+            owner.on_warning(RECORDING_WARNING)
         program = owner.program_dir
         if program.exists():
             shutil.rmtree(program)
@@ -290,7 +294,8 @@ class CompiledAgent:
     on_halt: Optional[Callable[[JitResult], None]] = None
     model_key: Optional[CustomerModelKey] = field(default=None, repr=False)
     key_dir: Optional[Path] = None
-    on_warning: Callable[[str], None] = _print_warning
+    on_warning: Optional[Callable[[str], None]] = None
+    require_distinct_reviewer_and_admitter: bool = False
     _sleep: Callable[[float], None] = field(default=time.sleep, repr=False)
 
     # -- layout --------------------------------------------------------------
@@ -433,6 +438,7 @@ class CompiledAgent:
         dialect: str,
     ) -> JitResult:
         program = self.program_dir
+        lifecycle.mark_draft(self.bundle_dir)
         lifted = lift_params(self.bundle_dir, values)
         candidate = {
             "state": lifecycle.BundleState.DRAFT.value,
@@ -446,7 +452,13 @@ class CompiledAgent:
             "policy": self.policy,
             "mine_effects": self.app.record_reader is not None,
             "model_key": self.model_key.provenance() if self.model_key else None,
-            "sensitive_data_warning": RECORDING_WARNING,
+            "sensitive_data_warning": {
+                "text": RECORDING_WARNING,
+                "shown_on": ["stderr"] + (["on_warning"] if self.on_warning else []),
+            },
+            "require_distinct_reviewer_and_admitter": (
+                self.require_distinct_reviewer_and_admitter
+            ),
             "recording": str(session.recording_dir),
             "compiled_recording": str(session.compiled_recording_dir),
             "bundle": str(self.bundle_dir),
@@ -486,12 +498,29 @@ class CompiledAgent:
 
     # -- DRAFT to ADMITTED (people) --------------------------------------------
 
+    def confirm_params(
+        self,
+        *,
+        principal_id: str,
+        accept_params: Sequence[str],
+        confirm: object = None,
+    ) -> dict[str, Any]:
+        """Confirm the task's parameters before the review. Returns the step
+        ids of the recompiled program. See
+        :func:`openadapt_flow.jit.lifecycle.confirm_params`."""
+
+        return lifecycle.confirm_params(
+            self.program_dir,
+            principal_id=principal_id,
+            accept_params=accept_params,
+            confirm=confirm,
+        )
+
     def review(
         self,
         *,
         principal_id: str,
         reviewed_steps: Sequence[str],
-        accept_params: Sequence[str],
         confirm: object = None,
     ) -> dict[str, Any]:
         """Record that ``principal_id`` reviewed every step. See
@@ -501,7 +530,6 @@ class CompiledAgent:
             self.program_dir,
             principal_id=principal_id,
             reviewed_steps=reviewed_steps,
-            accept_params=accept_params,
             confirm=confirm,
         )
 
@@ -586,6 +614,9 @@ class CompiledAgent:
             principal_id=principal_id,
             confirm=confirm,
             key_dir=self.key_dir,
+            require_distinct_reviewer_and_admitter=(
+                self.require_distinct_reviewer_and_admitter
+            ),
         )
 
     def reject(self, *, principal_id: str, reason: str = "") -> Path:
@@ -613,14 +644,37 @@ class CompiledAgent:
 
         try:
             record = lifecycle.verify_admission(self.bundle_dir, key_dir=self.key_dir)
-        except AdmissionError as exc:
+            workflow = Workflow.load(self.bundle_dir)
+        except Exception as exc:  # noqa: BLE001 - any doubt is a refusal
             return refused(f"the admission does not hold: {exc}")
-        workflow = Workflow.load(self.bundle_dir)
-        digest = lifecycle._digest(workflow)
+        # Pin what was admitted, not what is on disk now: the bundle is loaded
+        # again for the run, and must still be the admitted one.
+        digest = str(record["digest"])
+        if lifecycle._digest(workflow) != digest:
+            return refused("the bundle changed after its admission was checked")
         if (record.get("task") or {}).get("key") != self.task.key:
             return refused("the admission is for a different task signature")
         if sorted(workflow.params) != sorted(self.task.params):
             return refused("the admitted program's parameters do not match the task")
+        if record.get("policy") != self.policy:
+            return refused(
+                f"admitted under policy {record.get('policy')!r}, asked to run "
+                f"under {self.policy!r}"
+            )
+        canary_origin = (record.get("canary") or {}).get("target_origin")
+        if canary_origin != self.app.origin:
+            return refused(
+                f"the canary ran on {canary_origin}, not on {self.app.origin}; "
+                "admit a canary on this app"
+            )
+        problems = lifecycle._readback_problems(
+            lifecycle.readback_coverage(workflow, self.verifier)
+        )
+        if problems:
+            return refused(
+                "this verifier gives a write step no independent read-back: "
+                + "; ".join(problems)
+            )
         run_dir = self.runs_dir / f"{_stamp()}-{uuid.uuid4().hex[:8]}"
         run_dir.parent.mkdir(parents=True, exist_ok=True)
         gate_detail, report = self._run_governed(workflow, digest, values, run_dir)
@@ -787,6 +841,7 @@ def compile_agent(
     model_key: Optional[CustomerModelKey] = None,
     key_dir: Optional[Path | str] = None,
     on_warning: Optional[Callable[[str], None]] = None,
+    require_distinct_reviewer_and_admitter: bool = False,
 ) -> CompiledAgent:
     """Wrap ``agent`` so a task is explored once and then run as a program.
 
@@ -811,8 +866,10 @@ def compile_agent(
             unless the agent sets ``requires_model_key = False``.
         key_dir: Where the admission signing key lives (default
             :func:`~openadapt_flow.jit.lifecycle.default_key_dir`).
-        on_warning: Receives the pre-recording warning; prints to stderr by
-            default.
+        on_warning: Also receives the pre-recording warning, for a UI. The
+            warning is printed to stderr either way.
+        require_distinct_reviewer_and_admitter: Refuse an admission by the
+            principal who reviewed the draft. Off by default.
     """
 
     if agent is not None:
@@ -833,5 +890,6 @@ def compile_agent(
         on_halt=on_halt,
         model_key=model_key,
         key_dir=Path(key_dir) if key_dir is not None else None,
-        on_warning=on_warning or _print_warning,
+        on_warning=on_warning,
+        require_distinct_reviewer_and_admitter=require_distinct_reviewer_and_admitter,
     )

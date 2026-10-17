@@ -113,28 +113,24 @@ def test_anthropic_trajectory_miss_admit_hit_and_halt(
     with pytest.raises(AdmissionError, match="no human review"):
         jit.admit(principal_id="e2e-reviewer", confirm="ok")
     with pytest.raises(AdmissionError, match="not a human principal"):
-        jit.review(
-            principal_id="agent:anthropic",
-            reviewed_steps=[],
-            accept_params=["note"],
-            confirm="ok",
+        jit.confirm_params(
+            principal_id="agent:anthropic", accept_params=["note"], confirm="ok"
         )
-    # The review confirms the parameter (a recompile), so read the steps of
-    # the program that will run, after a first pass that applies it.
-    with pytest.raises(AdmissionError, match="every step"):
-        jit.review(
-            principal_id="e2e-reviewer",
-            reviewed_steps=[],
-            accept_params=["note"],
-            confirm="ok",
-        )
-    steps = [s["id"] for s in jit.status()["steps"]]
-    jit.review(
-        principal_id="e2e-reviewer",
-        reviewed_steps=steps,
-        accept_params=["note"],
-        confirm="ok",
+    with pytest.raises(AdmissionError, match="confirm the parameters"):
+        jit.review(principal_id="e2e-reviewer", reviewed_steps=[], confirm="ok")
+    # Confirming the parameter recompiles the program, and returns the steps
+    # of the result. Those are the steps the review asks for, first time.
+    confirmed = jit.confirm_params(
+        principal_id="e2e-reviewer", accept_params=["note"], confirm="ok"
     )
+    assert confirmed["steps"] == [s["id"] for s in jit.status()["steps"]]
+    jit.review(
+        principal_id="e2e-reviewer", reviewed_steps=confirmed["steps"], confirm="ok"
+    )
+    with pytest.raises(AdmissionError, match="already reviewed"):
+        jit.confirm_params(
+            principal_id="e2e-reviewer", accept_params=["note"], confirm="ok"
+        )
     with pytest.raises(AdmissionError, match="no passing canary"):
         jit.admit(principal_id="e2e-reviewer", confirm="ok")
 

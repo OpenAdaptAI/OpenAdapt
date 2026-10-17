@@ -2,29 +2,33 @@
 
 A bundle compiled from a CUA run starts as a ``DRAFT``. A draft never runs
 unattended: :meth:`~openadapt_flow.jit.CompiledAgent.run` refuses to execute
-it, and the only run a draft gets is an attended canary. A draft becomes
-``ADMITTED`` only when all four of these hold for the same bundle digest:
+it, ``openadapt-flow replay`` and ``run`` refuse a bundle marked as a draft
+(:func:`refuse_unadmitted_draft`), and the only run a draft gets is an
+attended canary. A draft becomes ``ADMITTED`` only when all of these hold for
+the same bundle digest, in this order:
 
-1. ``reviewed``: a named human principal reviewed every step
-   (:func:`record_review`). The review also confirms the task's parameters,
-   which recompiles the bundle, so the review pins the final digest.
-2. ``readback``: every write step has an independent read-back. Each effect
-   on a write step is checked against the verifier attached for the canary
-   (:func:`readback_coverage`). A read through the system of record, or
-   through a separate session, is ``independent_readback``. A read through
-   the acting screen is ``screen_readback`` and does not count.
-3. ``canary``: the bundle ran once on the target app, attended by a named
-   principal, and ended ``VERIFIED`` with zero model calls
+1. ``params``: a named person confirms the task's parameters
+   (:func:`confirm_params`). This recompiles the bundle, so it comes before
+   the review, and it can't run after one.
+2. ``reviewed``: a named person reviewed every step of that program
+   (:func:`record_review`).
+3. ``readback``: every write step has an independent read-back through the
+   verifier attached for the canary (:func:`readback_coverage`). Only a read
+   of the system of record (tier 1) is ``independent_readback``. A read
+   through the application's screens, in the acting session or a separate
+   one, is ``screen_readback`` and does not count.
+4. ``canary``: the bundle ran once on the target app, attended by a named
+   person, and ended ``VERIFIED`` with zero model calls
    (:func:`record_canary`).
-4. ``signed``: :func:`admit` writes an admission manifest that records who
+5. ``signed``: :func:`admit` writes an admission manifest that records who
    admitted it (``admitted_by_principal_id``) and when, signed with the
    local Ed25519 admission key.
 
-Who can be a principal is checked by identity only: the principal can't be
-the agent that made the recording, or any ``agent:`` or ``model:`` identity.
-A model never authorizes anything, and a CUA run can't approve its own
-contract. Flow can't prove a person typed the name; it records the name it
-was given and refuses the identities it knows are not people.
+Who can be a principal is checked by identity only. The principal can't be
+the identity that made the recording, or an ``agent:``, ``model:``, ``bot:``
+or similar identity. Flow can't prove a person typed the name. It records
+the name it was given and refuses the ones it knows are not people. The
+command line also requires an interactive terminal.
 
 ``REJECTED`` is terminal: :func:`reject` moves the draft aside, and the next
 run records again.
@@ -41,6 +45,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 __all__ = [
     "ADMISSION_FILE",
+    "DRAFT_MARKER",
     "ADMISSION_SCHEMA",
     "TRANSITIONS",
     "AdmissionError",
@@ -48,10 +53,13 @@ __all__ = [
     "admission_status",
     "admit",
     "check_principal",
+    "confirm_params",
     "default_key_dir",
+    "mark_draft",
     "readback_coverage",
     "record_canary",
     "record_review",
+    "refuse_unadmitted_draft",
     "reject",
     "state_of",
     "verify_admission",
@@ -60,6 +68,9 @@ __all__ = [
 CANDIDATE_FILE = "candidate.json"
 REVIEW_FILE = "review.json"
 CANARY_FILE = "canary.json"
+PARAMS_FILE = "params.json"
+#: Written into a draft's bundle, so a copied bundle stays a draft.
+DRAFT_MARKER = "jit_draft.json"
 EVENTS_FILE = "lifecycle.jsonl"
 ADMISSION_FILE = "admission.json"
 ADMISSION_SCHEMA = "openadapt-flow/jit-admission/v1"
@@ -69,9 +80,32 @@ INDEPENDENT_READBACK = "independent_readback"
 SCREEN_READBACK = "screen_readback"
 
 _NOT_PRINCIPALS = frozenset(
-    {"", "agent", "model", "assistant", "cua", "system", "auto", "automatic"}
+    {
+        "",
+        "agent",
+        "model",
+        "assistant",
+        "cua",
+        "llm",
+        "ai",
+        "bot",
+        "system",
+        "service",
+        "auto",
+        "automatic",
+    }
 )
-_NOT_PRINCIPAL_PREFIXES = ("agent:", "model:", "cua:", "llm:")
+_NOT_PRINCIPAL_PREFIXES = (
+    "agent:",
+    "model:",
+    "cua:",
+    "llm:",
+    "ai:",
+    "bot:",
+    "service:",
+    "svc:",
+    "system:",
+)
 
 
 class AdmissionError(RuntimeError):
@@ -116,8 +150,9 @@ def _canonical(data: Mapping[str, Any]) -> bytes:
 
 def default_key_dir() -> Path:
     """Where the admission signing key lives: ``$OPENADAPT_JIT_KEY_DIR`` or
-    ``~/.openadapt/jit``. Keep it out of the cache directory, so whoever can
-    edit a bundle can't also re-sign it."""
+    ``~/.openadapt/jit``. It is kept out of the cache directory, so write
+    access to a bundle is not enough to re-sign it. Anyone who can write the
+    key directory can."""
 
     return Path(os.environ.get(KEY_DIR_ENV) or Path.home() / ".openadapt" / "jit")
 
@@ -133,6 +168,52 @@ def _digest(workflow: Any) -> str:
     if not digest:
         raise AdmissionError("the compiled bundle carries no content digest")
     return str(digest)
+
+
+def _transition(program: Path, to: BundleState) -> None:
+    """Refuse a transition :data:`TRANSITIONS` does not allow."""
+
+    if (program / "rejected.json").is_file():
+        current = BundleState.REJECTED
+    elif (program / "bundle" / ADMISSION_FILE).is_file():
+        current = BundleState.ADMITTED
+    else:
+        current = BundleState.DRAFT
+    if to not in TRANSITIONS[current]:
+        raise AdmissionError(f"a {current.value} bundle can't become {to.value}")
+
+
+def mark_draft(bundle_dir: Path | str) -> None:
+    """Mark ``bundle_dir`` as a draft. The marker is not part of the content
+    digest, so it does not change what a review or an admission pins."""
+
+    _write(
+        Path(bundle_dir) / DRAFT_MARKER,
+        {
+            "state": BundleState.DRAFT.value,
+            "note": "compiled from a computer-use agent run; runs only after "
+            "admission (openadapt-flow jit)",
+        },
+    )
+
+
+def refuse_unadmitted_draft(
+    bundle_dir: Path | str, *, key_dir: Optional[Path] = None
+) -> None:
+    """Raise ``SystemExit`` when ``bundle_dir`` is a JIT draft without a valid
+    admission. For the ``replay`` and ``run`` commands."""
+
+    bundle = Path(bundle_dir)
+    if not (bundle / DRAFT_MARKER).is_file():
+        return
+    try:
+        verify_admission(bundle, key_dir=key_dir)
+    except AdmissionError as exc:
+        raise SystemExit(
+            f"refused: {bundle} is a DRAFT compiled from an agent run and is not "
+            f"admitted ({exc}). Review, canary and admit it first "
+            "(openadapt-flow jit status)."
+        ) from None
 
 
 # -- principals ----------------------------------------------------------------
@@ -180,9 +261,11 @@ def readback_coverage(workflow: Any, verifier: Any) -> list[dict[str, Any]]:
     flags (fail-closed). Each effect gets ``evidence``:
 
     * ``independent_readback``: the contract is not an on-screen read, and the
-      attached verifier reads it outside the acting session (tier 1 or 2).
+      attached verifier reads the system of record (tier 1).
     * ``screen_readback``: the contract, or the verifier's read of it, goes
-      through the acting screen.
+      through the application's screens: the acting session, or a separate
+      signed-in session (tier 2). Runtime ``VERIFIED`` accepts tier 2
+      (``VERIFIED_EFFECT_TIER``); admission is stricter.
     * ``placeholder``: no observed system-of-record delta was bound.
     * ``unverified``: no verifier is attached, or it declares no tier.
 
@@ -209,7 +292,7 @@ def readback_coverage(workflow: Any, verifier: Any) -> list[dict[str, Any]]:
                 evidence = SCREEN_READBACK
             elif tier is None:
                 evidence = "unverified"
-            elif tier.is_independent_of_actuation():
+            elif tier.reads_system_of_record():
                 evidence = INDEPENDENT_READBACK
             else:
                 evidence = SCREEN_READBACK
@@ -290,6 +373,8 @@ def admission_status(
     digest = _digest(workflow)
     review = _evidence_at(program / REVIEW_FILE, digest)
     canary = _evidence_at(program / CANARY_FILE, digest)
+    params = _evidence_at(program / PARAMS_FILE, digest)
+    task_params = _task_params(candidate)
     readback = (canary or {}).get("readback")
     problems = _readback_problems(readback) if readback is not None else None
     try:
@@ -299,11 +384,17 @@ def admission_status(
     return {
         "state": state,
         "digest": digest,
+        "policy": candidate.get("policy"),
         "steps": [
             {"id": s.id, "action": s.action.value, "intent": s.intent}
             for s in workflow.steps
         ],
         "requirements": {
+            "params": {
+                "met": not task_params or params is not None,
+                "task_params": task_params,
+                "by": (params or {}).get("principal_id"),
+            },
             "reviewed": {
                 "met": review is not None,
                 "by": (review or {}).get("principal_id"),
@@ -336,28 +427,32 @@ def _require_draft(program: Path) -> dict[str, Any]:
     return candidate
 
 
+def _task_params(candidate: Mapping[str, Any]) -> list[str]:
+    return sorted((candidate.get("task") or {}).get("params") or {})
+
+
 def _confirm_ok(confirm: object) -> bool:
     from openadapt_flow.authoring import _confirm_is_ok
 
     return bool(_confirm_is_ok(confirm))
 
 
-def record_review(
+def confirm_params(
     program_dir: Path | str,
     *,
     principal_id: str,
-    reviewed_steps: Sequence[str],
     accept_params: Sequence[str],
     confirm: object = None,
 ) -> dict[str, Any]:
-    """A named human reviewed the steps and confirmed the parameters.
+    """A named person confirms which typed values become the task's parameters.
 
     ``accept_params`` must be exactly the task's parameters. They are applied
     by recompiling the recording
-    (:func:`~openadapt_flow.compiler.param_confirm.apply_decisions`), and
-    ``reviewed_steps`` must then be exactly the recompiled bundle's step ids,
-    in order: the review is of the program that will run. The review pins
-    that bundle's digest; a canary or admission for any other digest refuses.
+    (:func:`~openadapt_flow.compiler.param_confirm.apply_decisions`), which can
+    renumber the steps. So this comes first: after it, :func:`admission_status`
+    lists the steps of the program that will run, and those are the steps
+    :func:`record_review` asks for. Once a review exists it refuses; reject the
+    draft to change the parameters.
     """
 
     from openadapt_flow.compiler.param_confirm import (
@@ -370,15 +465,20 @@ def record_review(
     candidate = _require_draft(program)
     name = check_principal(principal_id, candidate)
     if not _confirm_ok(confirm):
-        raise AdmissionError("review accepts confirm empty, ok, yes, or True")
-    task_params = sorted((candidate.get("task") or {}).get("params") or {})
+        raise AdmissionError("confirm_params accepts confirm empty, ok, yes, or True")
+    task_params = _task_params(candidate)
     if sorted(accept_params) != task_params:
         raise AdmissionError(
             f"accept_params {sorted(accept_params)} must be the task's "
             f"parameters {task_params}"
         )
+    if (program / REVIEW_FILE).is_file():
+        raise AdmissionError(
+            "the draft was already reviewed; parameters are confirmed before the "
+            "review. Reject the draft to change them"
+        )
     bundle = program / "bundle"
-    if accept_params and not candidate.get("params_applied"):
+    if candidate.get("params_applied") is None:
         try:
             decisions = decisions_from_accept_list(
                 load_proposals(bundle), list(accept_params)
@@ -394,9 +494,56 @@ def record_review(
                 mine_effects=bool(candidate.get("mine_effects", True)),
                 bind_effect_params=True,
             )
+            mark_draft(bundle)
         candidate["params_applied"] = sorted(accept_params)
         _write(program / CANDIDATE_FILE, candidate)
     workflow = _load_workflow(bundle)
+    if sorted(workflow.params) != task_params:
+        raise AdmissionError(
+            f"the program's parameters {sorted(workflow.params)} do not match "
+            f"the task's {task_params}"
+        )
+    record = {
+        "principal_id": name,
+        "confirmed_at": _now(),
+        "digest": _digest(workflow),
+        "params": sorted(accept_params),
+        "steps": [s.id for s in workflow.steps],
+    }
+    _write(program / PARAMS_FILE, record)
+    _event(program, "params_confirmed", principal_id=name, digest=record["digest"])
+    return record
+
+
+def record_review(
+    program_dir: Path | str,
+    *,
+    principal_id: str,
+    reviewed_steps: Sequence[str],
+    confirm: object = None,
+) -> dict[str, Any]:
+    """A named person reviewed every step of the program that will run.
+
+    A task with parameters needs :func:`confirm_params` first.
+    ``reviewed_steps`` must be exactly the bundle's step ids, in order. The
+    review pins the bundle's digest; a canary or admission for any other
+    digest refuses.
+    """
+
+    program = Path(program_dir)
+    candidate = _require_draft(program)
+    name = check_principal(principal_id, candidate)
+    if not _confirm_ok(confirm):
+        raise AdmissionError("review accepts confirm empty, ok, yes, or True")
+    workflow = _load_workflow(program / "bundle")
+    digest = _digest(workflow)
+    task_params = _task_params(candidate)
+    params = _evidence_at(program / PARAMS_FILE, digest)
+    if task_params and params is None:
+        raise AdmissionError(
+            f"confirm the parameters {task_params} first (confirm_params); it "
+            "recompiles the program, and the review is of the result"
+        )
     if sorted(workflow.params) != task_params:
         raise AdmissionError(
             f"the program's parameters {sorted(workflow.params)} do not match "
@@ -410,12 +557,12 @@ def record_review(
     record = {
         "principal_id": name,
         "reviewed_at": _now(),
-        "digest": _digest(workflow),
+        "digest": digest,
         "steps": step_ids,
-        "params": sorted(accept_params),
+        "params": task_params,
     }
     _write(program / REVIEW_FILE, record)
-    _event(program, "reviewed", principal_id=name, digest=record["digest"])
+    _event(program, "reviewed", principal_id=name, digest=digest)
     return record
 
 
@@ -461,12 +608,15 @@ def admit(
     principal_id: str,
     confirm: object = None,
     key_dir: Optional[Path] = None,
+    require_distinct_reviewer_and_admitter: bool = False,
 ) -> dict[str, Any]:
     """Move a DRAFT to ADMITTED and write the signed admission manifest.
 
     Refuses unless the review, the read-back coverage and a passing canary
     are all for the bundle's current digest, there are no placeholder
-    effects, and the program passes its policy.
+    effects, and the program passes its policy. With
+    ``require_distinct_reviewer_and_admitter`` (or the same flag on the draft),
+    the admitting principal must not be the reviewer.
     """
 
     from openadapt_flow.execute.keys import (
@@ -478,9 +628,14 @@ def admit(
 
     program = Path(program_dir)
     candidate = _require_draft(program)
+    _transition(program, BundleState.ADMITTED)
     name = check_principal(principal_id, candidate)
     if not _confirm_ok(confirm):
         raise AdmissionError("admit accepts confirm empty, ok, yes, or True")
+    distinct = bool(
+        require_distinct_reviewer_and_admitter
+        or candidate.get("require_distinct_reviewer_and_admitter")
+    )
     bundle = program / "bundle"
     workflow = _load_workflow(bundle)
     digest = _digest(workflow)
@@ -489,6 +644,11 @@ def admit(
         raise AdmissionError(
             "no human review of this bundle; review it first (the digest changed "
             "or there was no review)"
+        )
+    if distinct and review["principal_id"].strip().lower() == name.lower():
+        raise AdmissionError(
+            f"{name!r} reviewed this draft; the policy requires a different "
+            "principal to admit it"
         )
     canary = _evidence_at(program / CANARY_FILE, digest)
     if canary is None or not canary.get("passed"):
@@ -544,12 +704,15 @@ def admit(
             )
         },
         "readback": canary["readback"],
+        "require_distinct_reviewer_and_admitter": distinct,
         "recorded_by": candidate.get("recorded_by"),
         "model_key": candidate.get("model_key"),
         "signing_key": fingerprint_of(private.public_key()),
     }
     manifest = {**body, "signature": sign_bytes(private, _canonical(body))}
     _write(bundle / ADMISSION_FILE, manifest)
+    # The marker stays: the bundle remains a draft to anything that can't
+    # verify this manifest.
     _event(program, "admitted", principal_id=name, digest=digest)
     return manifest
 
@@ -605,6 +768,7 @@ def reject(program_dir: Path | str, *, principal_id: str, reason: str = "") -> P
 
     program = Path(program_dir)
     candidate = _require_draft(program)
+    _transition(program, BundleState.REJECTED)
     name = check_principal(principal_id, candidate)
     _write(
         program / "rejected.json",

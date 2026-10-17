@@ -21,7 +21,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from openadapt_flow.jit import AdmissionError, TaskSignature, WebApp, compile_agent
+from openadapt_flow.jit import TaskSignature, WebApp, compile_agent
 from openadapt_flow.jit.recorded import RecordedTrajectoryAgent
 from openadapt_flow.mockmed.fault_server import serve
 from openadapt_flow.runtime.effects import RestRecordVerifier
@@ -91,23 +91,14 @@ def main() -> int:
         if answer.strip().lower() not in ("ok", "yes", "y"):
             print("Not admitted. The candidate stays in", jit.program_dir)
             return 0
-        steps = [s["id"] for s in jit.status()["steps"]]
-        try:
-            jit.review(
-                principal_id=args.principal,
-                reviewed_steps=steps,
-                accept_params=["note"],
-                confirm="ok",
-            )
-        except AdmissionError:
-            # Confirming the parameter recompiled the program; review its steps.
-            steps = [s["id"] for s in jit.status()["steps"]]
-            jit.review(
-                principal_id=args.principal,
-                reviewed_steps=steps,
-                accept_params=["note"],
-                confirm="ok",
-            )
+        confirmed = jit.confirm_params(
+            principal_id=args.principal, accept_params=["note"], confirm="ok"
+        )
+        jit.review(
+            principal_id=args.principal,
+            reviewed_steps=confirmed["steps"],
+            confirm="ok",
+        )
         canary = jit.canary(principal_id=args.principal, note="Canary test note")
         print(f"Canary: {canary.status}; model calls: {canary.model_calls}")
         if not canary.verified:
