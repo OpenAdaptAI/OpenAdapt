@@ -6016,6 +6016,22 @@
       "sha256": "395573c928cee8c5bc61a0658cc2ada41698266e6fcf54af00d899f21502cc1a"
     },
     {
+      "path": "tests/fixtures/jit/anthropic_add_note.json",
+      "sha256": "28b2b0f48873021ec5472caa89fef667cc08e9eddf57b1295aecc8be02ed171c"
+    },
+    {
+      "path": "tests/fixtures/jit/openai_add_note.json",
+      "sha256": "bf82745f08485bc10dd2beabe653d446e32300946e81d935417599c3510b80a8"
+    },
+    {
+      "path": "tests/fixtures/jit/playwright_mcp_add_note.json",
+      "sha256": "e15ae34f5a851bd7b92d565394b3989aad4f31cfc94378d536a098eca7c5e91e"
+    },
+    {
+      "path": "tests/fixtures/jit/playwright_mcp_snapshot_refs.json",
+      "sha256": "1506ca759e5298fc67d7bb44119625b19c8111f0a722e8933566f2850ae18653"
+    },
+    {
       "path": "tests/fixtures/match_ridge/openemr_accordion_rdp.png",
       "sha256": "96baeda5e5cb84da804897ba573b4b12bb9f1a6b5008855a6f18458ca8adc558"
     },

@@ -1,0 +1,111 @@
+"""Explore a task once with a computer-use agent, then run it as a program.
+
+Uses a recorded Anthropic computer-use trajectory as the agent, so it makes no
+model calls. It serves the bundled MockMed app with its system of record:
+
+    python examples/jit/run_mockmed.py
+
+Run 1 is a cache miss. The agent's actions are recorded and compiled into a
+candidate, which waits for you. You review it and type ok to admit it. Run 2
+is a cache hit with a new note: the compiled program runs with no model calls
+and is checked against the system of record. Run 3 uses an app that shows
+"saved" and drops the note; the program stops and the run goes to the inbox.
+The agent is not called again after run 1.
+"""
+
+from __future__ import annotations
+
+import argparse
+import json
+import tempfile
+from pathlib import Path
+
+from openadapt_flow.jit import TaskSignature, WebApp, compile_agent
+from openadapt_flow.jit.recorded import RecordedTrajectoryAgent
+from openadapt_flow.mockmed.fault_server import serve
+from openadapt_flow.runtime.effects import RestRecordVerifier
+from openadapt_flow.tutorial import _http_json, _records
+
+ROOT = Path(__file__).resolve().parents[2]
+TRAJECTORY = ROOT / "tests" / "fixtures" / "jit" / "anthropic_add_note.json"
+TASK = TaskSignature(
+    "mockmed.add_note",
+    "Open the first referral, start a Triage encounter, and save this note: {note}",
+    {"note": str},
+)
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    parser.add_argument("--cache", default=None, help="cache directory (default: temp)")
+    parser.add_argument(
+        "--yes", action="store_true", help="admit without the prompt (you still decide)"
+    )
+    args = parser.parse_args()
+    cache = Path(args.cache or tempfile.mkdtemp(prefix="openadapt-jit-"))
+    agent = RecordedTrajectoryAgent.from_file(TRAJECTORY)
+    base, _db, stop = serve()
+    base = base.rstrip("/")
+    try:
+
+        def app(fault: str) -> WebApp:
+            return WebApp(
+                url=f"{base}/?fault={fault}&idempotency=demo#tasks",
+                record_reader=lambda: _records(base),
+                reset=lambda: _http_json(f"{base}/api/reset", method="POST", body={}),
+            )
+
+        verifier = RestRecordVerifier(
+            base, records_path="/api/db", records_key="records"
+        )
+
+        def wrapped(fault: str = "ok"):
+            return compile_agent(
+                agent,
+                task=TASK,
+                app=app(fault),
+                verifier=verifier,
+                policy="clinical-write",
+                cache_dir=cache,
+            )
+
+        jit = wrapped()
+        print("Run 1: the agent does the task while Flow records it")
+        first = jit.run(note=agent.inputs["note"])
+        print(f"  {first.status}; agent called: {first.agent_called}")
+        if first.candidate is None:
+            print(f"  no candidate: {first.detail}")
+            return 1
+        print(
+            json.dumps(
+                {k: first.candidate[k] for k in ("distilled", "params", "effects")},
+                indent=2,
+            )
+        )
+        answer = "ok" if args.yes else input("Admit this program? Type ok to admit: ")
+        if answer.strip().lower() not in ("ok", "yes", "y"):
+            print("Not admitted. The candidate stays in", jit.program_dir)
+            return 0
+        jit.admit(accept_params=["note"], confirm="ok")
+
+        print("Run 2: the admitted program, with a new note")
+        second = jit.run(note="Recheck knee in ten days")
+        print(
+            f"  {second.status}; model calls: {second.model_calls}; "
+            f"agent called: {second.agent_called}; records: {_records(base)}"
+        )
+
+        print("Run 3: the app shows 'saved' and drops the note")
+        third = wrapped("optimistic").run(note="Recheck knee in ten days")
+        print(
+            f"  {third.status}; agent called: {third.agent_called}; "
+            f"inbox: {third.inbox_item}"
+        )
+        print(f"  {third.halt_reason}")
+        return 0 if second.verified and third.status == "HALTED" else 1
+    finally:
+        stop()
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
