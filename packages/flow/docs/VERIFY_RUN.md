@@ -38,6 +38,15 @@ effects:         # the same list as effect_contract.yaml
     count_new_only: true
 ```
 
+It is the same file `openadapt-flow qualify --verify` reads (see
+[`QUALIFY_A_WORKFLOW.md`](QUALIFY_A_WORKFLOW.md)). verify-run ignores the
+qualify-only sections (`app`, `save_step`, `inputs`, `campaign`, and
+`verifier.session`), expands `record` to the same effect list qualify uses,
+and expands `${NAME}` environment references the same way. So the receipt's
+`workflow_digest` equals the `verify_config_sha256` qualify reports for the
+same file. `max_execution_window_s` (default 3600) is the one key only
+verify-run reads.
+
 The three inputs come from different people on purpose:
 
 - `--params` holds the values the task named, such as which patient. They

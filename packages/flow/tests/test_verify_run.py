@@ -870,3 +870,52 @@ def test_a_genuine_signature_over_a_refutation_is_not_a_pass(cfg, sor, tmp_path)
         document, _registry(), accept_outcomes=["halted_before_effect"]
     )
     assert accepted["ok"] is True
+
+
+# -- one verify.yaml for qualify and verify-run --------------------------------
+
+
+def test_the_qualify_example_loads_and_hashes_like_qualify(monkeypatch):
+    from openadapt_flow.qualify.campaign import record_effects
+    from openadapt_flow.qualify.config import (
+        load_verify_config as load_qualify_config,
+    )
+    from openadapt_flow.qualify.result import verify_config_sha256
+
+    path = Path(__file__).resolve().parents[1] / "benchmark/openemr_local/verify.yaml"
+    for name in ("OPENEMR_UI_URL", "OPENEMR_API_URL"):
+        monkeypatch.delenv(name, raising=False)
+    ours = load_verify_config(path)
+    theirs = load_qualify_config(path)
+    # Qualify-only sections and verifier.session are ignored, not refused.
+    assert ours.verifier == theirs.verifier.verifier
+    assert ours.environment_id == theirs.environment_id
+    assert [e.model_dump(mode="json") for e in ours.effects] == [
+        e.model_dump(mode="json") for e in record_effects(theirs)
+    ]
+    identity = "rest:example"
+    assert verify_config_sha256(identity, list(ours.effects)) == verify_config_sha256(
+        identity, record_effects(theirs)
+    )
+
+
+def test_record_and_effects_together_are_refused():
+    from openadapt_flow.verify_run import parse_verify_config
+
+    data = _verify_yaml("http://127.0.0.1:1")
+    data["record"] = {
+        "name": "note",
+        "match": ["patient_id"],
+        "fields": {"patient_id": "patient_id"},
+    }
+    with pytest.raises(VerifyRunError, match="either effects or record"):
+        parse_verify_config(data)
+
+
+def test_unset_environment_reference_is_refused(monkeypatch):
+    from openadapt_flow.verify_run import parse_verify_config
+
+    monkeypatch.delenv("OA_TEST_UNSET_SOR_URL", raising=False)
+    data = _verify_yaml("${OA_TEST_UNSET_SOR_URL}")
+    with pytest.raises(VerifyRunError, match="OA_TEST_UNSET_SOR_URL"):
+        parse_verify_config(data)

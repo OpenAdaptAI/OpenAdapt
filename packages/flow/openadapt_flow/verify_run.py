@@ -56,6 +56,7 @@ from uuid import uuid4
 from pydantic import BaseModel, ConfigDict, Field
 
 from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
+from openadapt_flow.qualify.result import verify_config_sha256
 from openadapt_flow.runtime.effects.adapter import verifier_identity
 from openadapt_flow.runtime.effects.effect import (
     Effect,
@@ -185,13 +186,72 @@ def load_verify_config(path: str | Path) -> VerifyConfig:
     source = Path(path)
     if not source.is_file():
         raise VerifyRunError(f"verify config {source} is not a file")
-    data = yaml.safe_load(source.read_text(encoding="utf-8")) or {}
+    try:
+        data = yaml.safe_load(source.read_text(encoding="utf-8")) or {}
+    except yaml.YAMLError as exc:
+        raise VerifyRunError(f"cannot parse {source}: {exc}") from exc
+    return parse_verify_config(data, source=f"verify config {source}")
+
+
+#: ``openadapt.verify/v1`` sections only qualify reads (RFC-0002, Qualify-only
+#: sections). verify-run accepts and ignores them, so one file serves both.
+QUALIFY_ONLY_SECTIONS: tuple[str, ...] = ("app", "save_step", "inputs", "campaign")
+
+
+def _record_effects(record: Any) -> list[Effect]:
+    """Expand qualify's ``record`` shorthand exactly as qualify does."""
+
+    from types import SimpleNamespace
+
+    from openadapt_flow.qualify.campaign import record_effects
+    from openadapt_flow.qualify.config import RecordConfig
+
+    try:
+        parsed = RecordConfig.model_validate(record)
+    except Exception as exc:
+        raise VerifyRunError(f"invalid record section: {exc}") from exc
+    if not parsed.fields or not parsed.match:
+        raise VerifyRunError("record must name fields and match")
+    return list(record_effects(cast(Any, SimpleNamespace(record=parsed))))
+
+
+def parse_verify_config(data: Any, *, source: str = "verify config") -> VerifyConfig:
+    """Validate a parsed ``verify.yaml`` the way verify-run reads it.
+
+    The same file qualify reads: ``${NAME}`` environment references are
+    expanded the same way, qualify-only sections and ``verifier.session`` are
+    ignored, and ``record`` expands to the same effect list qualify uses, so
+    ``workflow_digest`` equals qualify's ``verify_config_sha256``.
+    """
+
+    from openadapt_flow.qualify.config import _expand
+
     if not isinstance(data, dict):
-        raise VerifyRunError(f"verify config {source} must be a YAML mapping")
+        raise VerifyRunError(f"{source} must be a YAML mapping")
+    missing: list[str] = []
+    data = _expand(dict(data), missing)
+    if missing:
+        raise VerifyRunError(
+            "environment variable(s) not set: " + ", ".join(sorted(set(missing)))
+        )
+    for name in QUALIFY_ONLY_SECTIONS:
+        data.pop(name, None)
+    verifier = data.get("verifier")
+    if isinstance(verifier, dict) and "session" in verifier:
+        # A qualify hook for an authenticated client; not part of the
+        # verifier's identity, and verify-run does not import hooks.
+        data["verifier"] = {k: v for k, v in verifier.items() if k != "session"}
+    record = data.pop("record", None)
+    if record is not None:
+        if data.get("effects") is not None:
+            raise VerifyRunError(
+                "give the save's checks as either effects or record, not both"
+            )
+        data["effects"] = [e.model_dump(mode="json") for e in _record_effects(record)]
     try:
         cfg = VerifyConfig.model_validate(data)
     except Exception as exc:
-        raise VerifyRunError(f"invalid verify config {source}: {exc}") from exc
+        raise VerifyRunError(f"invalid {source}: {exc}") from exc
     if cfg.verifier.kind in _NOT_INDEPENDENT:
         raise VerifyRunError(
             f"verifier kind {cfg.verifier.kind!r} does not read independently of "
@@ -606,12 +666,8 @@ def verify_run(
             substrate=str(getattr(verifier, "substrate", "")), reachable=False
         )
 
-    contract_digest = sha256_tagged(
-        {
-            "verifier_identity": identity,
-            "effects": [e.model_dump(mode="json") for e in cfg.effects],
-        }
-    )
+    # Same digest qualify reports as verify_config_sha256 for this file.
+    contract_digest = verify_config_sha256(identity, list(cfg.effects))
     verdicts: list[EffectVerdict] = []
     rows: list[dict[str, Any]] = []
     weakest: Optional[VerificationTier] = None
