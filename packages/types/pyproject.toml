@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-types"
-version = "0.21.0"
+version = "0.22.0"
 description = "Pydantic models for computer-use agents: screen state (ComputerState, UINode), actions (Action), and results (ActionResult)"
 readme = "README.md"
 license = "MIT"

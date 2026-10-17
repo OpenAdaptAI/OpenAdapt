@@ -1,6 +1,30 @@
 # CHANGELOG
 
 
+## v0.22.0 (2026-10-17)
+
+### Documentation
+
+- **readme**: A person or an agent shows the task; drop 'once'
+  ([#46](https://github.com/OpenAdaptAI/openadapt-types/pull/46),
+  [`092bcc3`](https://github.com/OpenAdaptAI/openadapt-types/commit/092bcc39bae210476f863a1b0c4ecb9ddae27a73))
+
+Signed-off-by: Richard Abrich <richard.abrich@mldsai.com>
+
+### Features
+
+- **authoring**: Allow agent_drive on Windows, RDP, and Citrix observations
+  ([#47](https://github.com/OpenAdaptAI/openadapt-types/pull/47),
+  [`3d5146f`](https://github.com/OpenAdaptAI/openadapt-types/commit/3d5146f1658ac6fad754f1b8c990b693be856755))
+
+AuthoringObserveV1 rejected any windows, rdp, or citrix observation that wasn't coach_only, so no
+  producer could advertise agent drive there. The rule now follows what each surface can do: any
+  backend can advertise agent_drive, and rdp and citrix observations are screen-only and carry no
+  tree. A producer can still send coach_only.
+
+Signed-off-by: Richard Abrich <richard.abrich@mldsai.com>
+
+
 ## v0.21.0 (2026-10-15)
 
 ### Features
