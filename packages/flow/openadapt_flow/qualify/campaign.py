@@ -47,6 +47,7 @@ from openadapt_flow.qualify.environment import (
 )
 from openadapt_flow.qualify.faults import WebFaultDriver
 from openadapt_flow.qualify.keys import LocalTestKey, new_local_test_key
+from openadapt_flow.verification import VerificationTier
 
 #: (case id, expected outcome, oracle kind), in run order.
 CASES: tuple[tuple[str, str, str], ...] = (
@@ -178,7 +179,16 @@ def apply_verify_config(
         save.risk_explanation = "named as the save in verify.yaml"
         save.risk_review_required = False
         notes.append({"change": "save_step_irreversible", "step": save.id})
-    if config.record.fields:
+    if config.effects is not None:
+        save.effects = [effect.model_copy(deep=True) for effect in config.effects]
+        notes.append(
+            {
+                "change": "effects_from_verify_yaml",
+                "step": save.id,
+                "effects": len(save.effects),
+            }
+        )
+    elif config.record.fields:
         save.effects = record_effects(config)
         notes.append(
             {
@@ -263,8 +273,8 @@ def check_ready(
         problems.append(f"save step {save.id} has no armed identity check")
     if not save.effects:
         problems.append(
-            f"save step {save.id} has no record check: add record.fields "
-            "(and record.match) to verify.yaml"
+            f"save step {save.id} has no record check: add effects (or "
+            "record.fields and record.match) to verify.yaml"
         )
     if any(effect.needs_operator_confirmation for effect in save.effects):
         problems.append(
@@ -488,6 +498,7 @@ class RecordReadback:
                 "passed": passed,
                 "observed": oracle_kind if passed else f"not_{oracle_kind}",
                 "silent_incorrect_success": bool(not passed and report.success),
+                "effect_verdict": "INDETERMINATE",
             }
         after = self._read() or []
         written = next(
@@ -512,12 +523,16 @@ class RecordReadback:
             ok = len(matched) == 1 and str(matched[0].get(effect.field)) == str(want)
             field_checks.append({"field": effect.field, "match": ok})
         expected = written.expected_count if written else 1
+        exact = (
+            len(matched) == expected
+            and not changed_existing
+            and all(item["match"] for item in field_checks)
+        )
+        nothing = (
+            not matched and not changed_existing and len(after) == len(self.before)
+        )
         if oracle_kind == "exact_record":
-            passed = (
-                len(matched) == expected
-                and not changed_existing
-                and all(item["match"] for item in field_checks)
-            )
+            passed = exact
             observed = "exact_record" if passed else "record_mismatch"
         elif oracle_kind == "no_mutation":
             passed = (
@@ -532,6 +547,9 @@ class RecordReadback:
             "independent": True,
             "passed": passed,
             "observed": observed,
+            # RFC-0002 verdict of the read itself, whatever the case expected.
+            "effect_verdict": "CONFIRMED" if exact else "REFUTED",
+            "landed": "exact" if exact else ("none" if nothing else "some"),
             "records_before": len(self.before),
             "records_after": len(after),
             "matching_records": len(matched),
@@ -808,6 +826,10 @@ class QualifyResult:
     #: The environment observer, for runs after certification.
     observer: Any = None
     environment_digest: Optional[str] = None
+    #: ``openadapt.qualification-result/v1``.
+    result: Optional[dict[str, Any]] = None
+    #: Why no admission envelope was written, when certify did not write one.
+    admission_note: Optional[str] = None
 
     @property
     def partial(self) -> bool:
@@ -928,11 +950,33 @@ def qualify(
 
     # The environment boundary is read from a live session.
     assert hooks.make_verifier is not None
-    tier = getattr(hooks.make_verifier(params), "verification_tier", None)
-    if tier is None:
+    probe_verifier = hooks.make_verifier(params)
+    verifier_tier = getattr(probe_verifier, "verification_tier", None)
+    if verifier_tier is None:
+        raise QualifyConfigError("verifier declares no verification tier")
+    verifier_tier = VerificationTier(verifier_tier)
+    tier = (
+        VerificationTier.INDEPENDENT_SYSTEM
+        if config.minimum_effect_strength == "independent_system_of_record"
+        else VerificationTier.INDEPENDENT_SESSION
+    )
+    if int(verifier_tier) > int(tier):
         raise QualifyConfigError(
-            "system_of_record verifier declares no verification tier"
+            f"verifier reads at {verifier_tier.name.lower()}, weaker than "
+            f"minimum_effect_strength {config.minimum_effect_strength}"
         )
+    from openadapt_flow.qualify.result import (
+        build_result,
+        case_entry,
+        local_admission,
+        result_sha256,
+        sha256_hex,
+        verifier_identity_of,
+        verify_config_sha256,
+    )
+
+    verifier_id = verifier_identity_of(config.verifier.verifier, probe_verifier)
+    verify_sha = verify_config_sha256(verifier_id, list(save.effects))
     if hooks.reset is not None:
         hooks.reset()
     opener = hooks.open_session or (
@@ -970,6 +1014,7 @@ def qualify(
     policy_name = certify or config.campaign.policy
 
     rows: list[dict[str, Any]] = []
+    case_entries: list[dict[str, Any]] = []
     reports: dict[str, list[RunReport]] = {}
     results: list[Any] = []
     trial_times: list[float] = []
@@ -1074,6 +1119,16 @@ def qualify(
                     for name, res in judged["extra"].items()
                 },
             }
+            case_entries.append(
+                case_entry(
+                    case_id=case_id,
+                    trial=trial,
+                    report=report,
+                    oracle=oracle,
+                    verifier_tier=verifier_tier,
+                    report_path=ctx.run_dir / "report.json",
+                )
+            )
             rows.append(row)
             if write_campaign_files:
                 write_json(out / "campaign-summary.json", rows)
@@ -1091,11 +1146,28 @@ def qualify(
                 failure = "a qualification run let screenshots leave this computer"
             elif not oracle.get("passed") or oracle.get("silent_incorrect_success"):
                 failure = f"read-back {oracle.get('observed')}"
+            elif not case_entries[-1]["passed"]:
+                entry = case_entries[-1]
+                failure = (
+                    f"read-back verdict {entry['observed_verdict']} at "
+                    f"{entry['verification_tier']}, expected "
+                    f"{entry['expected_verdict']} at independent_readback"
+                )
             else:
                 bad = [n for n, r in judged["extra"].items() if not r.get("passed")]
                 if bad:
                     failure = f"extra check(s) failed: {bad}"
             if failure is not None:
+                write_json(
+                    out / "qualification" / "result.json",
+                    build_result(
+                        report=evaluate_qualification(workflow, evidence_root=root),
+                        verify_sha256=verify_sha,
+                        verifier_identity=verifier_id,
+                        fault_driver_version=setup.driver.contract_sha256[:16],
+                        cases=case_entries,
+                    ),
+                )
                 raise QualifyError(f"{case_id} trial {trial}: {failure}")
             results.append(
                 case_result(
@@ -1125,9 +1197,53 @@ def qualify(
     else:
         qreport = evaluate_qualification(workflow, evidence_root=root)
     write_json(out / "qualification" / "report.json", qreport.model_dump(mode="json"))
+    qresult = build_result(
+        report=qreport,
+        verify_sha256=verify_sha,
+        verifier_identity=verifier_id,
+        fault_driver_version=setup.driver.contract_sha256[:16],
+        cases=case_entries,
+    )
+    result_path = write_json(out / "qualification" / "result.json", qresult)
     if write_campaign_files:
         (out / "qualification" / "verdict.txt").write_text(qreport.render() + "\n")
     log(qreport.render())
+    log(
+        f"qualification-result/v1 {result_sha256(qresult)[:16]}: passed="
+        f"{qresult['passed']} silent_incorrect_success="
+        f"{qresult['silent_incorrect_success_count']} over_halt="
+        f"{qresult['over_halt_count']} model_calls={qresult['model_calls']}"
+    )
+    admission_note: Optional[str] = None
+    if certify is not None and qreport.passed and qresult["passed"]:
+        from openadapt_flow.admitted_composition import live_bundle_content_digest
+
+        save_qualified_workflow(workflow, bundle_dir)
+        try:
+            envelope = local_admission(
+                result=qresult,
+                result_bytes=result_path.read_bytes(),
+                oracle_id=config.verifier.verifier.kind,
+                campaign_id=campaign_id,
+                trials_required=n_trials,
+                bundle_content_digest=live_bundle_content_digest(
+                    Workflow.load(bundle_dir), bundle_dir
+                ),
+                effect_contract_sha256=sha256_hex(
+                    [effect.model_dump(mode="json") for effect in save.effects]
+                ),
+                identity_contract_sha256=None,
+            )
+        except ValueError as exc:
+            admission_note = f"no admission envelope: {exc.__class__.__name__}: " + (
+                str(exc).splitlines()[-1].strip() if str(exc) else ""
+            )
+            log(admission_note)
+        else:
+            write_json(
+                out / "qualification" / "admission.local.json",
+                envelope.model_dump(mode="json"),
+            )
     t_campaign = time.time()
     timing: dict[str, Any] = {
         "campaign_wall_s": round(t_campaign - t0, 1),
@@ -1143,6 +1259,12 @@ def qualify(
             for row in rows
         },
     }
+    if certify is not None and qreport.passed and not qresult["passed"]:
+        raise QualifyError(
+            "certification refused: the qualification result did not pass "
+            f"(silent incorrect success {qresult['silent_incorrect_success_count']}, "
+            "or a case verdict not from an independent read-back)"
+        )
     if certify is not None and not qreport.passed:
         if write_campaign_files:
             write_json(out / "timing.json", timing)
@@ -1155,8 +1277,8 @@ def qualify(
         else {},
     )
     result = QualifyResult(
-        passed=bool(qreport.passed),
-        certified=certify is not None and bool(qreport.passed),
+        passed=bool(qreport.passed) and bool(qresult["passed"]),
+        certified=certify is not None and bool(qreport.passed) and qresult["passed"],
         policy=certify,
         out=out,
         bundle_dir=bundle_dir,
@@ -1167,6 +1289,8 @@ def qualify(
         reports=reports,
         observer=setup.observer,
         environment_digest=web_environment_digest(environment),
+        result=qresult,
+        admission_note=admission_note,
     )
     if run_params is not None:
         if not result.certified:

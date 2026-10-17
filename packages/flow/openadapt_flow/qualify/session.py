@@ -138,9 +138,7 @@ def verifier_factory(config: VerifyConfig) -> Callable[[Mapping[str, object]], A
         from openadapt_flow.runtime.effects import RestRecordVerifier
 
         if not cfg.base_url:
-            raise QualifyConfigError(
-                "system_of_record.base_url is required for kind: rest"
-            )
+            raise QualifyConfigError("verifier.base_url is required for kind: rest")
 
         def build_rest(params: Mapping[str, object]) -> Any:
             return RestRecordVerifier(
@@ -158,7 +156,7 @@ def verifier_factory(config: VerifyConfig) -> Callable[[Mapping[str, object]], A
     def build(params: Mapping[str, object]) -> Any:
         verifier = build_effect_verifier(cfg, params)
         if verifier is None:
-            raise QualifyConfigError("system_of_record built no verifier")
+            raise QualifyConfigError("verifier built no verifier")
         return verifier
 
     return build

@@ -33,9 +33,9 @@ APP = {"name": "Demo", "version": "1", "url": "http://127.0.0.1:9301/"}
 
 def _config(**over):
     data = {
-        "version": 1,
+        "schema_version": "openadapt.verify/v1",
         "app": {**APP, "reset": {"command": "true"}},
-        "system_of_record": {
+        "verifier": {
             "kind": "rest",
             "base_url": "http://127.0.0.1:9300",
             "records_path": "/api/patient",
@@ -89,13 +89,13 @@ def test_minimal_config_parses_with_defaults():
 
 def test_env_expansion_and_missing_variables():
     data = {
-        "version": 1,
+        "schema_version": "openadapt.verify/v1",
         "app": {
             **APP,
             "url": "${UI:-http://127.0.0.1:1/}",
             "reset": {"command": "true"},
         },
-        "system_of_record": {
+        "verifier": {
             "kind": "rest",
             "base_url": "${API}",
             "records_path": "/r",
@@ -110,7 +110,7 @@ def test_env_expansion_and_missing_variables():
 @pytest.mark.parametrize(
     ("change", "message"),
     [
-        ({"system_of_record": {"kind": "onscreen"}}, "system_of_record"),
+        ({"verifier": {"kind": "onscreen"}}, "verifier"),
         (
             {"record": {"name": "p", "match": ["email"], "fields": {"lname": "lname"}}},
             "match",
@@ -255,7 +255,7 @@ def test_cli_reports_config_errors(tmp_path):
     bundle = tmp_path / "bundle"
     _workflow().save(bundle)
     (tmp_path / "verify.yaml").write_text(
-        "version: 1\napp: {name: d, version: '1', url: 'http://x/'}\n"
+        "schema_version: openadapt.verify/v1\napp: {name: d, version: '1', url: 'http://x/'}\n"
     )
     result = subprocess.run(
         [sys.executable, "-m", "openadapt_flow", "qualify", str(bundle),
@@ -265,4 +265,4 @@ def test_cli_reports_config_errors(tmp_path):
         cwd=Path(__file__).resolve().parents[1],
     )  # fmt: skip
     assert result.returncode == 2
-    assert "system_of_record" in result.stderr
+    assert "verifier" in result.stderr

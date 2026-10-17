@@ -1,7 +1,8 @@
 # Qualify the MockMed triage workflow (public demo evidence packs).
 # The exporter fills MOCKMED_BASE_URL (a fresh loopback server) and
 # MOCKMED_APP_VERSION (the digest of openadapt_flow/mockmed).
-version: 1
+schema_version: openadapt.verify/v1
+minimum_effect_strength: independent_system_of_record
 app:
   target: web
   name: OpenAdapt MockMed synthetic reference
@@ -10,12 +11,13 @@ app:
   version: sha256:${MOCKMED_APP_VERSION}
   reset:
     http: {method: POST, url: "${MOCKMED_BASE_URL}api/reset", body: {}}
-system_of_record:
+verifier:
   kind: rest
   base_url: ${MOCKMED_BASE_URL}
   records_path: /api/db
   records_key: records
-# The compiler mined the save's record checks from the demonstration.
+# No effects: the compiler mined the save's record checks from the
+# demonstration, and those are the contract.
 save_step: auto
 inputs:
   source: recorded

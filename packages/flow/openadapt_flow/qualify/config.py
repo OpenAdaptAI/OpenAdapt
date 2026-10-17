@@ -5,17 +5,27 @@ else does. A workflow is qualified with::
 
     openadapt-flow qualify <bundle> --verify verify.yaml
 
-The file names:
+The file is ``schema_version: openadapt.verify/v1`` (RFC-0002). Its core is
+the read-back contract, the same shape ``verify-run`` reads:
+
+- ``verifier``: how to read the written record back, independently of the
+  screen. Exactly the deployment ``effects`` section (``kind: rest``, ``sql``,
+  ``fhir``, ``graphql`` or a plugin kind). ``none`` and ``onscreen`` are
+  refused. ``session`` (``module:function``) may add an authenticated client
+  for ``kind: rest``; it is not part of the verifier's identity;
+- ``effects``: the effect contract list (``effect_contract.yaml``
+  ``effects:``), bound to the save step. Or ``record``, a shorthand that
+  expands to that list (record fields from inputs, the selecting fields, the
+  duplicate key). With neither, the effects the compiler mined from the
+  demonstration are used;
+- ``minimum_effect_strength``: ``independent_system_of_record`` (default) or
+  ``independent_session``;
+- ``qualification_id`` / ``environment_id``: optional opaque ids.
+
+Qualify adds what a campaign needs on top:
 
 - ``app``: the system the workflow runs against (address, version, how a
   trial starts, how the test system is reset between trials);
-- ``system_of_record``: how to read the written record back, independently of
-  the screen. It is the deployment ``effects`` section (``kind: rest``,
-  ``sql``, ``fhir``, ``graphql`` or a plugin kind), so any verifier Flow
-  already has works here;
-- ``record``: which record fields the save writes, from which inputs, which
-  fields select the record, and which field is the duplicate (idempotency)
-  key;
 - ``save_step``: the irreversible step, or ``auto`` to detect it;
 - ``inputs``: the test inputs for the cases;
 - ``campaign``: trials per case, cases, and the default certification policy.
@@ -38,9 +48,11 @@ from typing import Any, Literal, Mapping, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from openadapt_flow.deployment import EffectsConfig
-from openadapt_flow.runtime.effects import ValueExpr
+from openadapt_flow.runtime.effects import Effect, ValueExpr
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = "openadapt.verify/v1"
+EffectStrength = Literal["independent_system_of_record", "independent_session"]
+_OPAQUE = r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
 TargetKind = Literal["web", "windows", "macos", "linux", "rdp", "citrix"]
 CASE_IDS: tuple[str, ...] = (
     "representative",
@@ -164,15 +176,15 @@ class SystemOfRecordConfig(BaseModel):
 
     @model_validator(mode="after")
     def _check(self) -> "SystemOfRecordConfig":
-        _check_hook(self.session, "system_of_record.session")
+        _check_hook(self.session, "verifier.session")
         if self.verifier.kind in ("none", "onscreen"):
             raise ValueError(
-                "system_of_record.kind must read the system of record "
+                "verifier.kind must read the system of record "
                 "(rest, sql, fhir, graphql, ui_readback or a plugin), not "
                 f"{self.verifier.kind!r}"
             )
         if self.session is not None and self.verifier.kind != "rest":
-            raise ValueError("system_of_record.session is supported for kind: rest")
+            raise ValueError("verifier.session is supported for kind: rest")
         return self
 
 
@@ -247,13 +259,17 @@ class CampaignConfig(BaseModel):
 
 
 class VerifyConfig(BaseModel):
-    """``verify.yaml``: the only per-workflow input to qualification."""
+    """``verify.yaml`` (``openadapt.verify/v1``): the per-workflow input."""
 
     model_config = ConfigDict(extra="forbid")
 
-    version: Literal[1] = 1
+    schema_version: Literal["openadapt.verify/v1"]
+    qualification_id: Optional[str] = Field(default=None, pattern=_OPAQUE)
+    environment_id: Optional[str] = Field(default=None, pattern=_OPAQUE)
+    minimum_effect_strength: EffectStrength = "independent_system_of_record"
+    verifier: SystemOfRecordConfig
+    effects: Optional[list[Effect]] = None
     app: AppConfig
-    system_of_record: SystemOfRecordConfig
     record: RecordConfig = Field(default_factory=RecordConfig)
     save_step: str = "auto"
     inputs: InputsConfig = Field(default_factory=InputsConfig)
@@ -261,9 +277,34 @@ class VerifyConfig(BaseModel):
     #: Where relative paths in the file resolve (set by the loader).
     base_dir: Optional[str] = Field(default=None, exclude=True)
 
+    @model_validator(mode="before")
+    @classmethod
+    def _migrate_hint(cls, data: Any) -> Any:
+        if (
+            isinstance(data, dict)
+            and "schema_version" not in data
+            and ("version" in data or "system_of_record" in data)
+        ):
+            raise ValueError(
+                "this is the pre-RFC verify.yaml shape: replace `version: 1` with "
+                "`schema_version: openadapt.verify/v1` and rename "
+                "`system_of_record` to `verifier`"
+            )
+        return data
+
+    @property
+    def system_of_record(self) -> SystemOfRecordConfig:
+        return self.verifier
+
     @model_validator(mode="after")
     def _record(self) -> "VerifyConfig":
         record = self.record
+        if self.effects is not None and (record.fields or record.duplicate_key):
+            raise ValueError(
+                "give the save's checks as either effects or record, not both"
+            )
+        if self.effects is not None and not self.effects:
+            raise ValueError("effects is empty")
         missing = [f for f in record.match if f not in record.fields]
         if record.fields and missing:
             raise ValueError(

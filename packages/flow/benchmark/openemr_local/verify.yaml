@@ -5,7 +5,9 @@
 #     --certify clinical-write
 #
 # Made-up patients only. See docs/QUALIFY_A_WORKFLOW.md.
-version: 1
+schema_version: openadapt.verify/v1
+environment_id: openemr-local-fixture-7c96c8eefe46
+minimum_effect_strength: independent_system_of_record
 
 app:
   target: web
@@ -20,14 +22,15 @@ app:
 
 # Read the patient back through OpenEMR's REST API with a separate,
 # read-only OAuth client. This is the existing RestRecordVerifier.
-system_of_record:
+verifier:
   kind: rest
   base_url: ${OPENEMR_API_URL:-https://127.0.0.1:9300}
   records_path: /apis/default/api/patient?_limit=1000
   records_key: data
   session: benchmark.openemr_local.qualify_hooks:oracle_session
 
-# What the save writes. A bare value is a parameter name.
+# What the save writes; expands to the effect contract list (one
+# record_written plus a field_equals per field). A bare value is a parameter.
 record:
   name: patient
   match: [email, lname]
