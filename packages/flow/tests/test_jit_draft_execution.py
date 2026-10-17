@@ -101,10 +101,12 @@ def _admission(bundle: Path) -> Any:
 def test_serve_execute_refuses_a_draft_before_any_effect(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    pytest.importorskip("openadapt_types")
-    from openadapt_types.execute import ExecuteRequestV1, ExecuteTerminalOutcomeV1
-
+    pytest.importorskip("openadapt_flow.contracts")
     import openadapt_flow.tutorial as tutorial
+    from openadapt_flow.contracts.execute import (
+        ExecuteRequestV1,
+        ExecuteTerminalOutcomeV1,
+    )
     from openadapt_flow.execute.dispatch import DispatchError, live_replay
     from openadapt_flow.execute.service import ExecuteService
     from tests.test_execute_post_dispatch_faults import _request
