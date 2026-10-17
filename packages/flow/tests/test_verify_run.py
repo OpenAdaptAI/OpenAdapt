@@ -176,6 +176,7 @@ def test_correct_external_write_is_confirmed_and_verified(cfg, sor, tmp_path):
     )
     # The executor's model use is unknown, so the receipt cannot claim none.
     assert receipt["contracts"]["model_used"] is True
+    assert receipt["verification_tier"] == "independent_readback"
     assert result["evidence"]["verifier"]["model_calls"] == 0
 
 
@@ -240,6 +241,34 @@ def test_unreachable_store_is_indeterminate(tmp_path):
     )
     assert result["receipt"]["effect_verdict"] == "INDETERMINATE"
     assert result["receipt"]["outcome"] == "reconciliation_required"
+    assert result["receipt"]["verification_tier"] == "unchecked"
+
+
+def test_screen_readback_never_becomes_verified(clean_registry):
+    register_verifier_factory(
+        "fake-screen",
+        lambda cfg, params: _FakeVerifier(
+            VerificationTier.PERSISTED_STATE_REACQUISITION
+        ),
+    )
+    result = verify_run(
+        _fake_cfg("fake-screen"),
+        params=PARAMS,
+        run_record=AGENT_RECORD,
+        authorization_ref="ticket-0000-test",
+    )
+    receipt = result["receipt"]
+    assert receipt["effect_verdict"] == "CONFIRMED"
+    assert receipt["verification_tier"] == "screen_readback"
+    assert receipt["outcome"] == "reconciliation_required"
+
+
+def test_verified_without_independent_readback_fails_the_check(cfg, sor, tmp_path):
+    base, _db = sor
+    result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base))
+    forged = _issuer_sign({**result["receipt"], "verification_tier": "screen_readback"})
+    verdict = check_effect_receipt({"receipt": forged}, _registry())
+    assert verdict == {"verified": False, "reason": "malformed"}
 
 
 # -- the executor's claims never count ---------------------------------------
@@ -374,6 +403,7 @@ def test_receipt_keeps_every_execute_v1_field(cfg, sor, tmp_path):
         "executor_kind",
         "executor_ref_sha256",
         "effect_verdict",
+        "verification_tier",
     }
     assert receipt["schema_version"] == EFFECT_RECEIPT_SCHEMA
     # A strict Execute consumer refuses it rather than mistaking it for a

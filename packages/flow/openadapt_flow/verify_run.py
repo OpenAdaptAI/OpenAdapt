@@ -19,7 +19,7 @@ Three inputs, kept apart on purpose:
 The output is an ``openadapt.effect-receipt/v1`` document. Its ``receipt``
 keeps every field of ``openadapt.execute-evidence-receipt/v1`` with the same
 name, pattern, and meaning, adds ``executor_kind``, ``executor_ref_sha256``,
-and ``effect_verdict``, and carries a new ``schema_version`` so a strict
+``effect_verdict``, and ``verification_tier``, and carries a new ``schema_version`` so a strict
 Execute consumer refuses it instead of mistaking it for a governed Flow run.
 ``evidence_digest`` binds the evidence manifest written beside it.
 
@@ -66,6 +66,11 @@ ExecutorKind = Literal["flow_replay", "agent", "script", "human", "unknown"]
 EXECUTOR_KINDS: tuple[str, ...] = ("flow_replay", "agent", "script", "human", "unknown")
 
 EffectVerdictLabel = Literal["CONFIRMED", "REFUTED", "INDETERMINATE"]
+
+#: How the effect was checked. Only ``independent_readback`` can yield
+#: ``verified``, and only when the read also went through the system of
+#: record (the v1 oracle-tier rule).
+ReadbackClass = Literal["independent_readback", "screen_readback", "unchecked"]
 
 #: Verifier kinds that never read independently of the acting surface.
 _NOT_INDEPENDENT = {"none", "onscreen"}
@@ -265,6 +270,18 @@ def _observed(verdicts: Sequence[EffectVerdict]) -> str:
     return "absent" if "absent" in seen else "present"
 
 
+def _readback_class(
+    verdicts: Sequence[EffectVerdict], tiers: Sequence[Optional[VerificationTier]]
+) -> ReadbackClass:
+    """``unchecked`` unless every effect was actually read."""
+
+    if any(t is None for t in tiers) or any(v.unavailable for v in verdicts):
+        return "unchecked"
+    if all(t is not None and t.is_independent_of_actuation() for t in tiers):
+        return "independent_readback"
+    return "screen_readback"
+
+
 def verify_run(
     cfg: VerifyConfig,
     *,
@@ -304,6 +321,7 @@ def verify_run(
     verdicts: list[EffectVerdict] = []
     rows: list[dict[str, Any]] = []
     weakest: Optional[VerificationTier] = None
+    tiers: list[Optional[VerificationTier]] = []
     for effect in cfg.effects:
         try:
             bound = effect.resolve(params)
@@ -325,6 +343,7 @@ def verify_run(
         if tier is not None and (weakest is None or int(tier) > int(weakest)):
             weakest = tier
         verdicts.append(verdict)
+        tiers.append(tier)
         # Closed fields only: no reason text, no observed value, no records.
         rows.append(
             {
@@ -348,9 +367,15 @@ def verify_run(
         _STRENGTH_RANK[strength] >= _STRENGTH_RANK[cfg.minimum_effect_strength]
     )
     sor_read = weakest is VerificationTier.INDEPENDENT_SYSTEM
+    verification_tier = _readback_class(verdicts, tiers)
 
     delivery_uncertain = False
-    if effect_verdict == "CONFIRMED" and strong_enough and sor_read:
+    if (
+        effect_verdict == "CONFIRMED"
+        and verification_tier == "independent_readback"
+        and strong_enough
+        and sor_read
+    ):
         outcome = ExecuteTerminalOutcomeV1.VERIFIED
     elif effect_verdict == "REFUTED" and observed_effect == "absent":
         # The store shows nothing landed, whatever the executor said.
@@ -373,6 +398,9 @@ def verify_run(
             "reference_sha256": "sha256:"
             + hashlib.sha256(authorization_ref.encode("utf-8")).hexdigest(),
             "evaluated_by_verifier": False,
+            # approver{kind, id, policy_ref}: placeholder until the
+            # openadapt-types approver identity model exists (RFC-0002).
+            "approver": None,
         },
         "contract": {
             "contract_sha256": contract_digest,
@@ -380,6 +408,7 @@ def verify_run(
         },
         "readback": {
             "verifier_identity": verifier_identity(verifier),
+            "verification_tier": verification_tier,
             "baseline_sha256": baseline_digest,
             "read_at": _now(),
             "effects": rows,
@@ -431,6 +460,7 @@ def verify_run(
     receipt["executor_kind"] = executor_kind
     receipt["executor_ref_sha256"] = executor_ref
     receipt["effect_verdict"] = effect_verdict
+    receipt["verification_tier"] = verification_tier
     return {
         "schema_version": EFFECT_RECEIPT_SCHEMA,
         "receipt": receipt,
@@ -462,6 +492,11 @@ def check_effect_receipt(
         or receipt.get("schema_version") != EFFECT_RECEIPT_SCHEMA
     ):
         return {"verified": False, "reason": "no_effect_receipt"}
+    if receipt.get("outcome") in {"verified", "rolled_back_verified"} and (
+        receipt.get("verification_tier") != "independent_readback"
+        or receipt.get("effect_verdict") != "CONFIRMED"
+    ):
+        return {"verified": False, "reason": "malformed"}
     result: dict[str, Any] = {
         "verified": False,
         "executor_kind": receipt.get("executor_kind"),
@@ -475,6 +510,10 @@ def check_effect_receipt(
         if evidence.get("effect_verdict") != receipt.get("effect_verdict"):
             return {**result, "reason": "evidence_mismatch"}
         if (evidence.get("executor") or {}).get("kind") != receipt.get("executor_kind"):
+            return {**result, "reason": "evidence_mismatch"}
+        if (evidence.get("readback") or {}).get("verification_tier") != receipt.get(
+            "verification_tier"
+        ):
             return {**result, "reason": "evidence_mismatch"}
         result["evidence_bound"] = True
     else:

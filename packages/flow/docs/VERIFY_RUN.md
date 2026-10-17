@@ -61,13 +61,21 @@ The three inputs come from different people on purpose:
 Only a read through the system of record produces `verified`. A screen
 read-back (`onscreen`) is refused before anything runs.
 
+`verification_tier` on the receipt says how the effects were checked:
+`independent_readback` (system of record or a separate session),
+`screen_readback` (a plugin verifier that re-reads the acting session), or
+`unchecked` (at least one effect was not read). Only `independent_readback`
+can yield `verified`.
+
 ## The receipt
 
 `share/effect-receipt.json` holds `receipt` and `evidence`. `receipt` has
 every field of the Execute receipt (`openadapt.execute-evidence-receipt/v1`)
-plus `executor_kind`, `executor_ref_sha256`, and `effect_verdict`, under the
+plus `executor_kind`, `executor_ref_sha256`, `effect_verdict`, and
+`verification_tier`, under the
 schema `openadapt.effect-receipt/v1`. `evidence.readback` lists each effect's
-contract hash, verdict, and counts; `receipt.evidence_digest` is its
+contract hash, verdict, and counts. `evidence.authorization.approver` is
+`null` until OpenAdapt types defines approver identity. `receipt.evidence_digest` is its
 SHA-256. Neither part holds record values, URLs, or the agent's own text.
 
 The file is unsigned. An issuer adds `seal_signature` the same way OpenAdapt
