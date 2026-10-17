@@ -156,7 +156,9 @@ def build_surface_backends(
     """
 
     if build is None:
-        from openadapt_flow.backends.factory import build_backend as build
+        from openadapt_flow.backends.factory import build_backend
+
+        build = build_backend
     backends: dict[str, Any] = {}
     for name, cfg in configs.items():
         if str(cfg.kind).strip().lower() == "web":

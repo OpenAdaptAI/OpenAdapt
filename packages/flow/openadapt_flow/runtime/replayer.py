@@ -5988,6 +5988,7 @@ class Replayer:
             return "qualification environment evidence is unavailable"
         self._qualification_environment_call = None
         self._qualification_environment_bound = None
+        boundary: Any
         if surface_id == router.primary_id:
             boundary = project.environment
         else:
