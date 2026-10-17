@@ -7,6 +7,12 @@
 # skipped, and the single `packages-gate` job always reports, so it can be a
 # required check without blocking unrelated PRs.
 #
+# After the fold, openadapt-flow is the core: the contracts (formerly
+# openadapt-types) live in openadapt_flow.contracts and the MCP server (formerly
+# openadapt-agent) in openadapt_flow.agent. openadapt-types and openadapt-agent
+# are compatibility shims, tested here against the in-tree core, so a core
+# change re-runs both shim jobs.
+#
 # Flow is split: lint, four unit shards, and a critical job that runs the
 # golden free-path task (VERIFIED read-back against an independent oracle),
 # the record/compile/replay E2E, and the read-back and zero-model-call unit
@@ -72,8 +78,8 @@ jobs:
           hit() { if grep -Eq "$1" <<<"$changed"; then echo true; else echo false; fi; }
           wf='^\.github/workflows/packages\.yml$'
           flow="$(hit "^packages/flow/|$wf")"
-          types="$(hit "^packages/types/|$wf")"
-          # Agent is tested against the in-tree Flow, so a Flow change re-runs it.
+          # Both shims are tested against the in-tree core, so a core change re-runs them.
+          types="$(hit "^packages/(types|flow)/|$wf")"
           agent="$(hit "^packages/(agent|flow)/|$wf")"
           {
             echo "flow=$flow"
@@ -82,7 +88,7 @@ jobs:
           } | tee -a "$GITHUB_OUTPUT"
 
   types:
-    name: types (py${{ matrix.python-version }})
+    name: types shim (py${{ matrix.python-version }})
     needs: scope
     if: needs.scope.outputs.types == 'true'
     runs-on: ubuntu-latest
@@ -94,8 +100,6 @@ jobs:
     defaults:
       run:
         working-directory: packages/types
-    env:
-      UV_PYTHON: ${{ matrix.python-version }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -103,25 +107,31 @@ jobs:
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python-version }}
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-        with:
-          version: "0.11.29"
-      - name: Install (locked, dev extra)
-        run: uv sync --locked --extra dev
+          cache: pip
+      - name: Install the shim against the in-tree core
+        run: pip install -e ../flow -e ".[dev]" 'ruff==0.17.0' 'build==1.6.1'
+      - name: Confirm the shim resolves to the in-tree core
+        run: |
+          python - <<'PY'
+          import pathlib, openadapt_types
+          here = pathlib.Path(openadapt_types.__file__).resolve().as_posix()
+          print("openadapt_types resolves through", here)
+          import openadapt_flow.contracts as contracts
+          where = pathlib.Path(contracts.__file__).resolve().as_posix()
+          assert "packages/flow/openadapt_flow/contracts" in where, where
+          PY
       - name: Ruff
-        run: uv run --locked --extra dev --with 'ruff==0.17.0' ruff check openadapt_types tests scripts
+        run: ruff check openadapt_types tests scripts
       - name: Test
-        run: uv run --locked --extra dev pytest -q
-      - name: Seal signature verification (needs cryptography)
-        run: uv run --locked --extra dev --with 'cryptography>=42' pytest -q tests/test_seal.py
+        run: pytest -q
       - name: Build and verify the public distribution boundary
         if: matrix.python-version == '3.12'
         run: |
-          uv build
+          python -m build . --outdir dist
           python scripts/check_source_boundary.py --require-dist
 
   agent:
-    name: agent (py${{ matrix.python-version }})
+    name: agent shim (py${{ matrix.python-version }})
     needs: scope
     if: needs.scope.outputs.agent == 'true'
     runs-on: ubuntu-latest
@@ -141,8 +151,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - name: Install agent against the in-tree Flow
-        run: pip install -e ../flow -e ".[dev]"
+      - name: Install the shim against the in-tree core
+        run: pip install -e '../flow[agent]' -e ".[dev]"
       - name: Confirm the in-tree Flow is the one installed
         run: |
           python - <<'PY'
@@ -157,7 +167,7 @@ jobs:
         run: pytest -q
 
   flow-lint:
-    name: flow lint (ruff, mypy)
+    name: flow core lint (ruff, mypy)
     needs: scope
     if: needs.scope.outputs.flow == 'true'
     runs-on: ubuntu-latest
@@ -219,7 +229,7 @@ jobs:
             openadapt_flow/compiler/loop_authoring.py
 
   flow-unit:
-    name: flow unit (shard ${{ matrix.shard }}/4)
+    name: flow core unit (shard ${{ matrix.shard }}/4)
     needs: scope
     if: needs.scope.outputs.flow == 'true'
     runs-on: ubuntu-latest
@@ -240,7 +250,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install
-        run: pip install -e '.[dev,capture]'
+        run: pip install -e '.[dev,capture,agent]'
       - name: Verify openadapt-capture imports headless
         run: python -c "import openadapt_capture"
       - name: Resolve Playwright version
@@ -279,7 +289,7 @@ jobs:
           pytest -vv --durations=20 --basetemp=runs/ci "${files[@]}"
 
   flow-critical:
-    name: flow critical (golden VERIFIED, zero model calls)
+    name: flow core critical (golden VERIFIED, zero model calls)
     needs: scope
     if: needs.scope.outputs.flow == 'true'
     runs-on: ubuntu-latest
