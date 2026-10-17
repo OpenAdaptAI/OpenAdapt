@@ -260,7 +260,7 @@ deterministic and hand-authored, so these counts reproduce exactly on every run;
 that reproducibility is the whole point of a regression anchor and it is also
 exactly why the numbers carry no empirical weight. Do not cite them as a finding.
 OpenAdapt's **measured** end-to-end silent-wrong-effect result is
-[`benchmark/effect_e2e/`](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/benchmark/effect_e2e/EFFECT_E2E.md)
+[`benchmark/effect_e2e/`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/effect_e2e/EFFECT_E2E.md)
 in the engine repository — real replayer, real HTTP write to an on-disk SQLite
 system of record, ground truth read directly from storage over every table
 discovered from `sqlite_master`. Its measured ladder over 90 runs per arm is

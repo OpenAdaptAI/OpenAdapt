@@ -23,8 +23,8 @@ classifiers = [
 dependencies = ["pydantic>=2,<3"]
 
 [project.urls]
-Homepage = "https://github.com/OpenAdaptAI/openadapt-flow"
-Specification = "https://github.com/OpenAdaptAI/openadapt-flow/blob/main/benchmark/effectbench/SPEC.md"
+Homepage = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow"
+Specification = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/effectbench/SPEC.md"
 
 [project.scripts]
 effectbench = "effectbench.__main__:main"

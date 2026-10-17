@@ -90,7 +90,7 @@ python -m pip install -e '.[dev]'
 ```
 
 The engine source is in
-[`OpenAdaptAI/openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow).
+[`OpenAdaptAI/openadapt-flow`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow).
 Read its `CONTRIBUTING.md` before a package or release change.
 
 ## Next steps

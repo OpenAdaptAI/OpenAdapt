@@ -32,7 +32,7 @@ SCHEMA_DIR = (ROOT.parent / "flow" / "openadapt_flow" / "contracts") / "schemas"
 # PyPI renders the README too, and it doesn't resolve relative links, so the
 # README links to its own files by absolute GitHub URL.
 REPO_FILE_URL = re.compile(
-    r"\]\(https://github\.com/OpenAdaptAI/openadapt-types/(?:blob|tree)/main/([^)#]+)"
+    r"\]\(https://github\.com/OpenAdaptAI/OpenAdapt/(?:blob|tree)/main/packages/types/([^)#]+)"
 )
 PYTHON_BLOCK = re.compile(r"```python\n(.*?)```", re.DOTALL)
 # `print(...)  # expected output` on one line.
@@ -129,7 +129,7 @@ def test_readme_uses_absolute_links_for_pypi() -> None:
     relative = re.findall(r"\]\((?!https?:|#)([^)]+)", text)
     assert not relative, (
         f"PyPI can't resolve relative links in the README: {relative}. "
-        "Link to https://github.com/OpenAdaptAI/openadapt-types/blob/main/<path>."
+        "Link to https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/types/<path>."
     )
 
 

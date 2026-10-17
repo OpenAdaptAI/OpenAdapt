@@ -160,7 +160,7 @@ openadapt agent emit-skill <bundle> --out ~/.claude/skills
 the client list workflows without starting them. `emit-skill` writes an Agent
 Skill that tells the agent how to call the workflow. See
 [Give an agent the run tool](#give-an-agent-the-run-tool) and the
-[`openadapt-agent` README](https://github.com/OpenAdaptAI/openadapt-agent).
+[`openadapt-agent` README](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent).
 
 ---
 
@@ -187,9 +187,9 @@ admits the program watches.
 
 This repository is the installer and the `openadapt` command. The compiler and
 the runtime live in
-[`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow), and this
+[`openadapt-flow`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow), and this
 repository doesn't reimplement them.
-[`openadapt-agent`](https://github.com/OpenAdaptAI/openadapt-agent) exposes
+[`openadapt-agent`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent) exposes
 compiled programs to an agent over MCP.
 
 ## Run the tutorial
@@ -309,7 +309,7 @@ Leave out `--allow-run` when the client should inspect workflows but not start
 them. A halted or refused run comes back as a halt or a refusal, never as a
 success. Local unsigned success isn't a Seal; treat unsigned production success
 as failure. The
-[`openadapt-agent` README](https://github.com/OpenAdaptAI/openadapt-agent) has
+[`openadapt-agent` README](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent) has
 the client setup.
 
 ## Author a workflow
@@ -350,7 +350,7 @@ Child A has to end `VERIFIED` (or a halt class you named with `--allow-halt`)
 before child B starts. Handoffs copy parameter values that A's confirmed
 effect contract already bound. Missing evidence stops the run. Compose will
 not retarget one recording onto a second backend. The
-[`openadapt-flow` README](https://github.com/OpenAdaptAI/openadapt-flow#workflows-that-use-more-than-one-application)
+[multi-application guide](https://docs.openadapt.ai/guides/compose-multi-application/)
 has the full boundary.
 
 Native and remote workflows never start or download Chromium. Install only the
@@ -503,9 +503,9 @@ exact compiled bundle, application, and environment.
 
 - **Here:** installer, the unified `openadapt` CLI, release compatibility, and
   the stable project URL.
-- **[`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow):** the
+- **[`openadapt-flow`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow):** the
   compiler, the governed runtime, the CLI implementation, conformance tests.
-- **[`openadapt-agent`](https://github.com/OpenAdaptAI/openadapt-agent):** the
+- **[`openadapt-agent`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent):** the
   MCP bridge that serves compiled programs to agents.
 - **[`openadapt-capture`](https://github.com/OpenAdaptAI/openadapt-capture):**
   native screen, mouse, keyboard, timing, and window-scope capture.
