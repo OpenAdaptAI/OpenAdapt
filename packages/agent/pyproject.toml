@@ -1,0 +1,105 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openadapt-agent"
+version = "2.2.0"
+description = "Let your AI agent enter information in apps with no API and get back whether it saved (MCP and Agent Skills)"
+readme = "README.md"
+# openadapt-flow pins <3.13 (rapidocr-onnxruntime); this package inherits it.
+requires-python = ">=3.10,<3.13"
+license = "MIT"
+authors = [
+    {name = "Richard Abrich", email = "richard@openadapt.ai"}
+]
+maintainers = [
+    {name = "OpenAdaptAI", email = "contact@openadapt.ai"}
+]
+classifiers = [
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+keywords = ["mcp", "agent-skills", "gui", "automation", "workflow", "openadapt", "ai-agents", "ehr", "rpa"]
+
+dependencies = [
+    # Governed workflow compiler/runtime this package bridges. Execution
+    # shells out to its CLI; bundle metadata loads via its IR.
+    # FLOOR IS LOAD-BEARING. `reject`, its `rejected_by_operator` disposition,
+    # and the `decided_by` provenance keyword are named symbols that only exist
+    # from 1.26.0. A resolver satisfied by 1.25.x fails at CALL time, inside the
+    # attended decision path, with a TypeError rather than at resolve. Raise
+    # this with every new symbol taken from Flow's attended contract.
+    # 2.0 gates every saving run by default (each_item); the agent reports
+    # that wait as waiting_for_approval (tests/test_approval_flow.py) and
+    # 2.0 ships cloud_seal for Cloud-connected Seals.
+    "openadapt-flow>=2.1.0,<3",
+    # Flow uses cryptography for encrypted bundles and signed runtime evidence.
+    # Keep the published Agent artifact above the PKCS#7 oracle fixed by 50.0.0
+    # (GHSA-g6cj-pr64-35w5), even when an existing environment already has an
+    # older version that still satisfies Flow's transitive requirement.
+    "cryptography>=50.0.0",
+    # Official Model Context Protocol SDK (stdio server transport).
+    "mcp>=1.28,<3",
+    # MCP 2 low-level handlers require explicit input-schema validation.
+    "jsonschema>=4.20.0",
+    # Structured concurrency runtime the mcp SDK already uses; we call
+    # anyio.run / to_thread directly.
+    "anyio>=4.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "build>=1.2.0",
+    "pytest>=8.0.0",
+    "ruff>=0.4.0",
+]
+repair-screens = [
+    # Scrubs screens before a calling agent sees them during a repair. Without
+    # it, scrubbed_only and ask_each_time share no screen.
+    "openadapt-privacy[presidio]>=1.1.2",
+]
+tutorial = [
+    # The sandbox's real engine drives MockMed through Flow's tutorial entry
+    # query, added in openadapt-flow 1.29.0. Older Flow falls back to the
+    # simulated engine. Flow's macos extra (pyobjc, darwin-only markers) lets
+    # `serve --authoring` without --url pin the frontmost macOS window.
+    "openadapt-flow[browser,macos]>=2.1.0,<3",
+]
+
+[project.scripts]
+openadapt-agent = "openadapt_agent.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/OpenAdaptAI/openadapt-agent"
+Repository = "https://github.com/OpenAdaptAI/openadapt-agent"
+Documentation = "https://github.com/OpenAdaptAI/openadapt-agent#readme"
+"Bug Tracker" = "https://github.com/OpenAdaptAI/openadapt-agent/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/openadapt_agent"]
+# Keep release metadata compatible with the current PyPI validation toolchain.
+# Hatchling 1.32 changed its default to Core Metadata 2.5 before Twine's
+# packaging dependency accepted that version.
+core-metadata-version = "2.4"
+
+[tool.hatch.build.targets.sdist]
+core-metadata-version = "2.4"
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+# Pin Ruff's historical default gate so future releases cannot silently expand
+# the CI policy and fail unchanged code.
+select = ["E4", "E7", "E9", "F"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

@@ -1,0 +1,15 @@
+# Trigger the on-prem runner when a job file appears in the local inbox.
+# Event-driven: no polling daemon, no network. Pairs with
+# openadapt-flow-runner.service (Type=oneshot).
+
+[Unit]
+Description=Watch the openadapt-flow job inbox and trigger the local runner
+
+[Path]
+# @STORAGE_ROOT@ is substituted by install.sh. If you did not run install.sh,
+# edit this to your absolute storage_root/jobs/inbox path.
+PathExistsGlob=/srv/openadapt/jobs/inbox/*.job
+Unit=openadapt-flow-runner.service
+
+[Install]
+WantedBy=multi-user.target

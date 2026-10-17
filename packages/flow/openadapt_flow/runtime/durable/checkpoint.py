@@ -1,0 +1,1061 @@
+"""Durable checkpoint + pending-escalation store (RFC §5, Tier 3).
+
+The Workflow-Program IR RFC (``docs/design/WORKFLOW_PROGRAM_IR.md`` §5) makes
+the runtime three-tier: a deterministic fast path, a bounded local model
+recovery, and -- when neither can safely proceed -- a **durable pause /
+approve / resume from the last verified checkpoint**. Today's replayer only
+had the fast path and a bare ``halt``: on failure the run just dies, and a
+re-run starts from step 0. That is unsafe in production, because re-running a
+workflow that already performed consequential writes re-performs them.
+
+This module is the persistence substrate for Tier 3. It is deliberately
+import-light (pydantic + json + pathlib only -- no vision, no backend, no
+model), and it lives in its OWN package so the state-machine interpreter
+(Phase 2, which rewrites ``replayer.py`` heavily) can adopt it with a minimal,
+localized set of replayer touch-points (see the module docstring of
+``openadapt_flow.runtime.durable.controller``).
+
+Two durable artifacts, both written under the run directory:
+
+- :class:`RunCheckpoint` -- one per VERIFIED step (identity passed, effects
+  CONFIRMED, postconditions passed), written to ``run_dir/checkpoints/``. It
+  records enough to RESUME: the step index/id (and, for the Phase-2 state
+  machine, an optional ``state_id``), the run's parameter bindings, and the
+  index to continue from. Deterministic, cheap, ``$0``.
+- :class:`PendingEscalation` -- written to ``run_dir/pending_escalation.json``
+  when the run HALTS for an operator (a non-CONFIRMED effect that escalates,
+  an unmet consequential guard, an unconfirmed placeholder effect, an
+  unresolved disambiguation, ...). It captures WHY the run paused and the
+  proposed operator options, and points at the last verified checkpoint so a
+  human can approve and RESUME from there -- never from step 0, and never by
+  handing the remaining workflow to a free-form agent.
+
+A small :class:`RunManifest` (``run_dir/checkpoints/_manifest.json``) records
+the bundle directory and parameter bindings so :func:`~.resume.resume` can
+reconstruct the run from ``run_dir`` alone.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import re
+import secrets
+from contextlib import contextmanager
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import Iterator, Literal, Optional
+
+from pydantic import BaseModel, Field, model_validator
+
+from openadapt_flow.ir import (
+    ActionDeliveryReceipt,
+    ActionDeliveryUncertainty,
+    BusinessDecisionEvidence,
+    EffectVerificationEvidence,
+    FreshActuationEvent,
+    HealEvent,
+    IdentityCheck,
+    Postcondition,
+    ProgramExceptionEvidence,
+    ProgramTransitionEvidence,
+    Resolution,
+)
+from openadapt_flow.runtime.authorization import (
+    GovernedRunAuthorization,
+    RuntimeParamScalar,
+)
+from openadapt_flow.runtime.durable.approval import ApprovalRecord
+from openadapt_flow.runtime.durable.program_checkpoint import (
+    GraphFrame,
+    ProgramCheckpoint,
+)
+
+CHECKPOINTS_DIRNAME = "checkpoints"
+MANIFEST_FILENAME = "_manifest.json"
+PENDING_FILENAME = "pending_escalation.json"
+APPROVAL_FILENAME = "approval.json"
+APPROVAL_HISTORY_DIRNAME = "approval_history"
+CLAIM_FILENAME = ".durable_run.claim"
+STATE_LOCK_FILENAME = ".durable_state.lock"
+#: Prefix of the per-verified-state Phase-2 interpreter checkpoints
+#: (``pstate_0000.json``), written under ``run_dir/checkpoints/`` alongside the
+#: linear ``step_*.json`` checkpoints.
+PROGRAM_CHECKPOINT_PREFIX = "pstate_"
+#: Default stale-pause window: a pause older than this is refused on resume
+#: (the app state a stale checkpoint expects can no longer be trusted). 7 days.
+DEFAULT_STALE_AFTER_S = 7 * 24 * 3600.0
+_CLOUD_RUN_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+)
+
+
+def _now() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+class RunManifest(BaseModel):
+    """Enough to reconstruct a run from its ``run_dir`` alone.
+
+    Written once at run start (durability enabled). :func:`~.resume.resume`
+    reads it to find the bundle and the parameter bindings without the caller
+    re-supplying them.
+    """
+
+    schema_version: int = 2
+    #: Random run-instance identity, distinct from workflow/bundle identity.
+    #: Attended capabilities bind to this so a capability copied between two
+    #: runs of the same bundle is refused.
+    run_id: str = ""
+    #: Permanent local namespace identity. Copies cannot mint new authority.
+    namespace_id: str = ""
+    #: Canonical directory that originally claimed this durable namespace.
+    canonical_run_dir: str = ""
+    workflow_name: str
+    #: The workflow bundle directory (absolute), source of ``workflow.json``
+    #: and the template crops.
+    bundle_dir: str
+    #: The run's fully-resolved parameter bindings (defaults + caller
+    #: overrides), so a resume re-binds identically.
+    params: dict[str, RuntimeParamScalar] = Field(default_factory=dict)
+    #: Stable at-most-once reservation for the complete logical durable run.
+    #: A resumed leg reuses it only after it proves ownership in the ledger.
+    idempotency_key: Optional[str] = None
+    worklists: dict[str, list[dict[str, str]]] = Field(default_factory=dict)
+    governed_authorization: Optional[GovernedRunAuthorization] = None
+    #: Customer-controlled runs use their local durable authority only. Managed
+    #: Cloud runs retain the Cloud UUID that owns remote continuation permits.
+    delivery_authority_kind: Literal["customer_local", "cloud_runner"] = (
+        "customer_local"
+    )
+    remote_delivery_run_id: Optional[str] = None
+    #: Digest of the private, verified managed-dispatch envelope. It binds the
+    #: first Cloud permit without retaining a permit, cursor, or credential.
+    managed_dispatch_binding_sha256: Optional[str] = None
+    #: Sticky audit posture for the whole logical run.  A resumed leg may use a
+    #: local-only replayer, but that must not erase that an earlier leg was
+    #: configured with an egress-capable screenshot consumer.
+    screenshots_may_leave_box: bool = False
+    #: Cumulative calls made across every executed leg of this logical run.
+    #: Checkpoint reconstruction must not erase calls made by a step that
+    #: halted before it could produce a verified checkpoint.
+    model_calls: int = Field(default=0, ge=0)
+    #: Sticky whole-run network observation. ``observed`` must survive resume;
+    #: ``unknown`` remains conservative when no observer proves absence.
+    external_network_calls: Literal["none", "observed", "unknown"] = "unknown"
+    #: Optional healed-bundle output path, mirrored from the original run.
+    save_healed_to: Optional[str] = None
+    created_at: str = Field(default_factory=_now)
+
+    @model_validator(mode="after")
+    def _delivery_authority_binding_is_exact(self) -> "RunManifest":
+        if self.delivery_authority_kind == "customer_local":
+            if (
+                self.remote_delivery_run_id is not None
+                or self.managed_dispatch_binding_sha256 is not None
+            ):
+                raise ValueError("customer-local runs cannot retain a Cloud run id")
+            return self
+        if (
+            self.remote_delivery_run_id is None
+            or _CLOUD_RUN_UUID_RE.fullmatch(self.remote_delivery_run_id) is None
+        ):
+            raise ValueError("Cloud-runner runs require a canonical Cloud run id")
+        if not isinstance(
+            self.managed_dispatch_binding_sha256, str
+        ) or not re.fullmatch(
+            r"sha256:[a-f0-9]{64}", self.managed_dispatch_binding_sha256
+        ):
+            raise ValueError("Cloud-runner runs require a managed dispatch binding")
+        if (
+            self.governed_authorization is None
+            or self.governed_authorization.execution_profile
+            not in {"standard", "regulated"}
+        ):
+            raise ValueError(
+                "Cloud-runner runs require a Standard or Regulated authorization"
+            )
+        return self
+
+
+class RunCheckpoint(BaseModel):
+    """A durable marker that a step VERIFIED and the run may resume after it.
+
+    Written after each step whose identity passed, whose declared effects were
+    CONFIRMED (or a duplicate RECONCILED), and whose postconditions passed --
+    i.e. every step that ``result.ok`` and did not halt. The last such
+    checkpoint is the resume point: a run that pauses re-does only the paused
+    step onward, so an already-confirmed consequential write is NEVER
+    re-executed.
+    """
+
+    schema_version: int = 2
+    #: Exact logical run that produced this verification evidence.
+    run_id: str = ""
+    workflow_name: str
+    #: Exact compiled bundle bytes whose step semantics this proof covers.
+    bundle_version: str = ""
+    #: Index of the verified step in ``workflow.steps``.
+    step_index: int
+    step_id: str
+    intent: str = ""
+    #: Phase-2 state-machine state id, when the interpreter has one. None for
+    #: the linear replayer -- the step index/id is the resume key. Present so
+    #: the state-machine PR can populate it without a schema change.
+    state_id: Optional[str] = None
+    #: Where a resume continues: the NEXT step to execute (``step_index + 1``
+    #: for the linear replayer). Stored explicitly so the state machine can
+    #: point at an arbitrary successor state.
+    next_step_index: int
+    #: The run's parameter bindings at checkpoint time (resume re-binds these).
+    params: dict[str, RuntimeParamScalar] = Field(default_factory=dict)
+    #: Verification evidence carried for the audit trail / operator.
+    effect_verified: Optional[bool] = None
+    effect_approved_unverified: bool = False
+    effect_contract_hashes: list[str] = Field(default_factory=list)
+    effect_evidence: list[EffectVerificationEvidence] = Field(default_factory=list)
+    identity: Optional[IdentityCheck] = None
+    input_verified: Optional[bool] = None
+    starting_state_settled: Optional[bool] = None
+    delivery_attempted: Optional[bool] = None
+    delivery_receipt: Optional[ActionDeliveryReceipt] = None
+    drag_end_resolution: Optional[Resolution] = None
+    fresh_actuation_events: list[FreshActuationEvent] = Field(default_factory=list)
+    before_png: Optional[str] = None
+    governed_authorization_id: Optional[str] = None
+    governed_approval_source: Optional[str] = None
+    postconditions_ok: Optional[bool] = None
+    expected_postconditions: list[Postcondition] = Field(default_factory=list)
+    skipped: bool = False
+    actuation: Optional[str] = None
+    delivery_uncertainty: Optional[ActionDeliveryUncertainty] = None
+    #: Resolution/model/heal evidence is retained so a resumed report accounts
+    #: for the whole logical run rather than only the final leg.
+    resolution: Optional[Resolution] = None
+    drift_oracle_calls: int = Field(default=0, ge=0)
+    heal: Optional[HealEvent] = None
+    #: HMAC-authenticated pause capability that supplied source identity for a
+    #: human-attended checkpoint. Empty on ordinary runtime checkpoints.
+    attended_capability_digest: Optional[str] = None
+    #: Immutable reconciliation binding for an uncertain delivery that was
+    #: independently proven before this checkpoint committed.  It lets a
+    #: crashed process reconstruct the signed reconciliation receipt from the
+    #: durable transition without delivering the source action again.
+    attended_reconciliation_request_digest: Optional[str] = None
+    attended_reconciliation_expected_transition_digest: Optional[str] = None
+    attended_reconciliation_delivery_state: Optional[
+        Literal["delivered", "unknown"]
+    ] = None
+    attended_reconciliation_effect_contract_hashes: list[str] = Field(
+        default_factory=list
+    )
+    attended_reconciliation_at: Optional[str] = None
+    created_at: str = Field(default_factory=_now)
+
+
+class PendingEscalation(BaseModel):
+    """A durable pause: the run HALTED for an operator instead of dying.
+
+    Captures the current state, WHY it paused, and the proposed operator
+    options (derived from the halt reason / compensation escalation), plus the
+    checkpoint to resume from. Persisted to ``run_dir/pending_escalation.json``;
+    an operator (or a separate escalation path) reviews it, resolves the cause,
+    and resumes -- deterministically, from :attr:`resume_from_index`, NOT from
+    step 0 and NOT by delegating the tail of the workflow to a free-form agent
+    (RFC §5 explicit non-goal).
+    """
+
+    schema_version: int = 2
+    #: Exact logical run whose continuation is paused.
+    run_id: str = ""
+    workflow_name: str
+    #: The step that halted.
+    step_index: int
+    step_id: str
+    intent: str = ""
+    state_id: Optional[str] = None
+    #: Coarse machine category (see :func:`classify_halt`): ``effect_refuted``,
+    #: ``effect_indeterminate``, ``effect_escalated``, ``placeholder_effect``,
+    #: ``effect_unverifiable``, ``unmet_guard``, ``disambiguation``,
+    #: ``identity``, ``postcondition``, ``resolution``, ``delivery_uncertain``,
+    #: ``human_required``, ``business_decision``, or ``halt``.
+    #: ``business_decision`` has its own finite signed request and is not an
+    #: operational Continue/Skip/Teach capability. ``human_required`` means CAPTCHA/MFA/
+    #: re-authentication must be completed by the present operator; no
+    #: automation acts on the challenge.
+    category: str
+    #: The verbatim halt reason (``result.error``) -- WHY it paused.
+    reason: str = ""
+    #: Supporting audit lines (e.g. ``result.effect_results`` verdicts).
+    detail: list[str] = Field(default_factory=list)
+    #: Operator-facing next actions proposed for this pause (from the halt
+    #: reason / compensation). Approval and resume are always among them.
+    proposed_options: list[str] = Field(default_factory=list)
+    #: The step index a resume continues from = the last verified checkpoint's
+    #: ``next_step_index`` (0 when nothing verified yet). The paused step and
+    #: everything after it re-run; verified steps before it do NOT.
+    resume_from_index: int = 0
+    resume_from_step_id: Optional[str] = None
+    #: The run's parameter bindings, so an approved resume re-binds identically.
+    params: dict[str, RuntimeParamScalar] = Field(default_factory=dict)
+    #: ``rejected`` is TERMINAL: an operator answered the attended pause with
+    #: ``reject``, asserting this run must not proceed. The file is retained
+    #: rather than cleared so the audit trail keeps WHY the run stopped and
+    #: what was rejected; :func:`~.approval.enforce_resume_authorization`
+    #: refuses any resume, and no approval overrides it.
+    status: Literal["pending", "approved", "continuing", "rejected"] = "pending"
+    #: Stale-pause expiry (RFC §5, P0-5): a resume attempted more than this many
+    #: seconds after ``created_at`` is REFUSED (:class:`~.approval.PauseExpired`)
+    #: -- the app state a stale checkpoint expects can no longer be trusted.
+    #: ``<= 0`` disables expiry.
+    stale_after_s: float = DEFAULT_STALE_AFTER_S
+    #: True when this pause is over a Phase-2 PROGRAM run (its resume point is a
+    #: :class:`~.program_checkpoint.ProgramCheckpoint`, not a linear step index).
+    program: bool = False
+    #: Exact interpreter cursor at an ACTION-state halt. Empty for non-action
+    #: program halts, which therefore cannot issue Continue/Skip authority.
+    program_frames: list[GraphFrame] = Field(default_factory=list)
+    #: Highest verified program-checkpoint sequence before this halted action.
+    program_checkpoint_seq: int = Field(default=0, ge=0)
+    #: Rolling visited-state digest captured at the halt, for audit continuity.
+    program_history_hash: str = ""
+    #: Exact PHI-free trace suffix since the last verified program checkpoint.
+    #: An attended completion copies this suffix into its new checkpoint.
+    program_history_delta: list[str] = Field(default_factory=list)
+    #: Exact transition decisions since the last verified program checkpoint.
+    program_transition_evidence_delta: list[ProgramTransitionEvidence] = Field(
+        default_factory=list
+    )
+    business_decision_evidence_delta: list[BusinessDecisionEvidence] = Field(
+        default_factory=list
+    )
+    program_exception_evidence_delta: list[ProgramExceptionEvidence] = Field(
+        default_factory=list
+    )
+    #: History digest at the preceding verified checkpoint boundary.
+    program_parent_history_hash: str = ""
+    #: Complete ordered history through the paused state.
+    program_history: list[str] = Field(default_factory=list)
+    #: Exact, PHI-free record that this step may already have actuated.  Resume
+    #: must not re-enter it automatically: a human-completed verification
+    #: checkpoint or a fresh explicit uncertain-retry authorization is needed.
+    delivery_uncertainty: Optional[ActionDeliveryUncertainty] = None
+    created_at: str = Field(default_factory=_now)
+
+
+#: Suffix appended to a durable artifact's filename when it is encrypted at
+#: rest, so a plaintext and an encrypted store never collide and a reader can
+#: tell them apart on disk.
+ENC_SUFFIX = ".enc"
+
+
+class CheckpointStore:
+    """Read/write the durable artifacts under a run directory.
+
+    Layout (plaintext)::
+
+        run_dir/
+          checkpoints/
+            _manifest.json            # RunManifest
+            step_0000_<id>.json       # RunCheckpoint (one per verified step)
+            step_0001_<id>.json
+          pending_escalation.json     # PendingEscalation (present iff paused)
+
+    Encryption-at-rest (opt-in, OFF by default): when a ``key`` passphrase is
+    supplied (explicitly or via ``OPENADAPT_BUNDLE_KEY``), every artifact is
+    sealed with AES-256-GCM (``openadapt_flow.crypto``) and written with a
+    trailing ``.enc`` (``step_0000_<id>.json.enc`` etc.). A durable checkpoint
+    carries the run's parameter bindings and verification evidence, so the same
+    at-rest control the compiled bundle gets applies here. Reads transparently
+    decrypt an ``.enc`` artifact (a wrong/missing key fails LOUDLY via
+    ``crypto.DecryptionError`` / ``crypto.MissingKeyError``). With no key the
+    behavior is byte-for-byte unchanged from before.
+    """
+
+    def __init__(self, run_dir: Path | str, *, key: Optional[str] = None) -> None:
+        self.run_dir = Path(run_dir)
+        self.checkpoints_dir = self.run_dir / CHECKPOINTS_DIRNAME
+        # None => plaintext (unchanged default). A non-empty passphrase turns on
+        # AEAD sealing for writes and decryption for reads.
+        self.key = key
+
+    # -- (de)serialization seam ---------------------------------------------
+
+    def _write_model(self, path: Path, model: BaseModel) -> Path:
+        """Serialize ``model`` to ``path`` (``.json``), or to ``path`` + ``.enc``
+        sealed with AES-256-GCM when a key is configured. Returns the path
+        actually written; removes the counterpart form if it lingers."""
+        data = model.model_dump_json(indent=2).encode("utf-8")
+        if self.key:
+            from openadapt_flow import crypto as _crypto
+
+            target = path.with_name(path.name + ENC_SUFFIX)
+            self._atomic_write_bytes(
+                target,
+                _crypto.encrypt_bytes(data, self.key, aad=_crypto.CHECKPOINT_AAD),
+            )
+            if path.exists():
+                path.unlink()
+            return target
+        self._atomic_write_bytes(path, data)
+        enc = path.with_name(path.name + ENC_SUFFIX)
+        if enc.exists():
+            enc.unlink()
+        return path
+
+    @staticmethod
+    def _fsync_directory(path: Path) -> None:
+        """Persist one directory-entry update where the platform supports it."""
+
+        try:
+            descriptor = os.open(path, os.O_RDONLY)
+        except OSError:
+            return
+        try:
+            os.fsync(descriptor)
+        except OSError:
+            pass
+        finally:
+            os.close(descriptor)
+
+    @classmethod
+    def _atomic_write_bytes(cls, path: Path, data: bytes) -> None:
+        """Write complete bytes through a same-directory atomic replace."""
+
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_name(
+            f".{path.name}.{os.getpid()}.{secrets.token_hex(8)}.tmp"
+        )
+        descriptor = os.open(
+            temporary,
+            os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+            0o600,
+        )
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(data)
+                handle.flush()
+                os.fsync(handle.fileno())
+            os.replace(temporary, path)
+            cls._fsync_directory(path.parent)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+    def _read_json(self, path: Path) -> Optional[dict]:
+        """Read a plaintext ``path`` or its ``.enc`` sibling (decrypting the
+        latter), returning the parsed dict or None when neither exists."""
+        enc = path.with_name(path.name + ENC_SUFFIX)
+        if enc.is_file():
+            from openadapt_flow import crypto as _crypto
+
+            decrypted = _crypto.decrypt_bytes(
+                enc.read_bytes(), self.key, aad=_crypto.CHECKPOINT_AAD
+            )
+            return json.loads(decrypted)  # type: ignore[no-any-return]
+        if path.is_file():
+            return json.loads(path.read_text())  # type: ignore[no-any-return]
+        return None
+
+    @staticmethod
+    def model_digest(model: Optional[BaseModel]) -> str:
+        """Return one stable digest for an exact logical durable artifact."""
+
+        payload = None if model is None else model.model_dump(mode="json")
+        encoded = json.dumps(
+            payload, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")
+        return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+    def continuation_state_digest(self) -> str:
+        """Hash the exact local state that can advance one durable run.
+
+        The digest excludes approval and pause lifecycle status. The external
+        monotonic authority binds those separately. All executable cursor,
+        capability, and attended-transition evidence remains included.
+        """
+
+        with self.state_lock():
+            return self._continuation_state_digest_unlocked()
+
+    def _continuation_state_digest_unlocked(self) -> str:
+        """Hash continuation state while the caller holds ``state_lock``."""
+
+        manifest = self.read_manifest()
+        pending = self.read_pending()
+        pending_payload = (
+            pending.model_dump(mode="json") if pending is not None else None
+        )
+        if pending_payload is not None:
+            pending_payload["status"] = "pending"
+        claim_path = self.run_dir / CLAIM_FILENAME
+        try:
+            claim = json.loads(claim_path.read_text())
+        except (OSError, ValueError):
+            claim = None
+
+        def file_digest(path: Path) -> Optional[str]:
+            if not path.is_file():
+                return None
+            return "sha256:" + hashlib.sha256(path.read_bytes()).hexdigest()
+
+        receipts_dir = self.run_dir / ".attended_program_receipts"
+        receipts = []
+        if receipts_dir.is_dir():
+            receipts = [
+                {"name": path.name, "sha256": file_digest(path)}
+                for path in sorted(receipts_dir.glob("*.json"))
+            ]
+        payload = {
+            "manifest": (
+                manifest.model_dump(mode="json") if manifest is not None else None
+            ),
+            "claim": claim,
+            "pending": pending_payload,
+            "linear": [
+                checkpoint.model_dump(mode="json") for checkpoint in self.checkpoints()
+            ],
+            "program": [
+                checkpoint.model_dump(mode="json")
+                for checkpoint in self.program_checkpoints()
+            ],
+            "attended_capability": file_digest(
+                self.run_dir / "attended_capability.json"
+            ),
+            "attended_capability_history": file_digest(
+                self.run_dir / "attended_capability_history.json"
+            ),
+            "attended_program_receipts": receipts,
+        }
+        encoded = json.dumps(
+            payload,
+            sort_keys=True,
+            separators=(",", ":"),
+            ensure_ascii=False,
+        ).encode("utf-8")
+        return "sha256:" + hashlib.sha256(encoded).hexdigest()
+
+    @contextmanager
+    def state_lock(self) -> Iterator[None]:
+        """Serialize short durable compare-and-set operations across processes."""
+
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+        path = self.run_dir / STATE_LOCK_FILENAME
+        descriptor = os.open(path, os.O_CREAT | os.O_RDWR, 0o600)
+        try:
+            if os.name == "nt":
+                import msvcrt
+
+                if os.fstat(descriptor).st_size == 0:
+                    os.write(descriptor, b"0")
+                    os.fsync(descriptor)
+                os.lseek(descriptor, 0, os.SEEK_SET)
+                msvcrt.locking(  # type: ignore[attr-defined]
+                    descriptor,
+                    msvcrt.LK_LOCK,  # type: ignore[attr-defined]
+                    1,
+                )
+            else:
+                import fcntl
+
+                fcntl.flock(descriptor, fcntl.LOCK_EX)
+            yield
+        finally:
+            try:
+                if os.name == "nt":
+                    import msvcrt
+
+                    os.lseek(descriptor, 0, os.SEEK_SET)
+                    msvcrt.locking(  # type: ignore[attr-defined]
+                        descriptor,
+                        msvcrt.LK_UNLCK,  # type: ignore[attr-defined]
+                        1,
+                    )
+                else:
+                    import fcntl
+
+                    fcntl.flock(descriptor, fcntl.LOCK_UN)
+            finally:
+                os.close(descriptor)
+
+    def has_durable_artifacts(self) -> bool:
+        """Return whether this directory already owns durable run state.
+
+        The normal replayer creates ``steps/`` before it initializes durability,
+        so ordinary presentation output is not a durable namespace claim.  Every
+        artifact that can authorize or reconstruct a continuation is included.
+        """
+
+        candidates = (
+            self.run_dir / CLAIM_FILENAME,
+            self.run_dir / STATE_LOCK_FILENAME,
+            self.run_dir / "report.json",
+            self.run_dir / "halt.json",
+            self.run_dir / "steps",
+            self._pending_path(),
+            self._approval_path(),
+            self.run_dir / "attended_capability.json",
+            self.run_dir / "attended_capability_history.json",
+            self.run_dir / ".attended_capability.key",
+            self.run_dir / "attended_decisions.json",
+            self.run_dir / ".attended_decisions.lock",
+            self.run_dir / ".attended_action.lease",
+            self.run_dir / ".attended_program_receipts",
+        )
+        for path in candidates:
+            if path.exists() or path.with_name(path.name + ENC_SUFFIX).exists():
+                return True
+        if not self.checkpoints_dir.is_dir():
+            return False
+        return any(
+            path.name == MANIFEST_FILENAME
+            or path.name == MANIFEST_FILENAME + ENC_SUFFIX
+            or path.name.startswith("step_")
+            or path.name.startswith(PROGRAM_CHECKPOINT_PREFIX)
+            for path in self.checkpoints_dir.iterdir()
+        )
+
+    # -- manifest ------------------------------------------------------------
+
+    def write_manifest(self, manifest: RunManifest) -> Path:
+        self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
+        return self._write_model(self.checkpoints_dir / MANIFEST_FILENAME, manifest)
+
+    def cas_manifest(self, expected_digest: str, manifest: RunManifest) -> Path:
+        """Replace the manifest only when its exact logical revision matches."""
+
+        from openadapt_flow.runtime.durable.approval import StateDiverged
+
+        with self.state_lock():
+            current = self.read_manifest()
+            if self.model_digest(current) != expected_digest:
+                raise StateDiverged("the durable manifest changed before commit")
+            return self.write_manifest(manifest)
+
+    def write_fresh_manifest(self, manifest: RunManifest) -> Path:
+        """Atomically claim a new durable namespace and write its manifest.
+
+        The claim uses ``O_EXCL``. Two fresh runs cannot both initialize the
+        same directory, even when they race between the caller's initial read
+        and the manifest write. The claim remains for the lifetime of the run.
+        """
+
+        from openadapt_flow.runtime.durable.authority import DurableAuthority
+
+        authority = DurableAuthority(self.run_dir, self)
+        authority.claim(manifest)
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+        claim = self.run_dir / CLAIM_FILENAME
+        claim_payload = json.dumps(
+            {
+                "schema_version": 2,
+                "namespace_id": manifest.namespace_id,
+                "run_id": manifest.run_id,
+                "canonical_run_dir": manifest.canonical_run_dir,
+            },
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+        try:
+            descriptor = os.open(
+                claim,
+                os.O_CREAT | os.O_EXCL | os.O_WRONLY,
+                0o600,
+            )
+        except FileExistsError as exc:
+            from openadapt_flow.runtime.durable.approval import StateDiverged
+
+            raise StateDiverged(
+                "the run directory is already owned by another durable run"
+            ) from exc
+        committed = False
+        owner_stat = None
+        try:
+            with os.fdopen(descriptor, "wb") as handle:
+                handle.write(claim_payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            owner_stat = os.lstat(claim)
+            self._fsync_directory(self.run_dir)
+            target = self.write_manifest(manifest)
+            self._validate_local_namespace(manifest)
+            authority.activate(manifest)
+            committed = True
+            self.validate_namespace(manifest)
+            return target
+        except Exception:
+            # This process owns the new claim. Release it when initialization
+            # fails before a manifest exists, so an operator can correct the
+            # storage error and retry safely.
+            if not committed and owner_stat is not None:
+                try:
+                    current_stat = os.lstat(claim)
+                    if (
+                        current_stat.st_dev == owner_stat.st_dev
+                        and current_stat.st_ino == owner_stat.st_ino
+                        and claim.read_bytes() == claim_payload
+                    ):
+                        claim.unlink()
+                        self._fsync_directory(self.run_dir)
+                except FileNotFoundError:
+                    pass
+            raise
+
+    def read_manifest(self) -> Optional[RunManifest]:
+        raw = self._read_json(self.checkpoints_dir / MANIFEST_FILENAME)
+        return RunManifest.model_validate(raw) if raw is not None else None
+
+    def validate_namespace(self, manifest: RunManifest) -> None:
+        """Require local identity and external monotonic authority to agree."""
+
+        from openadapt_flow.runtime.durable.authority import DurableAuthority
+
+        self._validate_local_namespace(manifest)
+        DurableAuthority(self.run_dir, self).validate(manifest)
+
+    def _validate_local_namespace(self, manifest: RunManifest) -> None:
+        """Require the local claim, manifest, and actual path to agree."""
+
+        claim_path = self.run_dir / CLAIM_FILENAME
+        try:
+            raw = json.loads(claim_path.read_text())
+        except (OSError, ValueError) as exc:
+            from openadapt_flow.runtime.durable.approval import StateDiverged
+
+            raise StateDiverged(
+                "the durable namespace claim is missing or invalid"
+            ) from exc
+        canonical = str(self.run_dir.resolve())
+        if (
+            raw.get("schema_version") != 2
+            or not manifest.namespace_id
+            or raw.get("namespace_id") != manifest.namespace_id
+            or raw.get("run_id") != manifest.run_id
+            or raw.get("canonical_run_dir") != manifest.canonical_run_dir
+            or manifest.canonical_run_dir != canonical
+        ):
+            from openadapt_flow.runtime.durable.approval import StateDiverged
+
+            raise StateDiverged(
+                "the durable namespace claim does not match this exact run path"
+            )
+
+    # -- checkpoints ---------------------------------------------------------
+
+    @staticmethod
+    def _safe(step_id: str) -> str:
+        return "".join(ch if ch.isalnum() or ch in "-_" else "_" for ch in step_id)
+
+    def _checkpoint_path(self, checkpoint: RunCheckpoint) -> Path:
+        name = f"step_{checkpoint.step_index:04d}_{self._safe(checkpoint.step_id)}.json"
+        return self.checkpoints_dir / name
+
+    def write_checkpoint(self, checkpoint: RunCheckpoint) -> Path:
+        """Persist a verified-step checkpoint.
+
+        Idempotent per step index: re-writing the same index overwrites the
+        file, never appends a duplicate -- so a resume that re-verifies a step
+        cannot produce two checkpoints for it.
+        """
+        from openadapt_flow.runtime.durable.approval import StateDiverged
+
+        self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
+        path = self._checkpoint_path(checkpoint)
+        with self.state_lock():
+            raw = self._read_json(path)
+            if raw is not None:
+                retained = RunCheckpoint.model_validate(raw)
+                if retained != checkpoint:
+                    raise StateDiverged(
+                        "a different linear checkpoint already owns this index"
+                    )
+                return path.with_name(path.name + ENC_SUFFIX) if self.key else path
+            return self._write_model(path, checkpoint)
+
+    def checkpoints(self) -> list[RunCheckpoint]:
+        """All checkpoints, ordered by step index (plaintext or encrypted)."""
+        if not self.checkpoints_dir.is_dir():
+            return []
+        out: list[RunCheckpoint] = []
+        seen: set[str] = set()
+        for path in sorted(self.checkpoints_dir.glob("step_*.json*")):
+            # A step's plaintext base name; the .enc sibling maps to the same
+            # base so _read_json picks whichever exists (no double-counting).
+            base = (
+                path.name[: -len(ENC_SUFFIX)]
+                if path.name.endswith(ENC_SUFFIX)
+                else path.name
+            )
+            if base in seen:
+                continue
+            seen.add(base)
+            raw = self._read_json(self.checkpoints_dir / base)
+            if raw is not None:
+                out.append(RunCheckpoint.model_validate(raw))
+        out.sort(key=lambda c: c.step_index)
+        return out
+
+    def last_checkpoint(self) -> Optional[RunCheckpoint]:
+        """The highest-index verified checkpoint, or None if nothing verified."""
+        checkpoints = self.checkpoints()
+        return checkpoints[-1] if checkpoints else None
+
+    # -- pending escalation --------------------------------------------------
+
+    def _pending_path(self) -> Path:
+        return self.run_dir / PENDING_FILENAME
+
+    def write_pending(self, pending: PendingEscalation) -> Path:
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+        return self._write_model(self._pending_path(), pending)
+
+    def cas_pending(
+        self,
+        expected_digest: str,
+        pending: Optional[PendingEscalation],
+    ) -> Optional[Path]:
+        """Replace or clear one exact pending state without a lost update."""
+
+        from openadapt_flow.runtime.durable.approval import StateDiverged
+
+        with self.state_lock():
+            current = self.read_pending()
+            if self.model_digest(current) != expected_digest:
+                raise StateDiverged("the durable pause changed before commit")
+            if pending is not None:
+                return self.write_pending(pending)
+            self._clear_pending_unlocked()
+            return None
+
+    def read_pending(self) -> Optional[PendingEscalation]:
+        raw = self._read_json(self._pending_path())
+        return PendingEscalation.model_validate(raw) if raw is not None else None
+
+    def clear_pending(self) -> None:
+        """Remove a resolved pending escalation (called when a resume starts)."""
+        with self.state_lock():
+            self._clear_pending_unlocked()
+
+    def _clear_pending_unlocked(self) -> None:
+        for path in (
+            self._pending_path(),
+            self._pending_path().with_name(PENDING_FILENAME + ENC_SUFFIX),
+        ):
+            if path.is_file():
+                path.unlink()
+        self._fsync_directory(self.run_dir)
+
+    # -- program (Phase-2 state-machine) checkpoints -------------------------
+
+    def _program_checkpoint_path(self, checkpoint: ProgramCheckpoint) -> Path:
+        name = f"{PROGRAM_CHECKPOINT_PREFIX}{checkpoint.seq:04d}.json"
+        return self.checkpoints_dir / name
+
+    def write_program_checkpoint(self, checkpoint: ProgramCheckpoint) -> Path:
+        """Persist a verified-state interpreter checkpoint (Phase-2 program run).
+
+        Idempotent per ``seq``: re-writing the same sequence overwrites the file
+        rather than appending a duplicate. Sealed at rest when a key is
+        configured (the interpreter frame carries run params + effect contracts,
+        so it gets the same AEAD control as the linear checkpoints)."""
+        from openadapt_flow.runtime.durable.approval import StateDiverged
+
+        self.checkpoints_dir.mkdir(parents=True, exist_ok=True)
+        path = self._program_checkpoint_path(checkpoint)
+        with self.state_lock():
+            raw = self._read_json(path)
+            if raw is not None:
+                retained = ProgramCheckpoint.model_validate(raw)
+                if retained != checkpoint:
+                    raise StateDiverged(
+                        "a different program checkpoint already owns this sequence"
+                    )
+                return path.with_name(path.name + ENC_SUFFIX) if self.key else path
+            return self._write_model(path, checkpoint)
+
+    def program_checkpoints(self) -> list[ProgramCheckpoint]:
+        """All Phase-2 interpreter checkpoints, ordered by ``seq`` (plaintext or
+        encrypted)."""
+        if not self.checkpoints_dir.is_dir():
+            return []
+        out: list[ProgramCheckpoint] = []
+        seen: set[str] = set()
+        for path in sorted(
+            self.checkpoints_dir.glob(f"{PROGRAM_CHECKPOINT_PREFIX}*.json*")
+        ):
+            base = (
+                path.name[: -len(ENC_SUFFIX)]
+                if path.name.endswith(ENC_SUFFIX)
+                else path.name
+            )
+            if base in seen:
+                continue
+            seen.add(base)
+            raw = self._read_json(self.checkpoints_dir / base)
+            if raw is not None:
+                out.append(ProgramCheckpoint.model_validate(raw))
+        out.sort(key=lambda c: c.seq)
+        return out
+
+    def last_program_checkpoint(self) -> Optional[ProgramCheckpoint]:
+        """The highest-``seq`` interpreter checkpoint (the resume point), or None
+        when the run is not a program run / nothing verified yet."""
+        checkpoints = self.program_checkpoints()
+        return checkpoints[-1] if checkpoints else None
+
+    def completed_effect_keys(self) -> list[str]:
+        """Every already-CONFIRMED effect's contract hash across the program run
+        (the union of each checkpoint's ``new_effect_keys``) -- the idempotency
+        ledger a resume consults so it never re-performs a confirmed write."""
+        keys: list[str] = []
+        for cp in self.program_checkpoints():
+            keys.extend(cp.new_effect_keys)
+        return keys
+
+    def completed_effects(self) -> list[dict]:
+        """Every already-CONFIRMED effect contract (resolved ``Effect`` dumps)
+        across the program run -- so a resume can re-verify (read-only) that the
+        already-confirmed writes still hold before restoring the interpreter."""
+        effects: list[dict] = []
+        for cp in self.program_checkpoints():
+            effects.extend(cp.new_effects)
+        return effects
+
+    def completed_effect_evidence(self) -> list[EffectVerificationEvidence]:
+        """Structured proof retained for already-confirmed program effects."""
+
+        evidence: list[EffectVerificationEvidence] = []
+        for checkpoint in self.program_checkpoints():
+            evidence.extend(checkpoint.new_effect_evidence)
+        return evidence
+
+    def completed_unverified_effect_keys(self) -> list[str]:
+        """Already-performed, explicitly approved effect hashes.
+
+        These prevent duplicate re-execution but are never treated as
+        independently CONFIRMED and are never passed to record revalidation.
+        """
+        keys: list[str] = []
+        for checkpoint in self.program_checkpoints():
+            keys.extend(checkpoint.new_unverified_effect_keys)
+        return keys
+
+    # -- approval (authenticated resume authorization; P0-5) -----------------
+
+    def _approval_path(self) -> Path:
+        return self.run_dir / APPROVAL_FILENAME
+
+    def write_approval(self, approval: ApprovalRecord) -> Path:
+        """Write one approval once, or accept an exact idempotent retry.
+
+        Approval authority is immutable for one active pause. Replacing it
+        outside the pending-state compare-and-set can make durable audit state
+        disagree with the authority already admitted by a live continuation.
+        """
+
+        from openadapt_flow.runtime.durable.approval import ApprovalRequired
+
+        self.run_dir.mkdir(parents=True, exist_ok=True)
+        with self.state_lock():
+            retained = self.read_approval()
+            if retained is not None:
+                if retained != approval:
+                    raise ApprovalRequired(
+                        "the durable run already retains a different approval"
+                    )
+                self._write_approval_history_unlocked(approval)
+                path = self._approval_path()
+                return path.with_name(path.name + ENC_SUFFIX) if self.key else path
+            target = self._write_approval_unlocked(approval)
+            self._write_approval_history_unlocked(approval)
+            return target
+
+    def _write_approval_unlocked(self, approval: ApprovalRecord) -> Path:
+        """Write an approval while the caller owns :meth:`state_lock`."""
+
+        return self._write_model(self._approval_path(), approval)
+
+    def _write_approval_history_unlocked(self, approval: ApprovalRecord) -> Path:
+        """Append one immutable per-pause authority record."""
+
+        binding = approval.pause_binding_sha256.removeprefix("sha256:")
+        if len(binding) != 64 or any(ch not in "0123456789abcdef" for ch in binding):
+            from openadapt_flow.runtime.durable.approval import ApprovalRequired
+
+            raise ApprovalRequired("approval has no valid exact pause binding")
+        path = self.run_dir / APPROVAL_HISTORY_DIRNAME / f"{binding}.json"
+        raw = self._read_json(path)
+        if raw is not None:
+            retained = ApprovalRecord.model_validate(raw)
+            if retained != approval:
+                from openadapt_flow.runtime.durable.approval import ApprovalRequired
+
+                raise ApprovalRequired(
+                    "the durable approval history already binds this pause differently"
+                )
+            return path.with_name(path.name + ENC_SUFFIX) if self.key else path
+        return self._write_model(path, approval)
+
+    def commit_approval_transition(
+        self,
+        *,
+        expected_pending: PendingEscalation,
+        approval: ApprovalRecord,
+        target_status: Literal["approved", "continuing"],
+    ) -> PendingEscalation:
+        """Atomically bind authority and advance one exact active pause."""
+
+        from openadapt_flow.runtime.durable.approval import (
+            ApprovalRequired,
+            StateDiverged,
+        )
+
+        expected = self.model_digest(expected_pending)
+        with self.state_lock():
+            current = self.read_pending()
+            if current is None or self.model_digest(current) != expected:
+                raise StateDiverged("the durable pause changed before approval commit")
+            retained = self.read_approval()
+            if retained is None:
+                self._write_approval_unlocked(approval)
+            elif retained != approval:
+                same_pause = (
+                    retained.pause_binding_sha256 == approval.pause_binding_sha256
+                )
+                if same_pause or current.status != "pending":
+                    raise ApprovalRequired(
+                        "the durable run retains a different continuation approval"
+                    )
+                # A later pause can carry a new exact authority. Preserve both
+                # records append-only, then move the active pointer only while
+                # the exact new pending pause is still held by this transaction.
+                self._write_approval_history_unlocked(retained)
+                self._write_approval_unlocked(approval)
+            self._write_approval_history_unlocked(approval)
+            if current.status == target_status:
+                return current
+            allowed = {
+                ("pending", "approved"),
+                ("approved", "continuing"),
+                ("pending", "continuing"),
+            }
+            if (current.status, target_status) not in allowed:
+                raise StateDiverged(
+                    "the durable pause cannot make this approval transition"
+                )
+            updated = current.model_copy(update={"status": target_status})
+            self.write_pending(updated)
+            return updated
+
+    def read_approval(self) -> Optional[ApprovalRecord]:
+        raw = self._read_json(self._approval_path())
+        return ApprovalRecord.model_validate(raw) if raw is not None else None
+
+    def clear_approval(self) -> None:
+        """Remove a consumed approval (called when a resume completes)."""
+        for path in (
+            self._approval_path(),
+            self._approval_path().with_name(APPROVAL_FILENAME + ENC_SUFFIX),
+        ):
+            if path.is_file():
+                path.unlink()

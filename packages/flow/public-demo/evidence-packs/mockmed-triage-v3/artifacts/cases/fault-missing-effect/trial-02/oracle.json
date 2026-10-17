@@ -1,0 +1,14 @@
+{
+  "observed": "rejected_write",
+  "oracle_kind": "rejected_write_detected",
+  "passed": true,
+  "read_boundary": "independent from browser pixels and RunReport",
+  "read_path": "GET /api/db",
+  "schema_version": "openadapt.public-demo-oracle/v1",
+  "silent_incorrect_success": false,
+  "snapshot": {
+    "records": [],
+    "rejected_writes": 1
+  },
+  "wrong_target_action": false
+}

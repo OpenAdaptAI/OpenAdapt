@@ -1,0 +1,529 @@
+# Limits and guarantees
+
+OpenAdapt compiles demonstrated GUI workflows into deterministic, locally
+executable programs. Healthy runs make no model calls. When an interface
+changes, OpenAdapt can re-resolve a target from retained evidence, ask an
+explicitly enabled model for a proposal, or halt for an operator.
+
+This page defines the boundary of those claims. It is written for people
+deciding whether a workflow is suitable for evaluation or deployment. It is
+not a compliance certification, a safety case for a specific workflow, an SLA,
+or evidence that OpenAdapt is appropriate for unsupervised clinical use.
+
+For the current evidence behind each capability claim, see
+[`VERIFICATION.md`](VERIFICATION.md). For the package-wide evidence map, see
+[`PRODUCT_STATUS.md`](PRODUCT_STATUS.md).
+
+## Product boundary
+
+| Capability | Evidence basis | What the claim means | What it does not mean |
+| --- | --- | --- | --- |
+| Browser record, compile, and replay | **Required CI and counted attach trials** | The launched-browser path runs end to end in automated and clean-environment tests. The attached-browser path reuses the same recorder and passes 3 real Chromium record-and-compile trials with secret exclusion and external-browser survival checks. A live resize case also compiles actions from two viewport and device-scale baselines. | It is not evidence for every site, browser extension, authentication flow, or long-running production workload. Attach mode requires a loopback CDP endpoint and one same-origin Chromium tab. An action that overlaps a resize is refused because its pre-action coordinate evidence is not exact. The custom Capture extension remains a prototype and is not a direct replay path. |
+| Healthy replay with zero model calls | **Required CI** | A run that resolves from retained evidence can execute without a language or vision model; the run report counts model calls. | Zero model calls does not mean zero network traffic. The target application, hosted control plane, remote backend, or effect verifier may still use the network. |
+| Deterministic re-resolution | **Required CI** | Bounded visual or structural drift can be resolved through non-model evidence and recorded as a reviewable change. | It is not general adaptation to a redesigned workflow, changed business rules, or missing evidence. |
+| AI-assisted repair | **Required CI contracts; deployment evidence required** | An explicitly enabled model can propose a target or interpret a changed screen. Existing runtime checks still apply. | A model proposal is not authorization, proof of identity, or proof that a business transaction succeeded. |
+| Human teaching and resume | **Required CI contracts; field evidence required** | A halt can produce evidence for an operator correction, guarded promotion, and durable resume. | Field recovery time, broad authoring UX, enterprise identity integration, and non-repudiation are not established. |
+| Windows UI Automation | **Counted task acceptance** | The native UIA backend completed 3/3 exact WinForms effects and 3/3 refusals for both stale and ambiguous targets. | Acceptance is bound to the tested workflow and Windows environment; each application retains its own identity, effect, and version qualification. |
+| Native macOS automation | **Counted task acceptance** | The AX/AppKit backend completed 3/3 exact TextEdit file effects and refused an ambiguous two-window target; structural record/locate/refuse behavior is covered separately. Known AX-only ` - Google Chrome` and ` - Google Chrome for Testing` window-title suffixes are accepted only for the corresponding exact CoreGraphics application owner; PID, unique-candidate, focused/main, and topmost-window checks remain mandatory. | Acceptance is bound to the tested host and application. Accessibility exposure and supported native actions vary by application. |
+| Native Linux automation | **Counted task acceptance plus required CI** | Required current-main CI exercises AT-SPI against GTK3 with 3 exact effects, 3 ambiguity refusals, and 3 stale-target refusals. | The built-in path is X11. Wayland needs an operator-approved portal session, and each application retains its own qualification. |
+| RDP automation | **Counted task acceptance plus required CI** | A real-network Aardwolf/Windows batch passed 3/3 with an independent guest-tools oracle; a separate real-FreeRDP batch covers record, compile, governed replay, and drift refusal. | The two records do not by themselves cover arbitrary applications, WAN conditions, display policy, or Citrix ICA/HDX. |
+| Citrix / VDI pixel-window automation | **Required CI plus counted no-DOM stand-in** | The dedicated exact-Workspace-window backend, readiness gate, governed run, and durable resume passed 3 healthy effect-confirmed no-DOM trials plus 3 drift safe-halts. | The retained record explicitly has `ica_hdx_accepted=false`; live ICA/HDX acceptance stays bound to the exact deployment instead of being inferred from a stand-in or RDP. |
+| Managed browser execution | **Separate product target and workflow admissions** | The hosted lane admits attested browser bundles; production mode requires a configured real runner and refuses silent mock fallback. | It does not extend the supported claim to Windows, RDP, Citrix, PHI-bearing shared-cloud execution, an SLA, or a regulated certification. |
+| On-premises / customer-managed deployment | **Release and clean-machine evidence; site acceptance required** | Deployment configuration, local run gates, egress checks, and audit primitives are supplied. | OpenAdapt does not configure the customer's firewall, KMS, storage, identity provider, backups, retention, incident response, or legal compliance program. |
+| Compose separately recorded bundles | **Required CI** | `openadapt-flow compose` writes a parent sequencer from named compiled children plus a handoff contract. Unit tests cover authoring validation, fail-closed missing-handoff HALT, and a two-child fixture whose second child is a local mock backend. | It does not merge two recordings into one backend, retarget a bundle onto a surface it was not recorded on, or introduce a process contract. Live Citrix, Production admission, and cross-application field campaigns are not claimed here. |
+
+These evidence entries do not assign a product lifecycle state or accept risk.
+An actively admitted release can still produce an unsafe workflow if the
+demonstration, inferred checks, policy, or deployment configuration is
+inadequate.
+
+## Composing separately recorded bundles
+
+`compose` sequences already-compiled children through the governed `run`
+path. A child starts only after every predecessor ends `VERIFIED`, or a halt
+class named with `--allow-halt`. A handoff copies an effect-bound parameter
+from a confirmed receipt. Missing evidence HALTs. Subflows and worklists
+stay inside each child, on that child's surface.
+
+## What "deterministic" means
+
+The compiled program fixes the action sequence, parameters, target evidence,
+postconditions, and selected policy. The runtime applies a defined resolution
+ladder to the live observations. It does not ask a general-purpose agent to
+re-plan the task on every healthy run.
+
+Deterministic does **not** mean:
+
+- the application, OCR, network, or remote desktop will return identical
+  observations;
+- the same screen pixels prove the same database state;
+- every run will take the same time or choose the same fallback rung;
+- an action is idempotent or reversible; or
+- a successful report proves the user's business intent was satisfied.
+
+A "healthy" run is one that stays within the evidence and checks encoded in
+the bundle. It is not a claim that the surrounding application is healthy.
+
+Governed execution recomputes workflow semantics, snapshots verified sealed
+assets, binds parameters and worklists, detects later plaintext asset
+replacement at every consumer, and persists the same authorization across
+durable resume.
+
+## Repair has four distinct outcomes
+
+"Self-healing" is shorthand and should not be read as unrestricted autonomy.
+OpenAdapt distinguishes:
+
+1. **Automatic deterministic re-resolution.** A non-model rung finds a target
+   from retained structural, template, OCR, landmark, or geometric evidence.
+2. **AI-assisted proposal.** An explicitly enabled model proposes a target or
+   state interpretation. Identity, risk, postcondition, effect, and policy
+   checks are not intentionally bypassed, but those checks have the limits
+   described below.
+3. **Human teaching.** An operator demonstrates or approves a correction after
+   a halt. Promotion can be refused when the correction is underdetermined or
+   weakens a guarded property.
+4. **Unsupported drift.** Evidence is missing, ambiguous, or contradicted. The
+   expected outcome is a halt and report, not a guessed continuation.
+
+Target repair does not infer changed business intent. Adding a required step,
+removing a business state, changing a transaction's meaning, or introducing a
+new authorization rule requires a new or reviewed program.
+
+## The main incorrect-success risks
+
+OpenAdapt is designed to halt on many ambiguous conditions. The following
+classes can still produce a green run unless the workflow and deployment add
+the named control.
+
+### 1. Identity protection applies only where it is armed
+
+The compiler records whether each applicable action has usable identity
+evidence. Reports expose identity-armed coverage and list unarmed steps with a
+reason. An **unarmed** click has no pre-action identity check. Reporting the gap
+does not close it.
+
+For an armed step:
+
+- structured browser text can distinguish characters that OCR may collapse;
+- a definitive mismatch halts before the action;
+- OCR can be unable to distinguish identifiers such as `O` from `0` or `l`
+  from `1` on a pixel-only display;
+- the pixel comparison tier rejects a wrong record on a pixel-only display by
+  comparing the recorded vs live identifier crop (the pixels keep the `O`/`0`
+  and `l`/`1` distinction OCR collapses). It has three outcomes — mismatch
+  (localized glyph change → halt), abstain (render drift or uncertainty → fall
+  through), and, when enabled, verify (match). The positive **verify** path is
+  jitter-robust (the crops are sub-pixel aligned before comparison, so
+  cross-render jitter of the same value no longer looks like a glyph change) and
+  proven zero-false-accept on a synthetic cross-render battery, but its default
+  is **off** (`runtime.identity.PIXEL_VERIFY_ENABLED`, see below).
+- the recorded identifier crop shows the demonstration's screen. When the
+  identity band contains a workflow parameter and the run's value differs from
+  the demonstrated one (for example, a first name typed earlier in the run),
+  the pixel tier doesn't compare the crops, because the right record renders
+  different pixels too. The OCR parameter check decides instead: it puts the
+  run's value into the recorded band and requires the whole band to match. A
+  band that rests on a glyph-confusable identifier keeps the pixel comparison.
+
+Permissive `replay` may proceed on an unreadable reversible target and reports
+that condition. Governed `run` requires an affirmative live verdict for every
+identity-required admitted step; mismatch, unreadable, or abstain halts before
+action, and program exception edges cannot convert that safety halt into
+success. Unarmed steps remain outside this guarantee and may be refused by the
+selected policy.
+
+No identity tier can distinguish two entities whose available evidence is
+identical. Structured text avoids OCR glyph collapse, but it is only as unique
+as the identifiers exposed by the application. A deployment that requires a
+specific internal record must include that discriminator or verify it through
+the system of record.
+
+That last distinction makes correct risk classification important. Risk is
+inferred from action text and metadata and can be overridden, but inference is
+heuristic. A generic "OK" or an Enter key that submits a form can be
+under-classified. A benign label containing a write-shaped word can be
+over-classified and halt unnecessarily.
+
+Icon-only controls get two compile-time rules. A single OCR glyph (a
+floppy-disk Save icon reads as "日") is not a label, so the click needs
+qualification review instead of passing as a labelled non-write. And when a
+demonstration entered data and no later step declares a write, every icon-only
+click after the last entry is presumed to commit that record: it compiles
+irreversible, and qualification requires its record check. An icon-only click
+that only navigates after data entry is therefore over-classified until an
+operator reclassifies it.
+
+A consequential click must be tied to a record before Flow delivers it. Inside
+a table row, the row is that record. An icon-only Save that floats beside a
+form (openIMIS's claim Save has no text, accessible name, or tooltip) has no
+row, so the browser refuses it. When the browser recording shows how that
+control relates to the fields the demonstration typed into, the compiler
+records a **submit binding** (`Step.submit_binding`,
+[`submit_binding.py`](../openadapt_flow/submit_binding.py)):
+
+- form ownership: the control and the fields share one HTML form, or the
+  fields share a form and the control sits outside every form, or nothing has
+  a form;
+- submit role: the form's submit button, another button of that form, or a
+  button outside any form, plus the control's tag, type, role, and a digest of
+  its icon geometry;
+- position: the control follows every filled field in page order, sits in the
+  same quadrant of their bounding box, and keeps the same tag path from the
+  form or shared container down to it;
+- uniqueness: it's the only rendered, unlabeled control after those fields.
+  Controls in table rows and the adornments inside one field's own widget
+  don't count.
+
+A run recomputes the same observation for the element at the resolved point,
+against the fields that run typed into, and clicks only when every recorded
+value matches. The browser leases that observation until delivery, so a
+second icon, a replaced field, or a moved control in between refuses the
+click. The binding never relaxes another check: the resolution floor, the
+identity band, and the delivery lease still apply.
+
+The compiler doesn't bind the click when the demonstration was ambiguous, for
+example when two unlabeled controls follow the filled fields, the control
+belongs to another form, or the fields span two forms. It records why in
+`Step.submit_binding_unbound_reason`, lint reports it as an error, and a run
+refuses that click before any input. A pixel-only recording (RDP, Citrix)
+carries no DOM structure, so it gets no binding, and a backend that can't read
+the page structure refuses a bound click.
+
+The binding ties the click to the entry the run made. It doesn't check that
+the entry is right: the values typed come from the run's parameters, and only
+a record check can confirm what the application saved.
+
+For consequential or entity-sensitive workflows, require a policy that refuses
+unarmed actions, review the inferred risk and tags, and test identity against
+real near-match and same-name records. Pure-pixel substrates should expect more
+safe halts because OCR ambiguity cannot always be resolved. The adversarial
+identity evidence and measured over-halt tradeoff are documented in
+[`IDENTITY_EVIDENCE.md`](validation/IDENTITY_EVIDENCE.md) and the generated claim registry
+in [`VERIFICATION.md`](VERIFICATION.md).
+
+**Pixel-verify enable bar.** The pixel tier's positive **verify** path is built
+and validated but ships **disabled by default** (`PIXEL_VERIFY_ENABLED = False`).
+On the self-contained jitter battery (`benchmark/pixel_identity_aligned`:
+rendered MRNs plus the committed real-browser crops, re-rendered under sub-pixel
+jitter, JPEG q≤10, 105–150% DPI, and theme inversion) the sub-pixel-aligned
+whole-crop distance separates same-record matching renders (worst window
+0.0615, p95 0.0547) from every different record — glyph-collapse siblings and
+wrong MRNs alike (closest 0.0705) — with the verify gate (0.040) below both,
+giving **zero false-accept across the different-record trials**. The margin
+between the worst same-record window and the closest different record is
+**0.0090**, which is narrow; the numbers are `distance_stats` in
+[`benchmark/pixel_identity_aligned/evidence.json`](../benchmark/pixel_identity_aligned/evidence.json). That evidence is
+**synthetic**; a pixel false-accept is a silent wrong record, the worst possible
+outcome, and no real RDP/Citrix/HDX identifier corpus has been captured yet
+(so the shipped pixel-verify default remains off). The exact bar to flip the default on: reproduce
+`false_accept == 0` with a comparable gap on a **real captured remote-display
+identifier corpus**. Until then, verify is reachable only when a caller opts in
+per risk class (`verify_pixel_identity(..., enable_verify=True)`); mismatch and
+abstain remain always-on and can only ever add a halt.
+
+### 2. A postcondition verifies only what it observes
+
+The compiler mines visual and, where available, structural changes from one
+demonstration. A step can have no meaningful observable change, or the mined
+assertion can describe incidental screen state rather than the intended
+outcome. In those cases replay can accept a no-op or halt on harmless change.
+
+Common examples include:
+
+- an action whose before and after screens are effectively identical;
+- a native control whose popup exists outside the captured browser surface;
+- a stable-looking tenant-specific row, menu, counter, or banner frozen into
+  the demonstration;
+- a typed value that the application reformats or masks; and
+- a target that moved after an earlier action but before a later check.
+
+Typed-input read-back and structural postconditions reduce this risk but remain
+same-surface observations. A visible value does not prove it was durably stored.
+Masked input can prove that the field changed, not what secret value it now
+contains.
+
+`lint` reports vacuous postconditions and other coverage gaps. `certify`
+enforces the selected policy. Neither command understands the application's
+business semantics, and the permissive `replay` command does not require
+certification. Runnable is not the same as certified for a particular policy.
+
+### 3. The screen is not the system of record
+
+A success banner can coexist with a rejected, duplicated, partial, stale, or
+later-rolled-back write. Visual verification and a screen-reading model cannot
+detect a backend fault when the interface itself displays success.
+
+OpenAdapt can verify a declared effect against a configured REST, FHIR, or
+document-store verifier. When no such structured verifier is configured, a
+GUI-only recording gets an auto-derived on-screen **read-back** oracle (below);
+absent even that, the governed `run` gate admits a GUI write only after explicit
+`--approve-unverified-writes` and only when the step has a non-vacuous screen
+postcondition. The resulting authorization is bound to the exact sealed bundle,
+effective runtime inputs, step, and effect-contract hashes. Replay records
+`effect_approved_unverified=true`, never `effect_verified=true`; approval is
+not independent confirmation. Direct API writes still require a verifier and
+refuse this fallback.
+
+The remaining boundary is material:
+
+- the compiler does not infer a structured system-of-record binding (which
+  API / DB / record / idempotency key) from a demonstration that never observed
+  one; it auto-derives only the on-screen read-back below, or a flagged
+  placeholder that halts;
+- the operator must author and bind a structured effect to the correct record
+  and run parameters;
+- the verifier's permissions, query, freshness window, and independence must
+  be validated in the real deployment;
+- operator approval is risk acceptance, not independent confirmation; and
+- a screen read-back is useful but is not independent effect verification.
+
+A bounded fault-model study demonstrates why this matters: the screen-only
+oracle silently accepted several transactional fault classes that the configured
+effect path refused. See
+[`FAULT_MODEL.md`](../benchmark/fault_model/FAULT_MODEL.md) and
+[`EFFECT_VERIFIER.md`](design/EFFECT_VERIFIER.md). This is evidence for the
+mechanism, not proof that a customer-specific effect binding is correct.
+
+#### On-screen read-back (the no-API default oracle) is a consistency signal, not transactional proof
+
+For a GUI-only recording (Citrix / legacy EMR with no reachable read API), the
+compiler auto-derives an on-screen read-back oracle from what the demonstration
+already captured — the region where the saved value rendered and, when the
+recording re-opened the record, the re-navigation to it. Two strengths, one
+gate, measured in
+[`benchmark/effect_readback/`](../benchmark/effect_readback/RESULTS.md):
+
+- **Different-path read-back is the default.** Before re-reading, it re-opens
+  the record by a path independent of the write flow, forcing a real fetch;
+  this defeats the "the form still shows what I typed but nothing persisted"
+  phantom/optimistic class. Its measured false-CONFIRM rate is 0, so it is
+  auto-wired with no connector and HALTs on any non-CONFIRMED verdict.
+- **Same-surface read-back is NOT a default.** Re-reading the write's own
+  surface cannot see a phantom/optimistic/partial save (the note is still
+  painted there); its measured false-CONFIRM rate is > 0. It is wired only when
+  an operator explicitly sets `effects.kind: onscreen`, and is a halt-inducing
+  consistency signal, never an automatic pass.
+
+Even a different-path read-back is **same-application**, not an independent
+system of record. A read-back CONFIRMED means "the expected value is on screen
+when the record is re-opened" — a consistency signal, NOT full transactional
+proof. It cannot catch a partial save the app re-renders optimistically, a
+duplicate / double-submit, a lost update by a concurrent writer, or a value
+served from a stale cache/BFF (the `duplicate` and `stale` blind spots in the
+study CONFIRM because the value is present while a separate structural fault is
+not). Where a read API exists, the **structured system-of-record oracle**
+(`record_written` count, `forbid_collateral_loss`, idempotency key) remains the
+transactional guarantee. The ultimate safety net is never the read-back: it is
+the **identity gate** (right record) plus **halt-on-ambiguity** (never guess a
+target), with read-back as additive assurance on top.
+
+**Without a read that is independent of the acting session, the run cannot
+be `VERIFIED`.** That read is either a system-of-record read (REST, FHIR, SQL,
+file; tier 1) or the application's record page read in a separate signed-in
+browser session (`ui_readback`; tier 2). The second goes through the same
+application, so it is not a system-of-record read and has its own limits
+([`EFFECT_KIT.md`](EFFECT_KIT.md#separate-session-ui-read-back-ui_readback)).
+A pixel-only Citrix or RDP session with neither is that case. The on-screen
+oracle can still halt when the region is unreadable or wrong. If a
+consequential write may already have been delivered, the production
+`transaction_outcome` is `RECONCILIATION_REQUIRED`, never `VERIFIED`.
+Halt-on-doubt is unchanged. This is not live Citrix Production evidence; a
+live ICA/HDX session is a deployment-specific qualification. Wire the
+independent read before paying a sprint for a `VERIFIED` outcome.
+
+### 4. Model assistance can convert a halt into a false pass
+
+Model use is off by default. When configured, a grounding model can propose a
+target and a state verifier can re-evaluate some failed visual postconditions.
+Only an affirmative answer is eligible to rescue the supported state checks;
+uncertainty or service failure keeps the halt.
+
+The model still reads the screen, can be wrong, and cannot prove a hidden
+transactional effect. A model-assisted run is counted in the report and no
+longer qualifies as a zero-model run. Dense lists, small identifiers, unusual
+rendering, and in-progress states are known hard cases. Treat the model as an
+availability aid, not a safety authority, and keep consequential actions behind
+identity, effect, and policy controls that do not depend on the model's answer.
+
+#### Configuring your own grounding model (bring your own)
+
+The grounding model is operator-selectable. The `runtime.grounding_model`
+section of a deployment config chooses which model backs the fallback rung:
+`provider: anthropic` (the built-in Anthropic API path) or
+`provider: openai_compatible` (any `{base_url}/chat/completions` vision
+endpoint — OpenRouter, Azure OpenAI, a Bedrock/OpenAI proxy, or a self-hosted
+vLLM / Ollama / LM Studio). The API key is supplied by reference: `api_key_env`
+names an environment variable; the key is never stored in the config.
+
+Two boundaries are load-bearing:
+
+- **Configuring a model does not enable egress.** `runtime.grounding_model`
+  only names *which* model would be used. Whether any screenshot leaves the box
+  is still governed entirely by `runtime.allow_model_grounding`, which defaults
+  to off. An enabled model with egress off stays dormant and the run is fully
+  local. The hosted managed runner refuses any profile that enables
+  model-grounding egress at all.
+- **PHI mode fails closed on egress.** When PHI mode is active
+  (`OPENADAPT_FLOW_PHI_MODE`, or `OPENADAPT_FLOW_SCRUB=on`) a configured
+  grounding endpoint is refused unless its host is on the admin-attested
+  `runtime.phi_grounding_allowlist`; the run then stays fully local rather than
+  egressing. Known public aggregators (`openrouter.ai`, `api.openai.com`,
+  `api.anthropic.com`, `generativelanguage.googleapis.com`) stay blocked under
+  PHI even when allowlisted, unless the operator sets
+  `runtime.phi_egress_attested: true` to attest that a Business Associate
+  Agreement (or equivalent) covers the destination. Ambiguity — an
+  unresolvable host, an empty allowlist — always resolves to fully local.
+  Non-PHI runs are unaffected: any configured endpoint works under the normal
+  egress opt-in.
+
+None of this changes the safety authority. A configured model, like the built-in
+one, only *proposes* a point; the deterministic identity band and risk gate
+still dispose before any click, and irreversible steps refuse a grounder
+resolution and halt.
+
+### 5. A halt is not a rollback
+
+A run may halt after earlier steps have already changed the application or
+system of record. OpenAdapt does not provide a general transaction spanning an
+arbitrary GUI workflow. Compensation exists only where a deployment has
+explicitly implemented and verified it.
+
+Before resuming or teaching a halted consequential workflow, reconcile prior
+effects, confirm the current entity and application state, and ensure the bundle
+and approval still match the paused run. A report that accurately names the
+halt does not prove earlier actions were harmless.
+
+## Interaction and environment limits
+
+Qualification is strongest when the demonstration retains exact observations
+and exposes independently verifiable outcomes.
+
+| Condition | Current boundary |
+| --- | --- |
+| Zoom, DPI, font, layout, viewport, or monitor changes | Browser attach recording accepts a stable viewport or device-scale change between actions, starts a new exact geometry epoch, and refuses an action that overlaps the transition. Native offline conversion can normalize a stable source-window move, resize, monitor change, or scale change into one fixed output viewport when every timeline row carries valid mapping metadata. It refuses a malformed timeline or a changed output viewport. RDP and Citrix live backends can rebaseline geometry between actions and refuse a change during the exact-frame lease. Other rescale or reflow behavior remains workflow-specific. |
+| Native select menus, file choosers, permission prompts, and secure desktops | OS or browser chrome may not appear in the captured surface and may be unrecordable or undrivable. Prefer an application-level or keyboard/API path. |
+| New tabs and windows | Opening a tab can be observed structurally where the backend supports it; interaction inside additional windows and multi-window coordination are not a general supported path. |
+| Drag and drop or gesture-heavy controls | Not a general supported primitive. Use a structured/API alternative or validate a purpose-built workflow. |
+| Dates, locale-sensitive fields, and auto-formatting | The same keystrokes can produce different values across platforms or locales. Require an explicit read-back or system effect and test the deployment locale. |
+| Slow or asynchronous applications | A state that outlasts configured waits can halt. Increasing a timeout does not establish correctness. |
+| Transparent overlays or intercepted input | The action can be swallowed and detected only by a later check. If that check is vacuous, the no-op can be silent. |
+| Parameterized entity selection | Replacing typed text does not automatically make recorded target evidence generalize to every entity. The resolved row still needs identity evidence for the runtime value. |
+| Tenant, version, and dataset transfer | A demonstration can freeze tenant-specific state. Re-recording, recompilation, or reviewed program changes may be required. |
+
+## Privacy, PHI, and sanitized artifacts
+
+Compilation does **not** make a recording or bundle PHI-free. Recordings can
+contain full screenshots, typed values, DOM or accessibility text, and
+parameters. Bundles can retain target crops, labels, postconditions, identity
+evidence, and example values. Machine-readable run reports and live frames can
+contain data observed during execution.
+
+OpenAdapt's outbound artifact path works on a copy:
+
+1. transform supported text and still images under a named scrubber policy;
+2. preserve and validate the recording or bundle's operational structure;
+3. account for every file and refuse unsupported or unknown content;
+4. rescan the derivative and expose remaining findings;
+5. review it locally, including rendered images and text, before approval; and
+6. freeze the exact approved archive and bind approval to its hash.
+
+Changing the derivative invalidates approval. A changed executable bundle must
+also pass separate runtime-semantics validation; privacy approval is not
+executability proof. The safer authoring path is to review and approve a
+sanitized recording derivative, then compile and validate the resulting bundle.
+
+Scrubbing means **verified coverage under the configured detector, policy, and
+review**, not a mathematical guarantee that no PHI remains. OCR and named-entity
+recognition can miss unusual text, handwriting, images, or domain-specific
+identifiers. Human review materially improves confidence but is still fallible;
+regulated deployments must define reviewer identity, separation of duties,
+acceptable residual risk, and incident handling.
+
+A clean design-time derivative does not sanitize live execution. A runtime can
+reintroduce PHI through the target application, parameters, screenshots,
+postconditions, model requests, effect queries, logs, and reports. Keep those
+observations inside the declared execution boundary and apply storage,
+retention, access, and egress controls there.
+
+See [`SANITIZED_ARTIFACTS.md`](SANITIZED_ARTIFACTS.md) for the review and
+exact-hash workflow, [`PRIVACY.md`](PRIVACY.md) for the field-level data map,
+and [`ENTERPRISE_ARCHITECTURE.md`](ENTERPRISE_ARCHITECTURE.md) for component
+boundaries.
+
+## Deployment responsibilities
+
+### Managed browser lane
+
+Only upload the exact artifact admitted by the destination's policy. An
+approved sanitized derivative does not authorize PHI-bearing runtime data in a
+shared managed runner. Do not use the managed lane for PHI unless the written
+service scope, deployment architecture, retention controls, and applicable
+agreements explicitly cover the complete runtime data flow.
+
+### Customer-managed and on-premises lanes
+
+Running in a customer boundary changes where data and execution live; it does
+not improve target resolution or verification by itself. The operator remains
+responsible for network allowlists, firewall enforcement, secrets and KMS,
+host hardening, storage encryption, backups, retention, access control,
+monitoring, effect-verifier integration, update validation, and disaster
+recovery.
+
+The repository supplies integrity manifests, optional bundle encryption,
+destination policy, local egress checks, and audit primitives. A content digest
+proves byte identity, not publisher identity. A local hash chain is tamper
+evident against ordinary changes, not tamper proof against an administrator who
+can rewrite it. Local approvals record provenance but are not enterprise-IdP
+signatures or non-repudiation.
+
+OpenAdapt does not claim that this repository alone satisfies HIPAA, PHIPA,
+PIPEDA, or another legal regime. It does not itself provide a BAA or independent
+security certification. See [`ON_PREM.md`](ON_PREM.md) and
+[`COMPLIANCE.md`](../deploy/on-prem/COMPLIANCE.md).
+
+## Reading the benchmark evidence
+
+The reproducible MockMed comparison shows that, on one simple browser task,
+compiled replay completed the tested runs with lower latency and no model calls
+on healthy runs than the tested computer-use agent. Both arms passed the same
+external success check in that sample. The result supports the cost-and-latency
+mechanism; it does not establish a production reliability advantage, long-term
+maintenance cost, or safety on a real clinical system. Full task, sample,
+oracle, model, pricing assumptions, and artifacts are in
+[`benchmark/BENCHMARK.md`](../benchmark/BENCHMARK.md).
+
+The OpenEMR public-demo comparison is a bounded field check against fake data
+on a shared instance that resets. It is not exactly reproducible and is not
+evidence of clinical production safety, real-patient operation, Citrix support,
+or superior reliability. See
+[`benchmark/openemr/BENCHMARK.md`](../benchmark/openemr/BENCHMARK.md).
+
+When evaluating either result, include silent incorrect success and over-halt,
+not only task success. Also account for demonstration and review time,
+maintenance interventions, recovery time, effect-verifier integration, and the
+cost of safe halts.
+
+## Minimum deployment review
+
+Before unattended execution of a consequential workflow, require evidence that:
+
+- the exact bundle passes strict lint and the intended certification policy;
+- every entity-sensitive and consequential action is identity-armed and tested
+  against realistic near matches;
+- risk classifications and tags have been reviewed by someone who understands
+  the target application;
+- every write declares the intended effect and a correctly scoped independent
+  verifier is configured, or the lack of verification is explicitly accepted;
+- every step has a meaningful postcondition and known same-surface limitations
+  are accepted;
+- the fail-closed `run --dry-run` gate admits the exact sealed bundle and
+  compiler version intended for deployment;
+- secrets, storage, screenshots, reports, checkpoints, logs, and retention are
+  controlled inside the execution boundary;
+- model egress is disabled or explicitly allowlisted and tested; and
+- halt, reconciliation, approval, resume, rollback, and incident procedures
+  have been exercised in the real environment.
+
+Passing this review narrows known risks. It does not turn an application-level
+automation into an independently certified transaction system.

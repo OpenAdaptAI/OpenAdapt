@@ -1,0 +1,222 @@
+{
+  "demonstration": {
+    "binding": {
+      "control_role": null,
+      "control_tag": "button",
+      "control_type": "button",
+      "field_step_ids": [],
+      "filled_fields": 3,
+      "fixed_position": true,
+      "form_owner": "fields_only",
+      "horizontal": "right",
+      "icon_sha256": "dab0eb9ac87f030759e7293e597154400ec1829b5b1ef0f751170050d8238f10",
+      "order": "after",
+      "schema_version": 1,
+      "scope_kind": "container",
+      "scope_path": "div>div>span>button",
+      "submit_role": "detached",
+      "unlabeled_controls_after_fields": 1,
+      "vertical": "below"
+    },
+    "fields": {
+      "still_on_page": 3,
+      "typed_into": 5
+    },
+    "observation": {
+      "candidates": 1,
+      "counted": true,
+      "field_local": false,
+      "fields": 3,
+      "fields_in_scope": true,
+      "fixed": true,
+      "form_owner": "fields_only",
+      "horizontal": "right",
+      "icon_sha256": "dab0eb9ac87f030759e7293e597154400ec1829b5b1ef0f751170050d8238f10",
+      "in_row": false,
+      "labelled": false,
+      "order": "after",
+      "scope_kind": "container",
+      "scope_path": "div>div>span>button",
+      "submit_role": "detached",
+      "tag": "button",
+      "type": "button",
+      "v": 1,
+      "vertical": "below"
+    },
+    "save_point": [
+      1244,
+      752
+    ],
+    "unbound_reason": null
+  },
+  "engine_head": "9726decc52adc16daff3a33b36e7479b5668ff57",
+  "never_clicked": true,
+  "nothing_saved": true,
+  "run": {
+    "fields": {
+      "still_on_page": 3,
+      "typed_into": 5
+    },
+    "other_icon_buttons": [
+      {
+        "passed": false,
+        "point": [
+          1056,
+          63
+        ],
+        "refusal": "the unlabeled control at the resolved point is not bound to the form this run filled: the control has an accessible name, so its name identifies it"
+      },
+      {
+        "passed": false,
+        "point": [
+          1136,
+          63
+        ],
+        "refusal": "the unlabeled control at the resolved point is not bound to the form this run filled: the control has an accessible name, so its name identifies it"
+      },
+      {
+        "passed": false,
+        "point": [
+          1244,
+          40
+        ],
+        "refusal": "the unlabeled control at the resolved point is not bound to the form this run filled: the control does not follow the filled fields (it is before them in page order)"
+      },
+      {
+        "passed": false,
+        "point": [
+          285,
+          10
+        ],
+        "refusal": "the unlabeled control at the resolved point is not bound to the form this run filled: the control has an accessible name, so its name identifies it"
+      },
+      {
+        "passed": false,
+        "point": [
+          871,
+          10
+        ],
+        "refusal": "no actionable control at the resolved point to verify the submit binding against"
+      },
+      {
+        "passed": false,
+        "point": [
+          678,
+          78
+        ],
+        "refusal": "no actionable control at the resolved point to verify the submit binding against"
+      },
+      {
+        "passed": false,
+        "point": [
+          967,
+          78
+        ],
+        "refusal": "the unlabeled control at the resolved point is not bound to the form this run filled: the control has an accessible name, so its name identifies it"
+      },
+      {
+        "passed": false,
+        "point": [
+          293,
+          146
+        ],
+        "refusal": "the unlabeled control at the resolved point is not bound to the form this run filled: the control has an accessible name, so its name identifies it"
+      },
+      {
+        "passed": false,
+        "point": [
+          582,
+          146
+        ],
+        "refusal": "the unlabeled control at the resolved point is not bound to the form this run filled: the control has an accessible name, so its name identifies it"
+      },
+      {
+        "passed": false,
+        "point": [
+          967,
+          146
+        ],
+        "refusal": "no actionable control at the resolved point to verify the submit binding against"
+      },
+      {
+        "passed": false,
+        "point": [
+          459,
+          535
+        ],
+        "refusal": "the unlabeled control at the resolved point is not bound to the form this run filled: the control has an accessible name, so its name identifies it"
+      },
+      {
+        "passed": false,
+        "point": [
+          1134,
+          535
+        ],
+        "refusal": "the unlabeled control at the resolved point is not bound to the form this run filled: the control is inside a table row or list item, whose own identity ties it to a record"
+      },
+      {
+        "passed": false,
+        "point": [
+          459,
+          620
+        ],
+        "refusal": "the unlabeled control at the resolved point is not bound to the form this run filled: the control has an accessible name, so its name identifies it"
+      },
+      {
+        "passed": false,
+        "point": [
+          1134,
+          620
+        ],
+        "refusal": "the unlabeled control at the resolved point is not bound to the form this run filled: the control is inside a table row or list item, whose own identity ties it to a record"
+      }
+    ],
+    "save": {
+      "passed": true,
+      "point": [
+        1244,
+        752
+      ],
+      "refusal": null
+    },
+    "save_after_removing_second_icon": {
+      "passed": true,
+      "point": [
+        1244,
+        752
+      ],
+      "refusal": null
+    },
+    "save_moved_left": {
+      "passed": false,
+      "point": [
+        52,
+        752
+      ],
+      "refusal": "the unlabeled control at the resolved point is not bound to the form this run filled: the control moved relative to the filled fields (now below/within, recorded below/right)"
+    },
+    "save_with_second_icon": {
+      "passed": false,
+      "point": [
+        1244,
+        752
+      ],
+      "refusal": "the unlabeled control at the resolved point is not bound to the form this run filled: 2 unlabeled controls follow the filled fields, so which one submits them is ambiguous"
+    },
+    "second_icon": {
+      "passed": false,
+      "point": [
+        1244,
+        757
+      ],
+      "refusal": "the unlabeled control at the resolved point is not bound to the form this run filled: 2 unlabeled controls follow the filled fields, so which one submits them is ambiguous"
+    }
+  },
+  "summary": {
+    "checks_that_must_pass": 2,
+    "checks_that_must_refuse": 17,
+    "passed": 2,
+    "refused": 17,
+    "save_bound": true
+  }
+}

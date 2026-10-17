@@ -1,0 +1,21 @@
+{
+  "case_id": "representative",
+  "duration_ms": 4222.359291976318,
+  "execution_completed": true,
+  "execution_profile": "standard",
+  "expected_outcome": "VERIFIED",
+  "external_network_calls": 0,
+  "failed_step_id": null,
+  "halt": null,
+  "matched_expectation": true,
+  "model_calls": 0,
+  "observed_outcome": "VERIFIED",
+  "oracle_passed": true,
+  "production_eligible": true,
+  "report_sha256": "79bd5810918bb6e71951dd7ce159736f31844b94333e249e5b001de5a5162672",
+  "schema_version": "openadapt.public-demo-outcome/v1",
+  "screenshots_may_leave_box": false,
+  "silent_incorrect_success": false,
+  "trial": 1,
+  "wrong_target_action": false
+}

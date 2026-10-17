@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openadapt.ai/schemas/sanitized-artifact-approval-v1.json",
+  "title": "OpenAdapt sanitized artifact approval v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "approved_at",
+    "reviewer",
+    "automatic",
+    "policy_version",
+    "manifest_sha256",
+    "derivative_tree_sha256",
+    "approved_derivative_sha256",
+    "approved_archive_size_bytes",
+    "verification"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "approved_at": { "type": "string", "format": "date-time" },
+    "reviewer": { "type": "string", "minLength": 1 },
+    "automatic": { "type": "boolean" },
+    "policy_version": { "type": "string", "minLength": 1 },
+    "manifest_sha256": { "$ref": "#/$defs/sha256" },
+    "derivative_tree_sha256": { "$ref": "#/$defs/sha256" },
+    "approved_derivative_sha256": { "$ref": "#/$defs/sha256" },
+    "approved_archive_size_bytes": { "type": "integer", "minimum": 1 },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "verified_at",
+        "method",
+        "source_tree_verified",
+        "file_count",
+        "unresolved"
+      ],
+      "properties": {
+        "verified_at": { "type": "string", "format": "date-time" },
+        "method": { "const": "full-stable-rescan" },
+        "source_tree_verified": { "const": true },
+        "file_count": { "type": "integer", "minimum": 1 },
+        "unresolved": { "const": 0 }
+      }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "system": {
+    "name": "openadapt-compiler",
+    "description": "OpenAdapt record -> compile -> replay with fail-closed effect verification (the reference governed runtime).",
+    "url": "https://github.com/OpenAdaptAI/openadapt-flow"
+  },
+  "status": "pending_sibling_agent",
+  "note": "This is the reference OpenAdapt end-to-end result on the EffectBench MockMed anchor. It is produced by the sibling end-to-end measurement (a real record -> compile -> replay run scored through this benchmark's oracle), NOT by the in-benchmark EffectVerifiedSUT baseline. Until that measurement lands it is a wired placeholder. The shipped effect_verified baseline (results/reference.json) is the mechanism proxy: it reaches SWER 0 by gating success on an independent record readback exactly as the compiled runtime does.",
+  "produced_by": {
+    "repo": "OpenAdaptAI/openadapt-evals",
+    "artifact": "results-effectbench-openadapt-<pin>",
+    "harness": "openadapt_flow.benchmark.effectbench (in-tree runner) scored through the EffectBench oracle contract"
+  },
+  "expected_shape": {
+    "effectbench_submission_version": 1,
+    "results": {
+      "arm": "openadapt-compiler",
+      "swer": {"numerator": null, "denominator": null, "rate": null},
+      "over_halt": {"numerator": null, "denominator": null, "rate": null},
+      "task_success": {"numerator": null, "denominator": null, "rate": null}
+    },
+    "reproducibility": {
+      "effectbench_version": "1.0.0",
+      "pack_fingerprint": "<sha256 of the pack manifest at run time>"
+    }
+  }
+}

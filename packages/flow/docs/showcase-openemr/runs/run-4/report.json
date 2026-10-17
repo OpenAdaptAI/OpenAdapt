@@ -1,0 +1,374 @@
+{
+  "workflow_name": "openemr-add-patient-note",
+  "started_at": "2026-07-08T17:36:46.111314+00:00",
+  "params": {
+    "note": "Replay run 4: discussed low-sodium diet, handout provided."
+  },
+  "results": [
+    {
+      "step_id": "step_000",
+      "intent": "click 'ername'",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          705,
+          404
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 14.443500000197673
+      },
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_000_before.png",
+      "after_png": "steps/step_000_after.png",
+      "elapsed_ms": 416.701957999976
+    },
+    {
+      "step_id": "step_001",
+      "intent": "type 'admin'",
+      "ok": true,
+      "resolution": null,
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_001_before.png",
+      "after_png": "steps/step_001_after.png",
+      "elapsed_ms": 644.3784999992204
+    },
+    {
+      "step_id": "step_002",
+      "intent": "click 'Password'",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          684,
+          458
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 12.854916998549015
+      },
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_002_before.png",
+      "after_png": "steps/step_002_after.png",
+      "elapsed_ms": 383.1682500003808
+    },
+    {
+      "step_id": "step_003",
+      "intent": "type 'pass'",
+      "ok": true,
+      "resolution": null,
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_003_before.png",
+      "after_png": "steps/step_003_after.png",
+      "elapsed_ms": 335.0267910009279
+    },
+    {
+      "step_id": "step_004",
+      "intent": "click 'Login'",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          639,
+          566
+        ],
+        "confidence": 0.9999997615814209,
+        "elapsed_ms": 12.866875000327127
+      },
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_004_before.png",
+      "after_png": "steps/step_004_after.png",
+      "elapsed_ms": 3313.6120829985884
+    },
+    {
+      "step_id": "step_005",
+      "intent": "click 'Searchbyanydemogre'",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          1121,
+          31
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 10.93537499946251
+      },
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_005_before.png",
+      "after_png": "steps/step_005_after.png",
+      "elapsed_ms": 3188.4392909996677
+    },
+    {
+      "step_id": "step_006",
+      "intent": "type 'Phil'",
+      "ok": true,
+      "resolution": null,
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_006_before.png",
+      "after_png": "steps/step_006_after.png",
+      "elapsed_ms": 1308.404374998645
+    },
+    {
+      "step_id": "step_007",
+      "intent": "press Enter",
+      "ok": true,
+      "resolution": null,
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_007_before.png",
+      "after_png": "steps/step_007_after.png",
+      "elapsed_ms": 1868.6911249988043
+    },
+    {
+      "step_id": "step_008",
+      "intent": "click 'ford,Phil'",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          17,
+          457
+        ],
+        "confidence": 0.999998152256012,
+        "elapsed_ms": 10.352500001317821
+      },
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_008_before.png",
+      "after_png": "steps/step_008_after.png",
+      "elapsed_ms": 2470.0697909993323
+    },
+    {
+      "step_id": "step_009",
+      "intent": "scroll by (0, 400)",
+      "ok": true,
+      "resolution": null,
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_009_before.png",
+      "after_png": "steps/step_009_after.png",
+      "elapsed_ms": 5974.054082998919
+    },
+    {
+      "step_id": "step_010",
+      "intent": "scroll by (0, 400)",
+      "ok": true,
+      "resolution": null,
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_010_before.png",
+      "after_png": "steps/step_010_after.png",
+      "elapsed_ms": 4087.421207999796
+    },
+    {
+      "step_id": "step_011",
+      "intent": "scroll by (0, 400)",
+      "ok": true,
+      "resolution": null,
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_011_before.png",
+      "after_png": "steps/step_011_after.png",
+      "elapsed_ms": 2132.9242500014516
+    },
+    {
+      "step_id": "step_012",
+      "intent": "scroll by (0, 400)",
+      "ok": true,
+      "resolution": null,
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_012_before.png",
+      "after_png": "steps/step_012_after.png",
+      "elapsed_ms": 2144.9048340000445
+    },
+    {
+      "step_id": "step_013",
+      "intent": "click at (815, 369)",
+      "ok": true,
+      "resolution": {
+        "rung": "geometry",
+        "point": [
+          814,
+          768
+        ],
+        "confidence": 0.9,
+        "elapsed_ms": 1747.4418750007317
+      },
+      "postconditions_ok": true,
+      "heal": {
+        "step_id": "step_013",
+        "kind": "anchor_refresh",
+        "rung_used": "geometry",
+        "old_anchor": {
+          "template": "templates/step_013.png",
+          "region": [
+            735,
+            337,
+            160,
+            64
+          ],
+          "click_point": [
+            815,
+            369
+          ],
+          "ocr_text": null,
+          "landmarks": [
+            {
+              "relation": "right_of",
+              "ocr_text": "None",
+              "distance_px": 123,
+              "dx_px": -87,
+              "dy_px": 87
+            },
+            {
+              "relation": "above",
+              "ocr_text": "Yes",
+              "distance_px": 153,
+              "dx_px": 5,
+              "dy_px": 153
+            }
+          ],
+          "search_pad": 80
+        },
+        "new_anchor": {
+          "template": "templates/step_013.png",
+          "region": [
+            734,
+            736,
+            160,
+            64
+          ],
+          "click_point": [
+            814,
+            768
+          ],
+          "ocr_text": null,
+          "landmarks": [
+            {
+              "relation": "right_of",
+              "ocr_text": "None",
+              "distance_px": 123,
+              "dx_px": -87,
+              "dy_px": 87
+            },
+            {
+              "relation": "above",
+              "ocr_text": "Yes",
+              "distance_px": 153,
+              "dx_px": 5,
+              "dy_px": 153
+            }
+          ],
+          "search_pad": 80
+        },
+        "screenshot": "heals/step_013/screen.png",
+        "applied": true
+      },
+      "error": null,
+      "before_png": "steps/step_013_before.png",
+      "after_png": "steps/step_013_after.png",
+      "elapsed_ms": 3484.1849580006965
+    },
+    {
+      "step_id": "step_014",
+      "intent": "click '+Add <B'",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          90,
+          281
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 11.60541699937312
+      },
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_014_before.png",
+      "after_png": "steps/step_014_after.png",
+      "elapsed_ms": 2098.650040999928
+    },
+    {
+      "step_id": "step_015",
+      "intent": "click at (639, 357)",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          639,
+          357
+        ],
+        "confidence": 0.9999768137931824,
+        "elapsed_ms": 17.701499999020598
+      },
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_015_before.png",
+      "after_png": "steps/step_015_after.png",
+      "elapsed_ms": 458.16491699952167
+    },
+    {
+      "step_id": "step_016",
+      "intent": "type <note>",
+      "ok": true,
+      "resolution": null,
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_016_before.png",
+      "after_png": "steps/step_016_after.png",
+      "elapsed_ms": 415.91999999945983
+    },
+    {
+      "step_id": "step_017",
+      "intent": "click 'Save as new messag'",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          489,
+          452
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 13.908792001529946
+      },
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_017_before.png",
+      "after_png": "steps/step_017_after.png",
+      "elapsed_ms": 1818.11800000105
+    }
+  ],
+  "success": true,
+  "rung_counts": {
+    "template": 8,
+    "geometry": 1
+  },
+  "heal_count": 1,
+  "model_calls": 0,
+  "est_model_cost_usd": 0.0,
+  "total_ms": 36542.901958000584
+}

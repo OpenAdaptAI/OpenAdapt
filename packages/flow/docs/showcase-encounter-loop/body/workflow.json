@@ -1,0 +1,176 @@
+{
+  "schema_version": 2,
+  "name": "save-encounter",
+  "recording_id": null,
+  "contains_phi": false,
+  "phi_scrubbed": false,
+  "encrypted": false,
+  "created_at": "2026-07-21T00:00:00+00:00",
+  "viewport": null,
+  "params": {},
+  "param_specs": {
+    "patient_id": {
+      "name": "patient_id",
+      "type": "string",
+      "example": "patient-1",
+      "required": true,
+      "choices": []
+    },
+    "note": {
+      "name": "note",
+      "type": "string",
+      "example": "triage note",
+      "required": true,
+      "choices": []
+    }
+  },
+  "secret_params": [],
+  "steps": [
+    {
+      "id": "type_patient",
+      "intent": "type <patient_id>",
+      "action": "type",
+      "anchor": null,
+      "text": null,
+      "param": "patient_id",
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "type_note",
+      "intent": "type <note>",
+      "action": "type",
+      "anchor": null,
+      "text": null,
+      "param": "note",
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "save",
+      "intent": "save encounter",
+      "action": "key",
+      "anchor": null,
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": "Enter",
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "text_present",
+          "text": "Saved",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 0.2,
+          "template": null
+        }
+      ],
+      "effects": [
+        {
+          "kind": "record_written",
+          "match": {
+            "patient_id": {
+              "literal": null,
+              "param": "patient_id"
+            },
+            "type": {
+              "literal": "Triage",
+              "param": null
+            }
+          },
+          "field": null,
+          "value": null,
+          "expected_count": 1,
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": null,
+          "timeout_s": 2.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "patient_id": {
+              "literal": null,
+              "param": "patient_id"
+            }
+          },
+          "field": "note",
+          "value": {
+            "literal": null,
+            "param": "note"
+          },
+          "expected_count": 1,
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "reversible",
+          "probe": null,
+          "timeout_s": 2.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        }
+      ],
+      "api_binding": null,
+      "risk": "irreversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    }
+  ],
+  "program": null,
+  "subflows": {},
+  "data_sources": {},
+  "manifest": {
+    "schema_version": 2,
+    "content_digest": "71c9b3814d9d84d7c7a25dc03acd9f9533fa3b04b080aea5220693c975f1d723",
+    "file_hashes": {},
+    "provenance": {
+      "compiler_version": "1.19.0",
+      "source_recording_sha256": null,
+      "compiler_config_sha256": null,
+      "created_at": "2026-07-21T00:00:00+00:00",
+      "policy_name": null,
+      "certified": false,
+      "certification_status": null,
+      "certified_at": null,
+      "expires_at": null
+    },
+    "encrypted": false
+  }
+}

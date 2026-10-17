@@ -1,0 +1,521 @@
+#!/usr/bin/env python3
+"""Exercise the public quickstart from a clean wheel-installed environment.
+
+This is intentionally a product lifecycle check, not another source-tree test.
+It creates a fresh virtual environment, installs only the supplied wheel, runs
+the complete MockMed journey, inspects the generated evidence, uninstalls the
+package, and proves the environment no longer imports it.
+"""
+
+from __future__ import annotations
+
+import argparse
+import glob
+import hashlib
+import json
+import os
+import subprocess
+import sys
+import venv
+from pathlib import Path
+from typing import Sequence
+
+_UNHANDLED_RUNTIME_MARKERS = (
+    "Task was destroyed but it is pending!",
+    "Task exception was never retrieved",
+    "Future exception was never retrieved",
+    "TargetClosedError",
+)
+
+
+def _run(
+    command: Sequence[str],
+    *,
+    cwd: Path,
+    env: dict[str, str],
+    log: Path,
+    expected: int = 0,
+) -> subprocess.CompletedProcess[str]:
+    """Run a lifecycle command, persist its output, and enforce its exit code."""
+    printable = subprocess.list2cmdline(list(command))
+    print(f"\n$ {printable}", flush=True)
+    child_env = env.copy()
+    # Windows runners otherwise inherit a legacy console code page (commonly
+    # cp1252). The CLI deliberately prints status glyphs, and its JSON evidence
+    # is a UTF-8 artifact contract, so make the subprocess boundary explicit.
+    child_env["PYTHONUTF8"] = "1"
+    child_env["PYTHONIOENCODING"] = "utf-8"
+    result = subprocess.run(
+        list(command),
+        cwd=cwd,
+        env=child_env,
+        text=True,
+        encoding="utf-8",
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        check=False,
+    )
+    print(result.stdout, end="", flush=True)
+    log.parent.mkdir(parents=True, exist_ok=True)
+    log.write_text(f"$ {printable}\n\n{result.stdout}", encoding="utf-8")
+    marker = next(
+        (item for item in _UNHANDLED_RUNTIME_MARKERS if item in result.stdout), None
+    )
+    if marker is not None:
+        raise RuntimeError(
+            f"{printable} emitted an unhandled runtime error ({marker}); see {log}"
+        )
+    if result.returncode != expected:
+        raise RuntimeError(
+            f"{printable} exited {result.returncode}; expected {expected} (see {log})"
+        )
+    return result
+
+
+def _resolve_wheel(pattern: str) -> Path:
+    matches = [Path(item).resolve() for item in glob.glob(pattern)]
+    if len(matches) != 1:
+        raise ValueError(
+            f"--wheel must resolve to exactly one file; {pattern!r} matched "
+            f"{len(matches)}: {matches}"
+        )
+    if matches[0].suffix != ".whl":
+        raise ValueError(f"--wheel is not a wheel: {matches[0]}")
+    return matches[0]
+
+
+def _wheel_install_spec(wheel: Path, *, install_browser: bool) -> str:
+    """Install the optional browser runtime only for a browser lifecycle."""
+
+    return f"{wheel}[browser]" if install_browser else str(wheel)
+
+
+def _venv_python(root: Path) -> Path:
+    return root / ("Scripts/python.exe" if os.name == "nt" else "bin/python")
+
+
+def _console_script(root: Path) -> Path:
+    return root / (
+        "Scripts/openadapt-flow.exe" if os.name == "nt" else "bin/openadapt-flow"
+    )
+
+
+def _inspect_opencv_provider(
+    python: Path,
+    *,
+    cwd: Path,
+    env: dict[str, str],
+    log: Path,
+) -> str:
+    """Require one reviewed distribution to own the installed ``cv2`` package."""
+
+    probe = _run(
+        [
+            str(python),
+            "-c",
+            (
+                "import importlib.metadata as m, json; "
+                "names={d.metadata['Name'].lower() for d in m.distributions() "
+                "if d.metadata.get('Name')}; "
+                "providers=sorted(names & {'opencv-python','opencv-python-headless',"
+                "'opencv-contrib-python','opencv-contrib-python-headless'}); "
+                "import cv2; "
+                "print(json.dumps({'providers':providers,'cv2_version':cv2.__version__})); "
+                "assert providers == ['opencv-python'], providers"
+            ),
+        ],
+        cwd=cwd,
+        env=env,
+        log=log,
+    )
+    payload = json.loads(probe.stdout.splitlines()[-1])
+    return str(payload["providers"][0])
+
+
+def _load_report(path: Path) -> dict:
+    if not path.is_file():
+        raise AssertionError(f"missing machine-readable run report: {path}")
+    report = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(report, dict):
+        raise AssertionError(f"run report is not an object: {path}")
+    return report
+
+
+def _inspect_artifacts(artifacts: Path) -> dict[str, object]:
+    baseline_dir = artifacts / "baseline-run"
+    drift_dir = artifacts / "theme-drift-run"
+    baseline = _load_report(baseline_dir / "report.json")
+    drift = _load_report(drift_dir / "report.json")
+
+    for run_dir in (baseline_dir, drift_dir):
+        if not (run_dir / "REPORT.md").is_file():
+            raise AssertionError(f"missing illustrated report: {run_dir / 'REPORT.md'}")
+
+    if baseline.get("success") is not True:
+        raise AssertionError("baseline replay did not succeed")
+    if baseline.get("model_calls") != 0:
+        raise AssertionError("baseline replay made a model call")
+    if baseline.get("heal_count") != 0:
+        raise AssertionError("baseline replay unexpectedly healed")
+
+    if drift.get("success") is not True:
+        raise AssertionError("theme-drift replay did not succeed")
+    if drift.get("model_calls") != 0:
+        raise AssertionError("deterministic theme repair made a model call")
+    heal_count = int(drift.get("heal_count") or 0)
+    if heal_count < 1:
+        raise AssertionError("theme drift produced no reviewable repair")
+
+    results = drift.get("results") or []
+    applied = [row for row in results if (row.get("heal") or {}).get("applied")]
+    patches = list((drift_dir / "heals").glob("*/patch.json"))
+    if len(applied) != heal_count or len(patches) != heal_count:
+        raise AssertionError(
+            "heal evidence is incomplete: "
+            f"report={heal_count}, applied={len(applied)}, patches={len(patches)}"
+        )
+
+    healed_bundle = artifacts / "healed-bundle"
+    for required in ("workflow.json", "manifest.json"):
+        if not (healed_bundle / required).is_file():
+            raise AssertionError(f"healed bundle is missing {required}")
+
+    tutorial = _inspect_tutorial(artifacts / "tutorial")
+
+    return {
+        "baseline_success": True,
+        "baseline_model_calls": 0,
+        "baseline_heals": 0,
+        "drift_success": True,
+        "drift_model_calls": 0,
+        "drift_heals": heal_count,
+        "repair_patches": len(patches),
+        "reports_inspected": 3,
+        **tutorial,
+    }
+
+
+def _inspect_tutorial(tutorial_dir: Path) -> dict[str, object]:
+    """Assert the composed free path VERIFIED and emitted its receipt.
+
+    The per-command checks above all passed while this composition was broken:
+    ``replay`` runs the Demo profile, which can only report
+    ``COMPLETED_UNVERIFIED``, and the shareable artifact requires ``VERIFIED``.
+    Nothing observed the loop, so nothing caught it.  This does.
+    """
+    run_dir = tutorial_dir / "run"
+    report = _load_report(run_dir / "report.json")
+
+    if report.get("execution_outcome") != "VERIFIED":
+        raise AssertionError(
+            f"tutorial did not verify: {report.get('execution_outcome')!r}"
+        )
+    if report.get("execution_profile") != "standard":
+        raise AssertionError(
+            f"tutorial did not run a production profile: "
+            f"{report.get('execution_profile')!r}"
+        )
+    if report.get("transaction_outcome") != "VERIFIED":
+        raise AssertionError(
+            f"tutorial transaction outcome is "
+            f"{report.get('transaction_outcome')!r}, expected VERIFIED"
+        )
+    if report.get("transaction_billable") is not True:
+        raise AssertionError("a VERIFIED production run must be billable")
+    if report.get("model_calls") != 0:
+        raise AssertionError("tutorial made a model call")
+
+    envelope = report.get("outcome_envelope") or {}
+    required = int((envelope.get("required_contracts") or {}).get("effect") or 0)
+    passed = int((envelope.get("passed_contracts") or {}).get("effect") or 0)
+    if required < 1 or passed != required:
+        raise AssertionError(
+            f"tutorial effect evidence is incomplete: {passed}/{required}"
+        )
+
+    confirmed_tiers = [
+        evidence.get("verification_tier")
+        for result in report.get("results") or []
+        for evidence in result.get("effect_evidence") or []
+        if evidence.get("final_verdict") == "confirmed"
+    ]
+    if not confirmed_tiers or min(confirmed_tiers) > 3:
+        raise AssertionError(
+            "tutorial has no confirmed effect evidence at or above the "
+            f"required tier: {confirmed_tiers}"
+        )
+
+    receipt_path = run_dir / "receipt.json"
+    if not receipt_path.is_file():
+        raise AssertionError(f"tutorial emitted no shareable receipt: {receipt_path}")
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    if receipt.get("outcome") != "VERIFIED":
+        raise AssertionError(f"receipt outcome is {receipt.get('outcome')!r}")
+    if receipt.get("provenance") != "synthetic-tutorial":
+        raise AssertionError(
+            f"receipt provenance is {receipt.get('provenance')!r}, expected "
+            "synthetic-tutorial"
+        )
+    if not receipt.get("bundle_digest") or not receipt.get("receipt_digest"):
+        raise AssertionError("receipt is not digest-bound and cannot be checked")
+    for path in (run_dir / "receipt.png", run_dir / "receipt.md"):
+        if not path.is_file():
+            raise AssertionError(f"missing receipt artifact: {path}")
+
+    return {
+        "tutorial_outcome": "VERIFIED",
+        "tutorial_profile": "standard",
+        "tutorial_model_calls": 0,
+        "tutorial_effects_confirmed": passed,
+        "tutorial_effect_tier": min(confirmed_tiers),
+        "tutorial_receipt_emitted": True,
+    }
+
+
+def run_lifecycle(
+    wheel: Path,
+    work_dir: Path,
+    *,
+    install_browser: bool,
+    browser_with_deps: bool,
+    source_revision: str | None = None,
+) -> dict[str, object]:
+    """Run install through uninstall, returning the evidence summary."""
+    if work_dir.exists():
+        raise FileExistsError(
+            f"work directory already exists: {work_dir}; remove it before rerunning"
+        )
+    work_dir.mkdir(parents=True)
+    venv_dir = work_dir / "venv"
+    artifacts = work_dir / "artifacts"
+    logs = work_dir / "logs"
+    artifacts.mkdir()
+
+    venv.EnvBuilder(with_pip=True, clear=True).create(venv_dir)
+    python = _venv_python(venv_dir)
+    env = os.environ.copy()
+    env.pop("PYTHONPATH", None)
+    env["PYTHONUTF8"] = "1"
+    env["PYTHONIOENCODING"] = "utf-8"
+    # MockMed contains synthetic identities. Disable the optional PHI warning so
+    # lifecycle output stays actionable; real regulated runs must use SCRUB=on.
+    env["OPENADAPT_FLOW_SCRUB"] = "off"
+    installed = False
+    summary: dict[str, object] = {
+        "wheel": wheel.name,
+        "wheel_sha256": hashlib.sha256(wheel.read_bytes()).hexdigest(),
+        "platform": sys.platform,
+        "source_revision": source_revision or "local-unbound",
+    }
+
+    try:
+        _run(
+            [
+                str(python),
+                "-m",
+                "pip",
+                "install",
+                _wheel_install_spec(wheel, install_browser=install_browser),
+            ],
+            cwd=artifacts,
+            env=env,
+            log=logs / "01-install.log",
+        )
+        installed = True
+        summary["opencv_provider"] = _inspect_opencv_provider(
+            python,
+            cwd=artifacts,
+            env=env,
+            log=logs / "02-opencv-provider.log",
+        )
+        console = _console_script(venv_dir)
+        if not console.is_file():
+            raise AssertionError(f"console entry point was not installed: {console}")
+        _run(
+            [str(console), "--help"],
+            cwd=artifacts,
+            env=env,
+            log=logs / "03-cli-help.log",
+        )
+
+        # Linux needs host libraries that the ordinary unprivileged first-run
+        # download cannot install. Pre-provision them only in that lane. The
+        # macOS and Windows lanes leave Chromium absent here so the first Flow
+        # command proves the public lazy auto-install contract.
+        if browser_with_deps:
+            browser_command = [str(python), "-m", "playwright", "install"]
+            browser_command.append("--with-deps")
+            browser_command.append("chromium")
+            _run(
+                browser_command,
+                cwd=artifacts,
+                env=env,
+                log=logs / "04-browser-install.log",
+            )
+
+        cli = [str(python), "-m", "openadapt_flow"]
+        recording = artifacts / "recording"
+        bundle = artifacts / "bundle"
+        _run(
+            [*cli, "demo-record", "--out", str(recording)],
+            cwd=artifacts,
+            env=env,
+            log=logs / "05-record.log",
+        )
+        _run(
+            [
+                *cli,
+                "compile",
+                str(recording),
+                "--out",
+                str(bundle),
+                "--name",
+                "clean-machine-lifecycle",
+            ],
+            cwd=artifacts,
+            env=env,
+            log=logs / "06-compile.log",
+        )
+
+        # The bundled tutorial is deliberately not production-certified. The
+        # default lint command is an inspection surface: it exits nonzero only
+        # for errors while still rendering warnings. Production admission uses
+        # the explicit strict contract, which must refuse this bundle's
+        # uncovered irreversible click. The permissive smoke policy can still
+        # certify the deterministic execution tutorial.
+        _run(
+            [*cli, "lint", str(bundle), "--strict"],
+            cwd=artifacts,
+            env=env,
+            log=logs / "07-strict-lint-expected-refusal.log",
+            expected=1,
+        )
+        _run(
+            [*cli, "certify", str(bundle), "--policy", "permissive"],
+            cwd=artifacts,
+            env=env,
+            log=logs / "08-certify-permissive.log",
+        )
+        _run(
+            [*cli, "certify", str(bundle), "--policy", "clinical-write"],
+            cwd=artifacts,
+            env=env,
+            log=logs / "09-certify-clinical-expected-refusal.log",
+            expected=2,
+        )
+        _run(
+            [
+                *cli,
+                "replay",
+                str(bundle),
+                "--run-dir",
+                str(artifacts / "baseline-run"),
+            ],
+            cwd=artifacts,
+            env=env,
+            log=logs / "10-replay-baseline.log",
+        )
+        _run(
+            [
+                *cli,
+                "replay",
+                str(bundle),
+                "--drift",
+                "theme",
+                "--save-healed-to",
+                str(artifacts / "healed-bundle"),
+                "--run-dir",
+                str(artifacts / "theme-drift-run"),
+            ],
+            cwd=artifacts,
+            env=env,
+            log=logs / "11-replay-drift.log",
+        )
+        # The COMPOSED free path. Every command above passed while this loop
+        # was broken; only running it end to end catches that.
+        _run(
+            [*cli, "tutorial", "--out", str(artifacts / "tutorial")],
+            cwd=artifacts,
+            env=env,
+            log=logs / "12-tutorial-verified.log",
+        )
+        summary.update(_inspect_artifacts(artifacts))
+    finally:
+        if installed:
+            _run(
+                [str(python), "-m", "pip", "uninstall", "-y", "openadapt-flow"],
+                cwd=artifacts,
+                env=env,
+                log=logs / "13-uninstall.log",
+            )
+            probe = _run(
+                [
+                    str(python),
+                    "-c",
+                    (
+                        "import importlib.util; "
+                        "assert importlib.util.find_spec('openadapt_flow') is None"
+                    ),
+                ],
+                cwd=artifacts,
+                env=env,
+                log=logs / "14-uninstall-probe.log",
+            )
+            summary["uninstall_verified"] = probe.returncode == 0
+        (work_dir / "summary.json").write_text(
+            json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8"
+        )
+
+    print(f"\nLifecycle PASS: {work_dir / 'summary.json'}")
+    return summary
+
+
+def build_parser() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument(
+        "--wheel", required=True, help="Wheel path or a glob resolving to one wheel"
+    )
+    parser.add_argument(
+        "--work-dir", required=True, help="New directory for lifecycle artifacts"
+    )
+    parser.add_argument(
+        "--install-browser",
+        action="store_true",
+        help=(
+            "Install the wheel's browser extra; Chromium remains lazy unless "
+            "--browser-with-deps pre-provisions it"
+        ),
+    )
+    parser.add_argument(
+        "--browser-with-deps",
+        action="store_true",
+        help=(
+            "Pre-provision Chromium and its Linux host dependencies; without "
+            "this flag the first Flow command must auto-install Chromium"
+        ),
+    )
+    parser.add_argument(
+        "--source-revision",
+        default=None,
+        help="Exact source revision that produced the supplied wheel",
+    )
+    return parser
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    args = build_parser().parse_args(argv)
+    if args.browser_with_deps and not args.install_browser:
+        raise SystemExit("--browser-with-deps requires --install-browser")
+    wheel = _resolve_wheel(args.wheel)
+    run_lifecycle(
+        wheel,
+        Path(args.work_dir).resolve(),
+        install_browser=args.install_browser,
+        browser_with_deps=args.browser_with_deps,
+        source_revision=args.source_revision,
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

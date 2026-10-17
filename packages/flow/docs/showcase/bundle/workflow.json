@@ -1,0 +1,581 @@
+{
+  "schema_version": 1,
+  "name": "mockmed-triage",
+  "recording_id": "18088720baa347c9b6fae136362ddfa0",
+  "created_at": "2026-07-06T18:29:51.321911+00:00",
+  "viewport": [
+    1280,
+    800
+  ],
+  "params": {
+    "note": "Showcase triage booking three months"
+  },
+  "steps": [
+    {
+      "id": "step_000",
+      "intent": "click at (214, 195)",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_000.png",
+        "region": [
+          134,
+          163,
+          160,
+          64
+        ],
+        "click_point": [
+          214,
+          195
+        ],
+        "ocr_text": null,
+        "landmarks": [
+          {
+            "relation": "above",
+            "ocr_text": "Sign in to MockMed",
+            "distance_px": 131,
+            "dx_px": 77,
+            "dy_px": 106
+          },
+          {
+            "relation": "left_of",
+            "ocr_text": "Username",
+            "distance_px": 132,
+            "dx_px": 129,
+            "dy_px": 29
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "key": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            17,
+            145,
+            394,
+            100
+          ],
+          "phash": "e01fe01f2f1f85e0",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0
+        }
+      ],
+      "risk": "reversible",
+      "timeout_s": 10.0
+    },
+    {
+      "id": "step_001",
+      "intent": "type 'nurse.demo'",
+      "action": "type",
+      "anchor": null,
+      "text": "nurse.demo",
+      "param": null,
+      "key": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            27,
+            156,
+            147,
+            77
+          ],
+          "phash": "c2c969c3d23eb436",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0
+        },
+        {
+          "kind": "text_present",
+          "text": "nurse.demo",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 5.0
+        }
+      ],
+      "risk": "reversible",
+      "timeout_s": 10.0
+    },
+    {
+      "id": "step_002",
+      "intent": "click at (214, 264)",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_002.png",
+        "region": [
+          134,
+          232,
+          160,
+          64
+        ],
+        "click_point": [
+          214,
+          264
+        ],
+        "ocr_text": null,
+        "landmarks": [
+          {
+            "relation": "left_of",
+            "ocr_text": "Sign In",
+            "distance_px": 112,
+            "dx_px": 94,
+            "dy_px": -60
+          },
+          {
+            "relation": "left_of",
+            "ocr_text": "nurse.demo",
+            "distance_px": 132,
+            "dx_px": 113,
+            "dy_px": 69
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "key": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            17,
+            214,
+            394,
+            100
+          ],
+          "phash": "e0f0e01f3f0f95c2",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0
+        }
+      ],
+      "risk": "reversible",
+      "timeout_s": 10.0
+    },
+    {
+      "id": "step_003",
+      "intent": "type 'mockmed-demo-pass'",
+      "action": "type",
+      "anchor": null,
+      "text": "mockmed-demo-pass",
+      "param": null,
+      "key": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            27,
+            229,
+            158,
+            69
+          ],
+          "phash": "c0c9cdc9dec0f836",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0
+        }
+      ],
+      "risk": "reversible",
+      "timeout_s": 10.0
+    },
+    {
+      "id": "step_004",
+      "intent": "click 'Sign In'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_004.png",
+        "region": [
+          39,
+          292,
+          160,
+          64
+        ],
+        "click_point": [
+          119,
+          324
+        ],
+        "ocr_text": "Sign In",
+        "landmarks": [
+          {
+            "relation": "above",
+            "ocr_text": "Password",
+            "distance_px": 95,
+            "dx_px": 34,
+            "dy_px": 89
+          },
+          {
+            "relation": "above",
+            "ocr_text": "nurse.demo",
+            "distance_px": 130,
+            "dx_px": 19,
+            "dy_px": 129
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "key": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            87,
+            968,
+            314
+          ],
+          "phash": "f7f138e0e868e468",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0
+        },
+        {
+          "kind": "text_present",
+          "text": "Cardiology follow-up",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 5.0
+        }
+      ],
+      "risk": "reversible",
+      "timeout_s": 10.0
+    },
+    {
+      "id": "step_005",
+      "intent": "click 'Open'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_005.png",
+        "region": [
+          695,
+          154,
+          160,
+          64
+        ],
+        "click_point": [
+          775,
+          186
+        ],
+        "ocr_text": "Open",
+        "landmarks": [
+          {
+            "relation": "above",
+            "ocr_text": "Action",
+            "distance_px": 51,
+            "dx_px": 20,
+            "dy_px": 47
+          },
+          {
+            "relation": "below",
+            "ocr_text": "Open",
+            "distance_px": 58,
+            "dx_px": -2,
+            "dy_px": -58
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "key": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            43,
+            968,
+            318
+          ],
+          "phash": "f8e083ffbc08383c",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0
+        },
+        {
+          "kind": "text_present",
+          "text": "JaneSample—MRNP1—DOB1980-01-01",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 5.0
+        }
+      ],
+      "risk": "reversible",
+      "timeout_s": 10.0
+    },
+    {
+      "id": "step_006",
+      "intent": "click 'New Encounter'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_006.png",
+        "region": [
+          34,
+          127,
+          160,
+          64
+        ],
+        "click_point": [
+          114,
+          159
+        ],
+        "ocr_text": "New Encounter",
+        "landmarks": [
+          {
+            "relation": "below",
+            "ocr_text": "Encounters",
+            "distance_px": 61,
+            "dx_px": 34,
+            "dy_px": -51
+          },
+          {
+            "relation": "below",
+            "ocr_text": "No encountersyet.",
+            "distance_px": 85,
+            "dx_px": 24,
+            "dy_px": -82
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "key": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            170,
+            696,
+            215
+          ],
+          "phash": "ff77c16a62c0e2c0",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0
+        },
+        {
+          "kind": "text_present",
+          "text": "EncounterType",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 5.0
+        }
+      ],
+      "risk": "reversible",
+      "timeout_s": 10.0
+    },
+    {
+      "id": "step_007",
+      "intent": "click 'Triage'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_007.png",
+        "region": [
+          5,
+          128,
+          160,
+          64
+        ],
+        "click_point": [
+          85,
+          160
+        ],
+        "ocr_text": "Triage",
+        "landmarks": [
+          {
+            "relation": "below",
+            "ocr_text": "Note",
+            "distance_px": 70,
+            "dx_px": 44,
+            "dy_px": -55
+          },
+          {
+            "relation": "above",
+            "ocr_text": "NewEncounter",
+            "distance_px": 76,
+            "dx_px": -27,
+            "dy_px": 71
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "key": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            109,
+            177,
+            102
+          ],
+          "phash": "88c2f2295d2da73d",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0
+        }
+      ],
+      "risk": "reversible",
+      "timeout_s": 10.0
+    },
+    {
+      "id": "step_008",
+      "intent": "click at (344, 290)",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_008.png",
+        "region": [
+          184,
+          226,
+          320,
+          128
+        ],
+        "click_point": [
+          344,
+          290
+        ],
+        "ocr_text": null,
+        "landmarks": [
+          {
+            "relation": "left_of",
+            "ocr_text": "Consult",
+            "distance_px": 189,
+            "dx_px": 137,
+            "dy_px": 130
+          },
+          {
+            "relation": "left_of",
+            "ocr_text": "Save Encounter",
+            "distance_px": 233,
+            "dx_px": 210,
+            "dy_px": -101
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "key": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            195,
+            696,
+            190
+          ],
+          "phash": "ff3fd53f6a002a00",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0
+        }
+      ],
+      "risk": "reversible",
+      "timeout_s": 10.0
+    },
+    {
+      "id": "step_009",
+      "intent": "type <note>",
+      "action": "type",
+      "anchor": null,
+      "text": "Showcase triage booking three months",
+      "param": "note",
+      "key": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            2,
+            206,
+            408,
+            79
+          ],
+          "phash": "f0f07e7cd12b2b80",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0
+        }
+      ],
+      "risk": "reversible",
+      "timeout_s": 10.0
+    },
+    {
+      "id": "step_010",
+      "intent": "click 'Save Encounter'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_010.png",
+        "region": [
+          54,
+          359,
+          160,
+          64
+        ],
+        "click_point": [
+          134,
+          391
+        ],
+        "ocr_text": "Save Encounter",
+        "landmarks": [
+          {
+            "relation": "above",
+            "ocr_text": "Showcase triage booking three months",
+            "distance_px": 162,
+            "dx_px": -71,
+            "dy_px": 146
+          },
+          {
+            "relation": "above",
+            "ocr_text": "Note",
+            "distance_px": 199,
+            "dx_px": 93,
+            "dy_px": 176
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "key": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            43,
+            968,
+            169
+          ],
+          "phash": "e633398c19336673",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0
+        },
+        {
+          "kind": "text_present",
+          "text": "JaneSample—MRNP1—DOB1980-01-01",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 5.0
+        }
+      ],
+      "risk": "reversible",
+      "timeout_s": 10.0
+    }
+  ]
+}

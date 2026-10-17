@@ -1,0 +1,307 @@
+"""EffectBench metrics — SWER and its co-metrics, with confidence intervals.
+
+Every headline is a pure aggregation over a list of
+:class:`~openadapt_flow.benchmark.effectbench.schema.EpisodeRecord` rows, so a
+run's numbers can be recomputed from the published raw rows by anyone. No
+single mean is reported alone: :func:`summarize` always returns the per
+(category x substrate) decomposition alongside the overall rate (design doc
+section 5.2 bans aggregate-only reporting — a single mean is the thing the
+benchmark critiques).
+
+Metrics (design doc section 5.1):
+
+- **SWER** — Silent Wrong-Effect Rate = ``|SILENT_WRONG_EFFECT| / N``; split
+  into wrong-write vs phantom.
+- **Over-halt rate** — ``|OVER_HALT| / N``; the availability cost. Reported
+  JOINTLY with SWER (an agent can reach SWER=0 by halting on everything ->
+  over-halt=100%).
+- **Task success** (effect-verified) — ``|SUCCESS| / N``; the honest number.
+- **Screen success** — ``|reported_success| / N``; what a screen-only /
+  self-reported oracle would have claimed.
+- **Success-effect gap** — ``screen_success - task_success``; the
+  "benchmarks are lying to you" figure.
+- **Cost / latency** — mean + total, straight off the recorded ``model_calls``.
+- **``pass^k``** — fraction of tasks whose k sampled trials ALL yielded
+  effect-verified success (adopted from tau-bench); a 90%-per-trial agent is
+  ~57% at k=8.
+
+Intervals: Wilson 95% for every binomial rate (:func:`wilson_interval`); an
+optional nonparametric :func:`bootstrap_ci` for derived quantities (the gap).
+Small-N studies should report the counts too — the estimates carry ``k`` / ``n``.
+"""
+
+from __future__ import annotations
+
+import math
+import random
+from collections import defaultdict
+from typing import Callable, Iterable, Mapping, Optional, Sequence
+
+from pydantic import BaseModel, ConfigDict, Field
+
+from openadapt_flow.benchmark.effectbench.schema import (
+    EpisodeRecord,
+    OutcomeLabel,
+    SwerVariant,
+)
+
+
+class Interval(BaseModel):
+    """A confidence interval [lo, hi] on a rate, with the method that made it."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    lo: float
+    hi: float
+    method: str = "wilson"
+    confidence: float = 0.95
+
+
+class RateEstimate(BaseModel):
+    """A binomial rate ``k/n`` with its confidence interval.
+
+    Carries the raw counts so a small bounded study can report counts rather
+    than implying a population rate (design doc section 5.2).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    numerator: int
+    denominator: int
+    rate: float
+    ci: Interval
+
+    @property
+    def as_tuple(self) -> tuple[int, int, float]:
+        return self.numerator, self.denominator, self.rate
+
+
+def wilson_interval(k: int, n: int, *, z: float = 1.959963984540054) -> Interval:
+    """Wilson score 95% interval for a binomial proportion ``k/n``.
+
+    Preferred over the normal approximation for small ``n`` and rates near 0/1
+    (SWER is often near 0 for a good agent, near 1 for a bad one). ``n == 0``
+    yields the degenerate ``[0, 1]``.
+    """
+    if n <= 0:
+        return Interval(lo=0.0, hi=1.0, method="wilson")
+    phat = k / n
+    z2 = z * z
+    denom = 1.0 + z2 / n
+    center = (phat + z2 / (2 * n)) / denom
+    margin = (z * math.sqrt((phat * (1 - phat) + z2 / (4 * n)) / n)) / denom
+    lo = max(0.0, center - margin)
+    hi = min(1.0, center + margin)
+    return Interval(lo=lo, hi=hi, method="wilson")
+
+
+def rate(k: int, n: int) -> RateEstimate:
+    """A :class:`RateEstimate` for ``k/n`` with a Wilson interval."""
+    return RateEstimate(
+        numerator=k,
+        denominator=n,
+        rate=(k / n) if n else 0.0,
+        ci=wilson_interval(k, n),
+    )
+
+
+def bootstrap_ci(
+    values: Sequence[float],
+    *,
+    statistic: Callable[[Sequence[float]], float] = lambda xs: sum(xs) / len(xs),
+    n_resamples: int = 10000,
+    confidence: float = 0.95,
+    seed: int = 0,
+) -> Interval:
+    """Nonparametric bootstrap percentile interval for ``statistic(values)``.
+
+    For derived quantities without a clean closed form (e.g. the per-episode
+    success-effect gap). Deterministic given ``seed`` so a reported interval is
+    reproducible. Empty ``values`` yields ``[0, 1]``.
+    """
+    xs = list(values)
+    if not xs:
+        return Interval(lo=0.0, hi=1.0, method="bootstrap", confidence=confidence)
+    rng = random.Random(seed)
+    n = len(xs)
+    stats: list[float] = []
+    for _ in range(n_resamples):
+        sample = [xs[rng.randrange(n)] for _ in range(n)]
+        stats.append(statistic(sample))
+    stats.sort()
+    alpha = (1.0 - confidence) / 2.0
+    lo = stats[int(alpha * (n_resamples - 1))]
+    hi = stats[int((1.0 - alpha) * (n_resamples - 1))]
+    return Interval(lo=lo, hi=hi, method="bootstrap", confidence=confidence)
+
+
+def pass_hat_k(per_task_trials: Mapping[str, Sequence[bool]], k: int) -> float:
+    """``pass^k``: expected fraction of tasks whose k sampled trials ALL pass.
+
+    The unbiased combinatorial estimator (tau-bench): for a task with ``n``
+    trials of which ``c`` succeeded, the probability that a uniformly random
+    size-``k`` subset is all-success is ``C(c, k) / C(n, k)``. Averaged over
+    tasks with ``n >= k`` (tasks with fewer trials than ``k`` are skipped).
+    Returns ``0.0`` when no task has ``n >= k``.
+    """
+    if k <= 0:
+        return 1.0
+    per_task: list[float] = []
+    for trials in per_task_trials.values():
+        n = len(trials)
+        if n < k:
+            continue
+        c = sum(1 for t in trials if t)
+        per_task.append(math.comb(c, k) / math.comb(n, k) if c >= k else 0.0)
+    return sum(per_task) / len(per_task) if per_task else 0.0
+
+
+class CellSummary(BaseModel):
+    """Metrics for one (category x substrate) cell — the decomposition unit."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    category: str
+    substrate: str
+    n: int
+    swer: RateEstimate
+    swer_wrong_write: RateEstimate
+    swer_phantom: RateEstimate
+    over_halt: RateEstimate
+    task_success: RateEstimate
+    screen_success: RateEstimate
+    success_effect_gap: float
+
+
+class BenchmarkSummary(BaseModel):
+    """The full, decomposed summary of a set of episodes (one arm, or filtered).
+
+    ``cells`` is the mandatory per (category x substrate) breakdown; the overall
+    rates are provided for the abstract but never in isolation from ``cells``.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    arm: str = ""
+    n_episodes: int
+    n_tasks: int
+    arms: list[str] = Field(default_factory=list)
+
+    swer: RateEstimate
+    swer_wrong_write: RateEstimate
+    swer_phantom: RateEstimate
+    over_halt: RateEstimate
+    task_success: RateEstimate
+    screen_success: RateEstimate
+    #: The headline gap = screen_success.rate - task_success.rate.
+    success_effect_gap: float
+    #: Bootstrap 95% CI on the per-episode gap (screen_success - task_success).
+    success_effect_gap_ci: Interval
+
+    #: Cost / latency straight off the recorded model calls.
+    total_cost_usd: float
+    mean_cost_usd: float
+    mean_latency_s: float
+
+    #: ``pass^k`` for a few representative k (effect-verified success), keyed by
+    #: k as a string for JSON friendliness.
+    pass_hat_k: dict[str, float] = Field(default_factory=dict)
+
+    cells: list[CellSummary] = Field(default_factory=list)
+
+    #: Sanity invariant: the six labels partition the episodes.
+    outcome_counts: dict[str, int] = Field(default_factory=dict)
+
+
+def _cell(category: str, substrate: str, eps: Sequence[EpisodeRecord]) -> CellSummary:
+    n = len(eps)
+    swer_n = sum(1 for e in eps if e.outcome is OutcomeLabel.SILENT_WRONG_EFFECT)
+    ww = sum(1 for e in eps if e.swer_variant is SwerVariant.WRONG_WRITE)
+    ph = sum(1 for e in eps if e.swer_variant is SwerVariant.PHANTOM)
+    over = sum(1 for e in eps if e.outcome is OutcomeLabel.OVER_HALT)
+    succ = sum(1 for e in eps if e.outcome is OutcomeLabel.SUCCESS)
+    screen = sum(1 for e in eps if e.reported_success)
+    return CellSummary(
+        category=category,
+        substrate=substrate,
+        n=n,
+        swer=rate(swer_n, n),
+        swer_wrong_write=rate(ww, n),
+        swer_phantom=rate(ph, n),
+        over_halt=rate(over, n),
+        task_success=rate(succ, n),
+        screen_success=rate(screen, n),
+        success_effect_gap=((screen - succ) / n) if n else 0.0,
+    )
+
+
+def summarize(
+    episodes: Iterable[EpisodeRecord],
+    *,
+    arm: Optional[str] = None,
+    pass_k_values: Sequence[int] = (1, 2, 4, 8),
+) -> BenchmarkSummary:
+    """Aggregate episodes into the full decomposed :class:`BenchmarkSummary`.
+
+    Args:
+        episodes: The result rows to summarize.
+        arm: If given, only episodes with this ``arm`` are aggregated (a run
+            holds several arms; summarize one at a time to compare them).
+        pass_k_values: The ``k`` values to report ``pass^k`` for.
+    """
+    eps = [e for e in episodes if arm is None or e.arm == arm]
+    n = len(eps)
+
+    swer_n = sum(1 for e in eps if e.outcome is OutcomeLabel.SILENT_WRONG_EFFECT)
+    ww = sum(1 for e in eps if e.swer_variant is SwerVariant.WRONG_WRITE)
+    ph = sum(1 for e in eps if e.swer_variant is SwerVariant.PHANTOM)
+    over = sum(1 for e in eps if e.outcome is OutcomeLabel.OVER_HALT)
+    succ = sum(1 for e in eps if e.outcome is OutcomeLabel.SUCCESS)
+    screen = sum(1 for e in eps if e.reported_success)
+
+    gap_values = [
+        (1.0 if e.reported_success else 0.0)
+        - (1.0 if e.outcome is OutcomeLabel.SUCCESS else 0.0)
+        for e in eps
+    ]
+    gap = (sum(gap_values) / n) if n else 0.0
+
+    # pass^k over effect-verified success, grouped by task.
+    by_task: dict[str, list[bool]] = defaultdict(list)
+    for e in eps:
+        by_task[e.task_id].append(e.outcome is OutcomeLabel.SUCCESS)
+    pass_k = {str(k): pass_hat_k(by_task, k) for k in pass_k_values}
+
+    # per (category x substrate) cells.
+    grouped: dict[tuple[str, str], list[EpisodeRecord]] = defaultdict(list)
+    for e in eps:
+        grouped[(e.category.value, e.substrate.value)].append(e)
+    cells = [
+        _cell(cat, sub, cell_eps) for (cat, sub), cell_eps in sorted(grouped.items())
+    ]
+
+    outcome_counts: dict[str, int] = defaultdict(int)
+    for e in eps:
+        outcome_counts[e.outcome.value] += 1
+
+    total_cost = sum(e.cost_usd for e in eps)
+    return BenchmarkSummary(
+        arm=arm or "",
+        n_episodes=n,
+        n_tasks=len(by_task),
+        arms=sorted({e.arm for e in eps}),
+        swer=rate(swer_n, n),
+        swer_wrong_write=rate(ww, n),
+        swer_phantom=rate(ph, n),
+        over_halt=rate(over, n),
+        task_success=rate(succ, n),
+        screen_success=rate(screen, n),
+        success_effect_gap=gap,
+        success_effect_gap_ci=bootstrap_ci(gap_values),
+        total_cost_usd=total_cost,
+        mean_cost_usd=(total_cost / n) if n else 0.0,
+        mean_latency_s=(sum(e.latency_s for e in eps) / n) if n else 0.0,
+        pass_hat_k=pass_k,
+        cells=cells,
+        outcome_counts=dict(outcome_counts),
+    )

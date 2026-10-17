@@ -1,0 +1,80 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "openadapt-types"
+version = "0.22.0"
+description = "Pydantic models for computer-use agents: screen state (ComputerState, UINode), actions (Action), and results (ActionResult)"
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+authors = [
+    { name = "OpenAdapt", email = "admin@openadapt.ai" },
+]
+keywords = ["computer-use", "gui-automation", "schemas", "pydantic", "agents"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries",
+    "Typing :: Typed",
+]
+dependencies = [
+    "pydantic>=2.0",
+]
+
+[project.scripts]
+openadapt-vocab-lint = "openadapt_types.vocabulary.lint:main"
+
+[project.urls]
+Homepage = "https://github.com/OpenAdaptAI/openadapt-types"
+Repository = "https://github.com/OpenAdaptAI/openadapt-types"
+Issues = "https://github.com/OpenAdaptAI/openadapt-types/issues"
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov",
+]
+
+
+
+[tool.hatch.build.targets.wheel]
+packages = ["openadapt_types"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+# Package-local Ruff settings. Without this table Ruff walks up to the
+# monorepo root config, which enforces rules this package never adopted.
+[tool.ruff]
+target-version = "py310"
+
+[tool.ruff.lint]
+# Spelled out because newer Ruff releases widen the default rule set.
+select = ["E4", "E7", "E9", "F"]
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+commit_message = "chore: release {version}"
+major_on_zero = false
+allow_zero_version = true
+# Semantic Release changes only project metadata. Stamp that version into the
+# existing editable lock entry without resolving dependencies, stage it in the
+# generated release commit, and build exactly those reviewed inputs. The PSR
+# action is a Docker action, so uv must be installed inside its container.
+build_command = "python -m pip install uv==0.11.29 && python scripts/verify_release_lock.py --write && git add uv.lock && uv build"
+
+[tool.semantic_release.branches.main]
+match = "main"
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "style", "test"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]

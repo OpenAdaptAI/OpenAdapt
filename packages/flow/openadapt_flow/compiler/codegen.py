@@ -1,0 +1,176 @@
+"""Generate a readable Python rendering of a compiled workflow.
+
+The output (``workflow.py`` inside the bundle) exists so humans can
+code-review the automation. It is *generated, never parsed back* and never
+executed by the runtime — but it must be syntactically valid Python
+(``ast.parse`` clean).
+"""
+
+from __future__ import annotations
+
+from openadapt_flow.ir import ActionKind, Effect, Postcondition, Step, Workflow
+
+
+def _expect_comment(expect: list[Postcondition]) -> list[str]:
+    """Render postconditions as comment lines."""
+    lines = []
+    for pc in expect:
+        parts = [f"expect {pc.kind.value}"]
+        if pc.text is not None:
+            parts.append(f"text={pc.text!r}")
+        if pc.region is not None:
+            parts.append(f"region={pc.region}")
+        if pc.phash is not None:
+            parts.append(f"phash={pc.phash!r} (tol {pc.phash_tolerance})")
+        lines.append("    # " + " ".join(parts))
+    return lines
+
+
+def _effect_comment(effects: list[Effect]) -> list[str]:
+    """Render mined system-of-record effects as comment lines (for review).
+
+    A ``needs_operator_confirmation`` effect is flagged loudly — it is a
+    PLACEHOLDER the compiler could not bind and the run will refuse to trust
+    until an operator completes it (see compiler.effect_mining)."""
+    lines = []
+    for eff in effects:
+        parts = [f"effect {eff.kind.value}"]
+        if eff.match:
+            parts.append(f"match={eff.match}")
+        if eff.field is not None:
+            parts.append(f"field={eff.field!r} value={eff.value!r}")
+        if eff.kind.value == "record_written":
+            parts.append(f"count={eff.expected_count}")
+        if eff.idempotency_key is not None:
+            parts.append(f"idempotency_key={eff.idempotency_key!r}")
+        if eff.readback is not None:
+            rb = eff.readback
+            kind = "different-path" if rb.different_path else "same-surface"
+            parts.append(f"onscreen-readback={kind} region={rb.region!r}")
+            if rb.renavigation:
+                parts.append(f"renav={len(rb.renavigation)} action(s)")
+        parts.append(f"[{eff.risk}]")
+        if eff.needs_operator_confirmation:
+            parts.append("!! NEEDS OPERATOR CONFIRMATION (placeholder)")
+        elif eff.readback is not None and not eff.readback.different_path:
+            parts.append("!! SAME-SURFACE read-back (weak; non-default)")
+        lines.append("    # " + " ".join(parts))
+    return lines
+
+
+def _step_call(step: Step) -> str:
+    """Render the flow.<action>(...) call for a step."""
+    if step.action in (
+        ActionKind.CLICK,
+        ActionKind.DOUBLE_CLICK,
+        ActionKind.RIGHT_CLICK,
+        ActionKind.DRAG,
+    ):
+        fn = {
+            ActionKind.CLICK: "click",
+            ActionKind.DOUBLE_CLICK: "double_click",
+            ActionKind.RIGHT_CLICK: "right_click",
+            ActionKind.DRAG: "drag",
+        }[step.action]
+        assert step.anchor is not None
+        args = [
+            f"template={step.anchor.template!r}",
+            f"click_point={step.anchor.click_point!r}",
+            f"region={step.anchor.region!r}",
+        ]
+        if step.anchor.ocr_text:
+            args.append(f"ocr_text={step.anchor.ocr_text!r}")
+        if step.action is ActionKind.DRAG:
+            assert step.drag_end_anchor is not None
+            args.extend(
+                [
+                    f"end_template={step.drag_end_anchor.template!r}",
+                    f"end_click_point={step.drag_end_anchor.click_point!r}",
+                    f"end_region={step.drag_end_anchor.region!r}",
+                ]
+            )
+        return f"    flow.{fn}({', '.join(args)})"
+    if step.action is ActionKind.TYPE:
+        if step.param:
+            return f"    flow.type_text(params[{step.param!r}])"
+        return f"    flow.type_text({(step.text or '')!r})"
+    if step.action is ActionKind.SELECT_OPTION:
+        value = f"params[{step.param!r}]" if step.param else repr(step.text or "")
+        return (
+            f"    flow.select_option({value}, commit_key={step.selection_commit_key!r})"
+        )
+    if step.action is ActionKind.KEY:
+        return f"    flow.press({(step.key or '')!r})"
+    if step.action is ActionKind.HOTKEY:
+        chord = "+".join([*step.modifiers, step.key or ""])
+        return f"    flow.hotkey({chord!r})"
+    if step.action is ActionKind.WAIT:
+        return f"    flow.wait(timeout_s={step.timeout_s!r})"
+    if step.action is ActionKind.SCROLL:
+        return f"    flow.scroll({step.scroll_dx or 0!r}, {step.scroll_dy or 0!r})"
+    raise ValueError(f"unknown action {step.action!r}")
+
+
+def render_workflow_py(workflow: Workflow) -> str:
+    """Render a workflow as readable Python source.
+
+    Args:
+        workflow: Compiled workflow.
+
+    Returns:
+        Python source text that parses with ``ast.parse``; it references a
+        hypothetical ``flow`` runtime object and is documentation, not code
+        the replayer executes.
+    """
+    lines: list[str] = [
+        '"""Generated by openadapt-flow. Human-readable rendering of',
+        f"workflow {workflow.name!r} — for code review only; the replayer",
+        'executes workflow.json, not this file."""',
+        "",
+        f"WORKFLOW_NAME = {workflow.name!r}",
+        f"RECORDING_ID = {workflow.recording_id!r}",
+        f"PARAMS = {workflow.params!r}  # param -> example/default value",
+        "",
+        "",
+        "def run(flow, params=PARAMS):",
+    ]
+    if not workflow.steps:
+        lines.append("    pass")
+    for step in workflow.steps:
+        lines.append(f"    # {step.id}: {step.intent} [{step.risk}]")
+        for landmark in step.anchor.landmarks if step.anchor else []:
+            lines.append(
+                f"    # landmark: {landmark.ocr_text!r} "
+                f"({landmark.relation}, {landmark.distance_px}px)"
+            )
+        if step.anchor is not None and step.anchor.context_text:
+            # Legacy plaintext bundles only. New (PHI-free) bundles carry a
+            # salted-hash identity_template instead (audit REM-2), so no
+            # patient identifier is ever reprinted into this human-readable
+            # rendering — see the identity-armed note below.
+            lines.append(f"    # identity context: {step.anchor.context_text!r}")
+        elif step.anchor is not None and step.anchor.identity_template is not None:
+            n_tokens = len(step.anchor.identity_template.tokens)
+            has_struct = bool(step.anchor.identity_template.structured)
+            lines.append(
+                "    # identity: armed via PHI-free salted-hash template "
+                f"({n_tokens} band tokens"
+                f"{', structured' if has_struct else ''}); "
+                "no patient identifier stored"
+            )
+        if step.submit_binding is not None:
+            from openadapt_flow.submit_binding import describe_submit_binding
+
+            lines.append(
+                f"    # submit binding: {describe_submit_binding(step.submit_binding)}"
+            )
+        elif step.submit_binding_unbound_reason is not None:
+            lines.append(
+                "    # submit binding: NONE, the run refuses this click "
+                f"({step.submit_binding_unbound_reason})"
+            )
+        lines.append(_step_call(step))
+        lines.extend(_expect_comment(step.expect))
+        lines.extend(_effect_comment(step.effects))
+        lines.append("")
+    return "\n".join(lines).rstrip() + "\n"

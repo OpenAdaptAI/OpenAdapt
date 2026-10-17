@@ -1,0 +1,57 @@
+{
+  "meta": {
+    "generated_at": "2026-07-21 01:38:10",
+    "platform": "Darwin arm64 py3.12.7",
+    "model_calls": 0
+  },
+  "rows": [
+    {
+      "drift": "none",
+      "config": "full_ladder",
+      "report_success": true,
+      "rows_written": 1,
+      "correct_disbursement": true,
+      "wrong_write": false
+    },
+    {
+      "drift": "theme",
+      "config": "full_ladder",
+      "report_success": true,
+      "rows_written": 1,
+      "correct_disbursement": true,
+      "wrong_write": false
+    },
+    {
+      "drift": "rename",
+      "config": "full_ladder",
+      "report_success": true,
+      "rows_written": 1,
+      "correct_disbursement": true,
+      "wrong_write": false
+    },
+    {
+      "drift": "none",
+      "config": "template_only",
+      "report_success": true,
+      "rows_written": 1,
+      "correct_disbursement": true,
+      "wrong_write": false
+    },
+    {
+      "drift": "theme",
+      "config": "template_only",
+      "report_success": false,
+      "rows_written": 0,
+      "correct_disbursement": false,
+      "wrong_write": false
+    },
+    {
+      "drift": "rename",
+      "config": "template_only",
+      "report_success": false,
+      "rows_written": 0,
+      "correct_disbursement": false,
+      "wrong_write": false
+    }
+  ]
+}

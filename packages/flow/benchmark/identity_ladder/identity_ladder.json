@@ -1,0 +1,2577 @@
+{
+ "summary": {
+  "surface": "dense glyph-collapse same-name/same-DOB homonyms -- O/0 and l/1, alphanumeric AND purely-numeric MRNs (different patients one MRN glyph apart; 9th reopening added numerics)",
+  "n_pairs": 14,
+  "measured_via": "the REAL Replayer._verify_identity production tier stack (structured -> pixel -> vlm -> OCR -> halt); no hand-built tier subset",
+  "vlm_source": "ProbeFaithfulVLM reproducing benchmark/vlm_identity (PR #28): 100% detection / 0% false-accept; veto-only (a 'same' answer abstains, never grants a pass)",
+  "configs": {
+   "structured": {
+    "config": "structured",
+    "n_correct": 14,
+    "n_wrong": 14,
+    "false_accept": 0,
+    "false_accept_rate": 0.0,
+    "over_halt": 0,
+    "over_halt_rate": 0.0
+   },
+   "pixel_stable": {
+    "config": "pixel_stable",
+    "n_correct": 14,
+    "n_wrong": 14,
+    "false_accept": 0,
+    "false_accept_rate": 0.0,
+    "over_halt": 14,
+    "over_halt_rate": 1.0
+   },
+   "pixel_drift_vlm_on": {
+    "config": "pixel_drift_vlm_on",
+    "n_correct": 42,
+    "n_wrong": 42,
+    "false_accept": 0,
+    "false_accept_rate": 0.0,
+    "over_halt": 42,
+    "over_halt_rate": 1.0
+   },
+   "pixel_drift_vlm_off": {
+    "config": "pixel_drift_vlm_off",
+    "n_correct": 42,
+    "n_wrong": 42,
+    "false_accept": 0,
+    "false_accept_rate": 0.0,
+    "over_halt": 42,
+    "over_halt_rate": 1.0
+   },
+   "ocr_only_confusable": {
+    "config": "ocr_only_confusable",
+    "n_correct": 42,
+    "n_wrong": 42,
+    "false_accept": 0,
+    "false_accept_rate": 0.0,
+    "over_halt": 42,
+    "over_halt_rate": 1.0
+   }
+  },
+  "safety_invariant_false_accept_zero_all_configs": true
+ },
+ "results": {
+  "structured": {
+   "config": "structured",
+   "n_correct": 14,
+   "n_wrong": 14,
+   "false_accept": 0,
+   "false_accept_rate": 0.0,
+   "over_halt": 0,
+   "over_halt_rate": 0.0,
+   "cases": [
+    {
+     "pair": "O0_digit_1",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "click",
+     "status": "verified",
+     "mode": "structured"
+    },
+    {
+     "pair": "O0_digit_1",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "structured"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "click",
+     "status": "verified",
+     "mode": "structured"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "structured"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "click",
+     "status": "verified",
+     "mode": "structured"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "structured"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "click",
+     "status": "verified",
+     "mode": "structured"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "structured"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "click",
+     "status": "verified",
+     "mode": "structured"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "structured"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "click",
+     "status": "verified",
+     "mode": "structured"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "structured"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "click",
+     "status": "verified",
+     "mode": "structured"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "structured"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "click",
+     "status": "verified",
+     "mode": "structured"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "structured"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "click",
+     "status": "verified",
+     "mode": "structured"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "structured"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "click",
+     "status": "verified",
+     "mode": "structured"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "structured"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "click",
+     "status": "verified",
+     "mode": "structured"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "structured"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "click",
+     "status": "verified",
+     "mode": "structured"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "structured"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "click",
+     "status": "verified",
+     "mode": "structured"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "structured"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "click",
+     "status": "verified",
+     "mode": "structured"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "structured"
+    }
+   ]
+  },
+  "pixel_stable": {
+   "config": "pixel_stable",
+   "n_correct": 14,
+   "n_wrong": 14,
+   "false_accept": 0,
+   "false_accept_rate": 0.0,
+   "over_halt": 14,
+   "over_halt_rate": 1.0,
+   "cases": [
+    {
+     "pair": "O0_digit_1",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_1",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "stable",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "stable",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    }
+   ]
+  },
+  "pixel_drift_vlm_on": {
+   "config": "pixel_drift_vlm_on",
+   "n_correct": 42,
+   "n_wrong": 42,
+   "false_accept": 0,
+   "false_accept_rate": 0.0,
+   "over_halt": 42,
+   "over_halt_rate": 1.0,
+   "cases": [
+    {
+     "pair": "O0_digit_1",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_1",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "vlm"
+    },
+    {
+     "pair": "O0_digit_1",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_1",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_1",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_1",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "vlm"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "vlm"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "vlm"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "vlm"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "vlm"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "vlm"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "vlm"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "vlm"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "vlm"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "vlm"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "vlm"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "vlm"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "vlm"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    }
+   ]
+  },
+  "pixel_drift_vlm_off": {
+   "config": "pixel_drift_vlm_off",
+   "n_correct": 42,
+   "n_wrong": 42,
+   "false_accept": 0,
+   "false_accept_rate": 0.0,
+   "over_halt": 42,
+   "over_halt_rate": 1.0,
+   "cases": [
+    {
+     "pair": "O0_digit_1",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_1",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_1",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_1",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_1",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_1",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "pixel"
+    }
+   ]
+  },
+  "ocr_only_confusable": {
+   "config": "ocr_only_confusable",
+   "n_correct": 42,
+   "n_wrong": 42,
+   "false_accept": 0,
+   "false_accept_rate": 0.0,
+   "over_halt": 42,
+   "over_halt_rate": 1.0,
+   "cases": [
+    {
+     "pair": "O0_digit_1",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_1",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_1",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_1",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_1",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_1",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_2",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_digit_3",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_alpha_1",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_alpha_2",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_digit_1",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_digit_2",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_alpha_1",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_alpha_2",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_1",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_2",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "O0_numeric_3",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_numeric_1",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "dark",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "dark",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "zoom",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "zoom",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "font",
+     "scenario": "correct",
+     "outcome": "halt",
+     "status": "abstain",
+     "mode": "context"
+    },
+    {
+     "pair": "l1_numeric_2",
+     "cond": "font",
+     "scenario": "wrong",
+     "outcome": "halt",
+     "status": "mismatch",
+     "mode": "context"
+    }
+   ]
+  }
+ }
+}

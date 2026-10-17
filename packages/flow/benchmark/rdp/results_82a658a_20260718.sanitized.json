@@ -1,0 +1,125 @@
+{
+  "accepted": true,
+  "base_commit": "db87e3ffe802a94046f0f131da6094dac9a0fbd7",
+  "candidate_commit": "82a658a6926ddac74b010b613535c023d0b5f079",
+  "caveat": "This qualifies RDP transport/input only, not Citrix ICA/HDX.",
+  "cleanup": {
+    "attempted": true,
+    "base_snapshot_current_after": true,
+    "error_type": null,
+    "owned_snapshot_deleted": true,
+    "passed": true,
+    "restored_state": "suspended",
+    "snapshot_inventory_after_count": 8,
+    "snapshot_inventory_restored": true
+  },
+  "derivative_payload_sha256": "f1c5c4b9c83f99f89a0a5039c0fcbb7dca9ed458cccd49e37bc961e645565ae2",
+  "environment": {
+    "aardwolf_version": "0.2.14",
+    "base_snapshot_id": "retained-clean-qualification-base",
+    "computer_name": "redacted-local-windows-guest",
+    "desktop_readiness": {
+      "baseline_desktop_ready_bypasses_transition": true,
+      "explorer": "same exact session id",
+      "max_stable_change_fraction": 0.02,
+      "stable_frames": 3,
+      "target_session": "one exact active RDP account session",
+      "taskbar_bottom_fraction": 0.08,
+      "taskbar_min_bright_fraction": 0.5,
+      "taskbar_min_luma": 161,
+      "timeout_s": 75.0,
+      "transition_fraction": 0.1
+    },
+    "framebuffer": [
+      1280,
+      800
+    ],
+    "guest_ip": "redacted-private-guest-address",
+    "guest_version": "Microsoft Windows [Version 10.0.22631.6199]",
+    "host_free_bytes_after": 160666570752,
+    "host_free_bytes_before": 160662876160,
+    "initial_state": "suspended",
+    "preexisting_sessions_logged_off": [],
+    "qualified_session_ids": [
+      3,
+      3,
+      3
+    ],
+    "snapshot_inventory_before_count": 8,
+    "transport": "aardwolf",
+    "vm": "redacted-local-parallels-vm"
+  },
+  "failure_taxonomy": [
+    "connect_or_frame_failure",
+    "input_delivery_failure",
+    "independent_oracle_mismatch",
+    "over_halt_or_timeout",
+    "environment_restore_failure"
+  ],
+  "failure_taxonomy_counts": {
+    "none": 3
+  },
+  "failures": 0,
+  "generated_at": "2026-07-18T01:51:45.484944+00:00",
+  "model_calls": 0,
+  "oracle": "prlctl exec type <unique file written only via RDP input>",
+  "over_halts": 0,
+  "owned_snapshot_id": "redacted-batch-owned-snapshot",
+  "readiness": "one exact active target-account RDP session with Explorer in the same session id; fixed-VM Windows 11 light taskbar in the bottom 8% with at least 50% of pixels at luma >=161; framebuffer transition >=0.10 from the login baseline unless that baseline is already desktop-ready; three consecutive ready frames with <=0.02 change; 75-second counted timeout",
+  "redaction_manifest": {
+    "policy": "openadapt.rdp-public-evidence.v1",
+    "removed_identifier_arrays": {
+      "cleanup.snapshot_ids_after": 8,
+      "environment.snapshot_ids_before": 8
+    },
+    "replacements": {
+      "environment.base_snapshot_id": "retained-clean-qualification-base",
+      "environment.computer_name": "redacted-local-windows-guest",
+      "environment.guest_ip": "redacted-private-guest-address",
+      "environment.vm": "redacted-local-parallels-vm",
+      "owned_snapshot_id": "redacted-batch-owned-snapshot"
+    }
+  },
+  "run_count": 3,
+  "schema_version": "openadapt.rdp-qualification.v1",
+  "silent_incorrect_successes": 0,
+  "source_report_sha256": "7c31e220bfba34057b83a8910181ce54ab82bd67f5bbc527fb319ad2091b6b9b",
+  "substrate": "real-rdp-aardwolf-parallels-win11",
+  "successes": 3,
+  "task": "create a unique file through the Windows Run dialog over RDP",
+  "trials": [
+    {
+      "error_type": null,
+      "exact": true,
+      "expected": "oaflow-rdp-trial-1-a7afe4a26c8135af",
+      "failure_class": null,
+      "input_returned_without_error": true,
+      "latency_s": 51.845,
+      "model_calls": 0,
+      "observed": "oaflow-rdp-trial-1-a7afe4a26c8135af",
+      "trial": 1
+    },
+    {
+      "error_type": null,
+      "exact": true,
+      "expected": "oaflow-rdp-trial-2-fae5492e869de211",
+      "failure_class": null,
+      "input_returned_without_error": true,
+      "latency_s": 10.467,
+      "model_calls": 0,
+      "observed": "oaflow-rdp-trial-2-fae5492e869de211",
+      "trial": 2
+    },
+    {
+      "error_type": null,
+      "exact": true,
+      "expected": "oaflow-rdp-trial-3-367fd897497feee3",
+      "failure_class": null,
+      "input_returned_without_error": true,
+      "latency_s": 7.477,
+      "model_calls": 0,
+      "observed": "oaflow-rdp-trial-3-367fd897497feee3",
+      "trial": 3
+    }
+  ]
+}

@@ -1,0 +1,156 @@
+name: Paper
+
+on:
+  pull_request:
+    paths:
+      - "paper/**"
+      - "benchmark/**"
+      - ".github/workflows/paper.yml"
+  push:
+    branches: [main]
+    paths:
+      - "paper/**"
+      - "benchmark/**"
+      - ".github/workflows/paper.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: paper-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # A failing Azure apt mirror once held this job for 3h11m until the run
+    # limit killed it, because the TeX install has no bound of its own. A
+    # healthy install finishes in about 100 seconds, so 10 minutes is generous
+    # and still fails fast. PR #370 applied the same bound to ci.yml and the
+    # RDP workflow but did not reach this file.
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Check paper constants against benchmark artifacts
+        run: python paper/check_artifacts.py
+      - name: Install TeX
+        timeout-minutes: 10
+        run: |
+          set -uo pipefail
+          # The hosted runner resolves its Ubuntu mirror through
+          # /etc/apt/apt-mirrors.txt, which points at azure.archive.ubuntu.com.
+          # That mirror fails intermittently, and every failure costs minutes of
+          # apt retries before the canonical archive is tried. Prefer the
+          # canonical archive up front. Keep this best-effort: if the file is
+          # absent or already canonical, the run continues unchanged.
+          sudo sed -i \
+            's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          # A transient mirror fault must not fail the paper build outright.
+          update_ok=""
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              update_ok=1
+              break
+            fi
+            echo "::warning::apt-get update failed (attempt ${attempt}/3); retrying"
+            sleep $((attempt * 10))
+          done
+          if [ -z "$update_ok" ]; then
+            echo "::error::apt-get update failed three times; the Ubuntu mirror is unreachable"
+            exit 1
+          fi
+          set -e
+          sudo apt-get install -y \
+            latexmk texlive-latex-extra texlive-pictures texlive-science \
+            texlive-latex-recommended texlive-fonts-recommended
+      - name: Build PDFs (full report + workshop condensation)
+        timeout-minutes: 10
+        run: make -C paper
+      - name: Upload full report PDF
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: openadapt-paper
+          path: paper/build/main.pdf
+      - name: Upload workshop PDF
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: openadapt-paper-workshop
+          path: paper/workshop/build/main.pdf
+
+  # ---- Publish the built PDF as a stable, always-current release asset -----
+  # Runs only after a successful build on push to main. Overwrites the asset on
+  # the fixed `paper-latest` tag so there is one canonical, never-drifting URL:
+  #   https://github.com/OpenAdaptAI/openadapt-flow/releases/download/paper-latest/openadapt-paper.pdf
+  # This is the source of truth for openadapt.ai's build-time fetch. The
+  # consumer is openadapt-web's prebuild fetch step in its own repository.
+  publish:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write # create/overwrite the release asset on the stable tag
+    steps:
+      - name: Download built full report PDF
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8
+        with:
+          name: openadapt-paper
+          path: pdf
+
+      - name: Publish to the stable paper-latest release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # gh release commands need the repo context; the publish job downloads
+          # the artifact but never checks out, so pass GH_REPO explicitly.
+          GH_REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          # Canonical asset name -> stable download URL. Renaming main.pdf keeps
+          # the public URL clean and independent of the LaTeX entrypoint name.
+          cp pdf/main.pdf openadapt-paper.pdf
+          # Guard: never publish a non-PDF or a trivially small artifact.
+          head -c 4 openadapt-paper.pdf | grep -q '%PDF' \
+            || { echo "::error::Built artifact is not a PDF"; exit 1; }
+          size=$(wc -c < openadapt-paper.pdf)
+          if [ "$size" -lt 10240 ]; then
+            echo "::error::Built PDF is implausibly small ($size bytes)"; exit 1
+          fi
+          # Ensure the stable prerelease tag exists, then clobber its asset.
+          if ! gh release view paper-latest >/dev/null 2>&1; then
+            gh release create paper-latest \
+              --title "OpenAdapt Paper (latest build)" \
+              --notes "Auto-published from paper/build/main.pdf on every push to main. Always reflects the current LaTeX source; do not edit by hand." \
+              --prerelease
+          fi
+          gh release upload paper-latest openadapt-paper.pdf --clobber
+          echo "Published openadapt-paper.pdf ($size bytes) to paper-latest."
+
+      # Best-effort propagation: tell openadapt-web to redeploy so its build-time
+      # fetch re-pulls the fresh asset. openadapt.ai deploys via Netlify's own
+      # git integration (not GitHub Actions), so a repository_dispatch cannot
+      # redeploy it directly; openadapt-web's paper-redeploy.yml receives this
+      # event and pings its Netlify build hook. If the cross-repo token is not
+      # wired, this is skipped -- the build-time fetch remains the primary,
+      # self-healing mechanism. ADMIN_TOKEN is the org-level token already used
+      # by release.yml for cross-repo writes.
+      - name: Notify openadapt-web to redeploy (best-effort)
+        continue-on-error: true
+        env:
+          WEB_DISPATCH_TOKEN: ${{ secrets.ADMIN_TOKEN }}
+        run: |
+          set -uo pipefail
+          if [ -z "${WEB_DISPATCH_TOKEN:-}" ]; then
+            echo "::notice::No cross-repo dispatch token (ADMIN_TOKEN) available; skipping openadapt-web dispatch. The build-time fetch remains the source of truth."
+            exit 0
+          fi
+          curl --fail --retry 5 --retry-all-errors --show-error --silent \
+            -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${WEB_DISPATCH_TOKEN}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/OpenAdaptAI/openadapt-web/dispatches \
+            -d '{"event_type":"paper-updated"}' \
+            && echo "Dispatched paper-updated to openadapt-web." \
+            || { echo "::error::Dispatch to openadapt-web failed after retries (non-blocking; build-time fetch will still refresh on the next deploy)."; exit 1; }

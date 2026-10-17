@@ -1,0 +1,124 @@
+{
+  "caveat": "This isolates runtime authorization semantics; it does not measure OCR accuracy, application reliability, or production error rates.",
+  "conditions": {
+    "governed_unreadable": [
+      {
+        "acted": false,
+        "correct_action": false,
+        "identity_status": "unreadable",
+        "over_halt": false,
+        "safe_halt": true,
+        "silent_wrong_action": false,
+        "success": false,
+        "trial": 1
+      },
+      {
+        "acted": false,
+        "correct_action": false,
+        "identity_status": "unreadable",
+        "over_halt": false,
+        "safe_halt": true,
+        "silent_wrong_action": false,
+        "success": false,
+        "trial": 2
+      },
+      {
+        "acted": false,
+        "correct_action": false,
+        "identity_status": "unreadable",
+        "over_halt": false,
+        "safe_halt": true,
+        "silent_wrong_action": false,
+        "success": false,
+        "trial": 3
+      }
+    ],
+    "governed_verified": [
+      {
+        "acted": true,
+        "correct_action": true,
+        "identity_status": "verified",
+        "over_halt": false,
+        "safe_halt": false,
+        "silent_wrong_action": false,
+        "success": true,
+        "trial": 1
+      },
+      {
+        "acted": true,
+        "correct_action": true,
+        "identity_status": "verified",
+        "over_halt": false,
+        "safe_halt": false,
+        "silent_wrong_action": false,
+        "success": true,
+        "trial": 2
+      },
+      {
+        "acted": true,
+        "correct_action": true,
+        "identity_status": "verified",
+        "over_halt": false,
+        "safe_halt": false,
+        "silent_wrong_action": false,
+        "success": true,
+        "trial": 3
+      }
+    ],
+    "permissive_unreadable": [
+      {
+        "acted": true,
+        "correct_action": false,
+        "identity_status": "unreadable",
+        "over_halt": false,
+        "safe_halt": false,
+        "silent_wrong_action": true,
+        "success": true,
+        "trial": 1
+      },
+      {
+        "acted": true,
+        "correct_action": false,
+        "identity_status": "unreadable",
+        "over_halt": false,
+        "safe_halt": false,
+        "silent_wrong_action": true,
+        "success": true,
+        "trial": 2
+      },
+      {
+        "acted": true,
+        "correct_action": false,
+        "identity_status": "unreadable",
+        "over_halt": false,
+        "safe_halt": false,
+        "silent_wrong_action": true,
+        "success": true,
+        "trial": 3
+      }
+    ]
+  },
+  "oracle": "backend action log plus Replayer report",
+  "scope": "synthetic deterministic governed-policy handoff",
+  "summary": {
+    "governed_unreadable": {
+      "correct_action": 0,
+      "over_halt": 0,
+      "safe_halt": 3,
+      "silent_wrong_action": 0
+    },
+    "governed_verified": {
+      "correct_action": 3,
+      "over_halt": 0,
+      "safe_halt": 0,
+      "silent_wrong_action": 0
+    },
+    "permissive_unreadable": {
+      "correct_action": 0,
+      "over_halt": 0,
+      "safe_halt": 0,
+      "silent_wrong_action": 3
+    }
+  },
+  "trials_per_condition": 3
+}

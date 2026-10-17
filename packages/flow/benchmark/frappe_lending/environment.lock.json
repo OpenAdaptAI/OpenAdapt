@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "generated_for": "OpenAdapt synthetic Frappe Lending benchmark",
+  "upstreams": {
+    "frappe_docker": {
+      "url": "https://github.com/frappe/frappe_docker.git",
+      "ref": "c004361e790125ed13aaa933d11f7838711a8960",
+      "commit": "c004361e790125ed13aaa933d11f7838711a8960"
+    },
+    "frappe": {
+      "url": "https://github.com/frappe/frappe.git",
+      "ref": "v16.27.0",
+      "commit": "73decbb00106a12c4e854c98dce8c0e3f42f514e"
+    },
+    "erpnext": {
+      "url": "https://github.com/frappe/erpnext.git",
+      "ref": "v16.27.0",
+      "commit": "9d5c7605b8eae7fb5aaf9efd00a778adae2daeb1"
+    },
+    "lending": {
+      "url": "https://github.com/frappe/lending.git",
+      "ref": "v16.2.0",
+      "commit": "caed066b6636075634418f4f0382798b60c0e188"
+    }
+  },
+  "services": {
+    "frappe_build": "frappe/build:v16.27.0@sha256:03e6e1266d8427cbc8b524d5dc1afcfdf313dd3e0dc01f384e1564a10df970b2",
+    "frappe_base": "frappe/base:v16.27.0@sha256:87f036846924f1b9be1b30d590e7156c1013f73bbf946e6a43d8f1560a1f0d33",
+    "mariadb": "mariadb:11.8@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4",
+    "redis": "redis:6.2-alpine@sha256:c9ab371a96b057d3642be9bd71cb1b3fe97920d345dc949860578bffb3d54460"
+  },
+  "site": "frontend",
+  "image": "openadapt/frappe-lending-benchmark:20260716"
+}

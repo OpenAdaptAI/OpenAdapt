@@ -1,0 +1,525 @@
+{
+  "accepted": true,
+  "base_commit": "d952c363d1910f1699c1a4690002879b1990d743",
+  "candidate_commit": "6031fde559b942a1d8b1a560d8b6cee8a6bfc800",
+  "caveat": "Synthetic Tk task over real FreeRDP-transported pixels + input, but NOT Citrix ICA/HDX, NOT the aardwolf transport, NOT a Windows application qualification, and the drift is simulated on the real protocol session (not WAN capture).",
+  "contract": {
+    "drift_false_completions": 0,
+    "drift_safely_halted": 3,
+    "drift_silent_writes": 0,
+    "drift_trials": 3,
+    "healthy_effects_confirmed": 3,
+    "healthy_identity_verified": 3,
+    "healthy_over_halts": 0,
+    "healthy_policy_admitted": 3,
+    "healthy_runtime_effects_verified": 3,
+    "healthy_silent_incorrect_successes": 0,
+    "healthy_structural_rung_used": 0,
+    "healthy_trials": 3,
+    "healthy_visual_rungs_used": {
+      "template": 9
+    },
+    "healthy_zero_model_calls": true
+  },
+  "environment": {
+    "backend": "openadapt_flow FreeRDPBackend (pixel-only, use_structural off)",
+    "fixture_package_versions": {
+      "freerdp3-shadow-x11": "3.30.0+dfsg-0ubuntu0.24.04.1",
+      "freerdp3-x11": "3.30.0+dfsg-0ubuntu0.24.04.1",
+      "imagemagick": "8:6.9.12.98+dfsg1-5.2build2",
+      "openbox": "3.6.1-12build5",
+      "xdotool": "1:3.20160805.1-5build1"
+    },
+    "governed_policy": "policy.yaml",
+    "note": "aardwolf (the product's Windows-RDP transport) cannot connect to Linux RDP servers; see fixture README. The aardwolf-over-Windows transport is qualified separately in benchmark/rdp (PR #142).",
+    "pixel_identity_verify": "enabled for this synthetic qualification only",
+    "rdp_client": "xfreerdp3 (FreeRDP3 client, fullscreen)",
+    "rdp_server": "freerdp-shadow-cli3 (FreeRDP3 server)",
+    "runtime_effect_verifier": "DocumentHashVerifier over bind-mounted oracle",
+    "surface": "Tk kiosk app served over RDP; observed on client display",
+    "transport": "DockerX11RdpTransport (screenshot+xdotool over the RDP client)",
+    "viewport": [
+      1280,
+      800
+    ]
+  },
+  "failure_taxonomy": [
+    "connect_or_frame_failure",
+    "healthy_contract_violation",
+    "silent_incorrect_success",
+    "healthy_over_halt",
+    "effect_not_confirmed",
+    "identity_not_verified",
+    "effect_not_runtime_verified",
+    "policy_not_admitted",
+    "drift_contract_violation",
+    "reset_not_acknowledged"
+  ],
+  "generated_at": "2026-07-23T04:18:19.151494+00:00",
+  "model_calls": 0,
+  "oracle": "host read of the bind-mounted kiosk document, plus the runtime DocumentHashVerifier exactly-one-new-document gate",
+  "run_count": 6,
+  "schema_version": "openadapt.rdp-ladder-qualification.v2",
+  "substrate": "real-rdp-freerdp3-roundtrip-linux-kiosk",
+  "successes": 6,
+  "task": "record->compile->replay a patient-note write through the vision-only resolver ladder over a real RDP round-trip, with no structural backend; confirm the write via an independent document oracle; and halt under injected DPI/theme/JPEG drift",
+  "total_s": 163.956,
+  "trials": [
+    {
+      "condition_trial": 1,
+      "effect_confirmed": true,
+      "effect_expected": "MRN A1001\tfollowup in two weeks / healthy-1",
+      "effect_observed": "MRN A1001\tfollowup in two weeks / healthy-1",
+      "failure_class": null,
+      "identity_diagnostics": {
+        "step_000": {
+          "error": null,
+          "mode": "pixel",
+          "observed": "live identifier crop matches after alignment (worst window 0.000)",
+          "recorded_click_point": [
+            347,
+            192
+          ],
+          "resolution": {
+            "confidence": 0.9999997615814209,
+            "point": [
+              347,
+              192
+            ],
+            "rung": "template"
+          },
+          "status": "verified"
+        },
+        "step_001": {
+          "error": null,
+          "mode": "pixel",
+          "observed": "live identifier crop matches after alignment (worst window 0.000)",
+          "recorded_click_point": [
+            120,
+            588
+          ],
+          "resolution": {
+            "confidence": 0.999997615814209,
+            "point": [
+              120,
+              588
+            ],
+            "rung": "template"
+          },
+          "status": "verified"
+        },
+        "step_003": {
+          "error": null,
+          "mode": "pixel",
+          "observed": "live identifier crop matches after alignment (worst window 0.000)",
+          "recorded_click_point": [
+            910,
+            588
+          ],
+          "resolution": {
+            "confidence": 0.9999989867210388,
+            "point": [
+              910,
+              588
+            ],
+            "rung": "template"
+          },
+          "status": "verified"
+        }
+      },
+      "identity_required": true,
+      "identity_statuses": {
+        "step_000": "verified",
+        "step_001": "verified",
+        "step_003": "verified"
+      },
+      "identity_verified": true,
+      "kind": "healthy_record_compile_replay",
+      "model_calls": 0,
+      "over_halt": false,
+      "passed": true,
+      "policy_admitted": true,
+      "required_identity_step_ids": [
+        "step_000",
+        "step_001",
+        "step_003"
+      ],
+      "rung_counts": {
+        "template": 3
+      },
+      "runtime_effect_verified": true,
+      "silent_incorrect_success": false,
+      "step_diagnostics": [
+        {
+          "effect_verified": null,
+          "error": null,
+          "input_retried": false,
+          "input_verified": null,
+          "ok": true,
+          "postconditions_ok": true,
+          "resolution_rung": "template",
+          "safety_halt": false,
+          "step_id": "step_000"
+        },
+        {
+          "effect_verified": null,
+          "error": null,
+          "input_retried": false,
+          "input_verified": null,
+          "ok": true,
+          "postconditions_ok": true,
+          "resolution_rung": "template",
+          "safety_halt": false,
+          "step_id": "step_001"
+        },
+        {
+          "effect_verified": null,
+          "error": null,
+          "input_retried": false,
+          "input_verified": true,
+          "ok": true,
+          "postconditions_ok": true,
+          "resolution_rung": null,
+          "safety_halt": false,
+          "step_id": "step_002"
+        },
+        {
+          "effect_verified": true,
+          "error": null,
+          "input_retried": false,
+          "input_verified": null,
+          "ok": true,
+          "postconditions_ok": true,
+          "resolution_rung": "template",
+          "safety_halt": false,
+          "step_id": "step_003"
+        }
+      ],
+      "structural_rung_used": 0,
+      "success": true,
+      "trial": 1,
+      "visual_rungs_used": {
+        "template": 3
+      }
+    },
+    {
+      "condition_trial": 2,
+      "effect_confirmed": true,
+      "effect_expected": "MRN A1001\tfollowup in two weeks / healthy-2",
+      "effect_observed": "MRN A1001\tfollowup in two weeks / healthy-2",
+      "failure_class": null,
+      "identity_diagnostics": {
+        "step_000": {
+          "error": null,
+          "mode": "pixel",
+          "observed": "live identifier crop matches after alignment (worst window 0.000)",
+          "recorded_click_point": [
+            347,
+            192
+          ],
+          "resolution": {
+            "confidence": 0.9999997615814209,
+            "point": [
+              347,
+              192
+            ],
+            "rung": "template"
+          },
+          "status": "verified"
+        },
+        "step_001": {
+          "error": null,
+          "mode": "pixel",
+          "observed": "live identifier crop matches after alignment (worst window 0.000)",
+          "recorded_click_point": [
+            120,
+            588
+          ],
+          "resolution": {
+            "confidence": 0.999997615814209,
+            "point": [
+              120,
+              588
+            ],
+            "rung": "template"
+          },
+          "status": "verified"
+        },
+        "step_003": {
+          "error": null,
+          "mode": "pixel",
+          "observed": "live identifier crop matches after alignment (worst window 0.000)",
+          "recorded_click_point": [
+            910,
+            588
+          ],
+          "resolution": {
+            "confidence": 0.9999989867210388,
+            "point": [
+              910,
+              588
+            ],
+            "rung": "template"
+          },
+          "status": "verified"
+        }
+      },
+      "identity_required": true,
+      "identity_statuses": {
+        "step_000": "verified",
+        "step_001": "verified",
+        "step_003": "verified"
+      },
+      "identity_verified": true,
+      "kind": "healthy_record_compile_replay",
+      "model_calls": 0,
+      "over_halt": false,
+      "passed": true,
+      "policy_admitted": true,
+      "required_identity_step_ids": [
+        "step_000",
+        "step_001",
+        "step_003"
+      ],
+      "rung_counts": {
+        "template": 3
+      },
+      "runtime_effect_verified": true,
+      "silent_incorrect_success": false,
+      "step_diagnostics": [
+        {
+          "effect_verified": null,
+          "error": null,
+          "input_retried": false,
+          "input_verified": null,
+          "ok": true,
+          "postconditions_ok": true,
+          "resolution_rung": "template",
+          "safety_halt": false,
+          "step_id": "step_000"
+        },
+        {
+          "effect_verified": null,
+          "error": null,
+          "input_retried": false,
+          "input_verified": null,
+          "ok": true,
+          "postconditions_ok": true,
+          "resolution_rung": "template",
+          "safety_halt": false,
+          "step_id": "step_001"
+        },
+        {
+          "effect_verified": null,
+          "error": null,
+          "input_retried": false,
+          "input_verified": true,
+          "ok": true,
+          "postconditions_ok": true,
+          "resolution_rung": null,
+          "safety_halt": false,
+          "step_id": "step_002"
+        },
+        {
+          "effect_verified": true,
+          "error": null,
+          "input_retried": false,
+          "input_verified": null,
+          "ok": true,
+          "postconditions_ok": true,
+          "resolution_rung": "template",
+          "safety_halt": false,
+          "step_id": "step_003"
+        }
+      ],
+      "structural_rung_used": 0,
+      "success": true,
+      "trial": 2,
+      "visual_rungs_used": {
+        "template": 3
+      }
+    },
+    {
+      "condition_trial": 3,
+      "effect_confirmed": true,
+      "effect_expected": "MRN A1001\tfollowup in two weeks / healthy-3",
+      "effect_observed": "MRN A1001\tfollowup in two weeks / healthy-3",
+      "failure_class": null,
+      "identity_diagnostics": {
+        "step_000": {
+          "error": null,
+          "mode": "pixel",
+          "observed": "live identifier crop matches after alignment (worst window 0.000)",
+          "recorded_click_point": [
+            347,
+            192
+          ],
+          "resolution": {
+            "confidence": 0.9999997615814209,
+            "point": [
+              347,
+              192
+            ],
+            "rung": "template"
+          },
+          "status": "verified"
+        },
+        "step_001": {
+          "error": null,
+          "mode": "pixel",
+          "observed": "live identifier crop matches after alignment (worst window 0.000)",
+          "recorded_click_point": [
+            120,
+            588
+          ],
+          "resolution": {
+            "confidence": 0.999997615814209,
+            "point": [
+              120,
+              588
+            ],
+            "rung": "template"
+          },
+          "status": "verified"
+        },
+        "step_003": {
+          "error": null,
+          "mode": "pixel",
+          "observed": "live identifier crop matches after alignment (worst window 0.000)",
+          "recorded_click_point": [
+            910,
+            588
+          ],
+          "resolution": {
+            "confidence": 0.9999989867210388,
+            "point": [
+              910,
+              588
+            ],
+            "rung": "template"
+          },
+          "status": "verified"
+        }
+      },
+      "identity_required": true,
+      "identity_statuses": {
+        "step_000": "verified",
+        "step_001": "verified",
+        "step_003": "verified"
+      },
+      "identity_verified": true,
+      "kind": "healthy_record_compile_replay",
+      "model_calls": 0,
+      "over_halt": false,
+      "passed": true,
+      "policy_admitted": true,
+      "required_identity_step_ids": [
+        "step_000",
+        "step_001",
+        "step_003"
+      ],
+      "rung_counts": {
+        "template": 3
+      },
+      "runtime_effect_verified": true,
+      "silent_incorrect_success": false,
+      "step_diagnostics": [
+        {
+          "effect_verified": null,
+          "error": null,
+          "input_retried": false,
+          "input_verified": null,
+          "ok": true,
+          "postconditions_ok": true,
+          "resolution_rung": "template",
+          "safety_halt": false,
+          "step_id": "step_000"
+        },
+        {
+          "effect_verified": null,
+          "error": null,
+          "input_retried": false,
+          "input_verified": null,
+          "ok": true,
+          "postconditions_ok": true,
+          "resolution_rung": "template",
+          "safety_halt": false,
+          "step_id": "step_001"
+        },
+        {
+          "effect_verified": null,
+          "error": null,
+          "input_retried": false,
+          "input_verified": true,
+          "ok": true,
+          "postconditions_ok": true,
+          "resolution_rung": null,
+          "safety_halt": false,
+          "step_id": "step_002"
+        },
+        {
+          "effect_verified": true,
+          "error": null,
+          "input_retried": false,
+          "input_verified": null,
+          "ok": true,
+          "postconditions_ok": true,
+          "resolution_rung": "template",
+          "safety_halt": false,
+          "step_id": "step_003"
+        }
+      ],
+      "structural_rung_used": 0,
+      "success": true,
+      "trial": 3,
+      "visual_rungs_used": {
+        "template": 3
+      }
+    },
+    {
+      "condition_trial": 1,
+      "drift": "downscale_0.4x_blur + theme_invert + jpeg_q8 (simulated on real session)",
+      "effect_after_drift": null,
+      "failure_class": null,
+      "false_completion": false,
+      "halted": true,
+      "kind": "halt_under_injected_drift",
+      "model_calls": 0,
+      "passed": true,
+      "policy_bound": true,
+      "safety_halt": true,
+      "silent_write": false,
+      "trial": 4
+    },
+    {
+      "condition_trial": 2,
+      "drift": "downscale_0.4x_blur + theme_invert + jpeg_q8 (simulated on real session)",
+      "effect_after_drift": null,
+      "failure_class": null,
+      "false_completion": false,
+      "halted": true,
+      "kind": "halt_under_injected_drift",
+      "model_calls": 0,
+      "passed": true,
+      "policy_bound": true,
+      "safety_halt": true,
+      "silent_write": false,
+      "trial": 5
+    },
+    {
+      "condition_trial": 3,
+      "drift": "downscale_0.4x_blur + theme_invert + jpeg_q8 (simulated on real session)",
+      "effect_after_drift": null,
+      "failure_class": null,
+      "false_completion": false,
+      "halted": true,
+      "kind": "halt_under_injected_drift",
+      "model_calls": 0,
+      "passed": true,
+      "policy_bound": true,
+      "safety_halt": true,
+      "silent_write": false,
+      "trial": 6
+    }
+  ]
+}

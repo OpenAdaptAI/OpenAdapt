@@ -1,0 +1,102 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # Cover SDK 1, SDK 2's floor, and current dependencies in three jobs.
+          - python-version: "3.10"
+            dependency-set: floor
+          - python-version: "3.11"
+            dependency-set: mcp2-floor
+          - python-version: "3.12"
+            dependency-set: current
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        if: matrix.dependency-set == 'floor'
+      - name: Verify lock consistency
+        if: matrix.dependency-set == 'floor'
+        run: uv lock --locked
+      - name: Install dependency floors
+        if: matrix.dependency-set == 'floor'
+        run: >-
+          pip install -e ".[dev]"
+          "openadapt-flow==2.1.0"
+          "mcp==1.28.0"
+      - name: Install MCP 2 floor
+        if: matrix.dependency-set == 'mcp2-floor'
+        run: pip install -e ".[dev]" "mcp==2.0.0"
+      - name: Install current allowed dependencies
+        if: matrix.dependency-set == 'current'
+        run: pip install -e ".[dev]"
+      - name: Lint
+        run: ruff check src tests scripts
+      - name: Test
+        run: pytest -q
+      - name: Build release artifacts
+        if: matrix.python-version == '3.12'
+        run: python -m build
+      - name: Verify MIT package boundary
+        if: matrix.python-version == '3.12'
+        run: |
+          python scripts/check_release_artifacts.py dist
+          python scripts/check_dist.py dist/*
+          python scripts/check_source_boundary.py --require-dist
+
+  sandbox-e2e:
+    # The zero-flag sandbox with real openadapt-flow, a real browser, and the
+    # synthetic MockMed app: no fakes. Unit jobs above stub Flow's CLI.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install with the browser extra
+        run: pip install -e ".[dev,tutorial]"
+      - name: Install Chromium
+        run: python -m playwright install --with-deps chromium
+      # test_approval_flow.py skips until the installed openadapt-flow has
+      # approval modes.
+      - name: Run every sandbox case through openadapt-flow
+        env:
+          OPENADAPT_AGENT_E2E: "1"
+          DO_NOT_TRACK: "1"
+          OPENADAPT_TELEMETRY: "0"
+        run: pytest -q tests/test_sandbox_flow.py tests/test_approval_flow.py
+
+  repair-e2e:
+    # halt -> needs_repair -> teach_repair -> approval -> replay, on Flow's
+    # rendered dialog fixture with its real replayer, OCR, and campaigns.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install with the released Flow (ships openadapt_flow.repair.dialog_fixture)
+        run: |
+          pip install -e ".[dev]" "openadapt-flow>=2.1.0,<3"
+          pip install opencv-python-headless rapidocr-onnxruntime
+      - name: Run the repair end-to-end test
+        env:
+          DO_NOT_TRACK: "1"
+          OPENADAPT_TELEMETRY: "0"
+        run: |
+          python -c "import openadapt_flow.repair.dialog_fixture"
+          pytest -q -rs tests/test_repair_e2e.py tests/test_repair_hold.py

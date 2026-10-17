@@ -1,0 +1,264 @@
+/* MockMed — deterministic styling: no transitions, no animations,
+   all font sizes >= 14px. */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+  transition: none !important;
+  animation: none !important;
+}
+
+html, body {
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 16px;
+  background: #f4f6f8;
+  color: #1a2330;
+}
+
+#topbar {
+  background: #2456a4;
+  color: #ffffff;
+  padding: 14px 24px;
+  font-size: 20px;
+  font-weight: bold;
+}
+
+#subtitle {
+  font-size: 14px;
+  font-weight: normal;
+  margin-left: 16px;
+  opacity: 0.9;
+}
+
+main {
+  padding: 24px;
+  max-width: 960px;
+}
+
+h1 { font-size: 24px; margin-bottom: 16px; }
+h2 { font-size: 20px; margin: 20px 0 10px; }
+p  { font-size: 16px; }
+
+button {
+  font-size: 16px;
+  padding: 10px 18px;
+  border: 1px solid #2456a4;
+  background: #2f6fd0;
+  color: #ffffff;
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+input, textarea {
+  font-size: 16px;
+  padding: 8px;
+  border: 1px solid #9aa7b8;
+  border-radius: 4px;
+  background: #ffffff;
+  color: #1a2330;
+}
+
+label {
+  display: block;
+  font-size: 15px;
+  margin: 12px 0 4px;
+  font-weight: bold;
+}
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  background: #ffffff;
+}
+
+th, td {
+  border: 1px solid #cbd5e1;
+  padding: 10px 12px;
+  font-size: 15px;
+  text-align: left;
+}
+
+th { background: #e2e8f0; }
+
+/* Action rows. Buttons whose container carries .movable are relocated to the
+   opposite side under the "move" drift mode. */
+.actions {
+  display: flex;
+  width: 100%;
+  margin-top: 18px;
+  justify-content: flex-start;
+}
+
+body.drift-move .actions.movable {
+  justify-content: flex-end;
+}
+
+/* Segmented type chooser (buttons, never a native <select>). */
+.segmented {
+  display: inline-flex;
+  border: 1px solid #2456a4;
+  border-radius: 4px;
+  overflow: hidden;
+  margin-bottom: 14px;
+}
+
+.seg-btn {
+  border: none;
+  border-radius: 0;
+  background: #ffffff;
+  color: #2456a4;
+  width: 120px;
+}
+
+.seg-btn.selected {
+  background: #2456a4;
+  color: #ffffff;
+}
+
+#saved-banner {
+  background: #d7f5dd;
+  border: 1px solid #3c9a53;
+  color: #14532d;
+  padding: 12px;
+  margin: 14px 0;
+  font-size: 16px;
+}
+
+#patient-banner {
+  background: #e8eef8;
+  border: 1px solid #94aed3;
+  padding: 12px;
+  margin-bottom: 8px;
+  font-size: 17px;
+}
+
+/* Fixed widths so the "rename" drift keeps buttons in identical positions. */
+#new-encounter { width: 180px; }
+#save-encounter { width: 220px; }
+.open-btn { width: 90px; padding: 8px 0; }
+#signin { margin-top: 4px; width: 140px; }
+
+#login-card {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  padding: 24px;
+  width: 380px;
+}
+
+#login-card input { width: 100%; }
+
+/* Inline validation error (drift mode "reqfield"). */
+#save-error:not(:empty) {
+  background: #fdecea;
+  border: 1px solid #c0392b;
+  color: #8e2418;
+  padding: 12px;
+  margin-top: 14px;
+  font-size: 16px;
+  max-width: 640px;
+}
+
+body.drift-theme #save-error:not(:empty) {
+  background: #3a1d1a;
+  border-color: #e07a6a;
+  color: #f2b8ae;
+}
+
+/* "What's New" interstitial (drift mode "notice"). */
+#notice-card {
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  padding: 24px;
+  width: 520px;
+}
+
+body.drift-theme #notice-card { background: #1f2632; border-color: #3d4a5d; }
+
+textarea#note {
+  width: 100%;
+  max-width: 640px;
+  display: block;
+  /* Native form-control "normal" line metrics vary by host font and can make
+     rows="6" change height between the separate record/replay browsers. Keep
+     this synthetic fixture pixel-stable so a no-drift replay stays zero-heal. */
+  font-family: Arial, Helvetica, sans-serif;
+  line-height: 20px;
+}
+
+#encounter-list li {
+  font-size: 15px;
+  margin: 6px 0 6px 20px;
+}
+
+/* Blocking survey modal (drift mode "modal"). */
+#modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(20, 20, 30, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+#survey-modal {
+  background: #ffffff;
+  color: #1a2330;
+  padding: 28px;
+  width: 420px;
+  border: 2px solid #2456a4;
+}
+
+#survey-modal h2 { margin-top: 0; }
+
+/* Larger type (drift mode "font"): a user-side font-size preference bump.
+   Reflows text and shifts every element below the first size change. */
+body.drift-font { font-size: 19px; }
+body.drift-font button,
+body.drift-font input,
+body.drift-font textarea,
+body.drift-font p { font-size: 19px; }
+body.drift-font th, body.drift-font td { font-size: 18px; }
+body.drift-font label { font-size: 18px; }
+body.drift-font h1 { font-size: 28px; }
+body.drift-font h2 { font-size: 24px; }
+body.drift-font #patient-banner { font-size: 20px; }
+body.drift-font #saved-banner { font-size: 19px; }
+
+/* Whole-page scale (drift mode "zoom"): approximates browser zoom at 125%.
+   Every element grows and moves; pixel coordinates no longer line up with
+   the recorded frame. */
+body.drift-zoom { zoom: 1.25; }
+
+/* Dark palette (drift mode "theme"): breaks template matching, keeps
+   contrast high so OCR still works. */
+body.drift-theme { background: #161a22; color: #e6e9ef; }
+body.drift-theme #topbar { background: #0d1117; color: #e6e9ef; }
+body.drift-theme table { background: #1f2632; }
+body.drift-theme th { background: #2a3342; }
+body.drift-theme th, body.drift-theme td { border-color: #3d4a5d; }
+body.drift-theme input, body.drift-theme textarea {
+  background: #1f2632;
+  color: #e6e9ef;
+  border-color: #55637a;
+}
+body.drift-theme button {
+  background: #5b8def;
+  border-color: #3d5f9e;
+  color: #0d1117;
+}
+body.drift-theme .seg-btn { background: #1f2632; color: #9ec1ff; }
+body.drift-theme .seg-btn.selected { background: #5b8def; color: #0d1117; }
+body.drift-theme #login-card { background: #1f2632; border-color: #3d4a5d; }
+body.drift-theme #patient-banner { background: #222c3d; border-color: #3d5f9e; }
+body.drift-theme #saved-banner {
+  background: #173222;
+  border-color: #2f7a45;
+  color: #a7e3b8;
+}
+body.drift-theme #survey-modal {
+  background: #1f2632;
+  color: #e6e9ef;
+  border-color: #5b8def;
+}

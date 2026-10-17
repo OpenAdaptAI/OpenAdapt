@@ -1,0 +1,21 @@
+{
+  "action_count": 6,
+  "case_count": 6,
+  "consequential_action_count": 1,
+  "effect_covered_action_count": 1,
+  "effect_required_action_count": 1,
+  "environment_contract_sha256": "b9625879c7aca502f246c91da64eed07ed08629f0e95a682831ae389f1282723",
+  "generated_at": "2026-07-26T07:08:22.726542+00:00",
+  "identity_covered_action_count": 1,
+  "minimum_effect_tier": 1,
+  "passed": true,
+  "passed_case_count": 6,
+  "policy_name": "clinical-write",
+  "project_id": "a7355d64-6635-4930-965e-fd1b975ececc",
+  "project_revision": 12,
+  "refusals": [],
+  "schema_version": "openadapt.qualification-report/v1",
+  "state_changing_action_count": 0,
+  "workflow_contract_sha256": "1b94cfe9d2c90e373ad152f14cb9ebc0768a9ce2344d7f99d0f5f7bcb66bb50c",
+  "workflow_name": "mockmed-triage"
+}

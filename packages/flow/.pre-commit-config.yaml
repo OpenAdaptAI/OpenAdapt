@@ -1,0 +1,15 @@
+# Pre-commit hooks. Install once with:  pre-commit install
+#
+# The PHI guard (PHI audit REM-1) blocks committing a compiled bundle that still
+# carries a plaintext patient identity band. It is a local mirror of the CI
+# `phi-guard` job and needs no dependencies for the structural check; install
+# the `privacy` extra to also scan postconditions/labels for identifiers.
+repos:
+  - repo: local
+    hooks:
+      - id: bundle-phi-guard
+        name: Block committing bundles with plaintext PHI
+        entry: python scripts/check_bundle_phi.py
+        language: system
+        files: workflow\.json$
+        pass_filenames: true

@@ -1,0 +1,69 @@
+{
+  "step_id": "step_006",
+  "kind": "anchor_refresh",
+  "rung_used": "ocr",
+  "old_anchor": {
+    "template": "templates/step_006.png",
+    "region": [
+      34,
+      127,
+      160,
+      64
+    ],
+    "click_point": [
+      114,
+      159
+    ],
+    "ocr_text": "New Encounter",
+    "landmarks": [
+      {
+        "relation": "below",
+        "ocr_text": "Encounters",
+        "distance_px": 61,
+        "dx_px": 34,
+        "dy_px": -51
+      },
+      {
+        "relation": "below",
+        "ocr_text": "No encountersyet.",
+        "distance_px": 85,
+        "dx_px": 24,
+        "dy_px": -82
+      }
+    ],
+    "search_pad": 80
+  },
+  "new_anchor": {
+    "template": "templates/step_006.png",
+    "region": [
+      34,
+      127,
+      160,
+      64
+    ],
+    "click_point": [
+      114,
+      159
+    ],
+    "ocr_text": "New Encounter",
+    "landmarks": [
+      {
+        "relation": "below",
+        "ocr_text": "Encounters",
+        "distance_px": 61,
+        "dx_px": 34,
+        "dy_px": -51
+      },
+      {
+        "relation": "below",
+        "ocr_text": "No encountersyet.",
+        "distance_px": 85,
+        "dx_px": 24,
+        "dy_px": -82
+      }
+    ],
+    "search_pad": 80
+  },
+  "screenshot": "heals/step_006/screen.png",
+  "applied": true
+}

@@ -1,0 +1,277 @@
+{
+  "workflow_name": "openimis-eligibility-check",
+  "started_at": "2026-07-21T10:11:54.210861+00:00",
+  "execution_origin": null,
+  "execution_entry_url": null,
+  "bundle_content_digest": "a733c35882b57db7b7475c6ed4e8fed7310d300db2cf5c93b4b816363d38869c",
+  "source_recording_sha256": null,
+  "parameter_schema_sha256": "97a7276863ec7cb234bd81c85b0e3d697cb206cbcc85c151fe6bf4b880e736fe",
+  "governed_authorization_id": null,
+  "governed_approval_source": null,
+  "governed_authorization_created_at": null,
+  "governed_policy_name": null,
+  "governed_runtime_inputs_digest": null,
+  "governed_authorized_effect_contracts": {},
+  "required_identity_step_ids": [],
+  "approved_unverified_effect_step_ids": [],
+  "params": {
+    "insurance_no": "999000003",
+    "service_code": "A1",
+    "as_of_date": "2026-07-21"
+  },
+  "results": [
+    {
+      "step_id": "step_000",
+      "intent": "click 'Q Insuree enquiry ?'",
+      "ok": true,
+      "skipped": false,
+      "exception_handled": false,
+      "resolution": {
+        "rung": "structural",
+        "point": [
+          859,
+          63
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 9.346292004920542,
+        "structural_handle": {
+          "point": [
+            859,
+            63
+          ],
+          "confidence": 1.0,
+          "region": null,
+          "target_fingerprint": null,
+          "candidate_count": 1,
+          "supported_operations": []
+        }
+      },
+      "identity": {
+        "status": "verified",
+        "mode": "structured",
+        "coverage": 1.0,
+        "expected": "<structured identity template>",
+        "observed": "{\"target_kind\":\"eligibility_lookup\",\"target_id\":\"insurance_no\"}",
+        "param": null
+      },
+      "input_verified": null,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "effect_verified": null,
+      "effect_approved_unverified": false,
+      "safety_halt": false,
+      "effect_results": [],
+      "effect_contract_hashes": [],
+      "actuation": null,
+      "delivery_receipt": null,
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_000_before.png",
+      "after_png": "steps/step_000_after.png",
+      "elapsed_ms": 1152.447458007373
+    },
+    {
+      "step_id": "step_001",
+      "intent": "type <insurance_no>",
+      "ok": true,
+      "skipped": false,
+      "exception_handled": false,
+      "resolution": null,
+      "identity": null,
+      "input_verified": true,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "effect_verified": null,
+      "effect_approved_unverified": false,
+      "safety_halt": false,
+      "effect_results": [],
+      "effect_contract_hashes": [],
+      "actuation": null,
+      "delivery_receipt": null,
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_001_before.png",
+      "after_png": "steps/step_001_after.png",
+      "elapsed_ms": 790.5899999896064
+    },
+    {
+      "step_id": "step_002",
+      "intent": "press Enter",
+      "ok": true,
+      "skipped": false,
+      "exception_handled": false,
+      "resolution": null,
+      "identity": null,
+      "input_verified": null,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "effect_verified": null,
+      "effect_approved_unverified": false,
+      "safety_halt": false,
+      "effect_results": [],
+      "effect_contract_hashes": [],
+      "actuation": null,
+      "delivery_receipt": null,
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_002_before.png",
+      "after_png": "steps/step_002_after.png",
+      "elapsed_ms": 1254.6360000269488
+    },
+    {
+      "step_id": "step_003",
+      "intent": "click at (323, 626)",
+      "ok": true,
+      "skipped": false,
+      "exception_handled": false,
+      "resolution": {
+        "rung": "structural",
+        "point": [
+          323,
+          627
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 8.774708025157452,
+        "structural_handle": {
+          "point": [
+            323,
+            627
+          ],
+          "confidence": 1.0,
+          "region": null,
+          "target_fingerprint": null,
+          "candidate_count": 1,
+          "supported_operations": []
+        }
+      },
+      "identity": {
+        "status": "verified",
+        "mode": "structured",
+        "coverage": 1.0,
+        "expected": "<structured identity template>",
+        "observed": "{\"target_kind\":\"eligibility_service\",\"target_id\":\"service_code\",\"insurance_no\":\"999000003\"}",
+        "param": "insurance_no"
+      },
+      "input_verified": null,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "effect_verified": null,
+      "effect_approved_unverified": false,
+      "safety_halt": false,
+      "effect_results": [],
+      "effect_contract_hashes": [],
+      "actuation": null,
+      "delivery_receipt": null,
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_003_before.png",
+      "after_png": "steps/step_003_after.png",
+      "elapsed_ms": 1128.824874991551
+    },
+    {
+      "step_id": "step_004",
+      "intent": "type 'General'",
+      "ok": true,
+      "skipped": false,
+      "exception_handled": false,
+      "resolution": null,
+      "identity": null,
+      "input_verified": true,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "effect_verified": null,
+      "effect_approved_unverified": false,
+      "safety_halt": false,
+      "effect_results": [],
+      "effect_contract_hashes": [],
+      "actuation": null,
+      "delivery_receipt": null,
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_004_before.png",
+      "after_png": "steps/step_004_after.png",
+      "elapsed_ms": 1427.8360420139506
+    },
+    {
+      "step_id": "step_005",
+      "intent": "click at (351, 673)",
+      "ok": true,
+      "skipped": false,
+      "exception_handled": false,
+      "resolution": {
+        "rung": "structural",
+        "point": [
+          351,
+          673
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 9.34879097621888,
+        "structural_handle": {
+          "point": [
+            351,
+            673
+          ],
+          "confidence": 1.0,
+          "region": null,
+          "target_fingerprint": null,
+          "candidate_count": 1,
+          "supported_operations": []
+        }
+      },
+      "identity": {
+        "status": "verified",
+        "mode": "structured",
+        "coverage": 1.0,
+        "expected": "<structured identity template>",
+        "observed": "{\"target_kind\":\"eligibility_service_option\",\"target_id\":\"A1 General Consultation\",\"insurance_no\":\"999000003\"}",
+        "param": "insurance_no"
+      },
+      "input_verified": null,
+      "input_retried": false,
+      "postconditions_ok": true,
+      "effect_verified": true,
+      "effect_approved_unverified": false,
+      "safety_halt": false,
+      "effect_results": [
+        "[sql] field_equals: CONFIRMED — field 'eligibility' equals the expected value"
+      ],
+      "effect_contract_hashes": [
+        "sha256:87654c98082b153a12d1be4745e7325cf09bb31f023c5a15b7e8fed2d8acacff"
+      ],
+      "actuation": null,
+      "delivery_receipt": null,
+      "postcondition_drift_rescues": [],
+      "drift_oracle_calls": 0,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_005_before.png",
+      "after_png": "steps/step_005_after.png",
+      "elapsed_ms": 1072.1544169355184
+    }
+  ],
+  "success": true,
+  "terminal_outcome": null,
+  "visited_states": [],
+  "halt": null,
+  "rung_counts": {
+    "structural": 3
+  },
+  "heal_count": 0,
+  "model_calls": 0,
+  "est_model_cost_usd": 0.0,
+  "total_ms": 6826.545375050046,
+  "identity_applicable_steps": 3,
+  "identity_armed_steps": 3,
+  "identity_unarmed": [],
+  "screenshots_may_leave_box": false
+}

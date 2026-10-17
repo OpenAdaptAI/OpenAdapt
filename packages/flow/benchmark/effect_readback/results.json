@@ -1,0 +1,97 @@
+{
+  "meta": {
+    "generated_at": "2026-07-20 16:24:41",
+    "platform": "Darwin arm64 py3.12.7",
+    "note_text": "chest pain, follow up in two weeks",
+    "oracle": "runtime.effects.onscreen.OnScreenReadbackVerifier",
+    "ground_truth": "mockmed.fault_server in-process record store",
+    "model_calls": 0
+  },
+  "rows": [
+    {
+      "mode": "ok",
+      "title": "Clean write (control)",
+      "value_present": true,
+      "structurally_clean": true,
+      "same_surface_verdict": "confirmed",
+      "different_path_verdict": "confirmed"
+    },
+    {
+      "mode": "partial",
+      "title": "Partial save (note dropped)",
+      "value_present": false,
+      "structurally_clean": false,
+      "same_surface_verdict": "confirmed",
+      "different_path_verdict": "indeterminate"
+    },
+    {
+      "mode": "optimistic",
+      "title": "Optimistic-UI success, server rejects",
+      "value_present": false,
+      "structurally_clean": false,
+      "same_surface_verdict": "confirmed",
+      "different_path_verdict": "indeterminate"
+    },
+    {
+      "mode": "session",
+      "title": "Session expired (401, nothing persisted)",
+      "value_present": false,
+      "structurally_clean": false,
+      "same_surface_verdict": "refuted",
+      "different_path_verdict": "indeterminate"
+    },
+    {
+      "mode": "timeout",
+      "title": "Commit then client timeout",
+      "value_present": true,
+      "structurally_clean": true,
+      "same_surface_verdict": "confirmed",
+      "different_path_verdict": "confirmed"
+    },
+    {
+      "mode": "duplicate",
+      "title": "Duplicate submission (value present)",
+      "value_present": true,
+      "structurally_clean": false,
+      "same_surface_verdict": "confirmed",
+      "different_path_verdict": "confirmed"
+    },
+    {
+      "mode": "stale",
+      "title": "Lost update (value present)",
+      "value_present": true,
+      "structurally_clean": false,
+      "same_surface_verdict": "confirmed",
+      "different_path_verdict": "confirmed"
+    }
+  ],
+  "aggregate": {
+    "same_surface": {
+      "false_confirm_rate": 0.667,
+      "false_confirm_count": 2,
+      "false_confirm_of": [
+        "partial",
+        "optimistic"
+      ],
+      "false_halt_rate": 0.0,
+      "false_halt_of": [],
+      "true_confirm_rate": 1.0,
+      "structural_blind_spot_of": [
+        "duplicate",
+        "stale"
+      ]
+    },
+    "different_path": {
+      "false_confirm_rate": 0.0,
+      "false_confirm_count": 0,
+      "false_confirm_of": [],
+      "false_halt_rate": 0.0,
+      "false_halt_of": [],
+      "true_confirm_rate": 1.0,
+      "structural_blind_spot_of": [
+        "duplicate",
+        "stale"
+      ]
+    }
+  }
+}

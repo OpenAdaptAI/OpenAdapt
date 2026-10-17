@@ -1,0 +1,211 @@
+{
+  "model": "mlx-community/Qwen3-VL-4B-Instruct-4bit",
+  "corpus": "pixel_identity_probe.COLLAPSE_PAIRS (digit/alpha/numeric O0+l1)",
+  "n_wrong_patient": 14,
+  "false_accepts": 0,
+  "false_accept_rate": 0.0,
+  "detection_rate": 1.0,
+  "detection_by_flank": {
+    "digit": {
+      "detected": 5,
+      "n": 5
+    },
+    "alpha": {
+      "detected": 4,
+      "n": 4
+    },
+    "numeric": {
+      "detected": 5,
+      "n": 5
+    }
+  },
+  "false_accept_cases": [],
+  "latency_s": {
+    "median": 0.7598831653594971,
+    "max": 0.8078939914703369
+  },
+  "rows": [
+    {
+      "label": "O0_digit_1",
+      "glyph_class": "O0",
+      "flank": "digit",
+      "target": "MG4408",
+      "sibling": "MG44O8",
+      "verdict": "mismatch",
+      "sod": "different",
+      "vetoed": true,
+      "false_accept": false,
+      "latency_s": 0.8078939914703369,
+      "note": "digit-flanked: target zero vs sibling letter-O (MG4408/MG44O8)"
+    },
+    {
+      "label": "O0_digit_2",
+      "glyph_class": "O0",
+      "flank": "digit",
+      "target": "AC50061",
+      "sibling": "AC5OO61",
+      "verdict": "mismatch",
+      "sod": "different",
+      "vetoed": true,
+      "false_accept": false,
+      "latency_s": 0.8036808967590332,
+      "note": "digit-flanked, two zeros vs two O (AC50061/AC5OO61)"
+    },
+    {
+      "label": "O0_digit_3",
+      "glyph_class": "O0",
+      "flank": "digit",
+      "target": "RC90210",
+      "sibling": "RC9O210",
+      "verdict": "mismatch",
+      "sod": "different",
+      "vetoed": true,
+      "false_accept": false,
+      "latency_s": 0.7803120613098145,
+      "note": "digit-flanked single 0 vs O (RC90210/RC9O210)"
+    },
+    {
+      "label": "O0_alpha_1",
+      "glyph_class": "O0",
+      "flank": "alpha",
+      "target": "C0X3834",
+      "sibling": "COX3834",
+      "verdict": "mismatch",
+      "sod": "different",
+      "vetoed": true,
+      "false_accept": false,
+      "latency_s": 0.7497940063476562,
+      "note": "alpha-flanked 0 vs O -- dense_surface id_confusion_O0 class"
+    },
+    {
+      "label": "O0_alpha_2",
+      "glyph_class": "O0",
+      "flank": "alpha",
+      "target": "B0X7521",
+      "sibling": "BOX7521",
+      "verdict": "mismatch",
+      "sod": "different",
+      "vetoed": true,
+      "false_accept": false,
+      "latency_s": 0.7546942234039307,
+      "note": "alpha-flanked 0 vs O (B0X7521/BOX7521)"
+    },
+    {
+      "label": "l1_digit_1",
+      "glyph_class": "l1",
+      "flank": "digit",
+      "target": "MG4118",
+      "sibling": "MG41l8",
+      "verdict": "mismatch",
+      "sod": "different",
+      "vetoed": true,
+      "false_accept": false,
+      "latency_s": 0.7471678256988525,
+      "note": "digit-flanked 1 vs l (MG4118/MG41l8)"
+    },
+    {
+      "label": "l1_digit_2",
+      "glyph_class": "l1",
+      "flank": "digit",
+      "target": "AC50161",
+      "sibling": "AC50l61",
+      "verdict": "mismatch",
+      "sod": "different",
+      "vetoed": true,
+      "false_accept": false,
+      "latency_s": 0.7650721073150635,
+      "note": "digit-flanked 1 vs l (AC50161/AC50l61)"
+    },
+    {
+      "label": "l1_alpha_1",
+      "glyph_class": "l1",
+      "flank": "alpha",
+      "target": "PL1X904",
+      "sibling": "PLlX904",
+      "verdict": "mismatch",
+      "sod": "different",
+      "vetoed": true,
+      "false_accept": false,
+      "latency_s": 0.7861349582672119,
+      "note": "alpha-flanked 1 vs l (PL1X904/PLlX904)"
+    },
+    {
+      "label": "l1_alpha_2",
+      "glyph_class": "l1",
+      "flank": "alpha",
+      "target": "RX1T552",
+      "sibling": "RXlT552",
+      "verdict": "mismatch",
+      "sod": "different",
+      "vetoed": true,
+      "false_accept": false,
+      "latency_s": 0.7939667701721191,
+      "note": "alpha-flanked 1 vs l (RX1T552/RXlT552)"
+    },
+    {
+      "label": "O0_numeric_1",
+      "glyph_class": "O0",
+      "flank": "numeric",
+      "target": "100512",
+      "sibling": "1OO512",
+      "verdict": "mismatch",
+      "sod": "different",
+      "vetoed": true,
+      "false_accept": false,
+      "latency_s": 0.7743649482727051,
+      "note": "purely-numeric MRN, two 0 vs two O (100512/1OO512)"
+    },
+    {
+      "label": "O0_numeric_2",
+      "glyph_class": "O0",
+      "flank": "numeric",
+      "target": "400761",
+      "sibling": "4OO761",
+      "verdict": "mismatch",
+      "sod": "different",
+      "vetoed": true,
+      "false_accept": false,
+      "latency_s": 0.7491719722747803,
+      "note": "purely-numeric MRN, two 0 vs two O (400761/4OO761)"
+    },
+    {
+      "label": "O0_numeric_3",
+      "glyph_class": "O0",
+      "flank": "numeric",
+      "target": "501900",
+      "sibling": "5O19OO",
+      "verdict": "mismatch",
+      "sod": "different",
+      "vetoed": true,
+      "false_accept": false,
+      "latency_s": 0.7525429725646973,
+      "note": "purely-numeric MRN, three 0 vs three O (501900/5O19OO)"
+    },
+    {
+      "label": "l1_numeric_1",
+      "glyph_class": "l1",
+      "flank": "numeric",
+      "target": "417063",
+      "sibling": "4l7063",
+      "verdict": "mismatch",
+      "sod": "different",
+      "vetoed": true,
+      "false_accept": false,
+      "latency_s": 0.7137999534606934,
+      "note": "purely-numeric MRN, digit 1 vs letter l (417063/4l7063)"
+    },
+    {
+      "label": "l1_numeric_2",
+      "glyph_class": "l1",
+      "flank": "numeric",
+      "target": "110234",
+      "sibling": "ll0234",
+      "verdict": "mismatch",
+      "sod": "different",
+      "vetoed": true,
+      "false_accept": false,
+      "latency_s": 0.7158920764923096,
+      "note": "purely-numeric MRN, leading 1s vs ls (110234/ll0234)"
+    }
+  ]
+}

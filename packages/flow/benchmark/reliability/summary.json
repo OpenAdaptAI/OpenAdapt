@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "scope": {
+    "environment": "public no-authentication web applications",
+    "condition": "record, compile, then replay once on unchanged UI",
+    "model_calls": 0,
+    "independent_validation": false
+  },
+  "summary": {
+    "n_apps": 29,
+    "n_recorded": 29,
+    "n_compiled": 29,
+    "n_replayed": 29,
+    "compile_success_rate_over_recorded": 1.0,
+    "compile_success_rate_over_all": 1.0,
+    "outcomes": {
+      "success": 17,
+      "safe_halt": 10,
+      "wrong_action": 2
+    },
+    "replay_success_rate_over_replayed": 0.586,
+    "replay_success_rate_over_compiled": 0.586,
+    "wrong_action_count": 2,
+    "safe_halt_count": 10,
+    "false_halt_count": 0,
+    "crash_count": 0,
+    "record_error_count": 0,
+    "failure_categories": {
+      "identity_mismatch": 9,
+      "wrong_action_silent": 2,
+      "postcondition_failed": 1
+    },
+    "root_cause_hints": {
+      "ground_truth_disagrees": 2,
+      "dynamic_content": 1
+    }
+  },
+  "caveats": [
+    "One observation per target; this is not a repeatability estimate.",
+    "Public browser targets are not representative of authenticated enterprise or remote-desktop applications.",
+    "The study does not exercise UI drift.",
+    "The evidence was produced by the team that developed the mechanism and is not independent validation."
+  ]
+}

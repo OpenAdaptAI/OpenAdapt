@@ -1,0 +1,254 @@
+{
+  "$defs": {
+    "OracleChannel": {
+      "description": "How the oracle read the effect. The channel, not the payload, sets the tier.",
+      "enum": [
+        "visual",
+        "ocr",
+        "second_session",
+        "api",
+        "db",
+        "file",
+        "ack",
+        "counterparty"
+      ],
+      "title": "OracleChannel",
+      "type": "string"
+    },
+    "RewardCertificatePolicyV1": {
+      "additionalProperties": false,
+      "description": "The certificate a reward must hold before a trainer may call it certified.\n\n``epsilon`` bounds the false-accept probability.  ``delta`` is one minus\nthe confidence.  ``threshold`` is the checker decision threshold the bound\nwas calibrated at.  ``calibration_corpus_digest`` names the corpus without\ncarrying it.  ``expiry_policy_updates`` is the number of policy updates a\ncertificate stays current after issue.",
+      "properties": {
+        "calibration_corpus_digest": {
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "title": "Calibration Corpus Digest",
+          "type": "string"
+        },
+        "delta": {
+          "exclusiveMaximum": 1.0,
+          "exclusiveMinimum": 0.0,
+          "title": "Delta",
+          "type": "number"
+        },
+        "epsilon": {
+          "exclusiveMaximum": 1.0,
+          "exclusiveMinimum": 0.0,
+          "title": "Epsilon",
+          "type": "number"
+        },
+        "expiry_policy_updates": {
+          "maximum": 9007199254740991,
+          "minimum": 1,
+          "title": "Expiry Policy Updates",
+          "type": "integer"
+        },
+        "threshold": {
+          "title": "Threshold",
+          "type": "number"
+        }
+      },
+      "required": [
+        "epsilon",
+        "delta",
+        "threshold",
+        "calibration_corpus_digest",
+        "expiry_policy_updates"
+      ],
+      "title": "RewardCertificatePolicyV1",
+      "type": "object"
+    },
+    "RewardComponentV1": {
+      "additionalProperties": false,
+      "description": "One named term of the reward vector and its weight in the scalar.",
+      "properties": {
+        "name": {
+          "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,127}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "weight": {
+          "exclusiveMinimum": 0.0,
+          "maximum": 1000000.0,
+          "title": "Weight",
+          "type": "number"
+        }
+      },
+      "required": [
+        "name",
+        "weight"
+      ],
+      "title": "RewardComponentV1",
+      "type": "object"
+    },
+    "RewardOracleV1": {
+      "additionalProperties": false,
+      "description": "The independent oracle that reads the terminal effect.\n\nThe channel sets the tier.  The identity keys name the record the oracle\nreads.  The oracle contract digest binds the read recipe without carrying\nit.",
+      "properties": {
+        "channel": {
+          "$ref": "#/$defs/OracleChannel"
+        },
+        "identity_keys": {
+          "items": {
+            "type": "string"
+          },
+          "maxItems": 32,
+          "minItems": 1,
+          "title": "Identity Keys",
+          "type": "array",
+          "uniqueItems": true
+        },
+        "oracle_contract_digest": {
+          "pattern": "^sha256:[a-f0-9]{64}$",
+          "title": "Oracle Contract Digest",
+          "type": "string"
+        }
+      },
+      "required": [
+        "channel",
+        "identity_keys",
+        "oracle_contract_digest"
+      ],
+      "title": "RewardOracleV1",
+      "type": "object"
+    },
+    "RewardScoringPolicyV1": {
+      "additionalProperties": false,
+      "description": "How each scoring class becomes a scalar.\n\nUncertain episodes and platform failures are fixed to ``unscored`` in\nthis version.  A contract cannot declare them to be zero.",
+      "properties": {
+        "halted_before_effect_reward": {
+          "default": 0.0,
+          "maximum": 0.0,
+          "minimum": -1000000.0,
+          "title": "Halted Before Effect Reward",
+          "type": "number"
+        },
+        "platform_failures": {
+          "const": "unscored",
+          "default": "unscored",
+          "title": "Platform Failures",
+          "type": "string"
+        },
+        "refused_reward": {
+          "default": 0.0,
+          "maximum": 0.0,
+          "minimum": -1000000.0,
+          "title": "Refused Reward",
+          "type": "number"
+        },
+        "rejected_policy_reward": {
+          "default": 0.0,
+          "maximum": 0.0,
+          "minimum": -1000000.0,
+          "title": "Rejected Policy Reward",
+          "type": "number"
+        },
+        "uncertain_episodes": {
+          "const": "unscored",
+          "default": "unscored",
+          "title": "Uncertain Episodes",
+          "type": "string"
+        },
+        "verified_reward": {
+          "default": 1.0,
+          "exclusiveMinimum": 0.0,
+          "maximum": 1000000.0,
+          "title": "Verified Reward",
+          "type": "number"
+        },
+        "wrong_effect_reward": {
+          "default": -1.0,
+          "maximum": 0.0,
+          "minimum": -1000000.0,
+          "title": "Wrong Effect Reward",
+          "type": "number"
+        }
+      },
+      "title": "RewardScoringPolicyV1",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One immutable statement of what earns reward and who checks it.",
+  "properties": {
+    "certificate_policy": {
+      "$ref": "#/$defs/RewardCertificatePolicyV1"
+    },
+    "components": {
+      "items": {
+        "$ref": "#/$defs/RewardComponentV1"
+      },
+      "maxItems": 64,
+      "minItems": 1,
+      "title": "Components",
+      "type": "array",
+      "uniqueItems": true
+    },
+    "contract_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Contract Id",
+      "type": "string"
+    },
+    "contract_version": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Contract Version",
+      "type": "string"
+    },
+    "environment_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Environment Digest",
+      "type": "string"
+    },
+    "environment_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Environment Id",
+      "type": "string"
+    },
+    "forbidden_effect_contract_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Forbidden Effect Contract Digest",
+      "type": "string"
+    },
+    "oracle": {
+      "$ref": "#/$defs/RewardOracleV1"
+    },
+    "required_effect_contract_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Required Effect Contract Digest",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "openadapt.reward-contract/v1",
+      "default": "openadapt.reward-contract/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "scoring": {
+      "$ref": "#/$defs/RewardScoringPolicyV1"
+    },
+    "task_digest": {
+      "pattern": "^sha256:[a-f0-9]{64}$",
+      "title": "Task Digest",
+      "type": "string"
+    },
+    "task_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Task Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "contract_id",
+    "contract_version",
+    "task_id",
+    "task_digest",
+    "environment_id",
+    "environment_digest",
+    "required_effect_contract_digest",
+    "forbidden_effect_contract_digest",
+    "oracle",
+    "components",
+    "certificate_policy"
+  ],
+  "title": "RewardContractV1",
+  "type": "object"
+}

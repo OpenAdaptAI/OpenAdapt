@@ -1,0 +1,157 @@
+# Derived from frappe_docker pwd.yml at
+# c004361e790125ed13aaa933d11f7838711a8960. Synthetic local benchmark only.
+x-image: &image
+  image: ${BENCHMARK_IMAGE:?set BENCHMARK_IMAGE in the generated runtime.env}
+
+x-backend: &backend
+  <<: *image
+  depends_on:
+    configurator:
+      condition: service_completed_successfully
+  volumes:
+    - sites:/home/frappe/frappe-bench/sites
+    - logs:/home/frappe/frappe-bench/logs
+
+services:
+  db:
+    image: ${MARIADB_IMAGE:?pinned MARIADB_IMAGE required}
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_unicode_ci
+      - --skip-character-set-client-handshake
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?generated fixture secret required}
+      MYSQL_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?generated fixture secret required}
+    healthcheck:
+      test: ["CMD", "healthcheck.sh", "--connect", "--innodb_initialized"]
+      start_period: 5s
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - db-data:/var/lib/mysql
+
+  redis-cache:
+    image: ${REDIS_IMAGE:?pinned REDIS_IMAGE required}
+
+  redis-queue:
+    image: ${REDIS_IMAGE:?pinned REDIS_IMAGE required}
+    volumes:
+      - redis-queue-data:/data
+
+  configurator:
+    <<: *image
+    entrypoint: ["bash", "-c"]
+    command:
+      - >-
+        ls -1 apps > sites/apps.txt;
+        bench set-config -g db_host db;
+        bench set-config -gp db_port 3306;
+        bench set-config -g redis_cache redis://redis-cache:6379;
+        bench set-config -g redis_queue redis://redis-queue:6379;
+        bench set-config -g redis_socketio redis://redis-queue:6379;
+        bench set-config -gp socketio_port 9000
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    restart: "no"
+
+  create-site:
+    <<: *image
+    depends_on:
+      configurator:
+        condition: service_completed_successfully
+      db:
+        condition: service_healthy
+      redis-cache:
+        condition: service_started
+      redis-queue:
+        condition: service_started
+    entrypoint: ["bash", "-c"]
+    command:
+      - |
+        if [ ! -f "sites/${SITE_NAME}/site_config.json" ]; then
+          bench new-site \
+          --mariadb-user-host-login-scope='%' \
+          --admin-password="$${SITE_ADMIN_PASSWORD}" \
+          --db-root-username=root \
+          --db-root-password="$${MARIADB_ROOT_PASSWORD}" \
+          --install-app erpnext \
+          --set-default \
+          "${SITE_NAME}" &&
+          bench --site "${SITE_NAME}" install-app lending;
+        fi
+    environment:
+      MARIADB_ROOT_PASSWORD: ${MARIADB_ROOT_PASSWORD:?generated fixture secret required}
+      SITE_ADMIN_PASSWORD: ${SITE_ADMIN_PASSWORD:?generated fixture secret required}
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+    restart: "no"
+
+  backend:
+    <<: *backend
+    depends_on:
+      create-site:
+        condition: service_completed_successfully
+    environment:
+      GUNICORN_THREADS: "4"
+      GUNICORN_WORKERS: "2"
+      GUNICORN_TIMEOUT: "120"
+
+  frontend:
+    <<: *image
+    command: ["nginx-entrypoint.sh"]
+    depends_on:
+      - backend
+      - websocket
+    environment:
+      BACKEND: backend:8000
+      SOCKETIO: websocket:9000
+      FRAPPE_SITE_NAME_HEADER: ${SITE_NAME}
+      UPSTREAM_REAL_IP_ADDRESS: 127.0.0.1
+      UPSTREAM_REAL_IP_HEADER: X-Forwarded-For
+      UPSTREAM_REAL_IP_RECURSIVE: "off"
+      PROXY_READ_TIMEOUT: "120"
+      CLIENT_MAX_BODY_SIZE: 50m
+    ports:
+      # Fixture users have intentionally-known local passwords. Never expose
+      # this synthetic stack on a LAN interface.
+      - "127.0.0.1:${FRAPPE_PORT:-8080}:8080"
+    volumes:
+      - sites:/home/frappe/frappe-bench/sites
+      - logs:/home/frappe/frappe-bench/logs
+
+  websocket:
+    <<: *backend
+    command: ["node", "/home/frappe/frappe-bench/apps/frappe/socketio.js"]
+    environment:
+      FRAPPE_REDIS_CACHE: redis://redis-cache:6379
+      FRAPPE_REDIS_QUEUE: redis://redis-queue:6379
+
+  queue-short:
+    <<: *backend
+    profiles: ["workers"]
+    command: ["bench", "worker", "--queue", "short,default"]
+    environment:
+      FRAPPE_REDIS_CACHE: redis://redis-cache:6379
+      FRAPPE_REDIS_QUEUE: redis://redis-queue:6379
+
+  queue-long:
+    <<: *backend
+    profiles: ["workers"]
+    command: ["bench", "worker", "--queue", "long,default,short"]
+    environment:
+      FRAPPE_REDIS_CACHE: redis://redis-cache:6379
+      FRAPPE_REDIS_QUEUE: redis://redis-queue:6379
+
+  scheduler:
+    <<: *backend
+    profiles: ["workers"]
+    command: ["bench", "schedule"]
+
+volumes:
+  db-data:
+  redis-queue-data:
+  sites:
+  logs:

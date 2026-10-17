@@ -1,0 +1,10 @@
+# Extends the default gitleaks rules. Each allowlist entry names one
+# synthetic test value, so a real key in the same file is still caught.
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Synthetic bundle key in the approval end-to-end test, not a credential"
+paths = ['''^tests/test_approval_flow\.py$''']
+regexes = ['''approval-e2e-synthetic-key''']
+condition = "AND"

@@ -1,0 +1,2216 @@
+{
+  "meta": {
+    "generated_at": "2026-07-21 02:00:01",
+    "platform": "Darwin arm64 py3.12.7",
+    "total_steps": 11,
+    "repeats": 10,
+    "memo_text": "E2E funding ref three months",
+    "target_loan": "L1001",
+    "model_calls": 0
+  },
+  "classes": [
+    {
+      "mode": "ok",
+      "title": "Clean disbursement (control)",
+      "fault_class": "(control) no fault",
+      "injected": "core books the disbursement normally",
+      "expected_outcome": "SUCCESS",
+      "headline": "Baseline: the write lands and the replay agrees.",
+      "repeats": 10,
+      "outcome_counts": {
+        "SUCCESS": 10
+      },
+      "dominant_outcome": "SUCCESS",
+      "silently_mishandled_count": 0,
+      "example_reason": "one correct, complete disbursement booked",
+      "example_db": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "example_report_success": true
+    },
+    {
+      "mode": "partial",
+      "title": "Partial save",
+      "fault_class": "1. Partial save",
+      "injected": "core books the row but drops the funding memo field",
+      "expected_outcome": "UNDETECTED-FAILURE",
+      "headline": "UI says authorized and the replay reports success, but the booked row is missing the funding memo - no postcondition reads the ledger.",
+      "repeats": 10,
+      "outcome_counts": {
+        "UNDETECTED-FAILURE": 10
+      },
+      "dominant_outcome": "UNDETECTED-FAILURE",
+      "silently_mishandled_count": 10,
+      "example_reason": "replay reported success but the booked row is wrong/incomplete (e.g. missing memo)",
+      "example_db": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "example_report_success": true
+    },
+    {
+      "mode": "duplicate",
+      "title": "Duplicate submission / non-idempotent retry",
+      "fault_class": "2. Duplicate submission",
+      "injected": "the authorize is submitted twice with no idempotency key",
+      "expected_outcome": "WRONG-ACTION",
+      "headline": "Two disbursements are booked; the borrower is paid twice while the replay reports a single clean success. Classic non-idempotency.",
+      "repeats": 10,
+      "outcome_counts": {
+        "WRONG-ACTION": 10
+      },
+      "dominant_outcome": "WRONG-ACTION",
+      "silently_mishandled_count": 10,
+      "example_reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "example_db": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "example_report_success": true
+    },
+    {
+      "mode": "timeout",
+      "title": "Core timeout after successful write",
+      "fault_class": "3. Timeout after write",
+      "injected": "core books the row, then hangs past the client timeout",
+      "expected_outcome": "FALSE-ABORT",
+      "headline": "The money moved but the replay reports failure - safe in the moment, yet a naive human/agent retry would double-pay.",
+      "repeats": 10,
+      "outcome_counts": {
+        "FALSE-ABORT": 10
+      },
+      "dominant_outcome": "FALSE-ABORT",
+      "silently_mishandled_count": 0,
+      "example_reason": "the correct disbursement WAS booked but the replay reported failure (effect unverified; a retry would double-pay)",
+      "example_db": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "example_report_success": false
+    },
+    {
+      "mode": "optimistic",
+      "title": "Optimistic UI success then core rejection",
+      "fault_class": "4. Optimistic-UI success, async reject",
+      "injected": "UI paints authorized immediately; the core rejects the write",
+      "expected_outcome": "UNDETECTED-FAILURE",
+      "headline": "The screen says authorized, the replay reports success, and NOTHING was booked. Phantom success - the headline undetected failure.",
+      "repeats": 10,
+      "outcome_counts": {
+        "UNDETECTED-FAILURE": 10
+      },
+      "dominant_outcome": "UNDETECTED-FAILURE",
+      "silently_mishandled_count": 10,
+      "example_reason": "replay reported success but NOTHING was booked (phantom success)",
+      "example_db": [],
+      "example_report_success": true
+    },
+    {
+      "mode": "session",
+      "title": "Session expiry mid-workflow",
+      "fault_class": "5. Session expiry",
+      "injected": "the write returns 401; the app bounces to the login screen",
+      "expected_outcome": "SAFE-HALT",
+      "headline": "The authorized-banner postcondition is not met (login screen shows) so the replay halts with no side effect. Correctly handled.",
+      "repeats": 10,
+      "outcome_counts": {
+        "SAFE-HALT": 10
+      },
+      "dominant_outcome": "SAFE-HALT",
+      "silently_mishandled_count": 0,
+      "example_reason": "halted with no side effect",
+      "example_db": [],
+      "example_report_success": false
+    },
+    {
+      "mode": "stale",
+      "title": "Stale data / concurrent modification",
+      "fault_class": "6. Stale data / concurrent modification",
+      "injected": "last-write-wins over a loan a concurrent officer just held",
+      "expected_outcome": "WRONG-ACTION",
+      "headline": "A concurrent officer's URGENT fraud hold is silently overwritten (lost update); the disbursement proceeds and the replay reports a clean success.",
+      "repeats": 10,
+      "outcome_counts": {
+        "WRONG-ACTION": 10
+      },
+      "dominant_outcome": "WRONG-ACTION",
+      "silently_mishandled_count": 10,
+      "example_reason": "concurrent officer's hold was overwritten (lost update); replay reported success=True",
+      "example_db": [
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "example_report_success": true
+    },
+    {
+      "mode": "double",
+      "title": "Double-click registered by the environment",
+      "fault_class": "7. Double-click delivered twice",
+      "injected": "the authorize click is delivered twice, both reach the core",
+      "expected_outcome": "WRONG-ACTION",
+      "headline": "Same effect as a non-idempotent retry: two disbursements booked, one reported success. The replayer has no at-most-once guard.",
+      "repeats": 10,
+      "outcome_counts": {
+        "WRONG-ACTION": 10
+      },
+      "dominant_outcome": "WRONG-ACTION",
+      "silently_mishandled_count": 10,
+      "example_reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "example_db": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "example_report_success": true
+    },
+    {
+      "mode": "idempotent",
+      "title": "Idempotency key (the recommended fix)",
+      "fault_class": "(fix) at-most-once via idempotency key",
+      "injected": "authorize submitted twice, but the core de-duplicates on a key",
+      "expected_outcome": "SUCCESS",
+      "headline": "With an idempotency key the double-submit collapses to one disbursement: the duplicate/double-click hazard is neutralized.",
+      "repeats": 10,
+      "outcome_counts": {
+        "SUCCESS": 10
+      },
+      "dominant_outcome": "SUCCESS",
+      "silently_mishandled_count": 0,
+      "example_reason": "one correct, complete disbursement booked",
+      "example_db": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": "disb-zmpmd117tsh"
+        }
+      ],
+      "example_report_success": true
+    }
+  ],
+  "runs": [
+    {
+      "mode": "ok",
+      "repeat": 0,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "SUCCESS",
+      "reason": "one correct, complete disbursement booked",
+      "silently_mishandled": false,
+      "elapsed_s": 7.9
+    },
+    {
+      "mode": "ok",
+      "repeat": 1,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "SUCCESS",
+      "reason": "one correct, complete disbursement booked",
+      "silently_mishandled": false,
+      "elapsed_s": 8.4
+    },
+    {
+      "mode": "ok",
+      "repeat": 2,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "SUCCESS",
+      "reason": "one correct, complete disbursement booked",
+      "silently_mishandled": false,
+      "elapsed_s": 7.3
+    },
+    {
+      "mode": "ok",
+      "repeat": 3,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "SUCCESS",
+      "reason": "one correct, complete disbursement booked",
+      "silently_mishandled": false,
+      "elapsed_s": 7.5
+    },
+    {
+      "mode": "ok",
+      "repeat": 4,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "SUCCESS",
+      "reason": "one correct, complete disbursement booked",
+      "silently_mishandled": false,
+      "elapsed_s": 7.2
+    },
+    {
+      "mode": "ok",
+      "repeat": 5,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "SUCCESS",
+      "reason": "one correct, complete disbursement booked",
+      "silently_mishandled": false,
+      "elapsed_s": 8.0
+    },
+    {
+      "mode": "ok",
+      "repeat": 6,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "SUCCESS",
+      "reason": "one correct, complete disbursement booked",
+      "silently_mishandled": false,
+      "elapsed_s": 7.5
+    },
+    {
+      "mode": "ok",
+      "repeat": 7,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "SUCCESS",
+      "reason": "one correct, complete disbursement booked",
+      "silently_mishandled": false,
+      "elapsed_s": 7.2
+    },
+    {
+      "mode": "ok",
+      "repeat": 8,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "SUCCESS",
+      "reason": "one correct, complete disbursement booked",
+      "silently_mishandled": false,
+      "elapsed_s": 7.6
+    },
+    {
+      "mode": "ok",
+      "repeat": 9,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "SUCCESS",
+      "reason": "one correct, complete disbursement booked",
+      "silently_mishandled": false,
+      "elapsed_s": 7.3
+    },
+    {
+      "mode": "partial",
+      "repeat": 0,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "UNDETECTED-FAILURE",
+      "reason": "replay reported success but the booked row is wrong/incomplete (e.g. missing memo)",
+      "silently_mishandled": true,
+      "elapsed_s": 7.2
+    },
+    {
+      "mode": "partial",
+      "repeat": 1,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "UNDETECTED-FAILURE",
+      "reason": "replay reported success but the booked row is wrong/incomplete (e.g. missing memo)",
+      "silently_mishandled": true,
+      "elapsed_s": 7.1
+    },
+    {
+      "mode": "partial",
+      "repeat": 2,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "UNDETECTED-FAILURE",
+      "reason": "replay reported success but the booked row is wrong/incomplete (e.g. missing memo)",
+      "silently_mishandled": true,
+      "elapsed_s": 7.2
+    },
+    {
+      "mode": "partial",
+      "repeat": 3,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "UNDETECTED-FAILURE",
+      "reason": "replay reported success but the booked row is wrong/incomplete (e.g. missing memo)",
+      "silently_mishandled": true,
+      "elapsed_s": 7.1
+    },
+    {
+      "mode": "partial",
+      "repeat": 4,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "UNDETECTED-FAILURE",
+      "reason": "replay reported success but the booked row is wrong/incomplete (e.g. missing memo)",
+      "silently_mishandled": true,
+      "elapsed_s": 7.6
+    },
+    {
+      "mode": "partial",
+      "repeat": 5,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "UNDETECTED-FAILURE",
+      "reason": "replay reported success but the booked row is wrong/incomplete (e.g. missing memo)",
+      "silently_mishandled": true,
+      "elapsed_s": 7.8
+    },
+    {
+      "mode": "partial",
+      "repeat": 6,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "UNDETECTED-FAILURE",
+      "reason": "replay reported success but the booked row is wrong/incomplete (e.g. missing memo)",
+      "silently_mishandled": true,
+      "elapsed_s": 7.1
+    },
+    {
+      "mode": "partial",
+      "repeat": 7,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "UNDETECTED-FAILURE",
+      "reason": "replay reported success but the booked row is wrong/incomplete (e.g. missing memo)",
+      "silently_mishandled": true,
+      "elapsed_s": 7.0
+    },
+    {
+      "mode": "partial",
+      "repeat": 8,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "UNDETECTED-FAILURE",
+      "reason": "replay reported success but the booked row is wrong/incomplete (e.g. missing memo)",
+      "silently_mishandled": true,
+      "elapsed_s": 6.9
+    },
+    {
+      "mode": "partial",
+      "repeat": 9,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "UNDETECTED-FAILURE",
+      "reason": "replay reported success but the booked row is wrong/incomplete (e.g. missing memo)",
+      "silently_mishandled": true,
+      "elapsed_s": 7.0
+    },
+    {
+      "mode": "duplicate",
+      "repeat": 0,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 7.0
+    },
+    {
+      "mode": "duplicate",
+      "repeat": 1,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 6.9
+    },
+    {
+      "mode": "duplicate",
+      "repeat": 2,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 7.0
+    },
+    {
+      "mode": "duplicate",
+      "repeat": 3,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 7.1
+    },
+    {
+      "mode": "duplicate",
+      "repeat": 4,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 6.9
+    },
+    {
+      "mode": "duplicate",
+      "repeat": 5,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 7.0
+    },
+    {
+      "mode": "duplicate",
+      "repeat": 6,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 6.9
+    },
+    {
+      "mode": "duplicate",
+      "repeat": 7,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 7.1
+    },
+    {
+      "mode": "duplicate",
+      "repeat": 8,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 6.8
+    },
+    {
+      "mode": "duplicate",
+      "repeat": 9,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 7.8
+    },
+    {
+      "mode": "timeout",
+      "repeat": 0,
+      "report_success": false,
+      "authorize_postconditions_ok": false,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "FALSE-ABORT",
+      "reason": "the correct disbursement WAS booked but the replay reported failure (effect unverified; a retry would double-pay)",
+      "silently_mishandled": false,
+      "elapsed_s": 14.4
+    },
+    {
+      "mode": "timeout",
+      "repeat": 1,
+      "report_success": false,
+      "authorize_postconditions_ok": false,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "FALSE-ABORT",
+      "reason": "the correct disbursement WAS booked but the replay reported failure (effect unverified; a retry would double-pay)",
+      "silently_mishandled": false,
+      "elapsed_s": 13.9
+    },
+    {
+      "mode": "timeout",
+      "repeat": 2,
+      "report_success": false,
+      "authorize_postconditions_ok": false,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "FALSE-ABORT",
+      "reason": "the correct disbursement WAS booked but the replay reported failure (effect unverified; a retry would double-pay)",
+      "silently_mishandled": false,
+      "elapsed_s": 13.5
+    },
+    {
+      "mode": "timeout",
+      "repeat": 3,
+      "report_success": false,
+      "authorize_postconditions_ok": false,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "FALSE-ABORT",
+      "reason": "the correct disbursement WAS booked but the replay reported failure (effect unverified; a retry would double-pay)",
+      "silently_mishandled": false,
+      "elapsed_s": 14.4
+    },
+    {
+      "mode": "timeout",
+      "repeat": 4,
+      "report_success": false,
+      "authorize_postconditions_ok": false,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "FALSE-ABORT",
+      "reason": "the correct disbursement WAS booked but the replay reported failure (effect unverified; a retry would double-pay)",
+      "silently_mishandled": false,
+      "elapsed_s": 14.9
+    },
+    {
+      "mode": "timeout",
+      "repeat": 5,
+      "report_success": false,
+      "authorize_postconditions_ok": false,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "FALSE-ABORT",
+      "reason": "the correct disbursement WAS booked but the replay reported failure (effect unverified; a retry would double-pay)",
+      "silently_mishandled": false,
+      "elapsed_s": 15.3
+    },
+    {
+      "mode": "timeout",
+      "repeat": 6,
+      "report_success": false,
+      "authorize_postconditions_ok": false,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "FALSE-ABORT",
+      "reason": "the correct disbursement WAS booked but the replay reported failure (effect unverified; a retry would double-pay)",
+      "silently_mishandled": false,
+      "elapsed_s": 14.2
+    },
+    {
+      "mode": "timeout",
+      "repeat": 7,
+      "report_success": false,
+      "authorize_postconditions_ok": false,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "FALSE-ABORT",
+      "reason": "the correct disbursement WAS booked but the replay reported failure (effect unverified; a retry would double-pay)",
+      "silently_mishandled": false,
+      "elapsed_s": 14.6
+    },
+    {
+      "mode": "timeout",
+      "repeat": 8,
+      "report_success": false,
+      "authorize_postconditions_ok": false,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "FALSE-ABORT",
+      "reason": "the correct disbursement WAS booked but the replay reported failure (effect unverified; a retry would double-pay)",
+      "silently_mishandled": false,
+      "elapsed_s": 12.9
+    },
+    {
+      "mode": "timeout",
+      "repeat": 9,
+      "report_success": false,
+      "authorize_postconditions_ok": false,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "FALSE-ABORT",
+      "reason": "the correct disbursement WAS booked but the replay reported failure (effect unverified; a retry would double-pay)",
+      "silently_mishandled": false,
+      "elapsed_s": 14.0
+    },
+    {
+      "mode": "optimistic",
+      "repeat": 0,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [],
+      "rejected_writes": 1,
+      "outcome": "UNDETECTED-FAILURE",
+      "reason": "replay reported success but NOTHING was booked (phantom success)",
+      "silently_mishandled": true,
+      "elapsed_s": 8.1
+    },
+    {
+      "mode": "optimistic",
+      "repeat": 1,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [],
+      "rejected_writes": 1,
+      "outcome": "UNDETECTED-FAILURE",
+      "reason": "replay reported success but NOTHING was booked (phantom success)",
+      "silently_mishandled": true,
+      "elapsed_s": 8.0
+    },
+    {
+      "mode": "optimistic",
+      "repeat": 2,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [],
+      "rejected_writes": 1,
+      "outcome": "UNDETECTED-FAILURE",
+      "reason": "replay reported success but NOTHING was booked (phantom success)",
+      "silently_mishandled": true,
+      "elapsed_s": 7.4
+    },
+    {
+      "mode": "optimistic",
+      "repeat": 3,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [],
+      "rejected_writes": 1,
+      "outcome": "UNDETECTED-FAILURE",
+      "reason": "replay reported success but NOTHING was booked (phantom success)",
+      "silently_mishandled": true,
+      "elapsed_s": 7.3
+    },
+    {
+      "mode": "optimistic",
+      "repeat": 4,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [],
+      "rejected_writes": 1,
+      "outcome": "UNDETECTED-FAILURE",
+      "reason": "replay reported success but NOTHING was booked (phantom success)",
+      "silently_mishandled": true,
+      "elapsed_s": 7.5
+    },
+    {
+      "mode": "optimistic",
+      "repeat": 5,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [],
+      "rejected_writes": 1,
+      "outcome": "UNDETECTED-FAILURE",
+      "reason": "replay reported success but NOTHING was booked (phantom success)",
+      "silently_mishandled": true,
+      "elapsed_s": 9.1
+    },
+    {
+      "mode": "optimistic",
+      "repeat": 6,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [],
+      "rejected_writes": 1,
+      "outcome": "UNDETECTED-FAILURE",
+      "reason": "replay reported success but NOTHING was booked (phantom success)",
+      "silently_mishandled": true,
+      "elapsed_s": 8.5
+    },
+    {
+      "mode": "optimistic",
+      "repeat": 7,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [],
+      "rejected_writes": 1,
+      "outcome": "UNDETECTED-FAILURE",
+      "reason": "replay reported success but NOTHING was booked (phantom success)",
+      "silently_mishandled": true,
+      "elapsed_s": 8.3
+    },
+    {
+      "mode": "optimistic",
+      "repeat": 8,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [],
+      "rejected_writes": 1,
+      "outcome": "UNDETECTED-FAILURE",
+      "reason": "replay reported success but NOTHING was booked (phantom success)",
+      "silently_mishandled": true,
+      "elapsed_s": 8.1
+    },
+    {
+      "mode": "optimistic",
+      "repeat": 9,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [],
+      "rejected_writes": 1,
+      "outcome": "UNDETECTED-FAILURE",
+      "reason": "replay reported success but NOTHING was booked (phantom success)",
+      "silently_mishandled": true,
+      "elapsed_s": 7.6
+    },
+    {
+      "mode": "session",
+      "repeat": 0,
+      "report_success": false,
+      "authorize_postconditions_ok": false,
+      "db_records": [],
+      "rejected_writes": 0,
+      "outcome": "SAFE-HALT",
+      "reason": "halted with no side effect",
+      "silently_mishandled": false,
+      "elapsed_s": 13.0
+    },
+    {
+      "mode": "session",
+      "repeat": 1,
+      "report_success": false,
+      "authorize_postconditions_ok": false,
+      "db_records": [],
+      "rejected_writes": 0,
+      "outcome": "SAFE-HALT",
+      "reason": "halted with no side effect",
+      "silently_mishandled": false,
+      "elapsed_s": 13.9
+    },
+    {
+      "mode": "session",
+      "repeat": 2,
+      "report_success": false,
+      "authorize_postconditions_ok": false,
+      "db_records": [],
+      "rejected_writes": 0,
+      "outcome": "SAFE-HALT",
+      "reason": "halted with no side effect",
+      "silently_mishandled": false,
+      "elapsed_s": 13.8
+    },
+    {
+      "mode": "session",
+      "repeat": 3,
+      "report_success": false,
+      "authorize_postconditions_ok": false,
+      "db_records": [],
+      "rejected_writes": 0,
+      "outcome": "SAFE-HALT",
+      "reason": "halted with no side effect",
+      "silently_mishandled": false,
+      "elapsed_s": 14.1
+    },
+    {
+      "mode": "session",
+      "repeat": 4,
+      "report_success": false,
+      "authorize_postconditions_ok": false,
+      "db_records": [],
+      "rejected_writes": 0,
+      "outcome": "SAFE-HALT",
+      "reason": "halted with no side effect",
+      "silently_mishandled": false,
+      "elapsed_s": 13.6
+    },
+    {
+      "mode": "session",
+      "repeat": 5,
+      "report_success": false,
+      "authorize_postconditions_ok": false,
+      "db_records": [],
+      "rejected_writes": 0,
+      "outcome": "SAFE-HALT",
+      "reason": "halted with no side effect",
+      "silently_mishandled": false,
+      "elapsed_s": 13.7
+    },
+    {
+      "mode": "session",
+      "repeat": 6,
+      "report_success": false,
+      "authorize_postconditions_ok": false,
+      "db_records": [],
+      "rejected_writes": 0,
+      "outcome": "SAFE-HALT",
+      "reason": "halted with no side effect",
+      "silently_mishandled": false,
+      "elapsed_s": 13.3
+    },
+    {
+      "mode": "session",
+      "repeat": 7,
+      "report_success": false,
+      "authorize_postconditions_ok": false,
+      "db_records": [],
+      "rejected_writes": 0,
+      "outcome": "SAFE-HALT",
+      "reason": "halted with no side effect",
+      "silently_mishandled": false,
+      "elapsed_s": 13.5
+    },
+    {
+      "mode": "session",
+      "repeat": 8,
+      "report_success": false,
+      "authorize_postconditions_ok": false,
+      "db_records": [],
+      "rejected_writes": 0,
+      "outcome": "SAFE-HALT",
+      "reason": "halted with no side effect",
+      "silently_mishandled": false,
+      "elapsed_s": 13.3
+    },
+    {
+      "mode": "session",
+      "repeat": 9,
+      "report_success": false,
+      "authorize_postconditions_ok": false,
+      "db_records": [],
+      "rejected_writes": 0,
+      "outcome": "SAFE-HALT",
+      "reason": "halted with no side effect",
+      "silently_mishandled": false,
+      "elapsed_s": 13.4
+    },
+    {
+      "mode": "stale",
+      "repeat": 0,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "concurrent officer's hold was overwritten (lost update); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 7.5
+    },
+    {
+      "mode": "stale",
+      "repeat": 1,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "concurrent officer's hold was overwritten (lost update); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 7.6
+    },
+    {
+      "mode": "stale",
+      "repeat": 2,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "concurrent officer's hold was overwritten (lost update); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 7.6
+    },
+    {
+      "mode": "stale",
+      "repeat": 3,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "concurrent officer's hold was overwritten (lost update); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 7.8
+    },
+    {
+      "mode": "stale",
+      "repeat": 4,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "concurrent officer's hold was overwritten (lost update); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 7.6
+    },
+    {
+      "mode": "stale",
+      "repeat": 5,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "concurrent officer's hold was overwritten (lost update); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 8.8
+    },
+    {
+      "mode": "stale",
+      "repeat": 6,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "concurrent officer's hold was overwritten (lost update); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 8.9
+    },
+    {
+      "mode": "stale",
+      "repeat": 7,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "concurrent officer's hold was overwritten (lost update); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 7.8
+    },
+    {
+      "mode": "stale",
+      "repeat": 8,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "concurrent officer's hold was overwritten (lost update); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 8.1
+    },
+    {
+      "mode": "stale",
+      "repeat": 9,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "concurrent officer's hold was overwritten (lost update); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 8.1
+    },
+    {
+      "mode": "double",
+      "repeat": 0,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 8.2
+    },
+    {
+      "mode": "double",
+      "repeat": 1,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 8.4
+    },
+    {
+      "mode": "double",
+      "repeat": 2,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 7.1
+    },
+    {
+      "mode": "double",
+      "repeat": 3,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 7.2
+    },
+    {
+      "mode": "double",
+      "repeat": 4,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 7.5
+    },
+    {
+      "mode": "double",
+      "repeat": 5,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 7.3
+    },
+    {
+      "mode": "double",
+      "repeat": 6,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 8.5
+    },
+    {
+      "mode": "double",
+      "repeat": 7,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 8.4
+    },
+    {
+      "mode": "double",
+      "repeat": 8,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 9.3
+    },
+    {
+      "mode": "double",
+      "repeat": 9,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        },
+        {
+          "id": 2,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": null
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "WRONG-ACTION",
+      "reason": "2 disbursements booked (duplicate write); replay reported success=True",
+      "silently_mishandled": true,
+      "elapsed_s": 8.5
+    },
+    {
+      "mode": "idempotent",
+      "repeat": 0,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": "disb-zmpmd117tsh"
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "SUCCESS",
+      "reason": "one correct, complete disbursement booked",
+      "silently_mishandled": false,
+      "elapsed_s": 8.8
+    },
+    {
+      "mode": "idempotent",
+      "repeat": 1,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": "disb-gyh2wj3459t"
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "SUCCESS",
+      "reason": "one correct, complete disbursement booked",
+      "silently_mishandled": false,
+      "elapsed_s": 8.7
+    },
+    {
+      "mode": "idempotent",
+      "repeat": 2,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": "disb-gvq550zg2ju"
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "SUCCESS",
+      "reason": "one correct, complete disbursement booked",
+      "silently_mishandled": false,
+      "elapsed_s": 7.9
+    },
+    {
+      "mode": "idempotent",
+      "repeat": 3,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": "disb-we7nv2fkkac"
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "SUCCESS",
+      "reason": "one correct, complete disbursement booked",
+      "silently_mishandled": false,
+      "elapsed_s": 7.8
+    },
+    {
+      "mode": "idempotent",
+      "repeat": 4,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": "disb-5fhep1osoxe"
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "SUCCESS",
+      "reason": "one correct, complete disbursement booked",
+      "silently_mishandled": false,
+      "elapsed_s": 7.6
+    },
+    {
+      "mode": "idempotent",
+      "repeat": 5,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": "disb-bkhpsbw4mi"
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "SUCCESS",
+      "reason": "one correct, complete disbursement booked",
+      "silently_mishandled": false,
+      "elapsed_s": 7.8
+    },
+    {
+      "mode": "idempotent",
+      "repeat": 6,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": "disb-uf5kw4ocpz"
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "SUCCESS",
+      "reason": "one correct, complete disbursement booked",
+      "silently_mishandled": false,
+      "elapsed_s": 7.8
+    },
+    {
+      "mode": "idempotent",
+      "repeat": 7,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": "disb-gencmwjaj2o"
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "SUCCESS",
+      "reason": "one correct, complete disbursement booked",
+      "silently_mishandled": false,
+      "elapsed_s": 7.7
+    },
+    {
+      "mode": "idempotent",
+      "repeat": 8,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": "disb-ebuxsyulqk"
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "SUCCESS",
+      "reason": "one correct, complete disbursement booked",
+      "silently_mishandled": false,
+      "elapsed_s": 7.8
+    },
+    {
+      "mode": "idempotent",
+      "repeat": 9,
+      "report_success": true,
+      "authorize_postconditions_ok": true,
+      "db_records": [
+        {
+          "id": 1,
+          "loan_id": "L1001",
+          "product": "Personal",
+          "amount": "18500",
+          "memo": "E2E funding ref three months",
+          "source": "replay",
+          "key": "disb-j7c7inqqgh"
+        }
+      ],
+      "rejected_writes": 0,
+      "outcome": "SUCCESS",
+      "reason": "one correct, complete disbursement booked",
+      "silently_mishandled": false,
+      "elapsed_s": 7.9
+    }
+  ]
+}

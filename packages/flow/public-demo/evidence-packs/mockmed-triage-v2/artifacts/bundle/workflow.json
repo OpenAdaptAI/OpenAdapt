@@ -1,0 +1,1350 @@
+{
+  "schema_version": 2,
+  "name": "mockmed-triage",
+  "recording_id": "c20d81999b214ff1be7420725956968c",
+  "contains_phi": false,
+  "phi_scrubbed": false,
+  "encrypted": false,
+  "created_at": "2026-07-25T19:27:32.383972+00:00",
+  "viewport": [
+    1280,
+    800
+  ],
+  "params": {
+    "note": "Synthetic follow-up in two weeks"
+  },
+  "param_specs": {
+    "note": {
+      "name": "note",
+      "type": "string",
+      "example": "Synthetic follow-up in two weeks",
+      "required": true,
+      "choices": []
+    }
+  },
+  "secret_params": [],
+  "steps": [
+    {
+      "id": "step_000",
+      "intent": "click 'Open'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_000.png",
+        "structural": {
+          "selector": "#open-p1",
+          "role": "button",
+          "name": "Open",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          695,
+          154,
+          160,
+          64
+        ],
+        "click_point": [
+          775,
+          186
+        ],
+        "ocr_text": "Open",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "aa3ff7e2626b2339436bc552a8c235e9",
+          "band_len": 30,
+          "tokens": [
+            {
+              "c": "e6bb7ded96d44ccd",
+              "r": "e6bb7ded96d44ccd",
+              "n": 10,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "7b48c36e9b860bb9",
+              "r": "7b48c36e9b860bb9",
+              "n": 4,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "b05827803816c74e",
+              "r": "e9f286cf449ff74e",
+              "n": 4,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "65502554eb976e80",
+              "r": "65502554eb976e80",
+              "n": 8,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            },
+            {
+              "c": "8e32e3086ebae423",
+              "r": "80bcb8ddc0b221e2",
+              "n": 4,
+              "alpha": true,
+              "name": true,
+              "digit": false,
+              "idsh": false,
+              "glyph": false,
+              "gen": false
+            }
+          ],
+          "concats": [
+            {
+              "i": 0,
+              "size": 2,
+              "c": "bd4de8fb4ec16c08",
+              "r": "bd4de8fb4ec16c08",
+              "digit": false,
+              "name": true,
+              "n": 14
+            },
+            {
+              "i": 0,
+              "size": 3,
+              "c": "a36a43df8a1f3e7c",
+              "r": "d77d901ac8da0a00",
+              "digit": false,
+              "name": true,
+              "n": 18
+            },
+            {
+              "i": 0,
+              "size": 4,
+              "c": "ebb8c9f4f6e8ed0e",
+              "r": "f1080c5d93a3877f",
+              "digit": false,
+              "name": true,
+              "n": 26
+            },
+            {
+              "i": 1,
+              "size": 2,
+              "c": "2758fe955df1312d",
+              "r": "4e61012105bd63fc",
+              "digit": false,
+              "name": true,
+              "n": 8
+            },
+            {
+              "i": 1,
+              "size": 3,
+              "c": "068f8fd1d76dab3c",
+              "r": "e5b8cf7d357bc05d",
+              "digit": false,
+              "name": true,
+              "n": 16
+            },
+            {
+              "i": 1,
+              "size": 4,
+              "c": "6f81ceb04be362d1",
+              "r": "180ce69c4e8ee004",
+              "digit": false,
+              "name": true,
+              "n": 20
+            },
+            {
+              "i": 2,
+              "size": 2,
+              "c": "f20cf6d55b99ea01",
+              "r": "a8b2586600973f43",
+              "digit": false,
+              "name": true,
+              "n": 12
+            },
+            {
+              "i": 2,
+              "size": 3,
+              "c": "9dc46d3898b83a84",
+              "r": "9636fae293a904fa",
+              "digit": false,
+              "name": true,
+              "n": 16
+            },
+            {
+              "i": 3,
+              "size": 2,
+              "c": "5a922509c37fc4bc",
+              "r": "fc19da84ba2cf220",
+              "digit": false,
+              "name": true,
+              "n": 12
+            }
+          ],
+          "structured": "284a6811285df001",
+          "signal_hashes": {
+            "structured|exact|": "27c1eb45cfdbd785ecf50f692a02838cb2e7bb03b37876027abd1aa1570b8365",
+            "structured|normalized|unicode_nfkc": "27c1eb45cfdbd785ecf50f692a02838cb2e7bb03b37876027abd1aa1570b8365",
+            "structured|normalized|casefold": "284a6811285df001b0b8710899dcea2d8d325186a30e97061b41ae5a181621fb",
+            "structured|normalized|collapse_whitespace": "27c1eb45cfdbd785ecf50f692a02838cb2e7bb03b37876027abd1aa1570b8365",
+            "structured|normalized|strip_punctuation": "27c1eb45cfdbd785ecf50f692a02838cb2e7bb03b37876027abd1aa1570b8365",
+            "structured|normalized|unicode_nfkc,casefold": "284a6811285df001b0b8710899dcea2d8d325186a30e97061b41ae5a181621fb",
+            "structured|normalized|unicode_nfkc,collapse_whitespace": "27c1eb45cfdbd785ecf50f692a02838cb2e7bb03b37876027abd1aa1570b8365",
+            "structured|normalized|unicode_nfkc,strip_punctuation": "27c1eb45cfdbd785ecf50f692a02838cb2e7bb03b37876027abd1aa1570b8365",
+            "structured|normalized|casefold,collapse_whitespace": "284a6811285df001b0b8710899dcea2d8d325186a30e97061b41ae5a181621fb",
+            "structured|normalized|casefold,strip_punctuation": "284a6811285df001b0b8710899dcea2d8d325186a30e97061b41ae5a181621fb",
+            "structured|normalized|collapse_whitespace,strip_punctuation": "27c1eb45cfdbd785ecf50f692a02838cb2e7bb03b37876027abd1aa1570b8365",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "284a6811285df001b0b8710899dcea2d8d325186a30e97061b41ae5a181621fb",
+            "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "284a6811285df001b0b8710899dcea2d8d325186a30e97061b41ae5a181621fb",
+            "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "27c1eb45cfdbd785ecf50f692a02838cb2e7bb03b37876027abd1aa1570b8365",
+            "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "284a6811285df001b0b8710899dcea2d8d325186a30e97061b41ae5a181621fb",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "284a6811285df001b0b8710899dcea2d8d325186a30e97061b41ae5a181621fb",
+            "captured_context|exact|": "5684112f5c31c82283f280c830c0c7576b889949e01c76d53d288abf2639ca3c",
+            "captured_context|normalized|unicode_nfkc": "5684112f5c31c82283f280c830c0c7576b889949e01c76d53d288abf2639ca3c",
+            "captured_context|normalized|casefold": "40da0c4a518057dd6c8fb37685981602481e286b1f0bbf137ff275d2ff1a96f6",
+            "captured_context|normalized|collapse_whitespace": "5684112f5c31c82283f280c830c0c7576b889949e01c76d53d288abf2639ca3c",
+            "captured_context|normalized|strip_punctuation": "5684112f5c31c82283f280c830c0c7576b889949e01c76d53d288abf2639ca3c",
+            "captured_context|normalized|unicode_nfkc,casefold": "40da0c4a518057dd6c8fb37685981602481e286b1f0bbf137ff275d2ff1a96f6",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace": "5684112f5c31c82283f280c830c0c7576b889949e01c76d53d288abf2639ca3c",
+            "captured_context|normalized|unicode_nfkc,strip_punctuation": "5684112f5c31c82283f280c830c0c7576b889949e01c76d53d288abf2639ca3c",
+            "captured_context|normalized|casefold,collapse_whitespace": "40da0c4a518057dd6c8fb37685981602481e286b1f0bbf137ff275d2ff1a96f6",
+            "captured_context|normalized|casefold,strip_punctuation": "40da0c4a518057dd6c8fb37685981602481e286b1f0bbf137ff275d2ff1a96f6",
+            "captured_context|normalized|collapse_whitespace,strip_punctuation": "5684112f5c31c82283f280c830c0c7576b889949e01c76d53d288abf2639ca3c",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace": "40da0c4a518057dd6c8fb37685981602481e286b1f0bbf137ff275d2ff1a96f6",
+            "captured_context|normalized|unicode_nfkc,casefold,strip_punctuation": "40da0c4a518057dd6c8fb37685981602481e286b1f0bbf137ff275d2ff1a96f6",
+            "captured_context|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "5684112f5c31c82283f280c830c0c7576b889949e01c76d53d288abf2639ca3c",
+            "captured_context|normalized|casefold,collapse_whitespace,strip_punctuation": "40da0c4a518057dd6c8fb37685981602481e286b1f0bbf137ff275d2ff1a96f6",
+            "captured_context|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "40da0c4a518057dd6c8fb37685981602481e286b1f0bbf137ff275d2ff1a96f6"
+          },
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "above",
+            "ocr_text": "Action",
+            "distance_px": 51,
+            "dx_px": 20,
+            "dy_px": 47
+          },
+          {
+            "relation": "below",
+            "ocr_text": "Open",
+            "distance_px": 58,
+            "dx_px": -2,
+            "dy_px": -58
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            43,
+            968,
+            318
+          ],
+          "phash": "f8e083ffbc08383c",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_000_expect.png"
+        },
+        {
+          "kind": "text_present",
+          "text": "JaneSample—MRNP1—DOB1980-01-01",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 5.0,
+          "template": null
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": "structured identity (DOM/UIA/AX) owns this step's identity; no identifier pixels persisted at rest — mark the identifier field/region at record time (--identifier) to also arm the pixel tier for remote-display replays"
+    },
+    {
+      "id": "step_001",
+      "intent": "click 'New Encounter'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_001.png",
+        "structural": {
+          "selector": "#new-encounter",
+          "role": "button",
+          "name": "New Encounter",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          34,
+          127,
+          160,
+          64
+        ],
+        "click_point": [
+          114,
+          159
+        ],
+        "ocr_text": "New Encounter",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "aa3ff7e2626b2339436bc552a8c235e9",
+          "band_len": 0,
+          "tokens": [],
+          "concats": [],
+          "structured": "adf04276517dfb14",
+          "signal_hashes": {
+            "structured|exact|": "9229df1e8b59bb2afaf43d3c969c850ba53895c2e46b22b5867897a615ef95f8",
+            "structured|normalized|unicode_nfkc": "9229df1e8b59bb2afaf43d3c969c850ba53895c2e46b22b5867897a615ef95f8",
+            "structured|normalized|casefold": "adf04276517dfb14f46e1fed1b490b3b1822a31205884781b2c3b2259503cf75",
+            "structured|normalized|collapse_whitespace": "9229df1e8b59bb2afaf43d3c969c850ba53895c2e46b22b5867897a615ef95f8",
+            "structured|normalized|strip_punctuation": "ca57e27bb1adb9ceaf6b963d57206a9ef1659a549a1ab4a3750b5bb84e41e394",
+            "structured|normalized|unicode_nfkc,casefold": "adf04276517dfb14f46e1fed1b490b3b1822a31205884781b2c3b2259503cf75",
+            "structured|normalized|unicode_nfkc,collapse_whitespace": "9229df1e8b59bb2afaf43d3c969c850ba53895c2e46b22b5867897a615ef95f8",
+            "structured|normalized|unicode_nfkc,strip_punctuation": "ca57e27bb1adb9ceaf6b963d57206a9ef1659a549a1ab4a3750b5bb84e41e394",
+            "structured|normalized|casefold,collapse_whitespace": "adf04276517dfb14f46e1fed1b490b3b1822a31205884781b2c3b2259503cf75",
+            "structured|normalized|casefold,strip_punctuation": "3131700d1d818f6317666feba83a0ca0d3f8bd56cae55ea0bc3741f22e2f2172",
+            "structured|normalized|collapse_whitespace,strip_punctuation": "ca57e27bb1adb9ceaf6b963d57206a9ef1659a549a1ab4a3750b5bb84e41e394",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "adf04276517dfb14f46e1fed1b490b3b1822a31205884781b2c3b2259503cf75",
+            "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "3131700d1d818f6317666feba83a0ca0d3f8bd56cae55ea0bc3741f22e2f2172",
+            "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "ca57e27bb1adb9ceaf6b963d57206a9ef1659a549a1ab4a3750b5bb84e41e394",
+            "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "3131700d1d818f6317666feba83a0ca0d3f8bd56cae55ea0bc3741f22e2f2172",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "3131700d1d818f6317666feba83a0ca0d3f8bd56cae55ea0bc3741f22e2f2172"
+          },
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "below",
+            "ocr_text": "Encounters",
+            "distance_px": 61,
+            "dx_px": 34,
+            "dy_px": -51
+          },
+          {
+            "relation": "below",
+            "ocr_text": "No encountersyet.",
+            "distance_px": 85,
+            "dx_px": 24,
+            "dy_px": -82
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            101,
+            696,
+            350
+          ],
+          "phash": "fae0c01e950fc78e",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_001_expect.png"
+        },
+        {
+          "kind": "text_present",
+          "text": "EncounterType",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 5.0,
+          "template": null
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": "structured identity (DOM/UIA/AX) owns this step's identity; no identifier pixels persisted at rest — mark the identifier field/region at record time (--identifier) to also arm the pixel tier for remote-display replays"
+    },
+    {
+      "id": "step_002",
+      "intent": "click 'Triage'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_002.png",
+        "structural": {
+          "selector": "#type-triage",
+          "role": "button",
+          "name": "Triage",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          5,
+          182,
+          160,
+          64
+        ],
+        "click_point": [
+          85,
+          214
+        ],
+        "ocr_text": "Triage",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "aa3ff7e2626b2339436bc552a8c235e9",
+          "band_len": 0,
+          "tokens": [],
+          "concats": [],
+          "structured": "adf04276517dfb14",
+          "signal_hashes": {
+            "structured|exact|": "9229df1e8b59bb2afaf43d3c969c850ba53895c2e46b22b5867897a615ef95f8",
+            "structured|normalized|unicode_nfkc": "9229df1e8b59bb2afaf43d3c969c850ba53895c2e46b22b5867897a615ef95f8",
+            "structured|normalized|casefold": "adf04276517dfb14f46e1fed1b490b3b1822a31205884781b2c3b2259503cf75",
+            "structured|normalized|collapse_whitespace": "9229df1e8b59bb2afaf43d3c969c850ba53895c2e46b22b5867897a615ef95f8",
+            "structured|normalized|strip_punctuation": "ca57e27bb1adb9ceaf6b963d57206a9ef1659a549a1ab4a3750b5bb84e41e394",
+            "structured|normalized|unicode_nfkc,casefold": "adf04276517dfb14f46e1fed1b490b3b1822a31205884781b2c3b2259503cf75",
+            "structured|normalized|unicode_nfkc,collapse_whitespace": "9229df1e8b59bb2afaf43d3c969c850ba53895c2e46b22b5867897a615ef95f8",
+            "structured|normalized|unicode_nfkc,strip_punctuation": "ca57e27bb1adb9ceaf6b963d57206a9ef1659a549a1ab4a3750b5bb84e41e394",
+            "structured|normalized|casefold,collapse_whitespace": "adf04276517dfb14f46e1fed1b490b3b1822a31205884781b2c3b2259503cf75",
+            "structured|normalized|casefold,strip_punctuation": "3131700d1d818f6317666feba83a0ca0d3f8bd56cae55ea0bc3741f22e2f2172",
+            "structured|normalized|collapse_whitespace,strip_punctuation": "ca57e27bb1adb9ceaf6b963d57206a9ef1659a549a1ab4a3750b5bb84e41e394",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "adf04276517dfb14f46e1fed1b490b3b1822a31205884781b2c3b2259503cf75",
+            "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "3131700d1d818f6317666feba83a0ca0d3f8bd56cae55ea0bc3741f22e2f2172",
+            "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "ca57e27bb1adb9ceaf6b963d57206a9ef1659a549a1ab4a3750b5bb84e41e394",
+            "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "3131700d1d818f6317666feba83a0ca0d3f8bd56cae55ea0bc3741f22e2f2172",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "3131700d1d818f6317666feba83a0ca0d3f8bd56cae55ea0bc3741f22e2f2172"
+          },
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "below",
+            "ocr_text": "Note",
+            "distance_px": 70,
+            "dx_px": 44,
+            "dy_px": -54
+          },
+          {
+            "relation": "above",
+            "ocr_text": "NewEncounter",
+            "distance_px": 77,
+            "dx_px": -26,
+            "dy_px": 72
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            163,
+            177,
+            102
+          ],
+          "phash": "88c2f2295d2da73d",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_002_expect.png"
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": "structured identity (DOM/UIA/AX) owns this step's identity; no identifier pixels persisted at rest — mark the identifier field/region at record time (--identifier) to also arm the pixel tier for remote-display replays"
+    },
+    {
+      "id": "step_003",
+      "intent": "click at (480, 268)",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_003.png",
+        "structural": {
+          "selector": "#note-label",
+          "role": null,
+          "name": "Note",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          400,
+          236,
+          160,
+          64
+        ],
+        "click_point": [
+          480,
+          268
+        ],
+        "ocr_text": null,
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "aa3ff7e2626b2339436bc552a8c235e9",
+          "band_len": 0,
+          "tokens": [],
+          "concats": [],
+          "structured": "adf04276517dfb14",
+          "signal_hashes": {
+            "structured|exact|": "9229df1e8b59bb2afaf43d3c969c850ba53895c2e46b22b5867897a615ef95f8",
+            "structured|normalized|unicode_nfkc": "9229df1e8b59bb2afaf43d3c969c850ba53895c2e46b22b5867897a615ef95f8",
+            "structured|normalized|casefold": "adf04276517dfb14f46e1fed1b490b3b1822a31205884781b2c3b2259503cf75",
+            "structured|normalized|collapse_whitespace": "9229df1e8b59bb2afaf43d3c969c850ba53895c2e46b22b5867897a615ef95f8",
+            "structured|normalized|strip_punctuation": "ca57e27bb1adb9ceaf6b963d57206a9ef1659a549a1ab4a3750b5bb84e41e394",
+            "structured|normalized|unicode_nfkc,casefold": "adf04276517dfb14f46e1fed1b490b3b1822a31205884781b2c3b2259503cf75",
+            "structured|normalized|unicode_nfkc,collapse_whitespace": "9229df1e8b59bb2afaf43d3c969c850ba53895c2e46b22b5867897a615ef95f8",
+            "structured|normalized|unicode_nfkc,strip_punctuation": "ca57e27bb1adb9ceaf6b963d57206a9ef1659a549a1ab4a3750b5bb84e41e394",
+            "structured|normalized|casefold,collapse_whitespace": "adf04276517dfb14f46e1fed1b490b3b1822a31205884781b2c3b2259503cf75",
+            "structured|normalized|casefold,strip_punctuation": "3131700d1d818f6317666feba83a0ca0d3f8bd56cae55ea0bc3741f22e2f2172",
+            "structured|normalized|collapse_whitespace,strip_punctuation": "ca57e27bb1adb9ceaf6b963d57206a9ef1659a549a1ab4a3750b5bb84e41e394",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "adf04276517dfb14f46e1fed1b490b3b1822a31205884781b2c3b2259503cf75",
+            "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "3131700d1d818f6317666feba83a0ca0d3f8bd56cae55ea0bc3741f22e2f2172",
+            "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "ca57e27bb1adb9ceaf6b963d57206a9ef1659a549a1ab4a3750b5bb84e41e394",
+            "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "3131700d1d818f6317666feba83a0ca0d3f8bd56cae55ea0bc3741f22e2f2172",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "3131700d1d818f6317666feba83a0ca0d3f8bd56cae55ea0bc3741f22e2f2172"
+          },
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "left_of",
+            "ocr_text": "Consult",
+            "distance_px": 279,
+            "dx_px": 274,
+            "dy_px": 54
+          },
+          {
+            "relation": "left_of",
+            "ocr_text": "JaneSample—MRNP1—DOB1980-01-01",
+            "distance_px": 319,
+            "dx_px": 270,
+            "dy_px": 170
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            249,
+            696,
+            202
+          ],
+          "phash": "ff3fd53f6a002a00",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_003_expect.png"
+        }
+      ],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": "structured identity (DOM/UIA/AX) owns this step's identity; no identifier pixels persisted at rest — mark the identifier field/region at record time (--identifier) to also arm the pixel tier for remote-display replays"
+    },
+    {
+      "id": "step_004",
+      "intent": "type <note>",
+      "action": "type",
+      "anchor": null,
+      "text": "Synthetic follow-up in two weeks",
+      "param": "note",
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [],
+      "effects": [],
+      "api_binding": null,
+      "risk": "reversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": null,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": null
+    },
+    {
+      "id": "step_005",
+      "intent": "click 'Save Encounter'",
+      "action": "click",
+      "anchor": {
+        "template": "templates/step_005.png",
+        "structural": {
+          "selector": "#save-encounter",
+          "role": "button",
+          "name": "Save Encounter",
+          "automation_id": null,
+          "window_name": null
+        },
+        "region": [
+          54,
+          425,
+          160,
+          64
+        ],
+        "click_point": [
+          134,
+          457
+        ],
+        "ocr_text": "Save Encounter",
+        "context_text": null,
+        "structured_identity": null,
+        "identity_template": {
+          "schema_version": 1,
+          "salt": "aa3ff7e2626b2339436bc552a8c235e9",
+          "band_len": 0,
+          "tokens": [],
+          "concats": [],
+          "structured": "adf04276517dfb14",
+          "signal_hashes": {
+            "structured|exact|": "9229df1e8b59bb2afaf43d3c969c850ba53895c2e46b22b5867897a615ef95f8",
+            "structured|normalized|unicode_nfkc": "9229df1e8b59bb2afaf43d3c969c850ba53895c2e46b22b5867897a615ef95f8",
+            "structured|normalized|casefold": "adf04276517dfb14f46e1fed1b490b3b1822a31205884781b2c3b2259503cf75",
+            "structured|normalized|collapse_whitespace": "9229df1e8b59bb2afaf43d3c969c850ba53895c2e46b22b5867897a615ef95f8",
+            "structured|normalized|strip_punctuation": "ca57e27bb1adb9ceaf6b963d57206a9ef1659a549a1ab4a3750b5bb84e41e394",
+            "structured|normalized|unicode_nfkc,casefold": "adf04276517dfb14f46e1fed1b490b3b1822a31205884781b2c3b2259503cf75",
+            "structured|normalized|unicode_nfkc,collapse_whitespace": "9229df1e8b59bb2afaf43d3c969c850ba53895c2e46b22b5867897a615ef95f8",
+            "structured|normalized|unicode_nfkc,strip_punctuation": "ca57e27bb1adb9ceaf6b963d57206a9ef1659a549a1ab4a3750b5bb84e41e394",
+            "structured|normalized|casefold,collapse_whitespace": "adf04276517dfb14f46e1fed1b490b3b1822a31205884781b2c3b2259503cf75",
+            "structured|normalized|casefold,strip_punctuation": "3131700d1d818f6317666feba83a0ca0d3f8bd56cae55ea0bc3741f22e2f2172",
+            "structured|normalized|collapse_whitespace,strip_punctuation": "ca57e27bb1adb9ceaf6b963d57206a9ef1659a549a1ab4a3750b5bb84e41e394",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace": "adf04276517dfb14f46e1fed1b490b3b1822a31205884781b2c3b2259503cf75",
+            "structured|normalized|unicode_nfkc,casefold,strip_punctuation": "3131700d1d818f6317666feba83a0ca0d3f8bd56cae55ea0bc3741f22e2f2172",
+            "structured|normalized|unicode_nfkc,collapse_whitespace,strip_punctuation": "ca57e27bb1adb9ceaf6b963d57206a9ef1659a549a1ab4a3750b5bb84e41e394",
+            "structured|normalized|casefold,collapse_whitespace,strip_punctuation": "3131700d1d818f6317666feba83a0ca0d3f8bd56cae55ea0bc3741f22e2f2172",
+            "structured|normalized|unicode_nfkc,casefold,collapse_whitespace,strip_punctuation": "3131700d1d818f6317666feba83a0ca0d3f8bd56cae55ea0bc3741f22e2f2172"
+          },
+          "param_token_indices": {},
+          "rests_on_confusable_identifier": false
+        },
+        "identifier_crop": null,
+        "identifier_region": null,
+        "landmarks": [
+          {
+            "relation": "above",
+            "ocr_text": "Note",
+            "distance_px": 209,
+            "dx_px": 93,
+            "dy_px": 187
+          },
+          {
+            "relation": "above",
+            "ocr_text": "Triage",
+            "distance_px": 248,
+            "dx_px": 49,
+            "dy_px": 243
+          }
+        ],
+        "search_pad": 80
+      },
+      "text": null,
+      "param": null,
+      "secret": false,
+      "key": null,
+      "scroll_dx": null,
+      "scroll_dy": null,
+      "expect": [
+        {
+          "kind": "region_stable",
+          "text": null,
+          "region": [
+            0,
+            228,
+            696,
+            223
+          ],
+          "phash": "e0e0b83b1f87c7c2",
+          "phash_tolerance": 16,
+          "timeout_s": 5.0,
+          "template": "templates/step_005_expect.png"
+        },
+        {
+          "kind": "text_present",
+          "text": "Encounters",
+          "region": null,
+          "phash": null,
+          "phash_tolerance": 8,
+          "timeout_s": 5.0,
+          "template": null
+        }
+      ],
+      "effects": [
+        {
+          "kind": "record_written",
+          "match": {
+            "patient_id": {
+              "literal": "p1",
+              "param": null
+            },
+            "type": {
+              "literal": "Triage",
+              "param": null
+            },
+            "source": {
+              "literal": "replay",
+              "param": null
+            },
+            "key": {
+              "literal": "mockmed-triage-p1-v1",
+              "param": null
+            }
+          },
+          "field": null,
+          "value": null,
+          "expected_count": 1,
+          "idempotency_key": {
+            "literal": "mockmed-triage-p1-v1",
+            "param": null
+          },
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "irreversible",
+          "probe": "a record matching patient_id='p1', type='Triage', source='replay', key='mockmed-triage-p1-v1' exists exactly once (mined from the demonstration's system-of-record delta)",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        },
+        {
+          "kind": "field_equals",
+          "match": {
+            "patient_id": {
+              "literal": "p1",
+              "param": null
+            },
+            "type": {
+              "literal": "Triage",
+              "param": null
+            },
+            "source": {
+              "literal": "replay",
+              "param": null
+            },
+            "key": {
+              "literal": "mockmed-triage-p1-v1",
+              "param": null
+            }
+          },
+          "field": "note",
+          "value": {
+            "literal": "Synthetic follow-up in two weeks",
+            "param": null
+          },
+          "expected_count": 1,
+          "idempotency_key": null,
+          "key_field": "key",
+          "count_new_only": false,
+          "forbid_collateral_loss": true,
+          "risk": "irreversible",
+          "probe": "field 'note' of the written record equals the demonstrated value (mined; the value is the recorded example — substitute the run's parameter if this field is parameterized)",
+          "timeout_s": 5.0,
+          "needs_operator_confirmation": false,
+          "readback": null
+        }
+      ],
+      "api_binding": null,
+      "risk": "irreversible",
+      "wait_until": null,
+      "guard": null,
+      "timeout_s": 10.0,
+      "identity_armed": true,
+      "identity_unarmed_reason": null,
+      "identifier_crop_missing_reason": "structured identity (DOM/UIA/AX) owns this step's identity; no identifier pixels persisted at rest — mark the identifier field/region at record time (--identifier) to also arm the pixel tier for remote-display replays"
+    }
+  ],
+  "interstitials": [],
+  "program": null,
+  "subflows": {},
+  "data_sources": {},
+  "qualification": {
+    "schema_version": "openadapt.qualification-project/v1",
+    "project_id": "c019e039-b388-4182-8b2e-4d9a9b5ce9d4",
+    "revision": 12,
+    "previous_revision_sha256": "a25ce22038481786c74ed058e450e434b5b6a54dff80f89d77f4a7492125948f",
+    "created_at": "2026-07-25T19:27:32.394224+00:00",
+    "updated_at": "2026-07-25T19:28:57.749249+00:00",
+    "environment": {
+      "target_kind": "web",
+      "application": "OpenAdapt MockMed synthetic reference",
+      "application_version": "sha256:a406f611860de9d019be4b120b148dc1d78049a119403f4944347a636ffc6cf0",
+      "environment_digest": "ed6679482d12a1b471c26e2cf2066573616cf545bebcb54607bfaaac506e3278",
+      "runtime_version": "1.23.0",
+      "required_capabilities": [
+        "headless_chromium",
+        "independent_system_of_record",
+        "playwright_dom"
+      ]
+    },
+    "minimum_effect_tier": 1,
+    "action_classifications": {
+      "step_000": {
+        "step_id": "step_000",
+        "classification": "read_only",
+        "explanation": "reviewed as workflow preparation/navigation with no business-record effect",
+        "operator_confirmed": true
+      },
+      "step_001": {
+        "step_id": "step_001",
+        "classification": "read_only",
+        "explanation": "reviewed as workflow preparation/navigation with no business-record effect",
+        "operator_confirmed": true
+      },
+      "step_002": {
+        "step_id": "step_002",
+        "classification": "read_only",
+        "explanation": "reviewed as workflow preparation/navigation with no business-record effect",
+        "operator_confirmed": true
+      },
+      "step_003": {
+        "step_id": "step_003",
+        "classification": "read_only",
+        "explanation": "reviewed as workflow preparation/navigation with no business-record effect",
+        "operator_confirmed": true
+      },
+      "step_004": {
+        "step_id": "step_004",
+        "classification": "read_only",
+        "explanation": "reviewed as workflow preparation/navigation with no business-record effect",
+        "operator_confirmed": true
+      },
+      "step_005": {
+        "step_id": "step_005",
+        "classification": "irreversible",
+        "explanation": "compiler classified this as an irreversible system-of-record write",
+        "operator_confirmed": true
+      }
+    },
+    "identity_policies": {
+      "step_005": {
+        "step_id": "step_005",
+        "enforcement": "canonical_ladder",
+        "signals": [],
+        "quorum": 0
+      }
+    },
+    "effect_policies": [
+      {
+        "step_id": "step_005",
+        "effect_index": 0,
+        "effect_contract_hash": "sha256:de1ec3dd32c33b1683a590f55d45fea21a5a4290687eac7f350df7842e84815b",
+        "tier": 1
+      },
+      {
+        "step_id": "step_005",
+        "effect_index": 1,
+        "effect_contract_hash": "sha256:d267875f80a7e3d05ada9dbae3d761c300ed2c3526bb97266507ec8855d3c053",
+        "tier": 1
+      }
+    ],
+    "cases": [
+      {
+        "id": "fault-ambiguity",
+        "kind": "ambiguity",
+        "description": "Deterministic ambiguity refusal case",
+        "input_ref": null,
+        "expected_outcome": "halted",
+        "required": true,
+        "results": [
+          {
+            "case_id": "fault-ambiguity",
+            "project_id": "c019e039-b388-4182-8b2e-4d9a9b5ce9d4",
+            "project_revision": 12,
+            "project_contract_sha256": "bb8eca71da88ec832df66c19292cf70d986e7ed668d4c2dff48833fbb6df6475",
+            "workflow_contract_sha256": "ff1de38517588ed537572546f073ed3a9b5999adef9617481db068ca268f8a0b",
+            "environment_contract_sha256": "8a1c8c6158c75f944069f1b744de2cf3dccce297af3ba29d3e1c7c7d1779d65a",
+            "environment_digest": "ed6679482d12a1b471c26e2cf2066573616cf545bebcb54607bfaaac506e3278",
+            "runtime_version": "1.23.0",
+            "runner_id": "openadapt-flow/public-demo-headless",
+            "runner_capabilities": [
+              "headless_chromium",
+              "independent_system_of_record",
+              "playwright_dom"
+            ],
+            "status": "passed",
+            "observed_outcome": "halted",
+            "evidence": [
+              {
+                "kind": "run_report",
+                "sha256": "1ea81f2b2e0c5ca131d93da296a1d10e46ddc979a1909f008dfb4eb5d811b8cc",
+                "relative_path": "artifacts/cases/fault-ambiguity/trial-01/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "3dfed0836d32760af354c7b5707633a8d2bd16d315227a5d1dacd810705d7fe0",
+                "relative_path": "artifacts/cases/fault-ambiguity/trial-02/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "b9e853ec626d957ff5e47538d8431d5de26884619286dc23e189507fddd7b434",
+                "relative_path": "artifacts/cases/fault-ambiguity/trial-03/run/report.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f",
+                "relative_path": "artifacts/cases/fault-ambiguity/trial-01/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f",
+                "relative_path": "artifacts/cases/fault-ambiguity/trial-02/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f",
+                "relative_path": "artifacts/cases/fault-ambiguity/trial-03/oracle.json"
+              }
+            ],
+            "detail_code": "fault-ambiguity.three-trial-contract",
+            "completed_at": "2026-07-25T19:27:50.005124+00:00",
+            "attestation_key_id": "public-demo-headless-runner",
+            "attestation_signature": "vIjN/Q47J70qvyoUyZKkwNrJY9aPhAMFaZLx4LA0KWbevJ9ZAupcPtl0t7WsQ9Ooce310egAQkurJhQ5KpgcAw=="
+          }
+        ]
+      },
+      {
+        "id": "fault-wrong-identity",
+        "kind": "wrong_identity",
+        "description": "Deterministic wrong identity refusal case",
+        "input_ref": null,
+        "expected_outcome": "halted",
+        "required": true,
+        "results": [
+          {
+            "case_id": "fault-wrong-identity",
+            "project_id": "c019e039-b388-4182-8b2e-4d9a9b5ce9d4",
+            "project_revision": 12,
+            "project_contract_sha256": "bb8eca71da88ec832df66c19292cf70d986e7ed668d4c2dff48833fbb6df6475",
+            "workflow_contract_sha256": "ff1de38517588ed537572546f073ed3a9b5999adef9617481db068ca268f8a0b",
+            "environment_contract_sha256": "8a1c8c6158c75f944069f1b744de2cf3dccce297af3ba29d3e1c7c7d1779d65a",
+            "environment_digest": "ed6679482d12a1b471c26e2cf2066573616cf545bebcb54607bfaaac506e3278",
+            "runtime_version": "1.23.0",
+            "runner_id": "openadapt-flow/public-demo-headless",
+            "runner_capabilities": [
+              "headless_chromium",
+              "independent_system_of_record",
+              "playwright_dom"
+            ],
+            "status": "passed",
+            "observed_outcome": "halted",
+            "evidence": [
+              {
+                "kind": "run_report",
+                "sha256": "5ba7c7e17259b4f8d49975060e9865317607472fc0d5885901fef6ee086fc823",
+                "relative_path": "artifacts/cases/fault-wrong-identity/trial-01/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "6f07351aa5498611146871309ace4bc2380c0d58aa56985c72b2c4fabaf33398",
+                "relative_path": "artifacts/cases/fault-wrong-identity/trial-02/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "223ba9ab6831d742f2bb132f02d73ad15725adc1d4924a140478a2899571b74d",
+                "relative_path": "artifacts/cases/fault-wrong-identity/trial-03/run/report.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f",
+                "relative_path": "artifacts/cases/fault-wrong-identity/trial-01/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f",
+                "relative_path": "artifacts/cases/fault-wrong-identity/trial-02/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f",
+                "relative_path": "artifacts/cases/fault-wrong-identity/trial-03/oracle.json"
+              }
+            ],
+            "detail_code": "fault-wrong-identity.three-trial-contract",
+            "completed_at": "2026-07-25T19:27:54.490231+00:00",
+            "attestation_key_id": "public-demo-headless-runner",
+            "attestation_signature": "Afoox74pC3frk5IXRjn09mdlQAn4e7bZ42FcYC/gwoJqOOGj86QFVV00BY5zPYg9O2lA5MgiMNuwM/Dkzt3zCA=="
+          }
+        ]
+      },
+      {
+        "id": "fault-stale-identity",
+        "kind": "stale_identity",
+        "description": "Deterministic stale identity refusal case",
+        "input_ref": null,
+        "expected_outcome": "halted",
+        "required": true,
+        "results": [
+          {
+            "case_id": "fault-stale-identity",
+            "project_id": "c019e039-b388-4182-8b2e-4d9a9b5ce9d4",
+            "project_revision": 12,
+            "project_contract_sha256": "bb8eca71da88ec832df66c19292cf70d986e7ed668d4c2dff48833fbb6df6475",
+            "workflow_contract_sha256": "ff1de38517588ed537572546f073ed3a9b5999adef9617481db068ca268f8a0b",
+            "environment_contract_sha256": "8a1c8c6158c75f944069f1b744de2cf3dccce297af3ba29d3e1c7c7d1779d65a",
+            "environment_digest": "ed6679482d12a1b471c26e2cf2066573616cf545bebcb54607bfaaac506e3278",
+            "runtime_version": "1.23.0",
+            "runner_id": "openadapt-flow/public-demo-headless",
+            "runner_capabilities": [
+              "headless_chromium",
+              "independent_system_of_record",
+              "playwright_dom"
+            ],
+            "status": "passed",
+            "observed_outcome": "halted",
+            "evidence": [
+              {
+                "kind": "run_report",
+                "sha256": "31382c1ff3093502a4367a4bc5bea51390b81380c94b6ea95659643c7b228a18",
+                "relative_path": "artifacts/cases/fault-stale-identity/trial-01/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "97466e8690b69550a1434b1af1238347691143fd8135b8eb2d6fd065eb6bc3cf",
+                "relative_path": "artifacts/cases/fault-stale-identity/trial-02/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "9816ba074811864007349872d625cecc6abb630bd2915b1589014595ae66c870",
+                "relative_path": "artifacts/cases/fault-stale-identity/trial-03/run/report.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f",
+                "relative_path": "artifacts/cases/fault-stale-identity/trial-01/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f",
+                "relative_path": "artifacts/cases/fault-stale-identity/trial-02/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "53505ae34f1d494855f9d1ce5fb12561c36a86884834255270d973d57945bd1f",
+                "relative_path": "artifacts/cases/fault-stale-identity/trial-03/oracle.json"
+              }
+            ],
+            "detail_code": "fault-stale-identity.three-trial-contract",
+            "completed_at": "2026-07-25T19:27:57.895701+00:00",
+            "attestation_key_id": "public-demo-headless-runner",
+            "attestation_signature": "cPho4FpJtpM1XAk7bm2J7/05Z7Z/IJRkIiEdfzWjsffUu6zVDEheusr1exRZKEHnIQ0HpfHeH7sJlEfKzXATBA=="
+          }
+        ]
+      },
+      {
+        "id": "fault-weak-effect",
+        "kind": "weak_effect",
+        "description": "Deterministic weak effect refusal case",
+        "input_ref": null,
+        "expected_outcome": "halted",
+        "required": true,
+        "results": [
+          {
+            "case_id": "fault-weak-effect",
+            "project_id": "c019e039-b388-4182-8b2e-4d9a9b5ce9d4",
+            "project_revision": 12,
+            "project_contract_sha256": "bb8eca71da88ec832df66c19292cf70d986e7ed668d4c2dff48833fbb6df6475",
+            "workflow_contract_sha256": "ff1de38517588ed537572546f073ed3a9b5999adef9617481db068ca268f8a0b",
+            "environment_contract_sha256": "8a1c8c6158c75f944069f1b744de2cf3dccce297af3ba29d3e1c7c7d1779d65a",
+            "environment_digest": "ed6679482d12a1b471c26e2cf2066573616cf545bebcb54607bfaaac506e3278",
+            "runtime_version": "1.23.0",
+            "runner_id": "openadapt-flow/public-demo-headless",
+            "runner_capabilities": [
+              "headless_chromium",
+              "independent_system_of_record",
+              "playwright_dom"
+            ],
+            "status": "passed",
+            "observed_outcome": "halted",
+            "evidence": [
+              {
+                "kind": "run_report",
+                "sha256": "e121033fd21b6c140faa27d2cae7d2621299ec3a9be910782c021d03c0e75fd3",
+                "relative_path": "artifacts/cases/fault-weak-effect/trial-01/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "6c3a5544225f8de2d4755a338bc34a31f536b11f920b5f0e7f5e3938b3ddd353",
+                "relative_path": "artifacts/cases/fault-weak-effect/trial-02/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "d9019ad84bc604e412a07a06362523efb72bf9516642dc2a4b843aeee4a80a3f",
+                "relative_path": "artifacts/cases/fault-weak-effect/trial-03/run/report.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "25ea4b0ab9a8225cef1a40b1b8fbec4a40b24e13303f2a44efa8848ebfc55af4",
+                "relative_path": "artifacts/cases/fault-weak-effect/trial-01/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "25ea4b0ab9a8225cef1a40b1b8fbec4a40b24e13303f2a44efa8848ebfc55af4",
+                "relative_path": "artifacts/cases/fault-weak-effect/trial-02/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "25ea4b0ab9a8225cef1a40b1b8fbec4a40b24e13303f2a44efa8848ebfc55af4",
+                "relative_path": "artifacts/cases/fault-weak-effect/trial-03/oracle.json"
+              }
+            ],
+            "detail_code": "fault-weak-effect.three-trial-contract",
+            "completed_at": "2026-07-25T19:28:27.908751+00:00",
+            "attestation_key_id": "public-demo-headless-runner",
+            "attestation_signature": "u1Tq0eJvt0Uptf2ZKQJgkp/Rt62zMhwUgsmLSdr6HbcG6ZcUjau8V35Bxb0gIRuTZi46JSbJ8af4yVOuK7VGAA=="
+          }
+        ]
+      },
+      {
+        "id": "fault-missing-effect",
+        "kind": "missing_effect",
+        "description": "Deterministic missing effect refusal case",
+        "input_ref": null,
+        "expected_outcome": "halted",
+        "required": true,
+        "results": [
+          {
+            "case_id": "fault-missing-effect",
+            "project_id": "c019e039-b388-4182-8b2e-4d9a9b5ce9d4",
+            "project_revision": 12,
+            "project_contract_sha256": "bb8eca71da88ec832df66c19292cf70d986e7ed668d4c2dff48833fbb6df6475",
+            "workflow_contract_sha256": "ff1de38517588ed537572546f073ed3a9b5999adef9617481db068ca268f8a0b",
+            "environment_contract_sha256": "8a1c8c6158c75f944069f1b744de2cf3dccce297af3ba29d3e1c7c7d1779d65a",
+            "environment_digest": "ed6679482d12a1b471c26e2cf2066573616cf545bebcb54607bfaaac506e3278",
+            "runtime_version": "1.23.0",
+            "runner_id": "openadapt-flow/public-demo-headless",
+            "runner_capabilities": [
+              "headless_chromium",
+              "independent_system_of_record",
+              "playwright_dom"
+            ],
+            "status": "passed",
+            "observed_outcome": "halted",
+            "evidence": [
+              {
+                "kind": "run_report",
+                "sha256": "4aefb7644c82ee9c612beb1313a22fddb6fc684f8d616405de483dfff9ef1b76",
+                "relative_path": "artifacts/cases/fault-missing-effect/trial-01/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "97a59c886579c76349c8a8492b23eab401494c3483310845e9fe93c1a9d2950b",
+                "relative_path": "artifacts/cases/fault-missing-effect/trial-02/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "0fb36dcab3d016dfb888099dfd547eb10b79fea91a07d14a85d3099dfa54f3c2",
+                "relative_path": "artifacts/cases/fault-missing-effect/trial-03/run/report.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "3a55ea754f1fd03b3393a6a3abf9570a7ebd0bd90c0a9fe8f92a5e7689b132ad",
+                "relative_path": "artifacts/cases/fault-missing-effect/trial-01/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "3a55ea754f1fd03b3393a6a3abf9570a7ebd0bd90c0a9fe8f92a5e7689b132ad",
+                "relative_path": "artifacts/cases/fault-missing-effect/trial-02/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "3a55ea754f1fd03b3393a6a3abf9570a7ebd0bd90c0a9fe8f92a5e7689b132ad",
+                "relative_path": "artifacts/cases/fault-missing-effect/trial-03/oracle.json"
+              }
+            ],
+            "detail_code": "fault-missing-effect.three-trial-contract",
+            "completed_at": "2026-07-25T19:28:57.730580+00:00",
+            "attestation_key_id": "public-demo-headless-runner",
+            "attestation_signature": "KvkfTDxz4XnWwdTA25m9V901ViTLFFt8g8XN5/De3qoQqMNbQuD+vFPr5L2TulV+5BDBdA/7Vd4PFCLsx36pCA=="
+          }
+        ]
+      },
+      {
+        "id": "representative",
+        "kind": "representative",
+        "description": "Recorded workflow under its qualified application boundary",
+        "input_ref": null,
+        "expected_outcome": "verified",
+        "required": true,
+        "results": [
+          {
+            "case_id": "representative",
+            "project_id": "c019e039-b388-4182-8b2e-4d9a9b5ce9d4",
+            "project_revision": 12,
+            "project_contract_sha256": "bb8eca71da88ec832df66c19292cf70d986e7ed668d4c2dff48833fbb6df6475",
+            "workflow_contract_sha256": "ff1de38517588ed537572546f073ed3a9b5999adef9617481db068ca268f8a0b",
+            "environment_contract_sha256": "8a1c8c6158c75f944069f1b744de2cf3dccce297af3ba29d3e1c7c7d1779d65a",
+            "environment_digest": "ed6679482d12a1b471c26e2cf2066573616cf545bebcb54607bfaaac506e3278",
+            "runtime_version": "1.23.0",
+            "runner_id": "openadapt-flow/public-demo-headless",
+            "runner_capabilities": [
+              "headless_chromium",
+              "independent_system_of_record",
+              "playwright_dom"
+            ],
+            "status": "passed",
+            "observed_outcome": "verified",
+            "evidence": [
+              {
+                "kind": "run_report",
+                "sha256": "614d5793ce728cc8af5ed11dbf053f63e02e1e99356b55affe13d9ff84d49078",
+                "relative_path": "artifacts/cases/representative/trial-01/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "2a5488e5d364f0d582b1c29e96425e85f048a9b9ec0739a6a24ace522076e54c",
+                "relative_path": "artifacts/cases/representative/trial-02/run/report.json"
+              },
+              {
+                "kind": "run_report",
+                "sha256": "f63f2e54f5d24027e5e8980275d5c06a800c0d9355e02cef7098b194ac6c2a1b",
+                "relative_path": "artifacts/cases/representative/trial-03/run/report.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "788c60eeecab7de31d5e90c0784d7eee1ac34a84862ec138f18a3178caa8f987",
+                "relative_path": "artifacts/cases/representative/trial-01/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "788c60eeecab7de31d5e90c0784d7eee1ac34a84862ec138f18a3178caa8f987",
+                "relative_path": "artifacts/cases/representative/trial-02/oracle.json"
+              },
+              {
+                "kind": "effect",
+                "sha256": "788c60eeecab7de31d5e90c0784d7eee1ac34a84862ec138f18a3178caa8f987",
+                "relative_path": "artifacts/cases/representative/trial-03/oracle.json"
+              }
+            ],
+            "detail_code": "representative.three-trial-contract",
+            "completed_at": "2026-07-25T19:27:45.672337+00:00",
+            "attestation_key_id": "public-demo-headless-runner",
+            "attestation_signature": "hGdbqvXvpV6FmgG4MNC1Pl4BNZNg1cu/2E3fX8Lv8TJPta6COo0JkvCwnzFS2TOCKwkLkjBuajiGIIp9md/DAQ=="
+          }
+        ]
+      }
+    ],
+    "exclusions": [],
+    "requalification_conditions": [],
+    "trusted_runner_keys": {
+      "public-demo-headless-runner": "i1bWI6DDbdkyLc9yMnGwFiGSf1ZdGlCEDECn6P+tYRA="
+    },
+    "last_certification": {
+      "project_revision": 12,
+      "project_contract_sha256": "bb8eca71da88ec832df66c19292cf70d986e7ed668d4c2dff48833fbb6df6475",
+      "workflow_contract_sha256": "ff1de38517588ed537572546f073ed3a9b5999adef9617481db068ca268f8a0b",
+      "environment_contract_sha256": "8a1c8c6158c75f944069f1b744de2cf3dccce297af3ba29d3e1c7c7d1779d65a",
+      "policy_name": "clinical-write",
+      "passed": true,
+      "report_sha256": "45c2ea60dd48009157d094d2569c2dea0b7498fa3677a9291eac42ed5cb56852",
+      "certified_at": "2026-07-25T19:28:57.757884+00:00"
+    }
+  },
+  "manifest": {
+    "schema_version": 2,
+    "content_digest": "8c0bcebb84733d34b16a48d0dc9a612a15ce71842fca0761c2db5fc12a39e6cf",
+    "file_hashes": {
+      "templates/step_000.png": "46a75b5d63ceaad4bee942ccf2a6ca3d2b4f6327509df7eff2cc7ddb2c9fd389",
+      "templates/step_000_expect.png": "337e403fec476cc955bcf5f1d96902119d9c2fadc03e201c0c2fbc2475d03646",
+      "templates/step_001.png": "9d17fc905b1902add82cad885c72fe446a23e0334fc4db58592d2369e85f26a5",
+      "templates/step_001_expect.png": "ccbbb335c8160188198df18beb48bd88082b7bb1e5c1cd987d6766afb62c0773",
+      "templates/step_002.png": "e6a0e0718b00c26280e32928b744217d00a7e010ab9825da27724e2debc9b805",
+      "templates/step_002_expect.png": "f66608f19f3acf0ba8d86a39ecdd04781eb320787885039ab1eefee3835c83de",
+      "templates/step_003.png": "2cb01de3e45c7c6cd6526f1b6f9c1a4f86bee1a5e4f8e3f6fbf7150470cf5f2c",
+      "templates/step_003_expect.png": "68cd40d6bd0abdf81beb40dd4202bac784a4b55492f803cdd5fb1e7ab8f76941",
+      "templates/step_005.png": "5d8163520ba8355f44ffe0cd06a26be6bfe5d6660bcff1395dc82d4da3aa0ac1",
+      "templates/step_005_expect.png": "0919dca8fe883ad52eae6359f9da3494cb57c68e006ea4ba314d61e15787ea47"
+    },
+    "provenance": {
+      "compiler_version": "1.23.0",
+      "source_recording_sha256": null,
+      "compiler_config_sha256": "479f143ba6970af144553f82f66990463129ee6606852260478c9c2a79b7f91d",
+      "created_at": "2026-07-25T19:27:32.384447+00:00",
+      "policy_name": "clinical-write",
+      "certified": true,
+      "certification_status": "certified",
+      "certified_at": "2026-07-25T19:28:57.757894+00:00",
+      "expires_at": null,
+      "certification_invalidated_at": null,
+      "certification_invalidation_reason": null
+    },
+    "encrypted": false
+  }
+}
