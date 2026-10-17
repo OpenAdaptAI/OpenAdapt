@@ -94,9 +94,9 @@ appreciated but the certification applies to every contribution regardless.
 ## Contributor License Agreement
 
 A Contributor License Agreement is published:
-[`openadapt-flow/CLA.md`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/CLA.md)
+[`packages/flow/CLA.md`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/CLA.md)
 for individuals, and
-[`openadapt-flow/CCLA.md`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/CCLA.md)
+[`packages/flow/CCLA.md`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/CCLA.md)
 for companies whose employees contribute on company time. It gives MLDSAI Inc.
 an explicit copyright and patent license, which the MIT License alone doesn't
 provide, and it keeps the option of relicensing the combined work later.
