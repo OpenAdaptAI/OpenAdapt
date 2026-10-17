@@ -31,13 +31,9 @@ Only outcome done means the change was saved and checked. needs_review means it 
 The sandbox serves one synthetic workflow, `add_triage_note`. Its `sandbox_case` input shows each outcome: `normal`, `duplicate_record`, `false_saved_banner`, `timeout_after_save`, and `app_offline`.
 
 ```bash
-claude mcp add openadapt -- uvx --python 3.12 --from git+https://github.com/OpenAdaptAI/openadapt-agent openadapt-agent serve
-```
-
-PyPI has openadapt-agent 2.0.1, which predates the sandbox. From version 2.1.0 on, this shorter line does the same:
-
-```bash
 claude mcp add openadapt -- uvx --python 3.12 openadapt-agent serve
 ```
+
+This installs openadapt-agent from PyPI. It requires openadapt-flow 2.1.0 or later, which is on PyPI and installs with it.
 
 The skill name is openadapt-gui-write. It is never called computer use: your agent decides, and OpenAdapt does the entry.

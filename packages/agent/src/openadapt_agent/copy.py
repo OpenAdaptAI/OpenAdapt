@@ -41,12 +41,9 @@ PREVIEW_COMMAND = (
 #: Older name for ``FIRST_COMMAND``.
 THREE_LINE_INSTALL = FIRST_COMMAND
 
-#: The tutorial extra from the GitHub source. PyPI has 2.0.1, which has no
-#: sandbox, so ``openadapt-agent[tutorial]`` from PyPI starts a server that
-#: exits. Drop the ``@ git+...`` part once 2.0.2 is on PyPI.
-TUTORIAL_REQUIREMENT = (
-    "openadapt-agent[tutorial] @ git+https://github.com/OpenAdaptAI/openadapt-agent"
-)
+#: The tutorial extra from PyPI. It needs openadapt-flow 2.1.0 or later, which
+#: is on PyPI and installs with it.
+TUTORIAL_REQUIREMENT = "openadapt-agent[tutorial]"
 #: Starts the sandbox with the real engine. The README shows the same command.
 TUTORIAL_SERVE_COMMAND = (
     f"uvx --python 3.12 --from '{TUTORIAL_REQUIREMENT}' openadapt-agent serve"

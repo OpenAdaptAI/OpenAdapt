@@ -6,8 +6,7 @@ Not run in CI (it spawns a real server process). Usage:
     python scripts/smoke_client.py
 
     # Any launch command, for example the documented uvx line:
-    python scripts/smoke_client.py -- uvx --python 3.12 --from \\
-        git+https://github.com/OpenAdaptAI/openadapt-agent openadapt-agent serve
+    python scripts/smoke_client.py -- uvx --python 3.12 openadapt-agent serve
 
     # Operator bundles, read-only or with runs:
     python scripts/smoke_client.py --bundles /path/to/bundles [--allow-run]

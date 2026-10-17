@@ -64,12 +64,12 @@ Your customer provides the computer and a person for runs that stop. Someone who
 
 The sandbox is a practice server that needs no account. It has one workflow, `add_triage_note`, which adds a note to the first referral in MockMed, a test clinic app with made-up patients.
 
-You need [Claude Code](https://claude.com/claude-code) (signed in), [uv](https://docs.astral.sh/uv/), and git. To use a different client or your own code, see [Connect your own agent](#connect-your-own-agent).
+You need [Claude Code](https://claude.com/claude-code) (signed in) and [uv](https://docs.astral.sh/uv/). To use a different client or your own code, see [Connect your own agent](#connect-your-own-agent).
 
 1. Add the sandbox server. Claude Code saves it for the current folder only.
 
    ```bash
-   claude mcp add openadapt -- uvx --python 3.12 --from git+https://github.com/OpenAdaptAI/openadapt-agent openadapt-agent serve
+   claude mcp add openadapt -- uvx --python 3.12 openadapt-agent serve
    ```
 
 2. In the same folder, start Claude Code with `claude`. Claude Code starts the server.
@@ -99,7 +99,7 @@ The result looks like this (some fields left out):
 
 This install simulates each run without opening MockMed, and every result says so. To watch the real engine do the work, see [Drive MockMed with the real engine](#drive-mockmed-with-the-real-engine).
 
-Version 2.1.0 on PyPI includes the sandbox, so step 1 can also be `claude mcp add openadapt -- uvx --python 3.12 openadapt-agent serve`.
+openadapt-agent installs from PyPI and requires openadapt-flow 2.1.0 or later, which is on PyPI and installs with it. To try unreleased changes, use `--from git+https://github.com/OpenAdaptAI/openadapt-agent` in place of the package name.
 
 ### See every outcome
 
@@ -121,7 +121,7 @@ The `tutorial` extra makes openadapt-flow (Flow), the engine behind OpenAdapt, d
 
 ```bash
 claude mcp remove openadapt
-claude mcp add openadapt -- uvx --python 3.12 --from 'openadapt-agent[tutorial] @ git+https://github.com/OpenAdaptAI/openadapt-agent' openadapt-agent serve
+claude mcp add openadapt -- uvx --python 3.12 --from 'openadapt-agent[tutorial]' openadapt-agent serve
 ```
 
 When the server starts, Flow records the workflow once and, if needed, downloads a browser (about 300 MB). The first request waits for that. In our test on a Mac, the first request took about 80 seconds. The call returned `running` after 60 seconds, and the agent called `get_run` for the result. If setup takes more than 15 minutes, the request ends `did_not_run`. With Flow, a `done` result has `proof: "local"` instead of `"simulated"`.
@@ -193,7 +193,7 @@ Any MCP client can start the server with the command `uvx`. In a client that rea
   "mcpServers": {
     "openadapt": {
       "command": "uvx",
-      "args": ["--python", "3.12", "--from", "git+https://github.com/OpenAdaptAI/openadapt-agent", "openadapt-agent", "serve"]
+      "args": ["--python", "3.12", "openadapt-agent", "serve"]
     }
   }
 }
@@ -210,8 +210,7 @@ from mcp.client.stdio import stdio_client
 
 SERVER = StdioServerParameters(
     command="uvx",
-    args=["--python", "3.12", "--from", "git+https://github.com/OpenAdaptAI/openadapt-agent",
-          "openadapt-agent", "serve"],
+    args=["--python", "3.12", "openadapt-agent", "serve"],
 )
 
 
@@ -236,7 +235,7 @@ The SDK starts the server with only a few environment variables. To pass others,
 [scripts/smoke_client.py](scripts/smoke_client.py) is a fuller example that runs every sandbox case. From a clone of this repository, run `pip install -e .`, then:
 
 ```bash
-python scripts/smoke_client.py -- uvx --python 3.12 --from git+https://github.com/OpenAdaptAI/openadapt-agent openadapt-agent serve
+python scripts/smoke_client.py -- uvx --python 3.12 openadapt-agent serve
 ```
 
 If your agent runs in your own cloud, it can't reach this server, which has no network listener. The program that starts the server has to run on your customer's computer. One way to do that is a small worker there: it takes requests from your service over a connection it opens, starts this server, calls `run_workflow`, and sends each result back. The worker acts as your agent, so protect its connection like any other route to patient data. For a hosted route instead, [talk to us](https://openadapt.ai/qualify?why=embed).
@@ -342,7 +341,7 @@ If a workflow's name would come out as either one, emit-skill names the skill `o
 1. Add a recording server. `--url` opens the app in a new Chromium window with no saved sign-ins, and `--headed` keeps that window visible so the person can sign in.
 
    ```bash
-   claude mcp add openadapt-authoring -- uvx --python 3.12 --from 'openadapt-agent[tutorial] @ git+https://github.com/OpenAdaptAI/openadapt-agent' openadapt-agent serve --authoring --url https://app.example.com --headed
+   claude mcp add openadapt-authoring -- uvx --python 3.12 --from 'openadapt-agent[tutorial]' openadapt-agent serve --authoring --url https://app.example.com --headed
    ```
 
 2. Ask your agent to record the task with the person. When the agent pauses for sign-in, the person signs in to the app in that window.

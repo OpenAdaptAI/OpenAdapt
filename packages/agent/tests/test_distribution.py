@@ -241,7 +241,7 @@ def test_llms_txt_lists_the_tool_surface() -> None:
         "teach_attention",
         "escalate_attention",
         "docs.openadapt.ai",
-        PREVIEW_COMMAND.split(" -- ", 1)[1],
+        "openadapt-flow 2.1.0 or later",
         FIRST_COMMAND.split(" -- ", 1)[1],
         IDENTITY_SENTENCE,
     ):
@@ -287,9 +287,10 @@ def test_identity_sentence_is_shared() -> None:
     assert SKILL_WHEN_TO_USE in skill
     assert OUTCOME_RULES in skill
     assert "name: computer-use" not in skill.lower()
-    for command in (FIRST_COMMAND, PREVIEW_COMMAND):
-        assert command in readme
-        assert command in skill
+    # openadapt-agent and openadapt-flow 2.1.0 are on PyPI: lead with PyPI.
+    assert FIRST_COMMAND in readme
+    assert FIRST_COMMAND in skill
+    assert PREVIEW_COMMAND not in skill
     assert "openadapt-agent serve --allow-run" in readme
     assert "serve --authoring" in readme
     assert "serve --authoring" in llms
@@ -372,10 +373,16 @@ def test_retired_unsafe_claims_never_come_back() -> None:
 
 
 def test_tutorial_command_installs_a_version_with_the_sandbox() -> None:
-    """Until 2.1.0 is on PyPI, the tutorial extra comes from GitHub."""
+    """The tutorial extra comes from PyPI, with openadapt-flow 2.1.0 or later."""
     readme = README.read_text(encoding="utf-8")
     assert TUTORIAL_SERVE_COMMAND in readme
-    assert "--from 'openadapt-agent[tutorial]' " not in readme
+    assert "--from 'openadapt-agent[tutorial]' " in readme
+    assert "requires openadapt-flow 2.1.0 or later" in readme
+    for name in ("README.md", "llms.txt", "skills/openadapt-gui-write/SKILL.md"):
+        text = (REPO_ROOT / name).read_text(encoding="utf-8")
+        assert "openadapt-flow 2.1.0 or later" in text, name
+        assert "before 2.1.0 is on PyPI" not in text, name
+        assert "PyPI has openadapt-agent 2.0.1" not in text, name
 
 
 def _without_code(text: str) -> str:

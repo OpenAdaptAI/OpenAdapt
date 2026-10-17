@@ -70,12 +70,12 @@ def test_each_case_returns_its_outcome(sandbox_bridge, case):
 
 
 def test_simulated_engine_hint_installs_a_version_with_the_sandbox(sandbox_bridge):
-    # PyPI 2.0.1 has no sandbox, so a hint that installs the tutorial extra
-    # from PyPI starts a server that exits. Point at the GitHub source.
+    # The sandbox and openadapt-flow 2.1.0 are on PyPI: the hint installs the
+    # tutorial extra from PyPI, not from a GitHub ref.
     detail = sandbox_bridge.dispatch("list_workflows", {})["sandbox"]["engine_detail"]
     assert TUTORIAL_SERVE_COMMAND in detail
-    assert "git+https://github.com/OpenAdaptAI/openadapt-agent" in detail
-    assert "--from 'openadapt-agent[tutorial]' " not in detail
+    assert "--from 'openadapt-agent[tutorial]' " in detail
+    assert "git+https://" not in detail
 
 
 def test_app_offline_says_the_app_is_unreachable(sandbox_bridge):

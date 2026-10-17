@@ -25,8 +25,8 @@ Only `done` is a success. Results come from openadapt-flow's `transaction_outcom
 
 `openadapt-agent serve` with no flags is a sandbox: one workflow, `add_triage_note`, on MockMed, a synthetic clinic app. The `sandbox_case` input picks the outcome: `normal` (done), `duplicate_record` (needs_review), `false_saved_banner` and `timeout_after_save` (not_sure_if_saved), `app_offline` (did_not_run). Install the `tutorial` extra to drive the synthetic app with the real engine; otherwise results are simulated and say so.
 
-- From GitHub (before 2.1.0 is on PyPI): `claude mcp add openadapt -- uvx --python 3.12 --from git+https://github.com/OpenAdaptAI/openadapt-agent openadapt-agent serve`
-- From PyPI 2.0.2 on: `claude mcp add openadapt -- uvx --python 3.12 openadapt-agent serve`
+- From PyPI: `claude mcp add openadapt -- uvx --python 3.12 openadapt-agent serve`
+- Requires openadapt-flow 2.1.0 or later, which is on PyPI and installs with openadapt-agent.
 
 ## Modes and older surfaces
 
