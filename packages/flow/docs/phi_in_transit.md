@@ -110,7 +110,7 @@ returns `require_tls=False` — never for real PHI.
 ## Remote display (RDP / Guacamole) — already transport-encrypted
 
 The `win_agent` channel is one substrate; the other is the **remote-display**
-path (`openadapt_flow.backends.rdp_backend`, the L1/Retinology RDP wedge). That
+path (`openadapt_flow.backends.rdp_backend`). That
 stream does **not** need this work: **RDP is encrypted at the protocol level**
 (TLS/CredSSP since modern Windows), so the pixel stream and input are already
 protected in transit by the RDP layer itself. If RDP is fronted by
