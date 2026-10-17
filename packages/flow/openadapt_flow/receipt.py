@@ -40,7 +40,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Annotated, Any, Literal, Optional, cast
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 from openadapt_flow.ir import RunReport
 from openadapt_flow.verification import VerificationTier
@@ -86,6 +86,16 @@ ReceiptEffectTier = Literal[
     "independent_session",
     "persisted_state_reacquisition",
 ]
+
+#: How the weakest effect was checked (:mod:`openadapt_flow.assurance`). A
+#: success receipt never carries ``unchecked``.
+ReceiptAssurance = Literal["independent_readback", "screen_readback"]
+
+_ASSURANCE_BY_TIER: dict[str, ReceiptAssurance] = {
+    "independent_system": "independent_readback",
+    "independent_session": "independent_readback",
+    "persisted_state_reacquisition": "screen_readback",
+}
 
 ReceiptSubstrate = Literal["web", "windows", "macos", "linux", "rdp", "citrix"]
 
@@ -152,6 +162,10 @@ class RunReceipt(BaseModel):
     rung_histogram: dict[ReceiptRung, ReceiptCount] = Field(default_factory=dict)
     evidence_classes: list[ReceiptEvidenceClass] = Field(default_factory=list)
     effect_tier_reached: ReceiptEffectTier
+    #: The read-back assurance grade of the weakest effect, derived from
+    #: :attr:`effect_tier_reached`. Optional so receipts written before it
+    #: existed still validate (``exclude_none`` keeps their digest).
+    effect_assurance: Optional[ReceiptAssurance] = None
     authorization_required: ReceiptCount
     authorization_confirmed: ReceiptCount
     identity_required: ReceiptCount
@@ -233,6 +247,11 @@ class RunReceipt(BaseModel):
             raise ValueError("VERIFIED receipt lacks effect evidence")
         if "effect_tier_4" in self.evidence_classes:
             raise ValueError("immediate-screen evidence cannot produce VERIFIED")
+        if (
+            self.effect_assurance is not None
+            and self.effect_assurance != _ASSURANCE_BY_TIER[self.effect_tier_reached]
+        ):
+            raise ValueError("effect assurance disagrees with the effect tier")
         if (self.model_calls > 0) != ("model" in self.evidence_classes):
             raise ValueError("model-call count and evidence class disagree")
         if self.model_calls > 0 and self.external_network_calls != "observed":
@@ -241,6 +260,18 @@ class RunReceipt(BaseModel):
         if self.receipt_digest != expected:
             raise ValueError("receipt digest does not match its canonical payload")
         return self
+
+    @model_serializer(mode="wrap")
+    def _drop_unset_assurance(self, handler: Any) -> dict[str, Any]:
+        """Keep the exact bytes of receipts that carry no ``effect_assurance``.
+
+        The signed production projection hashes ``model_dump``; an added
+        ``null`` key would change that hash for every older receipt.
+        """
+        data: dict[str, Any] = handler(self)
+        if self.effect_assurance is None:
+            data.pop("effect_assurance", None)
+        return data
 
     def canonical_json(self, *, include_digest: bool = True) -> bytes:
         """Deterministic bytes for hashing and for the publish diff."""
@@ -776,6 +807,7 @@ def _build_receipt(
                 "effect evidence"
             )
 
+    weakest_tier = _weakest_confirmed_tier(report)
     rungs: dict[str, int] = {}
     for rung, count in dict(report.rung_counts).items():
         if rung not in ReceiptRung.__args__:  # type: ignore[attr-defined]
@@ -804,7 +836,8 @@ def _build_receipt(
             duration_ms=int(round(float(report.total_ms))),
             rung_histogram=rungs,  # type: ignore[arg-type]
             evidence_classes=evidence_classes,  # type: ignore[arg-type]
-            effect_tier_reached=_weakest_confirmed_tier(report),
+            effect_tier_reached=weakest_tier,
+            effect_assurance=_ASSURANCE_BY_TIER[weakest_tier],
             authorization_required=int(required.authorization),
             authorization_confirmed=int(passed.authorization),
             identity_required=int(required.identity),
@@ -873,6 +906,11 @@ def render_receipt_markdown(receipt: RunReceipt) -> str:
         f"| heals | {receipt.heals} |",
         f"| effects confirmed | {effects} |",
         f"| weakest effect evidence | `{receipt.effect_tier_reached}` |",
+        *(
+            [f"| read-back assurance | `{receipt.effect_assurance}` |"]
+            if receipt.effect_assurance
+            else []
+        ),
         f"| identity-armed steps | {identity} |",
         f"| over-halts | {receipt.over_halt_count} |",
         f"| resolution ladder | {ladder} |",
@@ -939,6 +977,11 @@ def _receipt_rows(receipt: RunReceipt) -> list[tuple[str, str]]:
             f"{receipt.effects_confirmed} of {receipt.effects_required}",
         ),
         ("effect evidence", receipt.effect_tier_reached),
+        *(
+            [("read-back assurance", receipt.effect_assurance)]
+            if receipt.effect_assurance
+            else []
+        ),
         (
             "identity-armed",
             f"{receipt.identity_armed} of {receipt.identity_applicable}",

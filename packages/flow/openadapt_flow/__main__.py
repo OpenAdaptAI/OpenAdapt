@@ -1047,6 +1047,30 @@ def _record_until_stop(args: argparse.Namespace):
 
 
 def _cmd_record(args: argparse.Namespace) -> int:
+    """Record, then (with ``--with-check``) ask for the demonstrated check."""
+    with_check = bool(getattr(args, "with_check", False))
+    if with_check:
+        from openadapt_flow.cli_check import RECORD_GUIDANCE
+
+        print(RECORD_GUIDANCE)
+    code = _cmd_record_capture(args)
+    if code == 0 and with_check:
+        from openadapt_flow.cli_check import guided_check
+
+        recording = Path(args.out)
+        if not (recording / "events.jsonl").is_file():
+            print("record: no events.jsonl to mark a check in; skipped")
+        elif not sys.stdin.isatty():
+            print(
+                "Mark the check with 'openadapt-flow check mark "
+                f"{recording} --start-event N --field PARAM=X,Y,W,H'."
+            )
+        else:
+            guided_check(recording)
+    return code
+
+
+def _cmd_record_capture(args: argparse.Namespace) -> int:
     # The interactive (web) recorder installs in-page DOM listeners against a
     # headed Playwright page. The DESKTOP recorder (--backend windows) captures
     # the operator's native OS input over the win_agent contract; both emit the
@@ -6772,6 +6796,15 @@ def build_parser() -> argparse.ArgumentParser:
             "pre-profile default."
         ),
     )
+    p.add_argument(
+        "--with-check",
+        action="store_true",
+        help=(
+            "After the save, also show how you'd check it saved (reload or "
+            "search again, open the record). Flow then asks which fields show "
+            "the values you typed and writes check.json"
+        ),
+    )
     _add_backend_flags(p)
     p.set_defaults(func=_cmd_record)
 
@@ -9561,8 +9594,10 @@ def build_parser() -> argparse.ArgumentParser:
     pr.set_defaults(func=_cmd_connector)
 
     from openadapt_flow.cli_admit import register_admit_parser
+    from openadapt_flow.cli_check import register_check_parser
 
     register_admit_parser(sub)
+    register_check_parser(sub)
 
     return parser
 
