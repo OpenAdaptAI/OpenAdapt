@@ -17,6 +17,7 @@ RULE_V0_ID = "clean-rule/v0"
 HARD_REASONS = frozenset(
     {
         "readback_not_confirmed",
+        "readback_not_independent",
         "readback_reconciled",
         "no_fields_compared",
         "field_unread",
@@ -31,6 +32,7 @@ HARD_REASONS = frozenset(
 #: Plain copy for each reason, shown in the review queue.
 REASON_COPY: dict[str, str] = {
     "readback_not_confirmed": "The record check didn't confirm the save.",
+    "readback_not_independent": ("The record wasn't read back from the system itself."),
     "readback_reconciled": "The save was corrected after the first read.",
     "no_fields_compared": "The record check compared no fields.",
     "field_unread": "A field the item typed wasn't read back.",
@@ -55,8 +57,15 @@ class RuleV0Config(BaseModel):
     min_history_items: int = Field(default=20, ge=1)
     max_abs_z: float = Field(default=3.0, gt=0)
     intake_floor: float = Field(default=0.9, ge=0.0, le=1.0)
-    #: Any decline among the recent items keeps the workflow's items per item.
-    max_recent_declines: int = Field(default=0, ge=0)
+    #: Recent declines are a soft reason when there are more than
+    #: ``max_recent_declines`` of them, or when they are more than
+    #: ``max_recent_decline_rate`` of the recent items. With the defaults one
+    #: decline among 20 or more recent items is tolerated (a single slip
+    #: shouldn't keep a steady workflow per item); a second decline, or one
+    #: decline among fewer than 20 items, still flags. Set both to 0 for the
+    #: old "any decline" rule.
+    max_recent_declines: int = Field(default=1, ge=0)
+    max_recent_decline_rate: float = Field(default=0.05, ge=0.0, le=1.0)
 
 
 def rule_v0(
@@ -69,6 +78,8 @@ def rule_v0(
     reasons: list[str] = []
     if not f["readback_confirmed"]:
         reasons.append("readback_not_confirmed")
+    if not f["readback_system_of_record"]:
+        reasons.append("readback_not_independent")
     if f["readback_reconciled"]:
         reasons.append("readback_reconciled")
     if not f["run_clean"]:
@@ -93,7 +104,11 @@ def rule_v0(
         reasons.append("param_unseen_value")
     if f["intake_below_floor"] or f["intake_min_confidence"] < cfg.intake_floor:
         reasons.append("intake_low_confidence")
-    if f["workflow_recent_declines"] > cfg.max_recent_declines:
+    declines = f["workflow_recent_declines"]
+    if declines and (
+        declines > cfg.max_recent_declines
+        or f["workflow_decline_rate"] > cfg.max_recent_decline_rate
+    ):
         reasons.append("recent_declines")
     return tuple(reasons)
 

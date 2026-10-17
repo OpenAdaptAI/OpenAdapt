@@ -17,6 +17,7 @@ import stat
 import subprocess
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import numpy as np
 import pytest
@@ -83,6 +84,8 @@ def _obs(i: int = 0, **overrides) -> SaveObservation:
         group_key=GROUP,
         outcome="VERIFIED",
         readback="confirmed",
+        readback_tier=1,
+        readback_system_of_record=True,
         run_clean=True,
         comparisons=[
             FieldComparison(name="name", kind="identity", expected=NAME, observed=NAME),
@@ -272,9 +275,11 @@ def test_clean_save_passes_rule_v0():
             "intake_low_confidence",
         ),
         (
-            dict(workflow=WorkflowHistory(recent_items=20, recent_declines=1)),
+            dict(workflow=WorkflowHistory(recent_items=20, recent_declines=2)),
             "recent_declines",
         ),
+        (dict(readback_tier=2), "readback_not_independent"),
+        (dict(readback_system_of_record=False), "readback_not_independent"),
     ],
 )
 def test_each_rule_v0_check_names_its_reason(change, code):
@@ -781,3 +786,242 @@ def test_cli_plan_approve_and_decide(tmp_path, capsys):
         )
         == 2
     )
+
+
+# -- read-back tier, declines threshold, report field checks, eligibility ---------
+
+
+@pytest.mark.parametrize(
+    ("items", "declines", "flagged"),
+    [
+        (20, 0, False),
+        (20, 1, False),  # 1 in 20 = 5%: one slip in a steady workflow
+        (100, 1, False),
+        (19, 1, True),  # 1 in 19 is over 5%
+        (5, 1, True),
+        (200, 2, True),  # a second decline always flags
+    ],
+)
+def test_recent_declines_threshold(items, declines, flagged):
+    obs = _obs(workflow=WorkflowHistory(recent_items=items, recent_declines=declines))
+    assert ("recent_declines" in rule_v0(extract_features(obs).values)) is flagged
+
+
+def test_old_any_decline_rule_is_one_setting_away():
+    from openadapt_flow.decision.rules import RuleV0Config
+
+    strict = RuleV0Config(max_recent_declines=0, max_recent_decline_rate=0.0)
+    obs = _obs(workflow=WorkflowHistory(recent_items=100, recent_declines=1))
+    assert "recent_declines" in rule_v0(extract_features(obs).values, strict)
+
+
+def test_screen_and_unchecked_read_backs_are_never_clean():
+    from openadapt_flow.decision.rules import HARD_REASONS
+
+    assert "readback_not_independent" in HARD_REASONS
+    for tier in (2, 3):
+        reasons = rule_v0(extract_features(_obs(readback_tier=tier)).values)
+        assert "readback_not_independent" in reasons
+
+
+def _fake_report(checks, *, tier=1, verdict="confirmed"):
+    from openadapt_flow.ir import EffectFieldCheck
+
+    evidence = SimpleNamespace(
+        final_verdict=verdict,
+        initial_verdict=verdict,
+        reconciliation_completed=False,
+        verification_tier=tier,
+    )
+    result = SimpleNamespace(
+        step_id="save",
+        effect_evidence=[evidence],
+        effect_field_checks=[EffectFieldCheck(**c) for c in checks],
+    )
+    return SimpleNamespace(
+        results=[result],
+        model_calls=0,
+        approval=None,
+        workflow_name="referral",
+        execution_outcome="VERIFIED",
+        params={},
+    )
+
+
+def test_report_field_checks_feed_triage(tmp_path):
+    from openadapt_flow.decision.features import observation_from_report
+
+    report = _fake_report(
+        [
+            {
+                "field": "dob",
+                "expected": DOB,
+                "observed": "07/14/1961",
+                "matched": True,
+            },
+            {"field": "mrn", "expected": MRN, "observed": MRN, "matched": True},
+        ]
+    )
+    obs = observation_from_report(report, run_dir=tmp_path)
+    assert [c.kind for c in obs.comparisons] == ["date", "id"]
+    assert obs.readback_tier == 1 and obs.readback_system_of_record
+    feats = extract_features(obs)
+    assert feats.values["fields_compared"] == 2
+    assert feats.values["readback_system_of_record"] is True
+
+
+def test_a_separate_session_read_is_not_clean(tmp_path):
+    from openadapt_flow.decision.features import observation_from_report
+
+    report = _fake_report(
+        [{"field": "mrn", "expected": MRN, "observed": MRN, "matched": True}], tier=2
+    )
+    obs = observation_from_report(report, run_dir=tmp_path)
+    assert obs.readback_tier == 2 and not obs.readback_system_of_record
+    assert "readback_not_independent" in rule_v0(extract_features(obs).values)
+
+
+def test_field_checks_are_recorded_from_verdicts():
+    from openadapt_flow.runtime.replayer import effect_field_checks
+
+    field_effect = SimpleNamespace(field="dob", match={})
+    verdict = SimpleNamespace(
+        expected_value="1949-12-11",
+        observed_value="1960-01-01",
+        confirmed=False,
+        matched_records=[],
+    )
+    (check,) = effect_field_checks(field_effect, verdict, 1)
+    assert (check.field, check.expected, check.observed, check.matched) == (
+        "dob",
+        "1949-12-11",
+        "1960-01-01",
+        False,
+    )
+    record_effect = SimpleNamespace(field=None, match={"mrn": MRN, "note": {"x": 1}})
+    verdict = SimpleNamespace(
+        expected_value=None, confirmed=True, matched_records=[{"mrn": MRN}]
+    )
+    checks = effect_field_checks(record_effect, verdict, 1)
+    assert [(c.field, c.matched) for c in checks] == [("mrn", True)]
+
+
+def test_empty_field_checks_leave_the_report_unchanged():
+    from openadapt_flow.ir import StepResult
+
+    plain = StepResult(step_id="s", intent="Click", ok=True)
+    assert "effect_field_checks" not in plain.model_dump(mode="json")
+    assert "effect_field_checks" not in json.loads(plain.model_dump_json())
+
+
+def test_miss_rate_bound_is_clopper_pearson():
+    import math
+
+    from openadapt_flow.decision.eligibility import miss_rate_upper_bound
+
+    # Zero misses: the bound solves (1 - p)^n = delta.
+    assert math.isclose(
+        miss_rate_upper_bound(0, 45, delta=0.1), 1 - 0.1 ** (1 / 45), rel_tol=1e-6
+    )
+    assert miss_rate_upper_bound(0, 0, delta=0.1) == 1.0
+    assert miss_rate_upper_bound(3, 3, delta=0.1) == 1.0
+    assert miss_rate_upper_bound(1, 100, delta=0.1) > 0.01
+
+
+def _audit_label(declined=False, group="g" * 0):
+    from openadapt_flow.decision.labels import ApprovalLabelV1
+
+    return ApprovalLabelV1(
+        label_id="1" * 32,
+        plan_id="2" * 32,
+        item_id="3" * 24,
+        group_key="4" * 64,
+        observation_sha256="5" * 64,
+        decision="declined" if declined else "approved",
+        decline_reason="wrong_values" if declined else None,
+        bucket="audit",
+        route="review_item",
+        inclusion_probability=0.1,
+        features=extract_features(_obs()).values,
+        approver_kind="unauthenticated",
+        auth_method="none",
+        recorded_at="2026-10-17T00:00:00+00:00",
+    )
+
+
+def _artifact(eligible=True):
+    from openadapt_flow.decision.calibration import CalibrationArtifact
+
+    return CalibrationArtifact(
+        group_key="4" * 64,
+        eligible=eligible,
+        ineligible_reason=None if eligible else "too_few_labels",
+        target_miss=0.05,
+        delta=0.1,
+        labels_total=500,
+        labels_bad=60,
+        labels_declined=60,
+        window=2000,
+        labels_sha256="6" * 64,
+        created_at="2026-10-17T00:00:00+00:00",
+    ).sealed()
+
+
+def test_eligibility_needs_evidence():
+    from openadapt_flow.decision.eligibility import (
+        EligibilityUnavailable,
+        TriageEligibilityProvider,
+    )
+
+    with pytest.raises(EligibilityUnavailable) as err:
+        TriageEligibilityProvider(artifacts={}, labels=[]).eligibility("wf-1")
+    assert err.value.code == "no_calibration_artifact"
+
+    art = _artifact()
+    with pytest.raises(EligibilityUnavailable) as err:
+        TriageEligibilityProvider(
+            artifacts={"wf-1": (art, "0" * 64)}, labels=[]
+        ).eligibility("wf-1")
+    assert err.value.code == "calibration_artifact_mismatch"
+
+    weak = _artifact(eligible=False)
+    with pytest.raises(EligibilityUnavailable) as err:
+        TriageEligibilityProvider(
+            artifacts={"wf-1": (weak, weak.artifact_sha256)}, labels=[]
+        ).eligibility("wf-1")
+    assert err.value.code == "calibration_not_eligible"
+
+    with pytest.raises(EligibilityUnavailable) as err:
+        TriageEligibilityProvider(
+            artifacts={"wf-1": (art, art.artifact_sha256)}, labels=[]
+        ).eligibility("wf-1")
+    assert err.value.code == "no_audit_labels"
+
+    with pytest.raises(ValueError):
+        TriageEligibilityProvider(artifacts={}, labels=[], audit_fraction=0.001)
+
+
+def test_eligibility_from_audit_labels():
+    from openadapt_flow.decision.eligibility import TriageEligibilityProvider
+
+    art = _artifact()
+    clean = [_audit_label() for _ in range(60)]
+    provider = TriageEligibilityProvider(
+        artifacts={"wf-1": (art, art.artifact_sha256)}, labels=clean
+    )
+    result = provider.eligibility("wf-1")
+    assert result.audited_items == 60 and result.audit_misses == 0
+    assert result.eligible  # 0 of 60: bound ~3.8% < 5%
+    assert result.calibration_artifact_sha256 == f"sha256:{art.artifact_sha256}"
+
+    missed = TriageEligibilityProvider(
+        artifacts={"wf-1": (art, art.artifact_sha256)},
+        labels=clean + [_audit_label(declined=True)],
+    ).eligibility("wf-1")
+    assert missed.audit_misses == 1 and not missed.eligible
+
+
+def test_labels_name_a_person():
+    label = _audit_label()
+    identity = label.approver_identity()
+    assert identity.is_person

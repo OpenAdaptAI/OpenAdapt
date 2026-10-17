@@ -35,8 +35,24 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, ValidationError, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+    model_serializer,
+    model_validator,
+)
 
+from openadapt_flow.approval_mode.approver import (
+    DEFAULT_APPROVER_POLICY,
+    DELEGATED_ROUTES,
+    Approver,
+    ApproverIdentityV1,
+    ApproverPolicyV1,
+    StepClass,
+    WebhookRefused,
+)
 from openadapt_flow.approval_mode.model import (
     ITEM_APPROVAL_ROUTE,
     OPAQUE_ID_PATTERN,
@@ -55,6 +71,10 @@ ANSWER_SCHEMA: Literal["openadapt.item-approval-answer/v1"] = (
     "openadapt.item-approval-answer/v1"
 )
 APPROVAL_DIRNAME = "item-approval"
+#: The run's approver policy, written once by the run. Absent means person-only.
+#: How often a waiting run asks a delegated approver again (seconds).
+DELEGATE_POLL_S = 5.0
+POLICY_FILENAME = "approver-policy.json"
 #: How long a run waits for an answer before it stops before the save.
 DEFAULT_APPROVAL_WAIT_S = 900.0
 MAX_APPROVAL_WAIT_S = 4 * 3600.0
@@ -121,6 +141,16 @@ class ItemApprovalRequest(BaseModel):
     #: Set when the run is a qualification case. A drill's own fault step
     #: never asks; the drill must stop there by itself.
     qualification_case_kind: Optional[str] = Field(default=None, max_length=64)
+    #: What kind of save this is, for the approver policy. Left out of the
+    #: file when it is the default, so earlier requests keep their digest.
+    step_class: StepClass = StepClass.CONSEQUENTIAL
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.step_class is StepClass.CONSEQUENTIAL:
+            data.pop("step_class", None)
+        return data
 
     @model_validator(mode="after")
     def _times(self) -> "ItemApprovalRequest":
@@ -159,9 +189,29 @@ class ItemApprovalAnswer(BaseModel):
     approver_id: Optional[str] = Field(default=None, pattern=OPAQUE_ID_PATTERN)
     auth_method: ApproverAuthMethod
     answered_at: str
+    #: Who or what decided. Required for an agent, rule or system; optional
+    #: for a person, whose older fields above already name them. Left out of
+    #: the file when absent, so earlier answers keep their digest.
+    approver: Optional[ApproverIdentityV1] = None
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.approver is None:
+            data.pop("approver", None)
+        return data
 
     def digest(self) -> str:
         return _digest(self)
+
+    def approver_identity(self) -> ApproverIdentityV1:
+        """Who decided, for the audit trail."""
+
+        if self.approver is not None:
+            return self.approver
+        from openadapt_flow.approval_mode.approver import person_identity
+
+        return person_identity(self.approver_id, self.auth_method)
 
     def reference(self, request: ItemApprovalRequest) -> ItemApprovalRef:
         """The PHI-free evidence row for the run report."""
@@ -175,6 +225,13 @@ class ItemApprovalAnswer(BaseModel):
             approver_kind=self.approver_kind,
             approver_id=self.approver_id,
             auth_method=self.auth_method,
+            decided_by="human" if self.decided_by == "human" else "automation",
+            route=self.route,  # type: ignore[arg-type]
+            approver=(
+                self.approver
+                if self.approver is not None and not self.approver.is_person
+                else None
+            ),
         )
 
 
@@ -183,20 +240,41 @@ def answer_refusal(
     answer: ItemApprovalAnswer,
     *,
     now: Optional[datetime] = None,
+    policy: Optional[ApproverPolicyV1] = None,
 ) -> Optional[str]:
     """Return a closed reason this answer can't be used, or ``None``.
 
     The run calls this itself; it never trusts that the CLI checked.
+    ``policy`` is the run's approver policy (person-only when ``None``). A
+    person answers through Desktop's Run it. An agent, rule or system answers
+    only where the policy allows its kind for the request's step class.
     """
 
     if answer.request_id != request.request_id:
         return "request_mismatch"
     if answer.request_sha256 != request.digest():
         return "request_digest_mismatch"
-    if answer.decided_by != "human":
-        return "not_decided_by_a_person"
-    if answer.route != ITEM_APPROVAL_ROUTE:
-        return "route_not_allowed"
+    approver = answer.approver
+    if approver is None or approver.is_person:
+        if answer.decided_by != "human":
+            return "not_decided_by_a_person"
+        if answer.route != ITEM_APPROVAL_ROUTE:
+            return "route_not_allowed"
+        if approver is not None and approver.auth.value != answer.approver_kind:
+            return "answer_fields_inconsistent"
+    else:
+        if answer.decided_by != "automation":
+            return "answer_fields_inconsistent"
+        if answer.route not in DELEGATED_ROUTES:
+            return "route_not_allowed"
+        if answer.approver_kind != "unauthenticated" or answer.approver_id is not None:
+            # The older person fields stay empty; ``approver`` names who decided.
+            return "answer_fields_inconsistent"
+        refusal = (policy or DEFAULT_APPROVER_POLICY).refusal(
+            request.step_class, approver
+        )
+        if refusal is not None:
+            return refusal.value
     try:
         answer.reference(request)
     except ValidationError:
@@ -328,6 +406,36 @@ class ItemApprovalStore:
             raise ItemApprovalRefused("request_unknown", "unknown approval request")
         return request_id
 
+    # -- approver policy -----------------------------------------------------
+    def write_policy(self, policy: ApproverPolicyV1) -> None:
+        """Record the run's approver policy once. A second, different policy
+        is refused; the same policy again is a no-op."""
+
+        self._checked_dir(create=True)
+        payload = canonical_json(policy.model_dump(mode="json"))
+        try:
+            _write_exclusive(self.dir / POLICY_FILENAME, payload)
+        except FileExistsError:
+            if self.policy() != policy:
+                raise ItemApprovalRefused(
+                    "policy_changed", "this run already has a different approver policy"
+                ) from None
+
+    def policy(self) -> ApproverPolicyV1:
+        """The run's approver policy. Person-only when none was written.
+
+        An unreadable policy file is never "no policy": it means person-only.
+        """
+
+        try:
+            raw = _read_regular(self._path(POLICY_FILENAME))
+        except (OSError, ItemApprovalRefused):
+            return DEFAULT_APPROVER_POLICY
+        try:
+            return ApproverPolicyV1.model_validate_json(raw)
+        except ValueError:
+            return DEFAULT_APPROVER_POLICY
+
     # -- requests ------------------------------------------------------------
     def open_request(
         self,
@@ -345,6 +453,7 @@ class ItemApprovalStore:
         qualification_case_kind: Optional[str] = None,
         now: Optional[datetime] = None,
         ttl_s: float = REQUEST_TTL_S,
+        step_class: StepClass = StepClass.CONSEQUENTIAL,
     ) -> ItemApprovalRequest:
         """Write the screenshot and the request. Returns the request."""
 
@@ -369,6 +478,7 @@ class ItemApprovalStore:
             created_at=_iso(created),
             expires_at=_iso(created + timedelta(seconds=min(ttl_s, REQUEST_TTL_S))),
             qualification_case_kind=qualification_case_kind,
+            step_class=step_class,
         )
         _write_exclusive(self.dir / f"{request_id}.png", frame_png)
         _write_exclusive(
@@ -478,7 +588,7 @@ class ItemApprovalStore:
             return "invalid_answer"
         if answer is None:
             return "expired" if request.expired(now) else "waiting"
-        refusal = answer_refusal(request, answer, now=now)
+        refusal = answer_refusal(request, answer, now=now, policy=self.policy())
         if refusal == "request_expired":
             return "expired"
         if refusal is not None:
@@ -534,7 +644,7 @@ class ItemApprovalStore:
             return None
         if answer is None or answer.decision != "approve":
             return None
-        if answer_refusal(request, answer, now=now) is not None:
+        if answer_refusal(request, answer, now=now, policy=self.policy()) is not None:
             return None
         return request, answer
 
@@ -547,6 +657,7 @@ def wait_for_answer(
     poll_s: float = 0.5,
     monotonic: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
+    approver: Optional[Approver] = None,
 ) -> tuple[Optional[ItemApprovalAnswer], Optional[str]]:
     """Wait for a usable answer. Returns ``(answer, None)`` or ``(None, code)``.
 
@@ -556,13 +667,24 @@ def wait_for_answer(
     """
 
     deadline = monotonic() + max(0.0, min(timeout_s, MAX_APPROVAL_WAIT_S))
+    policy = store.policy()
+    delegate = approver
+    if delegate is not None and policy.refusal(request.step_class, delegate.identity):
+        # The policy doesn't let this approver decide this step: ask a person.
+        delegate = None
+    next_ask = 0.0
     while True:
         try:
             answer = store.read_answer(request.request_id)
         except ItemApprovalRefused as exc:
             return None, exc.code
+        if answer is None and delegate is not None and monotonic() >= next_ask:
+            next_ask = monotonic() + DELEGATE_POLL_S
+            answer = _ask_delegate(store, request, delegate)
+            if answer is None and getattr(delegate, "_failed", False):
+                delegate = None
         if answer is not None:
-            refusal = answer_refusal(request, answer)
+            refusal = answer_refusal(request, answer, policy=policy)
             if refusal is not None:
                 return None, refusal
             return answer, None
@@ -571,6 +693,59 @@ def wait_for_answer(
         if monotonic() >= deadline:
             return None, "approval_wait_timed_out"
         sleep(poll_s)
+
+
+def request_facts(request: ItemApprovalRequest) -> dict[str, str]:
+    """The PHI-free facts a delegated approver sees. No intent, no image."""
+
+    return {
+        "schema_version": "openadapt.delegated-approval-request/v1",
+        "request_id": request.request_id,
+        "request_sha256": request.digest(),
+        "run_id": request.run_id,
+        "step_id": request.step_id,
+        "step_index": str(request.step_index),
+        "step_class": request.step_class.value,
+        "mode": request.mode.value,
+        "form_state_sha256": request.form_state_sha256,
+        "screenshot_sha256": request.screenshot_sha256,
+        "expires_at": request.expires_at,
+    }
+
+
+def _ask_delegate(
+    store: ItemApprovalStore, request: ItemApprovalRequest, delegate: Approver
+) -> Optional[ItemApprovalAnswer]:
+    """Ask a delegated approver once and record its answer, if it gave one.
+
+    Any failure (network, signature, malformed reply) leaves the request to a
+    person and stops asking this approver for this request.
+    """
+
+    try:
+        decided = delegate.decide(request_facts(request))
+    except (OSError, ValueError, WebhookRefused):
+        setattr(delegate, "_failed", True)
+        return None
+    if decided is None:
+        return None
+    try:
+        answer = make_answer(
+            request,
+            decision=decided.decision,
+            decided_by="automation",
+            route=delegate.route,
+            approver_id=None,
+            auth_method="none",
+            decline_reason=decided.decline_reason,
+            approver=delegate.identity,
+            policy=store.policy(),
+        )
+        store.write_answer(answer)
+    except ItemApprovalRefused:
+        # Already answered (a person was faster) or refused: read what's there.
+        return None
+    return answer
 
 
 def make_answer(
@@ -583,8 +758,14 @@ def make_answer(
     auth_method: str,
     decline_reason: Optional[str] = None,
     now: Optional[datetime] = None,
+    approver: Optional[ApproverIdentityV1] = None,
+    policy: Optional[ApproverPolicyV1] = None,
 ) -> ItemApprovalAnswer:
-    """Build and check one answer. Raises :class:`ItemApprovalRefused`."""
+    """Build and check one answer. Raises :class:`ItemApprovalRefused`.
+
+    ``approver`` names an agent, rule or system; it is refused unless
+    ``policy`` (the run's, read from its store) allows that kind here.
+    """
 
     approver_kind: Literal["cloud_user", "unauthenticated"] = (
         "cloud_user" if approver_id is not None else "unauthenticated"
@@ -601,12 +782,13 @@ def make_answer(
             approver_id=approver_id,
             auth_method=auth_method,  # type: ignore[arg-type]
             answered_at=_iso(now or _utc_now()),
+            approver=approver,
         )
     except ValidationError as exc:
         raise ItemApprovalRefused(
             "answer_fields_invalid", "the answer's fields are not valid"
         ) from exc
-    refusal = answer_refusal(request, answer, now=now)
+    refusal = answer_refusal(request, answer, now=now, policy=policy)
     if refusal is not None:
         raise ItemApprovalRefused(refusal, f"the answer was refused ({refusal})")
     return answer
@@ -634,6 +816,7 @@ def request_summary(
         "created_at": request.created_at,
         "expires_at": request.expires_at,
         "qualification_case_kind": request.qualification_case_kind,
+        "step_class": request.step_class.value,
     }
 
 
@@ -648,8 +831,10 @@ __all__ = [
     "ItemApprovalRefused",
     "ItemApprovalRequest",
     "ItemApprovalStore",
+    "POLICY_FILENAME",
     "answer_refusal",
     "make_answer",
+    "request_facts",
     "request_summary",
     "wait_for_answer",
 ]

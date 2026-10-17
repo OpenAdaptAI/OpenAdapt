@@ -243,15 +243,30 @@ The field-delta check and the whole-item snapshot in the design are meant to
 close these. Until then, `tests/test_approval_mode_adversarial.py` keeps
 strict expected-failure tests for them.
 
+## Built elsewhere
+
+- Desktop shows the approval request with **Approve and save** and
+  **Don't save** (`src/ui/ItemApproval.tsx`, openadapt-desktop #184), and
+  Needs you says when a workflow's switch is on or turned itself off.
+- Cloud stores switch records and their hash-chained audit events, signs the
+  status a runner checks, and shows the switch, the exceptions and each
+  run's approval line (openadapt-cloud #395).
+- openadapt-agent takes `serve --approval-mode each_item|problems_only|not_gated`
+  and records the mode on each result.
+
+## Delegated approvers
+
+By default only a person answers a save. A run can carry an approver policy
+(`--approver-policy`) that lets an agent, rule or system answer some step
+classes, and a signed webhook (`--approver-webhook`) to ask. See
+[`APPROVAL_AND_VERIFICATION.md`](APPROVAL_AND_VERIFICATION.md).
+
 ## Not built yet
 
 - The field-delta effect check, the three new drills and the `customer_stop`
   case kind.
-- A Cloud status client, switch records, spot checks, incidents and the
-  Desktop list queue.
+- A Desktop list queue for batch review.
   [`DECISION_TRIAGE.md`](DECISION_TRIAGE.md) describes the engine part that
   orders a list's verified saves for review.
-- Desktop's screens for the approval request, and openadapt-agent passing
-  `not_gated` explicitly. Until the agent does, an agent run under the
-  Standard or Regulated profile waits for a person and then stops before
-  saving.
+- Delegated approvers in Desktop and Cloud. Flow records them; neither app
+  shows who or what approved yet.

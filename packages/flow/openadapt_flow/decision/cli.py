@@ -166,6 +166,36 @@ def _cmd_estimate(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_eligibility(args: argparse.Namespace) -> int:
+    from openadapt_flow.decision.calibration import CalibrationArtifact
+    from openadapt_flow.decision.eligibility import (
+        EligibilityUnavailable,
+        TriageEligibilityProvider,
+    )
+    from openadapt_flow.decision.labels import LabelLog
+
+    try:
+        artifact = CalibrationArtifact.model_validate_json(
+            Path(args.artifact).read_text()
+        )
+    except (OSError, ValueError) as exc:
+        return _refuse("calibration_artifact_unreadable", str(exc))
+    provider = TriageEligibilityProvider(
+        artifacts={args.workflow: (artifact, args.artifact_sha256)},
+        labels=LabelLog(Path(args.labels)).read(),
+        verified_runs={args.workflow: args.verified_runs},
+        target_miss_rate=args.target_miss,
+        delta=args.delta,
+        audit_fraction=args.audit_rate,
+    )
+    try:
+        result = provider.eligibility(args.workflow)
+    except EligibilityUnavailable as exc:
+        return _refuse(exc.code, str(exc))
+    _emit({"ok": True, "eligible": result.eligible, **result.model_dump(mode="json")})
+    return 0 if result.eligible else 3
+
+
 def _approver_args(p: argparse.ArgumentParser) -> None:
     p.add_argument("--labels", required=True, help="Label log (JSON lines)")
     p.add_argument("--decided-by", required=True, help="Must be 'human'")
@@ -229,6 +259,24 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     est = tsub.add_parser("estimate", help="Estimate the miss rate from audit labels")
     est.add_argument("--labels", required=True)
     est.set_defaults(func=_cmd_estimate)
+
+    elig = tsub.add_parser(
+        "eligibility",
+        help=(
+            "Check whether a workflow may switch to only asking about problems: "
+            "a pinned, eligible calibration artifact and an audit miss-rate "
+            "bound under the target. Exit 0 eligible, 3 not yet, 2 no evidence."
+        ),
+    )
+    elig.add_argument("--workflow", required=True, help="Opaque workflow id")
+    elig.add_argument("--artifact", required=True, help="Calibration artifact")
+    elig.add_argument("--artifact-sha256", required=True, help="Pinned digest")
+    elig.add_argument("--labels", required=True, help="Label log (JSON lines)")
+    elig.add_argument("--verified-runs", type=int, default=0)
+    elig.add_argument("--target-miss", type=float, default=0.05)
+    elig.add_argument("--delta", type=float, default=0.10)
+    elig.add_argument("--audit-rate", type=float, default=0.1)
+    elig.set_defaults(func=_cmd_eligibility)
 
 
 __all__ = ["add_parser"]

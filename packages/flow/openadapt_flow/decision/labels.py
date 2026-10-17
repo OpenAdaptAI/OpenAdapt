@@ -23,6 +23,10 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from openadapt_flow.approval_mode.approver import (
+    ApproverIdentityV1,
+    person_identity,
+)
 from openadapt_flow.approval_mode.model import (
     OPAQUE_ID_PATTERN,
     ApproverAuthMethod,
@@ -112,6 +116,15 @@ class ApprovalLabelV1(BaseModel):
         elif self.approver_id is not None or self.auth_method != "none":
             raise ValueError("an unauthenticated decision names no approver")
         return self
+
+    def approver_identity(self) -> ApproverIdentityV1:
+        """The person who decided, as ``openadapt.approver-identity/v1``.
+
+        A label is always a person's decision: an agent, rule or system
+        decision is recorded on the run report and never becomes a label.
+        """
+
+        return person_identity(self.approver_id, self.auth_method)
 
     def is_bad(self) -> bool:
         """Declined as wrong values or the wrong record."""

@@ -39,7 +39,9 @@ engine part they would call.
 clean only when all of these hold:
 
 - the record check confirmed the save on the first read, with no
-  correction;
+  correction, and every read was of the system of record without the UI
+  (REST, SQL, FHIR, GraphQL or a file export; Flow tier 1). A UI read,
+  even in a separate session, or a missing read-back is never clean;
 - every field it compared matched what the item entered (names, dates and
   record numbers are normalised first, so `07/14/1961` matches
   `1961-07-14`), and no entered field went unread;
@@ -49,14 +51,21 @@ clean only when all of these hold:
   choice is one they used;
 - every value read from a document (`intake`) and not confirmed by a person
   has confidence 0.9 or higher;
-- nobody declined an item of this workflow among the recent items.
+- recent declines are rare: at most one, and no more than 5% of the
+  workflow's recent items. One slip among 20 or more items doesn't keep a
+  steady workflow per item; a second decline, or one among fewer than 20
+  items, does. `max_recent_declines=0, max_recent_decline_rate=0` restores
+  the old "any decline" rule.
 
 `learned` scores each save with a logistic regression over the same
 features and opts in per workflow. It needs a calibration artifact for the
 save's group (one workflow's save step), pinned by digest. It never clears a
 save that failed one of the first three checks above. If the group has fewer
 than 200 labels, or too few bad ones for the bound below, every save goes to
-the per-item queue. `learned_fallback="rule_v0"` uses the v0 rule instead.
+the per-item queue. That fallback stays `per_item` on purpose: choosing
+`learned` asks for a measured miss rate, and an uncalibrated group has none.
+`learned_fallback="rule_v0"` uses the v0 rule instead, for a team that
+accepts an unmeasured rule on that workflow.
 
 `off` sends every save to the per-item queue.
 
@@ -89,6 +98,11 @@ save was in, and the chance it was reviewed on its own. It holds no value,
 screenshot or record key. `openadapt_flow.decision.labels.to_judgment_case`
 converts a record to a `JudgmentCaseV1` human-node case.
 
+Labels are a person's decisions only. `ApprovalLabelV1.approver_identity()`
+returns the `openadapt.approver-identity/v1` person behind a label. An
+agent, rule or system decision on a save is recorded on the run report and
+never written here.
+
 Only the audit sample sees clean saves one at a time. Each bad save it finds
 is weighted by the inverse of the audit rate in
 `openadapt-flow triage estimate`, which estimates the share of bad saves
@@ -96,7 +110,7 @@ that reached a batch.
 
 ## What a provider sees
 
-A provider gets a fixed list of 21 numbers and booleans, such as
+A provider gets a fixed list of 22 numbers and booleans, such as
 `identity_fields_match` or `intake_min_confidence`. Values are compared on
 this computer first. A request that carries a string, an unknown name or a
 non-finite number can't be built. The only provider is the local logistic
@@ -112,11 +126,19 @@ openadapt-flow triage decide plan.json --item ITEM_ID --decline wrong_values \
   --labels labels.jsonl --decided-by human --approver-id USER --auth-method cloud_aal2
 openadapt-flow triage calibrate --labels labels.jsonl --group GROUP_KEY --out artifact.json
 openadapt-flow triage estimate --labels labels.jsonl
+openadapt-flow triage eligibility --workflow WF --artifact artifact.json \
+  --artifact-sha256 SHA256 --labels labels.jsonl
 ```
 
-`plan` also takes `--run-dir` for finished runs. A run report doesn't keep
-read-back values, so a plan built from runs alone has no field comparisons
-and calls nothing clean.
+`plan` also takes `--run-dir` for finished runs. The report keeps each field
+the record check compared (`effect_field_checks`), so a plan built from runs
+compares fields the same way.
+
+`eligibility` says whether a workflow has earned "only ask a person about
+problems": an eligible, pinned calibration artifact, and audited clean saves
+whose exact one-sided (Clopper-Pearson) miss-rate bound is under the target.
+It exits 0 when eligible, 3 when not yet, and 2 with a reason when there's
+no evidence. It never approves a save.
 
 ## Synthetic evaluation
 

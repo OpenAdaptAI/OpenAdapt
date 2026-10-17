@@ -114,6 +114,8 @@ def field_matches(comparison: FieldComparison) -> Optional[bool]:
 #: Every name a provider may see, with its type. Nothing else passes.
 FEATURE_TYPES: dict[str, type] = {
     "readback_confirmed": bool,
+    #: Every read-back was a read of the system of record itself (Flow tier 1).
+    "readback_system_of_record": bool,
     "readback_reconciled": bool,
     "run_clean": bool,
     "fields_compared": int,

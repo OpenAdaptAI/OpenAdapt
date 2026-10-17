@@ -61,7 +61,11 @@ class TriageConfig(BaseModel):
     #: Share of clean saves sent to the per-item queue anyway. Can't be off.
     audit_rate: float = Field(default=0.1, ge=0.01, le=1.0)
     #: What ``learned`` does when the group isn't calibrated. ``per_item``
-    #: (the default) sends every save to a person.
+    #: (the default) sends every save to a person. It stays the default on
+    #: purpose: someone who chose ``learned`` asked for a calibrated miss
+    #: rate, and an uncalibrated group has none. Falling back to ``rule_v0``
+    #: would quietly batch saves under a rule nobody measured on this
+    #: workflow. Pick ``rule_v0`` explicitly to accept that.
     learned_fallback: Literal["per_item", "rule_v0"] = "per_item"
     pinned_artifact_sha256: Optional[str] = Field(default=None, pattern=_HEX64)
 

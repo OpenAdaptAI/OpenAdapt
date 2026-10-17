@@ -16,13 +16,16 @@ from __future__ import annotations
 
 import hashlib
 import math
+import re
 from pathlib import Path
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from openadapt_flow.approval_mode.approver import ReadBackTier, read_back_tier_for
 from openadapt_flow.decision.minimize import (
     FieldComparison,
+    FieldKind,
     assert_minimized,
     minimize_comparisons,
     normalize,
@@ -128,6 +131,13 @@ class SaveObservation(BaseModel):
     #: The run's execution outcome (``VERIFIED``, ``HALTED_BEFORE_EFFECT``...).
     outcome: str = Field(default="UNKNOWN", max_length=64)
     readback: ReadbackResult = "none"
+    #: The weakest read-back tier among the save's checks
+    #: (:class:`~openadapt_flow.approval_mode.approver.ReadBackTier`):
+    #: 1 independent system, 2 screen read-back, 3 unchecked.
+    readback_tier: int = Field(default=3, ge=1, le=3)
+    #: Every check read the system of record itself (Flow tier 1), not a
+    #: UI read in a separate session. Only then can a save be clean.
+    readback_system_of_record: bool = False
     readback_reconciled: bool = False
     #: No repair, model call, rescue or lower rung in the run (R2).
     run_clean: bool = False
@@ -180,6 +190,9 @@ def extract_features(
     facts, flags = minimize_comparisons(observation.comparisons)
     out: dict[str, Any] = dict(facts)
     out["readback_confirmed"] = observation.readback == "confirmed"
+    out["readback_system_of_record"] = (
+        observation.readback_tier == 1 and observation.readback_system_of_record
+    )
     out["readback_reconciled"] = observation.readback_reconciled
     out["run_clean"] = observation.run_clean
 
@@ -266,10 +279,10 @@ def observation_from_report(
     """Build an observation from a :class:`~openadapt_flow.ir.RunReport`.
 
     The report gives the outcome, the record check's final verdicts and
-    whether the run stayed on its recorded path. It doesn't keep the
-    read-back values, so per-field ``comparisons`` come from the caller that
-    held the verifier's results; without them, ``all_fields_exact`` is false
-    and the v0 rule won't call the item clean.
+    tiers, whether the run stayed on its recorded path, and the per-field
+    read-back comparisons (``StepResult.effect_field_checks``). Pass
+    ``comparisons`` to override them. With none, ``all_fields_exact`` is
+    false and the v0 rule won't call the item clean.
     """
 
     evidence = [
@@ -289,6 +302,15 @@ def observation_from_report(
         item.reconciliation_completed or item.initial_verdict != item.final_verdict
         for item in evidence
     )
+    tiers = [read_back_tier_for(item.verification_tier) for item in evidence] or [
+        ReadBackTier.UNCHECKED
+    ]
+    readback_tier = max(tiers)
+    system_of_record = bool(evidence) and all(
+        item.verification_tier == 1 for item in evidence
+    )
+    if comparisons is None:
+        comparisons = comparisons_from_report(report)
     run_clean = report.model_calls == 0
     approval = getattr(report, "approval", None)
     if approval is not None:
@@ -303,6 +325,8 @@ def observation_from_report(
         group_key=group_key(report.workflow_name, step),
         outcome=report.execution_outcome or "UNKNOWN",
         readback=readback,
+        readback_tier=int(readback_tier),
+        readback_system_of_record=system_of_record,
         readback_reconciled=reconciled,
         run_clean=run_clean,
         comparisons=list(comparisons or []),
@@ -312,6 +336,47 @@ def observation_from_report(
         history=history or ParamHistory(),
         workflow=workflow or WorkflowHistory(),
     )
+
+
+_DATE_HINTS = ("date", "dob", "dos", "birth")
+_ID_HINTS = ("mrn", "id", "number", "npi", "ssn", "account", "claim")
+_IDENTITY_HINTS = ("name", "first", "last", "surname")
+
+
+def field_kind_for(name: str) -> FieldKind:
+    """How to compare a read-back field, guessed from its name.
+
+    Names that look like dates, record numbers or person names get the
+    stricter comparisons; anything else is a plain value.
+    """
+
+    parts = [p for p in re.split(r"[^a-z0-9]+", name.lower()) if p]
+    if any(p in _DATE_HINTS or p.endswith("date") for p in parts):
+        return "date"
+    if any(p in _ID_HINTS or p.endswith("id") for p in parts):
+        return "id"
+    if any(p in _IDENTITY_HINTS for p in parts):
+        return "identity"
+    return "value"
+
+
+def comparisons_from_report(report: Any) -> list[FieldComparison]:
+    """The read-back comparisons the verifier recorded on the report."""
+
+    out: list[FieldComparison] = []
+    for result in report.results:
+        for check in getattr(result, "effect_field_checks", None) or []:
+            if not re.match(r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$", check.field):
+                continue
+            out.append(
+                FieldComparison(
+                    name=check.field,
+                    kind=field_kind_for(check.field),
+                    expected=check.expected,
+                    observed=check.observed,
+                )
+            )
+    return out
 
 
 def intake_evidence(result: Any, *, source: IntakeSource) -> list[IntakeFieldEvidence]:
