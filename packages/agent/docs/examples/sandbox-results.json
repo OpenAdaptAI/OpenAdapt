@@ -1,0 +1,262 @@
+{
+  "captured_at": "2026-10-09T22:46:34+00:00",
+  "engine": "flow",
+  "provenance": "Measured on synthetic data: openadapt-agent sandbox, flow engine, MockMed synthetic clinic app. No real records.",
+  "results": {
+    "app_offline": {
+      "contract_version": "openadapt.run-result/v1",
+      "label": "Didn't run",
+      "mode": "sandbox",
+      "next_action": "Try again with the same request_id once the app is back. If it keeps happening, tell the operator.",
+      "next_step": "retry",
+      "outcome": "did_not_run",
+      "proof": "none",
+      "reason": "app_unreachable",
+      "record_changed": "no",
+      "request_id": "demo-app-offline",
+      "run_id": "run-6314b8b10b93421899360217",
+      "safe_to_retry": true,
+      "sandbox": {
+        "case": "app_offline",
+        "engine": "flow"
+      },
+      "what_happened": "Didn't start because the app isn't reachable from this computer. Nothing was written. This was a sandbox run on a synthetic app; no real record was touched.",
+      "workflow": "add_triage_note"
+    },
+    "duplicate_record": {
+      "contract_version": "openadapt.run-result/v1",
+      "label": "Stopped before saving",
+      "mode": "sandbox",
+      "model_calls": 0,
+      "needs_attention_id": "77d744a682594d44a3f8810d",
+      "next_action": "A person reviews this run on the computer that ran it. Call get_run later to see their decision. Don't start another run for this work until they finish.",
+      "next_step": "wait_for_person",
+      "outcome": "needs_review",
+      "proof": "none",
+      "reason": "record_not_confirmed",
+      "record_changed": "no",
+      "request_id": "demo-duplicate-record",
+      "run_id": "run-0b5813cc521e4854a6c3ffa3",
+      "safe_to_retry": false,
+      "sandbox": {
+        "case": "duplicate_record",
+        "engine": "flow"
+      },
+      "seconds": 1.2,
+      "technical": {
+        "execution_outcome": "HALTED",
+        "transaction_outcome": "HALTED_BEFORE_EFFECT"
+      },
+      "what_happened": "Stopped before saving. It couldn't confirm it had the right record open, so nothing was written. This was a sandbox run on a synthetic app; no real record was touched.",
+      "workflow": "add_triage_note"
+    },
+    "false_saved_banner": {
+      "contract_version": "openadapt.run-result/v1",
+      "label": "Check the record",
+      "mode": "sandbox",
+      "model_calls": 0,
+      "needs_attention_id": "77917c25aa8da46d4de2826a",
+      "next_action": "Have a person check the record in the app before anything runs again. Don't retry this request.",
+      "next_step": "check_record",
+      "outcome": "not_sure_if_saved",
+      "proof": "none",
+      "reason": "save_not_confirmed",
+      "record_changed": "unknown",
+      "request_id": "demo-false-saved-banner",
+      "run_id": "run-5b151caa473e4ab292d7e108",
+      "safe_to_retry": false,
+      "sandbox": {
+        "case": "false_saved_banner",
+        "engine": "flow"
+      },
+      "seconds": 9.8,
+      "technical": {
+        "execution_outcome": "HALTED",
+        "transaction_outcome": "RECONCILIATION_REQUIRED"
+      },
+      "what_happened": "OpenAdapt can't confirm whether the change was saved. It may have gone through. This was a sandbox run on a synthetic app; no real record was touched.",
+      "workflow": "add_triage_note"
+    },
+    "invalid_input": {
+      "contract_version": "openadapt.run-result/v1",
+      "invalid_inputs": [
+        {
+          "input": "note",
+          "problem": "is too short"
+        }
+      ],
+      "label": "Didn't run",
+      "mode": "sandbox",
+      "next_action": "Fix the inputs listed in invalid_inputs, then send the request again. You can reuse the same request_id.",
+      "next_step": "fix_inputs",
+      "outcome": "did_not_run",
+      "proof": "none",
+      "reason": "invalid_input",
+      "record_changed": "no",
+      "request_id": "demo-invalid",
+      "run_id": "run-9d88393a00f54898a3a0af9c",
+      "safe_to_retry": true,
+      "what_happened": "Didn't start because some inputs aren't valid. Nothing was written. This was a sandbox run on a synthetic app; no real record was touched.",
+      "workflow": "add_triage_note"
+    },
+    "list_workflows": {
+      "how_to_run": "Call run_workflow with a workflow name from this list, its inputs, and your own request_id for this piece of work. Only outcome done means the change was saved and checked. Never retry not_sure_if_saved. Reuse the same request_id when you retry anything.",
+      "mode": "sandbox",
+      "run_tools_enabled": true,
+      "sandbox": {
+        "app": "MockMed, a synthetic clinic app with made-up patients",
+        "cases": [
+          {
+            "case": "normal",
+            "outcome": "done",
+            "what_it_shows": "The app saves the note and the record check finds it in the app's record store."
+          },
+          {
+            "case": "duplicate_record",
+            "outcome": "needs_review",
+            "what_it_shows": "The queue lists the same referral twice, so OpenAdapt can't be sure which record to open. It stops before saving."
+          },
+          {
+            "case": "false_saved_banner",
+            "outcome": "not_sure_if_saved",
+            "what_it_shows": "The app shows a saved message, but its record store rejected the note. The record check doesn't find it."
+          },
+          {
+            "case": "timeout_after_save",
+            "outcome": "not_sure_if_saved",
+            "what_it_shows": "The record store saves the note, then the app times out and shows an error. Only a person checking the record can tell it saved."
+          },
+          {
+            "case": "app_offline",
+            "outcome": "did_not_run",
+            "what_it_shows": "The app isn't reachable, so OpenAdapt doesn't start."
+          }
+        ],
+        "engine": "flow",
+        "engine_detail": "Each run drives the synthetic app in a hidden browser with the real OpenAdapt engine. The first run waits while OpenAdapt records the workflow once.",
+        "ready": false
+      },
+      "workflows": [
+        {
+          "available": true,
+          "changes_records": true,
+          "done_means": "The note is in the synthetic app's record store, confirmed by reading the store directly instead of trusting the screen.",
+          "inputs": {
+            "additionalProperties": false,
+            "properties": {
+              "note": {
+                "description": "The triage note to add. Use made-up text.",
+                "maxLength": 500,
+                "minLength": 1,
+                "type": "string"
+              },
+              "sandbox_case": {
+                "default": "normal",
+                "description": "Which situation the synthetic app shows (normal: done; duplicate_record: needs_review; false_saved_banner: not_sure_if_saved; timeout_after_save: not_sure_if_saved; app_offline: did_not_run).",
+                "enum": [
+                  "normal",
+                  "duplicate_record",
+                  "false_saved_banner",
+                  "timeout_after_save",
+                  "app_offline"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "note"
+            ],
+            "type": "object"
+          },
+          "name": "add_triage_note",
+          "purpose": "Sandbox: add a triage note to the first referral in a synthetic clinic app. Nothing real changes."
+        }
+      ]
+    },
+    "normal": {
+      "contract_version": "openadapt.run-result/v1",
+      "label": "Done and checked",
+      "mode": "sandbox",
+      "model_calls": 0,
+      "next_action": "Nothing more to do for this request. Don't run it again for the same work.",
+      "next_step": "none",
+      "outcome": "done",
+      "proof": "local",
+      "reason": "saved_and_checked",
+      "record_changed": "yes",
+      "request_id": "demo-normal",
+      "run_id": "run-8c28f0bcac224af9b6947a7d",
+      "safe_to_retry": false,
+      "sandbox": {
+        "case": "normal",
+        "engine": "flow"
+      },
+      "seconds": 5.0,
+      "technical": {
+        "execution_outcome": "VERIFIED",
+        "transaction_outcome": "VERIFIED"
+      },
+      "what_happened": "Saved the change and read the record back to confirm it. The check ran on this computer, so there's no signed receipt. This was a sandbox run on a synthetic app; no real record was touched.",
+      "workflow": "add_triage_note"
+    },
+    "normal_again_same_request_id": {
+      "contract_version": "openadapt.run-result/v1",
+      "label": "Done and checked",
+      "mode": "sandbox",
+      "model_calls": 0,
+      "next_action": "Nothing more to do for this request. Don't run it again for the same work.",
+      "next_step": "none",
+      "outcome": "done",
+      "proof": "local",
+      "reason": "saved_and_checked",
+      "record_changed": "yes",
+      "replayed": true,
+      "request_id": "demo-normal",
+      "run_id": "run-8c28f0bcac224af9b6947a7d",
+      "safe_to_retry": false,
+      "sandbox": {
+        "case": "normal",
+        "engine": "flow"
+      },
+      "seconds": 5.0,
+      "technical": {
+        "execution_outcome": "VERIFIED",
+        "transaction_outcome": "VERIFIED"
+      },
+      "what_happened": "Saved the change and read the record back to confirm it. The check ran on this computer, so there's no signed receipt. This was a sandbox run on a synthetic app; no real record was touched.",
+      "workflow": "add_triage_note"
+    },
+    "timeout_after_save": {
+      "contract_version": "openadapt.run-result/v1",
+      "label": "Check the record",
+      "mode": "sandbox",
+      "model_calls": 0,
+      "needs_attention_id": "481486193ef0e44c0e2b0dd6",
+      "next_action": "Have a person check the record in the app before anything runs again. Don't retry this request.",
+      "next_step": "check_record",
+      "outcome": "not_sure_if_saved",
+      "proof": "none",
+      "reason": "save_not_confirmed",
+      "record_changed": "unknown",
+      "request_id": "demo-timeout-after-save",
+      "run_id": "run-cef0b138a5e1488abbd805f5",
+      "safe_to_retry": false,
+      "sandbox": {
+        "case": "timeout_after_save",
+        "engine": "flow"
+      },
+      "seconds": 10.2,
+      "technical": {
+        "execution_outcome": "HALTED",
+        "transaction_outcome": "RECONCILIATION_REQUIRED"
+      },
+      "what_happened": "OpenAdapt can't confirm whether the change was saved. It may have gone through. This was a sandbox run on a synthetic app; no real record was touched.",
+      "workflow": "add_triage_note"
+    }
+  },
+  "versions": {
+    "openadapt-agent": "2.0.2",
+    "openadapt-flow": "1.35.1",
+    "python": "3.12.13"
+  }
+}

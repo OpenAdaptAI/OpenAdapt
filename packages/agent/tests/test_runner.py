@@ -1,0 +1,471 @@
+"""FlowRunner + outcome mapping: success, halt, refusal, timeout, gating."""
+
+from __future__ import annotations
+
+import json
+import subprocess
+from pathlib import Path
+
+import pytest
+from conftest import FlowCliStub
+
+import openadapt_agent.runner as runner_mod
+from openadapt_agent.runner import (
+    FlowRunner,
+    RunnerConfig,
+    classify_outcome,
+    classify_report_status,
+)
+from openadapt_agent.runner import RunOutcome
+
+
+def _run(monkeypatch, runner_config, stub, **kwargs):
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
+    return FlowRunner(runner_config).run(
+        workflow="demo_triage",
+        bundle_dir=kwargs.pop("bundle_dir"),
+        params=kwargs.pop("params", {"note": "hello"}),
+        **kwargs,
+    )
+
+
+def test_success_mapping(monkeypatch, runner_config, bundle_dir, success_report):
+    stub = FlowCliStub(exit_code=0, report=success_report)
+    outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
+    assert outcome.status == "success"
+    public = outcome.to_dict()
+    assert public["success"] is True
+    assert public["sealed"] is False
+    assert public["requires_seal"] is False
+    assert public["outcome"] == "done"
+    assert public["proof"] == "local"
+    assert public["safe_to_retry"] is False
+    assert public["frames_included"] is False
+    blob = json.dumps(public)
+    assert ".png" not in blob
+    assert "image_data" not in blob
+    assert "screenshot_path" not in blob
+    assert outcome.summary["steps_ok"] == 2
+    assert outcome.report_path and outcome.report_path.endswith("report.json")
+    # Governed run verb, params via file (never argv), run dir owned by us.
+    cmd = stub.calls[0]
+    assert cmd[0] == "openadapt-flow-stub" and cmd[1] == "run"
+    assert "--params-file" in cmd and "--run-dir" in cmd
+    assert "hello" not in " ".join(cmd)
+
+
+def test_halt_maps_to_structured_halt_not_success(
+    monkeypatch, runner_config, bundle_dir, halt_report
+):
+    stub = FlowCliStub(exit_code=1, report=halt_report)
+    outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
+    assert outcome.status == "halt"
+    assert outcome.to_dict()["success"] is False
+    assert outcome.halt is not None
+    assert outcome.halt["reason"] == "unmet postcondition"
+    assert outcome.halt["observed_texts"] == ["Unexpected dialog: Save changes?"]
+    assert "report.json" in outcome.detail
+
+
+def test_halt_before_effect_says_nothing_was_written(
+    monkeypatch, runner_config, bundle_dir, halt_report
+):
+    stub = FlowCliStub(exit_code=1, report=halt_report)
+    outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
+    payload = outcome.to_dict()
+    assert payload["status"] == "halt"
+    assert payload["success"] is False
+    assert payload["execution_outcome"] == "HALTED"
+    assert payload["transaction_outcome"] == "HALTED_BEFORE_EFFECT"
+    assert payload["outcome"] == "needs_review"
+    assert "nothing was written" in payload["message"]
+
+
+def test_uncertain_delivery_never_says_the_record_did_not_change(
+    monkeypatch, runner_config, bundle_dir, halt_report
+):
+    halt_report["transaction_outcome"] = "RECONCILIATION_REQUIRED"
+    stub = FlowCliStub(exit_code=1, report=halt_report)
+    outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
+    payload = outcome.to_dict()
+    assert payload["status"] == "halt"
+    assert payload["outcome"] == "not_sure_if_saved"
+    assert payload["safe_to_retry"] is False
+    assert payload["record_changed"] == "unknown"
+    assert "did not change" not in payload["message"]
+    assert "nothing was written" not in payload["message"].lower()
+    assert "Don't retry" in payload["next_action"]
+
+
+def test_coarse_halt_without_transaction_outcome_makes_no_claim(
+    monkeypatch, runner_config, bundle_dir, halt_report
+):
+    del halt_report["transaction_outcome"]
+    stub = FlowCliStub(exit_code=1, report=halt_report)
+    payload = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir).to_dict()
+    assert payload["outcome"] == "not_sure_if_saved"
+    assert "may or may not be saved" in payload["message"]
+
+
+def test_exit_zero_with_failed_report_is_never_success(
+    monkeypatch, runner_config, bundle_dir, halt_report
+):
+    """Defense in depth: the persisted report outranks the exit code."""
+    stub = FlowCliStub(exit_code=0, report=halt_report)
+    outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
+    assert outcome.status == "halt"
+    assert outcome.to_dict()["success"] is False
+
+
+def test_demo_completed_unverified_is_never_agent_success(
+    monkeypatch, runner_config, bundle_dir, success_report
+):
+    success_report.update(
+        {
+            "execution_profile": "demo",
+            "execution_outcome": "COMPLETED_UNVERIFIED",
+            "transaction_outcome": "COMPLETED_UNVERIFIED",
+            "production_eligible": False,
+        }
+    )
+    stub = FlowCliStub(exit_code=0, report=success_report)
+
+    outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
+
+    assert outcome.status == "halt"
+    assert outcome.execution_outcome == "COMPLETED_UNVERIFIED"
+    assert outcome.to_dict()["success"] is False
+    assert outcome.to_dict()["execution_outcome"] == "COMPLETED_UNVERIFIED"
+    assert "finished the steps" in outcome.to_dict()["message"]
+    assert "stopped safely" not in outcome.to_dict()["message"]
+    assert "did not prove VERIFIED success" in outcome.detail
+
+
+def test_production_verified_without_a_seal_is_success_with_local_proof(
+    monkeypatch, runner_config, bundle_dir, success_report
+):
+    success_report.update(
+        {
+            "execution_profile": "standard",
+            "execution_outcome": "VERIFIED",
+            "production_eligible": True,
+        }
+    )
+    stub = FlowCliStub(exit_code=0, report=success_report)
+
+    outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
+    payload = outcome.to_dict()
+
+    assert payload["status"] == "success"
+    assert payload["success"] is True
+    assert payload["sealed"] is False
+    assert payload["proof"] == "local"
+    assert payload["outcome"] == "done"
+    assert payload["execution_outcome"] == "VERIFIED"
+    assert "read the record back" in payload["message"]
+    assert "failure" not in payload["message"]
+
+
+def test_precise_verified_requires_consistent_legacy_success(
+    monkeypatch, runner_config, bundle_dir, success_report
+):
+    success_report.update(
+        {
+            "success": False,
+            "execution_profile": "standard",
+            "execution_outcome": "VERIFIED",
+            "production_eligible": True,
+        }
+    )
+    stub = FlowCliStub(exit_code=0, report=success_report)
+
+    outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
+
+    assert outcome.status == "error"
+    assert outcome.to_dict()["success"] is False
+
+
+def test_precise_failed_report_maps_to_error_even_on_exit_zero(
+    monkeypatch, runner_config, bundle_dir, halt_report
+):
+    halt_report["execution_outcome"] = "FAILED"
+    halt_report["transaction_outcome"] = "FAILED_PLATFORM"
+    stub = FlowCliStub(exit_code=0, report=halt_report)
+
+    outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
+
+    assert outcome.status == "error"
+    assert outcome.execution_outcome == "FAILED"
+    assert outcome.to_dict()["success"] is False
+
+
+def test_legacy_report_without_boolean_success_is_error():
+    outcome = classify_outcome("w", 0, {"results": []})
+
+    assert outcome.status == "error"
+    assert outcome.to_dict()["success"] is False
+
+
+def test_non_object_report_fails_closed_without_an_exception():
+    outcome = classify_outcome("w", 0, ["not", "a", "report"])
+
+    assert outcome.status == "error"
+    assert outcome.execution_outcome is None
+    assert outcome.to_dict()["success"] is False
+
+
+@pytest.mark.parametrize(
+    ("report", "expected_outcome"),
+    [
+        ({"success": True, "execution_outcome": "HALTED"}, "HALTED"),
+        ({"success": True, "execution_outcome": "FAILED"}, "FAILED"),
+        ({"success": True, "execution_outcome": "ROLLED_BACK"}, "ROLLED_BACK"),
+        ({"success": "yes", "execution_outcome": "VERIFIED"}, "VERIFIED"),
+        (
+            {
+                "success": True,
+                "execution_outcome": "VERIFIED",
+                "execution_profile": "standard",
+                "production_eligible": True,
+                "outcome_envelope": {
+                    "outcome": "HALTED",
+                    "profile": "standard",
+                    "production_eligible": True,
+                },
+            },
+            "VERIFIED",
+        ),
+    ],
+)
+def test_inconsistent_precise_report_is_visible_error(report, expected_outcome):
+    status, outcome = classify_report_status(report)
+
+    assert status == "error"
+    assert outcome == expected_outcome
+
+
+def test_precise_completed_unverified_accepts_demo_and_production_shapes():
+    demo = {
+        "success": True,
+        "execution_profile": "demo",
+        "execution_outcome": "COMPLETED_UNVERIFIED",
+        "production_eligible": False,
+    }
+    standard = {
+        "success": False,
+        "execution_profile": "standard",
+        "execution_outcome": "COMPLETED_UNVERIFIED",
+        "production_eligible": False,
+    }
+
+    assert classify_report_status(demo) == ("halt", "COMPLETED_UNVERIFIED")
+    assert classify_report_status(standard) == ("halt", "COMPLETED_UNVERIFIED")
+
+
+def test_inconsistent_precise_outcome_uses_the_public_error_message():
+    outcome = RunOutcome(
+        status="error",
+        workflow="workflow_" + "a" * 24,
+        execution_outcome="COMPLETED_UNVERIFIED",
+    )
+
+    public = outcome.to_dict()
+    assert public["success"] is False
+    assert "can trust" in public["message"]
+    assert public["outcome"] == "not_sure_if_saved"
+    assert "completed" not in public["message"]
+
+
+def test_exit_zero_without_report_is_error(monkeypatch, runner_config, bundle_dir):
+    stub = FlowCliStub(exit_code=0, report=None)
+    outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
+    assert outcome.status == "error"
+    assert "without evidence" in outcome.detail
+
+
+def test_exit_two_is_governed_refusal(monkeypatch, runner_config, bundle_dir):
+    stub = FlowCliStub(exit_code=2, report=None)
+    stub.stdout = "run REFUSED: coverage gate failed"
+    outcome = _run(monkeypatch, runner_config, stub, bundle_dir=bundle_dir)
+    assert outcome.status == "refused"
+    assert "Nothing was executed" in outcome.detail
+    assert "REFUSED" in outcome.stdout_tail
+
+
+def test_timeout_maps_to_timeout(monkeypatch, runner_config, bundle_dir):
+    def raise_timeout(cmd, capture_output=True, text=True, timeout=None, **kwargs):
+        raise subprocess.TimeoutExpired(cmd, timeout, output=b"partial", stderr=b"")
+
+    outcome = _run(monkeypatch, runner_config, raise_timeout, bundle_dir=bundle_dir)
+    assert outcome.status == "timeout"
+    assert outcome.to_dict()["success"] is False
+    assert "killed" in outcome.detail
+
+
+def test_missing_cli_maps_to_error(monkeypatch, runner_config, bundle_dir):
+    def raise_missing(cmd, capture_output=True, text=True, timeout=None, **kwargs):
+        raise FileNotFoundError(cmd[0])
+
+    outcome = _run(monkeypatch, runner_config, raise_missing, bundle_dir=bundle_dir)
+    assert outcome.status == "error"
+    assert "not found" in outcome.detail
+
+
+def test_url_override_refused_without_flag(monkeypatch, runner_config, bundle_dir):
+    stub = FlowCliStub(exit_code=0)
+    outcome = _run(
+        monkeypatch,
+        runner_config,
+        stub,
+        bundle_dir=bundle_dir,
+        url_override="https://evil.example",
+    )
+    assert outcome.status == "refused"
+    assert stub.calls == []  # nothing executed
+
+
+def test_url_override_honoured_with_flag(monkeypatch, tmp_path, bundle_dir, success_report):
+    config = RunnerConfig(
+        flow_cli=("openadapt-flow-stub",),
+        runs_dir=tmp_path / "runs",
+        allow_url_override=True,
+    )
+    stub = FlowCliStub(exit_code=0, report=success_report)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
+    outcome = FlowRunner(config).run(
+        workflow="demo_triage",
+        bundle_dir=bundle_dir,
+        params={},
+        url_override="https://staging.example",
+    )
+    assert outcome.status == "success"
+    cmd = stub.calls[0]
+    assert cmd[cmd.index("--url") + 1] == "https://staging.example"
+
+
+def test_operator_fixed_args_forwarded(monkeypatch, tmp_path, bundle_dir, success_report):
+    config = RunnerConfig(
+        flow_cli=("openadapt-flow-stub",),
+        runs_dir=tmp_path / "runs",
+        url="https://app.example",
+        deployment_config="deploy.yaml",
+        policy="clinical-write",
+        extra_run_args=("--strict-templates",),
+    )
+    stub = FlowCliStub(exit_code=0, report=success_report)
+    monkeypatch.setattr(runner_mod, "_run_flow_process", stub)
+    FlowRunner(config).run(workflow="w", bundle_dir=bundle_dir, params={})
+    cmd = stub.calls[0]
+    assert cmd[cmd.index("--url") + 1] == "https://app.example"
+    assert cmd[cmd.index("--config") + 1] == "deploy.yaml"
+    assert cmd[cmd.index("--policy") + 1] == "clinical-write"
+    assert "--strict-templates" in cmd
+
+
+@pytest.mark.parametrize("exit_code", [3, 130])
+def test_other_nonzero_exit_without_report_is_uncertain(exit_code):
+    outcome = classify_outcome("w", exit_code, None, stdout="boom", stderr="")
+    assert outcome.status == "error"
+    public = outcome.to_dict()
+    assert public["success"] is False
+    assert public["outcome"] == "not_sure_if_saved"
+    assert public["safe_to_retry"] is False
+
+
+def test_legacy_success_flag_alone_is_finished_not_checked(legacy_success_report):
+    outcome = classify_outcome("w", 0, legacy_success_report)
+    public = outcome.to_dict()
+    assert public["success"] is False
+    assert public["outcome"] == "not_sure_if_saved"
+    assert public["label"] == "Finished, not checked"
+
+
+def test_refusal_carries_closed_failed_checks_not_flow_text():
+    stdout = "  [REFUSE] Certification passed: Jane Roe chart has 8 violations\n"
+    outcome = classify_outcome("w", 2, None, stdout=stdout)
+    public = outcome.to_dict()
+    assert public["status"] == "refused"
+    assert public["outcome"] == "did_not_run"
+    assert public["failed_checks"] == ["not_certified"]
+    assert "Jane Roe" not in str(public)
+
+
+def test_launch_failure_is_a_platform_error_that_may_retry(
+    monkeypatch, runner_config, bundle_dir
+):
+    def raise_missing(cmd, capture_output=True, text=True, timeout=None, **kwargs):
+        raise FileNotFoundError(cmd[0])
+
+    public = _run(monkeypatch, runner_config, raise_missing, bundle_dir=bundle_dir).to_dict()
+    assert public["outcome"] == "did_not_run"
+    assert public["reason"] == "platform_error"
+    assert public["safe_to_retry"] is True
+
+
+def test_failure_after_flow_made_its_run_dir_is_uncertain_not_retryable(
+    monkeypatch, runner_config, bundle_dir
+):
+    def fail_after_start(cmd, capture_output=True, text=True, timeout=None, **kwargs):
+        # Flow created its run directory (so it started), then reading its
+        # output failed in this process.
+        Path(cmd[cmd.index("--run-dir") + 1]).mkdir(parents=True)
+        raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "invalid start byte")
+
+    public = _run(monkeypatch, runner_config, fail_after_start, bundle_dir=bundle_dir).to_dict()
+    assert public["outcome"] == "not_sure_if_saved"
+    assert public["safe_to_retry"] is False
+
+
+def test_flow_output_is_decoded_without_strict_errors(
+    monkeypatch, runner_config, bundle_dir, success_report
+):
+    stub = FlowCliStub(exit_code=0, report=success_report)
+    seen = {}
+
+    def capture(cmd, **kwargs):
+        seen.update(kwargs)
+        return stub(cmd)
+
+    _run(monkeypatch, runner_config, capture, bundle_dir=bundle_dir)
+    assert seen.get("errors") == "replace"
+
+
+def test_pre_allocated_run_id_is_used(monkeypatch, runner_config, bundle_dir, success_report):
+    stub = FlowCliStub(exit_code=0, report=success_report)
+    outcome = _run(
+        monkeypatch, runner_config, stub, bundle_dir=bundle_dir, run_id="run-" + "c" * 24
+    )
+    assert outcome.run_id == "run-" + "c" * 24
+    assert stub.calls[0][stub.calls[0].index("--run-dir") + 1].endswith("run-" + "c" * 24)
+
+
+@pytest.mark.parametrize(
+    "status",
+    ["success", "halt", "refused", "timeout", "error"],
+)
+def test_public_outcome_projection_never_exports_protected_cli_or_report_text(
+    status,
+):
+    secret = "Jane Roe MRN-9911 sk_live_secret /private/protected/path"
+    outcome = RunOutcome(
+        status=status,
+        workflow="workflow_" + "a" * 24,
+        run_id="run-" + "b" * 24,
+        run_dir=secret,
+        report_path=secret,
+        exit_code=1,
+        detail=secret,
+        halt={"reason": secret, "observed_texts": [secret]},
+        summary={"steps_total": 2, "steps_ok": 1, "diagnostic": secret},
+        stdout_tail=secret,
+        stderr_tail=secret,
+    )
+
+    public = outcome.to_dict()
+    assert secret not in str(public)
+    assert "protected" not in public
+    assert public["status"] == status
+    assert public["success"] is (status == "success")
+
+    opted_in = outcome.to_dict(include_protected=True)
+    assert secret in str(opted_in["protected"])

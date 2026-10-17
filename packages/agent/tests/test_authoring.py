@@ -1,0 +1,1377 @@
+"""Stdio --authoring tools: probe names, PHI observe, record_observed."""
+
+from __future__ import annotations
+
+import asyncio
+import json
+import threading
+from pathlib import Path
+
+import anyio
+import pytest
+
+from openadapt_agent.authoring import (
+    AUTHORING_PROBE_TOOLS,
+    AuthoringBridge,
+    AuthoringError,
+    CoachOnlySession,
+    MAX_AUTHORING_WIRE_BYTES,
+    ThreadOwnedSession,
+    discover_desktop_authoring_ipc,
+    open_authoring_session,
+    pin_local_backend,
+    project_observe,
+)
+from openadapt_agent.mcp import build_server
+
+
+class FakeAuthoringSession:
+    """In-process stand-in until openadapt_flow.authoring lands."""
+
+    def __init__(
+        self,
+        *,
+        backend: str = "web",
+        coach_only: bool = False,
+        secret_pause_without_type: bool = False,
+    ):
+        self.backend = backend
+        self.coach_only = coach_only
+        self.secret_pause_without_type = secret_pause_without_type
+        self.calls: list = []
+        self.typed_via_backend: list[str] = []
+        self.observed_events: list[dict] = []
+        self.recording = False
+        self._secret_type_recorded = False
+        self.nodes = {
+            "n_9f2c001a": {
+                "node_id": "n_9f2c001a",
+                "role": "button",
+                "control_type": "button",
+                "automation_id": "btnContinue",
+                "enabled": True,
+                "focused": False,
+                "bounds": {"x": 0.72, "y": 0.88, "w": 0.14, "h": 0.05},
+                "backend_pixels": {"x": 920, "y": 640, "w": 180, "h": 36},
+                "value": "4111111111111111",
+                "title": "Chart — Jane Roe",
+                "name": "Save",
+            }
+        }
+
+    def observe(self):
+        self.calls.append("observe")
+        if self.coach_only:
+            return {
+                "backend": self.backend,
+                "agent_drive": True,
+                "coach_only": True,
+                "tree": list(self.nodes.values()),
+                "title": "Remote desktop",
+            }
+        return {
+            "schema_version": "openadapt.authoring.observe/v1",
+            "backend": self.backend,
+            "provider": "playwright_ax",
+            "agent_drive": True,
+            "coach_only": False,
+            "recording": self.recording,
+            "window": {
+                "process_name": "Chromium",
+                "role": "window",
+                "title": "Patient Jane Roe MRN-9911",
+                "bounds": {"x": 0.0, "y": 0.0, "w": 1.0, "h": 1.0},
+            },
+            "tree": [
+                {
+                    **node,
+                    "screenshot": "iVBORw0KGgo=",
+                    "url": "https://example.invalid/chart",
+                    "name": "Call 555-0100" if node_id == "leak" else node.get("name"),
+                }
+                for node_id, node in self.nodes.items()
+            ]
+            + [
+                {
+                    "node_id": "n_ssn1",
+                    "role": "textbox",
+                    "name": "SSN 123-45-6789",
+                    "automation_id": "patient@clinic.example",
+                    "value": "123-45-6789",
+                }
+            ],
+            "value": "raw AX dump",
+            "screenshot": "pixels",
+        }
+
+    def start_record(self):
+        self.calls.append("start_record")
+        if self.coach_only:
+            return {"error": "COACH_ONLY", "coach_only": True, "backend": self.backend}
+        self.recording = True
+        return {"status": "recording"}
+
+    def click(self, node_id=None, x=None, y=None):
+        self.calls.append(("click", node_id, x, y))
+        if self.coach_only:
+            return {"error": "COACH_ONLY"}
+        if node_id and node_id not in self.nodes:
+            return {"status": "error", "error": "stale_node"}
+        return {"status": "ok", "node_id": node_id, "backend_pixels": {"x": 1, "y": 2}}
+
+    def type_agent(self, text, param=None, node_id=None):
+        self.calls.append(("type_agent", text, param, node_id))
+        self.typed_via_backend.append(text)
+        return {"status": "ok", "param": param, "text": text}
+
+    def type_text(self, text, param=None):
+        raise AssertionError("human pause must not call backend type_text")
+
+    def pause_for_input(self, node_id=None, param=None, secret=False):
+        self.calls.append(("pause_for_input", node_id, param, secret))
+        event = {"kind": "type", "param": param, "secret": secret}
+        if not secret:
+            event["text"] = "synthetic follow-up"
+        self.observed_events.append(event)
+        if secret and not self.secret_pause_without_type:
+            self._secret_type_recorded = True
+        return {"recorded": True, "param": param, "text": "must-not-cross-mcp"}
+
+    def halt(self):
+        self.calls.append("halt")
+        self.recording = False
+        return {"status": "halted"}
+
+    def stop_record(self):
+        self.calls.append("stop_record")
+        self.recording = False
+        return {"status": "stopped"}
+
+    def compile(self):
+        self.calls.append("compile")
+        if self.secret_pause_without_type and not self._secret_type_recorded:
+            return {"error": "missing_secret_type"}
+        return {
+            "status": "needs_human_admit",
+            "workflow_id": "wf_demo0001",
+            "execution_outcome": "VERIFIED",
+            "success": True,
+        }
+
+    def admit(self, confirm=None):
+        self.calls.append(("admit", confirm))
+        return {
+            "status": "admitted",
+            "workflow_id": "wf_demo0001",
+            "execution_outcome": "VERIFIED",
+            "success": True,
+            "title": "Chart — Jane Roe",
+        }
+
+
+def test_probe_tool_names_match_hosted_surface():
+    names = [spec.name for spec in AuthoringBridge(FakeAuthoringSession()).list_tool_specs()]
+    for probe in AUTHORING_PROBE_TOOLS:
+        assert probe in names
+    assert "type" in names
+    assert "admit" in names
+    assert names.index("observe") < names.index("type")
+    assert names.index("compile") < names.index("admit")
+
+
+def test_observe_drops_values_titles_screenshots_and_unsafe_names():
+    bridge = AuthoringBridge(FakeAuthoringSession())
+    result = bridge.dispatch("observe", {})
+    blob = json.dumps(result)
+    assert result["schema_version"] == "openadapt.authoring.observe/v1"
+    assert result["mode"] == "authoring"
+    assert result["agent_drive"] is True
+    assert "value" not in blob
+    assert "screenshot" not in blob
+    assert "title" not in blob
+    assert "backend_pixels" not in blob
+    assert "Jane Roe" not in blob
+    assert "4111111111111111" not in blob
+    assert "123-45-6789" not in blob
+    assert "patient@clinic.example" not in blob
+    assert "https://" not in blob
+    node = next(item for item in result["tree"] if item["node_id"] == "n_9f2c001a")
+    assert node["automation_id"] == "btnContinue"
+    assert node["name"] == "Save"
+    assert all(item["node_id"] != "n_ssn1" or "name" not in item for item in result["tree"])
+
+
+def test_project_observe_empty_tree_is_not_a_raw_fallback():
+    projected = project_observe({"backend": "web", "tree": [{"role": "button", "value": "x"}]})
+    assert projected["tree"] == []
+    assert projected["reason"] == "empty_projection"
+    assert "value" not in json.dumps(projected)
+
+
+def test_start_record_and_click_and_halt_round_trip():
+    session = FakeAuthoringSession()
+    bridge = AuthoringBridge(session)
+    assert bridge.dispatch("start_record", {})["status"] == "recording"
+    clicked = bridge.dispatch("click", {"node_id": "n_9f2c001a"})
+    assert clicked["status"] == "ok"
+    assert "backend_pixels" not in clicked
+    assert bridge.dispatch("click", {"node_id": "n_missing"}) == {
+        "status": "error",
+        "error": "stale_node",
+    }
+    local = bridge.dispatch("click", {"x": 10, "y": 20})
+    assert local["status"] == "ok"
+    halted = bridge.dispatch("halt", {})
+    assert halted["status"] == "halted"
+    assert halted["compiled"] is False
+    assert ("click", "n_9f2c001a", None, None) in session.calls
+    assert ("click", None, 10, 20) in session.calls
+
+
+def test_local_type_is_agent_driven_and_strips_text():
+    session = FakeAuthoringSession()
+    bridge = AuthoringBridge(session)
+    result = bridge.dispatch("type", {"text": "synthetic follow-up", "param": "note"})
+    assert result["recorded"] is True
+    assert result["param"] == "note"
+    assert "text" not in result
+    assert session.typed_via_backend == ["synthetic follow-up"]
+    assert session.observed_events == []
+
+
+def test_pause_continue_uses_record_observed_never_type_text():
+    session = FakeAuthoringSession()
+    bridge = AuthoringBridge(session)
+    result = bridge.dispatch(
+        "pause_for_input",
+        {"node_id": "n_9f2c001a", "param": "note", "secret": False},
+    )
+    assert result == {"recorded": True, "param": "note"}
+    assert session.typed_via_backend == []
+    assert session.observed_events == [
+        {"kind": "type", "param": "note", "secret": False, "text": "synthetic follow-up"}
+    ]
+
+
+def test_secret_pause_result_has_no_value_and_compile_can_refuse():
+    session = FakeAuthoringSession(secret_pause_without_type=True)
+    bridge = AuthoringBridge(session)
+    paused = bridge.dispatch(
+        "pause_for_input",
+        {"node_id": "n_9f2c001a", "param": "identifier", "secret": True},
+    )
+    assert paused["recorded"] is True
+    assert paused["secret"] is True
+    assert "text" not in paused
+    assert bridge.dispatch("compile", {}) == {
+        "status": "error",
+        "error": "missing_secret_type",
+    }
+
+
+def test_compile_returns_needs_human_admit_never_verified():
+    bridge = AuthoringBridge(FakeAuthoringSession())
+    result = bridge.dispatch("compile", {})
+    assert result["status"] == "needs_human_admit"
+    assert result["workflow_id"] == "wf_demo0001"
+    assert result["recording_retained"] is True
+    assert "VERIFIED" not in json.dumps(result)
+    assert "success" not in result
+
+
+@pytest.mark.parametrize(
+    "arguments",
+    [{}, {"confirm": "ok"}, {"confirm": ""}, {"confirm": True}, {"confirm": "yes"}],
+)
+def test_admit_without_host_confirmation_refuses(arguments):
+    # B074: a model-supplied confirm (or none) is not a person's consent.
+    session = FakeAuthoringSession()
+    bridge = AuthoringBridge(session)
+    bridge.dispatch("compile", {})
+    with pytest.raises(AuthoringError) as exc_info:
+        bridge.dispatch("admit", arguments)
+    assert exc_info.value.code == "admit_requires_host_confirmation"
+    assert all(not (isinstance(call, tuple) and call[0] == "admit") for call in session.calls)
+
+
+def test_admit_schema_does_not_invite_self_confirmation():
+    specs = AuthoringBridge(FakeAuthoringSession()).list_tool_specs()
+    spec = next(s for s in specs if s.name == "admit")
+    assert "confirm" not in spec.input_schema.get("properties", {})
+    assert spec.input_schema["additionalProperties"] is False
+    assert "ok, yes" not in spec.description
+    assert "one-token" not in spec.description
+    assert "person" in spec.description
+
+
+def test_admit_after_host_confirmation_works_without_type_text():
+    session = FakeAuthoringSession()
+    bridge = AuthoringBridge(session)
+    compiled = bridge.dispatch("compile", {})
+    assert compiled["status"] == "needs_human_admit"
+    assert "wf_demo0001" in bridge.admit_confirmation_message()
+    admitted = bridge.dispatch("admit", {}, human_confirmed=True)
+    assert admitted == {"status": "admitted", "workflow_id": "wf_demo0001"}
+    assert ("admit", "ok") in session.calls
+    assert session.typed_via_backend == []
+    assert all(
+        call[0] != "type_text" if isinstance(call, tuple) else call != "type_text"
+        for call in session.calls
+    )
+    assert "VERIFIED" not in json.dumps(admitted)
+    assert "title" not in json.dumps(admitted)
+
+
+def test_admit_records_confirmation_channel_when_flow_accepts_it():
+    class ChannelSession(FakeAuthoringSession):
+        def admit(self, confirm=None, confirmation_channel=None):
+            self.calls.append(("admit", confirm, confirmation_channel))
+            return {"status": "accepted", "workflow_id": "wf_demo0001"}
+
+    session = ChannelSession()
+    bridge = AuthoringBridge(session)
+    bridge.dispatch("admit", {}, human_confirmed=True)
+    assert ("admit", "ok", "mcp_form_elicitation") in session.calls
+
+
+def test_admit_calls_flow_once_even_when_flow_raises_type_error():
+    class BrokenSession(FakeAuthoringSession):
+        def admit(self, confirm=None):
+            self.calls.append(("admit", confirm))
+            raise TypeError("bug inside Flow admit")
+
+    session = BrokenSession()
+    bridge = AuthoringBridge(session)
+    with pytest.raises(AuthoringError, match="bug inside Flow admit"):
+        bridge.dispatch("admit", {}, human_confirmed=True)
+    assert [call for call in session.calls if isinstance(call, tuple) and call[0] == "admit"] == [
+        ("admit", "ok")
+    ]
+
+
+def test_admit_extra_arguments_refuse_even_after_confirmation():
+    session = FakeAuthoringSession()
+    bridge = AuthoringBridge(session)
+    with pytest.raises(AuthoringError, match="schema"):
+        bridge.dispatch("admit", {"confirm": "ship-it"}, human_confirmed=True)
+    assert all(not (isinstance(call, tuple) and call[0] == "admit") for call in session.calls)
+    assert session.typed_via_backend == []
+
+
+def test_admit_fails_closed_without_session_admit():
+    class NoAdmitSession:
+        def compile(self):
+            return {
+                "status": "needs_human_admit",
+                "workflow_id": "wf_demo0001",
+                "execution_outcome": "VERIFIED",
+            }
+
+    bridge = AuthoringBridge(NoAdmitSession())
+    compiled = bridge.dispatch("compile", {})
+    assert compiled["status"] == "needs_human_admit"
+    assert "VERIFIED" not in json.dumps(compiled)
+    with pytest.raises(AuthoringError, match="does not implement admit") as exc_info:
+        bridge.dispatch("admit", {}, human_confirmed=True)
+    message = str(exc_info.value)
+    assert "Seal" in message
+    assert "unsigned" in message
+    assert "Production" in message
+
+
+def test_pinned_windows_and_remote_sessions_drive():
+    for backend in ("windows", "rdp", "citrix"):
+        bridge = AuthoringBridge(FakeAuthoringSession(backend=backend))
+        observed = bridge.dispatch("observe", {})
+        assert observed["coach_only"] is False
+        assert observed["agent_drive"] is True
+        if backend in ("rdp", "citrix"):
+            # Screen-only: a remote session never projects a tree.
+            assert observed["tree"] == []
+        assert bridge.dispatch("start_record", {})["status"] == "recording"
+        assert bridge.dispatch("click", {"x": 10, "y": 20})["status"] == "ok"
+
+
+def test_unpinned_windows_is_coach_only():
+    session = FakeAuthoringSession(backend="windows", coach_only=True)
+    bridge = AuthoringBridge(session)
+    observed = bridge.dispatch("observe", {})
+    assert observed["coach_only"] is True
+    assert observed["agent_drive"] is False
+    assert observed["tree"] == []
+    with pytest.raises(AuthoringError, match="COACH_ONLY"):
+        bridge.dispatch("start_record", {})
+    with pytest.raises(AuthoringError, match="COACH_ONLY"):
+        bridge.dispatch("click", {"node_id": "n_9f2c001a"})
+
+
+def test_get_command_result_returns_last_in_process_result():
+    bridge = AuthoringBridge(FakeAuthoringSession())
+    idle = bridge.dispatch("get_command_result", {})
+    assert idle["status"] == "idle"
+    assert idle["result"] is None
+    bridge.dispatch("start_record", {})
+    last = bridge.dispatch("get_command_result", {})
+    assert last["command_id"] == "start_record"
+    assert last["status"] == "done"
+    assert last["result"]["status"] == "recording"
+
+
+def test_unknown_fields_and_missing_click_target_are_refused():
+    bridge = AuthoringBridge(FakeAuthoringSession())
+    with pytest.raises(AuthoringError, match="schema"):
+        bridge.dispatch("observe", {"title": "nope"})
+    with pytest.raises(AuthoringError, match="node_id or local"):
+        bridge.dispatch("click", {})
+
+
+def test_mcp_lists_authoring_probe_tools_without_run_tools(
+    bundles_root, runner_config, mcp_client
+):
+    from openadapt_agent.bridge import AgentBridge
+
+    authoring = AuthoringBridge(FakeAuthoringSession())
+    server = build_server(authoring=authoring)
+
+    async def list_names():
+        async with mcp_client(server) as client:
+            return [tool.name for tool in (await client.list_tools()).tools]
+
+    names = anyio.run(list_names)
+    assert names[:4] == list(AUTHORING_PROBE_TOOLS)
+    assert "type" in names
+    assert "admit" in names
+    assert not any(name.startswith("run_") for name in names)
+
+    combined = build_server(
+        AgentBridge(bundles_root, runner_config, allow_run=False),
+        authoring=authoring,
+    )
+
+    async def combined_names():
+        async with mcp_client(combined) as client:
+            return [tool.name for tool in (await client.list_tools()).tools]
+
+    both = anyio.run(combined_names)
+    assert "list_workflows" in both
+    assert "observe" in both
+    assert not any(name.startswith("run_") for name in both)
+
+
+def test_mcp_observe_call_is_projected(mcp_client):
+    server = build_server(authoring=AuthoringBridge(FakeAuthoringSession()))
+
+    async def call_observe():
+        async with mcp_client(server) as client:
+            return await client.call_tool("observe", {})
+
+    result = anyio.run(call_observe)
+    payload = json.loads(result.content[0].text)
+    assert payload["schema_version"] == "openadapt.authoring.observe/v1"
+    assert "screenshot" not in result.content[0].text
+    assert "Jane Roe" not in result.content[0].text
+
+
+def test_open_authoring_session_notes_flow_dependency_when_missing(monkeypatch):
+    import sys
+    import types
+
+    fake_flow = types.ModuleType("openadapt_flow")
+    monkeypatch.setitem(sys.modules, "openadapt_flow", fake_flow)
+    monkeypatch.delitem(sys.modules, "openadapt_flow.authoring", raising=False)
+    with pytest.raises(AuthoringError, match="openadapt_flow.authoring"):
+        open_authoring_session()
+
+
+def test_authoring_sources_stay_stdio_without_http_listener():
+    root = Path(__file__).resolve().parents[1] / "src" / "openadapt_agent"
+    for name in ("authoring.py", "mcp.py", "cli.py", "mailbox.py", "runner_bind.py"):
+        text = (root / name).read_text(encoding="utf-8")
+        assert "HTTPServer" not in text
+        assert "uvicorn" not in text
+        assert "streamable_http" not in text.lower()
+        assert "FastAPI" not in text
+        assert "win_agent" not in text
+        assert "parallels_vm" not in text
+        assert "connect_over_cdp" not in text
+
+
+def test_observe_wire_omits_extra_keys_and_invalid_node_ids():
+    projected = project_observe(
+        {
+            "backend": "web",
+            "provider": "playwright_ax",
+            "value": "nope",
+            "title": "Chart",
+            "screenshot": "px",
+            "window": {
+                "process_name": "Chromium",
+                "role": "window",
+                "title": "secret",
+                "bounds": {"x": 0, "y": 0, "w": 1, "h": 1, "pixels": 9},
+            },
+            "tree": [
+                {
+                    "node_id": "n_9f2c001a",
+                    "role": "button",
+                    "enabled": True,
+                    "focused": False,
+                    "bounds": {"x": 0.1, "y": 0.1, "w": 0.1, "h": 0.1},
+                    "value": "4111",
+                    "backend_pixels": {"x": 1, "y": 2, "w": 3, "h": 4},
+                },
+                {"node_id": "n_9f2c", "role": "button", "enabled": True, "focused": False},
+            ],
+        }
+    )
+    blob = json.dumps(projected)
+    assert "value" not in blob
+    assert "title" not in blob
+    assert "screenshot" not in blob
+    assert "backend_pixels" not in blob
+    assert projected["tree"][0]["node_id"] == "n_9f2c001a"
+    assert all(item["node_id"] != "n_9f2c" for item in projected["tree"])
+    assert set(projected) <= {
+        "schema_version",
+        "backend",
+        "provider",
+        "mode",
+        "agent_drive",
+        "coach_only",
+        "recording",
+        "window",
+        "tree",
+        "truncated",
+        "node_count",
+        "reason",
+    }
+
+
+def test_invalid_backend_is_coach_only_not_unknown():
+    projected = project_observe({"backend": "turbo", "tree": [{"node_id": "n_9f2c001a"}]})
+    assert projected["backend"] == "windows"
+    assert projected["coach_only"] is True
+    assert projected["agent_drive"] is False
+    assert projected["provider"] == "none"
+    assert projected["tree"] == []
+    assert "unknown" not in json.dumps(projected)
+
+
+def test_observe_wire_truncates_to_32kib(monkeypatch):
+    monkeypatch.setattr(
+        "openadapt_agent.authoring.MAX_AUTHORING_WIRE_BYTES", 800
+    )
+    tree = []
+    for index in range(40):
+        tree.append(
+            {
+                "node_id": f"n_{index:08x}",
+                "role": "button",
+                "name": "SaveButtonLabelOk",
+                "enabled": True,
+                "focused": False,
+                "bounds": {"x": 0.01, "y": 0.01, "w": 0.1, "h": 0.1},
+            }
+        )
+    projected = project_observe(
+        {
+            "backend": "web",
+            "provider": "playwright_ax",
+            "window": {
+                "process_name": "Chromium",
+                "bounds": {"x": 0, "y": 0, "w": 1, "h": 1},
+            },
+            "tree": tree,
+        }
+    )
+    assert projected["truncated"] is True
+    assert len(json.dumps(projected, separators=(",", ":")).encode("utf-8")) <= 800
+    assert MAX_AUTHORING_WIRE_BYTES == 32 * 1024
+
+
+def test_remembered_pixels_stay_off_the_wire():
+    session = FakeAuthoringSession()
+    bridge = AuthoringBridge(session)
+    observed = bridge.dispatch("observe", {})
+    assert "backend_pixels" not in json.dumps(observed)
+    assert "n_9f2c001a" in bridge._nodes
+
+
+class _FlowError(RuntimeError):
+    def __init__(self, message, *, code):
+        super().__init__(message)
+        self.code = code
+
+
+class FlowShapedSession:
+    """Matches F1 AuthoringSession: no observe, type_text, continue_input, compile(dir, name=)."""
+
+    def __init__(self):
+        self.backend_kind = "web"
+        self.calls = []
+        self.nodes = {}
+        self.typed_via_backend = []
+        self.paused = None
+        self.observed_events = []
+
+    def remember_node(self, node_id, backend_pixels):
+        self.nodes[node_id] = dict(backend_pixels)
+
+    def start_record(self):
+        self.calls.append("start_record")
+        return None
+
+    def click(self, x=None, y=None, *, node_id=None):
+        self.calls.append(("click", node_id, x, y))
+        if node_id is not None and node_id not in self.nodes:
+            raise _FlowError("unknown node", code="stale_node")
+        return None
+
+    def type_text(self, text, param=None):
+        self.calls.append(("type_text", text, param))
+        self.typed_via_backend.append(text)
+        return None
+
+    def pause_for_input(self, *, param, secret=False, node_id=None, backend_pixels=None):
+        self.calls.append(("pause_for_input", node_id, param, secret))
+        self.paused = {"param": param, "secret": secret, "node_id": node_id}
+        return None
+
+    def continue_input(self, *, operator_confirmed=True):
+        self.calls.append(("continue_input", operator_confirmed))
+        if self.paused is None:
+            raise _FlowError("no pause", code="not_paused")
+        event = {
+            "kind": "type",
+            "param": self.paused["param"],
+            "secret": self.paused["secret"],
+        }
+        if not self.paused["secret"]:
+            event["text"] = "synthetic follow-up"
+        self.observed_events.append(event)
+        param = self.paused["param"]
+        self.paused = None
+        return {"recorded": True, "param": param}
+
+    def halt(self):
+        self.calls.append("halt")
+        return None
+
+    def compile(self, bundle_dir, *, name):
+        self.calls.append(("compile", str(bundle_dir), name))
+        return {
+            "status": "needs_human_admit",
+            "workflow_id": "wf_demo0001",
+            "recording_retained": True,
+            "execution_outcome": "VERIFIED",
+        }
+
+
+def test_flow_shaped_session_maps_f1_signatures_and_stale_node():
+    session = FlowShapedSession()
+    bridge = AuthoringBridge(session, out_dir="/tmp/authoring-out")
+    assert bridge.dispatch("start_record", {}) == {"status": "recording"}
+    session.remember_node("n_9f2c001a", {"x": 10, "y": 20, "w": 4, "h": 4})
+    assert bridge.dispatch("click", {"node_id": "n_9f2c001a"})["status"] == "ok"
+    assert bridge.dispatch("click", {"node_id": "n_deadbeef"}) == {
+        "status": "error",
+        "error": "stale_node",
+    }
+    typed = bridge.dispatch("type", {"text": "hello", "param": "note", "node_id": "n_9f2c001a"})
+    assert typed["recorded"] is True
+    assert "text" not in typed
+    assert session.typed_via_backend == ["hello"]
+    paused = bridge.dispatch(
+        "pause_for_input",
+        {"node_id": "n_9f2c001a", "param": "note", "secret": False},
+    )
+    assert paused == {"status": "paused", "param": "note"}
+    assert session.observed_events == []
+    continued = bridge.dispatch("continue_input", {})
+    assert continued == {"recorded": True, "param": "note"}
+    assert session.observed_events == [
+        {"kind": "type", "param": "note", "secret": False, "text": "synthetic follow-up"}
+    ]
+    compiled = bridge.dispatch("compile", {})
+    assert compiled["status"] == "needs_human_admit"
+    assert compiled["workflow_id"] == "wf_demo0001"
+    assert "VERIFIED" not in json.dumps(compiled)
+    assert session.calls[-1][0] == "compile"
+    assert session.calls[-1][2] == "authoring"
+
+
+def test_login_pause_records_observed_and_compile_needs_human_admit():
+    session = FlowShapedSession()
+    bridge = AuthoringBridge(session, out_dir="/tmp/authoring-login")
+    assert bridge.dispatch("start_record", {}) == {"status": "recording"}
+    paused = bridge.dispatch(
+        "pause_for_input",
+        {"node_id": "n_9f2c001a", "param": "password", "secret": True},
+    )
+    assert paused == {"status": "paused", "param": "password", "secret": True}
+    assert session.typed_via_backend == []
+    continued = bridge.dispatch("continue_input", {})
+    assert continued == {"recorded": True, "param": "password"}
+    assert session.observed_events == [
+        {"kind": "type", "param": "password", "secret": True}
+    ]
+    compiled = bridge.dispatch("compile", {})
+    assert compiled["status"] == "needs_human_admit"
+    assert "VERIFIED" not in json.dumps(compiled)
+
+
+def test_url_without_headed_fails_loud_empty_cookies():
+    with pytest.raises(AuthoringError, match="empty cookies") as exc_info:
+        pin_local_backend(url="https://example.invalid/app", headed=False)
+    message = str(exc_info.value)
+    assert "already signed into" in message
+    assert "pause_for_input" in message
+    assert "no --url" in message
+
+
+def test_headed_url_pins_playwright_not_cdp(monkeypatch):
+    launched: dict = {}
+
+    def fake_pin_web(url, *, headed):
+        launched["url"] = url
+        launched["headed"] = headed
+        return object(), "web", lambda: None
+
+    monkeypatch.setattr("openadapt_agent.authoring._pin_web", fake_pin_web)
+    backend, kind, close = pin_local_backend(
+        url="https://example.invalid/app", headed=True
+    )
+    assert kind == "web"
+    assert launched == {"url": "https://example.invalid/app", "headed": True}
+    assert callable(close)
+    assert backend is not None
+
+
+def test_coach_hint_and_bind_status_are_local():
+    bridge = AuthoringBridge(FakeAuthoringSession())
+    with pytest.raises(AuthoringError, match="PHI"):
+        bridge.dispatch("set_coach", {"hint": "open https://example.invalid"})
+    with pytest.raises(AuthoringError, match="PHI"):
+        bridge.dispatch("set_coach", {"hint": "call 1234567 now"})
+    set_ok = bridge.dispatch("set_coach", {"hint": "Click Save"})
+    assert set_ok == {"status": "ok", "hint": "Click Save"}
+    assert bridge.dispatch("get_coach", {}) == {"hint": "Click Save"}
+    status = bridge.dispatch("bind_status", {})
+    assert status == {"status": "stdio", "bound": True, "transport": "stdio"}
+    assert "tree" not in status
+    names = [spec.name for spec in bridge.list_tool_specs()]
+    assert names[:4] == list(AUTHORING_PROBE_TOOLS)
+    assert "continue_input" in names
+    assert "set_coach" in names
+    assert "bind_status" in names
+
+
+def test_desktop_ipc_discovery_does_not_open_a_listener(tmp_path, monkeypatch):
+    monkeypatch.setattr("openadapt_agent.authoring.Path.home", lambda: tmp_path)
+    assert discover_desktop_authoring_ipc() is None
+    ipc_dir = tmp_path / ".openadapt"
+    ipc_dir.mkdir()
+    (ipc_dir / "desktop_ipc.json").write_text(
+        json.dumps({"authoring": {"host": "127.0.0.1", "port": 9}}),
+        encoding="utf-8",
+    )
+    found = discover_desktop_authoring_ipc()
+    assert found is not None
+    assert found["endpoint"]["host"] == "127.0.0.1"
+    source = (
+        Path(__file__).resolve().parents[1]
+        / "src"
+        / "openadapt_agent"
+        / "authoring.py"
+    ).read_text(encoding="utf-8")
+    assert "http.client" not in source
+    assert "urlopen" not in source
+
+
+def test_pin_windows_is_coach_only_without_win_agent():
+    backend, kind, close = pin_local_backend(platform="win32")
+    assert backend is None
+    assert kind == "windows"
+    assert close is None
+    session = CoachOnlySession("windows")
+    bridge = AuthoringBridge(session)
+    observed = bridge.dispatch("observe", {})
+    assert observed["coach_only"] is True
+    assert observed["agent_drive"] is False
+    with pytest.raises(AuthoringError, match="COACH_ONLY"):
+        bridge.dispatch("start_record", {})
+
+
+def test_open_authoring_session_uses_f1_constructor_when_present(monkeypatch, tmp_path):
+    captured = {}
+
+    class Session:
+        def __init__(self, backend, out_dir, *, backend_kind, app_url=None, **kwargs):
+            captured["backend"] = backend
+            captured["out_dir"] = Path(out_dir)
+            captured["backend_kind"] = backend_kind
+            captured["app_url"] = app_url
+            captured["thread"] = threading.get_ident()
+
+    import types
+    import sys
+
+    fake_flow = types.ModuleType("openadapt_flow")
+    fake_authoring = types.ModuleType("openadapt_flow.authoring")
+    fake_authoring.AuthoringSession = Session
+    monkeypatch.setitem(sys.modules, "openadapt_flow", fake_flow)
+    monkeypatch.setitem(sys.modules, "openadapt_flow.authoring", fake_authoring)
+    monkeypatch.setattr(
+        "openadapt_agent.authoring.pin_local_backend",
+        lambda **kwargs: ("backend-obj", "web", None),
+    )
+    session = open_authoring_session(out_dir=tmp_path, url="https://example.invalid/")
+    # A --url session is built and driven on its browser owner thread.
+    assert isinstance(session, ThreadOwnedSession)
+    assert captured["thread"] != threading.get_ident()
+    session.close()
+    assert captured["backend"] == "backend-obj"
+    assert captured["backend_kind"] == "web"
+    assert captured["app_url"] == "https://example.invalid/"
+    assert captured["out_dir"] == tmp_path
+
+
+def test_open_authoring_session_windows_without_backend_is_coach_only(monkeypatch, tmp_path):
+    class Session:
+        def __init__(self, *args, **kwargs):
+            raise AssertionError("nothing is pinned, so no Flow session")
+
+    import types
+    import sys
+
+    fake_flow = types.ModuleType("openadapt_flow")
+    fake_authoring = types.ModuleType("openadapt_flow.authoring")
+    fake_authoring.AuthoringSession = Session
+    monkeypatch.setitem(sys.modules, "openadapt_flow", fake_flow)
+    monkeypatch.setitem(sys.modules, "openadapt_flow.authoring", fake_authoring)
+    session = open_authoring_session(out_dir=tmp_path, platform="win32")
+    assert isinstance(session, CoachOnlySession)
+    assert session.backend_kind == "windows"
+
+
+def test_open_authoring_session_windows_backend_constructs_flow_session(monkeypatch, tmp_path):
+    captured = {}
+
+    class Session:
+        def __init__(self, backend, out_dir, *, backend_kind, app_url=None):
+            captured["backend"] = backend
+            captured["backend_kind"] = backend_kind
+
+    import types
+    import sys
+
+    fake_flow = types.ModuleType("openadapt_flow")
+    fake_authoring = types.ModuleType("openadapt_flow.authoring")
+    fake_authoring.AuthoringSession = Session
+    monkeypatch.setitem(sys.modules, "openadapt_flow", fake_flow)
+    monkeypatch.setitem(sys.modules, "openadapt_flow.authoring", fake_authoring)
+    pinned = object()
+    session = open_authoring_session(
+        out_dir=tmp_path, backend=pinned, backend_kind="windows"
+    )
+    assert isinstance(session, Session)
+    assert captured == {"backend": pinned, "backend_kind": "windows"}
+
+
+def test_open_authoring_session_maps_f1_coach_only_error(monkeypatch, tmp_path):
+    class CoachOnlyError(RuntimeError):
+        def __init__(self):
+            super().__init__("COACH_ONLY")
+            self.code = "COACH_ONLY"
+
+    class Session:
+        def __init__(self, *args, **kwargs):
+            raise CoachOnlyError()
+
+    import types
+    import sys
+
+    fake_flow = types.ModuleType("openadapt_flow")
+    fake_authoring = types.ModuleType("openadapt_flow.authoring")
+    fake_authoring.AuthoringSession = Session
+    monkeypatch.setitem(sys.modules, "openadapt_flow", fake_flow)
+    monkeypatch.setitem(sys.modules, "openadapt_flow.authoring", fake_authoring)
+    session = open_authoring_session(
+        out_dir=tmp_path, backend=object(), backend_kind="web"
+    )
+    assert isinstance(session, CoachOnlySession)
+
+
+class _ThreadBoundBackend:
+    """Stands in for sync Playwright: every call must come from its own thread."""
+
+    def __init__(self, owner: int):
+        self.owner = owner
+        self.calls: list[str] = []
+
+    def check(self, name: str) -> None:
+        if threading.get_ident() != self.owner:
+            raise AssertionError(f"{name} ran off the thread that launched the browser")
+        self.calls.append(name)
+
+
+def install_fake_playwright_flow(monkeypatch) -> dict:
+    """Fake Flow whose browser launch behaves like sync_playwright().start().
+
+    Like the real launch, it leaves an event loop marked running on the
+    calling thread and returns objects bound to that thread.
+    """
+
+    import sys
+    import types
+
+    launched: dict = {}
+
+    class PlaywrightBackend:
+        @classmethod
+        def launch(cls, url, headless=True):
+            loop = asyncio.new_event_loop()
+            asyncio._set_running_loop(loop)
+            owner = threading.get_ident()
+            backend = _ThreadBoundBackend(owner)
+            launched.update(url=url, headless=headless, thread=owner, loop=loop, backend=backend)
+
+            def close():
+                backend.check("close")
+                asyncio._set_running_loop(None)
+                loop.close()
+                launched["closed"] = True
+
+            return backend, close
+
+    class Session:
+        backend_kind = "web"
+
+        def __init__(self, backend):
+            self._backend = backend
+
+        def observe(self):
+            self._backend.check("observe")
+            return {"backend": "web", "provider": "playwright_ax", "tree": []}
+
+        def start_record(self):
+            self._backend.check("start_record")
+            return None
+
+        def halt(self):
+            self._backend.check("halt")
+            return None
+
+    def open_session(backend, out_dir, *, backend_kind, app_url=None):
+        backend.check("open_session")
+        return Session(backend)
+
+    fake_flow = types.ModuleType("openadapt_flow")
+    fake_authoring = types.ModuleType("openadapt_flow.authoring")
+    fake_authoring.open_session = open_session
+    fake_backends = types.ModuleType("openadapt_flow.backends")
+    fake_playwright = types.ModuleType("openadapt_flow.backends.playwright_backend")
+    fake_playwright.PlaywrightBackend = PlaywrightBackend
+    monkeypatch.setitem(sys.modules, "openadapt_flow", fake_flow)
+    monkeypatch.setitem(sys.modules, "openadapt_flow.authoring", fake_authoring)
+    monkeypatch.setitem(sys.modules, "openadapt_flow.backends", fake_backends)
+    monkeypatch.setitem(
+        sys.modules, "openadapt_flow.backends.playwright_backend", fake_playwright
+    )
+    return launched
+
+
+def tool_is_error(result) -> bool:
+    """Read isError the same way on both MCP SDK generations."""
+
+    return result.model_dump(by_alias=True, mode="json")["isError"] is True
+
+
+def release_main_thread_loop(launched: dict) -> None:
+    """Undo a launch that ran on this thread so later tests can start anyio."""
+
+    if launched.get("thread") == threading.get_ident() and not launched.get("closed"):
+        asyncio._set_running_loop(None)
+        launched["loop"].close()
+
+
+def test_url_session_keeps_playwright_on_one_owner_thread_under_anyio(
+    monkeypatch, tmp_path, mcp_client
+):
+    launched = install_fake_playwright_flow(monkeypatch)
+    try:
+        session = open_authoring_session(
+            out_dir=tmp_path, url="http://127.0.0.1:9/", headed=True
+        )
+        server = build_server(authoring=AuthoringBridge(session, out_dir=tmp_path))
+
+        async def drive():
+            async with mcp_client(server) as client:
+                return [
+                    await client.call_tool(name, {})
+                    for name in ("observe", "start_record", "halt")
+                ]
+
+        # anyio refuses to start on a thread where Playwright left its loop.
+        results = anyio.run(drive)
+        assert [tool_is_error(result) for result in results] == [False, False, False], [
+            result.content[0].text for result in results
+        ]
+        assert launched["thread"] != threading.get_ident()
+        assert launched["headless"] is False
+        with pytest.raises(RuntimeError):
+            asyncio.get_running_loop()
+        session.close()
+        assert launched["closed"] is True
+        assert launched["backend"].calls == [
+            "open_session",
+            "observe",
+            "start_record",
+            "halt",
+            "close",
+        ]
+        with pytest.raises(AuthoringError, match="closed"):
+            session.observe()
+        session.close()
+    finally:
+        release_main_thread_loop(launched)
+
+
+def test_authoring_url_headed_serve_starts_and_dispatches_tools(
+    monkeypatch, tmp_path, capsys, mcp_client
+):
+    from openadapt_agent.cli import main
+
+    launched = install_fake_playwright_flow(monkeypatch)
+    captured: dict = {}
+
+    async def fake_run_stdio(bridge, authoring=None):
+        # Same anyio.run entry as stdio serve, with an in-memory client.
+        server = build_server(bridge, authoring=authoring)
+        async with mcp_client(server) as client:
+            captured["observe"] = await client.call_tool("observe", {})
+            captured["start_record"] = await client.call_tool("start_record", {})
+
+    monkeypatch.setattr("openadapt_agent.mcp._run_stdio", fake_run_stdio)
+    try:
+        result = main(
+            [
+                "serve",
+                "--authoring",
+                "--url",
+                "http://127.0.0.1:9/",
+                "--headed",
+                "--runs-dir",
+                str(tmp_path / "runs"),
+            ]
+        )
+        err = capsys.readouterr().err
+        assert result == 0, err
+        assert "Already running asyncio" not in err
+        assert tool_is_error(captured["observe"]) is False
+        assert tool_is_error(captured["start_record"]) is False
+        assert launched["closed"] is True
+    finally:
+        release_main_thread_loop(launched)
+
+
+def test_url_session_refusal_stops_the_owner_thread(monkeypatch, tmp_path):
+    install_fake_playwright_flow(monkeypatch)
+    before = {thread.name for thread in threading.enumerate()}
+    with pytest.raises(AuthoringError, match="empty cookies"):
+        open_authoring_session(out_dir=tmp_path, url="http://127.0.0.1:9/", headed=False)
+    assert {thread.name for thread in threading.enumerate()} <= before
+
+
+def test_url_coach_only_fallback_still_refuses_type_behind_owner_thread(
+    monkeypatch, tmp_path
+):
+    """Windows --url that cannot pin a browser stays coach-only, not "recorded"."""
+
+    install_fake_playwright_flow(monkeypatch)
+    session = open_authoring_session(
+        out_dir=tmp_path, url="http://127.0.0.1:9/", headed=False, platform="win32"
+    )
+    try:
+        bridge = AuthoringBridge(session, out_dir=tmp_path)
+        with pytest.raises(AuthoringError, match="COACH_ONLY"):
+            bridge.dispatch("type", {"text": "hello"})
+        with pytest.raises(AuthoringError, match="COACH_ONLY"):
+            bridge.dispatch("click", {"x": 1, "y": 2})
+    finally:
+        closer = getattr(session, "close", None)
+        if callable(closer):
+            closer()
+
+
+def test_url_session_construction_failure_closes_the_browser(monkeypatch, tmp_path):
+    import sys
+
+    launched = install_fake_playwright_flow(monkeypatch)
+
+    def broken_open_session(backend, out_dir, *, backend_kind, app_url=None):
+        raise RuntimeError("recorder unavailable")
+
+    monkeypatch.setattr(
+        sys.modules["openadapt_flow.authoring"], "open_session", broken_open_session
+    )
+    before = {thread.name for thread in threading.enumerate()}
+    try:
+        with pytest.raises(AuthoringError, match="recorder unavailable"):
+            open_authoring_session(out_dir=tmp_path, url="http://127.0.0.1:9/", headed=True)
+        assert launched["closed"] is True
+        assert {thread.name for thread in threading.enumerate()} <= before
+    finally:
+        release_main_thread_loop(launched)
+
+
+_DEMO_PAGE = b"""<!doctype html><html><head><title>Demo</title></head><body>
+<label for="note">Note</label><input id="note" aria-label="Note">
+<button id="save">Save</button></body></html>"""
+
+
+def test_real_url_session_serves_tools_under_anyio(monkeypatch, tmp_path, mcp_client):
+    """Real Playwright Chromium behind serve --authoring --url --headed.
+
+    Skips when the browser extra or Chromium is missing. Never downloads a
+    browser. Chromium runs headless here so the test needs no display.
+    """
+
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+    pytest.importorskip("playwright")
+    try:
+        from openadapt_flow import authoring as _flow_authoring  # noqa: F401
+        from openadapt_flow._browser_setup import NO_AUTO_INSTALL_ENV, _chromium_present
+        from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+    except ImportError:
+        pytest.skip("Flow authoring with the browser extra is not installed")
+    monkeypatch.setenv(NO_AUTO_INSTALL_ENV, "1")
+    try:
+        present = _chromium_present()
+    except Exception:
+        present = False
+    if not present:
+        pytest.skip("Playwright Chromium is not installed")
+
+    launch = PlaywrightBackend.launch.__func__
+
+    def headless_launch(cls, url, headless=True, **kwargs):
+        return launch(cls, url, headless=True, **kwargs)
+
+    monkeypatch.setattr(PlaywrightBackend, "launch", classmethod(headless_launch))
+
+    class DemoPage(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            self.wfile.write(_DEMO_PAGE)
+
+        def log_message(self, *args):
+            return None
+
+    site = ThreadingHTTPServer(("127.0.0.1", 0), DemoPage)
+    threading.Thread(target=site.serve_forever, daemon=True).start()
+    try:
+        session = open_authoring_session(
+            out_dir=tmp_path,
+            url=f"http://127.0.0.1:{site.server_port}/",
+            headed=True,
+        )
+        try:
+            server = build_server(authoring=AuthoringBridge(session, out_dir=tmp_path))
+
+            async def drive():
+                async with mcp_client(server) as client:
+                    observed = await client.call_tool("observe", {})
+                    tree = json.loads(observed.content[0].text)["tree"]
+                    button = next(node for node in tree if node["role"] == "button")
+                    results = [
+                        observed,
+                        await client.call_tool("start_record", {}),
+                        await client.call_tool("click", {"node_id": button["node_id"]}),
+                        await client.call_tool("halt", {}),
+                    ]
+                    return tree, results
+
+            tree, results = anyio.run(drive)
+        finally:
+            session.close()
+    finally:
+        site.shutdown()
+        site.server_close()
+    assert [tool_is_error(result) for result in results] == [False] * 4, [
+        result.content[0].text for result in results
+    ]
+    assert {node["role"] for node in tree} >= {"button", "text_input"}
+
+
+# -- B077: serve --authoring without --url on macOS ----------------------------
+
+
+class _FakeMacWindow:
+    def __init__(self, window_id, owner, title):
+        self.window_id = window_id
+        self.owner = owner
+        self.title = title
+
+
+class _FakeMacWindowClient:
+    """Flow's MacWindowClient semantics: exact, case-insensitive owner match."""
+
+    windows = [
+        _FakeMacWindow(7, "Google Chrome", "Inbox - Clinic"),
+        _FakeMacWindow(8, "Google Chrome", "Schedule"),
+        _FakeMacWindow(9, "Finder", "Downloads"),
+    ]
+    front = 7
+
+    def frontmost_window_id(self):
+        return self.front
+
+    def find_windows(self, owner, title):
+        return [
+            window
+            for window in self.windows
+            if window.owner.casefold() == owner.casefold()
+            and (title is None or window.title.casefold() == title.casefold())
+        ]
+
+
+class _FakeMacOSBackend:
+    def __init__(self, client, *, app, window_title=None):
+        self.client = client
+        self.app = app
+        self.window_title = window_title
+
+
+def _fake_quartz(windows):
+    import importlib.machinery
+    import types as pytypes
+
+    module = pytypes.ModuleType("Quartz")
+    module.__spec__ = importlib.machinery.ModuleSpec("Quartz", None)
+    module.kCGWindowListOptionIncludingWindow = 8
+    module.kCGNullWindowID = 0
+
+    def copy_window_info(option, window_id):
+        assert option == module.kCGWindowListOptionIncludingWindow
+        return [
+            {
+                "kCGWindowNumber": window.window_id,
+                "kCGWindowOwnerName": window.owner,
+                "kCGWindowName": window.title,
+                "kCGWindowLayer": 0,
+            }
+            for window in windows
+            if window.window_id == window_id
+        ]
+
+    module.CGWindowListCopyWindowInfo = copy_window_info
+    return module
+
+
+@pytest.fixture()
+def fake_mac(monkeypatch):
+    import sys as _sys
+
+    monkeypatch.setattr(
+        "openadapt_flow.backends.remote_display.MacWindowClient", _FakeMacWindowClient
+    )
+    monkeypatch.setattr(
+        "openadapt_flow.backends.macos_backend.MacOSBackend", _FakeMacOSBackend
+    )
+    monkeypatch.setitem(_sys.modules, "Quartz", _fake_quartz(_FakeMacWindowClient.windows))
+    return _FakeMacWindowClient
+
+
+def test_tutorial_extra_includes_macos_deps():
+    import re
+
+    text = (Path(__file__).resolve().parents[1] / "pyproject.toml").read_text(encoding="utf-8")
+    block = text.split("[project.optional-dependencies]", 1)[1].split("\n[", 1)[0]
+    tutorial = block.split("tutorial = [", 1)[1].split("]\n", 1)[0]
+    extras = re.search(r"openadapt-flow\[([^\]]+)\]", tutorial)
+    assert extras is not None
+    assert "macos" in {item.strip() for item in extras.group(1).split(",")}
+
+
+def test_pin_native_darwin_resolves_frontmost(fake_mac):
+    backend, kind, close = pin_local_backend(platform="darwin")
+    assert kind == "macos"
+    assert close is None
+    assert isinstance(backend, _FakeMacOSBackend)
+    assert backend.app == "Google Chrome"
+    assert backend.window_title == "Inbox - Clinic"
+
+
+def test_pin_native_darwin_refuses_a_shared_title(fake_mac, monkeypatch):
+    import sys as _sys
+
+    windows = [
+        _FakeMacWindow(7, "Google Chrome", "New Tab"),
+        _FakeMacWindow(8, "Google Chrome", "New Tab"),
+    ]
+    monkeypatch.setattr(fake_mac, "windows", windows)
+    monkeypatch.setitem(_sys.modules, "Quartz", _fake_quartz(windows))
+    with pytest.raises(AuthoringError, match="same title") as exc_info:
+        pin_local_backend(platform="darwin")
+    assert "New Tab" not in str(exc_info.value)
+
+
+def test_pin_native_darwin_names_screen_recording_when_titles_are_hidden(
+    fake_mac, monkeypatch
+):
+    import sys as _sys
+
+    windows = [
+        _FakeMacWindow(7, "Google Chrome", ""),
+        _FakeMacWindow(8, "Google Chrome", ""),
+    ]
+    monkeypatch.setattr(fake_mac, "windows", windows)
+    monkeypatch.setitem(_sys.modules, "Quartz", _fake_quartz(windows))
+    with pytest.raises(AuthoringError, match="Screen Recording"):
+        pin_local_backend(platform="darwin")
+
+
+def test_pin_native_darwin_without_a_front_window_says_so(fake_mac, monkeypatch):
+    monkeypatch.setattr(fake_mac, "front", None)
+    with pytest.raises(AuthoringError, match="No app window is in front"):
+        pin_local_backend(platform="darwin")
+
+
+def test_pin_native_darwin_missing_quartz_names_dependency(fake_mac, monkeypatch):
+    import importlib.util
+
+    real_find_spec = importlib.util.find_spec
+
+    def find_spec(name, *args, **kwargs):
+        if name == "Quartz":
+            return None
+        return real_find_spec(name, *args, **kwargs)
+
+    monkeypatch.setattr(importlib.util, "find_spec", find_spec)
+    with pytest.raises(AuthoringError) as exc_info:
+        pin_local_backend(platform="darwin")
+    message = str(exc_info.value)
+    assert "pyobjc" in message
+    assert "openadapt-flow[macos]" in message
+
+
+def test_pin_native_darwin_front_window_not_listed_is_not_called_a_shared_title(
+    fake_mac, monkeypatch
+):
+    # find_windows skips windows with no size, so the front window can be
+    # missing from its app's list. That isn't "more than one window".
+    class _HidesFront(fake_mac):
+        def find_windows(self, owner, title):
+            return [w for w in super().find_windows(owner, title) if w.window_id != self.front]
+
+    monkeypatch.setattr(
+        "openadapt_flow.backends.remote_display.MacWindowClient", _HidesFront
+    )
+    with pytest.raises(AuthoringError, match="didn't list the frontmost window") as exc_info:
+        pin_local_backend(platform="darwin")
+    assert "same title" not in str(exc_info.value)
+    assert "Inbox - Clinic" not in str(exc_info.value)
