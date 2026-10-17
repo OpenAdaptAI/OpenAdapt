@@ -1902,8 +1902,8 @@ macos = [
     { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin'" },
 ]
 native-ocr = [
-    { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin'" },
-    { name = "pyobjc-framework-vision", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-core", marker = "sys_platform == 'darwin'" },
+    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin'" },
     { name = "winrt-runtime", marker = "sys_platform == 'win32'" },
     { name = "winrt-windows-foundation", marker = "sys_platform == 'win32'" },
     { name = "winrt-windows-foundation-collections", marker = "sys_platform == 'win32'" },
@@ -1978,11 +1978,11 @@ requires-dist = [
     { name = "playwright", marker = "extra == 'dev'", specifier = ">=1.44" },
     { name = "pydantic", specifier = ">=2.5" },
     { name = "pygobject", marker = "sys_platform == 'linux' and extra == 'linux'", specifier = ">=3.46" },
+    { name = "pyobjc-core", marker = "sys_platform == 'darwin' and extra == 'native-ocr'", specifier = ">=10.0" },
     { name = "pyobjc-framework-applicationservices", marker = "sys_platform == 'darwin' and extra == 'macos'", specifier = ">=10.3" },
     { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin' and extra == 'macos'", specifier = ">=10.3" },
+    { name = "pyobjc-framework-cocoa", marker = "sys_platform == 'darwin' and extra == 'native-ocr'", specifier = ">=10.0" },
     { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin' and extra == 'macos'", specifier = ">=10.3" },
-    { name = "pyobjc-framework-quartz", marker = "sys_platform == 'darwin' and extra == 'native-ocr'", specifier = ">=10.0" },
-    { name = "pyobjc-framework-vision", marker = "sys_platform == 'darwin' and extra == 'native-ocr'", specifier = ">=10.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8" },
     { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=5.0" },
     { name = "pytest-timeout", marker = "extra == 'dev'", specifier = ">=2.2" },
@@ -2589,21 +2589,6 @@ wheels = [
 ]
 
 [[package]]
-name = "pyobjc-framework-coreml"
-version = "12.2.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pyobjc-core" },
-    { name = "pyobjc-framework-cocoa" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/98/1e/7d2db3e4468eb04cc92264be83113d86eea4f96302742437de695a445d6d/pyobjc_framework_coreml-12.2.1.tar.gz", hash = "sha256:ef3c2b6a160891b44173235603d10174929656b9c206d6f2f443fe2aa903c2cb", size = 49272, upload-time = "2026-06-19T16:20:18.459Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f9/5b/caf7ddf83f1faf049a519fa5b515263953e08474543cde2f0fa8b084b05b/pyobjc_framework_coreml-12.2.1-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:3d04c58b18ce9a136ea9184f604658d50b8753ad4634638ac50e360298a3eb81", size = 11947, upload-time = "2026-06-19T16:09:16.366Z" },
-    { url = "https://files.pythonhosted.org/packages/d5/93/1c5ca6b3cdb32d37b1df64d18d6e38b73ad7cf30b55ff51083093e5c8388/pyobjc_framework_coreml-12.2.1-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:711be8528b0cbbc49b5bd4669309f0ad0de6ed76499ffb706b0dd2f1b294293f", size = 11945, upload-time = "2026-06-19T16:09:17.464Z" },
-    { url = "https://files.pythonhosted.org/packages/75/d9/d639ecf7f5730482c0be4a9a0e340a06d48fecad0976ca708cdfb4b79429/pyobjc_framework_coreml-12.2.1-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:ca06f106c8d0e2e818212e6cfe9270bd333983ffd086be7b474fc9df34cbc5cc", size = 11973, upload-time = "2026-06-19T16:09:18.357Z" },
-]
-
-[[package]]
 name = "pyobjc-framework-coretext"
 version = "12.2.1"
 source = { registry = "https://pypi.org/simple" }
@@ -2632,23 +2617,6 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/e7/8f/7b2abbade50ed918e59c3dfe14aece0f0f8a4dc43a3884fd4f2508c7787a/pyobjc_framework_quartz-12.2.1-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:c8fed57ac8a1927e4fe4f48ab4042cbc1087d881743182b6f3f2e6e227a9209f", size = 218013, upload-time = "2026-06-19T16:16:01.768Z" },
     { url = "https://files.pythonhosted.org/packages/b9/08/527d1ff856e2f2446b5887be01989cc08f9adaf3de7d4eb13d07826c362f/pyobjc_framework_quartz-12.2.1-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:60f29408b4f9ed5391a29c6b63e2aa56ddfb8b66b3fb47962930427981e14462", size = 217998, upload-time = "2026-06-19T16:16:02.978Z" },
     { url = "https://files.pythonhosted.org/packages/14/fc/d7c7b3134cdbd1a487f3f77b5be125d87a6c9e7d9411035739d99335cc0c/pyobjc_framework_quartz-12.2.1-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:de9c8cca7e95290c8d540466af11c7cdfe3a5458e6f56c34006d5b45243f9ed9", size = 219000, upload-time = "2026-06-19T16:16:04.29Z" },
-]
-
-[[package]]
-name = "pyobjc-framework-vision"
-version = "12.2.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "pyobjc-core" },
-    { name = "pyobjc-framework-cocoa" },
-    { name = "pyobjc-framework-coreml" },
-    { name = "pyobjc-framework-quartz" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/0e/7a/1fdffff1b6bf124b260a2169869f4b71a08b9f6603698f7dec990d5ae5f3/pyobjc_framework_vision-12.2.1.tar.gz", hash = "sha256:debfd59dd7d962a6053bf733370148c11a9ec44091b517a0966f48d81c305879", size = 72683, upload-time = "2026-06-19T16:22:01.102Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/2f/95/f3654046937fa1de8bf2998bfcaa2ce2da05676cce059ed0760073fd21a5/pyobjc_framework_vision-12.2.1-cp310-cp310-macosx_10_9_universal2.whl", hash = "sha256:c9792afbc3ba16483095d9a90c3f7a562383a6d7e86d2783824fab9b4b562219", size = 21792, upload-time = "2026-06-19T16:19:21.332Z" },
-    { url = "https://files.pythonhosted.org/packages/f5/dc/a4043619a8c1bae2ef0463ebf88b3d2d5973ad5809dcc5d2d5fc93f34151/pyobjc_framework_vision-12.2.1-cp311-cp311-macosx_10_9_universal2.whl", hash = "sha256:86f221d7ced483e7292194293b791a255e0bd1e4011048533501679e378d40fd", size = 21794, upload-time = "2026-06-19T16:19:22.356Z" },
-    { url = "https://files.pythonhosted.org/packages/3c/1b/ee3aa7d1517d2d161cd9c2d00b9fc19206d2472b4bb35e98835ec9992d02/pyobjc_framework_vision-12.2.1-cp312-cp312-macosx_10_13_universal2.whl", hash = "sha256:fa2e56d891eab12a0ddac2373c69957c108f70dea56f5a9a6081a3c2f905c98b", size = 16947, upload-time = "2026-06-19T16:19:23.209Z" },
 ]
 
 [[package]]

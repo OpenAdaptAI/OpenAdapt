@@ -61,13 +61,20 @@ def _choice() -> str:
     return choice
 
 
+_VISION_FRAMEWORK = "/System/Library/Frameworks/Vision.framework"
+
+
 def native_backend_available() -> bool:
     """Return whether this platform's native OCR can be imported, cheaply."""
     import importlib.util
 
     try:
         if sys.platform == "darwin":
-            return importlib.util.find_spec("Vision") is not None
+            return (
+                importlib.util.find_spec("objc") is not None
+                and importlib.util.find_spec("Foundation") is not None
+                and os.path.isdir(_VISION_FRAMEWORK)
+            )
         if sys.platform.startswith("win"):
             return importlib.util.find_spec("winrt.windows.media.ocr") is not None
     except (ImportError, ValueError):
@@ -137,50 +144,55 @@ class AppleVisionEngine:
 
     Language correction is off so identifiers such as MRNs are read as drawn,
     not corrected toward dictionary words.
+
+    Vision.framework is loaded straight from the system with
+    ``objc.loadBundle``, and Vision decodes the PNG itself. That skips
+    PyObjC's Vision and Quartz wrapper packages, which take about two seconds
+    to load the first time on a new install.
     """
 
     name = "apple-vision"
     languages = ("en-US",)
+    #: ``VNRequestTextRecognitionLevelAccurate``.
+    _LEVEL_ACCURATE = 0
 
     def __init__(self) -> None:
-        import Quartz  # noqa: F401 - fail here, not mid-run
-        import Vision
+        import objc
+        from Foundation import NSData
 
-        self._vision = Vision
+        classes: dict[str, Any] = {}
+        objc.loadBundle("Vision", classes, bundle_path=_VISION_FRAMEWORK)
+        self._request_class = classes["VNRecognizeTextRequest"]
+        self._handler_class = classes["VNImageRequestHandler"]
+        self._nsdata = NSData
         self._lock = threading.Lock()
-        probe = Vision.VNRecognizeTextRequest.alloc().init()
+        probe = self._request_class.alloc().init()
         self._revision = int(probe.revision())
 
     def _request(self) -> Any:
-        vision = self._vision
-        request = vision.VNRecognizeTextRequest.alloc().init()
+        request = self._request_class.alloc().init()
         request.setRevision_(self._revision)
-        request.setRecognitionLevel_(vision.VNRequestTextRecognitionLevelAccurate)
+        request.setRecognitionLevel_(self._LEVEL_ACCURATE)
         request.setUsesLanguageCorrection_(False)
         request.setRecognitionLanguages_(list(self.languages))
         return request
 
     def recognize_png(self, png: bytes) -> list[RawLine]:
-        import Quartz
-        from Foundation import NSData
+        from openadapt_flow.vision.imgops import png_size
 
-        data = NSData.dataWithBytes_length_(png, len(png))
-        source = Quartz.CGImageSourceCreateWithData(data, None)
-        if source is None:
+        size = png_size(png)
+        if size is None:
             raise ValueError("could not decode PNG bytes")
-        image = Quartz.CGImageSourceCreateImageAtIndex(source, 0, None)
-        if image is None:
-            raise ValueError("could not decode PNG bytes")
-        width = Quartz.CGImageGetWidth(image)
-        height = Quartz.CGImageGetHeight(image)
+        width, height = size
+        data = self._nsdata.dataWithBytes_length_(png, len(png))
         request = self._request()
-        handler = self._vision.VNImageRequestHandler.alloc().initWithCGImage_options_(
-            image, None
-        )
+        handler = self._handler_class.alloc().initWithData_options_(data, None)
         with self._lock:
-            ok, error = handler.performRequests_error_([request], None)
+            result = handler.performRequests_error_([request], None)
+        # Without the wrapper's metadata PyObjC returns only the BOOL.
+        ok = result[0] if isinstance(result, tuple) else bool(result)
         if not ok:
-            raise RuntimeError(f"Apple Vision text recognition failed: {error}")
+            raise RuntimeError("Apple Vision text recognition failed")
         lines: list[RawLine] = []
         for observation in request.results() or []:
             candidates = observation.topCandidates_(1)
@@ -218,6 +230,7 @@ class AppleVisionEngine:
             "recognition_level": "accurate",
             "language_correction": False,
             "languages": list(self.languages),
+            "image_input": "png-data",
             "pyobjc": str(getattr(objc, "__version__", "")),
         }
 

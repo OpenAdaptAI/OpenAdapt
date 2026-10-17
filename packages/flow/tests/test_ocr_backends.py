@@ -108,7 +108,7 @@ def test_runtime_imports_do_not_load_opencv() -> None:
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="Apple Vision is macOS-only")
 def test_apple_vision_reads_rendered_text() -> None:
-    pytest.importorskip("Vision")
+    pytest.importorskip("objc")
     engine = ob.AppleVisionEngine()
     image = Image.new("RGB", (480, 120), "white")
     draw = ImageDraw.Draw(image)
@@ -127,3 +127,19 @@ def test_apple_vision_reads_rendered_text() -> None:
     contract = engine.contract()
     assert contract["engine"] == "apple-vision"
     assert contract["language_correction"] is False
+
+
+def test_prewarm_image_is_a_valid_png() -> None:
+    """The prewarm image must decode, or the native engine rejects it and
+    the warm-up silently does nothing (the earlier 1x1 constant did)."""
+    from openadapt_flow import _prewarm
+    from openadapt_flow.vision.imgops import png_size
+
+    assert png_size(_prewarm._blank_png()) == (64, 16)
+    import io
+
+    from PIL import Image
+
+    with Image.open(io.BytesIO(_prewarm._blank_png())) as image:
+        image.load()
+        assert image.size == (64, 16)
