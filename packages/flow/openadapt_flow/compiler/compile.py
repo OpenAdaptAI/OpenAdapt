@@ -2651,6 +2651,26 @@ def compile_recording(
                 len(decisions),
             )
 
+    # Default fix-up passes (see compiler.fixup_passes): replace a demonstrated
+    # gesture that asserts nothing with an equivalent checked one, using only
+    # the recording's own frames. Every change is recorded in
+    # ``compile_notes.json`` so the bundle stays auditable.
+    from openadapt_flow.compiler.fixup_passes import (
+        apply_fixup_passes,
+        write_compile_notes,
+    )
+
+    steps, compile_notes = apply_fixup_passes(
+        steps,
+        {step.id: (sb, sa) for step, sb, sa, _event in pending},
+        bundle,
+        crop_png=_crop_png,
+        phash_png=phash_png,
+        surface=surface,
+    )
+    for note in compile_notes:
+        logger.info("compile-pass %s: %s", note["step"], note["change"])
+
     workflow = Workflow(
         name=name,
         recording_id=meta.get("id"),
@@ -2901,6 +2921,7 @@ def compile_recording(
     )
     workflow.encrypted = False
 
+    write_compile_notes(bundle, compile_notes)
     workflow.save(bundle)
     (bundle / "workflow.py").write_text(render_workflow_py(workflow))
     return workflow
