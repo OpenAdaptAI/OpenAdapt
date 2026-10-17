@@ -1993,7 +1993,7 @@ def _resolve_surface_bindings(args: argparse.Namespace, cfg, workflow) -> dict:
 
     flags = list(getattr(args, "surface", None) or [])
     configured = dict(getattr(cfg, "surfaces", {}) or {})
-    if not workflow.surfaces:
+    if not getattr(workflow, "surfaces", None):
         if flags or configured:
             raise SystemExit(
                 "REFUSED: --surface / surfaces: were given, but this bundle "
