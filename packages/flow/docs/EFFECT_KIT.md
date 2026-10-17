@@ -230,56 +230,166 @@ Frappe Lending reference matrix (`benchmark/frappe_lending/fixture.py`, PR
 every other audited table by exactly 0. This is a harness-level companion to
 the verifier (it brackets a whole run, not one step).
 
-## A read-back the person shows ("Show how to check the save")
+## A read-back taught by demonstration ("Now show how you'd check it saved")
 
-For an application with no API, database or export, the person can show how
-they would check the save at the end of the recording. In an authoring
-session, `begin_check()` returns the prompt "Show how to check the save".
-The person then navigates to the saved record (recorded like any other step)
-and marks each field that shows a value they typed, with `mark_field(param=...,
-node_id=...)`. The marks are stored beside the recording as `check.json`, and
-`compile_recording` turns them into an `onscreen` read-back on the save step
-(`openadapt_flow/compiler/readback_authoring.py`):
+For an application with no API, database or export (a legacy desktop app,
+or one reached over Citrix or RDP), the record check has to go through the
+application's own screens. The person records the save, then records how an
+auditor would prove it persisted: throw away what the screen remembers,
+open the saved record, read the fields. `compile` turns the second part into
+an `onscreen` read-back on the save step
+(`openadapt_flow/compiler/readback_authoring.py`).
 
-- the navigation leaves the task and becomes the read-back's re-navigation. A
-  value typed into a search box (for example the patient's name) is replayed
-  with this run's value;
-- each marked field is a screen region, compared with the run parameter typed
-  into the form. Every field must read back. One unreadable field makes the
-  check `INDETERMINATE`, and a readable field with another value makes it
-  `REFUTED`. Either one halts the run;
-- compiling checks the marks against the demonstration. Each marked region must
-  show the value typed for its parameter, or compiling fails. A check that
-  types a secret, marks an input that wasn't typed, or comes before any save is
-  refused.
+### Recording the check
 
-Each field is read one of two ways:
+There are three ways to record it:
 
-- **From the page structure.** When the backend can read the text an element
-  shows (`displayed_text_at`; the browser backend reads the DOM) and, at
-  marking time, the marked element showed exactly the value typed for its
-  parameter, the field is compiled with `source: structure`. At runtime the
-  element at the field's center must show exactly the expected value. A
-  backend that can't read the structure makes the check `INDETERMINATE`; it
-  does not fall back to OCR. The page body is never read as a field.
-- **By OCR** of the marked region, otherwise.
+- **CLI.** `openadapt-flow record --with-check ...` prints the prompt "Now
+  show how you'd check it saved." The person does the task, saves, and goes
+  on to the check in the same recording. Afterwards the CLI lists the
+  recorded events and asks where the check starts and which fields show the
+  typed values (`PARAM=X,Y,W,H`, in frame pixels). For a recording made
+  without the flag, `openadapt-flow check mark REC --start-event N --field
+  PARAM=X,Y,W,H` writes the same file.
+- **Authoring session** (an agent or the Desktop app driving Flow). Calling
+  `begin_check()` returns the prompt. Every event after it belongs to the
+  check. `mark_field(param=..., node_id=...)` marks a field, and
+  `mark_reset(kind)` names the last step as the reset when Flow can't
+  recognize it.
+- **By hand.** `check.json` beside the recording holds `start_event`, the
+  marked `fields`, an optional declared `reset`, and the `prompt` the person
+  saw.
 
-Reading the structure avoids OCR misreads. It is not more independent: it is
-still the same application and session, and the tier is the same. Native
-accessibility reads (macOS, Linux) and template matching aren't implemented.
+### What compiling checks
 
-How strong it is, compared with a read outside the application:
+- **A state reset before the read.** The check must contain a step that
+  throws away client-side state: a reload (F5, Ctrl+R or Cmd+R), a new
+  search (text typed, then submitted with Enter or a click), or a window
+  closed by key and then reopened. Flow can't recognize a click on a
+  browser's reload button or a fresh sign-in from the recording, so the
+  person names those (`--reset KIND@EVENT`, or `mark_reset`). Their kinds
+  are `reload`, `new_search`, `reopen_window` and `fresh_session`. The
+  compiled check records whether the reset was `detected` or only
+  `declared`. A check with no reset is refused. Without one, the check could
+  read the form the save left behind, or a page the browser rendered without
+  fetching, and a save that never reached the record would pass. Before this
+  rule, fields marked on the screen the save left compiled into a re-read of
+  that screen (tier 4). They are now refused; that weaker read is only
+  available as a hand-configured `effects.kind: onscreen`.
+- **The marks match the demonstration.** Each marked region must show the
+  value typed for its parameter on the screen where it was marked. A check
+  that types a secret, marks a value that wasn't typed, or comes before any
+  save is refused.
+- **The navigation leaves the task.** It becomes the read-back's
+  re-navigation, replayed after the save. A value typed into a search box
+  (for example the patient's name) is replayed with this run's value.
 
-| The check | Tier | What it can catch | What it can't |
-|---|---|---|---|
-| re-opens the record (at least two navigation actions) | 3, `reacquired-state` | a save only the form showed; a wrong value in a marked field | a page served from a cache the write filled; a duplicate submit; a lost update by another writer; fields nobody marked |
-| fields marked on the screen the save left | 4, `screen-consistency` | a value the save's own screen shows wrong | anything the screen paints but the record never got |
-| `ui_readback` (separate signed-in browser session) | 2, `independent-session` | the above, without sharing the acting session | it is still the same application, not its record store |
-| REST, SQL, FHIR and other system-of-record reads | 1, `independent-system` | what the record store holds | |
+### A person admits the check
 
-A check the person shows is never a system-of-record read. Under
-`problems_only` approval, a save checked this way still goes to a person
-(`onscreen_readback`). At runtime it makes no model calls.
+The compiled check is marked `demonstrated` and has no admission. Until a
+person admits it, it can't confirm a save: the verifier rules
+`INDETERMINATE` and the run halts. The demonstration that taught the check,
+whether a person or an agent drove it, can't approve it.
+
+```bash
+openadapt-flow check show BUNDLE        # what each check does, and who admitted it
+openadapt-flow check admit BUNDLE       # a person, at a terminal, types "admit"
+```
+
+`check admit` prints each check (the replayed steps, the reset and whether it
+was detected or declared, the fields and how each is read) and asks the
+person to type `admit`. It refuses to run without an interactive terminal.
+The admission records who admitted the check, when (UTC), and a SHA-256 of
+the exact check (`readback.admission`). A check that changes after admission
+(a moved field, another reset) no longer matches that digest. Its admission
+is dropped when the run resolves the contract, so it can't confirm a save
+until a person admits it again. `admit` re-seals the bundle manifest.
+
+### How a field is read
+
+- **From the page structure.** At marking time, the backend must be able to
+  read the text an element shows (`displayed_text_at`), and the marked element
+  must show exactly the value typed for its parameter. The field is then
+  compiled with `source: structure`, and at runtime the element must show
+  exactly the expected value. The browser backend reads the DOM. The macOS
+  (AX) and Linux (AT-SPI) backends read the accessibility element under the
+  point. The Windows backend doesn't offer this read: its UI Automation read
+  returns a whole row without the clicked cell. A backend that can't read
+  the structure makes the check `INDETERMINATE`; it doesn't fall back to OCR.
+  An element that shows the value among other text (a row, a container)
+  makes the check `INDETERMINATE`, not `CONFIRMED`.
+- **By OCR** of the marked region, otherwise. This is the only option on
+  RDP and Citrix.
+
+Each field is compared by kind (`value_kind`). When the mark doesn't set
+one, compiling infers it from the typed value:
+
+| Kind | Compared after | Example that matches |
+|---|---|---|
+| `text` | lowercasing and collapsing whitespace; OCR may also match approximately | `Chest pain` / `chest  pain` |
+| `code` | lowercasing and removing spaces, hyphens, dots and slashes | `MG-44-08` / `mg4408` |
+| `date` | parsing to a calendar date | `Mar 4, 2026` / `2026-03-04` |
+| `currency` | parsing to an amount, ignoring the symbol and thousands separators | `$1,250.00` / `1250` |
+
+A numeric date such as `03/04/2026` reads two ways. Unless the field sets
+`date_order` (`dmy` or `mdy`), it is `INDETERMINATE`.
+
+OCR can't tell some characters apart on a pixel-only display: `O` and `0`,
+and `l`, `I` and `1`. When an OCR read differs from the expected value only
+in those characters, the field is `INDETERMINATE`, never `CONFIRMED`. A
+legible read that differs in any other character is `REFUTED`. Structure and
+accessibility reads return the real characters, so the same difference there
+is `REFUTED`.
+
+### Outcomes
+
+| What the re-opened record shows | Verdict | Run |
+|---|---|---|
+| every marked field shows the expected value | `CONFIRMED` | continues |
+| a legible field shows another value | `REFUTED` | halts |
+| a field is blank or unreadable (for example, nothing was saved) | `INDETERMINATE` | halts; reconciliation |
+| a field differs only in OCR-confusable characters, or a date reads two ways | `INDETERMINATE` | halts |
+| the check isn't admitted, or its re-navigation can't be replayed | `INDETERMINATE` | halts |
+
+A blank field never counts as proof that nothing was saved.
+
+### How strong it is
+
+| The check | Tier | Assurance | What it can catch | What it can't |
+|---|---|---|---|---|
+| taught by demonstration (reset, then read) | 3, `reacquired-state` | `screen_readback` | a save only the form showed; a wrong value in a marked field | a page served from a cache the write filled; a duplicate submit; a lost update by another writer; fields nobody marked |
+| hand-configured `onscreen`, same screen | 4, `screen-consistency` | `screen_readback` | a value the save's own screen shows wrong | anything the screen paints but the record never got |
+| `ui_readback` (separate signed-in browser session) | 2, `independent-session` | `independent_readback` | the above, without sharing the acting session | it is still the same application, not its record store |
+| REST, SQL, FHIR and other system-of-record reads | 1, `independent-system` | `independent_readback` | what the record store holds | |
+
+A check taught by demonstration is never a system-of-record read and never
+makes a run `VERIFIED`. Under `problems_only` approval, a save checked this
+way still goes to a person (`onscreen_readback`). At runtime it makes no
+model calls: replayed input, OCR of fixed regions, and structure reads.
+
+### Read-back assurance
+
+Each piece of effect evidence carries one of three grades
+(`openadapt_flow/assurance.py`), and the on-screen and separate-session
+verifiers also state it on their verdicts:
+
+- `independent_readback`: an API, database, FHIR or file read, or the
+  record page read in a separate signed-in session;
+- `screen_readback`: the acting session read the value off the screen;
+- `unchecked`: no verifier confirmed the write.
+
+The grade comes from the verifier's tier and final verdict, so it can't
+disagree with them. The success receipt records the weakest effect's grade
+as `effect_assurance`, next to `effect_tier_reached`.
+
+Current rule: a separate-session UI read (tier 2) counts as
+`independent_readback`, because it doesn't go through the session that
+typed, and tier 2 can reach `VERIFIED`. It isn't a system-of-record read.
+The `regulated` policy pack requires tier 1, and the Seal ladder in
+`openadapt-types` puts a second session at oracle tier 1, below the
+production Seal minimum of 2. These three names are the shared vocabulary
+being added to `openadapt-types`; until it ships, `assurance.py` defines
+them locally behind a marked adapter point.
 
 ## Separate-session UI read-back (`ui_readback`)
 

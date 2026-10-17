@@ -332,6 +332,17 @@ transactional guarantee. The ultimate safety net is never the read-back: it is
 the **identity gate** (right record) plus **halt-on-ambiguity** (never guess a
 target), with read-back as additive assurance on top.
 
+A read-back taught by demonstration
+([`EFFECT_KIT.md`](EFFECT_KIT.md#a-read-back-taught-by-demonstration-now-show-how-youd-check-it-saved))
+has three more limits. It must reset client state (a reload, a new search, a
+reopened window) before it reads. Flow recognizes a reload key, a closed and
+reopened window, and a submitted search from the recording; any other reset
+is the person's declaration, and Flow records it as declared rather than
+checked. On a pixel-only display, a read that differs from the expected
+value only in `O`/`0` or `l`/`1` is `INDETERMINATE`: the check halts instead
+of guessing. It confirms nothing until a person admits it. Its assurance
+grade is `screen_readback`, never `independent_readback`.
+
 **Without a read that is independent of the acting session, the run cannot
 be `VERIFIED`.** That read is either a system-of-record read (REST, FHIR, SQL,
 file; tier 1) or the application's record page read in a separate signed-in
