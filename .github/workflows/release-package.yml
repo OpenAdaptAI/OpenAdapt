@@ -8,6 +8,7 @@
 #   flow     openadapt-flow   pypi-flow
 #   types    openadapt-types  pypi-types
 #   agent    openadapt-agent  pypi-agent
+#   capture  openadapt-capture  pypi-capture
 #
 # Manual dispatch only: there is no tag or push trigger, so nothing here runs
 # unless someone starts it. It refuses any ref other than the current tip of
@@ -24,7 +25,7 @@ on:
         description: "Package directory under packages/"
         required: true
         type: choice
-        options: [flow, types, agent]
+        options: [flow, types, agent, capture]
       version:
         description: "Version to publish; must equal packages/<package>/pyproject.toml"
         required: true
@@ -77,7 +78,12 @@ jobs:
           pkg, version = os.environ["PACKAGE"], os.environ["VERSION"]
           with open(f"packages/{pkg}/pyproject.toml", "rb") as fh:
               project = tomllib.load(fh)["project"]
-          expected = {"flow": "openadapt-flow", "types": "openadapt-types", "agent": "openadapt-agent"}[pkg]
+          expected = {
+              "flow": "openadapt-flow",
+              "types": "openadapt-types",
+              "agent": "openadapt-agent",
+              "capture": "openadapt-capture",
+          }[pkg]
           if project["name"] != expected:
               sys.exit(f"packages/{pkg} is {project['name']!r}, expected {expected!r}")
           if project["version"] != version:
@@ -101,6 +107,12 @@ jobs:
           python -m pip install 'build==1.6.1' 'twine==7.0.0'
           python -m build "packages/$PACKAGE" --outdir dist
           python -m twine check --strict dist/*
+          if [ "$PACKAGE" = capture ]; then
+            # Capture's release contract: notes for this version, and archives
+            # that carry only the public source boundary.
+            python packages/capture/scripts/check_changelog.py --skip-tags
+            python packages/capture/scripts/verify_distribution.py dist/*
+          fi
           ls -l dist
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
