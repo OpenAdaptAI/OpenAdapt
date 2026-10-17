@@ -904,7 +904,7 @@ def test_native_release_workflow_points_latest_at_the_published_installers() -> 
     }
     assert job["permissions"] == {"contents": "write"}
     steps = _job_steps(job)
-    assert steps["actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"]["with"] == {
+    assert steps["actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333"]["with"] == {
         "name": "${{ needs.verify-published-release.outputs.verified_artifact }}",
         "path": "mirror",
     }
@@ -932,7 +932,7 @@ def test_native_release_workflow_mirrors_installers_onto_the_engine_release() ->
         "id-token": "write",
     }
     steps = _job_steps(job)
-    assert steps["actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c"]["with"] == {
+    assert steps["actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333"]["with"] == {
         "name": "${{ needs.verify-published-release.outputs.verified_artifact }}",
         "path": "mirror",
     }

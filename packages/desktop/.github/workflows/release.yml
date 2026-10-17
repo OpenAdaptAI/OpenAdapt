@@ -147,7 +147,7 @@ jobs:
       - name: Python Semantic Release
         if: steps.check_skip.outputs.skip != 'true'
         id: release
-        uses: python-semantic-release/python-semantic-release@9a026e9303981c866c3425723009becb2437c757 # v10.6.2
+        uses: python-semantic-release/python-semantic-release@b700dbeb1f431a0fcc30a79f3f0869407fe07278 # v10.7.0
         with:
           github_token: ${{ secrets.ADMIN_TOKEN }}
 
@@ -157,7 +157,7 @@ jobs:
 
       - name: Publish to GitHub Releases
         if: steps.check_skip.outputs.skip != 'true' && steps.release.outputs.released == 'true'
-        uses: python-semantic-release/publish-action@6d89e2de8d40ecb3717316ecbbf15a6fa8ea9039 # v10.6.2
+        uses: python-semantic-release/publish-action@99d4062dd393b5a7a62c5fe9ed78fb364b5674f2 # v10.7.0
         with:
           github_token: ${{ secrets.ADMIN_TOKEN }}
 
@@ -352,7 +352,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install uv
-        uses: astral-sh/setup-uv@20cfd1bf945f4377ade1205e4dbc17946fc9a30d # v10.0.1
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
 
       - name: Build and validate exact recovery artifacts
         working-directory: target

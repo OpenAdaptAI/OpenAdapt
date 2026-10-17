@@ -153,7 +153,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: npm
@@ -269,7 +269,7 @@ jobs:
           --signing ${{ steps.signing.outputs.mode }}
 
       - name: Upload smoke-tested DMG
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-macos-${{ matrix.architecture }}
           path: dist/native/*
@@ -298,7 +298,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: npm
@@ -454,7 +454,7 @@ jobs:
           --signing ${{ steps.signing.outputs.mode }}
 
       - name: Upload smoke-tested Windows installers
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-windows-x86_64
           path: dist/native/*
@@ -522,7 +522,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: "22"
           cache: npm
@@ -591,7 +591,7 @@ jobs:
           --signing github-attested
 
       - name: Upload smoke-tested Linux packages
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-linux-x86_64
           path: dist/native/*
@@ -620,7 +620,7 @@ jobs:
           python-version: "3.12"
 
       - name: Download all smoke-tested platform artifacts
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           pattern: native-*
           path: release-assets
@@ -630,7 +630,7 @@ jobs:
         run: python scripts/native_release.py validate-set --directory release-assets
 
       - name: Generate a machine-readable SBOM from the exact installer set
-        uses: anchore/sbom-action@3ad7283483fc7af8ff2b4ea19663c2d5ca935e26 # v0.24.2
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
         with:
           path: release-assets
           format: cyclonedx-json
@@ -774,7 +774,7 @@ jobs:
             --source-commit "${SOURCE_COMMIT}"
 
       - name: Upload exact attested release set
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: native-release-${{ needs.validate.outputs.native_tag }}
           path: release-assets/*
@@ -803,7 +803,7 @@ jobs:
           python-version: "3.12"
 
       - name: Download exact attested release set
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: native-release-${{ needs.validate.outputs.native_tag }}
           path: release-assets
@@ -1045,7 +1045,7 @@ jobs:
         shell: bash
         run: echo "verified_artifact=verified-published-native-${GITHUB_RUN_ID}" >> "${GITHUB_OUTPUT}"
 
-      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: verified-published-native-${{ github.run_id }}
           path: release-assets/*
@@ -1084,7 +1084,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ needs.verify-published-release.outputs.verified_artifact }}
           path: mirror
@@ -1186,7 +1186,7 @@ jobs:
         with:
           python-version: "3.12"
 
-      - uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: ${{ needs.verify-published-release.outputs.verified_artifact }}
           path: mirror
