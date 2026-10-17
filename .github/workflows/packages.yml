@@ -1,0 +1,369 @@
+# Per-package CI for the packages/ tree.
+#
+# The root workflow (main.yml) only runs the launcher's own tests. This
+# workflow runs each package's own suite from the monorepo checkout, so a
+# change under packages/ cannot land untested. A `scope` job applies the
+# packages/** path filter; package jobs that the change does not touch are
+# skipped, and the single `packages-gate` job always reports, so it can be a
+# required check without blocking unrelated PRs.
+#
+# Flow is split: lint, four unit shards, and a critical job that runs the
+# golden free-path task (VERIFIED read-back against an independent oracle),
+# the record/compile/replay E2E, and the read-back and zero-model-call unit
+# files by name, failing if any of them is skipped.
+name: Packages
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: packages-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  PIP_DISABLE_PIP_VERSION_CHECK: "1"
+
+jobs:
+  scope:
+    name: scope (packages/** filter)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      flow: ${{ steps.classify.outputs.flow }}
+      types: ${{ steps.classify.outputs.types }}
+      agent: ${{ steps.classify.outputs.agent }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Classify the change
+        id: classify
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BEFORE_SHA: ${{ github.event.before }}
+        run: |
+          set -euo pipefail
+          all() {
+            for pkg in flow types agent; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
+            exit 0
+          }
+          case "$EVENT_NAME" in
+            workflow_dispatch) all ;;
+            pull_request) base="HEAD^1" ;;  # the PR merge commit's first parent is the base tip
+            *)
+              if [ -z "${BEFORE_SHA:-}" ] || [ "$BEFORE_SHA" = 0000000000000000000000000000000000000000 ] \
+                || ! git cat-file -e "$BEFORE_SHA^{commit}" 2>/dev/null; then
+                all
+              fi
+              base="$BEFORE_SHA"
+              ;;
+          esac
+          changed="$(git diff --name-only "$base" HEAD)"
+          printf '%s\n' "$changed" | sed 's/^/changed: /'
+          hit() { if printf '%s\n' "$changed" | grep -Eq "$1"; then echo true; else echo false; fi; }
+          wf='^\.github/workflows/packages\.yml$'
+          flow="$(hit "^packages/flow/|$wf")"
+          types="$(hit "^packages/types/|$wf")"
+          # Agent is tested against the in-tree Flow, so a Flow change re-runs it.
+          agent="$(hit "^packages/(agent|flow)/|$wf")"
+          {
+            echo "flow=$flow"
+            echo "types=$types"
+            echo "agent=$agent"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  types:
+    name: types (py${{ matrix.python-version }})
+    needs: scope
+    if: needs.scope.outputs.types == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    defaults:
+      run:
+        working-directory: packages/types
+    env:
+      UV_PYTHON: ${{ matrix.python-version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.11.29"
+      - name: Install (locked, dev extra)
+        run: uv sync --locked --extra dev
+      - name: Ruff
+        run: uv run --locked --extra dev --with 'ruff==0.17.0' ruff check openadapt_types tests scripts
+      - name: Test
+        run: uv run --locked --extra dev pytest -q
+      - name: Seal signature verification (needs cryptography)
+        run: uv run --locked --extra dev --with 'cryptography>=42' pytest -q tests/test_seal.py
+      - name: Build and verify the public distribution boundary
+        if: matrix.python-version == '3.12'
+        run: |
+          uv build
+          python scripts/check_source_boundary.py --require-dist
+
+  agent:
+    name: agent (py${{ matrix.python-version }})
+    needs: scope
+    if: needs.scope.outputs.agent == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.12"]
+    defaults:
+      run:
+        working-directory: packages/agent
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+      - name: Install agent against the in-tree Flow
+        run: pip install -e ../flow -e ".[dev]"
+      - name: Confirm the in-tree Flow is the one installed
+        run: |
+          python - <<'PY'
+          import pathlib, openadapt_flow
+          here = pathlib.Path(openadapt_flow.__file__).resolve()
+          assert "packages/flow" in here.as_posix(), here
+          print("openadapt_flow from", here)
+          PY
+      - name: Ruff
+        run: ruff check src tests scripts
+      - name: Test
+        run: pytest -q
+
+  flow-lint:
+    name: flow lint (ruff, mypy)
+    needs: scope
+    if: needs.scope.outputs.flow == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: packages/flow
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -e '.[dev]'
+      - name: Ruff lint
+        run: ruff check openadapt_flow
+      - name: Ruff format check
+        run: ruff format --check openadapt_flow tests
+      - name: Mypy
+        run: mypy
+      - name: Mypy (strict, safety path only)
+        run: |
+          mypy \
+            --ignore-missing-imports --follow-imports=silent \
+            --check-untyped-defs --no-implicit-optional --strict-equality \
+            --warn-redundant-casts --warn-unused-ignores \
+            --disallow-untyped-decorators --extra-checks \
+            openadapt_flow/identity_signals.py \
+            openadapt_flow/policy.py \
+            openadapt_flow/qualification.py \
+            openadapt_flow/runtime/identity.py \
+            openadapt_flow/runtime/identity_template.py \
+            openadapt_flow/runtime/identity_vlm.py \
+            openadapt_flow/runtime/replayer.py \
+            openadapt_flow/runtime/resolver.py \
+            openadapt_flow/submit_binding.py \
+            openadapt_flow/runtime/effects/effect.py \
+            openadapt_flow/runtime/effects/adapter.py \
+            openadapt_flow/runtime/effects/auth.py \
+            openadapt_flow/runtime/effects/compensation.py \
+            openadapt_flow/runtime/effects/document_arrival.py \
+            openadapt_flow/runtime/effects/document_hash.py \
+            openadapt_flow/runtime/effects/email_delivery.py \
+            openadapt_flow/runtime/effects/fhir.py \
+            openadapt_flow/runtime/effects/file_arrival.py \
+            openadapt_flow/runtime/effects/graphql.py \
+            openadapt_flow/runtime/effects/onscreen.py \
+            openadapt_flow/runtime/effects/rest.py \
+            openadapt_flow/runtime/effects/sql.py \
+            openadapt_flow/runtime/effects/ui_readback.py \
+            openadapt_flow/compiler/compile.py \
+            openadapt_flow/compiler/codegen.py \
+            openadapt_flow/compiler/annotate.py \
+            openadapt_flow/compiler/effect_mining.py \
+            openadapt_flow/compiler/induction.py \
+            openadapt_flow/compiler/loop_authoring.py
+
+  flow-unit:
+    name: flow unit (shard ${{ matrix.shard }}/4)
+    needs: scope
+    if: needs.scope.outputs.flow == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    defaults:
+      run:
+        working-directory: packages/flow
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -e '.[dev,capture]'
+      - name: Verify openadapt-capture imports headless
+        run: python -c "import openadapt_capture"
+      - name: Resolve Playwright version
+        id: pw
+        run: |
+          python -c "import importlib.metadata as m; print('version=' + m.version('playwright'))" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+      - name: Install and launch Playwright browser
+        timeout-minutes: 12
+        run: >-
+          python scripts/install_playwright_browser.py
+          --attempts 2 --attempt-timeout-seconds 270
+      - name: Select this shard's test files
+        env:
+          SHARD: ${{ matrix.shard }}
+        run: |
+          set -euo pipefail
+          # Same scope as Flow's own PR gate: everything outside tests/e2e,
+          # minus the installer self-test and the long qualification campaign.
+          # Files are dealt round-robin from a sorted list, so every file lands
+          # in exactly one shard.
+          find tests -name 'test_*.py' -not -path 'tests/e2e/*' \
+            -not -path 'tests/test_install_playwright_browser.py' \
+            -not -path 'tests/test_qualification_gate_campaign.py' \
+            | LC_ALL=C sort | awk -v s="$SHARD" 'NR % 4 == s % 4' > "$RUNNER_TEMP/shard.txt"
+          wc -l < "$RUNNER_TEMP/shard.txt"
+      - name: Test
+        run: |
+          set -euo pipefail
+          mkdir -p runs
+          mapfile -t files < "$RUNNER_TEMP/shard.txt"
+          pytest -vv --durations=20 --basetemp=runs/ci "${files[@]}"
+
+  flow-critical:
+    name: flow critical (golden VERIFIED, zero model calls)
+    needs: scope
+    if: needs.scope.outputs.flow == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    defaults:
+      run:
+        working-directory: packages/flow
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install
+        run: pip install -e '.[dev]'
+      - name: Resolve Playwright version
+        id: pw
+        run: |
+          python -c "import importlib.metadata as m; print('version=' + m.version('playwright'))" >> "$GITHUB_OUTPUT"
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+      - name: Install and launch Playwright browser
+        timeout-minutes: 12
+        run: >-
+          python scripts/install_playwright_browser.py
+          --attempts 2 --attempt-timeout-seconds 270
+      - name: Golden task (free path -> VERIFIED)
+        run: |
+          mkdir -p runs
+          pytest -vv --durations=20 tests/e2e/test_free_path_e2e.py \
+            --basetemp=runs/ci-golden --junitxml=runs/golden-junit.xml
+      - name: Record / compile / replay E2E
+        run: |
+          pytest -vv --durations=20 tests/e2e/test_record_compile_replay.py \
+            --basetemp=runs/ci-rcr --junitxml=runs/rcr-junit.xml
+      - name: Read-back and zero-model-call tests, by name
+        run: |
+          pytest -vv --durations=20 \
+            tests/test_replayer_readback.py \
+            tests/test_readback_authoring.py \
+            tests/test_run_receipt.py \
+            tests/test_drift_oracle.py \
+            tests/test_effect_e2e_harness.py \
+            tests/test_admitted_composition_runtime.py \
+            tests/e2e/test_structural_action.py \
+            --basetemp=runs/ci-critical --junitxml=runs/critical-junit.xml
+      - name: Fail if any critical test was skipped or none ran
+        run: |
+          python - <<'PY'
+          import sys
+          import xml.etree.ElementTree as ET
+          bad = False
+          for name in ("golden", "rcr", "critical"):
+              root = ET.parse(f"runs/{name}-junit.xml").getroot()
+              suites = [root] if root.tag == "testsuite" else list(root.iter("testsuite"))
+              tests = sum(int(s.get("tests", 0)) for s in suites)
+              skipped = sum(int(s.get("skipped", 0)) for s in suites)
+              print(f"{name}: {tests} tests, {skipped} skipped")
+              if tests == 0 or skipped:
+                  bad = True
+          sys.exit(1 if bad else 0)
+          PY
+
+  packages-gate:
+    name: packages-gate
+    needs: [scope, types, agent, flow-lint, flow-unit, flow-critical]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require every selected package job to pass
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: |
+          python3 - <<'PY'
+          import json, os, sys
+          needs = json.loads(os.environ["RESULTS"])
+          bad = {k: v["result"] for k, v in needs.items() if v["result"] not in ("success", "skipped")}
+          if needs["scope"]["result"] != "success":
+              bad["scope"] = needs["scope"]["result"]
+          for k, v in needs.items():
+              print(f"{k}: {v['result']}")
+          sys.exit(1 if bad else 0)
+          PY
