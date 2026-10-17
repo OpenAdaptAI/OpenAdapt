@@ -20,6 +20,11 @@ interface TeachRecordingResult {
   correction?: TeachCorrection;
 }
 
+interface BranchOffer {
+  examples: number;
+  step_key: string;
+}
+
 export function Teach({
   workflowId,
   onDone,
@@ -34,6 +39,8 @@ export function Teach({
   const [result, setResult] = useState<string | null>(null);
   const [retryingPersistence, setRetryingPersistence] = useState(false);
   const [correction, setCorrection] = useState<TeachCorrection | null>(null);
+  const [branchOffer, setBranchOffer] = useState<BranchOffer | null>(null);
+  const [branching, setBranching] = useState(false);
 
   useEffect(() => {
     engineTry<RunReport | null>(
@@ -89,7 +96,11 @@ export function Teach({
     setPhase("teaching");
     setResult(null);
     try {
-      const r = await engineInvoke<{ promoted?: boolean; message?: string }>(
+      const r = await engineInvoke<{
+        promoted?: boolean;
+        message?: string;
+        branch_offer?: BranchOffer;
+      }>(
         CMD.TEACH_FIX,
         {
           workflow_id: workflowId,
@@ -105,10 +116,28 @@ export function Teach({
           ? "Fix accepted and promoted locally."
           : r?.message ?? "Teach submitted.",
       );
+      setBranchOffer(r?.branch_offer ?? null);
     } catch (e) {
       setResult(String(e));
     } finally {
       setPhase("idle");
+    }
+  }
+
+  async function teachBranch() {
+    if (!branchOffer) return;
+    setBranching(true);
+    try {
+      const r = await engineInvoke<{ ok?: boolean; message?: string }>(
+        CMD.TEACH_BRANCH,
+        { workflow_id: workflowId, step_key: branchOffer.step_key },
+      );
+      setResult(r?.message ?? "Branch request sent.");
+      if (r?.ok) setBranchOffer(null);
+    } catch (e) {
+      setResult(String(e));
+    } finally {
+      setBranching(false);
     }
   }
 
@@ -243,6 +272,28 @@ export function Teach({
           </div>
         )}
       </Card>
+
+      {branchOffer && (
+        <Card>
+          <CardHead
+            eyebrow="Make it permanent"
+            title={`You resolved this step ${branchOffer.examples} times`}
+            sub="OpenAdapt can learn one branch that applies when the screen shows what these halts had in common. It uses no model at run time, and it stays inactive until its tests pass and you approve it."
+          />
+          <div className="row">
+            <Button
+              variant="primary"
+              disabled={branching}
+              onClick={() => void teachBranch()}
+            >
+              {branching ? "Learning…" : "Learn a branch from these fixes"}
+            </Button>
+            <Button variant="ghost" onClick={() => setBranchOffer(null)}>
+              Not now
+            </Button>
+          </div>
+        </Card>
+      )}
     </div>
   );
 }

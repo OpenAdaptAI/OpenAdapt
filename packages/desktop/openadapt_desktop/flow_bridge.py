@@ -1299,6 +1299,27 @@ class FlowBridge:
         ]
         return self._run(args, out_dir=out_dir, timeout=timeout)
 
+    def teach_branch(
+        self,
+        examples: list[tuple[Path, Path]],
+        bundle_dir: Path,
+        out_dir: Path,
+        *,
+        timeout: float | None = None,
+    ) -> FlowResult:
+        """Learn one guarded branch from several halts resolved the same way.
+
+        Runs ``openadapt-flow teach-branch``. Flow writes the branch as a
+        repair candidate; it does not run until a person approves it.
+        """
+        if len(examples) < 2:
+            raise ValueError("teach-branch needs at least two resolved halts")
+        args = ["teach-branch"]
+        for run_dir, fix in examples:
+            args += ["--example", str(run_dir), str(fix)]
+        args += ["--bundle", str(bundle_dir), "--out", str(out_dir)]
+        return self._run(args, out_dir=out_dir, timeout=timeout)
+
     # --- report / halt parsing (halt is read from report.json, not exit code) ---
 
     @staticmethod

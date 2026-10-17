@@ -37,6 +37,7 @@ export const CMD = {
   GET_RUN_REPORT: "get_run_report",
   RETRY_RUN_PERSISTENCE: "retry_run_persistence",
   TEACH_FIX: "teach_fix",
+  TEACH_BRANCH: "teach_branch",
   // simple operator surface: items, the Needs-you inbox, Results, the sample
   GET_TASK_INPUTS: "get_task_inputs",
   RUN_ITEM: "run_item",

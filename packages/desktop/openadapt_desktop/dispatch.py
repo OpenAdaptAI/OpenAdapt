@@ -291,6 +291,7 @@ class EngineDispatcher:
             "turn_off_approval_mode": self.turn_off_approval_mode,
             "run_sample": self.run_sample,
             "teach_fix": self.teach_fix,
+            "teach_branch": self.teach_branch,
             # qualification cockpit (canonical Flow graph/policy/manifests)
             "get_qualification": self.get_qualification,
             "initialize_qualification": self.initialize_qualification,
@@ -2240,7 +2241,111 @@ class EngineDispatcher:
         except Exception as exc:
             return {"promoted": False, "message": str(exc)}
         message = "Fix promoted." if result.ok else (result.stderr or "Teach did not promote.")
-        return {"promoted": result.ok, "message": message}
+        response: dict[str, Any] = {"promoted": result.ok, "message": message}
+        if result.ok:
+            examples = self._remember_branch_example(workflow_id, run, fix)
+            if len(examples) >= 2:
+                response["branch_offer"] = {
+                    "examples": len(examples),
+                    "step_key": examples[-1]["step_key"],
+                }
+        return response
+
+    # --- teach-by-correction branches -------------------------------------
+    #
+    # Each taught halt is remembered per workflow and halted step. Once two
+    # halts on the same step were resolved, Teach offers to compile them into
+    # one guarded branch (``openadapt-flow teach-branch``). The branch is a
+    # repair candidate: it runs only after tests pass and a person approves.
+
+    def _branch_examples_path(self, workflow_id: str) -> Path:
+        key = hashlib.sha256(workflow_id.encode("utf-8")).hexdigest()[:16]
+        return self.config.data_dir / "branch_examples" / f"{key}.json"
+
+    @staticmethod
+    def _halt_step_key(run: dict) -> str:
+        from openadapt_desktop.flow_bridge import FlowBridge
+
+        report = FlowBridge.read_report(Path(run["run_path"]))
+        halt = report.get("halt") if isinstance(report, dict) else None
+        if isinstance(halt, dict):
+            for field in ("step_id", "step_index", "step_intent"):
+                value = halt.get(field)
+                if value not in (None, ""):
+                    return f"{field}:{value}"
+        return "unknown"
+
+    def _load_branch_examples(self, workflow_id: str) -> list[dict]:
+        path = self._branch_examples_path(workflow_id)
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return []
+        return [row for row in data if isinstance(row, dict)] if isinstance(data, list) else []
+
+    def _remember_branch_example(self, workflow_id: str, run: dict, fix: Path) -> list[dict]:
+        """Store this resolved halt; return the examples for the same step."""
+        step_key = self._halt_step_key(run)
+        rows = self._load_branch_examples(workflow_id)
+        rows = [row for row in rows if row.get("run_id") != run.get("run_id")]
+        rows.append(
+            {
+                "run_id": str(run.get("run_id") or ""),
+                "run_path": str(run["run_path"]),
+                "fix_path": str(fix),
+                "step_key": step_key,
+            }
+        )
+        path = self._branch_examples_path(workflow_id)
+        path.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        path.write_text(json.dumps(rows, indent=2), encoding="utf-8")
+        path.chmod(0o600)
+        if step_key == "unknown":
+            return []
+        return [row for row in rows if row.get("step_key") == step_key]
+
+    def teach_branch(self, **params: Any) -> dict:
+        """Compile the remembered resolutions of one step into a branch candidate."""
+        workflow_id = str(params.get("workflow_id") or "")
+        step_key = str(params.get("step_key") or "")
+        bundle = self._bundle_dir(workflow_id)
+        if bundle is None:
+            return {"ok": False, "message": f"Unknown workflow {workflow_id}"}
+        examples = [
+            row
+            for row in self._load_branch_examples(workflow_id)
+            if step_key and step_key != "unknown" and row.get("step_key") == step_key
+            and Path(row.get("run_path", "")).exists()
+            and Path(row.get("fix_path", "")).exists()
+        ]
+        if len(examples) < 2:
+            return {
+                "ok": False,
+                "message": "A branch needs at least two resolved halts on the same step.",
+            }
+        out_dir = self.config.data_dir / "bundles" / f"{workflow_id}_branch_{uuid.uuid4().hex[:6]}"
+        try:
+            result = self.services.flow_bridge.teach_branch(
+                [(Path(row["run_path"]), Path(row["fix_path"])) for row in examples],
+                bundle,
+                out_dir,
+            )
+        except Exception as exc:
+            return {"ok": False, "message": str(exc)}
+        if not result.ok:
+            return {
+                "ok": False,
+                "message": result.stderr or result.stdout or "Flow did not learn a branch.",
+            }
+        return {
+            "ok": True,
+            "examples": len(examples),
+            "candidate_dir": str(out_dir),
+            "message": (
+                f"Branch candidate written from {len(examples)} resolved halts. "
+                "It does not run until it passes its tests and you approve it."
+            ),
+        }
 
     def _teachable_run(
         self,
