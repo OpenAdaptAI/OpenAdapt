@@ -1,0 +1,46 @@
+# Reviewed gitleaks false positives in the monorepo import branches
+# (monorepo/phase1-import and monorepo/phase1-fold, draft PRs #1178 and #1179).
+# The secret-scan workflow runs `gitleaks git` over every fetched ref, so findings in
+# those branches fail unrelated PRs until this file is on main.
+# Each entry is a test literal, an Ed25519 type annotation, a published test vector or
+# a benchmark idempotency key from the openadapt-flow and openadapt-agent histories.
+# None is a credential. Each fingerprint pins commit:file:rule:line, so a new finding,
+# or the same text in any other commit, file or line, still fails. No rule is relaxed.
+01d9ead6895964e8236272296fad0d424dffd98f:packages/flow/tests/fixtures/terminal_verification_v2_terminal_vectors.json:generic-api-key:33
+0f5f39557513cd71d9e84996f5773eeca26b1005:packages/flow/tests/test_attended_actions.py:generic-api-key:122
+0f5f39557513cd71d9e84996f5773eeca26b1005:packages/flow/tests/test_attended_actions.py:generic-api-key:174
+0f5f39557513cd71d9e84996f5773eeca26b1005:packages/flow/tests/test_qualification_fault_contract.py:generic-api-key:582
+2951a00e9144b018aa59ad2485f50479dd877d6c:packages/flow/tests/test_attended_actions.py:generic-api-key:2237
+2951a00e9144b018aa59ad2485f50479dd877d6c:packages/flow/tests/test_mobile_attended_decision_e2e.py:generic-api-key:1182
+2951a00e9144b018aa59ad2485f50479dd877d6c:packages/flow/tests/test_mobile_attended_decision_e2e.py:generic-api-key:1336
+2951a00e9144b018aa59ad2485f50479dd877d6c:packages/flow/tests/test_mobile_attended_decision_e2e.py:generic-api-key:1369
+3ae27e33667a16bca09931a29ca9b019cd93857d:packages/agent/tests/test_approval_flow.py:generic-api-key:29
+58e095943d6966551d0f68cd5d0b680ee60ccfce:packages/flow/tests/test_browser_attach.py:generic-api-key:3478
+58e095943d6966551d0f68cd5d0b680ee60ccfce:packages/flow/tests/test_browser_attach.py:generic-api-key:4011
+58e095943d6966551d0f68cd5d0b680ee60ccfce:packages/flow/tests/test_browser_attach.py:generic-api-key:4472
+58e095943d6966551d0f68cd5d0b680ee60ccfce:packages/flow/tests/test_browser_attach.py:generic-api-key:4670
+58e095943d6966551d0f68cd5d0b680ee60ccfce:packages/flow/tests/test_browser_attach.py:generic-api-key:4745
+61c86ece7cdcdc16f4459024d98f402e58d9ca61:packages/flow/tests/test_mobile_attended_decision_e2e.py:generic-api-key:1137
+61c86ece7cdcdc16f4459024d98f402e58d9ca61:packages/flow/tests/test_mobile_attended_decision_e2e.py:generic-api-key:503
+61c86ece7cdcdc16f4459024d98f402e58d9ca61:packages/flow/tests/test_mobile_attended_decision_e2e.py:generic-api-key:566
+67d12b73226052aea9e325daeb8c379ce242dba7:packages/flow/openadapt_flow/reward/worker.py:generic-api-key:262
+80c1c52b64764e186c12b29f22dc7980a26038d6:packages/flow/tests/test_qualification_admission.py:generic-api-key:130
+80c1c52b64764e186c12b29f22dc7980a26038d6:packages/flow/tests/test_qualification_admission.py:generic-api-key:59
+8327392b979abeda4bdcd71debee305cdc309295:packages/flow/benchmark/fault_model/results.json:generic-api-key:1918
+8327392b979abeda4bdcd71debee305cdc309295:packages/flow/benchmark/fault_model/results.json:generic-api-key:1960
+8327392b979abeda4bdcd71debee305cdc309295:packages/flow/benchmark/fault_model/results.json:generic-api-key:2002
+8327392b979abeda4bdcd71debee305cdc309295:packages/flow/benchmark/fault_model/results.json:generic-api-key:2065
+8327392b979abeda4bdcd71debee305cdc309295:packages/flow/benchmark/fault_model/results.json:generic-api-key:2086
+8327392b979abeda4bdcd71debee305cdc309295:packages/flow/benchmark/fault_model/results.json:generic-api-key:2107
+8327392b979abeda4bdcd71debee305cdc309295:packages/flow/benchmark/fault_model/results.json:generic-api-key:239
+8327392b979abeda4bdcd71debee305cdc309295:packages/flow/benchmark/lending_fault_model/results.json:generic-api-key:2030
+8327392b979abeda4bdcd71debee305cdc309295:packages/flow/benchmark/lending_fault_model/results.json:generic-api-key:2052
+8327392b979abeda4bdcd71debee305cdc309295:packages/flow/benchmark/lending_fault_model/results.json:generic-api-key:2074
+8327392b979abeda4bdcd71debee305cdc309295:packages/flow/benchmark/lending_fault_model/results.json:generic-api-key:2096
+8327392b979abeda4bdcd71debee305cdc309295:packages/flow/benchmark/lending_fault_model/results.json:generic-api-key:2140
+8327392b979abeda4bdcd71debee305cdc309295:packages/flow/benchmark/lending_fault_model/results.json:generic-api-key:2162
+8327392b979abeda4bdcd71debee305cdc309295:packages/flow/benchmark/lending_fault_model/results.json:generic-api-key:2206
+8832abe79e7c7f363034e4804b7adf0b66834a56:packages/flow/openadapt_flow/execute/service.py:generic-api-key:75
+a6e3448303f3de14020abc75b38aff7e6c893771:packages/flow/tests/test_hosted_runner_product_release_gate.py:generic-api-key:93
+be6ad79ab99fb0881d2dd59ce8b98e0aec8b12d6:packages/flow/openadapt_flow/backends/playwright_backend.py:generic-api-key:1340
+eb78575c688f06d7edc04afc69389aad10e1f5fa:packages/flow/tests/fixtures/terminal_verification_v2_delivery_vector.json:generic-api-key:3
