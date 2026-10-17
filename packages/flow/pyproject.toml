@@ -115,6 +115,8 @@ dev = [
     "mypy>=1.11",
     "pytest-cov>=5.0",
     "jsonschema>=4.21",
+    # Notarized Seals tests (RFC 3161 tokens); see the `notary` extra.
+    "asn1crypto>=1.5",
     # Browser tests remain part of the full development matrix even though the
     # published base runtime no longer installs Playwright for non-web users.
     "playwright>=1.44",
@@ -131,6 +133,14 @@ grounding = ["openadapt-grounding>=0.1.0"]
 console = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
+]
+# Notarized Seals: `openadapt-flow notary`. RFC 3161 timestamps need an ASN.1
+# codec for CMS/TSTInfo; asn1crypto is pure Python with no dependencies, and
+# signatures still go through `cryptography`. openadapt_types.seal (the Seal
+# verifier) first shipped in openadapt-types 0.20.
+notary = [
+    "asn1crypto>=1.5",
+    "openadapt-types>=0.20.0,<0.22.0",
 ]
 # Reference Execute server: `openadapt-flow serve-execute`. Same public
 # request schema as Cloud Execute, hosted in this process with a local
