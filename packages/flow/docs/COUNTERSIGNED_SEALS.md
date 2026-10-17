@@ -1,18 +1,25 @@
-# Notarized Seals
+# Countersigned Seals
 
 A Seal is a receipt that OpenAdapt Cloud signed with an Ed25519 key
 (`openadapt.seal-signature/v1`). It says who made a statement about one write.
 It does not say when the statement existed, and it can't let a holder prove a
-patient's MRN to an auditor without publishing it. `openadapt-flow notary`
+patient's MRN to an auditor without publishing it. `openadapt-flow countersign`
 adds both, plus a dossier file for disputes:
 
 - **Trusted timestamps** (RFC 3161) over the receipt hash, from any TSA.
 - **Salted field commitments** so the holder can reveal chosen fields later
   and keep the others hidden.
-- **A countersignature** by a notary issuer, using the Seal scheme as is.
+- **A countersignature** by a countersigning issuer, using the Seal scheme as is.
 - **A dossier**: one HTML or zip file a third party can check offline.
-- **`notary verify`**: the Seal check with the executor, the verification
+- **`countersign verify`**: the Seal check with the executor, the verification
   tier, the timestamps, and the disclosures printed every time.
+
+A Seal with a trusted timestamp is a Timestamped Seal. One that also carries
+a countersignature is a Countersigned Seal.
+
+Neither kind is a notarial act or an eIDAS qualified electronic seal, and
+the timestamp is not an eIDAS qualified electronic timestamp unless
+`--tsa-url` names a qualified TSA.
 
 Nothing here runs during replay, and nothing here calls a model. Only digests
 leave the machine: the TSA receives one 32-byte hash.
@@ -20,7 +27,7 @@ leave the machine: the TSA receives one 32-byte hash.
 ## Install
 
 ```bash
-pip install 'openadapt-flow[notary]'
+pip install 'openadapt-flow[countersign]'
 ```
 
 This adds `asn1crypto` (pure Python, no dependencies) to parse and encode
@@ -40,10 +47,10 @@ beside them in the same wire document:
   "receipt": { "...": "unchanged, still carries seal_signature" },
   "evidence": { "...": "unchanged, still bound by evidence_digest" },
   "extensions": {
-    "openadapt.notary/v1": {
-      "schema": "openadapt.notary/v1",
+    "openadapt.countersign/v1": {
+      "schema": "openadapt.countersign/v1",
       "statement": {
-        "schema_version": "openadapt.notary-statement/v1",
+        "schema_version": "openadapt.countersign-statement/v1",
         "receipt_schema": "openadapt.effect-receipt/v1",
         "receipt_sha256": "…",
         "execution_id": "…",
@@ -77,24 +84,24 @@ after a dispute started.
 
 ```bash
 # 1. Before the executor runs: timestamp the baseline read for this run.
-openadapt-flow notary timestamp-baseline --baseline baseline.json \
+openadapt-flow countersign timestamp-baseline --baseline baseline.json \
   --read-at 2026-10-17T04:58:00Z --nonce "$RUN_NONCE" -o baseline-ts.json
 
 # 2. After the receipt exists: commit fields, timestamp, countersign.
-openadapt-flow notary notarize receipt.json -o notarized.json \
+openadapt-flow countersign add receipt.json -o countersigned.json \
   --fields-file fields.json --baseline-timestamp baseline-ts.json
 
 # 3. Check it. Exit 0 only for a genuine Seal on a verified outcome.
-openadapt-flow notary verify notarized.json
+openadapt-flow countersign verify countersigned.json
 
 # 4. In a dispute: reveal one field, then export a dossier.
-openadapt-flow notary disclose notarized.json --field f-1a2b3c4d -o mrn.disclosure.json
-openadapt-flow notary dossier notarized.json --disclosure mrn.disclosure.json \
+openadapt-flow countersign disclose countersigned.json --field f-1a2b3c4d -o mrn.disclosure.json
+openadapt-flow countersign dossier countersigned.json --disclosure mrn.disclosure.json \
   -o dossier.html
 ```
 
 `openadapt-flow seal` already encrypts bundles, so these commands live under
-`notary`.
+`countersign`.
 
 `fields.json` is a JSON object of field name to value, such as
 `{"mrn": "004217"}`. Values never go on the command line, because shell
@@ -111,7 +118,7 @@ It is free, its tokens state 1-second accuracy, and it receives only the
 is this machine's clock, so its tokens prove nothing about time to anyone
 else. It exists for tests and trials without network access.
 
-## What `notary verify` shows
+## What `countersign verify` shows
 
 ```
 SIGNATURE GENUINE, NOT A FLOW REPLAY (AGENT). Pass --accept-non-flow to accept a receipt from another executor
@@ -123,7 +130,7 @@ SIGNATURE GENUINE, NOT A FLOW REPLAY (AGENT). Pass --accept-non-flow to accept a
   ...
   Seal signature      VERIFIED against a pinned key (seal-ed25519-…, issued 2026-10-17T05:00:00Z)
   Evidence manifest   bound: digest and labels match the receipt
-  Notary statement    matches the receipt
+  Statement           matches the receipt
   Receipt timestamp   VERIFIED 2026-10-17T05:20:40Z by CN=DigiCert SHA256 RSA4096 Timestamp Responder 2026 1,… (chains to pinned CN=DigiCert Trusted Root G4,…)
   Baseline timestamp  absent
   Countersignature    absent
@@ -159,7 +166,7 @@ Verification reads only what the holder pinned:
   `~/.openadapt/seal-keys.json`. Nothing is fetched.
 - TSA trust comes from `--tsa-cert`: the TSA's certificate or a CA above it.
   Without it, the verifier pins Sigstore's TSA root, shipped in
-  `openadapt_flow/notary/trust/sigstore-tsa-root.pem` (SHA-256 fingerprint
+  `openadapt_flow/countersign/trust/sigstore-tsa-root.pem` (SHA-256 fingerprint
   `2A:CA:8F:EA:...:D6:33`, valid until 2035-04-06). A token from another TSA
   then fails until you pin that TSA's certificate.
   A certificate inside the token or the document is used to build the path,
@@ -168,12 +175,13 @@ Verification reads only what the holder pinned:
   usage.
 
 The countersignature is a `openadapt.seal-signature/v1` over an
-`openadapt.notary-attestation/v1` object. It reuses the Seal key registry,
+`openadapt.countersign-attestation/v1` object. It reuses the Seal key registry,
 pinning, and `openadapt_types.seal.verify_seal_signature` unchanged. The
 attestation's `schema_version` is inside the signed hash, which keeps an
-attestation from being read as a receipt. Cloud has no notary endpoint yet;
-`CloudNotaryIssuer` is an interface stub that raises, and
-`LocalNotaryIssuer` signs with a local key for tests and self-hosted trials.
+attestation from being read as a receipt. Cloud has no countersigning
+endpoint yet; `CloudCountersignIssuer` is an interface stub that raises, and
+`LocalCountersignIssuer` signs with a local key for tests and self-hosted
+trials.
 
 ## Field commitments
 
@@ -196,27 +204,27 @@ identity digests and do not replace them.
 
 A disclosure counts only when the commitments are bound by a verified
 timestamp or countersignature. Otherwise anyone could have written the block
-after the fact, and `notary verify` reports `commitments_unbound`.
+after the fact, and `countersign verify` reports `commitments_unbound`.
 
 ## The vault
 
-`notarize` writes the salts and values to
-`$OPENADAPT_NOTARY_VAULT/<receipt_sha256>/field-secrets.json` (default
-`~/.openadapt/notary-vault`), mode 0600 in a 0700 directory, together with a
-copy of the notarized document. The vault holds PHI. Back it up and encrypt
+`countersign add` writes the salts and values to
+`$OPENADAPT_COUNTERSIGN_VAULT/<receipt_sha256>/field-secrets.json` (default
+`~/.openadapt/countersign-vault`), mode 0600 in a 0700 directory, together
+with a copy of the countersigned document. The vault holds PHI. Back it up and encrypt
 it the way you do the system of record. Losing it loses the ability to
 disclose; it never weakens the commitments. On Windows, the mode bits do not
 apply; rely on the profile directory's ACL.
 
 ## The dossier
 
-`notary dossier` writes one HTML page, or a zip with the page plus the raw
+`countersign dossier` writes one HTML page, or a zip with the page plus the raw
 token files and an `openssl` recipe. The page contains the receipt, the
-evidence manifest, the notary block, the report computed at export, and the
+evidence manifest, the countersign block, the report computed at export, and the
 pinned keys used. When opened, it checks in the browser the receipt hash,
 the Ed25519 Seal signature against the embedded key, the evidence digest, and
 each disclosed commitment. RFC 3161 tokens need `openssl ts -verify` or
-`openadapt-flow notary verify dossier.html`; the page prints the command.
+`openadapt-flow countersign verify dossier.html`; the page prints the command.
 
 By default the dossier has no PHI. Disclosed values appear only when you pass
 a disclosure bundle. Screenshots appear only with `--screenshot` and only
@@ -253,12 +261,12 @@ A token from `--tsa-local` proves only what this machine's clock said.
 
 ## Tests
 
-`tests/test_notary.py` runs offline. It covers brute-force resistance over a
+`tests/test_countersign.py` runs offline. It covers brute-force resistance over a
 small MRN domain, wrong disclosed values, a real Sigstore token
-(`tests/fixtures/notary/sigstore-token.der`) checked against the bundled
+(`tests/fixtures/countersign/sigstore-token.der`) checked against the bundled
 root, a real DigiCert token
-(`tests/fixtures/notary/digicert-token.der`, captured on 2026-10-17 with
+(`tests/fixtures/countersign/digicert-token.der`, captured on 2026-10-17 with
 `openssl ts -query`) checked against DigiCert Trusted Root G4, `openssl ts
--verify` on local tokens, tampering after notarization, baseline nonce
+-verify` on local tokens, tampering after countersigning, baseline nonce
 binding, exit codes for REFUTED and INDETERMINATE Seals, and a dossier with
 no PHI by default.

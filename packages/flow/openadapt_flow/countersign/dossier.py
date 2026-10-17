@@ -1,10 +1,10 @@
 """Dispute dossier: one offline file a third party can check without OpenAdapt.
 
-``openadapt-flow notary dossier`` writes a self-contained HTML page (or a zip
+``openadapt-flow countersign dossier`` writes a self-contained HTML page (or a zip
 with the same page plus the raw files ``openssl`` needs). It contains:
 
 * the receipt and its evidence manifest, which are PHI-free by construction;
-* the notary block: statement, RFC 3161 tokens, countersignature;
+* the countersign block: statement, RFC 3161 tokens, countersignature;
 * the verification report computed at export, with the pinned keys used;
 * disclosed fields, only from a disclosure bundle the holder passed in;
 * screenshots, only after automatic redaction by openadapt-privacy, and only
@@ -16,7 +16,7 @@ they appear only when the caller hands over a disclosure bundle.
 The page re-checks itself in the reader's browser (WebCrypto): the receipt
 hash, the Ed25519 Seal signature against the embedded key, the evidence
 digest, and each disclosed commitment. RFC 3161 tokens need ``openssl ts
--verify`` or ``openadapt-flow notary verify``; the page prints the command.
+-verify`` or ``openadapt-flow countersign verify``; the page prints the command.
 """
 
 from __future__ import annotations
@@ -31,13 +31,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
-from openadapt_flow.notary.notarize import (
+from openadapt_flow.countersign.document import (
     EXTENSION_KEY,
-    NotaryReport,
+    CountersignReport,
     locate,
-    verify_notarized,
+    verify_countersigned,
 )
-from openadapt_flow.notary.render import render_report
+from openadapt_flow.countersign.render import render_report
 
 __all__ = ["DOSSIER_SCHEMA", "build_dossier", "extract_dossier_data", "write_dossier"]
 
@@ -91,11 +91,11 @@ def build_dossier(
     screenshots: Sequence[Path] = (),
     accept_non_flow: bool = False,
     now: Optional[datetime] = None,
-) -> tuple[dict[str, Any], NotaryReport]:
-    from openadapt_flow.notary.tsa import load_pem_certificates
+) -> tuple[dict[str, Any], CountersignReport]:
+    from openadapt_flow.countersign.tsa import load_pem_certificates
 
     certs = load_pem_certificates(tsa_certificates_pem) if tsa_certificates_pem else []
-    report = verify_notarized(
+    report = verify_countersigned(
         document,
         registry=registry,
         tsa_certificates=certs,
@@ -111,7 +111,7 @@ def build_dossier(
         ),
         "receipt": dict(located.receipt),
         "evidence": dict(located.evidence) if located.evidence is not None else None,
-        "notary": dict(located.notary) if located.notary is not None else None,
+        "countersign": dict(located.block) if located.block is not None else None,
         "pinned_seal_keys": [dict(k) for k in registry],
         "pinned_tsa_certificates_pem": tsa_certificates_pem.decode("ascii")
         if tsa_certificates_pem
@@ -128,13 +128,13 @@ def _document_from_data(data: Mapping[str, Any]) -> dict[str, Any]:
     doc: dict[str, Any] = {"receipt": data["receipt"]}
     if data.get("evidence") is not None:
         doc["evidence"] = data["evidence"]
-    if data.get("notary") is not None:
-        doc["extensions"] = {EXTENSION_KEY: data["notary"]}
+    if data.get("countersign") is not None:
+        doc["extensions"] = {EXTENSION_KEY: data["countersign"]}
     return doc
 
 
 def extract_dossier_data(html_text: str) -> dict[str, Any]:
-    """The embedded data of a dossier page, for ``notary verify dossier.html``."""
+    """The embedded data of a dossier page, for ``countersign verify dossier.html``."""
     marker = f'<script type="application/json" id="{_DATA_ID}">'
     start = html_text.find(marker)
     end = html_text.find("</script>", start)
@@ -190,7 +190,7 @@ _JS = r"""
         } catch (e) { row('Seal signature', false, 'this browser has no Ed25519 in WebCrypto'); }
       }
     } else { row('Seal signature', false, 'unsigned receipt'); }
-    const fields = (data.notary && data.notary.commitments && data.notary.commitments.fields) || {};
+    const fields = (data.countersign && data.countersign.commitments && data.countersign.commitments.fields) || {};
     for (const d of (data.disclosures || [])) {
       for (const f of (d.fields || [])) {
         const c = 'sha256:' + await sha('openadapt.field-commitment/v1\u0000' + canon({label: f.label, name: f.name, salt: f.salt, value: f.value}));
@@ -211,7 +211,7 @@ img{max-width:100%;border:1px solid #999}
 """
 
 
-def render_html(data: Mapping[str, Any], report: NotaryReport) -> str:
+def render_html(data: Mapping[str, Any], report: CountersignReport) -> str:
     esc = html.escape
     sections: list[str] = []
     sections.append(
@@ -232,8 +232,8 @@ def render_html(data: Mapping[str, Any], report: NotaryReport) -> str:
         "compare its key id with the key you pinned from OpenAdapt's published registry.</p>"
         "<ul id='live'></ul><noscript>JavaScript is off; use the command line below.</noscript>"
     )
-    notary = data.get("notary") or {}
-    rts = notary.get("receipt_timestamp")
+    block = data.get("countersign") or {}
+    rts = block.get("receipt_timestamp")
     if rts:
         sections.append(
             "<h2>Check the trusted timestamp yourself</h2><p>Save the token and the TSA "
@@ -242,9 +242,9 @@ def render_html(data: Mapping[str, Any], report: NotaryReport) -> str:
                 "base64 -d receipt-timestamp.b64 > receipt-timestamp.tsr\n"
                 f"openssl ts -verify -digest {rts.get('imprint_sha256')} -in receipt-timestamp.tsr "
                 "-token_in -CAfile tsa-ca.pem\n\n"
-                "Or: openadapt-flow notary verify this-dossier.html --tsa-cert tsa-ca.pem"
+                "Or: openadapt-flow countersign verify this-dossier.html --tsa-cert tsa-ca.pem"
             )
-            + "</pre><p>The digest is SHA-256 of the notary statement below, which names "
+            + "</pre><p>The digest is SHA-256 of the countersign statement below, which names "
             "the receipt hash.</p>"
         )
     for note in data.get("notes") or []:
@@ -274,7 +274,7 @@ def render_html(data: Mapping[str, Any], report: NotaryReport) -> str:
     for title, key in (
         ("Receipt", "receipt"),
         ("Evidence manifest", "evidence"),
-        ("Notary block", "notary"),
+        ("Countersign block", "countersign"),
     ):
         if data.get(key) is not None:
             sections.append(
@@ -297,7 +297,7 @@ def render_html(data: Mapping[str, Any], report: NotaryReport) -> str:
 
 
 def write_dossier(
-    data: Mapping[str, Any], report: NotaryReport, out: Path, *, fmt: str = "html"
+    data: Mapping[str, Any], report: CountersignReport, out: Path, *, fmt: str = "html"
 ) -> Path:
     page = render_html(data, report)
     if fmt == "html":
@@ -317,15 +317,15 @@ def write_dossier(
                 "disclosures.json",
                 json.dumps(data["disclosures"], indent=2, sort_keys=True),
             )
-        notary = data.get("notary") or {}
+        block = data.get("countersign") or {}
         commands = [
             "# Verify offline",
             "",
-            "openadapt-flow notary verify document.json --tsa-cert tsa-ca.pem --keys seal-keys.json",
+            "openadapt-flow countersign verify document.json --tsa-cert tsa-ca.pem --keys seal-keys.json",
             "",
         ]
         for name in ("receipt_timestamp", "baseline_timestamp"):
-            entry = notary.get(name)
+            entry = block.get(name)
             if entry:
                 stem = name.replace("_", "-")
                 zf.writestr(f"{stem}.tsr", base64.b64decode(entry["token"]))

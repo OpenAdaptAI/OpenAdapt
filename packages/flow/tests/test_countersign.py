@@ -1,4 +1,4 @@
-"""Notarized Seals: salted commitments, RFC 3161 timestamps, verify output, dossier.
+"""Countersigned Seals: salted commitments, RFC 3161 timestamps, verify output, dossier.
 
 No test touches the network: HTTP TSAs run over an in-process transport, and
 the DigiCert token is a fixture captured once with ``openssl ts -query``.
@@ -28,24 +28,24 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (  # noqa: E402
 )
 from openadapt_types.seal import parse_key_registry, verify_sealed_receipt  # noqa: E402
 
-from openadapt_flow.notary import commitments as C  # noqa: E402
-from openadapt_flow.notary.dossier import (  # noqa: E402
+from openadapt_flow.countersign import commitments as C  # noqa: E402
+from openadapt_flow.countersign.document import (  # noqa: E402
+    EXTENSION_KEY,
+    CloudCountersignIssuer,
+    CountersignError,
+    LocalCountersignIssuer,
+    countersign_document,
+    receipt_sha256,
+    timestamp_baseline,
+    verify_countersigned,
+)
+from openadapt_flow.countersign.dossier import (  # noqa: E402
     build_dossier,
     extract_dossier_data,
     write_dossier,
 )
-from openadapt_flow.notary.notarize import (  # noqa: E402
-    EXTENSION_KEY,
-    CloudNotaryIssuer,
-    LocalNotaryIssuer,
-    NotaryError,
-    notarize_document,
-    receipt_sha256,
-    timestamp_baseline,
-    verify_notarized,
-)
-from openadapt_flow.notary.render import render_report  # noqa: E402
-from openadapt_flow.notary.tsa import (  # noqa: E402
+from openadapt_flow.countersign.render import render_report  # noqa: E402
+from openadapt_flow.countersign.tsa import (  # noqa: E402
     HttpTsa,
     LocalTsa,
     TimestampError,
@@ -53,7 +53,7 @@ from openadapt_flow.notary.tsa import (  # noqa: E402
     verify_timestamp_token,
 )
 
-FIXTURES = Path(__file__).parent / "fixtures" / "notary"
+FIXTURES = Path(__file__).parent / "fixtures" / "countersign"
 #: The fixed TEST seed openadapt-cloud's sealSignature tests use. Not a real key.
 TEST_SEED = bytes([7]) * 32
 T0 = datetime(2026, 10, 17, 5, 0, 0, tzinfo=timezone.utc)
@@ -80,8 +80,8 @@ def _no_network(monkeypatch):
 
 
 @pytest.fixture
-def issuer() -> LocalNotaryIssuer:
-    return LocalNotaryIssuer(
+def issuer() -> LocalCountersignIssuer:
+    return LocalCountersignIssuer(
         Ed25519PrivateKey.from_private_bytes(TEST_SEED), clock=_clock(T0)
     )
 
@@ -127,7 +127,11 @@ def _evidence(
 
 
 def _effect_doc(
-    signer: LocalNotaryIssuer, *, kind="agent", outcome="verified", verdict="CONFIRMED"
+    signer: LocalCountersignIssuer,
+    *,
+    kind="agent",
+    outcome="verified",
+    verdict="CONFIRMED",
 ) -> dict:
     evidence = _evidence(kind, verdict)
     receipt = {
@@ -170,7 +174,7 @@ def _effect_doc(
     }
 
 
-def _execute_doc(signer: LocalNotaryIssuer) -> dict:
+def _execute_doc(signer: LocalCountersignIssuer) -> dict:
     receipt = {
         "schema_version": "openadapt.execute-evidence-receipt/v1",
         "receipt_id": "rcpt-0000000002",
@@ -389,15 +393,17 @@ def test_openssl_accepts_local_tsa_tokens(tsa, tmp_path):
     assert "Verification: OK" in proc.stdout, proc.stderr
 
 
-# -- notarize and verify -----------------------------------------------------
+# -- countersign and verify --------------------------------------------------
 
 
-def _notarized(issuer, tsa, *, doc=None, fields=None, baseline=None, countersign=True):
+def _countersigned(
+    issuer, tsa, *, doc=None, fields=None, baseline=None, countersign=True
+):
     doc = doc or _effect_doc(issuer)
     block = kept = None
     if fields:
         block, kept = C.commit_fields(fields)
-    out = notarize_document(
+    out = countersign_document(
         doc,
         tsa=tsa,
         tsa_pem=tsa.certificate_pem(),
@@ -408,23 +414,23 @@ def _notarized(issuer, tsa, *, doc=None, fields=None, baseline=None, countersign
     return out, block, kept
 
 
-def test_notarizing_leaves_the_receipt_and_its_seal_untouched(issuer, tsa):
+def test_countersigning_leaves_the_receipt_and_its_seal_untouched(issuer, tsa):
     doc = _effect_doc(issuer)
-    out, _, _ = _notarized(issuer, tsa, doc=doc, fields={"mrn": "004217"})
+    out, _, _ = _countersigned(issuer, tsa, doc=doc, fields={"mrn": "004217"})
     assert out["receipt"] == doc["receipt"] and out["evidence"] == doc["evidence"]
     keys = parse_key_registry([issuer.registry_entry()])
     assert verify_sealed_receipt(
         out["receipt"], keys
     ).ok  # the existing verifier, unchanged
     assert "004217" not in json.dumps(out) and "mrn" not in json.dumps(out)
-    with pytest.raises(NotaryError):
-        notarize_document(out, tsa=tsa)
+    with pytest.raises(CountersignError):
+        countersign_document(out, tsa=tsa)
 
 
 def test_agent_receipt_never_reads_like_a_flow_replay(issuer, tsa):
-    out, _, _ = _notarized(issuer, tsa)
+    out, _, _ = _countersigned(issuer, tsa)
     reg = [issuer.registry_entry()]
-    report = verify_notarized(out, registry=reg, tsa_certificates=[tsa.certificate])
+    report = verify_countersigned(out, registry=reg, tsa_certificates=[tsa.certificate])
     text = render_report(report)
     assert report.exit_code == 1
     assert text.splitlines()[0].startswith(
@@ -433,7 +439,7 @@ def test_agent_receipt_never_reads_like_a_flow_replay(issuer, tsa):
     assert "AGENT: a computer-use agent acted. This is not a Flow replay" in text
     assert "independent_readback" in text
     assert "Receipt timestamp   VERIFIED 2026-10-17T05:01:00Z" in text
-    accepted = verify_notarized(
+    accepted = verify_countersigned(
         out, registry=reg, tsa_certificates=[tsa.certificate], accept_non_flow=True
     )
     assert accepted.exit_code == 0
@@ -443,8 +449,8 @@ def test_agent_receipt_never_reads_like_a_flow_replay(issuer, tsa):
 
 
 def test_declared_flow_replay_in_an_effect_receipt_is_not_trusted(issuer, tsa):
-    out, _, _ = _notarized(issuer, tsa, doc=_effect_doc(issuer, kind="flow_replay"))
-    report = verify_notarized(
+    out, _, _ = _countersigned(issuer, tsa, doc=_effect_doc(issuer, kind="flow_replay"))
+    report = verify_countersigned(
         out, registry=[issuer.registry_entry()], tsa_certificates=[tsa.certificate]
     )
     assert report.exit_code == 1
@@ -453,12 +459,12 @@ def test_declared_flow_replay_in_an_effect_receipt_is_not_trusted(issuer, tsa):
 
 def test_execute_receipt_reads_as_flow_replay(issuer, tsa):
     bare = _execute_doc(issuer)
-    out, _, _ = _notarized(issuer, tsa, doc=bare)
+    out, _, _ = _countersigned(issuer, tsa, doc=bare)
     # A bare receipt is wrapped, never edited: legacy verifiers read "receipt".
     assert out["receipt"] == bare and "extensions" not in out["receipt"]
     keys = parse_key_registry([issuer.registry_entry()])
     assert verify_sealed_receipt(out["receipt"], keys).ok
-    report = verify_notarized(
+    report = verify_countersigned(
         out, registry=[issuer.registry_entry()], tsa_certificates=[tsa.certificate]
     )
     assert report.exit_code == 0, report.problems
@@ -474,10 +480,10 @@ def test_execute_receipt_reads_as_flow_replay(issuer, tsa):
 def test_signed_refuted_and_indeterminate_receipts_exit_nonzero(
     issuer, tsa, verdict, outcome
 ):
-    out, _, _ = _notarized(
+    out, _, _ = _countersigned(
         issuer, tsa, doc=_effect_doc(issuer, outcome=outcome, verdict=verdict)
     )
-    report = verify_notarized(
+    report = verify_countersigned(
         out,
         registry=[issuer.registry_entry()],
         tsa_certificates=[tsa.certificate],
@@ -490,8 +496,8 @@ def test_signed_refuted_and_indeterminate_receipts_exit_nonzero(
 
 
 def test_unpinned_tsa_is_not_checked_and_not_a_pass(issuer, tsa):
-    out, _, _ = _notarized(issuer, tsa)
-    report = verify_notarized(
+    out, _, _ = _countersigned(issuer, tsa)
+    report = verify_countersigned(
         out, registry=[issuer.registry_entry()], accept_non_flow=True
     )
     assert report.receipt_timestamp["status"] == "not_checked"
@@ -502,54 +508,56 @@ def test_unpinned_tsa_is_not_checked_and_not_a_pass(issuer, tsa):
     )
 
 
-def test_tampering_after_notarization_is_caught(issuer, tsa):
-    out, _, _ = _notarized(issuer, tsa)
+def test_tampering_after_countersigning_is_caught(issuer, tsa):
+    out, _, _ = _countersigned(issuer, tsa)
     reg = [issuer.registry_entry()]
     edited = json.loads(json.dumps(out))
     edited["receipt"]["executor_kind"] = "flow_replay"
-    report = verify_notarized(edited, registry=reg, tsa_certificates=[tsa.certificate])
+    report = verify_countersigned(
+        edited, registry=reg, tsa_certificates=[tsa.certificate]
+    )
     assert report.seal["status"] == "receipt_mismatch"
     assert "statement_mismatch" in report.problems
 
     # A fresh timestamp over a forged statement does not survive the statement check.
     swapped = json.loads(json.dumps(out))
     swapped["extensions"][EXTENSION_KEY]["statement"]["nonce"] = "nonce-forged000000"
-    report = verify_notarized(
+    report = verify_countersigned(
         swapped, registry=reg, tsa_certificates=[tsa.certificate], accept_non_flow=True
     )
     assert "statement_mismatch" in report.problems and report.exit_code == 1
 
 
 def test_countersignature_reuses_the_seal_scheme(issuer, tsa):
-    out, _, _ = _notarized(issuer, tsa)
+    out, _, _ = _countersigned(issuer, tsa)
     block = out["extensions"][EXTENSION_KEY]
     att = block["countersignature"]["attestation"]
-    assert att["schema_version"] == "openadapt.notary-attestation/v1"
+    assert att["schema_version"] == "openadapt.countersign-attestation/v1"
     assert (
         block["countersignature"]["seal_signature"]["schema"]
         == "openadapt.seal-signature/v1"
     )
-    report = verify_notarized(
+    report = verify_countersigned(
         out,
         registry=[issuer.registry_entry()],
         tsa_certificates=[tsa.certificate],
         accept_non_flow=True,
     )
     assert report.countersignature["status"] == "verified"
-    other = LocalNotaryIssuer(Ed25519PrivateKey.generate())
+    other = LocalCountersignIssuer(Ed25519PrivateKey.generate())
     forged = json.loads(json.dumps(out))
     forged["extensions"][EXTENSION_KEY]["countersignature"]["seal_signature"] = (
         other.countersign(att)
     )
-    report = verify_notarized(
+    report = verify_countersigned(
         forged,
         registry=[issuer.registry_entry()],
         tsa_certificates=[tsa.certificate],
         accept_non_flow=True,
     )
     assert report.countersignature["status"] == "unknown_key" and report.exit_code == 1
-    with pytest.raises(NotaryError):
-        CloudNotaryIssuer().countersign(att)
+    with pytest.raises(CountersignError):
+        CloudCountersignIssuer().countersign(att)
 
 
 def test_baseline_timestamp_binds_read_time_and_run_nonce(issuer):
@@ -568,8 +576,8 @@ def test_baseline_timestamp_binds_read_time_and_run_nonce(issuer):
         baseline_read_at=rb["baseline_read_at"],
         nonce=doc["receipt"]["nonce"],
     )
-    out = notarize_document(doc, tsa=late, baseline_timestamp=good, issuer=issuer)
-    report = verify_notarized(
+    out = countersign_document(doc, tsa=late, baseline_timestamp=good, issuer=issuer)
+    report = verify_countersigned(
         out, registry=reg, tsa_certificates=[early.certificate], accept_non_flow=True
     )
     assert report.baseline_timestamp["status"] == "verified" and report.exit_code == 0
@@ -581,9 +589,9 @@ def test_baseline_timestamp_binds_read_time_and_run_nonce(issuer):
         baseline_read_at=rb["baseline_read_at"],
         nonce="nonce-another-run0",
     )
-    out = notarize_document(doc, tsa=late, baseline_timestamp=other_run)
+    out = countersign_document(doc, tsa=late, baseline_timestamp=other_run)
     assert (
-        verify_notarized(
+        verify_countersigned(
             out, registry=reg, tsa_certificates=[early.certificate]
         ).baseline_timestamp["status"]
         == "binding_mismatch"
@@ -595,9 +603,9 @@ def test_baseline_timestamp_binds_read_time_and_run_nonce(issuer):
         baseline_read_at=rb["baseline_read_at"],
         nonce=doc["receipt"]["nonce"],
     )
-    out = notarize_document(doc, tsa=late, baseline_timestamp=after)
+    out = countersign_document(doc, tsa=late, baseline_timestamp=after)
     assert (
-        verify_notarized(
+        verify_countersigned(
             out, registry=reg, tsa_certificates=[early.certificate]
         ).baseline_timestamp["status"]
         == "after_receipt"
@@ -605,14 +613,14 @@ def test_baseline_timestamp_binds_read_time_and_run_nonce(issuer):
 
 
 def test_disclosure_counts_only_against_bound_commitments(issuer, tsa):
-    out, block, kept = _notarized(
+    out, block, kept = _countersigned(
         issuer, tsa, fields={"mrn": "004217", "dob": "1961-03-04"}, countersign=False
     )
     rsha = receipt_sha256(out["receipt"])
     label = next(s.label for s in kept if s.name == "mrn")
     bundle = C.build_disclosure(block, kept, [label], receipt_sha256=rsha)
     reg = [issuer.registry_entry()]
-    report = verify_notarized(
+    report = verify_countersigned(
         out,
         registry=reg,
         tsa_certificates=[tsa.certificate],
@@ -623,13 +631,13 @@ def test_disclosure_counts_only_against_bound_commitments(issuer, tsa):
     assert "mrn) OK" in render_report(report)
     # Without a checked timestamp or countersignature the commitments could
     # have been written after the fact; a matching value proves nothing.
-    report = verify_notarized(
+    report = verify_countersigned(
         out, registry=reg, disclosures=[bundle], accept_non_flow=True
     )
     assert "commitments_unbound" in report.problems
     wrong = json.loads(json.dumps(bundle))
     wrong["fields"][0]["value"] = "004218"
-    report = verify_notarized(
+    report = verify_countersigned(
         out,
         registry=reg,
         tsa_certificates=[tsa.certificate],
@@ -643,7 +651,7 @@ def test_disclosure_counts_only_against_bound_commitments(issuer, tsa):
 
 
 def test_dossier_embeds_no_phi_by_default_and_reverifies(issuer, tsa, tmp_path):
-    out, block, kept = _notarized(
+    out, block, kept = _countersigned(
         issuer, tsa, fields={"mrn": "004217", "patient_name": "Ada Lovelace"}
     )
     raw_png = b"\x89PNG\r\n\x1a\nRAW-PHI-SCREENSHOT"
@@ -663,7 +671,7 @@ def test_dossier_embeds_no_phi_by_default_and_reverifies(issuer, tsa, tmp_path):
     assert "left out: no redaction provider" in page
     assert "SEAL VERIFIED FOR A AGENT RUN" in page
     again = extract_dossier_data(page)
-    re_report = verify_notarized(
+    re_report = verify_countersigned(
         again["document"],
         registry=[issuer.registry_entry()],
         tsa_certificates=[tsa.certificate],
@@ -690,7 +698,7 @@ def test_dossier_includes_disclosures_and_redacted_screenshots_only_when_given(
     Image.new("RGB", (4, 4), (255, 0, 0)).save(buf, format="PNG")
     shot = tmp_path / "frame.png"
     shot.write_bytes(buf.getvalue())
-    out, block, kept = _notarized(
+    out, block, kept = _countersigned(
         issuer, tsa, fields={"mrn": "004217", "patient_name": "Ada Lovelace"}
     )
     label = next(s.label for s in kept if s.name == "mrn")
@@ -733,7 +741,7 @@ def test_dossier_includes_disclosures_and_redacted_screenshots_only_when_given(
 # -- CLI end to end ------------------------------------------------------------
 
 
-def test_cli_notarize_disclose_verify_dossier(issuer, tmp_path, capsys, monkeypatch):
+def test_cli_add_disclose_verify_dossier(issuer, tmp_path, capsys, monkeypatch):
     from cryptography.hazmat.primitives import serialization
 
     from openadapt_flow.__main__ import main
@@ -743,7 +751,7 @@ def test_cli_notarize_disclose_verify_dossier(issuer, tmp_path, capsys, monkeypa
     doc.write_text(json.dumps(_effect_doc(issuer)))
     fields = tmp_path / "fields.json"
     fields.write_text(json.dumps({"mrn": "004217"}))
-    key = tmp_path / "notary.pem"
+    key = tmp_path / "issuer.pem"
     key.write_bytes(
         Ed25519PrivateKey.from_private_bytes(TEST_SEED).private_bytes(
             serialization.Encoding.PEM,
@@ -754,16 +762,16 @@ def test_cli_notarize_disclose_verify_dossier(issuer, tmp_path, capsys, monkeypa
     keys = tmp_path / "seal-keys.json"
     keys.write_text(json.dumps({"keys": [issuer.registry_entry()]}))
     vault = tmp_path / "vault"
-    notarized = tmp_path / "notarized.json"
+    countersigned = tmp_path / "countersigned.json"
     tsa_dir = tmp_path / "tsa"
     assert (
         main(
             [
-                "notary",
-                "notarize",
+                "countersign",
+                "add",
                 str(doc),
                 "-o",
-                str(notarized),
+                str(countersigned),
                 "--fields-file",
                 str(fields),
                 "--tsa-local",
@@ -776,16 +784,16 @@ def test_cli_notarize_disclose_verify_dossier(issuer, tmp_path, capsys, monkeypa
         )
         == 0
     )
-    assert (notarized.stat().st_mode & 0o777) == 0o600
+    assert (countersigned.stat().st_mode & 0o777) == 0o600
     rsha = receipt_sha256(json.loads(doc.read_text())["receipt"])
     secrets_file = vault / rsha / "field-secrets.json"
     assert (
         secrets_file.stat().st_mode & 0o777
     ) == 0o600 and "004217" in secrets_file.read_text()
-    assert "004217" not in notarized.read_text()
+    assert "004217" not in countersigned.read_text()
     label = next(
         iter(
-            json.loads(notarized.read_text())["extensions"][EXTENSION_KEY][
+            json.loads(countersigned.read_text())["extensions"][EXTENSION_KEY][
                 "commitments"
             ]["fields"]
         )
@@ -794,9 +802,9 @@ def test_cli_notarize_disclose_verify_dossier(issuer, tmp_path, capsys, monkeypa
     assert (
         main(
             [
-                "notary",
+                "countersign",
                 "disclose",
-                str(notarized),
+                str(countersigned),
                 "--field",
                 label,
                 "-o",
@@ -809,9 +817,9 @@ def test_cli_notarize_disclose_verify_dossier(issuer, tmp_path, capsys, monkeypa
     )
     capsys.readouterr()
     base = [
-        "notary",
+        "countersign",
         "verify",
-        str(notarized),
+        str(countersigned),
         "--keys",
         str(keys),
         "--tsa-cert",
@@ -833,9 +841,9 @@ def test_cli_notarize_disclose_verify_dossier(issuer, tmp_path, capsys, monkeypa
     assert (
         main(
             [
-                "notary",
+                "countersign",
                 "dossier",
-                str(notarized),
+                str(countersigned),
                 "-o",
                 str(html_out),
                 "--keys",
@@ -851,7 +859,7 @@ def test_cli_notarize_disclose_verify_dossier(issuer, tmp_path, capsys, monkeypa
     assert (
         main(
             [
-                "notary",
+                "countersign",
                 "verify",
                 str(html_out),
                 "--keys",
@@ -874,14 +882,14 @@ def test_sigstore_token_verifies_offline_against_bundled_root():
     import hashlib
     from pathlib import Path
 
-    from openadapt_flow.notary.tsa import (
+    from openadapt_flow.countersign.tsa import (
         load_pem_certificates,
         sigstore_tsa_root_pem,
         verify_timestamp_token,
     )
 
     token = (
-        Path(__file__).parent / "fixtures" / "notary" / "sigstore-token.der"
+        Path(__file__).parent / "fixtures" / "countersign" / "sigstore-token.der"
     ).read_bytes()
     digest = hashlib.sha256(b"openadapt sigstore probe").digest()
     roots = load_pem_certificates(sigstore_tsa_root_pem())
@@ -896,8 +904,8 @@ def test_sigstore_token_verifies_offline_against_bundled_root():
 def test_default_authority_is_sigstore_and_no_timestamp_opts_out():
     import argparse
 
-    from openadapt_flow.notary.cli import _authority, _tsa_pem
-    from openadapt_flow.notary.tsa import (
+    from openadapt_flow.countersign.cli import _authority, _tsa_pem
+    from openadapt_flow.countersign.tsa import (
         SIGSTORE_TSA_URL,
         HttpTsa,
         sigstore_tsa_root_pem,

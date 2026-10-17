@@ -1,27 +1,27 @@
-"""Notarized Seals: trusted timestamps, salted field commitments, dossiers.
+"""Countersigned Seals: trusted timestamps, salted field commitments, dossiers.
 
 An optional layer over the existing Seal (``openadapt.seal-signature/v1``). It
 adds nothing to the receipt or its evidence manifest; every addition lives in
-``extensions["openadapt.notary/v1"]`` beside them. See docs/NOTARIZED_SEALS.md.
+``extensions["openadapt.countersign/v1"]`` beside them. See docs/COUNTERSIGNED_SEALS.md.
 
 Nothing here runs during replay and nothing here calls a model.
 """
 
-from openadapt_flow.notary.commitments import (
+from openadapt_flow.countersign.commitments import (
     build_disclosure,
     commit_fields,
     verify_disclosure,
 )
-from openadapt_flow.notary.notarize import (
+from openadapt_flow.countersign.document import (
     EXTENSION_KEY,
-    CloudNotaryIssuer,
-    LocalNotaryIssuer,
-    NotaryIssuer,
-    notarize_document,
+    CloudCountersignIssuer,
+    CountersignIssuer,
+    LocalCountersignIssuer,
+    countersign_document,
     timestamp_baseline,
-    verify_notarized,
+    verify_countersigned,
 )
-from openadapt_flow.notary.tsa import (
+from openadapt_flow.countersign.tsa import (
     HttpTsa,
     LocalTsa,
     TimestampAuthority,
@@ -30,17 +30,17 @@ from openadapt_flow.notary.tsa import (
 
 __all__ = [
     "EXTENSION_KEY",
-    "CloudNotaryIssuer",
+    "CloudCountersignIssuer",
     "HttpTsa",
-    "LocalNotaryIssuer",
+    "LocalCountersignIssuer",
     "LocalTsa",
-    "NotaryIssuer",
+    "CountersignIssuer",
     "TimestampAuthority",
     "build_disclosure",
     "commit_fields",
-    "notarize_document",
+    "countersign_document",
     "timestamp_baseline",
     "verify_disclosure",
-    "verify_notarized",
+    "verify_countersigned",
     "verify_timestamp_token",
 ]

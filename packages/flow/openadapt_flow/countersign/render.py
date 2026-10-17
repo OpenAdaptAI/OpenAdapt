@@ -1,4 +1,4 @@
-"""Plain-text rendering of a :class:`NotaryReport`.
+"""Plain-text rendering of a :class:`CountersignReport`.
 
 Written so an agent receipt can never read like a Flow replay: the executor
 line is always printed, always second, and says who declared it.
@@ -8,10 +8,10 @@ from __future__ import annotations
 
 from typing import Any
 
-from openadapt_flow.notary.notarize import (
+from openadapt_flow.countersign.document import (
     EFFECT_RECEIPT_SCHEMA,
     EXECUTE_RECEIPT_SCHEMA,
-    NotaryReport,
+    CountersignReport,
 )
 
 __all__ = ["executor_line", "headline", "render_report", "tier_line"]
@@ -44,7 +44,7 @@ _TS_TEXT = {
     "after_receipt": "FAILED: the baseline was stamped after the receipt",
     "malformed": "MALFORMED",
     "unsupported_algorithm": "FAILED: unsupported signature algorithm",
-    "verifier_unavailable": "NOT CHECKED: install openadapt-flow[notary]",
+    "verifier_unavailable": "NOT CHECKED: install openadapt-flow[countersign]",
 }
 
 _EXECUTORS = {
@@ -55,7 +55,7 @@ _EXECUTORS = {
 }
 
 
-def executor_line(report: NotaryReport) -> str:
+def executor_line(report: CountersignReport) -> str:
     kind = report.executor_kind
     if report.receipt_schema == EXECUTE_RECEIPT_SCHEMA:
         return (
@@ -74,7 +74,7 @@ def executor_line(report: NotaryReport) -> str:
     )
 
 
-def tier_line(report: NotaryReport) -> str:
+def tier_line(report: CountersignReport) -> str:
     if report.receipt_schema == EXECUTE_RECEIPT_SCHEMA:
         return f"not stated by Execute v1 (oracle_tier {report.oracle_tier})"
     tier = report.verification_tier
@@ -86,7 +86,7 @@ def tier_line(report: NotaryReport) -> str:
     return f"{tier} ({meaning}; oracle_tier {report.oracle_tier})"
 
 
-def headline(report: NotaryReport) -> str:
+def headline(report: CountersignReport) -> str:
     if report.seal.get("status") != "verified":
         return "NOT VERIFIED: Seal signature " + str(report.seal.get("status"))
     if report.problems:
@@ -114,7 +114,7 @@ def _ts(entry: dict[str, Any]) -> str:
     return text
 
 
-def render_report(report: NotaryReport, *, show_names: bool = True) -> str:
+def render_report(report: CountersignReport, *, show_names: bool = True) -> str:
     lines = [headline(report), ""]
     rows: list[tuple[str, str]] = [
         ("Executor", executor_line(report)),
@@ -143,12 +143,15 @@ def render_report(report: NotaryReport, *, show_names: bool = True) -> str:
     st = report.statement.get("status")
     if st == "absent":
         rows.append(
-            ("Notary", "absent: no timestamp, countersignature, or commitments")
+            (
+                "Countersign block",
+                "absent: no timestamp, countersignature, or commitments",
+            )
         )
     else:
         rows.append(
             (
-                "Notary statement",
+                "Statement",
                 "matches the receipt"
                 if st == "matches_receipt"
                 else "FAILED: does not match the receipt",

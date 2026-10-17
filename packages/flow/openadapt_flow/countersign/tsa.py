@@ -75,7 +75,7 @@ def sigstore_tsa_root_pem() -> bytes:
     from importlib import resources
 
     return (
-        resources.files("openadapt_flow.notary")
+        resources.files("openadapt_flow.countersign")
         .joinpath(SIGSTORE_TSA_ROOT_RESOURCE)
         .read_bytes()
     )
@@ -104,7 +104,7 @@ def _asn1() -> Any:
     except ImportError as exc:  # pragma: no cover - exercised without the extra
         raise TimestampError(
             "verifier_unavailable",
-            "install 'openadapt-flow[notary]' (asn1crypto) for RFC 3161 timestamps",
+            "install 'openadapt-flow[countersign]' (asn1crypto) for RFC 3161 timestamps",
         ) from exc
     import asn1crypto
 
@@ -317,7 +317,7 @@ class LocalTsa:
             serialization.PrivateFormat.PKCS8,
             serialization.NoEncryption(),
         )
-        from openadapt_flow.notary.vault import write_private_bytes
+        from openadapt_flow.countersign.vault import write_private_bytes
 
         write_private_bytes(key_path, pem)
         cert_path.write_bytes(tsa.certificate_pem())

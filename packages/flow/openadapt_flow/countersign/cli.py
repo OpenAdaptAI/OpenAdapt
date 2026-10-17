@@ -1,7 +1,7 @@
-"""``openadapt-flow notary``: notarize, disclose, verify, and export a dossier.
+"""``openadapt-flow countersign``: add, disclose, verify, and export a dossier.
 
 The bundle-encryption command already owns ``openadapt-flow seal``, so these
-live under ``notary``. ``notary verify`` is the Seal check with the executor,
+live under ``countersign``. ``countersign verify`` is the Seal check with the executor,
 verification tier, timestamp, and disclosures shown.
 """
 
@@ -15,7 +15,7 @@ import sys
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
-__all__ = ["add_notary_parser", "load_pinned_registry"]
+__all__ = ["add_countersign_parser", "load_pinned_registry"]
 
 MAX_DOCUMENT_BYTES = 1 << 20
 
@@ -64,7 +64,7 @@ def _read_document(path: str) -> tuple[Any, list[Any]]:
     """A JSON document, or the data embedded in a dossier page."""
     text = Path(path).expanduser().read_text(encoding="utf-8")
     if text.lstrip().startswith("<"):
-        from openadapt_flow.notary.dossier import extract_dossier_data
+        from openadapt_flow.countersign.dossier import extract_dossier_data
 
         data = extract_dossier_data(text)
         return data["document"], list(data["disclosures"])
@@ -75,14 +75,14 @@ def _tsa_pem(paths: Sequence[str]) -> Optional[bytes]:
     """Pinned TSA certificates: ``--tsa-cert`` files, else the Sigstore root."""
 
     if not paths:
-        from openadapt_flow.notary.tsa import sigstore_tsa_root_pem
+        from openadapt_flow.countersign.tsa import sigstore_tsa_root_pem
 
         return sigstore_tsa_root_pem()
     return b"".join(Path(p).expanduser().read_bytes() for p in paths)
 
 
 def _authority(args: argparse.Namespace) -> tuple[Any, Optional[bytes]]:
-    from openadapt_flow.notary.tsa import SIGSTORE_TSA_URL, HttpTsa, LocalTsa
+    from openadapt_flow.countersign.tsa import SIGSTORE_TSA_URL, HttpTsa, LocalTsa
 
     if getattr(args, "no_timestamp", False):
         return None, None
@@ -93,7 +93,7 @@ def _authority(args: argparse.Namespace) -> tuple[Any, Optional[bytes]]:
 
 
 def _write_out(path: str, value: Any) -> None:
-    from openadapt_flow.notary.vault import write_private_bytes
+    from openadapt_flow.countersign.vault import write_private_bytes
 
     write_private_bytes(
         Path(path).expanduser(),
@@ -101,23 +101,23 @@ def _write_out(path: str, value: Any) -> None:
     )
 
 
-def cmd_notarize(args: argparse.Namespace) -> int:
-    from openadapt_flow.notary.commitments import commit_fields
-    from openadapt_flow.notary.notarize import (
-        LocalNotaryIssuer,
-        NotaryError,
+def cmd_add(args: argparse.Namespace) -> int:
+    from openadapt_flow.countersign.commitments import commit_fields
+    from openadapt_flow.countersign.document import (
+        CountersignError,
+        LocalCountersignIssuer,
+        countersign_document,
         locate,
-        notarize_document,
         receipt_sha256,
     )
-    from openadapt_flow.notary.tsa import TimestampError
-    from openadapt_flow.notary.vault import NotaryVault, VaultError
+    from openadapt_flow.countersign.tsa import TimestampError
+    from openadapt_flow.countersign.vault import CountersignVault, VaultError
 
     try:
         document = _read_json(args.document)
         located = locate(document)
         rsha = receipt_sha256(located.receipt)
-        vault = NotaryVault(Path(args.vault).expanduser() if args.vault else None)
+        vault = CountersignVault(Path(args.vault).expanduser() if args.vault else None)
         commitments = None
         if args.fields_file:
             fields = _read_json(args.fields_file)
@@ -140,8 +140,8 @@ def cmd_notarize(args: argparse.Namespace) -> int:
             key = serialization.load_pem_private_key(
                 Path(args.countersign_key).expanduser().read_bytes(), None
             )
-            issuer = LocalNotaryIssuer(key)
-        notarized = notarize_document(
+            issuer = LocalCountersignIssuer(key)
+        countersigned = countersign_document(
             document,
             tsa=tsa,
             tsa_pem=tsa_pem,
@@ -149,15 +149,15 @@ def cmd_notarize(args: argparse.Namespace) -> int:
             baseline_timestamp=baseline,
             issuer=issuer,
         )
-        vault.put_json(rsha, "document.json", notarized, overwrite=True)
-        _write_out(args.out, notarized)
-    except (NotaryError, TimestampError) as exc:
-        print(f"notarize REFUSED: {exc.code}", file=sys.stderr)
+        vault.put_json(rsha, "document.json", countersigned, overwrite=True)
+        _write_out(args.out, countersigned)
+    except (CountersignError, TimestampError) as exc:
+        print(f"add REFUSED: {exc.code}", file=sys.stderr)
         return 2
     except (OSError, ValueError, VaultError) as exc:
-        print(f"notarize REFUSED: {exc}", file=sys.stderr)
+        print(f"add REFUSED: {exc}", file=sys.stderr)
         return 2
-    print(f"Notarized receipt {rsha}: {args.out}")
+    print(f"Countersign block added to receipt {rsha}: {args.out}")
     if commitments:
         labels = ", ".join(sorted(commitments["fields"]))
         print(f"Committed {len(commitments['fields'])} field(s): {labels}")
@@ -169,8 +169,8 @@ def cmd_notarize(args: argparse.Namespace) -> int:
 
 
 def cmd_timestamp_baseline(args: argparse.Namespace) -> int:
-    from openadapt_flow.notary.notarize import timestamp_baseline
-    from openadapt_flow.notary.tsa import TimestampError
+    from openadapt_flow.countersign.document import timestamp_baseline
+    from openadapt_flow.countersign.tsa import TimestampError
 
     tsa, tsa_pem = _authority(args)
     if tsa is None:
@@ -203,24 +203,28 @@ def cmd_timestamp_baseline(args: argparse.Namespace) -> int:
 
 
 def cmd_disclose(args: argparse.Namespace) -> int:
-    from openadapt_flow.notary.commitments import CommitmentError, build_disclosure
-    from openadapt_flow.notary.notarize import NotaryError, locate, receipt_sha256
-    from openadapt_flow.notary.vault import NotaryVault, VaultError
+    from openadapt_flow.countersign.commitments import CommitmentError, build_disclosure
+    from openadapt_flow.countersign.document import (
+        CountersignError,
+        locate,
+        receipt_sha256,
+    )
+    from openadapt_flow.countersign.vault import CountersignVault, VaultError
 
     try:
         located = locate(_read_json(args.document))
-        if located.notary is None or not located.notary.get("commitments"):
-            raise NotaryError("no_commitments")
+        if located.block is None or not located.block.get("commitments"):
+            raise CountersignError("no_commitments")
         rsha = receipt_sha256(located.receipt)
-        vault = NotaryVault(Path(args.vault).expanduser() if args.vault else None)
+        vault = CountersignVault(Path(args.vault).expanduser() if args.vault else None)
         bundle = build_disclosure(
-            located.notary["commitments"],
+            located.block["commitments"],
             vault.get_secrets(rsha),
             args.field,
             receipt_sha256=rsha,
         )
         _write_out(args.out, bundle)
-    except NotaryError as exc:
+    except CountersignError as exc:
         print(f"disclose REFUSED: {exc.code}", file=sys.stderr)
         return 2
     except (CommitmentError, VaultError, OSError, ValueError) as exc:
@@ -234,9 +238,9 @@ def cmd_disclose(args: argparse.Namespace) -> int:
 
 
 def cmd_verify(args: argparse.Namespace) -> int:
-    from openadapt_flow.notary.notarize import verify_notarized
-    from openadapt_flow.notary.render import render_report
-    from openadapt_flow.notary.tsa import load_pem_certificates
+    from openadapt_flow.countersign.document import verify_countersigned
+    from openadapt_flow.countersign.render import render_report
+    from openadapt_flow.countersign.tsa import load_pem_certificates
 
     try:
         document, embedded = _read_document(args.document)
@@ -246,7 +250,7 @@ def cmd_verify(args: argparse.Namespace) -> int:
     except (OSError, ValueError) as exc:
         print(f"NOT VERIFIED: unreadable input ({exc})", file=sys.stderr)
         return 1
-    report = verify_notarized(
+    report = verify_countersigned(
         document,
         registry=load_pinned_registry(args.keys),
         tsa_certificates=certs,
@@ -261,9 +265,9 @@ def cmd_verify(args: argparse.Namespace) -> int:
 
 
 def cmd_dossier(args: argparse.Namespace) -> int:
-    from openadapt_flow.notary.dossier import build_dossier, write_dossier
-    from openadapt_flow.notary.notarize import NotaryError
-    from openadapt_flow.notary.render import headline
+    from openadapt_flow.countersign.document import CountersignError
+    from openadapt_flow.countersign.dossier import build_dossier, write_dossier
+    from openadapt_flow.countersign.render import headline
 
     try:
         document = _read_json(args.document)
@@ -278,7 +282,7 @@ def cmd_dossier(args: argparse.Namespace) -> int:
         )
         fmt = args.format or ("zip" if args.out.endswith(".zip") else "html")
         out = write_dossier(data, report, Path(args.out).expanduser(), fmt=fmt)
-    except NotaryError as exc:
+    except CountersignError as exc:
         print(f"dossier REFUSED: {exc.code}", file=sys.stderr)
         return 2
     except (OSError, ValueError) as exc:
@@ -336,22 +340,22 @@ def _add_trust(p: argparse.ArgumentParser) -> None:
     )
 
 
-def add_notary_parser(sub: Any) -> None:
+def add_countersign_parser(sub: Any) -> None:
     p = sub.add_parser(
-        "notary",
+        "countersign",
         help="Timestamp, countersign, selectively disclose, and export a dispute dossier for a Seal",
     )
-    nsub = p.add_subparsers(dest="notary_cmd", required=True)
+    nsub = p.add_subparsers(dest="countersign_cmd", required=True)
 
     n = nsub.add_parser(
-        "notarize",
-        help="Add a notary block: field commitments, RFC 3161 timestamp, countersignature",
+        "add",
+        help="Add a countersign block: field commitments, RFC 3161 timestamp, countersignature",
     )
     n.add_argument(
         "document", help="Receipt, effect-receipt wire document, or report.json"
     )
     n.add_argument(
-        "-o", "--out", required=True, help="Notarized document to write (mode 0600)"
+        "-o", "--out", required=True, help="Countersigned document to write (mode 0600)"
     )
     n.add_argument(
         "--fields-file",
@@ -360,16 +364,14 @@ def add_notary_parser(sub: Any) -> None:
     _add_tsa(n)
     n.add_argument(
         "--baseline-timestamp",
-        help="Output of 'notary timestamp-baseline' for this run",
+        help="Output of 'countersign timestamp-baseline' for this run",
     )
-    n.add_argument(
-        "--countersign-key", help="Ed25519 PEM for a local notary countersignature"
-    )
+    n.add_argument("--countersign-key", help="Ed25519 PEM for a local countersignature")
     n.add_argument(
         "--vault",
-        help="Vault directory (default $OPENADAPT_NOTARY_VAULT or ~/.openadapt/notary-vault)",
+        help="Vault directory (default $OPENADAPT_COUNTERSIGN_VAULT or ~/.openadapt/countersign-vault)",
     )
-    n.set_defaults(func=cmd_notarize)
+    n.set_defaults(func=cmd_add)
 
     b = nsub.add_parser(
         "timestamp-baseline", help="Timestamp a baseline read before the executor runs"
@@ -390,7 +392,7 @@ def add_notary_parser(sub: Any) -> None:
     d = nsub.add_parser(
         "disclose", help="Write a disclosure bundle revealing chosen committed fields"
     )
-    d.add_argument("document", help="Notarized document")
+    d.add_argument("document", help="Countersigned document")
     d.add_argument(
         "--field",
         action="append",
@@ -407,7 +409,8 @@ def add_notary_parser(sub: Any) -> None:
         help="Check a Seal offline and show executor, verification tier, timestamps, and disclosures",
     )
     v.add_argument(
-        "document", help="Notarized document, receipt, report.json, or dossier .html"
+        "document",
+        help="Countersigned document, receipt, report.json, or dossier .html",
     )
     _add_trust(v)
     v.add_argument("--json", action="store_true")
@@ -416,7 +419,7 @@ def add_notary_parser(sub: Any) -> None:
     x = nsub.add_parser(
         "dossier", help="Export one offline-verifiable HTML or zip for a dispute"
     )
-    x.add_argument("document", help="Notarized document")
+    x.add_argument("document", help="Countersigned document")
     x.add_argument("-o", "--out", required=True, help="Output .html or .zip")
     x.add_argument("--format", choices=["html", "zip"])
     x.add_argument(

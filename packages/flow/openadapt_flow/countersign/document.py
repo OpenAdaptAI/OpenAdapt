@@ -1,13 +1,13 @@
-"""Notarized Seals: a timestamped, countersigned statement about a receipt.
+"""Countersigned Seals: a timestamped, countersigned statement about a receipt.
 
-The notary block is an optional extension that travels beside a receipt in
-its wire document, under ``extensions["openadapt.notary/v1"]``. It never
+The countersign block is an optional extension that travels beside a receipt in
+its wire document, under ``extensions["openadapt.countersign/v1"]``. It never
 edits the receipt or its evidence manifest, so the receipt's Seal signature
 and ``evidence_digest`` still verify with the existing code.
 
 The block holds:
 
-* ``statement``: what is being notarized, by digest only. It names the
+* ``statement``: what the block attests, by digest only. It names the
   receipt (``receipt_sha256``, ``execution_id``, ``nonce``), the evidence
   manifest (``evidence_digest``), the baseline that binds the read to one run
   (``baseline_sha256``, ``baseline_read_at``), and the field commitment block
@@ -18,13 +18,13 @@ The block holds:
 * ``baseline_timestamp`` (optional): a token over SHA-256 of a baseline
   binding (``baseline_sha256``, ``baseline_read_at``, ``nonce``), taken when
   the baseline was read and before the executor ran.
-* ``countersignature`` (optional): a Seal signature by a notary issuer over an
+* ``countersignature`` (optional): a Seal signature by a countersigning issuer over an
   attestation that names the statement and both tokens. It reuses
   ``openadapt.seal-signature/v1``, Cloud's key registry, and pinning
   unchanged; the attestation's own ``schema_version`` sits inside the signed
   hash, which keeps it apart from receipts signed by the same key.
 
-Only digests leave the customer: the TSA sees one 32-byte hash, a notary
+Only digests leave the customer: the TSA sees one 32-byte hash, a countersigning
 issuer sees the attestation (digests and an opaque execution id).
 """
 
@@ -37,12 +37,12 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Mapping, Optional, Protocol, Sequence
 
-from openadapt_flow.notary.commitments import (
+from openadapt_flow.countersign.commitments import (
     CommitmentError,
     commitments_sha256,
     verify_disclosure,
 )
-from openadapt_flow.notary.tsa import (
+from openadapt_flow.countersign.tsa import (
     TimestampAuthority,
     TimestampVerification,
     verify_timestamp_token,
@@ -51,31 +51,31 @@ from openadapt_flow.notary.tsa import (
 __all__ = [
     "ATTESTATION_SCHEMA",
     "BASELINE_BINDING_SCHEMA",
-    "CloudNotaryIssuer",
+    "CloudCountersignIssuer",
     "EXTENSION_KEY",
-    "LocalNotaryIssuer",
-    "NotaryError",
-    "NotaryIssuer",
-    "NotaryReport",
+    "LocalCountersignIssuer",
+    "CountersignError",
+    "CountersignIssuer",
+    "CountersignReport",
     "STATEMENT_SCHEMA",
     "baseline_binding",
     "build_statement",
     "locate",
-    "notarize_document",
+    "countersign_document",
     "timestamp_baseline",
-    "verify_notarized",
+    "verify_countersigned",
 ]
 
-EXTENSION_KEY = "openadapt.notary/v1"
-STATEMENT_SCHEMA = "openadapt.notary-statement/v1"
-ATTESTATION_SCHEMA = "openadapt.notary-attestation/v1"
-BASELINE_BINDING_SCHEMA = "openadapt.notary-baseline-binding/v1"
+EXTENSION_KEY = "openadapt.countersign/v1"
+STATEMENT_SCHEMA = "openadapt.countersign-statement/v1"
+ATTESTATION_SCHEMA = "openadapt.countersign-attestation/v1"
+BASELINE_BINDING_SCHEMA = "openadapt.countersign-baseline-binding/v1"
 EFFECT_RECEIPT_SCHEMA = "openadapt.effect-receipt/v1"
 EXECUTE_RECEIPT_SCHEMA = "openadapt.execute-evidence-receipt/v1"
 _SEALABLE = {"verified", "rolled_back_verified"}
 
 
-class NotaryError(ValueError):
+class CountersignError(ValueError):
     def __init__(self, code: str, detail: str = "") -> None:
         super().__init__(f"{code}: {detail}" if detail else code)
         self.code = code
@@ -102,20 +102,20 @@ def receipt_sha256(receipt: Mapping[str, Any]) -> str:
 class Located:
     receipt: Mapping[str, Any]
     evidence: Optional[Mapping[str, Any]]
-    notary: Optional[Mapping[str, Any]]
+    block: Optional[Mapping[str, Any]]
 
 
 def locate(document: Any) -> Located:
-    """Find the receipt, evidence manifest, and notary block in a document.
+    """Find the receipt, evidence manifest, and countersign block in a document.
 
     Accepts an effect-receipt wire document (``{"receipt", "evidence"}``), a
     bare receipt, a Flow ``report.json`` carrying ``execute_receipt``, or any
     of these with ``extensions``.
     """
     if not isinstance(document, Mapping):
-        raise NotaryError("no_receipt")
+        raise CountersignError("no_receipt")
     extensions = document.get("extensions")
-    notary = extensions.get(EXTENSION_KEY) if isinstance(extensions, Mapping) else None
+    block = extensions.get(EXTENSION_KEY) if isinstance(extensions, Mapping) else None
     receipt: Any = None
     if "receipt" not in document and (
         "seal_signature" in document
@@ -131,12 +131,12 @@ def locate(document: Any) -> Located:
     if not isinstance(receipt, Mapping) or not isinstance(
         receipt.get("schema_version"), str
     ):
-        raise NotaryError("no_receipt")
+        raise CountersignError("no_receipt")
     evidence = document.get("evidence")
     return Located(
         receipt=receipt,
         evidence=evidence if isinstance(evidence, Mapping) else None,
-        notary=notary if isinstance(notary, Mapping) else None,
+        block=block if isinstance(block, Mapping) else None,
     )
 
 
@@ -232,16 +232,16 @@ def timestamp_baseline(
     return entry
 
 
-# -- notary issuer -----------------------------------------------------------
+# -- countersigning issuer -----------------------------------------------------------
 
 
-class NotaryIssuer(Protocol):
+class CountersignIssuer(Protocol):
     """Countersigns an attestation with a Seal key. Sees digests only."""
 
     def countersign(self, attestation: Mapping[str, Any]) -> dict[str, Any]: ...
 
 
-class LocalNotaryIssuer:
+class LocalCountersignIssuer:
     """Countersigns with a local Ed25519 key using the Seal signature scheme.
 
     For tests and self-hosted trials. A holder trusts it only after pinning
@@ -297,10 +297,10 @@ class LocalNotaryIssuer:
         return {**unsigned, "signature": signature}
 
 
-class CloudNotaryIssuer:
-    """Interface stub for a Cloud notary endpoint. No server exists yet.
+class CloudCountersignIssuer:
+    """Interface stub for a Cloud countersigning endpoint. No server exists yet.
 
-    Proposed contract: ``POST /api/v1/notary/countersign`` with the
+    Proposed contract: ``POST /api/v1/countersign`` with the
     attestation JSON (digests and an opaque execution id only). Cloud would
     recompute ``receipt_sha256`` of the attestation, optionally fetch its own
     RFC 3161 token over ``statement_sha256``, and return a
@@ -311,8 +311,9 @@ class CloudNotaryIssuer:
         self.base_url = base_url
 
     def countersign(self, attestation: Mapping[str, Any]) -> dict[str, Any]:
-        raise NotaryError(
-            "issuer_unavailable", "Cloud has no notary endpoint yet; use a local issuer"
+        raise CountersignError(
+            "issuer_unavailable",
+            "Cloud has no countersigning endpoint yet; use a local issuer",
         )
 
 
@@ -335,21 +336,21 @@ def _attestation(
     }
 
 
-def notarize_document(
+def countersign_document(
     document: Mapping[str, Any],
     *,
     tsa: Optional[TimestampAuthority] = None,
     tsa_pem: Optional[bytes] = None,
     commitments: Optional[Mapping[str, Any]] = None,
     baseline_timestamp: Optional[Mapping[str, Any]] = None,
-    issuer: Optional[NotaryIssuer] = None,
+    issuer: Optional[CountersignIssuer] = None,
 ) -> dict[str, Any]:
-    """Return a copy of ``document`` with a notary block. The receipt is untouched."""
+    """Return a copy of ``document`` with a countersign block. The receipt is untouched."""
     located = locate(document)
-    if located.notary is not None:
-        raise NotaryError("already_notarized")
+    if located.block is not None:
+        raise CountersignError("already_countersigned")
     if not isinstance(located.receipt.get("execution_id"), str):
-        raise NotaryError("malformed", "the receipt names no execution_id")
+        raise CountersignError("malformed", "the receipt names no execution_id")
     statement = build_statement(located.receipt, located.evidence, commitments)
     block: dict[str, Any] = {"schema": EXTENSION_KEY, "statement": statement}
     if commitments:
@@ -384,8 +385,8 @@ def notarize_document(
 
 
 @dataclass
-class NotaryReport:
-    """Everything ``openadapt-flow notary verify`` prints. ``exit_code`` decides."""
+class CountersignReport:
+    """Everything ``openadapt-flow countersign verify`` prints. ``exit_code`` decides."""
 
     receipt_schema: Optional[str]
     execution_id: Optional[str]
@@ -426,7 +427,7 @@ class NotaryReport:
         """0 only for a genuine Seal on a verified outcome with no failed check.
 
         A Seal on a REFUTED or INDETERMINATE outcome is genuine but exits 1,
-        as ``openadapt seal verify`` does. A notary part that is present but
+        as ``openadapt seal verify`` does. A countersign part that is present but
         could not be checked (no pinned TSA certificate) also exits 1. An
         effect receipt from anything but an issuer-attested Flow replay exits 1
         unless the caller passed ``--accept-non-flow``.
@@ -469,15 +470,15 @@ def _check_token(
     return out
 
 
-def verify_notarized(
+def verify_countersigned(
     document: Any,
     *,
     registry: Sequence[Mapping[str, Any]],
     tsa_certificates: Sequence[Any] = (),
     disclosures: Sequence[Mapping[str, Any]] = (),
     accept_non_flow: bool = False,
-) -> NotaryReport:
-    """Offline check of a (possibly notarized) Seal document. Pinned trust only.
+) -> CountersignReport:
+    """Offline check of a (possibly countersigned) Seal document. Pinned trust only.
 
     ``registry`` is the holder's pinned Seal key registry; ``tsa_certificates``
     are TSA certificates the holder pinned. Certificates carried inside the
@@ -487,8 +488,10 @@ def verify_notarized(
 
     try:
         located = locate(document)
-    except NotaryError:
-        report = NotaryReport(None, None, None, None, "absent", None, None, None, None)
+    except CountersignError:
+        report = CountersignReport(
+            None, None, None, None, "absent", None, None, None, None
+        )
         report.seal = {"status": "no_receipt"}
         report.problems.append("no_receipt")
         return report
@@ -502,7 +505,7 @@ def verify_notarized(
     else:
         kind, source = None, "absent"
     rsha = receipt_sha256(receipt)
-    report = NotaryReport(
+    report = CountersignReport(
         receipt_schema=str(schema),
         execution_id=receipt.get("execution_id"),
         receipt_sha256=rsha,
@@ -566,8 +569,8 @@ def verify_notarized(
         }
         if mismatch:
             report.problems.append("evidence_mismatch")
-    notary = located.notary
-    if notary is None:
+    block = located.block
+    if block is None:
         for name in (
             "statement",
             "receipt_timestamp",
@@ -580,8 +583,8 @@ def verify_notarized(
             report.problems.append("disclosure_without_commitments")
             report.disclosures = [{"status": "no_commitments"} for _ in disclosures]
         return report
-    statement = notary.get("statement")
-    commitments = notary.get("commitments")
+    statement = block.get("statement")
+    commitments = block.get("commitments")
     try:
         expected = build_statement(receipt, located.evidence, commitments)
     except CommitmentError:
@@ -614,7 +617,7 @@ def verify_notarized(
         else b""
     )
     # Receipt timestamp.
-    rts = notary.get("receipt_timestamp")
+    rts = block.get("receipt_timestamp")
     if rts is None:
         report.receipt_timestamp = {"status": "absent"}
     else:
@@ -624,7 +627,7 @@ def verify_notarized(
                 "receipt_timestamp_" + report.receipt_timestamp["status"]
             )
     # Baseline timestamp: must name this run's nonce and the stated baseline.
-    bts = notary.get("baseline_timestamp")
+    bts = block.get("baseline_timestamp")
     if bts is None:
         report.baseline_timestamp = {"status": "absent"}
     else:
@@ -656,7 +659,7 @@ def verify_notarized(
                 "baseline_timestamp_" + report.baseline_timestamp["status"]
             )
     # Countersignature: Seal scheme over the attestation.
-    cs = notary.get("countersignature")
+    cs = block.get("countersignature")
     if cs is None:
         report.countersignature = {"status": "absent"}
     elif not keys:

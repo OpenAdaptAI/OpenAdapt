@@ -1,11 +1,11 @@
 """The local dispute vault: what a holder keeps so a receipt can be defended.
 
 The vault holds what must not leave the customer by default: the salts and
-values behind field commitments, and the notarized document that binds them.
+values behind field commitments, and the countersigned document that binds them.
 One directory per receipt, named by its ``receipt_sha256``. Directories are
 created mode 0700 and files 0600 (POSIX; on Windows rely on the profile ACL).
 
-Default location: ``$OPENADAPT_NOTARY_VAULT`` or ``~/.openadapt/notary-vault``.
+Default location: ``$OPENADAPT_COUNTERSIGN_VAULT`` or ``~/.openadapt/countersign-vault``.
 Treat it as PHI at rest: back it up the way you back up the system of record,
 and encrypt the volume.
 """
@@ -19,12 +19,17 @@ import tempfile
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
-from openadapt_flow.notary.commitments import FieldSecret
+from openadapt_flow.countersign.commitments import FieldSecret
 
-__all__ = ["NotaryVault", "VaultError", "default_vault_path", "write_private_bytes"]
+__all__ = [
+    "CountersignVault",
+    "VaultError",
+    "default_vault_path",
+    "write_private_bytes",
+]
 
 _RECEIPT_SHA = re.compile(r"^[0-9a-f]{64}$")
-SECRETS_SCHEMA = "openadapt.notary-vault-secrets/v1"
+SECRETS_SCHEMA = "openadapt.countersign-vault-secrets/v1"
 
 
 class VaultError(RuntimeError):
@@ -33,11 +38,11 @@ class VaultError(RuntimeError):
 
 def default_vault_path(env: Optional[Mapping[str, str]] = None) -> Path:
     env = os.environ if env is None else env
-    named = env.get("OPENADAPT_NOTARY_VAULT", "").strip()
+    named = env.get("OPENADAPT_COUNTERSIGN_VAULT", "").strip()
     return (
         Path(named).expanduser()
         if named
-        else Path.home() / ".openadapt" / "notary-vault"
+        else Path.home() / ".openadapt" / "countersign-vault"
     )
 
 
@@ -64,7 +69,7 @@ def write_private_bytes(path: Path, data: bytes, *, overwrite: bool = False) -> 
         raise
 
 
-class NotaryVault:
+class CountersignVault:
     def __init__(self, root: Optional[Path] = None) -> None:
         self.root = Path(root) if root is not None else default_vault_path()
 

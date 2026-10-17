@@ -155,7 +155,7 @@ def _check_block(block: Any) -> Mapping[str, str]:
 
 
 def commitments_sha256(block: Mapping[str, Any]) -> str:
-    """Digest of the canonical commitment block, as bound by a notary statement."""
+    """Digest of the canonical commitment block, as bound by a countersign statement."""
     _check_block(block)
     return "sha256:" + hashlib.sha256(_canonical(dict(block))).hexdigest()
 
