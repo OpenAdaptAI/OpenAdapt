@@ -6301,8 +6301,11 @@ screen, and a weak or missing check that the write happened. Certifying
 signed report and a certified bundle the runner will admit. A certificate
 covers only the environment the workflow was qualified in.
 
-Definitions of qualify, certify and certification policies:
+Definitions of qualify and certify:
   docs/QUALIFICATION_TERMS.md
+Certification policies (built-in clinical-write and permissive, or your own
+YAML file passed to --certify):
+  docs/QUALIFICATION_TERMS.md#certification-policy
 How to write verify.yaml:
   docs/QUALIFY_A_WORKFLOW.md
 """
