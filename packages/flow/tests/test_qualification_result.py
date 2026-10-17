@@ -233,7 +233,7 @@ def test_admission_binds_the_result_digest(tmp_path):
 
 
 def test_admission_refuses_fewer_than_three_trials(tmp_path):
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="at least 3 trials per case"):
         local_admission(
             result=_result(tmp_path, trials=1),
             result_bytes=b"{}",

@@ -286,6 +286,12 @@ def local_admission(
     observed: dict[str, int] = {}
     for case in result["cases"]:
         observed[case["case_id"]] = observed.get(case["case_id"], 0) + 1
+    fewest = min(observed.values(), default=0)
+    if trials_required < 3 or fewest < 3:
+        raise ValueError(
+            "the qualification-admission/v1 envelope needs at least 3 trials "
+            f"per case; this campaign ran {fewest}"
+        )
 
     def uid(label: str) -> str:
         return str(uuid5(NAMESPACE_URL, f"openadapt-qualify:{campaign_id}:{label}"))

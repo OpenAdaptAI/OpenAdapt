@@ -1235,8 +1235,9 @@ def qualify(
                 identity_contract_sha256=None,
             )
         except ValueError as exc:
-            admission_note = f"no admission envelope: {exc.__class__.__name__}: " + (
-                str(exc).splitlines()[-1].strip() if str(exc) else ""
+            first = str(exc).splitlines()
+            admission_note = "no admission envelope: " + (
+                first[0] if len(first) == 1 else f"{first[0]} {first[-2].strip()}"
             )
             log(admission_note)
         else:
