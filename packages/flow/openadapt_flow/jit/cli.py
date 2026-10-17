@@ -27,6 +27,7 @@ import sys
 from pathlib import Path
 from typing import Callable
 
+from openadapt_flow.cli_hints import command
 from openadapt_flow.jit import authority, lifecycle
 
 
@@ -88,7 +89,7 @@ def cmd_jit(
         if args.jit_cmd == "keygen":
             pub = authority.generate_encrypted_key(args.out)
             print(f"wrote {args.out}; public key {pub}")
-            print("A person registers it: openadapt-flow jit register ...")
+            print(f"A person registers it: {command('jit register')} ...")
             return 0
         if args.jit_cmd == "register":
             if confirm(
