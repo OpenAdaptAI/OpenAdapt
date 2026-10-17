@@ -6216,6 +6216,18 @@
       "sha256": "a238b23846705f081603c7fe8a66ee16a88281ad21acfd0d047052716a49b912"
     },
     {
+      "path": "tests/fixtures/shadow/invoice_exact.episodes.json",
+      "sha256": "e555e3913c02df609cdf490872fad30574a1c438b2c110b0ff3345e1a31c26ce"
+    },
+    {
+      "path": "tests/fixtures/shadow/invoice_variant.episodes.json",
+      "sha256": "cc2d9508eac86e6115485025525e7529b4830f720eb28c21e258622e7a70ec79"
+    },
+    {
+      "path": "tests/fixtures/shadow/report_mail.episodes.json",
+      "sha256": "4e3f1fed5b5bfba9220fd37d53eff1bea2655df4903fb6a59ec215bc3e2d2ec0"
+    },
+    {
       "path": "tests/fixtures/terminal_verification_v2_delivery_consumer_vector.json",
       "sha256": "f2e32472ad562b5b67d95d3d9cafaf08b4a2adb9fb5ff3cda2813307beb61c96"
     },
