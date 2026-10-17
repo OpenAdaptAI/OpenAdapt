@@ -206,19 +206,29 @@ def validate_git_tags(releases: list[Release], repository: Path) -> None:
         )
 
 
-def check_repository(repository: Path) -> list[Release]:
+def check_repository(repository: Path, *, check_tags: bool = True) -> list[Release]:
     changelog = (repository / "CHANGELOG.md").read_text(encoding="utf-8")
     pyproject = (repository / "pyproject.toml").read_text(encoding="utf-8")
     releases = validate_documents(changelog, pyproject)
-    validate_git_tags(releases, repository)
+    if check_tags:
+        validate_git_tags(releases, repository)
     return releases
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--repository", type=Path, default=Path(__file__).resolve().parents[1])
+    parser.add_argument(
+        "--skip-tags",
+        action="store_true",
+        help=(
+            "Validate CHANGELOG.md against pyproject.toml only. In the OpenAdapt "
+            "monorepo the v* tags belong to the openadapt launcher; capture's "
+            "release tags (through v1.2.2) live in OpenAdaptAI/openadapt-capture."
+        ),
+    )
     args = parser.parse_args()
-    releases = check_repository(args.repository.resolve())
+    releases = check_repository(args.repository.resolve(), check_tags=not args.skip_tags)
     print(f"verified CHANGELOG.md through v{releases[0].version}")
 
 

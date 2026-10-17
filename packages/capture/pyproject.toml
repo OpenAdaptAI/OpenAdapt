@@ -107,8 +107,9 @@ dev = [
 capture = "openadapt_capture.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/OpenAdaptAI/openadapt-capture"
-Repository = "https://github.com/OpenAdaptAI/openadapt-capture"
+Homepage = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/capture"
+Repository = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/capture"
+Issues = "https://github.com/OpenAdaptAI/OpenAdapt/issues"
 
 
 

@@ -9,6 +9,7 @@ import pytest
 
 from scripts.check_changelog import (
     ChangelogContractError,
+    check_repository,
     validate_documents,
     validate_git_tags,
 )
@@ -131,6 +132,15 @@ def test_git_tag_contract_refuses_two_untagged_releases(monkeypatch) -> None:
 
     with pytest.raises(ChangelogContractError, match="untagged stable release"):
         validate_git_tags(releases, REPOSITORY)
+
+
+def test_skipping_tags_still_validates_documents_but_not_foreign_tags(monkeypatch) -> None:
+    """In the monorepo the v* tags are the launcher's, so they are not consulted."""
+    _with_tags(monkeypatch, ["0.3.1", "2.2.0"])
+
+    with pytest.raises(ChangelogContractError):
+        check_repository(REPOSITORY)
+    assert check_repository(REPOSITORY, check_tags=False)
 
 
 def test_source_distribution_refuses_a_version_without_release_notes(tmp_path: Path) -> None:
