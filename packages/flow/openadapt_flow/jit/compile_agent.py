@@ -766,6 +766,8 @@ class CompiledAgent:
                 governed_authorization=authorization,
                 durable=True,
                 require_settled=True,
+                attended_draft_by=attended_by,
+                draft_key_dir=self.key_dir,
             ).run(
                 workflow.model_copy(deep=True),
                 params=values,

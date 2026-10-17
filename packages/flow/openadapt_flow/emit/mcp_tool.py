@@ -170,10 +170,17 @@ def emit_mcp_server(bundle_dir: Path | str, out_path: Path | str) -> Path:
         params_dict = "{}"
         param_docs = ""
 
+    from openadapt_flow.jit.lifecycle import draft_label
+
     docstring = _clean_line(
         f"Replay the {workflow.name!r} workflow "
         f"({len(workflow.steps)} steps) against a live app."
     )
+    if draft_label(bundle):
+        docstring = _clean_line(
+            "DRAFT, not admitted: this tool refuses to run until a person "
+            "reviews, canaries and admits the bundle (openadapt-flow jit). " + docstring
+        )
 
     source = _SERVER_TEMPLATE.format(
         name=workflow.name,

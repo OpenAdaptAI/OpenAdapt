@@ -1,10 +1,11 @@
 """DRAFT to ADMITTED: the states of a compiled CUA run, and what admission needs.
 
 A bundle compiled from a CUA run starts as a ``DRAFT``. A draft never runs
-unattended: :meth:`~openadapt_flow.jit.CompiledAgent.run` refuses to execute
-it, ``openadapt-flow replay`` and ``run`` refuse a bundle marked as a draft
-(:func:`refuse_unadmitted_draft`), and the only run a draft gets is an
-attended canary. A draft becomes ``ADMITTED`` only when all of these hold for
+unattended. :meth:`openadapt_flow.runtime.Replayer.run`, which every
+execution path goes through (``replay``, ``run``, ``serve-execute``, an
+emitted MCP server, :meth:`~openadapt_flow.jit.CompiledAgent.run`), refuses a
+bundle marked as a draft unless it carries a valid admission
+(:func:`ensure_runnable`). The only run a draft gets is an attended canary. A draft becomes ``ADMITTED`` only when all of these hold for
 the same bundle digest, in this order:
 
 1. ``params``: a named person confirms the task's parameters
@@ -60,6 +61,9 @@ __all__ = [
     "record_canary",
     "record_review",
     "refuse_unadmitted_draft",
+    "DraftNotAdmitted",
+    "draft_label",
+    "ensure_runnable",
     "reject",
     "state_of",
     "verify_admission",
@@ -197,23 +201,72 @@ def mark_draft(bundle_dir: Path | str) -> None:
     )
 
 
+class DraftNotAdmitted(AdmissionError):
+    """An execution path was asked to run a JIT draft that is not admitted."""
+
+
+def ensure_runnable(
+    bundle_dir: Path | str,
+    *,
+    attended_by: Optional[str] = None,
+    key_dir: Optional[Path] = None,
+) -> None:
+    """Refuse to execute a JIT draft that has no valid admission.
+
+    A bundle without the draft marker is not a JIT draft and passes. A draft
+    passes when :func:`verify_admission` accepts its admission, or when
+    ``attended_by`` names a person who is attending this run (the canary).
+    ``attended_by`` is for the in-process JIT API. No CLI or server path
+    passes it.
+
+    Raises:
+        DraftNotAdmitted: the draft is not admitted, or ``attended_by`` is not
+            a human principal.
+    """
+
+    bundle = Path(bundle_dir)
+    if not (bundle / DRAFT_MARKER).is_file():
+        return
+    if attended_by is not None:
+        candidate = _read(bundle.parent / CANDIDATE_FILE) or {}
+        try:
+            check_principal(attended_by, candidate)
+        except AdmissionError as exc:
+            raise DraftNotAdmitted(f"{bundle}: {exc}") from None
+        return
+    try:
+        verify_admission(bundle, key_dir=key_dir)
+    except AdmissionError as exc:
+        raise DraftNotAdmitted(
+            f"refused: {bundle} is a DRAFT compiled from an agent run and is not "
+            f"admitted ({exc}). Review, canary and admit it first "
+            "(openadapt-flow jit status)."
+        ) from None
+
+
+def draft_label(
+    bundle_dir: Path | str, *, key_dir: Optional[Path] = None
+) -> Optional[str]:
+    """``"DRAFT"`` when ``bundle_dir`` is a JIT draft with no valid admission,
+    else None. For paths that describe a bundle without running it."""
+
+    try:
+        ensure_runnable(bundle_dir, key_dir=key_dir)
+    except DraftNotAdmitted:
+        return "DRAFT"
+    return None
+
+
 def refuse_unadmitted_draft(
     bundle_dir: Path | str, *, key_dir: Optional[Path] = None
 ) -> None:
     """Raise ``SystemExit`` when ``bundle_dir`` is a JIT draft without a valid
     admission. For the ``replay`` and ``run`` commands."""
 
-    bundle = Path(bundle_dir)
-    if not (bundle / DRAFT_MARKER).is_file():
-        return
     try:
-        verify_admission(bundle, key_dir=key_dir)
-    except AdmissionError as exc:
-        raise SystemExit(
-            f"refused: {bundle} is a DRAFT compiled from an agent run and is not "
-            f"admitted ({exc}). Review, canary and admit it first "
-            "(openadapt-flow jit status)."
-        ) from None
+        ensure_runnable(bundle_dir, key_dir=key_dir)
+    except DraftNotAdmitted as exc:
+        raise SystemExit(str(exc)) from None
 
 
 # -- principals ----------------------------------------------------------------

@@ -238,9 +238,14 @@ explores again.
   refuses it, and no run can reach `VERIFIED`.
 - Secret inputs are not lifted. A secret is typed by a person at a pause
   (see `AuthoringSession.pause_for_input`), not by the agent.
-- `openadapt-flow replay` and `run` refuse a draft. Other ways to load a
-  bundle (`emit-skill`, `emit-mcp`, `serve-execute`, your own code calling
-  `Workflow.load`) don't check the draft marker yet.
+- Every execution path refuses a draft, because the check is in
+  `Replayer.run`. `Workflow.load` doesn't check, so code that loads a draft
+  and acts on it without `Replayer` isn't covered. `Replayer` takes
+  `attended_draft_by` for the canary, and in-process code can pass it with
+  a person's name.
+- The draft marker is a file next to the sealed bundle, not part of its
+  digest. Deleting `jit_draft.json` turns a draft back into a plain bundle,
+  and the ordinary run gate applies to it.
 - OpenAI `pending_safety_checks` are your loop's to acknowledge;
   `computer.execute` does not read them.
 - One admitted program per task signature. A task that needs branches still

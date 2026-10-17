@@ -17,8 +17,12 @@ DRAFT --confirm_params--> --review--> --canary--> --admit--> ADMITTED
 - Run unattended. `run()` returns `needs_human_admit` and executes nothing.
   The governed runner refuses a draft unless a named principal attends it,
   and the only attended run is the canary. The bundle carries a
-  `jit_draft.json` marker, and `openadapt-flow replay` and `run` refuse a
-  marked bundle without a valid admission, including a copy of it.
+  `jit_draft.json` marker. `Replayer.run`, which every execution path goes
+  through, refuses a marked bundle without a valid admission, including a
+  copy of it. That covers `openadapt-flow replay` and `run`, `serve-execute`
+  (refused before any effect), the server that `emit-mcp` writes, and your
+  own code that calls `Replayer.run`. `emit-skill` and `emit-mcp` still write
+  their output for a draft, labelled DRAFT.
 - Approve itself. A principal named `agent`, `model`, `bot`, or starting
   with `agent:`, `model:`, `bot:`, `llm:`, `service:` and similar can't
   confirm, review, attend, admit or reject. Neither can the identity that

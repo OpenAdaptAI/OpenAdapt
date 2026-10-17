@@ -635,6 +635,12 @@ class Replayer:
             the save so a person handles it. Its post-run decision is stamped
             on the report as ``approval``. It can only add refusals; it never
             changes an outcome word. None (default) leaves replay unchanged.
+        attended_draft_by: A named person attending this run of a JIT draft
+            (the canary, :mod:`openadapt_flow.jit`). None (default): a bundle
+            carrying ``jit_draft.json`` runs only with a valid admission, and
+            :meth:`run` raises ``DraftNotAdmitted`` otherwise.
+        draft_key_dir: Where the JIT admission key lives, for that check.
+            None uses ``$OPENADAPT_JIT_KEY_DIR`` or ``~/.openadapt/jit``.
     """
 
     def __init__(
@@ -673,7 +679,13 @@ class Replayer:
             QualificationEnvironmentObserver
         ] = None,
         approval_gate: Optional["ApprovalGate"] = None,
+        attended_draft_by: Optional[str] = None,
+        draft_key_dir: Optional[Path] = None,
     ) -> None:
+        # A JIT draft (openadapt_flow.jit) runs only once admitted, or attended
+        # by a named person (the canary). Checked in run().
+        self._attended_draft_by = attended_draft_by
+        self._draft_key_dir = draft_key_dir
         if vision is None:
             import openadapt_flow.vision as vision  # lazy: heavy OCR deps
 
@@ -1327,6 +1339,16 @@ class Replayer:
         campaign_refusal = self._qualification_campaign_refusal(workflow)
         if campaign_refusal is not None:
             raise ValueError(campaign_refusal)
+        if bundle_dir is not None:
+            # Every execution path runs through here, so a JIT draft with no
+            # valid admission is refused before any action.
+            from openadapt_flow.jit.lifecycle import ensure_runnable
+
+            ensure_runnable(
+                bundle_dir,
+                attended_by=self._attended_draft_by,
+                key_dir=self._draft_key_dir,
+            )
         bundle_dir = Path(bundle_dir)
         run_dir = Path(run_dir)
         self._install_execution_snapshots(workflow)
