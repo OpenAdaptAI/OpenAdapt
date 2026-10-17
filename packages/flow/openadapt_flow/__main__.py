@@ -1984,7 +1984,9 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     # ADMITTED (every gate above passed) and the run directory is final, but
     # NO actuation has begun on either the desktop or the web path below.
     _maybe_attest_pre_state(run_dir, args)
-    approval_gate = _approval_gate_for_run(args, run_dir)
+    approval_gate = _approval_gate_for_run(
+        args, run_dir, policy_name=getattr(args, "policy", None) or cfg.policy.policy
+    )
     fault_driver = getattr(args, "_qualification_fault_driver", None)
     if _normalize_kind(backend_cfg.kind) != "web":
         return _replay_desktop(
@@ -2221,7 +2223,42 @@ def _approval_wait_seconds(args: argparse.Namespace) -> float:
     return max(0.0, min(float(raw), MAX_APPROVAL_WAIT_S))
 
 
-def _approval_gate_for_run(args: argparse.Namespace, run_dir: Path):
+def _approver_settings(args: argparse.Namespace):
+    """The run's approver policy and delegated approver, from its flags."""
+
+    import os
+
+    from openadapt_flow.approval_mode.approver import (
+        ApproverAuth,
+        ApproverIdentityV1,
+        ApproverKind,
+        ApproverPolicyV1,
+        WebhookApprover,
+    )
+
+    policy = None
+    path = getattr(args, "approver_policy", None)
+    if path:
+        policy = ApproverPolicyV1.model_validate_json(Path(path).read_text())
+    approver = None
+    url = getattr(args, "approver_webhook", None)
+    if url:
+        secret = os.environ.get("OPENADAPT_APPROVER_WEBHOOK_SECRET", "").encode()
+        approver = WebhookApprover(
+            url,
+            secret,
+            ApproverIdentityV1(
+                kind=ApproverKind(getattr(args, "approver_webhook_kind", "system")),
+                auth=ApproverAuth.SIGNED_WEBHOOK,
+                id=getattr(args, "approver_webhook_id", None),
+            ),
+        )
+    return policy, approver
+
+
+def _approval_gate_for_run(
+    args: argparse.Namespace, run_dir: Path, *, policy_name: Optional[str] = None
+):
     """Build the run's approval gate from the mode ``run`` resolved, if any."""
 
     mode = getattr(args, "_approval_mode", None)
@@ -2230,10 +2267,14 @@ def _approval_gate_for_run(args: argparse.Namespace, run_dir: Path):
     from openadapt_flow.approval_mode.gate import ApprovalGate
     from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
 
+    policy, approver = _approver_settings(args)
     return ApprovalGate(
         mode,
         approval_store=ItemApprovalStore(run_dir),
         approval_wait_s=_approval_wait_seconds(args),
+        approver_policy=policy,
+        approver=approver,
+        policy_name=policy_name,
     )
 
 
@@ -2786,16 +2827,22 @@ def _carry_item_approval_to_pause(run_dir: Path, store, pending):
     return store.read_pending() or pending
 
 
-def _resume_approval_gate(args: argparse.Namespace, mode, run_dir: Path):
+def _resume_approval_gate(
+    args: argparse.Namespace, mode, run_dir: Path, *, policy_name: Optional[str] = None
+):
     if mode is None:
         return None
     from openadapt_flow.approval_mode.gate import ApprovalGate
     from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
 
+    policy, approver = _approver_settings(args)
     return ApprovalGate(
         mode,
         approval_store=ItemApprovalStore(run_dir),
         approval_wait_s=_approval_wait_seconds(args),
+        approver_policy=policy,
+        approver=approver,
+        policy_name=policy_name,
     )
 
 
@@ -3070,7 +3117,9 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             qualification_campaign_guard=campaign_guard,
             runtime_config=cfg.runtime,
             checkpoint_key=ckpt_key,
-            approval_gate=_resume_approval_gate(args, resume_mode, run_dir),
+            approval_gate=_resume_approval_gate(
+                args, resume_mode, run_dir, policy_name=cfg.policy.policy
+            ),
         )
         return resume(
             run_dir,
@@ -3270,8 +3319,12 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
 
     ``show`` prints the run's requests as JSON. ``approve`` and ``decline``
     answer one request exactly once, for the request digest the person saw.
-    Flow accepts an answer only with ``--decided-by human`` from the
-    ``desktop_run_it`` route; the waiting run re-checks every answer itself.
+    A person answers with ``--decided-by human`` from the ``desktop_run_it``
+    route. An agent, system or rule answers with ``--delegate-kind`` and
+    ``--delegate-id``, ``--decided-by automation`` and its own route, and only
+    where the run's approver policy allows that kind for the step; the
+    default policy allows only a person. The waiting run re-checks every
+    answer itself.
     """
     import json
 
@@ -3306,15 +3359,45 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
         print(json.dumps({"ok": False, "code": code, "message": message}))
         return 2
 
-    if bool(args.unauthenticated) == bool(args.approver_id):
+    delegate = None
+    if getattr(args, "delegate_kind", None):
+        from openadapt_flow.approval_mode.approver import (
+            ApproverAuth,
+            ApproverIdentityV1,
+            ApproverKind,
+        )
+
+        if args.approver_id or args.unauthenticated:
+            return refuse(
+                "approver_invalid",
+                "a delegated answer names its approver with --delegate-id only",
+            )
+        try:
+            delegate = ApproverIdentityV1(
+                kind=ApproverKind(args.delegate_kind),
+                auth=ApproverAuth(
+                    "mcp_session" if args.route == "mcp" else "local_cli"
+                ),
+                id=args.delegate_id,
+                on_behalf_of=getattr(args, "on_behalf_of", None),
+            )
+        except ValueError as exc:
+            return refuse(
+                "approver_invalid", f"the delegated approver is invalid: {exc}"
+            )
+    elif bool(args.unauthenticated) == bool(args.approver_id):
         return refuse(
             "approver_invalid",
             "name the approver's Cloud user id with --approver-id, or pass "
             "--unauthenticated when Desktop is signed out",
         )
-    if args.unauthenticated and args.auth_method not in {None, "none"}:
+    if (
+        delegate is None
+        and args.unauthenticated
+        and args.auth_method not in {None, "none"}
+    ):
         return refuse("approver_invalid", "a signed-out approval has no sign-in method")
-    if args.approver_id and args.auth_method in {None, "none"}:
+    if delegate is None and args.approver_id and args.auth_method in {None, "none"}:
         return refuse(
             "approver_invalid",
             "a Cloud approver needs --auth-method cloud_aal2 or cloud_aal1",
@@ -3336,9 +3419,15 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
             decision="approve" if verb == "approve" else "decline",
             decided_by=args.decided_by,
             route=args.route,
-            approver_id=None if args.unauthenticated else args.approver_id,
-            auth_method="none" if args.unauthenticated else args.auth_method,
+            approver_id=None
+            if (args.unauthenticated or delegate)
+            else args.approver_id,
+            auth_method="none"
+            if (args.unauthenticated or delegate)
+            else args.auth_method,
             decline_reason=getattr(args, "reason", None),
+            approver=delegate,
+            policy=store.policy(),
         )
         store.write_answer(answer)
     except ItemApprovalRefused as exc:
@@ -6131,6 +6220,41 @@ def _add_approval_flags(p: argparse.ArgumentParser) -> None:
     """Add the per-item approval flags to ``run``, ``resume`` and ``run-case``."""
 
     p.add_argument(
+        "--approver-policy",
+        default=None,
+        metavar="FILE",
+        help=(
+            "An openadapt.approver-policy/v1 JSON file: which kinds of approver "
+            "(person, rule, agent, system) may answer each class of save. "
+            "Without it only a person may answer. A clinical_write save takes "
+            "a non-person approver only when the policy pins an opt-in."
+        ),
+    )
+    p.add_argument(
+        "--approver-webhook",
+        default=None,
+        metavar="URL",
+        help=(
+            "Ask this https endpoint (the customer's approver agent or system) "
+            "about each waiting save, with HMAC-signed, PHI-free messages. The "
+            "secret is read from OPENADAPT_APPROVER_WEBHOOK_SECRET. A person can "
+            "still answer in Desktop. Needs --approver-webhook-id and a policy "
+            "that allows the approver's kind."
+        ),
+    )
+    p.add_argument(
+        "--approver-webhook-id",
+        default=None,
+        help="The webhook approver's opaque id, such as system:acme-approvals",
+    )
+    p.add_argument(
+        "--approver-webhook-kind",
+        choices=["agent", "system"],
+        default="system",
+        help="Whether the webhook approver is an agent or a system (default system)",
+    )
+
+    p.add_argument(
         "--approval-mode",
         choices=["each_item", "problems_only", "not_gated"],
         default=None,
@@ -7429,12 +7553,34 @@ def build_parser() -> argparse.ArgumentParser:
         q.add_argument(
             "--decided-by",
             required=True,
-            help="Who decided. Only 'human' is accepted.",
+            help=(
+                "Who decided: 'human', or 'automation' with --delegate-kind "
+                "for an agent, system or rule the run's policy allows"
+            ),
         )
         q.add_argument(
             "--route",
             required=True,
-            help="Where the person decided. Only 'desktop_run_it' is accepted.",
+            help=(
+                "Where it was decided: 'desktop_run_it' for a person; "
+                "'local_cli' or 'mcp' for a delegated approver"
+            ),
+        )
+        q.add_argument(
+            "--delegate-kind",
+            choices=["agent", "system"],
+            default=None,
+            help="A delegated approver's kind. The run's approver policy must allow it",
+        )
+        q.add_argument(
+            "--delegate-id",
+            default=None,
+            help="The delegated approver's opaque id, such as agent:approver-bot",
+        )
+        q.add_argument(
+            "--on-behalf-of",
+            default=None,
+            help="The organization or person the delegated approver acts for",
         )
         q.add_argument(
             "--approver-id",
@@ -7515,6 +7661,10 @@ def build_parser() -> argparse.ArgumentParser:
     from openadapt_flow.intake.cli import add_parser as _add_intake_parser
 
     _add_intake_parser(sub)
+
+    from openadapt_flow.decision.cli import add_parser as _add_triage_parser
+
+    _add_triage_parser(sub)
 
     p = sub.add_parser(
         "lint",
