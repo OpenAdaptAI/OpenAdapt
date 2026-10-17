@@ -1637,7 +1637,9 @@ def doctor(backend: str | None):
                             "  [MISSING] Browser: Chromium needs these system "
                             f"libraries: {', '.join(missing_system_libs)}"
                         )
-                        click.echo("  Install them: " + _CHROMIUM_SYSTEM_LIBS_COMMAND)
+                        click.echo(
+                            "  Install them once: " + _CHROMIUM_SYSTEM_LIBS_COMMAND
+                        )
                     else:
                         try:
                             chromium = _chromium_present()
