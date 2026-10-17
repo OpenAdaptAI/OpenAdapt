@@ -2307,7 +2307,7 @@ def _attach_cloud_seal(args: argparse.Namespace) -> None:
         )
 
 
-def _cmd_seal(args: argparse.Namespace) -> int:
+def _cmd_attach_seal(args: argparse.Namespace) -> int:
     """``attach-seal``: fetch Cloud's signed receipt into a VERIFIED run report."""
     from openadapt_flow.cloud_seal import attach_from_cloud
 
@@ -7268,7 +7268,7 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Cloud base URL (or OPENADAPT_CLOUD_URL; default https://app.openadapt.ai)",
     )
-    sa.set_defaults(func=_cmd_seal)
+    sa.set_defaults(func=_cmd_attach_seal)
 
     p = sub.add_parser(
         "resume",
