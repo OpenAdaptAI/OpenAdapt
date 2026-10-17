@@ -1,0 +1,99 @@
+{
+  "$defs": {
+    "ApproverAuth": {
+      "description": "How the approver was identified.",
+      "enum": [
+        "cloud_user",
+        "unauthenticated",
+        "policy",
+        "local_cli",
+        "signed_webhook",
+        "mcp_session"
+      ],
+      "title": "ApproverAuth",
+      "type": "string"
+    },
+    "ApproverKind": {
+      "description": "Who or what made an approval decision.",
+      "enum": [
+        "person",
+        "rule",
+        "agent",
+        "system"
+      ],
+      "title": "ApproverKind",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Who or what approved or declined one step. PHI-free by construction.\n\n``id`` is an opaque identifier (a Cloud user id, a rule id, an agent id,\na system id), never a name or free text.",
+  "properties": {
+    "auth": {
+      "$ref": "#/$defs/ApproverAuth"
+    },
+    "auth_method": {
+      "default": "none",
+      "enum": [
+        "cloud_aal2",
+        "cloud_aal1",
+        "none"
+      ],
+      "title": "Auth Method",
+      "type": "string"
+    },
+    "id": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Id"
+    },
+    "kind": {
+      "$ref": "#/$defs/ApproverKind"
+    },
+    "on_behalf_of": {
+      "anyOf": [
+        {
+          "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "On Behalf Of"
+    },
+    "policy_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Policy Sha256"
+    },
+    "schema_version": {
+      "const": "openadapt.approver-identity/v1",
+      "default": "openadapt.approver-identity/v1",
+      "title": "Schema Version",
+      "type": "string"
+    }
+  },
+  "required": [
+    "kind",
+    "auth"
+  ],
+  "title": "ApproverIdentityV1",
+  "type": "object"
+}

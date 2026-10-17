@@ -1,0 +1,238 @@
+{
+  "$defs": {
+    "ApprovalModeV1": {
+      "description": "When a consequential step waits for a decision.\n\nThe values ``each_item``, ``problems_only`` and ``not_gated`` are the\nones Flow already stores; they keep their meaning.",
+      "enum": [
+        "not_gated",
+        "each_item",
+        "batch",
+        "problems_only",
+        "problems_only"
+      ],
+      "title": "ApprovalModeV1",
+      "type": "string"
+    },
+    "ApproverAuth": {
+      "description": "How the approver was identified.",
+      "enum": [
+        "cloud_user",
+        "unauthenticated",
+        "policy",
+        "local_cli",
+        "signed_webhook",
+        "mcp_session"
+      ],
+      "title": "ApproverAuth",
+      "type": "string"
+    },
+    "ApproverIdentityV1": {
+      "additionalProperties": false,
+      "description": "Who or what approved or declined one step. PHI-free by construction.\n\n``id`` is an opaque identifier (a Cloud user id, a rule id, an agent id,\na system id), never a name or free text.",
+      "properties": {
+        "auth": {
+          "$ref": "#/$defs/ApproverAuth"
+        },
+        "auth_method": {
+          "default": "none",
+          "enum": [
+            "cloud_aal2",
+            "cloud_aal1",
+            "none"
+          ],
+          "title": "Auth Method",
+          "type": "string"
+        },
+        "id": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Id"
+        },
+        "kind": {
+          "$ref": "#/$defs/ApproverKind"
+        },
+        "on_behalf_of": {
+          "anyOf": [
+            {
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "On Behalf Of"
+        },
+        "policy_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Policy Sha256"
+        },
+        "schema_version": {
+          "const": "openadapt.approver-identity/v1",
+          "default": "openadapt.approver-identity/v1",
+          "title": "Schema Version",
+          "type": "string"
+        }
+      },
+      "required": [
+        "kind",
+        "auth"
+      ],
+      "title": "ApproverIdentityV1",
+      "type": "object"
+    },
+    "ApproverKind": {
+      "description": "Who or what made an approval decision.",
+      "enum": [
+        "person",
+        "rule",
+        "agent",
+        "system"
+      ],
+      "title": "ApproverKind",
+      "type": "string"
+    },
+    "StepClass": {
+      "description": "What kind of step a decision is about.",
+      "enum": [
+        "read_only",
+        "reversible",
+        "consequential",
+        "irreversible",
+        "clinical_write"
+      ],
+      "title": "StepClass",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One approval decision, as it goes into the audit trail and receipt.\n\nPHI-free: digests, codes and opaque ids only.",
+  "properties": {
+    "approver": {
+      "$ref": "#/$defs/ApproverIdentityV1"
+    },
+    "batch_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Batch Sha256"
+    },
+    "decided_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+      "title": "Decided At",
+      "type": "string"
+    },
+    "decision": {
+      "enum": [
+        "approved",
+        "declined"
+      ],
+      "title": "Decision",
+      "type": "string"
+    },
+    "decline_reason": {
+      "anyOf": [
+        {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Decline Reason"
+    },
+    "mode": {
+      "$ref": "#/$defs/ApprovalModeV1"
+    },
+    "policy_sha256": {
+      "anyOf": [
+        {
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Policy Sha256"
+    },
+    "request_sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Request Sha256",
+      "type": "string"
+    },
+    "route": {
+      "enum": [
+        "desktop_run_it",
+        "review_item",
+        "review_batch",
+        "local_cli",
+        "webhook",
+        "mcp",
+        "rule"
+      ],
+      "title": "Route",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "openadapt.approval-record/v1",
+      "default": "openadapt.approval-record/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "step_class": {
+      "$ref": "#/$defs/StepClass"
+    },
+    "step_id": {
+      "maxLength": 256,
+      "minLength": 1,
+      "title": "Step Id",
+      "type": "string"
+    },
+    "workflow_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$",
+      "title": "Workflow Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workflow_id",
+    "step_id",
+    "step_class",
+    "mode",
+    "decision",
+    "approver",
+    "route",
+    "request_sha256",
+    "decided_at"
+  ],
+  "title": "ApprovalRecordV1",
+  "type": "object"
+}
