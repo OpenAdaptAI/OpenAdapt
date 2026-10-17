@@ -496,12 +496,12 @@ class CompiledAgent:
             detail=f"{detail} (capture kept at {kept})",
         )
 
-    # -- DRAFT to ADMITTED (people) --------------------------------------------
+    # -- DRAFT to ADMITTED -------------------------------------------------------
 
     def confirm_params(
         self,
         *,
-        principal_id: str,
+        principal_id: Any,
         accept_params: Sequence[str],
         confirm: object = None,
     ) -> dict[str, Any]:
@@ -514,6 +514,7 @@ class CompiledAgent:
             principal_id=principal_id,
             accept_params=accept_params,
             confirm=confirm,
+            key_dir=self.key_dir,
         )
 
     def review(
@@ -533,30 +534,60 @@ class CompiledAgent:
             confirm=confirm,
         )
 
-    def canary(self, *, principal_id: str, **params: Any) -> JitResult:
-        """Run the reviewed draft once on the target app, attended.
+    def canary(self, *, principal_id: Any, **params: Any) -> JitResult:
+        """Run the draft once on the target app, attended.
 
-        Use a test record. The canary refuses to run unless the review is for
-        the current bundle and every write step has an independent read-back
-        through this agent's verifier. It passes only when the run ends
-        ``VERIFIED`` with zero model calls. A failed canary goes to the inbox;
-        the agent is not called.
+        ``principal_id`` is a person's name, or a registered
+        :class:`~openadapt_flow.jit.authority.Principal`: an admitter key, or
+        an agent under a signed admission policy. A person's canary needs
+        their review of the current bundle first. An agent's canary needs the
+        draft and this app inside its policy; otherwise the draft goes to the
+        ``needs_person`` queue and nothing runs.
+
+        Use a test record. The canary refuses to run unless every write step
+        has an independent read-back through this agent's verifier. It passes
+        only when the run ends ``VERIFIED`` with zero model calls. A failed
+        canary goes to the inbox; the agent is not called.
         """
 
         from openadapt_flow.ir import Workflow
+        from openadapt_flow.jit import authority
 
         values = self.task.validate(params)
         candidate = self.candidate()
         if candidate is None or self.admitted:
             raise AdmissionError("a canary runs a DRAFT; there is none")
-        lifecycle.check_principal(principal_id, candidate)
+        _, principal = lifecycle.resolve_actor(
+            principal_id, candidate, key_dir=self.key_dir
+        )
         workflow = Workflow.load(self.bundle_dir)
         digest = lifecycle._digest(workflow)
         review = lifecycle._evidence_at(
             self.program_dir / lifecycle.REVIEW_FILE, digest
         )
-        if review is None:
+        if principal is None and review is None:
             raise AdmissionError("review the draft before its canary")
+        if principal is not None and principal.kind == "agent":
+            assert principal.policy is not None
+            out = authority.scope_problems(
+                principal.policy.policy, workflow, candidate, self.app.origin
+            )
+            if out:
+                lifecycle._write(
+                    self.program_dir / lifecycle.NEEDS_PERSON_FILE,
+                    {
+                        "at": lifecycle._now(),
+                        "digest": digest,
+                        "agent_principal_id": principal.principal_id,
+                        "policy_id": principal.policy.policy.policy_id,
+                        "policy_digest": principal.policy.policy.digest(),
+                        "reasons": out,
+                    },
+                )
+                raise AdmissionError(
+                    "outside the agent's admission policy; queued for a person: "
+                    + "; ".join(out)
+                )
         readback = lifecycle.readback_coverage(workflow, self.verifier)
         problems = lifecycle._readback_problems(readback)
 
@@ -571,6 +602,7 @@ class CompiledAgent:
                 readback=readback,
                 target_origin=self.app.origin,
                 run_dir=run_dir,
+                key_dir=self.key_dir,
             )
             result = JitResult(
                 status=record["outcome"],
@@ -619,11 +651,23 @@ class CompiledAgent:
             ),
         )
 
-    def reject(self, *, principal_id: str, reason: str = "") -> Path:
+    def admit_with_key(self, principal: Any) -> dict[str, Any]:
+        """Admit with a registered admitter key, or as an agent under a signed
+        admission policy. Returns ``{"outcome": "admitted" | "needs_person"}``.
+        See :func:`openadapt_flow.jit.lifecycle.admit_with_key`."""
+
+        return lifecycle.admit_with_key(
+            self.program_dir, principal=principal, key_dir=self.key_dir
+        )
+
+    def reject(self, *, principal_id: Any, reason: str = "") -> Path:
         """Set the draft aside; the next run records again."""
 
         return lifecycle.reject(
-            self.program_dir, principal_id=principal_id, reason=reason
+            self.program_dir,
+            principal_id=principal_id,
+            reason=reason,
+            key_dir=self.key_dir,
         )
 
     # -- cache hit -----------------------------------------------------------
@@ -707,7 +751,7 @@ class CompiledAgent:
         values: dict[str, str],
         run_dir: Path,
         *,
-        attended_by: Optional[str] = None,
+        attended_by: Any = None,
     ) -> tuple[Optional[str], Any]:
         """The standard-profile run: gate, authorization, Replayer, verifier.
 
@@ -721,6 +765,7 @@ class CompiledAgent:
             ExecutionProfile,
             execution_profile_contract,
         )
+        from openadapt_flow.jit import authority
         from openadapt_flow.run_gate import (
             build_runtime_authorization,
             evaluate_run_gate,
@@ -748,7 +793,7 @@ class CompiledAgent:
             workflow,
             gate,
             approval_source=(
-                f"openadapt-flow-jit-canary:{attended_by}"
+                f"openadapt-flow-jit-canary:{authority.describe(attended_by)}"
                 if attended_by
                 else "openadapt-flow-jit"
             ),

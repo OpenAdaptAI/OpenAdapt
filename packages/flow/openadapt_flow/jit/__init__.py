@@ -15,6 +15,14 @@ from openadapt_flow.jit.adapters import (
     register_dialect,
     translate,
 )
+from openadapt_flow.jit.authority import (
+    AdmissionPolicy,
+    AuthorityError,
+    Principal,
+    SignedAdmissionPolicy,
+    load_encrypted_key,
+    principal_from_key,
+)
 from openadapt_flow.jit.compile_agent import (
     RECORDING_WARNING,
     CompiledAgent,
@@ -34,6 +42,12 @@ from openadapt_flow.jit.lifecycle import AdmissionError, BundleState
 from openadapt_flow.jit.signature import ParamError, TaskSignature
 
 __all__ = [
+    "AdmissionPolicy",
+    "AuthorityError",
+    "Principal",
+    "SignedAdmissionPolicy",
+    "load_encrypted_key",
+    "principal_from_key",
     "DIALECTS",
     "RECORDING_WARNING",
     "AdmissionError",

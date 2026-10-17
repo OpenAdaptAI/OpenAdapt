@@ -635,8 +635,10 @@ class Replayer:
             the save so a person handles it. Its post-run decision is stamped
             on the report as ``approval``. It can only add refusals; it never
             changes an outcome word. None (default) leaves replay unchanged.
-        attended_draft_by: A named person attending this run of a JIT draft
-            (the canary, :mod:`openadapt_flow.jit`). None (default): a bundle
+        attended_draft_by: Who attends this run of a JIT draft (the canary,
+            :mod:`openadapt_flow.jit`): a person's name, or a registered
+            ``openadapt_flow.jit.authority.Principal`` (an admitter key, or an
+            agent under a valid signed admission policy). None (default): a bundle
             carrying ``jit_draft.json`` runs only with a valid admission, and
             :meth:`run` raises ``DraftNotAdmitted`` otherwise.
         draft_key_dir: Where the JIT admission key lives, for that check.
@@ -679,7 +681,7 @@ class Replayer:
             QualificationEnvironmentObserver
         ] = None,
         approval_gate: Optional["ApprovalGate"] = None,
-        attended_draft_by: Optional[str] = None,
+        attended_draft_by: Optional[Any] = None,
         draft_key_dir: Optional[Path] = None,
     ) -> None:
         # A JIT draft (openadapt_flow.jit) runs only once admitted, or attended

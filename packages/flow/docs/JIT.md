@@ -2,8 +2,10 @@
 
 `openadapt_flow.jit` wraps a computer-use agent, such as Claude or OpenAI
 computer use. The first run of a task lets the agent do it while Flow records
-every action. Flow compiles the recording into a DRAFT program. A named
-person reviews it, watches it run once as a canary, and admits it. Later runs
+every action. Flow compiles the recording into a DRAFT program. It is
+admitted after canary runs, by a registered agent under an admission policy
+a person signed, by a CI job with a registered admitter key, or by a person
+at a terminal. Later runs
 execute the admitted program: no model calls, and each save is read back from
 the system of record before the run reports `VERIFIED`.
 
@@ -185,19 +187,25 @@ returns the step ids the review asks for. It refuses once a review exists.
 
 ## Admission
 
-A draft is admitted by a named person in this order: `confirm_params` (when
-the task has parameters), `review`, `canary`, `admit`. `run` never calls any
-of them. [JIT_ADMISSION.md](JIT_ADMISSION.md) lists what each step checks.
+A draft is admitted in one of three modes
+([JIT_ADMISSION.md](JIT_ADMISSION.md)): a registered agent under a signed
+admission policy (`canary`, then `admit_with_key`), a CI job with a
+registered admitter key (the same calls), or a person (`confirm_params` when
+the task has parameters, `review`, `canary`, `admit`). `run` never calls any
+of them.
 The admission manifest (`admission.json` in the bundle) is signed with a
 local Ed25519 key and pins the bundle's content digest. A run checks the
 signature and the digest, and the run gate pins the admitted digest, so a
 bundle or manifest edited after admission is refused.
 
 `review` (which confirms the parameters first), `admit`, `reject` and
-`status` are also on the command line. Every command except `status` needs
-an interactive terminal and a typed `ok`:
+`status` are also on the command line. `jit admit --key` (with `--policy`
+for an agent) runs from a script. A person's commands need an interactive
+terminal and a typed `ok`:
 
 ```bash
+openadapt-flow jit admit jit-cache/<task key> --key agent.pem --policy signed-policy.json
+openadapt-flow jit review --queue jit-cache      # drafts that need a person
 openadapt-flow jit status jit-cache/<task key>
 openadapt-flow jit review jit-cache/<task key> --principal dana@clinic.example \
     --accept-param note --all-steps-shown
