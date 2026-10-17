@@ -22,12 +22,16 @@ What is real and what is simulated:
   :class:`~openadapt_flow.fleet.canary.TenantCanaryRunner` interface.
 
 The scenario: the portal moves from 7.1 to 7.2 and renames its controls.
-Tenant ``north`` halts, a person repairs and approves it, and ``north``
-exports a signed patch. Tenant ``east`` imports it, its canary passes on
-``east``'s own cases, and its policy auto-promotes. Tenant ``west`` is still
-on 7.1, so the patch is refused; after ``west`` upgrades it imports, the
-canary passes, and the candidate waits for a person because ``west``'s policy
-does not allow auto-promotion.
+All three tenants have registered 7.1 with the hub and opted in to the
+portal's app family. Tenant ``north`` halts, a person repairs and approves
+it, and ``north`` sends a signed contribution to the hub. The hub verifies
+it and re-signs it for distribution. Tenant ``east`` imports it, its canary
+passes on ``east``'s own cases, the revocation list is fresh, and its signed
+policy auto-promotes. Tenant ``west`` is still on 7.1, so the patch is
+refused; after ``west`` upgrades it imports, the canary passes, and the
+candidate waits for a person because ``west``'s policy does not allow
+auto-promotion. Finally the hub issues a kill switch for the patch: ``east``
+rolls back and ``west`` rejects its candidate.
 """
 
 from __future__ import annotations
@@ -45,7 +49,6 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Iterator, Optional, Sequence
 
-from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from PIL import Image
 
 from openadapt_flow.backend import StructuralResolutionRefused
@@ -56,19 +59,30 @@ from openadapt_flow.fleet.fingerprint import (
     AppVersionFingerprint,
     fingerprint_from_observation,
 )
+from openadapt_flow.fleet.hub import FleetHub, register_fingerprint
 from openadapt_flow.fleet.intake import PatchImportError, import_patch
+from openadapt_flow.fleet.optin import FleetOptIn
 from openadapt_flow.fleet.patch import SignedStructuralPatch
 from openadapt_flow.fleet.policy import (
     FleetPromotionPolicy,
+    PolicyApprover,
     PromotionDecision,
+    RoleRegistry,
+    SecurityOfficialAttestation,
+    SignedPromotionPolicy,
+    apply_fleet_kill_switches,
     process_imported_patch,
+    sign_policy,
 )
 from openadapt_flow.fleet.signing import (
+    CertificateChain,
     FleetTrust,
-    SignerCertificate,
-    issue_certificate,
-    public_key_b64,
+    IntermediateCertificate,
+    OfflineRootCustody,
+    SoftwareKeyCustody,
+    issue_signer_certificate,
 )
+from openadapt_flow.fleet.status import read_fleet_status
 from openadapt_flow.ir import (
     ActionDeliveryReceipt,
     ActionKind,
@@ -535,12 +549,13 @@ class SimulatedTenant:
     portal_version: str
     member_band: str
     member_key: str
-    policy: FleetPromotionPolicy
+    policy: SignedPromotionPolicy
+    roles: RoleRegistry
+    opt_in: FleetOptIn
     trust: FleetTrust
-    signer_key: Ed25519PrivateKey = field(  # gitleaks:allow (type annotation)
-        default_factory=Ed25519PrivateKey.generate
-    )
-    certificate: Optional[SignerCertificate] = None
+    signer: SoftwareKeyCustody = field(default_factory=SoftwareKeyCustody.generate)
+    chain: Optional[CertificateChain] = None
+    policy_key: Optional[SoftwareKeyCustody] = None
     model_calls: int = 0
     healthy_cases: int = 3
     fault_kinds: tuple[str, ...] = FAULT_KINDS
@@ -629,30 +644,75 @@ class SimulatedTenant:
         return report
 
 
-ROOT_KEY_VALIDITY = timedelta(days=30)
+ROOT_CUSTODIANS = ("custodian-a", "custodian-b", "custodian-c")
+SIGNER_VALIDITY = timedelta(days=7)
+HUB_ID = "fleet-hub"
+
+
+def _policy_for(
+    name: str,
+    *,
+    auto_promote: bool,
+    app_families: tuple[str, ...],
+    healthy_cases: int,
+    fault_cases: int,
+    now: datetime,
+) -> FleetPromotionPolicy:
+    return FleetPromotionPolicy(
+        approver=PolicyApprover(
+            person_id=f"{name}-cmio",
+            name=f"{name.title()} CMIO",
+            title="Chief Medical Information Officer",
+        ),
+        security_official=SecurityOfficialAttestation(
+            official_name=f"{name.title()} Security Officer",
+            official_title="HIPAA Security Official",
+            authorised_at=now.isoformat(),
+        ),
+        approved_at=now.isoformat(),
+        auto_promote=auto_promote,
+        app_families=app_families,
+        min_healthy_cases=healthy_cases,
+        min_fault_cases=fault_cases,
+        canary_max_runs=2,
+    )
 
 
 @dataclass
 class Fleet:
+    """An offline root, one intermediate, a hub, and its tenants."""
+
     root: Path
-    root_key: Ed25519PrivateKey  # gitleaks:allow (type annotation)
+    root_custody: OfflineRootCustody
+    intermediate: SoftwareKeyCustody
+    intermediate_certificate: IntermediateCertificate
     feed: FilePatchFeed
+    hub: FleetHub
     tenants: dict[str, SimulatedTenant] = field(default_factory=dict)
 
     @property
     def trust(self) -> FleetTrust:
-        return FleetTrust.pin(self.root_key)
+        return FleetTrust.pin(self.root_custody)
 
-    def certify(self, tenant: SimulatedTenant, now: Optional[datetime] = None) -> None:
+    def issue(
+        self,
+        purpose: str,
+        subject: str,
+        signer: SoftwareKeyCustody,
+        *,
+        now: Optional[datetime] = None,
+        app_families: tuple[str, ...] = (APP_FAMILY,),
+    ) -> CertificateChain:
         now = now or datetime.now(timezone.utc)
-        tenant.certificate = issue_certificate(
-            self.root_key,
-            tenant_pseudonym=hashlib.sha256(tenant.name.encode()).hexdigest()[:12]
-            + "-tenant",
-            signer_public_key=public_key_b64(tenant.signer_key),
-            app_families=(APP_FAMILY,),
+        return issue_signer_certificate(
+            self.intermediate,
+            self.intermediate_certificate,
+            purpose=purpose,
+            subject=subject,
+            signer_public_key=signer.public_key_b64(),
+            app_families=() if purpose == "status" else app_families,
             not_before=now - timedelta(minutes=1),
-            not_after=now + ROOT_KEY_VALIDITY,
+            not_after=now - timedelta(minutes=1) + SIGNER_VALIDITY,
         )
 
     def add_tenant(
@@ -666,47 +726,112 @@ class Fleet:
         healthy_cases: int = 3,
         fault_kinds: tuple[str, ...] = FAULT_KINDS,
         app_families: tuple[str, ...] = (APP_FAMILY,),
+        opt_in: bool = True,
+        register: bool = True,
     ) -> SimulatedTenant:
-        """A tenant with its own bundle, data, key, trust pins and policy."""
+        """A tenant with its own bundle, data, keys, trust pins and policy.
+
+        ``opt_in`` allows export and import for :data:`APP_FAMILY`, as an
+        admin would. ``register`` registers the tenant's current app version
+        with the hub.
+        """
         now = datetime.now(timezone.utc)
-        policy = FleetPromotionPolicy(
-            approved_by=f"{name}-compliance-officer",
-            approved_at=now.isoformat(),
+        approver = SoftwareKeyCustody.generate()
+        policy = _policy_for(
+            name,
             auto_promote=auto_promote,
             app_families=app_families,
-            min_healthy_cases=healthy_cases,
-            min_fault_cases=len(fault_kinds),
-            canary_max_runs=2,
+            healthy_cases=healthy_cases,
+            fault_cases=len(fault_kinds),
+            now=now,
         )
+        roles = RoleRegistry(
+            workflow_authors=(f"{name}-workflow-author",),
+            policy_approvers={policy.approver.person_id: approver.public_key_b64()},
+        )
+        allow = FleetOptIn.off()
+        if opt_in:
+            for direction in ("export", "import"):
+                allow = allow.allow(
+                    direction, added_by=f"{name}-admin", app_family=APP_FAMILY, now=now
+                )
         tenant = SimulatedTenant(
             name=name,
             root=self.root / name,
             portal_version=portal_version,
             member_band=member_band,
             member_key=member_key,
-            policy=policy,
+            policy=sign_policy(policy, approver),
+            roles=roles,
+            opt_in=allow,
             trust=self.trust,
             healthy_cases=healthy_cases,
             fault_kinds=fault_kinds,
         )
+        tenant.policy_key = approver
         build_bundle(
             tenant.bundle,
             version=portal_version,
             member_band=member_band,
             member_key=member_key,
         )
-        self.certify(tenant, now)
+        tenant.chain = self.issue(
+            "contributor", f"tenant-{name}", tenant.signer, now=now
+        )
+        if register:
+            self.register(tenant)
         self.tenants[name] = tenant
         return tenant
+
+    def register(self, tenant: SimulatedTenant) -> int:
+        assert tenant.chain is not None
+        return self.hub.register(
+            register_fingerprint(tenant.app(), tenant.signer, tenant.chain)
+        )
+
+
+def build_fleet_core(root: Path) -> Fleet:
+    """The root ceremony, the intermediate, and the hub. No tenants yet."""
+    now = datetime.now(timezone.utc)
+    root_custody = OfflineRootCustody(
+        SoftwareKeyCustody.generate(), custodians=ROOT_CUSTODIANS, threshold=2
+    )
+    intermediate = SoftwareKeyCustody.generate()
+    intermediate_certificate = root_custody.issue_intermediate(
+        intermediate.public_key_b64(),
+        purposes=("contributor", "distribution", "status"),
+        not_before=now - timedelta(minutes=1),
+        not_after=now + timedelta(days=365),
+        approvals=ROOT_CUSTODIANS[:2],
+        ceremony_id="sim-ceremony-1",
+    )
+    feed = FilePatchFeed(root / "feed")
+    trust = FleetTrust.pin(root_custody)
+    dist, status = SoftwareKeyCustody.generate(), SoftwareKeyCustody.generate()
+    partial = Fleet(
+        root=root,
+        root_custody=root_custody,
+        intermediate=intermediate,
+        intermediate_certificate=intermediate_certificate,
+        feed=feed,
+        hub=None,  # type: ignore[arg-type]
+    )
+    partial.hub = FleetHub(
+        root / "hub",
+        trust=trust,
+        feed=feed,
+        distribution_signer=dist,
+        distribution_chain=partial.issue("distribution", HUB_ID, dist, now=now),
+        status_signer=status,
+        status_chain=partial.issue("status", HUB_ID, status, now=now),
+    )
+    partial.hub.issue_revocation_list(now=now)
+    return partial
 
 
 def build_fleet(root: Path) -> Fleet:
     """Three tenants on portal 7.1 with their own data, keys and policies."""
-    fleet = Fleet(
-        root=root,
-        root_key=Ed25519PrivateKey.generate(),
-        feed=FilePatchFeed(root / "feed"),
-    )
+    fleet = build_fleet_core(root)
     fleet.add_tenant(
         "north",
         member_band="Member Ada Lovelace DOB 1985-12-10",
@@ -776,7 +901,7 @@ def local_repair(
     store.approve(candidate.candidate_id, person)
     store.stage(candidate.candidate_id, person)
     store.start_canary(
-        candidate.candidate_id, person, max_runs=tenant.policy.canary_max_runs
+        candidate.candidate_id, person, max_runs=tenant.policy.policy.canary_max_runs
     )
     return candidate.candidate_id
 
@@ -799,12 +924,14 @@ def live_canary(tenant: SimulatedTenant, candidate_id: str) -> str:
 def receive(
     fleet: Fleet, tenant: SimulatedTenant, patch: SignedStructuralPatch
 ) -> PromotionDecision:
-    """Import one patch on ``tenant`` and let its policy decide."""
-    assert tenant.certificate is not None
+    """Import one patch on ``tenant`` and let its signed policy decide."""
+    status = read_fleet_status(fleet.feed, tenant.trust)
     result = import_patch(
         tenant.store,
         patch,
         trust=tenant.trust,
+        opt_in=tenant.opt_in,
+        status=status,
         tenant_bundle=tenant.bundle,
         tenant_app=tenant.app(),
         out_dir=tenant.root / "bundles" / f"patch-{patch.patch_id[:12]}",
@@ -813,10 +940,29 @@ def receive(
         tenant.store,
         result.candidate.candidate_id,
         policy=tenant.policy,
+        roles=tenant.roles,
+        trust=tenant.trust,
+        status_source=fleet.feed,
         runner=tenant,
         cases=tenant.cases(),
         work_dir=tenant.root / "canary" / patch.patch_id[:12],
     )
+
+
+def contribute(fleet: Fleet, tenant: SimulatedTenant, candidate_id: str):
+    """Export ``tenant``'s approved repair and send it to the hub."""
+    assert tenant.chain is not None
+    exported = export_patch(
+        tenant.store,
+        candidate_id,
+        workflow_family=WORKFLOW_FAMILY,
+        app_before=app_fingerprint("7.1"),
+        app_after=app_fingerprint("7.2"),
+        signer=tenant.signer,
+        chain=tenant.chain,
+        opt_in=tenant.opt_in,
+    )
+    return exported, fleet.hub.accept(exported.contribution)
 
 
 @contextmanager
@@ -867,19 +1013,10 @@ def _run_scenario(root: Path, *, log: Any) -> dict[str, Any]:
         f"north repair approved by a person; live canary -> {live_canary(north, candidate_id)}"
     )
 
-    assert north.certificate is not None
-    exported = export_patch(
-        north.store,
-        candidate_id,
-        workflow_family=WORKFLOW_FAMILY,
-        app_before=app_fingerprint("7.1"),
-        app_after=app_fingerprint("7.2"),
-        signer_key=north.signer_key,
-        certificate=north.certificate,
-    )
-    fleet.feed.publish(exported.patch)
-    log(f"north exported patch {exported.patch.patch_id[:16]} to the feed")
-    summary["patch_id"] = exported.patch.patch_id
+    exported, decision = contribute(fleet, north, candidate_id)
+    log(f"north contributed a patch; hub: {decision.outcome} ({decision.reason})")
+    assert decision.patch is not None
+    summary["patch_id"] = decision.patch.patch_id
 
     for patch in fleet.feed.list_patches(app_family=APP_FAMILY):
         decision = receive(fleet, east, patch)
@@ -899,6 +1036,19 @@ def _run_scenario(root: Path, *, log: Any) -> dict[str, Any]:
         decision = receive(fleet, west, patch)
         log(f"west on 7.2: {decision.outcome} ({'; '.join(decision.reasons)})")
         summary["west"] = decision.outcome
+
+    patch_id = summary["patch_id"]
+    fleet.hub.issue_kill_switch(
+        disable_auto_promotion=True, rollback_patch_ids=[patch_id], reason="bad_patch"
+    )
+    for tenant in (east, west):
+        changed = apply_fleet_kill_switches(
+            tenant.store, read_fleet_status(fleet.feed, tenant.trust)
+        )
+        log(
+            f"{tenant.name} after the kill switch: {', '.join(changed) or 'nothing to do'}"
+        )
+        summary[f"{tenant.name}_kill_switch"] = changed
 
     summary["model_calls"] = {t.name: t.model_calls for t in fleet.tenants.values()}
     log(f"model calls across every replay: {summary['model_calls']}")
