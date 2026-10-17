@@ -72,8 +72,16 @@ class TunedVision(AppleVisionEngine):
         language_correction: bool = False,
         level: int = 0,
         min_text_height: float | None = None,
+        revision: int | None = None,
+        flip: str = "keep",
     ) -> None:
         super().__init__()
+        if revision is not None:
+            self._revision = revision
+        #: "keep" upside-down reads, "drop" them, or "rev2" re-read the
+        #: image with revision 2 (no orientation detection) when any is seen.
+        self.flip = flip
+        self.flipped_images = 0
         self.passes = passes
         self.merge = merge
         self.lc = language_correction
@@ -89,27 +97,65 @@ class TunedVision(AppleVisionEngine):
             request.setMinimumTextHeight_(self.mth)
         return request
 
+    def _vision(self, png: bytes, revision: int) -> list[tuple[RawLine, bool]]:
+        from openadapt_flow.vision.imgops import png_size
+
+        width, height = png_size(png)
+        data = self._nsdata.dataWithBytes_length_(png, len(png))
+        request = self._request()
+        request.setRevision_(revision)
+        handler = self._handler_class.alloc().initWithData_options_(data, None)
+        with self._lock:
+            handler.performRequests_error_([request], None)
+        out = []
+        for ob in request.results() or []:
+            cands = ob.topCandidates_(1)
+            if not cands:
+                continue
+            box = ob.boundingBox()
+            x0 = box.origin.x * width
+            x1 = (box.origin.x + box.size.width) * width
+            y0 = (1.0 - box.origin.y - box.size.height) * height
+            y1 = (1.0 - box.origin.y) * height
+            ix0, iy0 = int(max(0.0, x0)), int(max(0.0, y0))
+            ix1, iy1 = int(min(float(width), x1)), int(min(float(height), y1))
+            flipped = ob.topLeft().x > ob.topRight().x
+            out.append(((ix0, iy0, max(0, ix1 - ix0), max(0, iy1 - iy0),
+                         str(cands[0].string()), float(cands[0].confidence())), flipped))
+        return out
+
     def _raw(self, png: bytes) -> list[RawLine]:
-        return AppleVisionEngine.recognize_png(self, png)
+        obs = self._vision(png, self._revision)
+        if any(f for _, f in obs):
+            self.flipped_images += 1
+            if self.flip == "rev2":
+                obs = self._vision(png, 2)
+            elif self.flip == "drop":
+                obs = [o for o in obs if not o[1]]
+        return [ln for ln, _ in obs]
 
     def _pass(self, img: Image.Image, p: dict[str, Any]) -> list[RawLine]:
         W, H = img.size
         tiles = int(p.get("tiles", 1))
+        tile_h = int(p.get("tile_h", 0))
+        if tile_h and H > tile_h * 1.25:
+            tiles = -(-H // tile_h)
         if tiles > 1 and H > 400:
-            ov = 96
-            step = H // tiles
+            ov = max(96, (tile_h or H // tiles) // 4)
+            step = -(-H // tiles)
             out: list[RawLine] = []
             for k in range(tiles):
                 y0 = max(0, k * step - ov)
                 y1 = min(H, (k + 1) * step + ov)
                 sub = img.crop((0, y0, W, y1))
-                for ln in self._pass(sub, {**p, "tiles": 1}):
+                core0, core1 = k * step, min(H, (k + 1) * step)
+                for ln in self._pass(sub, {**p, "tiles": 1, "tile_h": 0}):
                     x, y, w, h = ln[:4]
-                    if (y <= 2 and y0 > 0) or (y + h >= (y1 - y0) - 2 and y1 < H):
-                        continue  # cut by an internal tile edge
-                    cand = (x, y + y0, w, h, ln[4], ln[5])
-                    if not any(_overlap(cand, o) > 0.5 for o in out):
-                        out.append(cand)
+                    cy = y + y0 + h / 2
+                    # Each line belongs to the one tile whose core holds its
+                    # center; the overlap keeps it whole in that tile.
+                    if core0 <= cy < core1:
+                        out.append((x, y + y0, w, h, ln[4], ln[5]))
             return out
         dx, dy = int(p.get("dx", 0)), int(p.get("dy", 0))
         work = img.crop((dx, dy, W, H)) if (dx or dy) else img
@@ -216,11 +262,36 @@ CONFIGS: dict[str, dict[str, Any]] = {
         "passes": [{"gray": True}, {"gray": True, "dx": 1, "dy": 1}, {"gray": True, "dx": 2, "dy": 0}],
         "merge": "vote",
     },
+    "tile512": {"passes": [{"tile_h": 512}]},
+    "tile768": {"passes": [{"tile_h": 768}]},
+    "tile1024": {"passes": [{"tile_h": 1024}]},
+    "tile1024_gray": {"passes": [{"tile_h": 1024, "gray": True}]},
+    "tile768_conf0": {"passes": [{"tile_h": 768}], "record_min_conf": 0.0},
+    "tile1024_conf0": {"passes": [{"tile_h": 1024}], "record_min_conf": 0.0},
+    "conf0": {"passes": [{}], "record_min_conf": 0.0},
+    "rev2": {"passes": [{}], "revision": 2},
+    "flipdrop": {"passes": [{}], "flip": "drop"},
+    "fliprev2": {"passes": [{}], "flip": "rev2"},
+    "tile768_fliprev2": {"passes": [{"tile_h": 768}], "flip": "rev2"},
+    "tile768_flipdrop": {"passes": [{"tile_h": 768}], "flip": "drop"},
+    "tile768_rev2": {"passes": [{"tile_h": 768}], "revision": 2},
+    "tile1024_fliprev2": {"passes": [{"tile_h": 1024}], "flip": "rev2"},
+    "tile768_fliprev2_conf0": {"passes": [{"tile_h": 768}], "flip": "rev2", "record_min_conf": 0.0},
 }
 
 
 def install(name: str) -> TunedVision:
     cfg = dict(CONFIGS[name])
+    rmc = cfg.pop("record_min_conf", None)
+    if rmc is not None:
+        # The record-time confidence floor (compiler MIN_OCR_CONFIDENCE) as
+        # bound by the record paths of the evidence harnesses.
+        from openadapt_flow.compiler import compile as C
+        from openadapt_flow.validation import dense_surface as D
+        from openadapt_flow.validation import identity_ladder as IL
+
+        for mod in (C, D, IL):
+            mod.MIN_OCR_CONFIDENCE = rmc
     eng = TunedVision(**cfg)
     ocr_mod._engine = eng
     ocr_mod.clear_ocr_memo()
@@ -344,6 +415,7 @@ def main() -> int:
                 "p95_ms": round(1000 * xs[int(len(xs) * 0.95)], 1)}
 
     result["latency"] = {"full_frame": stats(big), "crop": stats(small)}
+    result["flipped_images"] = eng.flipped_images
     result["wall_s"] = round(time.time() - t0, 1)
     result["finished"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
     result["load"] = os.getloadavg()
