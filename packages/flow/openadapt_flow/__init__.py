@@ -1,4 +1,4 @@
-"""openadapt-flow: record once, compile, replay deterministically, heal on drift."""
+"""openadapt-flow: record, compile, replay deterministically, heal on drift."""
 
 __version__ = "2.1.0"
 

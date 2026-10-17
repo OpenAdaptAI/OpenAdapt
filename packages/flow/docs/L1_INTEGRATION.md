@@ -8,7 +8,7 @@ metadata* (`{file_number}_{date}_{doctype}` filename or a CSV sidecar).
 
 openadapt-flow targets the L1 role: instead of hand-building a bespoke
 acquisition harness per site (per-EMR navigation code, per-screen detection,
-custom recovery logic), a site operator **records the workflow once** and the
+custom recovery logic), a site operator **records the workflow** and the
 compiler produces the deterministic, self-healing script that acquires the
 artifacts on every subsequent run — locally, with no per-run model calls on
 the happy path.

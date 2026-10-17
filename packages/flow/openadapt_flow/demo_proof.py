@@ -1066,7 +1066,7 @@ def render_demo_page(evidence: DemoEvidence) -> str:
   <section>
     <h2>Try it on a test copy of your own app</h2>
     <pre class="cmd"><code>{_e(next_cmd)}</code></pre>
-    <p class="hint">This opens a browser and records the task while you do it once.</p>
+    <p class="hint">This opens a browser and records the task while you do it.</p>
   </section>
   {details}
   <footer>Generated {_e(evidence.generated_at)} by openadapt-flow {_e(evidence.flow_version)}. All data on this page is fake.</footer>

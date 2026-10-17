@@ -173,7 +173,7 @@ The same path from Python:
 from openadapt_flow import api
 
 url = "https://your-test-app.example"
-rec = api.record(url, out="rec")  # do the task once, then close the browser
+rec = api.record(url, out="rec")  # do the task, then close the browser
 bundle = api.compile(rec, out="bundle", name="my-task", accept_params=["note"])
 report = api.replay(bundle, url, params={"note": "Follow-up in 2 weeks"})
 print(report.transaction_outcome)  # COMPLETED_UNVERIFIED: a rehearsal

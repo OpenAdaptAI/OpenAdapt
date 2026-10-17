@@ -6297,7 +6297,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="openadapt-flow",
         description=(
-            "Record a task once and compile it into a program that runs on "
+            "Record a task and compile it into a program that runs on "
             "this computer. With a record check configured, a governed run "
             "confirms each save by reading the record back, and a run that "
             "can't confirm a save stops and asks a person. When the screen "

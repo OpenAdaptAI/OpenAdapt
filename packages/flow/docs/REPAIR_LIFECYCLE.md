@@ -233,7 +233,7 @@ The in-run gate protects the run; the lifecycle protects the fleet.
 `openadapt-agent` serves workflows to other agents over MCP. When a run halts
 there, the server can return a one-time repair token. If an administrator
 turned on screen access for that workflow or organization, the calling agent
-may demonstrate the stuck step once while OpenAdapt records it.
+may demonstrate the stuck step while OpenAdapt records it.
 `openadapt_flow.repair.agent_teach.teach_from_calling_agent` turns that
 recording into a candidate:
 
