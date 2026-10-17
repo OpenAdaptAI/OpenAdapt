@@ -296,6 +296,8 @@ exclude = [
 # recipes/raw rows are absent from the current public tree. Public mechanisms,
 # fake-patient synthetic fixtures, and bounded aggregate evidence remain.
 exclude = [
+    # Registry bundles are fetched by `openadapt-flow pull`, not shipped.
+    "/registry",
     "/.hypothesis",
     "/.openadapt-chrome-profile",
     "/.openadapt-recording-partial-*",

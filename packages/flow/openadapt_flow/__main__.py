@@ -7388,6 +7388,10 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--headed", action="store_true", help="Run the browsers headed")
     p.set_defaults(func=_cmd_benchmark)
 
+    from openadapt_flow.registry import add_parser as _add_pull_parser
+
+    _add_pull_parser(sub)
+
     from openadapt_flow.intake.cli import add_parser as _add_intake_parser
 
     _add_intake_parser(sub)
