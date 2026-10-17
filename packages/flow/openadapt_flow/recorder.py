@@ -118,10 +118,15 @@ class Recorder:
         settle_timeout_s: float = 3.0,
         surface_id: str = PRIMARY_SURFACE_ID,
         surface_kind: Optional[str] = None,
+        page_backend_factory: Optional[Callable[[Any], Backend]] = None,
     ) -> None:
         # ``_backend`` is always the ACTIVE surface's backend; on a
         # single-surface recording it never changes.
         self._backend = backend
+        # Builds the backend for a browser page an action opened. The
+        # interactive recorder passes one that applies its privacy masking
+        # and scrubbed structural reads to every page it follows.
+        self._page_backend_factory = page_backend_factory
         self._primary_backend = backend
         self._primary_surface_id = surface_id
         self._primary_surface_kind = surface_kind
@@ -290,12 +295,27 @@ class Recorder:
 
         return self._surface_backends[surface_id]
 
+    def surface_for_page(self, page: Any) -> Optional[str]:
+        """The surface id recorded for browser ``page``, or None."""
+
+        for surface_id, backend in self._surface_backends.items():
+            if self._browser_page(backend) is page:
+                return surface_id
+        return None
+
+    def knows_page(self, page: Any) -> bool:
+        """Whether ``page`` was open at the start or claimed by an action."""
+
+        return any(page is known for known in self._known_pages)
+
     def switch_surface(
         self,
         surface_id: str,
         *,
         backend: Optional[Backend] = None,
         kind: Optional[str] = None,
+        before_png: Optional[bytes] = None,
+        structural_before: Optional[dict[str, Any]] = None,
     ) -> None:
         """Record moving to another surface (a tab/popup, or another backend).
 
@@ -332,8 +352,11 @@ class Recorder:
                 self._surface_backends[surface_id] = backend
                 self._remember_pages(backend)
             target = backend
-        before = self._backend.screenshot()
-        structural_before = self._structural_state()
+        # A caller that observed the switch (the interactive recorder) captured
+        # the old surface already; a driven recording captures it now.
+        before = before_png if before_png is not None else self._backend.screenshot()
+        if structural_before is None:
+            structural_before = self._structural_state()
         self._multi_surface = True
         self._backend = target
         self._active_surface = surface_id
@@ -397,6 +420,24 @@ class Recorder:
             for page in self._context_pages(self._backend)
             if not any(page is known for known in self._known_pages)
         ]
+        opener_page = self._browser_page(self._backend)
+
+        def _opened_by_another_known_page(page: Any) -> bool:
+            # A page another recorded page opened belongs to THAT page's
+            # action; it is claimed when that action is recorded. (The
+            # interactive recorder can see a new page before it has written
+            # the pending action of the surface the user just left.)
+            try:
+                live_opener = page.opener()
+            except Exception:
+                return False
+            return (
+                live_opener is not None
+                and live_opener is not opener_page
+                and any(live_opener is known for known in self._known_pages)
+            )
+
+        new_pages = [p for p in new_pages if not _opened_by_another_known_page(p)]
         if not new_pages:
             return []
         if len(new_pages) > MAX_PAGES_OPENED_PER_STEP:
@@ -406,7 +447,6 @@ class Recorder:
             )
         from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 
-        opener_page = self._browser_page(self._backend)
         ids: list[str] = []
         for order, page in enumerate(new_pages):
             self._known_pages.append(page)
@@ -449,7 +489,11 @@ class Recorder:
                     "title": title,
                 }
             )
-            self._surface_backends[surface_id] = PlaywrightBackend(page)
+            self._surface_backends[surface_id] = (
+                self._page_backend_factory(page)
+                if self._page_backend_factory is not None
+                else PlaywrightBackend(page)
+            )
             ids.append(surface_id)
         self._multi_surface = True
         return ids
@@ -578,6 +622,12 @@ class Recorder:
         # click) passes it in; otherwise we settle and capture now.
         if after_png is None:
             after_png = self._wait_settled()
+        # The observed action may have opened browser pages (a popup, a
+        # target=_blank tab): claim them for this event, exactly as a driven
+        # action does. A non-browser backend has no pages, so nothing changes.
+        opened = self._claim_new_pages(self._i)
+        if opened:
+            event = {**event, "opens": opened}
         self._commit(
             event,
             before_png,
