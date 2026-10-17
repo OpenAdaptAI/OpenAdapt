@@ -787,9 +787,7 @@ def replay_observe(
             [SimpleNamespace(region=region) for _text, region in first_near], band
         )
         f = identity_mod.ROW_REREAD_FACTOR
-        row_png = (
-            None if row is None else identity_mod.upscale_crop(frame.png, row, f)
-        )
+        row_png = None if row is None else identity_mod.upscale_crop(frame.png, row, f)
         if row is not None and row_png is not None:
             (row_check, w_obs, row_nf, w_obs_nf, _w_lines, _w_near) = _band_attempt(
                 row_png,

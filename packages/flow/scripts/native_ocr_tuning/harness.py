@@ -26,9 +26,9 @@ from typing import Any
 
 os.environ["OPENADAPT_FLOW_OCR"] = "native"
 
-from PIL import Image, ImageOps  # noqa: E402
-
 import importlib  # noqa: E402
+
+from PIL import Image, ImageOps  # noqa: E402
 
 ocr_mod = importlib.import_module("openadapt_flow.vision.ocr")
 from openadapt_flow.vision.ocr_backends import AppleVisionEngine, RawLine  # noqa: E402
@@ -123,8 +123,19 @@ class TunedVision(AppleVisionEngine):
             ix0, iy0 = int(max(0.0, x0)), int(max(0.0, y0))
             ix1, iy1 = int(min(float(width), x1)), int(min(float(height), y1))
             flipped = ob.topLeft().x > ob.topRight().x
-            out.append(((ix0, iy0, max(0, ix1 - ix0), max(0, iy1 - iy0),
-                         str(cands[0].string()), float(cands[0].confidence())), flipped))
+            out.append(
+                (
+                    (
+                        ix0,
+                        iy0,
+                        max(0, ix1 - ix0),
+                        max(0, iy1 - iy0),
+                        str(cands[0].string()),
+                        float(cands[0].confidence()),
+                    ),
+                    flipped,
+                )
+            )
         return out
 
     def _raw(self, png: bytes) -> list[RawLine]:
@@ -282,7 +293,10 @@ CONFIGS: dict[str, dict[str, Any]] = {
     "tiles4": {"passes": [{"tiles": 4}]},
     "gray_s1.5": {"passes": [{"gray": True, "scale": 1.5, "resample": L}]},
     "union_orig_gray": {"passes": [{}, {"gray": True}], "merge": "union"},
-    "union_orig_s1.5": {"passes": [{}, {"scale": 1.5, "resample": L}], "merge": "union"},
+    "union_orig_s1.5": {
+        "passes": [{}, {"scale": 1.5, "resample": L}],
+        "merge": "union",
+    },
     "vote_orig_gray_s1.5": {
         "passes": [{}, {"gray": True}, {"scale": 1.5, "resample": L}],
         "merge": "vote",
@@ -296,7 +310,11 @@ CONFIGS: dict[str, dict[str, Any]] = {
         "merge": "vote",
     },
     "vote_offsets_gray": {
-        "passes": [{"gray": True}, {"gray": True, "dx": 1, "dy": 1}, {"gray": True, "dx": 2, "dy": 0}],
+        "passes": [
+            {"gray": True},
+            {"gray": True, "dx": 1, "dy": 1},
+            {"gray": True, "dx": 2, "dy": 0},
+        ],
         "merge": "vote",
     },
     "tile512": {"passes": [{"tile_h": 512}]},
@@ -307,35 +325,135 @@ CONFIGS: dict[str, dict[str, Any]] = {
     "tile1024_conf0": {"passes": [{"tile_h": 1024}], "record_min_conf": 0.0},
     "conf0": {"passes": [{}], "record_min_conf": 0.0},
     "rev2": {"passes": [{}], "revision": 2},
-    "t768f_small2": {"passes": [{"tile_h": 768, "small_h": 300, "small_scale": 2.0}], "flip": "rev2"},
-    "t768f_small3": {"passes": [{"tile_h": 768, "small_h": 300, "small_scale": 3.0}], "flip": "rev2"},
-    "t768f_small1.5": {"passes": [{"tile_h": 768, "small_h": 300, "small_scale": 1.5}], "flip": "rev2"},
-    "t768f_small2_bicubic": {"passes": [{"tile_h": 768, "small_h": 300, "small_scale": 2.0, "resample": "bicubic"}], "flip": "rev2"},
-    "t768f_agree_lc": {"passes": [{"tile_h": 768}, {"tile_h": 768, "lc": True}], "flip": "rev2", "merge": "vote"},
-    "t768f_vote_offsets": {"passes": [{"tile_h": 768}, {"tile_h": 768, "dx": 1, "dy": 1}, {"tile_h": 768, "dx": 2}], "flip": "rev2", "merge": "vote"},
-    "t768f_union_offsets": {"passes": [{"tile_h": 768}, {"tile_h": 768, "dx": 1, "dy": 1}], "flip": "rev2", "merge": "union"},
+    "t768f_small2": {
+        "passes": [{"tile_h": 768, "small_h": 300, "small_scale": 2.0}],
+        "flip": "rev2",
+    },
+    "t768f_small3": {
+        "passes": [{"tile_h": 768, "small_h": 300, "small_scale": 3.0}],
+        "flip": "rev2",
+    },
+    "t768f_small1.5": {
+        "passes": [{"tile_h": 768, "small_h": 300, "small_scale": 1.5}],
+        "flip": "rev2",
+    },
+    "t768f_small2_bicubic": {
+        "passes": [
+            {"tile_h": 768, "small_h": 300, "small_scale": 2.0, "resample": "bicubic"}
+        ],
+        "flip": "rev2",
+    },
+    "t768f_agree_lc": {
+        "passes": [{"tile_h": 768}, {"tile_h": 768, "lc": True}],
+        "flip": "rev2",
+        "merge": "vote",
+    },
+    "t768f_vote_offsets": {
+        "passes": [
+            {"tile_h": 768},
+            {"tile_h": 768, "dx": 1, "dy": 1},
+            {"tile_h": 768, "dx": 2},
+        ],
+        "flip": "rev2",
+        "merge": "vote",
+    },
+    "t768f_union_offsets": {
+        "passes": [{"tile_h": 768}, {"tile_h": 768, "dx": 1, "dy": 1}],
+        "flip": "rev2",
+        "merge": "union",
+    },
     "t768f_pad24": {"passes": [{"tile_h": 768, "small_pad": 24}], "flip": "rev2"},
     "t768f_pad12": {"passes": [{"tile_h": 768, "small_pad": 12}], "flip": "rev2"},
-    "t768f_union_pad24": {"passes": [{"tile_h": 768}, {"tile_h": 768, "small_pad": 24}], "flip": "rev2", "merge": "union"},
-    "t768f_union_pad24_pad12": {"passes": [{"tile_h": 768, "small_pad": 24}, {"tile_h": 768, "small_pad": 12}], "flip": "rev2", "merge": "union"},
-    "t768f_union3_pad": {"passes": [{"tile_h": 768}, {"tile_h": 768, "small_pad": 24}, {"tile_h": 768, "small_pad": 12}], "flip": "rev2", "merge": "union"},
-    "t768f_vote3_pad": {"passes": [{"tile_h": 768}, {"tile_h": 768, "small_pad": 24}, {"tile_h": 768, "small_pad": 12}], "flip": "rev2", "merge": "vote"},
+    "t768f_union_pad24": {
+        "passes": [{"tile_h": 768}, {"tile_h": 768, "small_pad": 24}],
+        "flip": "rev2",
+        "merge": "union",
+    },
+    "t768f_union_pad24_pad12": {
+        "passes": [{"tile_h": 768, "small_pad": 24}, {"tile_h": 768, "small_pad": 12}],
+        "flip": "rev2",
+        "merge": "union",
+    },
+    "t768f_union3_pad": {
+        "passes": [
+            {"tile_h": 768},
+            {"tile_h": 768, "small_pad": 24},
+            {"tile_h": 768, "small_pad": 12},
+        ],
+        "flip": "rev2",
+        "merge": "union",
+    },
+    "t768f_vote3_pad": {
+        "passes": [
+            {"tile_h": 768},
+            {"tile_h": 768, "small_pad": 24},
+            {"tile_h": 768, "small_pad": 12},
+        ],
+        "flip": "rev2",
+        "merge": "vote",
+    },
     "t768f_row2": {"passes": [{"tile_h": 768}], "flip": "rev2", "row_retry": True},
-    "t768f_row3": {"passes": [{"tile_h": 768}], "flip": "rev2", "row_retry": True, "row_factor": 3},
-    "t768f_small2_row2": {"passes": [{"tile_h": 768, "small_h": 300, "small_scale": 2.0}], "flip": "rev2", "row_retry": True},
-    "t768f_small2_row1": {"passes": [{"tile_h": 768, "small_h": 300, "small_scale": 2.0}], "flip": "rev2", "row_retry": True, "row_factor": 1},
-    "t768f_small2_row1_union_pad": {"passes": [{"tile_h": 768, "small_h": 300, "small_scale": 2.0}, {"tile_h": 768, "small_h": 300, "small_scale": 2.0, "small_pad": 24}], "flip": "rev2", "merge": "union", "row_retry": True, "row_factor": 1},
+    "t768f_row3": {
+        "passes": [{"tile_h": 768}],
+        "flip": "rev2",
+        "row_retry": True,
+        "row_factor": 3,
+    },
+    "t768f_small2_row2": {
+        "passes": [{"tile_h": 768, "small_h": 300, "small_scale": 2.0}],
+        "flip": "rev2",
+        "row_retry": True,
+    },
+    "t768f_small2_row1": {
+        "passes": [{"tile_h": 768, "small_h": 300, "small_scale": 2.0}],
+        "flip": "rev2",
+        "row_retry": True,
+        "row_factor": 1,
+    },
+    "t768f_small2_row1_union_pad": {
+        "passes": [
+            {"tile_h": 768, "small_h": 300, "small_scale": 2.0},
+            {"tile_h": 768, "small_h": 300, "small_scale": 2.0, "small_pad": 24},
+        ],
+        "flip": "rev2",
+        "merge": "union",
+        "row_retry": True,
+        "row_factor": 1,
+    },
     "t768f_gray": {"passes": [{"tile_h": 768, "gray": True}], "flip": "rev2"},
-    "t768f_lc_on": {"passes": [{"tile_h": 768}], "flip": "rev2", "language_correction": True},
-    "t768f_vote3": {"passes": [{"tile_h": 768}, {"tile_h": 768, "gray": True}, {"tile_h": 768, "small_h": 300, "small_scale": 2.0}], "flip": "rev2", "merge": "vote"},
-    "t768f_union_small2": {"passes": [{"tile_h": 768}, {"tile_h": 768, "small_h": 300, "small_scale": 2.0}], "flip": "rev2", "merge": "union"},
+    "t768f_lc_on": {
+        "passes": [{"tile_h": 768}],
+        "flip": "rev2",
+        "language_correction": True,
+    },
+    "t768f_vote3": {
+        "passes": [
+            {"tile_h": 768},
+            {"tile_h": 768, "gray": True},
+            {"tile_h": 768, "small_h": 300, "small_scale": 2.0},
+        ],
+        "flip": "rev2",
+        "merge": "vote",
+    },
+    "t768f_union_small2": {
+        "passes": [
+            {"tile_h": 768},
+            {"tile_h": 768, "small_h": 300, "small_scale": 2.0},
+        ],
+        "flip": "rev2",
+        "merge": "union",
+    },
     "flipdrop": {"passes": [{}], "flip": "drop"},
     "fliprev2": {"passes": [{}], "flip": "rev2"},
     "tile768_fliprev2": {"passes": [{"tile_h": 768}], "flip": "rev2"},
     "tile768_flipdrop": {"passes": [{"tile_h": 768}], "flip": "drop"},
     "tile768_rev2": {"passes": [{"tile_h": 768}], "revision": 2},
     "tile1024_fliprev2": {"passes": [{"tile_h": 1024}], "flip": "rev2"},
-    "tile768_fliprev2_conf0": {"passes": [{"tile_h": 768}], "flip": "rev2", "record_min_conf": 0.0},
+    "tile768_fliprev2_conf0": {
+        "passes": [{"tile_h": 768}],
+        "flip": "rev2",
+        "record_min_conf": 0.0,
+    },
 }
 
 
@@ -374,14 +492,26 @@ def _patch_row_retry(factor: int) -> None:
         )
         f = factor
         retry, r_obs, retry_nf, r_obs_nf, _rl, _rn = D._band_attempt(
-            up, None, (resolved_point[1] - region[1]) * f,
-            ((exclude[0] - region[0]) * f, (exclude[1] - region[1]) * f,
-             exclude[2] * f, exclude[3] * f),
+            up,
+            None,
+            (resolved_point[1] - region[1]) * f,
+            (
+                (exclude[0] - region[0]) * f,
+                (exclude[1] - region[1]) * f,
+                exclude[2] * f,
+                exclude[3] * f,
+            ),
             context_text,
         )
-        if (rank[retry.status], retry.coverage) > (rank[obs.check.status], obs.check.coverage):
+        if (rank[retry.status], retry.coverage) > (
+            rank[obs.check.status],
+            obs.check.coverage,
+        ):
             obs.check, obs.observed = retry, r_obs
-            obs.observed_no_rowfilter, obs.status_no_rowfilter = r_obs_nf, retry_nf.status
+            obs.observed_no_rowfilter, obs.status_no_rowfilter = (
+                r_obs_nf,
+                retry_nf.status,
+            )
         return obs
 
     D.replay_observe = observe
@@ -434,10 +564,22 @@ def run_dense(seeds: list[int]) -> dict[str, Any]:
         "unarmed": len(res["trials"]) - len(armed),
         "by_condition": by,
         "trials": [
-            {k: t[k] for k in (
-                "seed", "collision_class", "click_config", "replay_condition",
-                "context_text", "fa_status", "fa_observed", "acc_status",
-                "acc_observed", "is_false_abort", "is_false_accept")}
+            {
+                k: t[k]
+                for k in (
+                    "seed",
+                    "collision_class",
+                    "click_config",
+                    "replay_condition",
+                    "context_text",
+                    "fa_status",
+                    "fa_observed",
+                    "acc_status",
+                    "acc_observed",
+                    "is_false_abort",
+                    "is_false_accept",
+                )
+            }
             for t in res["trials"]
         ],
     }
@@ -472,6 +614,7 @@ def run_pairs() -> dict[str, Any]:
 def run_homonyms() -> dict[str, Any]:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2] / "tests"))
     import test_identity_ocr_conservative_9th as T
+
     from openadapt_flow.validation.dense_surface import RenderCondition
 
     cases = list(T._NUMERIC_HOMONYMS)
@@ -497,14 +640,19 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--config", required=True, choices=sorted(CONFIGS))
     ap.add_argument("--out", type=Path, required=True)
-    ap.add_argument("--sets", nargs="+", default=["dense", "ladder", "pairs", "homonyms"])
+    ap.add_argument(
+        "--sets", nargs="+", default=["dense", "ladder", "pairs", "homonyms"]
+    )
     ap.add_argument("--seeds", type=int, nargs="+", default=[1, 2, 3, 4, 5])
     args = ap.parse_args()
     args.out.mkdir(parents=True, exist_ok=True)
     eng = install(args.config)
-    result: dict[str, Any] = {"config": args.config, "spec": CONFIGS[args.config],
-                              "engine": eng.contract(),
-                              "started": time.strftime("%Y-%m-%dT%H:%M:%S%z")}
+    result: dict[str, Any] = {
+        "config": args.config,
+        "spec": CONFIGS[args.config],
+        "engine": eng.contract(),
+        "started": time.strftime("%Y-%m-%dT%H:%M:%S%z"),
+    }
     t0 = time.time()
     for name in args.sets:
         ts = time.time()
@@ -524,24 +672,31 @@ def main() -> int:
         if not xs:
             return {"n": 0}
         xs = sorted(xs)
-        return {"n": len(xs), "mean_ms": round(1000 * sum(xs) / len(xs), 1),
-                "p50_ms": round(1000 * xs[len(xs) // 2], 1),
-                "p95_ms": round(1000 * xs[int(len(xs) * 0.95)], 1)}
+        return {
+            "n": len(xs),
+            "mean_ms": round(1000 * sum(xs) / len(xs), 1),
+            "p50_ms": round(1000 * xs[len(xs) // 2], 1),
+            "p95_ms": round(1000 * xs[int(len(xs) * 0.95)], 1),
+        }
 
     result["latency"] = {"full_frame": stats(big), "crop": stats(small)}
     result["flipped_images"] = eng.flipped_images
     result["wall_s"] = round(time.time() - t0, 1)
     result["finished"] = time.strftime("%Y-%m-%dT%H:%M:%S%z")
     result["load"] = os.getloadavg()
-    (args.out / f"{args.config}.json").write_text(json.dumps(result, indent=1, default=str))
+    (args.out / f"{args.config}.json").write_text(
+        json.dumps(result, indent=1, default=str)
+    )
     d = result.get("dense", {})
-    print(f"RESULT {args.config} dense FA={d.get('false_abort')}/{d.get('n')} "
-          f"FACC={d.get('false_accept')} mism={d.get('fa_mismatch')} "
-          f"ladder FACC={result.get('ladder', {}).get('false_accept')} "
-          f"halt={result.get('ladder', {}).get('over_halt')} "
-          f"hom FACC={result.get('homonyms', {}).get('false_accept')} "
-          f"ok={result.get('homonyms', {}).get('correct_verified')} "
-          f"lat={result['latency']} wall={result['wall_s']}")
+    print(
+        f"RESULT {args.config} dense FA={d.get('false_abort')}/{d.get('n')} "
+        f"FACC={d.get('false_accept')} mism={d.get('fa_mismatch')} "
+        f"ladder FACC={result.get('ladder', {}).get('false_accept')} "
+        f"halt={result.get('ladder', {}).get('over_halt')} "
+        f"hom FACC={result.get('homonyms', {}).get('false_accept')} "
+        f"ok={result.get('homonyms', {}).get('correct_verified')} "
+        f"lat={result['latency']} wall={result['wall_s']}"
+    )
     return 0
 
 
