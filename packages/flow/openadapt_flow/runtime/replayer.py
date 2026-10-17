@@ -4468,13 +4468,84 @@ class Replayer:
         checkpoint: Any,
         *,
         bundle_dir: Path,
+        workflow: Optional[Workflow] = None,
     ) -> None:
-        """Prove that the live app still satisfies a linear resume cursor."""
+        """Prove that the live app still satisfies a linear resume cursor.
 
-        self._revalidate_retained_postconditions(
-            checkpoint.expected_postconditions,
-            bundle_dir=bundle_dir,
+        In a multi-surface run the retained contract belongs to the surface
+        that was active at the checkpoint. That surface is first bound by
+        identity (the one live target whose screen shows the retained
+        contract, plus its declared structured attributes); zero or several
+        matches refuse the resume.
+        """
+
+        active = getattr(checkpoint, "active_surface", None)
+        if (
+            workflow is None
+            or not workflow.surfaces
+            or active is None
+            or active == workflow.surfaces[0].id
+        ):
+            self._revalidate_retained_postconditions(
+                checkpoint.expected_postconditions,
+                bundle_dir=bundle_dir,
+            )
+            return
+        backend = self._bind_checkpoint_surface(workflow, checkpoint, bundle_dir)
+        primary = self.backend
+        self._activate_surface_backend(backend)
+        try:
+            self._revalidate_retained_postconditions(
+                checkpoint.expected_postconditions,
+                bundle_dir=bundle_dir,
+            )
+        finally:
+            self._activate_surface_backend(primary)
+
+    def _bind_checkpoint_surface(
+        self, workflow: Workflow, checkpoint: Any, bundle_dir: Path
+    ) -> Any:
+        """Bind the checkpoint's active surface by identity, or refuse."""
+
+        active = checkpoint.active_surface
+        self._surface_identity_context = (workflow, bundle_dir)
+        try:
+            router = SurfaceRouter(
+                workflow,
+                self.backend,
+                self.surface_backends,
+                poll_interval_s=self.poll_interval_s,
+                identity_check=self._surface_identity_check,
+                resume_active=active,
+                observations=dict(checkpoint.surface_observations),
+            )
+        except ValueError as exc:
+            raise StateDiverged(f"{exc}; refusing to resume") from exc
+        probe = Step(
+            id=checkpoint.step_id,
+            intent=f"re-bind surface '{active}' for resume",
+            action=ActionKind.SWITCH_SURFACE,
+            surface=active,
+            expect=[
+                condition.model_copy(deep=True)
+                for condition in checkpoint.expected_postconditions
+            ],
         )
+        prefix = f"Resume after step '{checkpoint.step_id}'"
+        if router.specs[active].is_page:
+            page, error = router._bind_page(active, probe, prefix)
+            if error is not None or page is None:
+                raise StateDiverged(error or f"{prefix}: surface not bound")
+            return router.backends[active]
+        backend, error = router._bind_backend(active, probe, prefix)
+        if error is not None or backend is None:
+            raise StateDiverged(error or f"{prefix}: surface not bound")
+        if self._surface_identity_check(backend, probe) is not True:
+            raise StateDiverged(
+                f"{prefix}: surface '{active}' does not show its retained "
+                "identity; refusing to resume"
+            )
+        return backend
 
     def _revalidate_retained_postconditions(
         self,

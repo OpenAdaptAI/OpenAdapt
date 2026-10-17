@@ -415,6 +415,16 @@ def action_evidence_error(
     elif strict_production:
         return "production action lacks a closed runtime actuation path"
 
+    if step.action is ActionKind.SWITCH_SURFACE:
+        # A switch is armed by its SURFACE identity check (the recorded screen
+        # text and origin of its target, docs/MULTI_SURFACE.md), not by an
+        # entity identity row: it acts on no record. Its proof is the passed
+        # postconditions on the new surface.
+        if result.identity is not None:
+            return "surface switch contains an entity identity verdict"
+        if identity_required and step.expect and result.postconditions_ok is not True:
+            return "surface switch lacks a passed surface identity check"
+        return None
     if identity_required:
         return nonvacuous_identity_error(result.identity)
     # A step without an armed identity contract may continue when the optional
