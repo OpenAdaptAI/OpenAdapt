@@ -2,10 +2,13 @@
 
 The single public entry point is :func:`create_server`, a stdlib-only HTTP
 server that runs INSIDE the Windows VM's *interactive* desktop session
-(session 1) and exposes exactly the two endpoints ``WindowsBackend`` calls:
+(session 1) and exposes the endpoints ``WindowsBackend`` calls:
 
     GET  /screenshot        -> raw PNG bytes of the live desktop
-    POST /execute_windows   -> exec() of bare Python (pyautogui / uiautomation)
+    POST /input, /uia/...   -> bounded typed input and UIA operations
+    POST /execute_windows   -> (opt-in, legacy) allow-listed pyautogui input
+                               calls parsed from the WAA command shape; never
+                               exec()'d
 
 Plus a ``GET /health`` liveness probe. See ``server.py`` for the full
 contract, the session-0 rationale, and the loopback/bearer-token hardening.

@@ -17,17 +17,19 @@ computer, see
 | Method | Path | Purpose |
 |---|---|---|
 | `GET` | `/screenshot` | raw PNG bytes of the live desktop (`Content-Type: image/png`) |
-| `POST` | `/execute_windows` | `exec()` of **bare** Python; body `{"command": "..."}` — never `python -c`-wrapped. Response echoes captured stdout so UIA reads travel back. |
+| `POST` | `/input`, `/input/guarded`, `/uia/*`, `/context/identity` | bounded, schema-checked typed operations (the production path) |
+| `POST` | `/execute_windows` | **Off by default** (`--allow-legacy-commands`). Accepts only the WAA command shape `import pyautogui; pyautogui.<input>(<literals>)` for an allow-listed set of input functions. The command is parsed with `ast` and dispatched from a fixed table; it is **never `exec()`'d**. Anything else is refused with HTTP 400 `unsupported_legacy_command`. |
 | `GET` | `/health` | liveness + `active_console_session` (unauthenticated) |
 
 Only the Python **standard library** is imported at load; `mss`/Pillow (for the
-screenshot) and `pyautogui`/`uiautomation` (used by the exec'd commands) import
+screenshot) and `pyautogui`/`uiautomation` (used by the input handlers) import
 lazily. No Flask required in the guest.
 
 ## Security (TLS in transit + loopback default + bearer token)
 
-`/screenshot` returns a PNG of the live patient chart and `/execute_windows` is
-arbitrary remote code execution *by contract* — both carry **PHI**. So:
+`/screenshot` returns a PNG of the live patient chart and the input routes drive
+the desktop that shows it — both carry **PHI**. The agent never executes code
+sent over the network. So:
 
 - **TLS in transit (encrypt PHI on the wire).** The 2026 HIPAA Security Rule
   makes encryption in transit mandatory. Pass a per-run cert/key
@@ -82,7 +84,8 @@ then polls `/health`. This is what the opt-in e2e harness uses.
 `OAFLOW_AGENT_PORT`, `OAFLOW_AGENT_TOKEN`.
 
 ## Relationship to `scripts/desktop/waa_shim.py`
-The original `waa_shim.py` (Flask, binds `0.0.0.0`, no auth) remains the
-default for the existing desktop benchmark. This package is the **hardened,
+The original `waa_shim.py` (Flask) is kept only for the desktop benchmark's
+`/uia` tree metric and two fixed benchmark tasks. It binds loopback by default,
+accepts an optional bearer token, and no longer has an exec route. This package is the **hardened,
 dependency-free, auth-capable** successor used by `launch_agent()` and the
 snapshot-safe e2e; both speak the identical `WindowsBackend` contract.
