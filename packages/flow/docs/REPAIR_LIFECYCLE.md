@@ -12,7 +12,7 @@ campaigns, lifecycle store, CLI). Tests: `tests/test_repair_lifecycle.py`.
 
 ```mermaid
 stateDiagram-v2
-    [*] --> candidate: heal / teach / manual / model suggestion
+    [*] --> candidate: heal / teach / manual / model suggestion / fleet patch
     candidate --> reviewed: human reviews the diff
     reviewed --> replay_passed: replay campaign (healthy drift battery) passes
     replay_passed --> fault_passed: fault campaign (adversarial battery) passes
@@ -182,6 +182,15 @@ human. A runtime model suggestion may only produce a candidate (source
 enforced in code and covered by tests
 (`test_model_actor_cannot_perform_any_transition`,
 `test_model_suggestion_source_still_requires_full_human_gate`).
+
+One exception to the human review and approval gates exists, and it is
+narrow: an imported fleet patch (source `fleet_patch`) can be reviewed and
+approved under a promotion policy that a named person approved in advance
+(`review_under_policy`, `approve_under_policy`). The store refuses it for any
+other source, for any candidate that changes identity evidence or weakens the
+contract, and unless both campaigns passed on the tenant's own qualification
+cases. The approval record names the policy digest and the person who
+approved the policy. See [Fleet drift patches](#fleet-drift-patches).
 
 ## Sync and fingerprints
 
@@ -355,3 +364,22 @@ the latest demonstration's provenance, and the agent can't review or approve
 it. Tests: `tests/test_agent_teach_branch.py`. A reference number in the
 title makes the one-demonstration path abstain on identity too; the tests use
 payer names.
+
+## Fleet drift patches
+
+A repair a person approved can be exported as a signed structural patch for
+other tenants on the same application version
+([FLEET_DRIFT_PATCHES.md](FLEET_DRIFT_PATCHES.md)). On the receiving tenant
+the patch becomes an ordinary candidate with source `fleet_patch`:
+
+- `import_patch` verifies the signature chain and the application
+  fingerprint, applies the anchor map to a copy of that tenant's bundle, and
+  registers it with `build_candidate`, so binding digests and identity flags
+  come from the same code as every other candidate.
+- `process_imported_patch` runs the replay and fault campaigns on the
+  tenant's own qualification cases, then follows the tenant's
+  `FleetPromotionPolicy`. A failed campaign blocks the candidate. A patch that
+  changes identity evidence, a policy that is off or does not cover the
+  application, or too few cases leaves the candidate for a person.
+  Otherwise the store approves it under the policy, stages it, and starts the
+  live canary window described above.
