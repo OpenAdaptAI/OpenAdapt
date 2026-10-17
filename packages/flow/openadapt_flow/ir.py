@@ -3562,6 +3562,26 @@ class ObservedSurfaceEnvironment(BaseModel):
         return data
 
 
+class SurfaceObservation(BaseModel):
+    """The last-seen identity observation of one surface (never a handle).
+
+    A surface is a name plus an identity check, not a live window. Durable
+    checkpoints keep this observation per surface so a resume can re-bind each
+    surface by identity (docs/MULTI_SURFACE.md, "Binding by identity"). It
+    holds no URL path, title, or screen text: the origin is the structured
+    attribute already declared in the bundle, and the screen is kept only as a
+    perceptual hash of the last frame Flow saw on that surface.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    surface: str = Field(pattern=SURFACE_ID_PATTERN)
+    kind: str = Field(min_length=1, max_length=32)
+    observed_after_step: Optional[str] = Field(default=None, max_length=128)
+    origin: Optional[str] = Field(default=None, max_length=512)
+    screen_phash: Optional[str] = Field(default=None, pattern="^[a-f0-9]{4,64}$")
+
+
 class UnarmedStep(BaseModel):
     """A click step that will proceed with NO identity verification."""
 

@@ -1854,6 +1854,9 @@ class Replayer:
         surface_refusal = self._begin_surfaces(
             workflow,
             resume=resume_from is not None or resume_program is not None,
+            resume_from=resume_from,
+            resume_program=resume_program is not None,
+            bundle_dir=bundle_dir,
         )
         if surface_refusal is not None:
             report.results.append(
@@ -1947,6 +1950,9 @@ class Replayer:
                     # Tier-3: verified step -> checkpoint; halt -> pending
                     # escalation (resumable from the last checkpoint).
                     if post_action_refusal is None:
+                        router = self._surface_router
+                        if router is not None and result.ok:
+                            router.observe_active(step.id)
                         durable_run.record(
                             step_index,
                             step,
@@ -1957,6 +1963,12 @@ class Replayer:
                                 self._attended_transition_observation()
                                 if not result.ok
                                 else None
+                            ),
+                            active_surface=(
+                                router.active_id if router is not None else None
+                            ),
+                            surface_observations=(
+                                router.observations if router is not None else None
                             ),
                         )
                         if (
@@ -5839,13 +5851,21 @@ class Replayer:
 
     # -- multi-surface routing (docs/MULTI_SURFACE.md) -----------------------
 
-    def _begin_surfaces(self, workflow: Workflow, *, resume: bool) -> Optional[str]:
+    def _begin_surfaces(
+        self,
+        workflow: Workflow,
+        *,
+        resume: bool,
+        resume_from: Optional[int] = None,
+        resume_program: bool = False,
+        bundle_dir: Optional[Path] = None,
+    ) -> Optional[str]:
         """Bind the workflow's surfaces for this run, or say why not.
 
         A single-surface workflow binds nothing and runs exactly as before.
-        A multi-surface workflow is refused where its evidence would bind one
-        surface only: governed or qualified runs, and durable runs/resumes,
-        whose checkpoints do not carry the active surface.
+        A surface is a name plus an identity check, never a live handle, so a
+        linear resume re-binds every surface by identity from the last
+        checkpoint's surface observations (docs/MULTI_SURFACE.md).
         """
 
         self._surface_router = None
@@ -5856,29 +5876,49 @@ class Replayer:
                     "no surfaces; refusing to run"
                 )
             return None
-        # Governed, qualified, and durable runs are admitted: the governed
-        # authorization binds the sealed bundle, whose workflow.json carries
-        # the declared surface map; every step result records the surface it
-        # ran on; the outcome classifier requires that record to match the
-        # contract; and a qualification case observes each surface against
-        # its own qualified boundary. Two paths stay refused: a resume (a
-        # checkpoint cannot carry live page handles across processes) and a
-        # managed Cloud dispatch (its runner has not been exercised with
-        # surfaces).
-        blockers = [
-            name
-            for name, present in (
-                ("a managed dispatch binding", self._managed_dispatch_snapshot),
-                ("a resume", resume),
-            )
-            if present
-        ]
-        if blockers:
+        # Governed, qualified, durable, resumed, and managed (Cloud) runs are
+        # admitted: the governed authorization binds the sealed bundle, whose
+        # workflow.json carries the declared surface map; every step result
+        # records the surface it ran on; the outcome classifier requires that
+        # record to match the contract; a qualification case observes each
+        # surface against its own qualified boundary; and checkpoints carry
+        # each surface's last-seen identity observation, never a handle.
+        if resume_program:
             return (
-                "multi-surface workflows are not yet admitted with "
-                + ", ".join(blockers)
-                + "; refusing to run"
+                "a multi-surface workflow program cannot be resumed yet: program "
+                "checkpoints do not carry surface observations; refusing to run"
             )
+        if self._managed_dispatch_snapshot is not None:
+            # An unattended run must not start when a surface it will switch
+            # to has no target: it would stop half-way after earlier writes.
+            unbound = [
+                spec.id
+                for spec in workflow.surfaces[1:]
+                if not spec.is_page and spec.id not in (self.surface_backends or {})
+            ]
+            if unbound:
+                return (
+                    "a managed dispatch of a multi-surface workflow needs a "
+                    "backend for every backend surface in the deployment "
+                    "profile's surfaces: map; unbound: "
+                    + ", ".join(unbound)
+                    + "; refusing to run"
+                )
+        resume_active: Optional[str] = None
+        resume_observations: dict[str, Any] = {}
+        if resume and resume_from:
+            last = None
+            for checkpoint in self._durable_linear_snapshot:
+                if getattr(checkpoint, "step_index", None) == resume_from - 1:
+                    last = checkpoint
+            if last is None or getattr(last, "active_surface", None) is None:
+                return (
+                    "the checkpoint this multi-surface run resumes from carries "
+                    "no surface observation, so its surfaces cannot be re-bound "
+                    "by identity; refusing to run"
+                )
+            resume_active = last.active_surface
+            resume_observations = dict(last.surface_observations)
         authorization = self.governed_authorization
         if (
             authorization is not None
@@ -5915,15 +5955,57 @@ class Replayer:
                 )
         self._surface_environment_observations = {}
         try:
+            self._surface_identity_context = (workflow, bundle_dir)
             self._surface_router = SurfaceRouter(
                 workflow,
                 self.backend,
                 self.surface_backends,
                 poll_interval_s=self.poll_interval_s,
+                identity_check=self._surface_identity_check,
+                resume_active=resume_active,
+                observations=resume_observations,
             )
         except ValueError as exc:
             return f"{exc}; refusing to run"
         return None
+
+    def _surface_identity_check(self, backend: Any, step: Step) -> Optional[bool]:
+        """Vision-first identity check of one live target for ``step``.
+
+        Pixels and screen text only, on the candidate's own screenshot: the
+        step's anchor template for an action step, the recorded screen text
+        (TEXT_PRESENT) of a SWITCH_SURFACE step, which was mined from the
+        first frame of its target. None when the step carries neither; the
+        router then relies on the declared structured attributes alone.
+        """
+
+        workflow, bundle_dir = getattr(self, "_surface_identity_context", (None, None))
+        try:
+            png = backend.screenshot()
+        except Exception:
+            return False
+        evidence = False
+        if step.action is ActionKind.SWITCH_SURFACE:
+            for condition in step.expect:
+                text = condition.text
+                if (
+                    condition.kind is not PostconditionKind.TEXT_PRESENT
+                    or not text
+                    or "{" in text
+                ):
+                    continue
+                evidence = True
+                if self.vision.find_text(png, text) is None:
+                    return False
+        elif step.anchor is not None and step.anchor.template and bundle_dir:
+            template = self._asset_bytes(
+                Path(bundle_dir), step.anchor.template, workflow=workflow
+            )
+            if template:
+                evidence = True
+                if self.vision.find_template(png, template) is None:
+                    return False
+        return True if evidence else None
 
     def _end_surfaces(self) -> None:
         """Restore the primary backend after a multi-surface run."""
@@ -6097,6 +6179,15 @@ class Replayer:
                 graph_ctx=graph_ctx,
             )
         refusal = router.entry_refusal(step)
+        if refusal is None and step.action is not ActionKind.SWITCH_SURFACE:
+            # Route the step to its surface's live target; after a resume or
+            # a closed page this re-binds it by the step's identity check.
+            refusal = router.route(step)
+            if refusal is None and router.active_backend is not self.backend:
+                self._activate_surface_backend(router.active_backend)
+                refusal = self._bind_surface_qualification_environment(
+                    workflow, router.active_id
+                )
         if refusal is not None:
             refused = self._surface_refusal_result(step, refusal)
             refused.surface = router.active_id

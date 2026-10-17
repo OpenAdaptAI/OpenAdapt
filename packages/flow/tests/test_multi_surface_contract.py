@@ -163,20 +163,41 @@ def _run(replayer: Replayer, workflow: Workflow, tmp_path, **kw):
     return replayer.run(workflow, bundle_dir=bundle_dir, run_dir=tmp_path / "run", **kw)
 
 
-def test_resume_of_a_multi_surface_bundle_is_refused(tmp_path) -> None:
-    # Durable runs are admitted; a resume is not (live page handles cannot
-    # cross a process boundary). Simulate the resume flag directly.
+def test_resume_without_a_surface_observation_is_refused(tmp_path) -> None:
+    # A resume re-binds surfaces by identity from the last checkpoint. A
+    # checkpoint that carries no surface observation (written by an older
+    # runtime) cannot be re-bound, so the resume is refused before any input.
     windows = _WindowsFake()
     replayer = Replayer(FakeBackend(), surface_backends={"windows_1": windows})
-    assert "a resume" in (replayer._begin_surfaces(_multi(), resume=True) or "")
+    refusal = replayer._begin_surfaces(_multi(), resume=True, resume_from=1)
+    assert "cannot be re-bound" in (refusal or "")
     assert windows.actions == []
 
 
-def test_managed_dispatch_of_a_multi_surface_bundle_is_refused() -> None:
+def test_resume_of_a_multi_surface_program_is_refused() -> None:
     replayer = Replayer(FakeBackend(), surface_backends={"windows_1": _WindowsFake()})
-    replayer._managed_dispatch_snapshot = object()
-    refusal = replayer._begin_surfaces(_multi(), resume=False)
-    assert "managed dispatch" in (refusal or "")
+    refusal = replayer._begin_surfaces(_multi(), resume=True, resume_program=True)
+    assert "program" in (refusal or "")
+
+
+def test_resume_from_the_start_binds_the_primary() -> None:
+    replayer = Replayer(FakeBackend(), surface_backends={"windows_1": _WindowsFake()})
+    assert replayer._begin_surfaces(_multi(), resume=True, resume_from=0) is None
+    assert replayer._surface_router is not None
+    assert replayer._surface_router.active_id == "main"
+
+
+def test_managed_dispatch_needs_every_backend_surface_bound() -> None:
+    # Cloud dispatch needs only the deployment profile's surfaces: map. The
+    # one refusal kept guards something real: an unattended run must not
+    # start when a surface it will switch to has no target.
+    unbound = Replayer(FakeBackend())
+    unbound._managed_dispatch_snapshot = ("run", "sha", "{}")
+    refusal = unbound._begin_surfaces(_multi(), resume=False)
+    assert "surfaces: map" in (refusal or "") and "windows_1" in (refusal or "")
+    bound = Replayer(FakeBackend(), surface_backends={"windows_1": _WindowsFake()})
+    bound._managed_dispatch_snapshot = ("run", "sha", "{}")
+    assert bound._begin_surfaces(_multi(), resume=False) is None
 
 
 def test_surface_backends_for_a_single_surface_bundle_is_refused(tmp_path) -> None:
