@@ -484,7 +484,7 @@ def test_open_authoring_session_notes_flow_dependency_when_missing(monkeypatch):
 
 
 def test_authoring_sources_stay_stdio_without_http_listener():
-    root = Path(__file__).resolve().parents[1] / "src" / "openadapt_agent"
+    root = Path(__file__).resolve().parents[2] / "flow" / "openadapt_flow" / "agent"
     for name in ("authoring.py", "mcp.py", "cli.py", "mailbox.py", "runner_bind.py"):
         text = (root / name).read_text(encoding="utf-8")
         assert "HTTPServer" not in text
@@ -779,9 +779,10 @@ def test_desktop_ipc_discovery_does_not_open_a_listener(tmp_path, monkeypatch):
     assert found is not None
     assert found["endpoint"]["host"] == "127.0.0.1"
     source = (
-        Path(__file__).resolve().parents[1]
-        / "src"
-        / "openadapt_agent"
+        Path(__file__).resolve().parents[2]
+        / "flow"
+        / "openadapt_flow"
+        / "agent"
         / "authoring.py"
     ).read_text(encoding="utf-8")
     assert "http.client" not in source

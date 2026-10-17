@@ -27,19 +27,19 @@ from openadapt_flow.runtime.durable.business_decision import (
 )
 
 if TYPE_CHECKING:
-    from openadapt_types import (
+    from openadapt_flow.contracts import (
         BusinessDecisionAnswerReceiptV1 as PortableBusinessDecisionAnswerReceiptV1,
     )
-    from openadapt_types import (
+    from openadapt_flow.contracts import (
         BusinessDecisionAnswerV1 as PortableBusinessDecisionAnswerV1,
     )
-    from openadapt_types import (
+    from openadapt_flow.contracts import (
         BusinessDecisionDeliveryPolicyV1 as PortableBusinessDecisionDeliveryPolicyV1,
     )
-    from openadapt_types import (
+    from openadapt_flow.contracts import (
         BusinessDecisionPresentationV1 as PortableBusinessDecisionPresentationV1,
     )
-    from openadapt_types import (
+    from openadapt_flow.contracts import (
         BusinessDecisionTaskV1 as PortableBusinessDecisionTaskV1,
     )
 
@@ -109,7 +109,7 @@ def create_runner_business_decision_signature_attestation(
 ) -> dict[str, Any]:
     """Attest that the exact customer signatures passed on this runner."""
 
-    from openadapt_types import validate_business_decision_delivery
+    from openadapt_flow.contracts import validate_business_decision_delivery
 
     if task.issuer_key_id != expected_task_issuer_key_id:
         raise ValueError("the portable task signing key id is not trusted")
@@ -253,7 +253,7 @@ def _verify_presentation(
     decision_digest: str,
     decision_revision: int,
 ) -> None:
-    from openadapt_types import business_decision_presentation_text_digest
+    from openadapt_flow.contracts import business_decision_presentation_text_digest
 
     if (
         presentation.decision_contract_digest != decision_digest
@@ -299,7 +299,7 @@ def project_portable_business_decision_task(
 ) -> PortableBusinessDecisionTaskV1:
     """Build one signed remote-safe task from the active authenticated request."""
 
-    from openadapt_types import (
+    from openadapt_flow.contracts import (
         BusinessDecisionDeliveryMode,
         sign_business_decision_task_hmac,
         validate_business_decision_delivery,
@@ -486,7 +486,7 @@ def admit_portable_business_decision_answer(
 ) -> tuple[BusinessDecisionSubmission, BusinessDecisionPrincipal]:
     """Authenticate one remote answer and return Flow's local input models."""
 
-    from openadapt_types import validate_business_decision_answer
+    from openadapt_flow.contracts import validate_business_decision_answer
 
     if task.issuer_key_id != expected_task_issuer_key_id:
         raise ValueError("the portable task signing key id is not trusted")
@@ -554,7 +554,7 @@ def project_recorded_business_decision_answer_receipt(
 ) -> PortableBusinessDecisionAnswerReceiptV1:
     """Return a signed portable receipt for an answer retained by Flow."""
 
-    from openadapt_types import (
+    from openadapt_flow.contracts import (
         sign_business_decision_answer_receipt_hmac,
         validate_business_decision_answer,
     )

@@ -31,13 +31,6 @@ import hashlib
 from pathlib import Path
 from typing import Any, Literal, Optional
 
-from openadapt_types import (
-    HUMAN_DECISION_TASK_SCHEMA,
-    HUMAN_DECISION_TASK_V2_SCHEMA,
-    HumanDecisionReceiptV1,
-    HumanDecisionTaskV1,
-    HumanDecisionTaskV2,
-)
 from pydantic import BaseModel, ConfigDict, Field
 
 from openadapt_flow.console import data
@@ -46,6 +39,13 @@ from openadapt_flow.console.attention import AttentionItem, _last_failed_result
 from openadapt_flow.console.decision_context import (
     RemoteHaltContextV1,
     remote_halt_context,
+)
+from openadapt_flow.contracts import (
+    HUMAN_DECISION_TASK_SCHEMA,
+    HUMAN_DECISION_TASK_V2_SCHEMA,
+    HumanDecisionReceiptV1,
+    HumanDecisionTaskV1,
+    HumanDecisionTaskV2,
 )
 from openadapt_flow.decision_delivery import (
     DecisionDeliveryTier,
@@ -698,7 +698,7 @@ def portable_remote_decision_task(
     object has no string-valued field, so this docstring's first sentence stays
     literally true: the context widens what a remote operator KNOWS without
     widening what the envelope can REPRESENT. The signed
-    :class:`~openadapt_types.HumanDecisionTaskV1` is unchanged, byte for byte,
+    :class:`~openadapt_flow.contracts.HumanDecisionTaskV1` is unchanged, byte for byte,
     at every tier.
     """
     remote, tenant_id, runner_id = _remote_scope(deployment)

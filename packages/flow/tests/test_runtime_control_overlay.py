@@ -7,18 +7,13 @@ from collections.abc import Iterator
 
 import pytest
 
-openadapt_types = pytest.importorskip("openadapt_types")
-if not hasattr(openadapt_types, "ControlOverlayFrameV2"):
-    pytest.skip("requires openadapt-types >= 0.5.0", allow_module_level=True)
-
-from openadapt_types import (  # noqa: E402
+from openadapt_flow.contracts import (  # noqa: E402
     ControlOverlayDataClassification,
     ControlOverlayMediaFrameBindingV2,
     ControlOverlayMode,
     ControlOverlayObservationBindingV2,
     ControlOverlayPhase,
 )
-
 from openadapt_flow.ir import (  # noqa: E402
     ActionKind,
     Anchor,

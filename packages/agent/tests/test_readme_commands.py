@@ -23,7 +23,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 #: rejected command on purpose are not listed.
 SURFACES = (
     REPO_ROOT / "README.md",
-    REPO_ROOT / "llms.txt",
+    REPO_ROOT .parents[1] / "llms.txt",
     REPO_ROOT / "skills" / "openadapt-gui-write" / "SKILL.md",
 )
 _INVOCATION = re.compile(r"openadapt-agent ((?:serve|authoring|emit-skill)\b[^`|\n]*)")

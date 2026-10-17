@@ -32,7 +32,8 @@ from openadapt_agent.copy import (
 REPO_ROOT = Path(__file__).resolve().parents[1]
 SERVER_JSON = REPO_ROOT / "server.json"
 MCPB_MANIFEST = REPO_ROOT / "manifest.json"
-LLMS_TXT = REPO_ROOT / "llms.txt"
+# One llms.txt for the monorepo, at its root (MCP server listed first).
+LLMS_TXT = REPO_ROOT.parents[1] / "llms.txt"
 PYPROJECT = REPO_ROOT / "pyproject.toml"
 README = REPO_ROOT / "README.md"
 DESIGN = REPO_ROOT / "docs" / "DESIGN.md"
@@ -66,7 +67,8 @@ def test_server_json_is_valid_and_well_formed() -> None:
     doc = _server_json()
     assert doc["$schema"].startswith("https://static.modelcontextprotocol.io/")
     assert doc["name"] == REVERSE_DNS_NAME
-    assert doc["repository"]["url"].endswith("/openadapt-agent")
+    assert doc["repository"]["url"] == "https://github.com/OpenAdaptAI/OpenAdapt"
+    assert doc["repository"]["subfolder"] == "packages/agent"
     assert doc["repository"]["source"] == "github"
     packages = doc["packages"]
     assert len(packages) == 1
@@ -312,7 +314,7 @@ def test_runner_link_docs_do_not_use_cloud_pairing_command() -> None:
     # B088: docs told pip users to pass a runner link to `openadapt connect`.
     docs = [README, LLMS_TXT, *sorted((REPO_ROOT / "docs").rglob("*.md"))]
     docs += sorted((REPO_ROOT / "skills").rglob("*.md"))
-    docs += sorted((REPO_ROOT / "src" / "openadapt_agent").rglob("*.py"))
+    docs += sorted((REPO_ROOT.parent / "flow" / "openadapt_flow" / "agent").rglob("*.py"))
     offenders = [
         f"{path.relative_to(REPO_ROOT)}:{number}"
         for path in docs
@@ -379,7 +381,7 @@ def test_tutorial_command_installs_a_version_with_the_sandbox() -> None:
     assert "--from 'openadapt-agent[tutorial]' " in readme
     assert "requires openadapt-flow 2.1.0 or later" in readme
     for name in ("README.md", "llms.txt", "skills/openadapt-gui-write/SKILL.md"):
-        text = (REPO_ROOT / name).read_text(encoding="utf-8")
+        text = (LLMS_TXT if name == "llms.txt" else REPO_ROOT / name).read_text(encoding="utf-8")
         assert "openadapt-flow 2.1.0 or later" in text, name
         assert "before 2.1.0 is on PyPI" not in text, name
         assert "PyPI has openadapt-agent 2.0.1" not in text, name

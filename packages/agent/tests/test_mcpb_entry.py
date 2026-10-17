@@ -92,7 +92,7 @@ def test_every_mcpb_variable_is_wired_to_user_config() -> None:
     manifest = json.loads((root / "manifest.json").read_text(encoding="utf-8"))
     env = manifest["server"]["mcp_config"]["env"]
     user_config = manifest["user_config"]
-    source = (root / "src" / "openadapt_agent" / "mcpb_entry.py").read_text(encoding="utf-8")
+    source = (root.parent / "flow" / "openadapt_flow" / "agent" / "mcpb_entry.py").read_text(encoding="utf-8")
     read = set(re.findall(r'"(OPENADAPT_AGENT_[A-Z_]+)"', source))
     assert "OPENADAPT_AGENT_POLICY" in read
     for name in read:

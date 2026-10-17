@@ -5,7 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 
 import pytest
-from openadapt_types import (
+from openadapt_flow.contracts import (
     BusinessDecisionDeliveryMode,
     BusinessDecisionPresentationV1,
     BusinessDecisionRequiredAuthn,

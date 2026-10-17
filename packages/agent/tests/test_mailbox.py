@@ -209,7 +209,7 @@ def test_pack_url_parses_without_getting() -> None:
 
 
 def test_parse_connect_target_does_not_get() -> None:
-    source = Path("src/openadapt_agent/runner_bind.py").read_text(encoding="utf-8")
+    source = Path("../flow/openadapt_flow/agent/runner_bind.py").read_text(encoding="utf-8")
     assert "urlopen" not in source
     assert "Request(" not in source
     assert 'method="GET"' not in source
@@ -254,7 +254,7 @@ def test_claim_maps_mailbox_failures(status: int) -> None:
 def test_poll_wait_is_zero_not_twenty_five() -> None:
     assert POLL_WAIT_S == 0
     assert DEFAULT_LEASE_S == 900
-    source = Path("src/openadapt_agent/mailbox.py").read_text(encoding="utf-8")
+    source = Path("../flow/openadapt_flow/agent/mailbox.py").read_text(encoding="utf-8")
     assert "DEFAULT_WAIT_S" not in source
     assert '"wait_seconds": POLL_WAIT_S' in source
     assert "from openadapt_flow.backends.win_agent" not in source
@@ -491,7 +491,7 @@ def test_open_mailbox_transport_prefers_desktop_when_importable(monkeypatch) -> 
 
 
 def test_mailbox_sources_have_no_listener_or_win_agent() -> None:
-    root = Path(__file__).resolve().parents[1] / "src" / "openadapt_agent"
+    root = Path(__file__).resolve().parents[2] / "flow" / "openadapt_flow" / "agent"
     for name in ("mailbox.py", "runner_bind.py", "cli.py"):
         text = (root / name).read_text(encoding="utf-8")
         assert "HTTPServer" not in text
@@ -634,7 +634,7 @@ def test_url_client_without_a_session_is_coach_only_not_error() -> None:
 def test_documented_url_connect_commands_pass_headed() -> None:
     root = Path(__file__).resolve().parents[1]
     commands = []
-    for doc in [root / "README.md", root / "llms.txt", *sorted((root / "docs").glob("*.md"))]:
+    for doc in [root / "README.md", root.parents[1] / "llms.txt", *sorted((root / "docs").glob("*.md"))]:
         text = doc.read_text(encoding="utf-8").replace("\\\n", " ")
         for line in text.splitlines():
             if "authoring connect" in line and "--url" in line:

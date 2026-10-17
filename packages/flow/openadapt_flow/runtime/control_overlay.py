@@ -22,7 +22,7 @@ from collections.abc import Callable, Sequence
 from types import MappingProxyType
 from typing import Literal, TypeAlias
 
-from openadapt_types import (
+from openadapt_flow.contracts import (
     ControlOverlayDataClassification,
     ControlOverlayFrameV2,
     ControlOverlayMediaFrameBindingV2,
@@ -38,7 +38,6 @@ from openadapt_types import (
     ControlOverlayTimelineV2,
     build_control_overlay_timeline_v2,
 )
-
 from openadapt_flow.ir import Region
 
 ExecutionOutcome: TypeAlias = Literal[

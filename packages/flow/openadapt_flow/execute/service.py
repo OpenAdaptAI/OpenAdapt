@@ -11,7 +11,9 @@ from typing import Any, Literal, Optional, cast
 from uuid import uuid4
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from openadapt_types.execute import (
+from pydantic import ValidationError
+
+from openadapt_flow.contracts.execute import (
     ExecuteAcceptedV1,
     ExecuteEvidenceContractV1,
     ExecuteEvidenceReceiptV1,
@@ -20,9 +22,7 @@ from openadapt_types.execute import (
     ExecuteStatusV1,
     ExecuteTerminalOutcomeV1,
 )
-from openadapt_types.oracle import oracle_tier_from_effect_strength
-from pydantic import ValidationError
-
+from openadapt_flow.contracts.oracle import oracle_tier_from_effect_strength
 from openadapt_flow.execute.dispatch import (
     DispatchError,
     DispatchResult,

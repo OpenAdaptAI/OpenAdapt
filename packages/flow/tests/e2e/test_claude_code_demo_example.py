@@ -164,9 +164,9 @@ def test_run_halts_when_the_app_drops_the_write(built: dict, tmp_path: Path) -> 
 
 
 def test_agent_bridge_runs_the_bundle(built: dict, tmp_path: Path) -> None:
-    pytest.importorskip("openadapt_agent")
-    from openadapt_agent.bridge import AgentBridge
-    from openadapt_agent.runner import RunnerConfig
+    pytest.importorskip("openadapt_flow.agent")
+    from openadapt_flow.agent.bridge import AgentBridge
+    from openadapt_flow.agent.runner import RunnerConfig
 
     layout = built["layout"]
     bridge = AgentBridge(

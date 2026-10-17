@@ -20,7 +20,14 @@ from openadapt_types.vocabulary.lint import main as vocab_lint
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
 CONTRACTS = ROOT / "docs" / "CONTRACTS.md"
-SCHEMA_DIR = ROOT / "openadapt_types" / "schemas"
+def _resolve(target: str):
+    """README paths under openadapt_types/ now live in openadapt_flow/contracts/."""
+    if target.startswith("openadapt_types/"):
+        return (ROOT.parent / "flow" / "openadapt_flow" / "contracts") / target[len("openadapt_types/") :]
+    return ROOT / target
+
+
+SCHEMA_DIR = (ROOT.parent / "flow" / "openadapt_flow" / "contracts") / "schemas"
 
 # PyPI renders the README too, and it doesn't resolve relative links, so the
 # README links to its own files by absolute GitHub URL.
@@ -108,7 +115,7 @@ def test_readme_only_links_to_files_that_exist() -> None:
     text = README.read_text(encoding="utf-8")
     targets = re.findall(r"\]\((?!https?:)([^)#]+)", text)
     targets += REPO_FILE_URL.findall(text)
-    missing = [t for t in targets if not (ROOT / t).exists()]
+    missing = [t for t in targets if not _resolve(t).exists()]
     assert not missing, f"README links to paths that do not exist: {missing}"
 
 

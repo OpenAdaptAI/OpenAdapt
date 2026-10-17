@@ -12,10 +12,10 @@ import pytest
 from pydantic import ValidationError
 
 pytest.importorskip("fastapi")
-pytest.importorskip("openadapt_types")
+pytest.importorskip("openadapt_flow.contracts")
 
 from fastapi.testclient import TestClient  # noqa: E402
-from openadapt_types.execute import (  # noqa: E402
+from openadapt_flow.contracts.execute import (  # noqa: E402
     ExecuteAcceptedV1,
     ExecuteEvidenceReceiptV1,
     ExecuteRequestV1,

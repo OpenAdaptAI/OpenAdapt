@@ -12,16 +12,16 @@ from pathlib import Path
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from openadapt_types.authentication import (
+from openadapt_flow.contracts.authentication import (
     AuthenticationReceiptPayloadV1,
     AuthenticationRunBindingV1,
     issue_authentication_receipt,
 )
-from openadapt_types.human_decision import (
+from openadapt_flow.contracts.human_decision import (
     HumanDecisionTaskV1,
     sign_human_decision_receipt_hmac,
 )
-from openadapt_types.process_capability import (
+from openadapt_flow.contracts.process_capability import (
     ArtifactRefV1,
     CodeArtifactOutputV1,
     CodeCapabilityAdmissionEnvelopeV1,

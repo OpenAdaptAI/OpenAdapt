@@ -562,7 +562,7 @@ def test_the_console_script_points_at_main() -> None:
 def test_the_registry_ships_inside_the_package() -> None:
     for name in ("vocabulary.json", "outcomes.json", "outcome-vectors.json", "lint.py"):
         assert (REGISTRY_DIR / name).is_file()
-    assert REGISTRY_DIR == ROOT / "openadapt_types" / "vocabulary"
+    assert REGISTRY_DIR == (ROOT.parent / "flow" / "openadapt_flow" / "contracts") / "vocabulary"
 
 
 def test_the_vocabulary_doc_matches_the_registry() -> None:
