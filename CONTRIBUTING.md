@@ -103,7 +103,7 @@ provide, and it keeps the option of relicensing the combined work later.
 
 It is not enforced here yet. You don't agree to it by opening a pull request,
 and nothing is implied. You agree when you sign, either through the automated
-CLA check after that check is turned on for this repository, or by email. Until
+CLA check once that check is turned on for this repository, or by email. Until
 then the DCO and the MIT License are what govern your contribution.
 
 The open-core boundary above is the reason this matters. Your contribution may

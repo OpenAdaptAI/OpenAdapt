@@ -24,7 +24,7 @@ Please include, where possible:
 - We will **acknowledge** your report within **5 business days**.
 - We will provide an estimated timeline for a fix and keep you updated on
   progress.
-- We will credit reporters who wish to be acknowledged after a fix ships.
+- We will credit reporters who wish to be acknowledged once a fix has shipped.
 - Please give us a reasonable opportunity to remediate before any public
   disclosure.
 
