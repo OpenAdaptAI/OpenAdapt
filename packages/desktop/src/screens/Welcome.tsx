@@ -6,7 +6,7 @@ import { ChoiceButton } from "../ui/simple";
 const STEPS = [
   {
     title: "Show it",
-    body: "Do the task once, on test data, in the app where you already do it.",
+    body: "Do the task on test data, in the app where you already do it.",
   },
   {
     title: "Check it",
@@ -62,7 +62,7 @@ export function Welcome({
         />
         <ChoiceButton
           title="Show OpenAdapt your task"
-          sub="Pick the app, then do the task once while OpenAdapt watches."
+          sub="Pick the app, then do the task while OpenAdapt watches."
           onClick={onShow}
         />
       </div>

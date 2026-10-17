@@ -365,7 +365,7 @@ export function RecordReview({
 
       {firstWorkflow && (
         <Callout title="Pick a task you can check yourself">
-          Do the task once, on a test record, the way you normally would. A
+          Do the task on a test record, the way you normally would. A
           good task takes a minute or two and ends with a save you can see.
           Everything stays on this computer.
         </Callout>

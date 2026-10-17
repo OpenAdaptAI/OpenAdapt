@@ -188,7 +188,7 @@ export function Sample({
           <section className="sample-next">
             <h2>Now try your own task</h2>
             <p>
-              Show OpenAdapt a task once in the app where you already do it.
+              Show OpenAdapt a task in the app where you already do it.
               Use a test record.
             </p>
             <div className="row">

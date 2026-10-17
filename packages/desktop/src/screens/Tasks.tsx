@@ -220,7 +220,7 @@ export function Tasks({
         <section className="first-task" aria-label="Get started">
           <h2>Hand off your first task</h2>
           <p>
-            Show OpenAdapt a task once, in the app where you already do it.
+            Show OpenAdapt a task in the app where you already do it.
             OpenAdapt repeats it, checks each saved record, and stops to ask you
             when something doesn't match.
           </p>
