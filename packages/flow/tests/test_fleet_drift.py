@@ -1126,6 +1126,38 @@ def test_auto_promotion_aborts_without_fresh_status_or_under_a_kill_switch(
     assert store.load_candidate(decision.candidate.candidate_id).state == "reviewed"
 
 
+@pytest.mark.parametrize("level", ["root", "intermediate", "serial"])
+def test_a_revoked_key_anywhere_in_the_chain_stops_auto_promotion(
+    fleet_with_patch, tmp_path, level
+):
+    fleet, patch = fleet_with_patch
+    tenant = _receiver(fleet, f"revoked-{level}")
+    signer, chain = fleet.hub._status
+    now = datetime.now(timezone.utc)
+    keys = {
+        "root": patch.chain.root_key_id,
+        "intermediate": patch.chain.intermediate_key_id,
+    }
+    feed = FilePatchFeed(tmp_path / level)
+    feed.publish_revocation_list(
+        sign_revocation_list(
+            RevocationListPayload(
+                sequence=1,
+                issued_at=now.isoformat(),
+                next_update=(now + timedelta(hours=1)).isoformat(),
+                revoked_key_ids=(keys[level],) if level in keys else (),
+                revoked_serials=(patch.chain.serial,) if level == "serial" else (),
+            ),
+            signer,
+            chain,
+        )
+    )
+    decision = _receive(fleet, tenant, patch, status_source=feed)
+    assert decision.outcome == "needs_person"
+    assert any("the patch's chain" in r for r in decision.reasons), decision.reasons
+    assert tenant.store.active_pointer() is None
+
+
 def test_kill_switch_rolls_back_a_named_patch(fleet_with_patch, tmp_path):
     fleet, patch = fleet_with_patch
     tenant = _receiver(fleet, "east-kill")

@@ -59,6 +59,7 @@ from openadapt_flow.fleet.signing import (
     KeyCustody,
     PatchSignatureError,
     key_id,
+    revocation_reason,
     sign_document,
     verify_document,
 )
@@ -289,14 +290,16 @@ def _status_reasons(status: FleetStatus, candidate: RepairCandidate) -> list[str
         reasons.append("a fleet kill switch has turned auto-promotion off")
     fleet = candidate.fleet_patch
     if fleet is not None:
-        revoked = status.revoked_key_ids
-        if fleet.intermediate_key_id in revoked:
-            reasons.append("the patch's intermediate certificate is revoked")
-        if (
-            fleet.signer_key_id in revoked
-            or fleet.signer_serial in status.revoked_serials
-        ):
-            reasons.append("the patch's distribution certificate is revoked")
+        revoked = revocation_reason(
+            root_key_id=fleet.root_key_id,
+            intermediate_key_id=fleet.intermediate_key_id,
+            signer_key_id=fleet.signer_key_id,
+            serial=fleet.signer_serial,
+            revoked_key_ids=status.revoked_key_ids,
+            revoked_serials=status.revoked_serials,
+        )
+        if revoked is not None:
+            reasons.append(f"the patch's chain: {revoked}")
     return reasons
 
 

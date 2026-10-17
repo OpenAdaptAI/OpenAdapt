@@ -439,16 +439,38 @@ class FleetTrust(BaseModel):
         return cls(roots=keys)
 
 
+def revocation_reason(
+    *,
+    root_key_id: str,
+    intermediate_key_id: str,
+    signer_key_id: str,
+    serial: str,
+    revoked_key_ids: frozenset[str] | set[str],
+    revoked_serials: frozenset[str] | set[str],
+) -> Optional[str]:
+    """Why a chain, given by its key ids and serial, is revoked, or None."""
+    if root_key_id in revoked_key_ids:
+        return "the fleet root key is revoked"
+    if intermediate_key_id in revoked_key_ids:
+        return "the intermediate certificate is revoked"
+    if signer_key_id in revoked_key_ids or serial in revoked_serials:
+        return "the signer certificate is revoked"
+    return None
+
+
 def chain_revocation_reason(
     chain: CertificateChain,
     revoked_key_ids: frozenset[str] | set[str],
     revoked_serials: frozenset[str] | set[str],
 ) -> Optional[str]:
-    if chain.intermediate_key_id in revoked_key_ids:
-        return "the intermediate certificate is revoked"
-    if chain.signer_key_id in revoked_key_ids or chain.serial in revoked_serials:
-        return "the signer certificate is revoked"
-    return None
+    return revocation_reason(
+        root_key_id=chain.root_key_id,
+        intermediate_key_id=chain.intermediate_key_id,
+        signer_key_id=chain.signer_key_id,
+        serial=chain.serial,
+        revoked_key_ids=revoked_key_ids,
+        revoked_serials=revoked_serials,
+    )
 
 
 def verify_chain(
@@ -524,6 +546,7 @@ __all__ = [
     "issue_signer_certificate",
     "key_id",
     "public_key_b64",
+    "revocation_reason",
     "sign_document",
     "verify_chain",
     "verify_document",
