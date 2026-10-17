@@ -1,2 +1,24 @@
 # Default code owners for the OpenAdapt meta-package
 * @abrichr
+
+# openadapt-flow safety-critical paths (from packages/flow/.github/CODEOWNERS).
+/packages/flow/openadapt_flow/compiler/                    @abrichr
+/packages/flow/openadapt_flow/identity_signals.py          @abrichr
+/packages/flow/openadapt_flow/runtime/identity.py          @abrichr
+/packages/flow/openadapt_flow/runtime/identity_template.py @abrichr
+/packages/flow/openadapt_flow/runtime/identity_vlm.py      @abrichr
+/packages/flow/openadapt_flow/runtime/effects/             @abrichr
+/packages/flow/openadapt_flow/policy.py                    @abrichr
+/packages/flow/openadapt_flow/policies/                    @abrichr
+/packages/flow/openadapt_flow/qualification.py             @abrichr
+/packages/flow/openadapt_flow/runtime/replayer.py          @abrichr
+/packages/flow/openadapt_flow/runtime/resolver.py          @abrichr
+/packages/flow/openadapt_flow/submit_binding.py            @abrichr
+/packages/flow/openadapt_flow/validation/                  @abrichr
+/packages/flow/docs/LIMITS.md                              @abrichr
+/packages/flow/docs/EFFECT_VERIFIER.md                     @abrichr
+/packages/flow/docs/QUALIFICATION_PROJECT.md               @abrichr
+/packages/flow/docs/WORKFLOW_PROGRAM_IR.md                 @abrichr
+/packages/flow/docs/phi_at_rest.md                         @abrichr
+/packages/flow/docs/PRIVACY.md                             @abrichr
+/packages/flow/SECURITY.md                                 @abrichr

@@ -78,6 +78,16 @@ ALLOWLISTED_PATHS = (
     "docs/platform-manifest.md",
     "CONTRIBUTING.md",
     "TRADEMARKS.md",
+    # Imported package files that state or test the boundary itself: each
+    # package's copy of the rendered policy, the tests that bind it, flow's
+    # release-contract test listing private paths a sdist must reject, and the
+    # README that tells an operator where the private corpus checkout goes.
+    "packages/flow/source-policy.public.json",
+    "packages/flow/tests/test_source_policy_binding.py",
+    "packages/flow/tests/test_release_contract.py",
+    "packages/flow/benchmark/vision_hardening/README.md",
+    "packages/types/source-policy.public.json",
+    "packages/agent/source-policy.public.json",
 )
 
 # Binary-ish extensions we skip for content scanning (path scan still applies).

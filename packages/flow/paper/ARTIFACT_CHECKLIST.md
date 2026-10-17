@@ -42,6 +42,9 @@ benchmark artifact. It is a transcription-fidelity gate, not a validity gate.
       (`OpenAdaptAI/openadapt-flow`, branch `main`). This is the base commit of
       the paper branch; every benchmark artifact cited by
       `check_artifacts.py` is read from this tree.
+      In `OpenAdaptAI/OpenAdapt` this history was rewritten under
+      `packages/flow/` (there it is `7ab1fa1c5c00`). `d5ce14ff` exists only in the archived
+      `OpenAdaptAI/openadapt-flow` repository, which must never be deleted.
 - [x] Release tag: `v1.24.0` (`openadapt-flow` 1.24.0, the release current at
       this commit; `pyproject.toml` `version = "1.24.0"`).
 - [x] Wheel/sdist digests archived (verified against the PyPI JSON API, not
