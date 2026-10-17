@@ -119,6 +119,8 @@ attributes (`data-testid`, `data-test`, `data-test-id`, `data-cy`,
   (`aria-label`, `title`, `placeholder`, `value`, `href`, `src`, `alt`);
 - any token with four or more consecutive digits or eight or more hex
   characters;
+- any id, class or attribute value that looks like a name (see the
+  name-like rule below), such as `#patient-Jane-Doe`;
 - the value of any `data-*` attribute that is not a test hook, such as
   `[data-patient-id=…]`. Values are refused rather than stripped, because
   stripping changes what the selector matches;
@@ -145,11 +147,15 @@ bundles: parameters and their examples and choices, typed text, identity
 bands, structured identity, window titles, effect match values, API binding
 values, identity-template salts and hashes, the digests the candidate
 recorded, and the bundle digests themselves. It refuses if any value
-appears as a word run in the patch's free-text fields, or any digest
-appears anywhere in the patch. The test
+appears as a word run in the patch's free-text fields (after splitting
+camelCase, so `rowJaneDoe` reads as `row jane doe`), if a value of two or
+more words appears anywhere with its spaces removed (`rowjanedoe`), or if
+any digest appears anywhere in the patch. The test
 `test_export_redaction_carries_no_fixture_value_or_digest` fills a bundle
-with PHI-like values in each of those fields and checks that no value, in any
-spelling, and no digest of one, is in the signed patch.
+with PHI-like values in each of those fields and checks that none of them,
+in the spellings the test covers, and no digest of one, is in the signed
+patch. The check only knows values the bundle recorded; a name that never
+appeared in the bundle is caught only by the name-like rule.
 
 Export also refuses a repair that is not approved by a person, a repair
 approved under a policy, a repair that weakens the contract, an imported
@@ -237,7 +243,9 @@ with a `status` certificate:
 problems. Any of these makes it not fresh: no list, a list that does not
 verify, a list signed by anything but a status certificate, a list past
 `next_update`, or a list older than the policy's `max_status_age_hours`
-(at most 24). A kill switch that does not verify is also a problem.
+(at most 24). A kill-switch entry that is malformed or does not verify is
+also a problem. Each entry is parsed and verified on its own, so a bad
+entry does not hide the rollback IDs in the others.
 
 Auto-promotion fails closed. Before reviewing under a policy, and again
 before approving, `process_imported_patch` reads status. If status is not
@@ -278,13 +286,17 @@ revoked (`revoke_contributor` returns a new revocation list and a kill
 switch naming those patches). The distributed patch is signed with the
 hub's distribution certificate, has `created_at` truncated to the hour, and
 carries nothing from the contribution's envelope. Two patches from the same
-tenant share no field that names the source, so a receiver cannot link them.
+tenant share no field that names the source. A receiver can still guess
+from what a patch contains (the same selector style, for example) or from
+when it appears in the feed; the hub publishes as soon as it accepts, and
+does not batch.
 
 **Three-tenant rule.** Tenants register the fingerprints they run with
 `register_fingerprint`, signed with their contributor certificate. The hub
 distributes a patch only when at least `MIN_INDEPENDENT_TENANTS` (3)
 distinct contributor certificate subjects have registered the patch's
-`app_before` fingerprint. Earlier contributions are held, and
+`app_before` fingerprint. Revoked subjects do not count. Earlier
+contributions are held, and
 `release_held` distributes them once the third tenant registers. The hub
 maps each contributor certificate subject to an organisation at onboarding,
 so two subjects of one organisation do not count as two tenants. This keeps
@@ -342,9 +354,11 @@ cases fails.
 
 The policy is signed (`SignedPromotionPolicy`) with the approver's key. A
 local role registry, `roles.json`, lists workflow authors and policy
-approvers with their public keys. The two lists must not overlap: the person
-who builds or repairs a workflow cannot sign the policy that lets repairs
-promote themselves. `verify_policy` refuses a policy whose signer is not a
+approvers with their public keys. The two lists must not overlap, so a
+person the admin lists as a workflow author cannot also be listed as an
+approver. The code checks the lists, not who actually recorded or repaired
+a workflow; keeping `roles.json` accurate is the admin's job. `verify_policy`
+refuses a policy whose signer is not a
 registered approver, whose approver is also an author, or whose signature
 does not match. An unverified policy never auto-promotes.
 
@@ -436,6 +450,16 @@ directory rather than in `~/.openadapt/durable-authority`.
   files.
 - Only structural locators are remapped. A repair that changes pixels only,
   adds steps, or changes effects is not exportable.
+- `RepairStore.review_under_policy` and `approve_under_policy` check the
+  candidate, but trust their caller for the policy: a `PolicyPreApproval` is
+  a digest and a name, and the store does not verify the policy signature
+  or fleet status itself. `process_imported_patch` does both. Any code
+  that runs in the tenant's process could call the store directly.
+- If fleet status goes stale between the first check and the approval, the
+  candidate stays reviewed under the policy and waits for a person to
+  approve it. That person's approval is the only human step.
+- Two processes updating `status-state.json` at once can race; the file is
+  replaced atomically but not locked.
 - There is no HSM adapter and no hub server. The hub runs in process over a
   file feed.
 - The security official's authorisation is asserted by the approver, not
