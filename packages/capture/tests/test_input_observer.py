@@ -79,13 +79,18 @@ class _FailureAfterReadinessTimeoutObserver(_CooperativeNeverReadyObserver):
 
 
 class _ReadyObserver(ThreadedInputObserver):
-    def __init__(self, callback=lambda _event: None) -> None:
+    def __init__(
+        self,
+        callback=lambda _event: None,
+        *,
+        startup_timeout: float = 0.2,
+    ) -> None:
         super().__init__(
             callback,
             observe_keyboard=True,
             observe_mouse=False,
             capture_mouse_moves=False,
-            startup_timeout=0.2,
+            startup_timeout=startup_timeout,
             shutdown_timeout=0.02,
         )
         self.release_loop = threading.Event()
@@ -117,7 +122,14 @@ class _SetupEmittingObserver(_ReadyObserver):
             self.callback_invoked.set()
             callback(event)
 
-        super().__init__(observe_delivery)
+        # ``_setup`` deliberately spends up to 50 ms proving that no event is
+        # delivered before ``start`` commits.  That wait is part of setup, so
+        # it is charged against the readiness deadline; a 0.2 s deadline left
+        # a loaded CI runner too little headroom and timed out a healthy
+        # start.  Readiness is not what these tests measure, so use the
+        # production default as a hang guard.  Success and setup-failure
+        # paths both signal readiness promptly, so this never slows a pass.
+        super().__init__(observe_delivery, startup_timeout=5.0)
         self.delivery_queue_size = delivery_queue_size
         self.fail_setup = fail_setup
         self.health_checked = False
