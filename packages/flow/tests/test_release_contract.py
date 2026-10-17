@@ -421,17 +421,30 @@ def test_release_tag_requires_reviewed_exact_main_and_release_app() -> None:
             "\n  backfill-github-release:"
         )
     ]
+    # Qualification runs in its own job before the release App token is
+    # minted (the full matrix outlives a one-hour App token), and the tag job
+    # depends on its success.
+    qualify = workflow[
+        workflow.index("\n  qualify-release-commit:") : workflow.index(
+            "\n  create-release-tag:"
+        )
+    ]
+    assert "- name: Require exact-SHA release qualification" in qualify
+    assert "create-github-app-token" not in qualify
+    assert "environment:" not in qualify
+    assert "needs: [validate-dispatch, qualify-release-commit]" in release
+    assert "needs.qualify-release-commit.result == 'success'" in release
+    assert "check_release_ci.py" not in release
     current_main_index = release.index(
         "- name: Require the reviewed release candidate on current main"
-    )
-    qualification_index = release.index(
-        "- name: Require exact-main release qualification"
     )
     artifact_index = release.index(
         "- name: Build and verify the exact release artifacts"
     )
     tag_index = release.index("- name: Create and push one annotated release tag")
-    final_main_check_index = release.index("Refusing a stale release tag.", tag_index)
+    final_main_check_index = release.index(
+        "Refusing a release tag off main.", tag_index
+    )
     tag_command_index = release.index("git tag --annotate", tag_index)
 
     assert "  workflow_dispatch:" in triggers
@@ -445,20 +458,20 @@ def test_release_tag_requires_reviewed_exact_main_and_release_app() -> None:
     assert "permission-contents: write" in release
     assert "actions: write" in release
     assert "token: ${{ steps.release-app.outputs.token }}" in release
-    assert current_main_index < qualification_index < artifact_index < tag_index
-    assert "python scripts/check_release_ci.py" in release
-    assert '--repository "${GITHUB_REPOSITORY}"' in release
-    assert '--sha "${GITHUB_SHA}"' in release
-    assert "--dispatch-missing" in release
-    assert '--ref "${GITHUB_REF_NAME}"' in release
-    assert "--wait-seconds 5400" in release
-    assert "--poll-seconds 10" in release
+    assert current_main_index < artifact_index < tag_index
+    assert "python scripts/check_release_ci.py" in qualify
+    assert '--repository "${GITHUB_REPOSITORY}"' in qualify
+    assert '--sha "${GITHUB_SHA}"' in qualify
+    assert "--dispatch-missing" in qualify
+    assert '--ref "${GITHUB_REF_NAME}"' in qualify
+    assert "--wait-seconds 5400" in qualify
+    assert "--poll-seconds 10" in qualify
     assert (
         "git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main"
         in release
     )
     assert 'current_main="$(git rev-parse refs/remotes/origin/main)"' in release
-    assert '"${current_main}" != "${GITHUB_SHA}"' in release
+    assert 'git merge-base --is-ancestor "${GITHUB_SHA}" "${current_main}"' in release
     assert "python scripts/check_release_consistency.py" in release
     assert "python scripts/validate_claims.py --check --structure-only" in release
     assert "python scripts/check_release_consistency.py --require-dist" in release
@@ -469,7 +482,11 @@ def test_release_tag_requires_reviewed_exact_main_and_release_app() -> None:
         )
         == 2
     )
-    assert release.count('"${current_main}" != "${GITHUB_SHA}"') == 2
+    assert (
+        release.count('git merge-base --is-ancestor "${GITHUB_SHA}" "${current_main}"')
+        == 2
+    )
+    assert 'git tag --annotate "${release_tag}" "${GITHUB_SHA}"' in release
     assert "git tag --annotate" in release
     assert 'git push origin "refs/tags/${release_tag}"' in release
     assert "!inputs.backfill_github_release" in release
