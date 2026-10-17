@@ -109,8 +109,8 @@ def test_node_dependencies_are_locked_for_cross_platform_tauri_builds() -> None:
 
     assert lock["lockfileVersion"] == 3
     assert lock["packages"][""]["version"] == package["version"]
-    assert lock["packages"]["node_modules/@tauri-apps/cli"]["version"] == "2.11.4"
-    assert lock["packages"]["node_modules/@tauri-apps/api"]["version"] == "2.11.1"
+    assert lock["packages"]["node_modules/@tauri-apps/cli"]["version"] == "2.12.2"
+    assert lock["packages"]["node_modules/@tauri-apps/api"]["version"] == "2.12.3"
 
 
 def test_native_workflows_are_pinned_and_preserve_candidate_boundary() -> None:
