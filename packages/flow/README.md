@@ -3,7 +3,7 @@
 [![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml)
 [![PyPI](https://img.shields.io/pypi/v/openadapt-flow)](https://pypi.org/project/openadapt-flow/)
 [![Python](https://img.shields.io/pypi/pyversions/openadapt-flow)](https://pypi.org/project/openadapt-flow/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/LICENSE)
 
 A person or an agent shows openadapt-flow a task in a web or desktop app. It
 compiles the task into a program that runs on your own machine and repeats the
@@ -382,8 +382,10 @@ The full list, capability by capability: [docs/LIMITS.md](docs/LIMITS.md).
 
 - [Qualify a workflow](docs/QUALIFY_A_WORKFLOW.md): `openadapt-flow qualify`
   runs a bundle against the normal case and deliberate faults, reads the write
-  back from the system of record, and certifies it under a policy. Terms are
-  defined in [docs/QUALIFICATION_TERMS.md](docs/QUALIFICATION_TERMS.md).
+  back from the system of record, and certifies it under a policy. Qualify
+  and certify are defined in the [glossary](https://docs.openadapt.ai/reference/glossary/#qualify).
+  [docs/QUALIFICATION_TERMS.md](docs/QUALIFICATION_TERMS.md) has the fault
+  cases, what gets signed, and the policy rules.
 - [Production setup](docs/PRODUCTION.md): qualifying a bundle from its
   recording, policies, multi-step processes, signed results, and release
   status.

@@ -1,7 +1,9 @@
 # OpenAdapt Agent
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
-[![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)](https://www.python.org/downloads/)
+[![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml)
+[![PyPI](https://img.shields.io/pypi/v/openadapt-agent)](https://pypi.org/project/openadapt-agent/)
+[![Python](https://img.shields.io/pypi/pyversions/openadapt-agent)](https://pypi.org/project/openadapt-agent/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/LICENSE)
 
 Your AI agent decides what to enter. OpenAdapt enters it in the app and checks that it saved.
 
