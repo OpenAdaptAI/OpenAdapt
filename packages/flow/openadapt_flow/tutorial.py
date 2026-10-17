@@ -543,10 +543,6 @@ def run_tutorial(
             downgrades a requirement to make a stage pass.
     """
 
-    from openadapt_flow.compiler import compile_recording
-    from openadapt_flow.mockmed.fault_server import serve
-    from openadapt_flow.report import render_run_report
-
     say = echo or (lambda message: None)
     delay = _validated_presentation_delay(presentation_delay_s)
     root = Path(work_dir)
@@ -555,9 +551,59 @@ def run_tutorial(
     bundle_dir = root / "bundle"
     run_dir = root / "run"
 
+    import contextlib
+
+    from openadapt_flow import _prewarm as prewarm
+    from openadapt_flow.backends._browser_process import shared_browser
+
+    # Load OpenCV and the OCR models while the browser starts; recording,
+    # compiling, and replay all need them.
+    prewarm.start()
+    visible = headed or interactive_record or delay > 0
+    with contextlib.ExitStack() as browsers:
+        if not interactive_record:
+            # One browser process for every run; each run gets a fresh context.
+            browsers.enter_context(shared_browser(headless=not visible))
+            if break_it and visible != headed:
+                browsers.enter_context(shared_browser(headless=not headed))
+        return _run_tutorial_stages(
+            root,
+            recording_dir=recording_dir,
+            bundle_dir=bundle_dir,
+            run_dir=run_dir,
+            headed=headed,
+            visible=visible,
+            name=name,
+            emit_receipt=emit_receipt,
+            interactive_record=interactive_record,
+            delay=delay,
+            say=say,
+            break_it=break_it,
+        )
+
+
+def _run_tutorial_stages(
+    root: Path,
+    *,
+    recording_dir: Path,
+    bundle_dir: Path,
+    run_dir: Path,
+    headed: bool,
+    visible: bool,
+    name: str,
+    emit_receipt: bool,
+    interactive_record: bool,
+    delay: float,
+    say: Callable[[str], None],
+    break_it: bool,
+) -> TutorialResult:
+    """The stages of :func:`run_tutorial`, inside its shared browser."""
+    from openadapt_flow.compiler import compile_recording
+    from openadapt_flow.mockmed.fault_server import serve
+    from openadapt_flow.report import render_run_report
+
     base_url, _db, stop = serve()
     try:
-        visible = headed or interactive_record or delay > 0
         say("[1/5] Record the demonstration against a real persistence boundary")
         if interactive_record:
             record_tutorial_interactive(base_url, recording_dir)

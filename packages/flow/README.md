@@ -42,15 +42,21 @@ Agents can call a compiled workflow as one tool over MCP; see
 ## See it run
 
 ```bash
-pip install 'openadapt-flow[browser]'
-openadapt-flow demo
+uvx --python 3.12 --from 'openadapt-flow[browser]' openadapt-flow demo
 ```
+
+Without [uv](https://docs.astral.sh/uv/), run
+`pip install 'openadapt-flow[browser]'` and then `openadapt-flow demo`. uv
+installs the package in about a second when its cache is warm; pip takes 8 to
+10 seconds.
 
 The demo runs one recorded task twice against a fake clinic app on your
 computer. The first run uses an honest app. The second uses an app that shows
 "Encounter saved" and then drops the note. When both runs finish, the demo
-opens a page with the two results side by side. The first run can take a few
-minutes while Playwright downloads Chromium. With the
+opens a page with the two results side by side. It uses your installed Chrome
+or Edge. Without either, it downloads Playwright's headless Chromium once
+(about 220 MB on disk). Set `OPENADAPT_FLOW_BROWSER` to `chrome`, `msedge`, or
+`bundled` to choose. With the
 [OpenAdapt launcher](https://github.com/OpenAdaptAI/OpenAdapt) installed,
 `openadapt flow demo` runs the same command.
 

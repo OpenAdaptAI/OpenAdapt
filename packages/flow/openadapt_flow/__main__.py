@@ -87,6 +87,7 @@ from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
+    Callable,
     Iterator,
     Literal,
     Mapping,
@@ -1533,6 +1534,38 @@ def _print_break_it_narrative(broken: "BreakItResult") -> None:
     )
 
 
+def _demo_progress() -> Optional[Callable[[str], None]]:
+    """Show the current demo stage on one terminal line that rewrites itself.
+
+    Returns None when stdout is not a terminal, so piped output keeps only the
+    short summary. The line is cleared before the summary prints.
+    """
+    import re
+
+    if not sys.stdout.isatty():
+        return None
+    stage = re.compile(r"^\[(\d)/5\] (.+)$")
+
+    def echo(message: str) -> None:
+        match = stage.match(message)
+        if match:
+            text = f"Run 1, step {match.group(1)} of 5: {match.group(2)}"
+        elif message.startswith("[break-it]"):
+            text = "Run 2: the same task against an app that lies"
+        else:
+            return
+        sys.stdout.write("\r\033[K" + text[:100])
+        sys.stdout.flush()
+
+    return echo
+
+
+def _clear_progress_line() -> None:
+    if sys.stdout.isatty():
+        sys.stdout.write("\r\033[K")
+        sys.stdout.flush()
+
+
 def _cmd_demo(args: argparse.Namespace) -> int:
     """Run the checked run and the lying-app run, then write one proof page.
 
@@ -1562,7 +1595,14 @@ def _cmd_demo(args: argparse.Namespace) -> int:
         "OpenAdapt demo: one task, run twice on a fake clinic app on this "
         "computer. No AI calls."
     )
-    print("The first run can take a few minutes while the browser downloads.")
+    from openadapt_flow._browser_setup import BROWSER_ENV, installed_browser_channel
+
+    channel = installed_browser_channel()
+    if channel and (os.environ.get(BROWSER_ENV) or "auto").lower() in ("auto", channel):
+        name = "Chrome" if channel == "chrome" else "Edge"
+        print(f"Using your installed {name}, so nothing needs downloading.")
+    else:
+        print("The first run downloads a small browser (about 90 MB) once.")
 
     # The bundled demo app holds only fixed synthetic data. Keep an installed
     # but unconfigured privacy provider from blocking it, exactly as the
@@ -1574,7 +1614,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
         result = run_tutorial(
             out_dir,
             headed=bool(args.headed),
-            echo=print if args.verbose else None,
+            echo=print if args.verbose else _demo_progress(),
             break_it=True,
         )
     except TutorialError as exc:
@@ -1591,6 +1631,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
         )
         return 2
     finally:
+        _clear_progress_line()
         if scrub is None:
             os.environ.pop("OPENADAPT_FLOW_SCRUB", None)
         elif scrub == "auto":
@@ -2104,14 +2145,13 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         print(f"No --url given; replaying against bundled MockMed{drift_note}")
 
     video_dir = getattr(args, "record_video", None)
-    from openadapt_flow._browser_setup import ensure_chromium_installed
-
-    ensure_chromium_installed()
     from playwright.sync_api import sync_playwright
+
+    from openadapt_flow._browser_setup import launch_chromium
 
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=not headed)
+            browser = launch_chromium(p.chromium, headless=not headed)
             # OPT-IN session video (default off): a recorded replay lives in a
             # context so Playwright can attach the recorder; None keeps the old
             # direct-page path with zero effect.
@@ -3130,7 +3170,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
 
     try:
         if _normalize_kind(backend_cfg.kind) == "web":
-            from openadapt_flow._browser_setup import ensure_chromium_installed
+            from openadapt_flow._browser_setup import launch_chromium
 
             url = args.url or cfg.backend.url
             if url is None:
@@ -3147,11 +3187,10 @@ def _cmd_resume(args: argparse.Namespace) -> int:
                 ) as page:
                     report = _resume_with(build_backend(backend_cfg, page=page))
             else:
-                ensure_chromium_installed()
                 from playwright.sync_api import sync_playwright
 
                 with sync_playwright() as p:
-                    browser = p.chromium.launch(headless=not headed)
+                    browser = launch_chromium(p.chromium, headless=not headed)
                     page = browser.new_page(viewport=_VIEWPORT)
                     page.goto(url)
                     try:
@@ -3521,16 +3560,15 @@ def _cmd_bench(args: argparse.Namespace) -> int:
 
     @contextmanager
     def backend_factory():
-        from openadapt_flow._browser_setup import ensure_chromium_installed
+        from playwright.sync_api import sync_playwright
+
+        from openadapt_flow._browser_setup import launch_chromium
         from openadapt_flow.backends.playwright_backend import (
             PlaywrightBackend,
         )
 
-        ensure_chromium_installed()
-        from playwright.sync_api import sync_playwright
-
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=not args.headed)
+            browser = launch_chromium(p.chromium, headless=not args.headed)
             page = browser.new_page(viewport=_VIEWPORT)
             page.goto(target_url)
             try:
