@@ -3,7 +3,7 @@
 These documents preserve pre-1.0 implementation history. They are not the
 current product architecture, roadmap, or source for docs.openadapt.ai. Start
 with the [current documentation](https://docs.openadapt.ai) or the canonical
-[`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow) engine.
+[`openadapt-flow`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow) engine.
 
 ## Documents
 

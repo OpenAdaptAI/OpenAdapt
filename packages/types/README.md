@@ -1,9 +1,9 @@
 # openadapt-types
 
-[![test](https://github.com/OpenAdaptAI/openadapt-types/actions/workflows/test.yml/badge.svg)](https://github.com/OpenAdaptAI/openadapt-types/actions/workflows/test.yml)
+[![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml)
 [![PyPI](https://img.shields.io/pypi/v/openadapt-types)](https://pypi.org/project/openadapt-types/)
 [![Python](https://img.shields.io/pypi/pyversions/openadapt-types)](https://pypi.org/project/openadapt-types/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/OpenAdaptAI/openadapt-types/blob/main/LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/types/LICENSE)
 
 Pydantic models for computer-use agents: what is on the screen, what to do
 to it, and what happened when you did. Use them when you build an agent, a
@@ -127,7 +127,7 @@ An unknown or contradictory status reads "Check the record", never "nothing
 was written". The table that maps status values to results also ships as
 JSON for other languages, and the `openadapt-vocab-lint` command checks
 user-facing text against it. See
-[docs/VOCABULARY.md](https://github.com/OpenAdaptAI/openadapt-types/blob/main/docs/VOCABULARY.md).
+[docs/VOCABULARY.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/types/docs/VOCABULARY.md).
 
 ## JSON Schema for other languages
 
@@ -143,7 +143,7 @@ The messages that OpenAdapt components exchange ship under
 the OpenAPI document for OpenAdapt Execute, the API that starts runs and
 reports their results. Two files hold test vectors, and the rest are JSON
 Schema files.
-[docs/CONTRACTS.md](https://github.com/OpenAdaptAI/openadapt-types/blob/main/docs/CONTRACTS.md)
+[docs/CONTRACTS.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/types/docs/CONTRACTS.md)
 lists each contract, its Python model, and what it may carry.
 
 ## Convert from older formats
@@ -182,4 +182,4 @@ never `done`.
 
 ## License
 
-[MIT](https://github.com/OpenAdaptAI/openadapt-types/blob/main/LICENSE)
+[MIT](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/types/LICENSE)

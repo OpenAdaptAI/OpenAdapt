@@ -99,7 +99,7 @@ The result looks like this (some fields left out):
 
 This install simulates each run without opening MockMed, and every result says so. To watch the real engine do the work, see [Drive MockMed with the real engine](#drive-mockmed-with-the-real-engine).
 
-openadapt-agent installs from PyPI and requires openadapt-flow 2.1.0 or later, which is on PyPI and installs with it. To try unreleased changes, use `--from git+https://github.com/OpenAdaptAI/openadapt-agent` in place of the package name.
+openadapt-agent installs from PyPI and requires openadapt-flow 2.1.0 or later, which is on PyPI and installs with it. To try unreleased changes, use `--from git+https://github.com/OpenAdaptAI/OpenAdapt#subdirectory=packages/agent` in place of the package name.
 
 ### See every outcome
 
@@ -180,7 +180,7 @@ The sandbox has all three tools. With your own workflows, `run_workflow` appears
 
 ## Developer setup
 
-The package is a local Model Context Protocol (MCP) server that talks over stdio, plus an `openadapt-agent` command. It needs Python 3.10 to 3.12. It checks inputs, stops second entries, and turns Flow's report into one of the four outcomes. [openadapt-flow](https://github.com/OpenAdaptAI/openadapt-flow) records, replays, and checks the workflows.
+The package is a local Model Context Protocol (MCP) server that talks over stdio, plus an `openadapt-agent` command. It needs Python 3.10 to 3.12. It checks inputs, stops second entries, and turns Flow's report into one of the four outcomes. [openadapt-flow](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow) records, replays, and checks the workflows.
 
 To see Flow on its own, install the OpenAdapt launcher with `pip install openadapt`, then run `openadapt flow tutorial` or `openadapt quickstart --break-it`.
 
@@ -253,7 +253,7 @@ A bundle is a compiled workflow folder that contains `workflow.json`, or `workfl
 
 `openadapt-agent serve --allow-run` is the older form of `--mode production`, or of the sandbox when there's no `--bundles`.
 
-Each run goes through `openadapt-flow run`. Flow drives web apps in Chromium, with the address set by `--url`. It also drives desktop apps and RDP and Citrix sessions, which can need Flow's own target flags passed with `--extra-run-arg`. The [openadapt-flow README](https://github.com/OpenAdaptAI/openadapt-flow#readme) covers each kind of app.
+Each run goes through `openadapt-flow run`. Flow drives web apps in Chromium, with the address set by `--url`. It also drives desktop apps and RDP and Citrix sessions, which can need Flow's own target flags passed with `--extra-run-arg`. The [openadapt-flow README](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow) covers each kind of app.
 
 ### Get a workflow ready to run
 
@@ -265,7 +265,7 @@ What Flow requires depends on the profile set in the deployment config (`--confi
 - `standard` or `regulated`: certification, an active admission (a signed readiness test) for that exact bundle version, and a record check that reads the saved record through a separate path, such as the app's API, its database, or a second session. Under `standard`, a Citrix session with no separate way to read the record can't end `done`.
 - `demo`: no certification, but Flow doesn't confirm the save, so a finished run ends `not_sure_if_saved`.
 
-Flow's [execution profiles](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/docs/EXECUTION_PROFILES.md) page explains each profile.
+Flow's [execution profiles](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/EXECUTION_PROFILES.md) page explains each profile.
 
 ### Set server options
 
@@ -273,7 +273,7 @@ Flow's [execution profiles](https://github.com/OpenAdaptAI/openadapt-flow/blob/m
 | --- | --- |
 | `--runs-dir DIR` | Where run records and Flow's evidence go. The default is `~/.openadapt/runs` (or `OPENADAPT_AGENT_RUNS_DIR` when it's set), never the folder where the client starts the server; the sandbox uses `~/.openadapt/agent-sandbox`. The server prints the folder it uses when it starts. The check that stops a second entry covers one runs folder, so give every server for the same work the same folder. Earlier versions used `./runs`; if that folder holds their records and you don't pass `--runs-dir`, the server won't start, so you choose which folder to keep. |
 | `--url URL` | The app's address, passed to every Flow run. |
-| `--config YAML` | Flow's deployment config ([example](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/docs/deployment.example.yaml)), which sets the profile and whether model grounding is allowed. |
+| `--config YAML` | Flow's deployment config ([example](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/deployment.example.yaml)), which sets the profile and whether model grounding is allowed. |
 | `--policy NAME-OR-PATH` | The policy Flow certifies against, such as `clinical-write` or `permissive`. |
 | `--timeout SECONDS` | How long one run may work (default 600). Time a person spends approving a save doesn't count. A run stopped at the limit is `not_sure_if_saved`. |
 | `--approval-mode MODE` | Whether a person approves each save. Without it, Flow decides: under `standard` and `regulated` a run stops before each save until a person approves it (`each_item`). `not_gated` turns that off for every run this server starts; each result records it under `technical.approval_mode`. |
@@ -355,7 +355,7 @@ For a native Windows app, start Flow's Windows agent server in the signed-in des
 
 For an RDP or Citrix session, pass `--remote-window APP` (the client app, for example `"Microsoft Remote Desktop"`) or `--citrix`, and `--remote-window-title` when the app has more than one window. A remote session is screen-only: there's no DOM or UI Automation tree, so `observe` returns no nodes and your agent clicks x,y pixels in the client window and presses keys, the way a person would. To let your agent see that window, add `--authoring-screens scrubbed`, which turns on a `screen` tool that returns the frame with identifiers scrubbed and shares nothing if scrubbing fails. `--authoring-screens unscrubbed` skips scrubbing. Screens are off by default.
 
-[Recording on Windows, RDP and Citrix](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/docs/RECORDING_ON_WINDOWS_RDP_CITRIX.md) explains the Windows agent server, why it's needed when the agent runs on another computer, how to start it, the token, and the RDP and Citrix pixel path.
+[Recording on Windows, RDP and Citrix](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/RECORDING_ON_WINDOWS_RDP_CITRIX.md) explains the Windows agent server, why it's needed when the agent runs on another computer, how to start it, the token, and the RDP and Citrix pixel path.
 
 The recording marks every step as the agent's or the person's (`actor` in `events.jsonl`, `demonstrated_by` in `meta.json`), and a person still accepts the result. On Windows with none of these flags, the tools can only tell the person what to click.
 
