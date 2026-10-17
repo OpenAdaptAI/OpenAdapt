@@ -1,7 +1,7 @@
 """Shadow-mined episodes -> the existing induction -> a CANDIDATE, never a run.
 
 The fixtures under ``tests/fixtures/shadow/`` are real
-``openadapt.shadow.episodes/v1`` exports, produced by openadapt-capture's
+``openadapt.shadow.episodes/v2`` exports, produced by openadapt-capture's
 shadow miner from synthetic streams
 (``tests/shadow_support/generate_flow_fixtures.py`` in that repository).
 """
@@ -66,7 +66,7 @@ def test_fixed_control_task_induces_a_candidate_draft_with_parameters():
     assert draft is not None and draft.program is not None
     assert draft.name.startswith("shadow-draft-")
     assert len(draft.param_specs) == 2
-    # Parameter examples are digests, never values.
+    # Parameter examples are export-local references, never values or digests.
     assert all(v.startswith("<") and ":" in v for v in draft.params.values())
 
 
@@ -145,7 +145,10 @@ def test_candidate_cannot_claim_admission():
     [
         (lambda s: s.update(text="jane.doe@example.com"), "unknown field"),
         (lambda s: s.update(display_label="Pay 1200"), "digits in a plain label"),
-        (lambda s: s.update(value_digest="not-a-digest"), "malformed digest"),
+        (lambda s: s.update(value_ref="not-a-ref"), "malformed reference"),
+        (lambda s: s.update(value_digest="0123456789abcdef"), "a keyed digest field"),
+        (lambda s: s.update(label_digest="0123456789abcdef"), "a keyed digest field"),
+        (lambda s: s.update(token="click|Mail|button|0a1b2c3d"), "a digest in a token"),
         (lambda s: s.update(kind="screenshot"), "unknown kind"),
     ],
 )
@@ -159,9 +162,28 @@ def test_export_schema_refuses_raw_content(mutate, why):
 def test_export_schema_refuses_wrong_schema_and_status():
     data = _load("report_mail")
     with pytest.raises(ValidationError):
-        induce_candidate({**data, "schema": "openadapt.shadow.episodes/v2"})
+        induce_candidate({**data, "schema": "openadapt.shadow.episodes/v3"})
     with pytest.raises(ValidationError):
         induce_candidate({**data, "status": "admitted"})
+
+
+def test_v1_exports_with_keyed_digests_are_refused():
+    data = _load("report_mail")
+    with pytest.raises(ValueError, match="keyed digests"):
+        induce_candidate({**data, "schema": "openadapt.shadow.episodes/v1"})
+    with pytest.raises(ValidationError):
+        induce_candidate({**data, "tokens": ["focus|Mail", "click|Mail|button|0a1b2c3d"]})
+
+
+@pytest.mark.parametrize("name", ["report_mail", "invoice_exact", "invoice_variant"])
+def test_draft_carries_no_digest(name):
+    import re
+
+    candidate = induce_candidate(_load(name))
+    blob = candidate.model_dump_json()
+    # No 8+ character hex run except the export's own id.
+    runs = set(re.findall(r"(?<![0-9a-z])[0-9a-f]{8,}(?![0-9a-z])", blob))
+    assert runs <= {_load(name)["motif_id"]}
 
 
 def test_write_candidate_never_writes_a_runnable_bundle(tmp_path):

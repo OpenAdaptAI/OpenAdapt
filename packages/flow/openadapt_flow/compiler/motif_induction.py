@@ -3,10 +3,13 @@
 OpenAdapt Capture's shadow mode (``openadapt_capture.shadow``, off by default)
 can notice that a person repeated the same cross-application sequence several
 times and, if the person clicks **Review draft**, export those episodes as
-``openadapt.shadow.episodes/v1`` JSON. Each step in that export is a
-value-free symbol: an application, a control role, keyed digests in place of
-labels and typed values, a coarse URL pattern. There are no screenshots, no
-coordinates, and no plain-text values.
+``openadapt.shadow.episodes/v2`` JSON. Each step in that export is a
+value-free symbol: an application, a control role, references local to the
+export in place of labels and typed values (``label-a``, ``value-b``), a
+scrubbed URL pattern. There are no screenshots, no coordinates, no plain-text
+values, and no keyed digests: two steps that share a reference shared a value,
+and that is all the export says about values. Version 1 exports, which carried
+keyed digests, are refused, so a digest can never reach a draft.
 
 This module converts the episodes into linear :class:`~openadapt_flow.ir.Workflow`
 traces and hands them to the EXISTING multi-trace induction
@@ -39,12 +42,13 @@ from collections import Counter
 from pathlib import Path
 from typing import Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from openadapt_flow.compiler.induction import RecordNext, TraceInput, induce_program
 from openadapt_flow.ir import ActionKind, Anchor, Step, StructuralLocator, Workflow
 
-EPISODES_SCHEMA = "openadapt.shadow.episodes/v1"
+EPISODES_SCHEMA = "openadapt.shadow.episodes/v2"
+REFUSED_SCHEMAS = frozenset({"openadapt.shadow.episodes/v1"})
 CANDIDATE_SCHEMA: Literal["openadapt.shadow.candidate/v1"] = (
     "openadapt.shadow.candidate/v1"
 )
@@ -53,6 +57,11 @@ DRAFT_FILENAME = "draft-workflow.json"
 CANDIDATE_FILENAME = "candidate.json"
 
 _DIGEST = r"^[0-9a-f]{16}$"
+_TOKEN_DIGEST = re.compile(r"^[0-9a-f]{8,}$")
+_LABEL_REF = r"^label-[a-z]{1,4}$"
+_VALUE_REF = r"^value-[a-z]{1,4}$"
+#: Capture's placeholder for a chrome label that looked like data.
+DYNAMIC_LABEL = "<dynamic_label>"
 _WRITE_STEMS = ("save", "submit", "send", "post", "approve", "confirm", "create", "add")
 _SHEET_APPS = ("excel", "numbers", "sheets", "calc", "spreadsheet")
 _SAVE_MODIFIERS = frozenset({"meta", "ctrl", "cmd", "command"})
@@ -88,11 +97,11 @@ class ShadowStep(BaseModel):
     app: Optional[str] = Field(default=None, max_length=128)
     window_class: Optional[str] = Field(default=None, max_length=128)
     role: Optional[str] = Field(default=None, max_length=64)
-    label_digest: Optional[str] = Field(default=None, pattern=_DIGEST)
+    label_ref: Optional[str] = Field(default=None, pattern=_LABEL_REF)
     display_label: Optional[str] = Field(
         default=None, max_length=32, pattern=r"^[^0-9@]*$"
     )
-    value_digest: Optional[str] = Field(default=None, pattern=_DIGEST)
+    value_ref: Optional[str] = Field(default=None, pattern=_VALUE_REF)
     value_shape: Optional[
         Literal["empty", "digits", "decimal", "date", "email", "alpha", "alnum", "text"]
     ] = None
@@ -100,6 +109,20 @@ class ShadowStep(BaseModel):
     key: Optional[str] = Field(default=None, max_length=32)
     modifiers: list[str] = Field(default_factory=list, max_length=4)
     secure: bool = False
+
+
+    @field_validator("token")
+    @classmethod
+    def _no_digest_in_token(cls, value: str) -> str:
+        if any(_TOKEN_DIGEST.match(part) for part in value.split("|")):
+            raise ValueError("a shadow token must not carry a keyed digest")
+        return value
+
+
+def _check_tokens(tokens: list[str]) -> list[str]:
+    for token in tokens:
+        ShadowStep._no_digest_in_token(token)
+    return tokens
 
 
 class ShadowEpisode(BaseModel):
@@ -113,13 +136,18 @@ class ShadowEpisode(BaseModel):
 
 
 class ShadowEpisodesExport(BaseModel):
-    """The ``openadapt.shadow.episodes/v1`` document Capture writes."""
+    """The ``openadapt.shadow.episodes/v2`` document Capture writes."""
 
     model_config = ConfigDict(extra="forbid")
 
-    schema_: Literal["openadapt.shadow.episodes/v1"] = Field(alias="schema")
+    schema_: Literal["openadapt.shadow.episodes/v2"] = Field(alias="schema")
     motif_id: str = Field(pattern=_DIGEST)
     tokens: list[str]
+
+    @field_validator("tokens")
+    @classmethod
+    def _tokens_carry_no_digest(cls, value: list[str]) -> list[str]:
+        return _check_tokens(value)
     apps: list[str]
     count_in_window: int = Field(ge=0)
     window_s: float
@@ -170,12 +198,20 @@ class MotifCandidate(BaseModel):
     admission_path: list[str] = Field(default_factory=lambda: list(ADMISSION_PATH))
 
 
-def _alias(digest: Optional[str]) -> str:
-    """Letters-only alias of a digest (induction drops digits from intents)."""
+def _alias(ref: Optional[str]) -> str:
+    """Name of a control known only by its export reference."""
 
-    if not digest:
+    if not ref:
         return "unnamed"
-    return "fld-" + "".join(chr(ord("a") + int(c, 16)) for c in digest[:8])
+    return "fld-" + ref.split("-", 1)[1]
+
+
+def _shown(display_label: Optional[str]) -> Optional[str]:
+    """A plain-text chrome label, or None for none or a scrubbed one."""
+
+    if not display_label or display_label == DYNAMIC_LABEL:
+        return None
+    return display_label
 
 
 def _placeholder_anchor(role: Optional[str], name: str, *, varies: bool) -> Anchor:
@@ -236,13 +272,13 @@ def _episode_steps(
                 "double_click": ActionKind.DOUBLE_CLICK,
                 "right_click": ActionKind.RIGHT_CLICK,
             }[sym.kind]
-            if sym.value_digest:
-                name = f"value:{sym.value_digest}"
+            if sym.value_ref:
+                name = sym.value_ref
                 what = f"{sym.role or 'control'} (varies)"
             else:
-                name = sym.display_label or _alias(sym.label_digest)
+                name = _shown(sym.display_label) or _alias(sym.label_ref)
                 what = f"{sym.role or 'control'} {name}"
-            writes = _is_write_label(sym.display_label) or (
+            writes = _is_write_label(_shown(sym.display_label)) or (
                 nxt is not None and nxt.kind == "submit"
             )
             steps.append(
@@ -251,7 +287,7 @@ def _episode_steps(
                     intent=f"{prefix} click {what}",
                     action=action,
                     anchor=_placeholder_anchor(
-                        sym.role, name, varies=bool(sym.value_digest)
+                        sym.role, name, varies=bool(sym.value_ref)
                     ),
                     risk="irreversible" if writes else "reversible",
                     risk_explanation=(
@@ -271,7 +307,7 @@ def _episode_steps(
                     )
                 )
         elif sym.kind == "type":
-            field = sym.display_label or _alias(sym.label_digest)
+            field = _shown(sym.display_label) or _alias(sym.label_ref)
             intent = f"{prefix} type {sym.role or 'field'} {field}"
             if sym.secure:
                 steps.append(
@@ -280,7 +316,7 @@ def _episode_steps(
                         intent=intent,
                         action=ActionKind.TYPE,
                         secret=True,
-                        param=f"secret_{_alias(sym.label_digest)[4:]}",
+                        param=f"secret_{_alias(sym.label_ref)[4:]}",
                     )
                 )
             else:
@@ -290,7 +326,7 @@ def _episode_steps(
                         id=sid,
                         intent=intent,
                         action=ActionKind.TYPE,
-                        text=f"<{shape}:{sym.value_digest or 'none'}>",
+                        text=f"<{shape}:{sym.value_ref or 'none'}>",
                     )
                 )
             if nxt is not None and nxt.kind == "key" and _is_sheet(app):
@@ -389,6 +425,11 @@ def induce_candidate(export: ShadowEpisodesExport | dict) -> MotifCandidate:
     """Run the existing induction over shadow episodes; return a candidate."""
 
     if not isinstance(export, ShadowEpisodesExport):
+        if isinstance(export, dict) and export.get("schema") in REFUSED_SCHEMAS:
+            raise ValueError(
+                f"{export.get('schema')} carries keyed digests and is refused; "
+                f"export again with a Capture that writes {EPISODES_SCHEMA}"
+            )
         export = ShadowEpisodesExport.model_validate(export)
     workflows, checks = episodes_to_workflows(export)
     traces: list[TraceInput] = list(workflows)

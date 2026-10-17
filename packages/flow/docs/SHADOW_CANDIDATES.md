@@ -11,14 +11,29 @@ The code is `openadapt_flow/compiler/motif_induction.py`.
 
 ## What goes in
 
-An `openadapt.shadow.episodes/v1` JSON document. Each episode is a list of
-value-free symbols: an application, a control role, keyed digests in place of
-labels and typed values, a coarse URL pattern, and short plain-text labels for
-buttons and menu items. There are no screenshots, coordinates, or values.
+An `openadapt.shadow.episodes/v2` JSON document. Each episode is a list of
+value-free symbols: an application, a control role, a scrubbed URL pattern,
+short plain-text labels for buttons and menu items made of common words, and
+references in place of other labels and typed values.
 
-The schema is strict. `induce_candidate` refuses a document with an unknown
-field, a malformed digest, a plain-text label that contains digits or `@`, an
-unknown step kind, or a status other than `candidate`.
+A reference such as `label-a` or `value-c` is local to one export. Two steps
+with the same reference had the same label or value; that is all the export
+says. Capture's keyed digests never leave Capture: its keys are destroyed
+every 24 hours, and a digest that outlived its key could be matched against
+guesses for short identifiers such as a record number or an SSN, so no digest
+may reach a draft.
+
+The schema is strict. `induce_candidate` refuses:
+
+- a `v1` document (it carried keyed digests);
+- a step with a `label_digest` or `value_digest` field, or any other unknown
+  field;
+- a token with a hex part of eight or more characters;
+- a malformed reference;
+- a plain-text label that contains digits or `@`;
+- an unknown step kind, or a status other than `candidate`.
+
+A label that Capture scrubbed (`<dynamic_label>`) is treated as no label.
 
 ## What comes out
 
@@ -52,7 +67,7 @@ treats the folder as a bundle, and it refuses a folder that already holds one.
 
 - **No anchors.** Shadow mining keeps no pixels, so every anchor in the draft
   is a placeholder (`shadow-unrecorded.png` at 0,0).
-- **No values.** Parameter examples are digests such as `<email:5c91…>`.
+- **No values.** Parameter examples are references such as `<email:value-b>`.
 - **Writes need review.** A click on a Submit-, Save-, or Send-like control,
   or a click right before a form submit, is marked `irreversible` with
   `risk_review_required`, so certification refuses it until a person reviews
