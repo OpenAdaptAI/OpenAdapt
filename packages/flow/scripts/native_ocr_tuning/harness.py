@@ -166,6 +166,8 @@ class TunedVision(AppleVisionEngine):
         if p.get("gray"):
             work = ImageOps.grayscale(work).convert("RGB")
         pad = int(p.get("pad", 0))
+        if p.get("small_pad") and work.size[1] < int(p.get("small_h", 300)):
+            pad = int(p["small_pad"])
         if pad:
             work = ImageOps.expand(work, border=pad, fill=(255, 255, 255))
         s = float(p.get("scale", 1.0))
@@ -284,6 +286,12 @@ CONFIGS: dict[str, dict[str, Any]] = {
     "t768f_agree_lc": {"passes": [{"tile_h": 768}, {"tile_h": 768, "lc": True}], "flip": "rev2", "merge": "vote"},
     "t768f_vote_offsets": {"passes": [{"tile_h": 768}, {"tile_h": 768, "dx": 1, "dy": 1}, {"tile_h": 768, "dx": 2}], "flip": "rev2", "merge": "vote"},
     "t768f_union_offsets": {"passes": [{"tile_h": 768}, {"tile_h": 768, "dx": 1, "dy": 1}], "flip": "rev2", "merge": "union"},
+    "t768f_pad24": {"passes": [{"tile_h": 768, "small_pad": 24}], "flip": "rev2"},
+    "t768f_pad12": {"passes": [{"tile_h": 768, "small_pad": 12}], "flip": "rev2"},
+    "t768f_union_pad24": {"passes": [{"tile_h": 768}, {"tile_h": 768, "small_pad": 24}], "flip": "rev2", "merge": "union"},
+    "t768f_union_pad24_pad12": {"passes": [{"tile_h": 768, "small_pad": 24}, {"tile_h": 768, "small_pad": 12}], "flip": "rev2", "merge": "union"},
+    "t768f_union3_pad": {"passes": [{"tile_h": 768}, {"tile_h": 768, "small_pad": 24}, {"tile_h": 768, "small_pad": 12}], "flip": "rev2", "merge": "union"},
+    "t768f_vote3_pad": {"passes": [{"tile_h": 768}, {"tile_h": 768, "small_pad": 24}, {"tile_h": 768, "small_pad": 12}], "flip": "rev2", "merge": "vote"},
     "t768f_gray": {"passes": [{"tile_h": 768, "gray": True}], "flip": "rev2"},
     "t768f_lc_on": {"passes": [{"tile_h": 768}], "flip": "rev2", "language_correction": True},
     "t768f_vote3": {"passes": [{"tile_h": 768}, {"tile_h": 768, "gray": True}, {"tile_h": 768, "small_h": 300, "small_scale": 2.0}], "flip": "rev2", "merge": "vote"},
