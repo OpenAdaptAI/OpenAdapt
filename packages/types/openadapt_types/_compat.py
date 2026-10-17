@@ -21,7 +21,7 @@ not imported types, to avoid circular dependencies.
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any
 
 from .action import Action, ActionTarget, ActionType
 from .computer_state import BoundingBox, ComputerState, UINode

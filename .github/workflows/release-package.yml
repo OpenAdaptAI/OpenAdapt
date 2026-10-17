@@ -1,0 +1,129 @@
+# Publish ONE package from packages/ to PyPI.
+#
+# release-and-publish.yml publishes only the root `openadapt` launcher. Each
+# package publishes separately from here, through its own GitHub environment
+# and PyPI Trusted Publisher:
+#
+#   package  PyPI project     environment
+#   flow     openadapt-flow   pypi-flow
+#   types    openadapt-types  pypi-types
+#   agent    openadapt-agent  pypi-agent
+#
+# Manual dispatch only: there is no tag or push trigger, so nothing here runs
+# unless someone starts it. It refuses any ref other than the current tip of
+# main, a version that does not match the package's pyproject.toml, and a
+# version that already exists on PyPI. The publish job holds the only
+# id-token permission and runs in the package's environment, so the
+# environment's protection rules gate the upload.
+name: Release package
+
+on:
+  workflow_dispatch:
+    inputs:
+      package:
+        description: "Package directory under packages/"
+        required: true
+        type: choice
+        options: [flow, types, agent]
+      version:
+        description: "Version to publish; must equal packages/<package>/pyproject.toml"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-package-${{ inputs.package }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build ${{ inputs.package }} ${{ inputs.version }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      project: ${{ steps.check.outputs.project }}
+    steps:
+      - name: Require the tip of main
+        env:
+          REF: ${{ github.ref }}
+        run: |
+          if [ "$REF" != "refs/heads/main" ]; then
+            echo "Package releases run only from refs/heads/main, not $REF." >&2
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Check the dispatched commit, version and PyPI state
+        id: check
+        env:
+          PACKAGE: ${{ inputs.package }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if [ "$(git rev-parse HEAD)" != "$(git rev-parse refs/remotes/origin/main)" ]; then
+            echo "main moved after dispatch; re-run on the current tip." >&2
+            exit 1
+          fi
+          python - <<'PY'
+          import json, os, sys, tomllib, urllib.error, urllib.request
+          pkg, version = os.environ["PACKAGE"], os.environ["VERSION"]
+          with open(f"packages/{pkg}/pyproject.toml", "rb") as fh:
+              project = tomllib.load(fh)["project"]
+          expected = {"flow": "openadapt-flow", "types": "openadapt-types", "agent": "openadapt-agent"}[pkg]
+          if project["name"] != expected:
+              sys.exit(f"packages/{pkg} is {project['name']!r}, expected {expected!r}")
+          if project["version"] != version:
+              sys.exit(f"input version {version} != pyproject version {project['version']}")
+          try:
+              urllib.request.urlopen(f"https://pypi.org/pypi/{expected}/{version}/json", timeout=30)
+          except urllib.error.HTTPError as exc:
+              if exc.code != 404:
+                  raise
+          else:
+              sys.exit(f"{expected} {version} is already on PyPI")
+          with open(os.environ["GITHUB_OUTPUT"], "a") as out:
+              out.write(f"project={expected}\n")
+          print(f"releasing {expected} {version}")
+          PY
+      - name: Build sdist and wheel
+        env:
+          PACKAGE: ${{ inputs.package }}
+        run: |
+          set -euo pipefail
+          python -m pip install 'build==1.6.1' 'twine==7.0.0'
+          python -m build "packages/$PACKAGE" --outdir dist
+          python -m twine check --strict dist/*
+          ls -l dist
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: dist-${{ inputs.package }}
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: publish ${{ needs.build.outputs.project }} ${{ inputs.version }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: pypi-${{ inputs.package }}
+      url: https://pypi.org/project/${{ needs.build.outputs.project }}/${{ inputs.version }}/
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist-${{ inputs.package }}
+          path: dist/
+      - name: Publish to PyPI (Trusted Publishing)
+        uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
+        with:
+          packages-dir: dist/
