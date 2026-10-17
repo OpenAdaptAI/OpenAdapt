@@ -6,6 +6,14 @@ stdio may also include ``type`` for agent-driven typing through Flow's
 Recorder. Hosted remains pause-only. Human type during a pause is
 ``record_observed`` everywhere; never ``type_text`` on the pause target.
 
+The local agent can drive the recording on every surface Flow has a backend
+for. Native Windows apps go through an operator-started Flow Windows agent server
+(``--windows-agent-url``), the same synthetic-input path replay uses. RDP and
+Citrix go through the local client window (``--remote-window``, ``--citrix``)
+and are screen-only: the agent clicks pixels and presses keys. The operator
+can turn on the ``screen`` tool (``--authoring-screens``) so the agent sees
+the frame it clicks in; it is off unless the operator turns it on.
+
 This module is a transport-independent stdio bridge. It does not open a
 network listener. Hosted ChatGPT.com uses ``openadapt-agent authoring
 connect`` (outbound mailbox poll in :mod:`openadapt_agent.mailbox`).
@@ -22,6 +30,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import logging
 import queue
 import re
 import sys
@@ -32,9 +41,12 @@ from typing import Any, Callable, Mapping, Optional
 
 from openadapt_agent.bridge import BridgeError, ToolSpec
 
+_LOG = logging.getLogger(__name__)
+
 __all__ = [
     "AUTHORING_LOCAL_TOOLS",
     "AUTHORING_PROBE_TOOLS",
+    "AUTHORING_SCREEN_MODES",
     "AuthoringBridge",
     "AuthoringError",
     "MAX_AUTHORING_WIRE_BYTES",
@@ -72,6 +84,10 @@ AUTHORING_LOCAL_TOOLS = (
     "bind_status",
 )
 AUTHORING_TOOLS = AUTHORING_PROBE_TOOLS + AUTHORING_LOCAL_TOOLS
+#: Listed only when the operator starts the server with --authoring-screens.
+AUTHORING_SCREEN_TOOL = "screen"
+#: Who decides whether the agent sees screens: the operator, at server start.
+AUTHORING_SCREEN_MODES = ("off", "scrubbed", "unscrubbed")
 
 MAX_AUTHORING_NODES = 200
 MAX_AUTHORING_WIRE_BYTES = 32 * 1024
@@ -133,8 +149,18 @@ _T1_BACKENDS = frozenset({"web", "macos", "linux", "windows", "rdp", "citrix"})
 _T1_PROVIDERS = frozenset(
     {"playwright_ax", "macos_ax", "windows_uia", "linux_atspi", "none"}
 )
-_COACH_ONLY_BACKENDS = frozenset({"windows", "rdp", "citrix"})
-_AGENT_DRIVE_BACKENDS = frozenset({"web", "macos", "linux"})
+#: Surfaces where nothing is pinned to drive (no Windows agent server, no client
+#: window) fall back to coach-only. A pinned backend on any surface drives.
+_COACH_ONLY_BACKENDS: frozenset[str] = frozenset()
+_UNPINNED_COACH_KINDS = frozenset({"windows", "rdp", "citrix"})
+_AGENT_DRIVE_BACKENDS = frozenset({"web", "macos", "linux", "windows", "rdp", "citrix"})
+#: Remote sessions: pixels and keys, so the observe tree is always empty.
+_SCREEN_ONLY_BACKENDS = frozenset({"rdp", "citrix"})
+_PIN_HINT = (
+    "Start the server with --windows-agent-url for a native Windows app "
+    "(the Flow Windows agent server you started on this computer), or --remote-window / "
+    "--citrix for an RDP or Citrix client window."
+)
 _ELEMENT_ROLES = frozenset(
     {
         "button",
@@ -213,9 +239,11 @@ _PROBE_HELP = {
         "tree for click."
     ),
     "start_record": (
-        "Start a Flow Recorder session over the locally pinned backend. "
-        "Refuses Windows native, Citrix, and RDP (coach-only). Does not "
-        "compile and does not enable run tools."
+        "Start a Flow Recorder session over the locally pinned backend: a "
+        "browser, a macOS or Linux window, a native Windows app, or an RDP "
+        "or Citrix client window. RDP and Citrix are screen-only: click x,y "
+        "pixels. Refuses only when no window is pinned. Does not compile and "
+        "does not enable run tools."
     ),
     "click": (
         "Click one observed node through Flow Recorder. Prefer node_id from "
@@ -238,10 +266,11 @@ class AuthoringError(BridgeError):
 
 
 class CoachOnlySession:
-    """Stdio stand-in when the pinned substrate is v1 coach-only.
+    """Stdio stand-in when nothing is pinned for the agent to drive.
 
-    Observe works. Agent-drive (start_record / click / type) refuses.
-    Never constructs the in-guest Windows agent HTTP helper.
+    On Windows with no ``--windows-agent-url`` and no client window, the
+    person actuates. Observe works; start_record / click / type refuse.
+    Never starts the Windows agent server.
     """
 
     def __init__(self, backend_kind: str = "windows"):
@@ -431,6 +460,11 @@ def pin_local_backend(
     platform: Optional[str] = None,
     backend: Any = None,
     backend_kind: Optional[str] = None,
+    windows_agent_url: Optional[str] = None,
+    windows_agent_token: Optional[str] = None,
+    remote_window: Optional[str] = None,
+    remote_window_title: Optional[str] = None,
+    citrix: bool = False,
 ) -> tuple[Any, str, Any]:
     """Pin the local target. Titles never go to MCP.
 
@@ -440,8 +474,11 @@ def pin_local_backend(
     - ``url`` launches Playwright Chromium with empty cookies (no debug-port
       attach, not the person's already-logged-in Chrome). ``headed`` must be
       true so a person can sign in in that window via ``pause_for_input``.
-    - Windows native / RDP / Citrix → coach-only; never the in-guest Windows
-      agent HTTP helper.
+    - ``windows_agent_url`` → ``WindowsBackend`` over a Windows agent server the
+      operator already started (never started here).
+    - ``remote_window`` / ``citrix`` → the RDP or Citrix client window,
+      screen-only.
+    - Windows with none of those → coach-only.
     - macOS / Linux → unique frontmost window via Flow backends when those
       constructors are importable (F1). Non-unique Linux titles are coach-only.
       Omit ``url`` after the person signs in in Chrome if DOM identity is not
@@ -451,6 +488,16 @@ def pin_local_backend(
     if backend is not None:
         kind = backend_kind or "web"
         return backend, kind, None
+    pinned = _pin_desktop_driver(
+        windows_agent_url=windows_agent_url,
+        windows_agent_token=windows_agent_token,
+        remote_window=remote_window,
+        remote_window_title=remote_window_title,
+        citrix=citrix,
+        url=url,
+    )
+    if pinned is not None:
+        return pinned
     plat = platform or sys.platform
     if url:
         if not headed:
@@ -475,6 +522,61 @@ def pin_local_backend(
         "(macOS; no DOM identity), or run Desktop so overlay stays "
         "single-owner. Debug-port attach is out of v1."
     )
+
+
+def _pin_desktop_driver(
+    *,
+    windows_agent_url: Optional[str],
+    windows_agent_token: Optional[str],
+    remote_window: Optional[str],
+    remote_window_title: Optional[str],
+    citrix: bool,
+    url: Optional[str],
+) -> Optional[tuple[Any, str, Any]]:
+    """Build Flow's Windows or remote-window backend through its factory.
+
+    Uses the same ``build_backend`` that ``openadapt-flow replay`` uses, so
+    recording and replay share one driver. Never starts the Windows agent server.
+    """
+
+    remote = bool(remote_window) or citrix
+    if not windows_agent_url and not remote:
+        return None
+    if windows_agent_url and remote:
+        raise AuthoringError(
+            "pin one target: --windows-agent-url for a native Windows app, or "
+            "--remote-window / --citrix for an RDP or Citrix client window"
+        )
+    if url:
+        raise AuthoringError(
+            "--url pins a browser; it can't be combined with "
+            "--windows-agent-url, --remote-window, or --citrix"
+        )
+    try:
+        from openadapt_flow.backends.factory import build_backend
+        from openadapt_flow.deployment import BackendConfig
+    except ImportError as exc:
+        raise AuthoringError(
+            "driving a Windows app or a remote session needs openadapt-flow "
+            "with the windows extra (pip install 'openadapt-flow[windows]')"
+        ) from exc
+    if windows_agent_url:
+        config = BackendConfig(
+            kind="windows", agent_url=windows_agent_url, agent_token=windows_agent_token
+        )
+        kind = "windows"
+    else:
+        kind = "citrix" if citrix else "rdp"
+        config = BackendConfig(
+            kind=kind,
+            rdp_window=remote_window or None,
+            rdp_window_title=remote_window_title or None,
+        )
+    try:
+        backend = build_backend(config)
+    except (ValueError, RuntimeError, OSError) as exc:
+        raise AuthoringError(f"could not pin the {kind} target: {exc}") from exc
+    return backend, kind, getattr(backend, "close", None)
 
 
 def _pin_web(url: str, *, headed: bool) -> tuple[Any, str, Any]:
@@ -600,14 +702,20 @@ def open_authoring_session(
     backend: Any = None,
     backend_kind: Optional[str] = None,
     platform: Optional[str] = None,
+    windows_agent_url: Optional[str] = None,
+    windows_agent_token: Optional[str] = None,
+    remote_window: Optional[str] = None,
+    remote_window_title: Optional[str] = None,
+    citrix: bool = False,
     **kwargs: Any,
 ) -> object:
     """Construct Flow's public authoring session when that module exists.
 
     ``AuthoringSession`` (F1) requires ``backend``, ``out_dir``, and
-    ``backend_kind``. This helper pins locally (or returns a coach-only
-    stand-in for Windows native / Citrix / RDP) so ``serve --authoring``
-    still works when F1 lands. Desktop IPC is preferred when advertised;
+    ``backend_kind``. This helper pins locally: a browser, a macOS or Linux
+    window, a native Windows app through the Windows agent server, or an RDP or Citrix
+    client window. On Windows with nothing pinned it returns a coach-only
+    stand-in. Desktop IPC is preferred when advertised;
     this package does not implement the D2 protocol.
     """
     try:
@@ -628,6 +736,13 @@ def open_authoring_session(
         backend=backend,
         backend_kind=backend_kind,
         platform=platform,
+        pin=dict(
+            windows_agent_url=windows_agent_url,
+            windows_agent_token=windows_agent_token,
+            remote_window=remote_window,
+            remote_window_title=remote_window_title,
+            citrix=citrix,
+        ),
         **kwargs,
     )
     if backend is None and backend_kind is None and url:
@@ -654,33 +769,56 @@ def _open_pinned_session(
     backend: Any,
     backend_kind: Optional[str],
     platform: Optional[str],
+    pin: Optional[dict[str, Any]] = None,
     **kwargs: Any,
 ) -> object:
     close = None
     kind = backend_kind
     pinned = backend
+    pin = dict(pin or {})
     if pinned is None and kind is None:
         try:
             pinned, kind, close = pin_local_backend(
-                url=url, headed=headed, platform=platform
+                url=url, headed=headed, platform=platform, **pin
             )
         except AuthoringError:
             plat = platform or sys.platform
-            if plat == "win32" or plat.startswith("win"):
+            asked_for_driver = any(pin.get(key) for key in pin)
+            if (plat == "win32" or plat.startswith("win")) and not asked_for_driver:
                 pinned, kind, close = None, "windows", None
             else:
                 raise
     kind = kind or "web"
     normalized = kind.strip().lower().replace("_", "-")
-    if normalized in {"remote-display", "citrix", "rdp", "windows", "win", "win-agent"}:
-        session = CoachOnlySession(
-            "citrix" if normalized == "citrix" else ("rdp" if normalized in {"rdp", "remote-display"} else "windows")
-        )
+    canonical = (
+        "citrix"
+        if normalized == "citrix"
+        else "rdp"
+        if normalized in {"rdp", "remote-display"}
+        else "windows"
+        if normalized in {"windows", "win", "win-agent"}
+        else kind
+    )
+    if pinned is None and canonical in _UNPINNED_COACH_KINDS:
+        # Nothing to drive: the person actuates until a target is pinned.
+        session = CoachOnlySession(canonical)
         if close is not None:
             session.close = close  # type: ignore[attr-defined]
         return session
+    if canonical in _SCREEN_ONLY_BACKENDS and pin.get("remote_window"):
+        hints = {"rdp_window": pin["remote_window"]}
+        if pin.get("remote_window_title"):
+            hints["rdp_window_title"] = pin["remote_window_title"]
+        kwargs.setdefault("backend_hints", hints)
+    kind = canonical
     opener = getattr(flow_authoring, "open_session", None)
     session_cls = getattr(flow_authoring, "AuthoringSession", None)
+    target = opener if callable(opener) else session_cls
+    if "backend_hints" in kwargs and not (
+        callable(target) and _accepts_keyword(target, "backend_hints")
+    ):
+        # An older Flow records the session without replay window hints.
+        kwargs.pop("backend_hints")
     try:
         if callable(opener):
             session = opener(
@@ -839,9 +977,22 @@ def _validate_observe_types(payload: dict[str, Any]) -> dict[str, Any]:
         model = AuthoringObserveV1.model_validate(payload)
         return json.loads(model.model_dump_json(exclude_none=True))
     except Exception:
+        if payload.get("backend") in _UNPINNED_COACH_KINDS and payload.get("coach_only") is False:
+            # openadapt-types before 0.22 rejects any Windows, RDP, or Citrix
+            # observation that isn't coach_only. Check everything else
+            # against the contract; if only that rule failed, keep the
+            # already-projected payload so a pinned driver can be used.
+            try:
+                AuthoringObserveV1.model_validate(
+                    {**payload, "coach_only": True, "agent_drive": False}
+                )
+            except Exception:
+                pass
+            else:
+                return payload
         backend = payload.get("backend") if payload.get("backend") in _T1_BACKENDS else "windows"
         provider = payload.get("provider") if payload.get("provider") in _T1_PROVIDERS else "none"
-        coach_only = backend in _COACH_ONLY_BACKENDS
+        coach_only = payload.get("coach_only") is True
         return _empty_observe(backend=backend, provider=provider, coach_only=coach_only)
 
 
@@ -872,6 +1023,9 @@ def project_observe(payload: Any) -> dict[str, Any]:
     if coach_only:
         agent_drive = False
     tree_in = source.get("tree")
+    if backend in _SCREEN_ONLY_BACKENDS:
+        # Remote sessions are pixels and keys; never project a tree for them.
+        tree_in = []
     nodes: list[dict[str, Any]] = []
     if isinstance(tree_in, list) and not coach_only:
         for item in tree_in:
@@ -1023,8 +1177,21 @@ def _session_code(exc: BaseException) -> Optional[str]:
 class AuthoringBridge:
     """Stdio authoring tool specs and dispatch over a session object."""
 
-    def __init__(self, session: object, *, out_dir: Optional[Path | str] = None):
+    def __init__(
+        self,
+        session: object,
+        *,
+        out_dir: Optional[Path | str] = None,
+        screens: str = "off",
+        scrubber_factory: Optional[Callable[[], Any]] = None,
+    ):
+        if screens not in AUTHORING_SCREEN_MODES:
+            raise AuthoringError(
+                f"screens must be one of {', '.join(AUTHORING_SCREEN_MODES)}"
+            )
         self.session = session
+        self._screens = screens
+        self._scrubber_factory = scrubber_factory
         self._out_dir = Path(out_dir) if out_dir is not None else None
         self._last_tool: Optional[str] = None
         self._last_result: Optional[dict[str, Any]] = None
@@ -1034,6 +1201,8 @@ class AuthoringBridge:
         self._compiled_workflow_id: Optional[str] = None
 
     def handles(self, name: str) -> bool:
+        if name == AUTHORING_SCREEN_TOOL:
+            return self._screens != "off"
         return name in AUTHORING_TOOLS
 
     def admit_confirmation_message(self) -> str:
@@ -1264,6 +1433,27 @@ class AuthoringBridge:
                 annotations=_READ_ONLY,
             ),
         ]
+        if self._screens != "off":
+            specs.append(
+                ToolSpec(
+                    name=AUTHORING_SCREEN_TOOL,
+                    description=(
+                        "Return the pinned window's current frame as a base64 "
+                        "PNG, in the pixel space click x,y uses. Use it to drive "
+                        "a native Windows app or an RDP or Citrix session, where "
+                        "observe has no tree. The operator turned this on at "
+                        "server start"
+                        + (
+                            "; frames are scrubbed of identifiers first, and none "
+                            "is returned if scrubbing fails."
+                            if self._screens == "scrubbed"
+                            else "; frames are not scrubbed."
+                        )
+                    ),
+                    input_schema=_EMPTY_OBJECT,
+                    annotations=_READ_ONLY,
+                )
+            )
         return specs
 
     def dispatch(
@@ -1279,6 +1469,9 @@ class AuthoringBridge:
         accepted a host-mediated confirmation (MCP form elicitation). Only
         ``admit`` reads it; nothing in ``arguments`` can stand in for it.
         """
+        if name == AUTHORING_SCREEN_TOOL and self._screens != "off":
+            _require_object(arguments, set())
+            return self._screen()
         if name not in AUTHORING_TOOLS:
             raise AuthoringError("unknown tool name")
         if name == "get_command_result":
@@ -1308,6 +1501,43 @@ class AuthoringBridge:
         self._last_result = result
         return result
 
+    def _screen(self) -> dict[str, Any]:
+        """The pinned frame, scrubbed unless the operator chose unscrubbed."""
+
+        import base64
+        import io
+
+        self._refuse_coach_only("screen")
+        grab = getattr(self.session, "screenshot", None)
+        if not callable(grab):
+            raise AuthoringError("this authoring session can't share its screen")
+        png = grab()
+        if not isinstance(png, (bytes, bytearray)) or not bytes(png).startswith(b"\x89PNG"):
+            raise AuthoringError("the pinned window returned no frame")
+        png = bytes(png)
+        scrubbed = False
+        if self._screens == "scrubbed":
+            from openadapt_agent.repair import default_scrubber, scrub_png
+
+            try:
+                png, _evidence = scrub_png(png, self._scrubber_factory or default_scrubber)
+            except Exception:
+                _LOG.exception("authoring screen scrubbing failed; nothing shared")
+                raise AuthoringError(
+                    "the screen could not be scrubbed, so no screen was shared"
+                ) from None
+            scrubbed = True
+        from PIL import Image
+
+        with Image.open(io.BytesIO(png)) as image:
+            width, height = image.size
+        return {
+            "scrubbed": scrubbed,
+            "width": int(width),
+            "height": int(height),
+            "screen_png_base64": base64.b64encode(png).decode("ascii"),
+        }
+
     def _last_command_result(self) -> dict[str, Any]:
         if self._last_result is None:
             return {
@@ -1332,8 +1562,8 @@ class AuthoringBridge:
         if code == "COACH_ONLY" or type(exc).__name__ == "CoachOnlyError":
             self._coach_only = True
             raise AuthoringError(
-                "refused: COACH_ONLY (person actuates; this backend is "
-                "not agent-drive in v1)",
+                f"refused: COACH_ONLY (nothing is pinned for the agent to "
+                f"drive, so a person actuates). {_PIN_HINT}",
                 code="COACH_ONLY",
             ) from exc
         if isinstance(exc, AuthoringError):
@@ -1398,8 +1628,8 @@ class AuthoringBridge:
     def _refuse_coach_only(self, tool: str) -> None:
         if self._coach_only:
             raise AuthoringError(
-                f"{tool} refused: COACH_ONLY (person actuates; this backend is "
-                "not agent-drive in v1)",
+                f"{tool} refused: COACH_ONLY (nothing is pinned for the agent "
+                f"to drive, so a person actuates). {_PIN_HINT}",
                 code="COACH_ONLY",
             )
 
@@ -1412,8 +1642,8 @@ class AuthoringBridge:
         ):
             self._coach_only = True
             raise AuthoringError(
-                "start_record refused: COACH_ONLY (person actuates; this backend "
-                "is not agent-drive in v1)",
+                f"start_record refused: COACH_ONLY (nothing is pinned for the "
+                f"agent to drive, so a person actuates). {_PIN_HINT}",
                 code="COACH_ONLY",
             )
         result = _public_result(raw)
@@ -1456,8 +1686,8 @@ class AuthoringBridge:
             if raw.get("error") == "stale_node" or raw.get("status") == "stale_node":
                 return {"status": "error", "error": "stale_node"}
             raise AuthoringError(
-                "click refused: COACH_ONLY (person actuates; this backend is "
-                "not agent-drive in v1)",
+                f"click refused: COACH_ONLY (nothing is pinned for the agent "
+                f"to drive, so a person actuates). {_PIN_HINT}",
                 code="COACH_ONLY",
             )
         result = _public_result(raw)
@@ -1465,8 +1695,8 @@ class AuthoringBridge:
             return {"status": "error", "error": "stale_node"}
         if result.get("error") == "COACH_ONLY":
             raise AuthoringError(
-                "click refused: COACH_ONLY (person actuates; this backend is "
-                "not agent-drive in v1)",
+                f"click refused: COACH_ONLY (nothing is pinned for the agent "
+                f"to drive, so a person actuates). {_PIN_HINT}",
                 code="COACH_ONLY",
             )
         result.setdefault("status", "ok")

@@ -100,6 +100,50 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--windows-agent-url",
+        metavar="URL",
+        help=(
+            "With --authoring: drive a native Windows app through the Flow "
+            "Windows agent server you started on this computer (for example "
+            "http://localhost:5001). "
+            "The agent's input goes through the same synthetic-input path "
+            "replay uses. The token comes from OAFLOW_AGENT_TOKEN."
+        ),
+    )
+    p.add_argument(
+        "--remote-window",
+        metavar="APP",
+        help=(
+            "With --authoring: drive the RDP or Citrix session shown in this "
+            "local client window (app name, for example 'Microsoft Remote "
+            "Desktop'). Screen-only: the agent clicks pixels and presses keys."
+        ),
+    )
+    p.add_argument(
+        "--remote-window-title",
+        metavar="TITLE",
+        help="With --remote-window or --citrix: pick one window by its title.",
+    )
+    p.add_argument(
+        "--citrix",
+        action="store_true",
+        help=(
+            "With --authoring: drive the local Citrix Workspace window "
+            "(--remote-window overrides the app name). Screen-only."
+        ),
+    )
+    p.add_argument(
+        "--authoring-screens",
+        choices=("off", "scrubbed", "unscrubbed"),
+        default="off",
+        help=(
+            "With --authoring: let the agent see the pinned window through the "
+            "screen tool, so it can drive a native Windows app or a remote "
+            "session from pixels. scrubbed removes identifiers first and "
+            "shares nothing if that fails. Default off."
+        ),
+    )
+    p.add_argument(
         "--tutorial",
         action="store_true",
         help=(
@@ -419,6 +463,20 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     from openadapt_agent.runner import default_flow_cli
     from openadapt_agent.tutorial import TutorialError
 
+    desktop_pin = bool(
+        args.windows_agent_url
+        or args.remote_window
+        or args.remote_window_title
+        or args.citrix
+        or args.authoring_screens != "off"
+    )
+    if desktop_pin and not args.authoring:
+        print(
+            "serve: --windows-agent-url, --remote-window, --remote-window-title, "
+            "--citrix, and --authoring-screens need --authoring",
+            file=sys.stderr,
+        )
+        return 2
     if args.authoring and args.tutorial:
         print("serve: --authoring cannot be combined with --tutorial", file=sys.stderr)
         return 2
@@ -515,8 +573,14 @@ def _cmd_serve(args: argparse.Namespace) -> int:
                         out_dir=authoring_dir,
                         url=args.url,
                         headed=args.headed,
+                        windows_agent_url=args.windows_agent_url,
+                        windows_agent_token=os.environ.get("OAFLOW_AGENT_TOKEN") or None,
+                        remote_window=args.remote_window,
+                        remote_window_title=args.remote_window_title,
+                        citrix=args.citrix,
                     ),
                     out_dir=authoring_dir,
+                    screens=args.authoring_screens,
                 )
             except AuthoringError as exc:
                 print(f"serve: {exc}", file=sys.stderr)

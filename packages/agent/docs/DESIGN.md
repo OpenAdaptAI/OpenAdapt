@@ -246,7 +246,7 @@ server. Probe names match hosted MCP: `observe`, `start_record`,
 | Tool | Group | What it does |
 | --- | --- | --- |
 | `observe` | probe | Returns a PHI-safe tree of the pinned window: no values, titles, URLs, screenshots, or pixels. |
-| `start_record` | probe | Starts a Flow Recorder session. Refused for Windows native, Citrix, and RDP, which are coach-only. |
+| `start_record` | probe | Starts a Flow Recorder session over the pinned target: a browser, a macOS or Linux window, a native Windows app (`--windows-agent-url`), or an RDP or Citrix client window (`--remote-window`, `--citrix`). Refused only when nothing is pinned. |
 | `click` | probe | Clicks one observed node. Local stdio also accepts x,y pixels. |
 | `halt` | probe | Ends the authoring session without compiling. It isn't a governed run halt. |
 | `type` | local | Types text the agent supplies through `Recorder.type_text`. Not for secrets or for text a person typed. |
@@ -259,6 +259,12 @@ server. Probe names match hosted MCP: `observe`, `start_record`,
 | `set_coach` | local | Stores a PHI-safe coach hint of up to 80 characters in this process. |
 | `get_coach` | local | Returns the last coach hint. |
 | `bind_status` | local | Reports local bind status. A stdio server is already on the machine, so there's no pack mailbox. |
+
+The operator can add one more tool, `screen`, by starting the server with
+`--authoring-screens scrubbed` or `unscrubbed`. It returns the pinned frame
+as a base64 PNG in the pixels `click` takes, so the agent can drive a native
+Windows app or an RDP or Citrix session. `scrubbed` shares nothing when
+scrubbing fails. It's off by default.
 
 Hosted MCP remains pause-only: it has no `type`. Human
 type during `pause_for_input` is persisted with `Recorder.record_observed`
@@ -279,13 +285,20 @@ yet.
 
 Observe is a fail-closed PHI projection (`openadapt.authoring.observe/v1`):
 no `value`, `text`, window `title`, screenshot, OCR, URL, or backend
-pixels. Windows native, Citrix, and RDP are `COACH_ONLY` in v1.
+pixels. RDP and Citrix are screen-only: observe has no tree, and the agent
+clicks pixels. Native Windows has no tree yet either; the Recorder still
+stores each click's UI Automation locator when the Windows agent server
+reports one.
 
 The session object is Flow's public `openadapt_flow.authoring` module
 (`AuthoringSession(backend, out_dir, backend_kind=…)` when F1 is
 importable). Until that module is importable, `serve --authoring` fails
-closed with an explicit dependency error. Windows native, Citrix, and
-RDP construct a coach-only stand-in and never spawn `win_agent`. Observe
+closed with an explicit dependency error. Native Windows pins Flow's
+`WindowsBackend` against a Windows agent server the operator already
+started; RDP and Citrix pin the local client window. Both go through
+Flow's `build_backend`, the factory replay uses, and this package never
+starts the Windows agent server. With nothing pinned on Windows, the
+session is a coach-only stand-in. Observe
 is fail-closed to the T1 wire (`additionalProperties: false`, node ids
 `n_` + 8 hex, 200 nodes / 32 KiB). Capture's projector is used when
 importable. If Desktop has advertised authoring IPC, overlay stays

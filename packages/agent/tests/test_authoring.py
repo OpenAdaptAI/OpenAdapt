@@ -36,7 +36,7 @@ class FakeAuthoringSession:
         secret_pause_without_type: bool = False,
     ):
         self.backend = backend
-        self.coach_only = coach_only or backend in {"windows", "rdp", "citrix"}
+        self.coach_only = coach_only
         self.secret_pause_without_type = secret_pause_without_type
         self.calls: list = []
         self.typed_via_backend: list[str] = []
@@ -379,8 +379,21 @@ def test_admit_fails_closed_without_session_admit():
     assert "Production" in message
 
 
-def test_windows_native_is_coach_only():
-    session = FakeAuthoringSession(backend="windows")
+def test_pinned_windows_and_remote_sessions_drive():
+    for backend in ("windows", "rdp", "citrix"):
+        bridge = AuthoringBridge(FakeAuthoringSession(backend=backend))
+        observed = bridge.dispatch("observe", {})
+        assert observed["coach_only"] is False
+        assert observed["agent_drive"] is True
+        if backend in ("rdp", "citrix"):
+            # Screen-only: a remote session never projects a tree.
+            assert observed["tree"] == []
+        assert bridge.dispatch("start_record", {})["status"] == "recording"
+        assert bridge.dispatch("click", {"x": 10, "y": 20})["status"] == "ok"
+
+
+def test_unpinned_windows_is_coach_only():
+    session = FakeAuthoringSession(backend="windows", coach_only=True)
     bridge = AuthoringBridge(session)
     observed = bridge.dispatch("observe", {})
     assert observed["coach_only"] is True
@@ -823,10 +836,10 @@ def test_open_authoring_session_uses_f1_constructor_when_present(monkeypatch, tm
     assert captured["out_dir"] == tmp_path
 
 
-def test_open_authoring_session_windows_never_constructs_flow_session(monkeypatch, tmp_path):
+def test_open_authoring_session_windows_without_backend_is_coach_only(monkeypatch, tmp_path):
     class Session:
         def __init__(self, *args, **kwargs):
-            raise AssertionError("must not construct AuthoringSession for windows")
+            raise AssertionError("nothing is pinned, so no Flow session")
 
     import types
     import sys
@@ -836,11 +849,33 @@ def test_open_authoring_session_windows_never_constructs_flow_session(monkeypatc
     fake_authoring.AuthoringSession = Session
     monkeypatch.setitem(sys.modules, "openadapt_flow", fake_flow)
     monkeypatch.setitem(sys.modules, "openadapt_flow.authoring", fake_authoring)
-    session = open_authoring_session(
-        out_dir=tmp_path, backend=object(), backend_kind="windows"
-    )
+    session = open_authoring_session(out_dir=tmp_path, platform="win32")
     assert isinstance(session, CoachOnlySession)
     assert session.backend_kind == "windows"
+
+
+def test_open_authoring_session_windows_backend_constructs_flow_session(monkeypatch, tmp_path):
+    captured = {}
+
+    class Session:
+        def __init__(self, backend, out_dir, *, backend_kind, app_url=None):
+            captured["backend"] = backend
+            captured["backend_kind"] = backend_kind
+
+    import types
+    import sys
+
+    fake_flow = types.ModuleType("openadapt_flow")
+    fake_authoring = types.ModuleType("openadapt_flow.authoring")
+    fake_authoring.AuthoringSession = Session
+    monkeypatch.setitem(sys.modules, "openadapt_flow", fake_flow)
+    monkeypatch.setitem(sys.modules, "openadapt_flow.authoring", fake_authoring)
+    pinned = object()
+    session = open_authoring_session(
+        out_dir=tmp_path, backend=pinned, backend_kind="windows"
+    )
+    assert isinstance(session, Session)
+    assert captured == {"backend": pinned, "backend_kind": "windows"}
 
 
 def test_open_authoring_session_maps_f1_coach_only_error(monkeypatch, tmp_path):

@@ -49,7 +49,7 @@ Flow `AuthoringSession` / `Recorder` is the actuation engine when importable. Ov
 - Pause: print `Sign in in the app, then press Enter`. Do not ask for a password. Do not `type_text` the secret.
 - Continue → `record_observed` on the pause-target node.
 - `--url` pins Playwright Chromium with **empty cookies**. No debug-port attach. It needs `--headed` so the person can sign in in that window. Without `--headed`, or when the browser can't open, the command stops before it claims the runner link, so the same link still works.
-- Unique-window fail-closed: macOS / Linux without a unique frontmost title is coach-only. Windows native / Citrix / RDP are coach-only. Never spawn `win_agent`.
+- Unique-window fail-closed: macOS / Linux without a unique frontmost title is coach-only. In this hosted mailbox client, Windows native / Citrix / RDP stay coach-only, because hosted clicks are `node_id` only and those surfaces have no tree. Never spawn `win_agent`. A local agent drives them through `serve --authoring` (see the README).
 - Allow-per-`sub` before observe / click / halt.
 - GET handshake is not actuation (the CLI does not GET the pack page to click).
 - Uncertain delivery: no blind retry (`RECONCILIATION_REQUIRED`).
