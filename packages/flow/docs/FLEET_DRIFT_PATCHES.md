@@ -409,7 +409,7 @@ who added it and when. A missing file means both lists are empty.
 | `allow --export\|--import --app-family F\|--domain D --admin NAME` | Adds an allowlist entry |
 | `disallow ...` | Removes one |
 | `roles --author ID` / `roles --approver ID --public-key KEY` | Registers a workflow author or a policy approver; refuses a person in both roles |
-| `policy keygen --out FILE` | Writes an approver key (PEM, mode 0600) and prints its public key |
+| `policy keygen --out FILE [--unencrypted]` | Writes an approver key (PEM, mode 0600) and prints its public key. The key is encrypted with the passphrase in `OPENADAPT_FLEET_KEY_PASSPHRASE`; with no passphrase it refuses unless `--unencrypted` is given. `policy sign` reads the same variable to open the key |
 | `policy sign --draft FILE --key FILE --approver-id ... --approver-name ... --approver-title ... --security-official-name ... --security-official-title ... --attest-security-official` | Signs a draft policy; refuses without the attestation flag or if the signer is not a registered approver |
 | `policy verify [--policy FILE]` | Verifies the signed policy against the role registry |
 | `simulate --out DIR` | Runs the simulator |

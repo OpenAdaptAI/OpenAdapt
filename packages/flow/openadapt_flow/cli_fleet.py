@@ -20,6 +20,7 @@ import os
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
+from typing import Optional
 
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
@@ -132,8 +133,28 @@ def _cmd_allow(args: argparse.Namespace, *, allow: bool) -> int:
     return 0
 
 
+#: Passphrase for the policy approver key. Read from the environment, as
+#: ``OPENADAPT_BUNDLE_KEY`` is for bundles, so it stays out of shell history.
+KEY_PASSPHRASE_ENV = "OPENADAPT_FLEET_KEY_PASSPHRASE"
+
+
+def _passphrase() -> Optional[bytes]:
+    value = os.environ.get(KEY_PASSPHRASE_ENV)
+    return value.encode("utf-8") if value else None
+
+
 def _load_private_key(path: str) -> SoftwareKeyCustody:
-    key = serialization.load_pem_private_key(Path(path).read_bytes(), password=None)
+    data = Path(path).read_bytes()
+    try:
+        key = serialization.load_pem_private_key(data, password=_passphrase())
+    except TypeError as exc:
+        # Encrypted without a passphrase, or a passphrase for a plain key.
+        raise SystemExit(
+            f"refused: cannot open {path}: {exc}. Set {KEY_PASSPHRASE_ENV} to "
+            "the key's passphrase (only for an encrypted key)."
+        ) from exc
+    except ValueError as exc:
+        raise SystemExit(f"refused: cannot open {path}: wrong passphrase?") from exc
     if not isinstance(key, Ed25519PrivateKey):
         raise SystemExit("the policy key must be an Ed25519 private key")
     return SoftwareKeyCustody(key)
@@ -143,11 +164,22 @@ def _cmd_keygen(args: argparse.Namespace) -> int:
     out = Path(args.out)
     if out.exists():
         raise SystemExit(f"{out} exists; refusing to overwrite a key")
+    passphrase = _passphrase()
+    if passphrase is None and not args.unencrypted:
+        raise SystemExit(
+            f"refused: set {KEY_PASSPHRASE_ENV} to encrypt the key, or pass "
+            "--unencrypted to write it in the clear (mode 0600)"
+        )
+    encryption: serialization.KeySerializationEncryption = (
+        serialization.BestAvailableEncryption(passphrase)
+        if passphrase is not None
+        else serialization.NoEncryption()
+    )
     key = Ed25519PrivateKey.generate()
     pem = key.private_bytes(
         serialization.Encoding.PEM,
         serialization.PrivateFormat.PKCS8,
-        serialization.NoEncryption(),
+        encryption,
     )
     out.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(out, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
@@ -305,6 +337,14 @@ def register_fleet_parser(sub: argparse._SubParsersAction) -> None:
     psub = policy.add_subparsers(dest="policy_cmd", required=True)
     keygen = psub.add_parser("keygen", help="Create a policy approver key (PEM, 0600)")
     keygen.add_argument("--out", required=True)
+    keygen.add_argument(
+        "--unencrypted",
+        action="store_true",
+        help=(
+            "write the key without a passphrase; otherwise set "
+            "OPENADAPT_FLEET_KEY_PASSPHRASE"
+        ),
+    )
     sign = psub.add_parser("sign", help="Sign a policy draft as a policy approver")
     sign.add_argument(
         "--draft", required=True, help="JSON with auto_promote, app_families, ..."

@@ -1655,8 +1655,10 @@ def test_qualification_case_ids_stay_local():
     assert "jane" not in _label(case).lower()
 
 
-def test_fleet_cli_opt_in_roles_and_policy(tmp_path, capsys):
+def test_fleet_cli_opt_in_roles_and_policy(tmp_path, capsys, monkeypatch):
     from openadapt_flow.__main__ import main
+
+    monkeypatch.setenv("OPENADAPT_FLEET_KEY_PASSPHRASE", "correct horse battery")
 
     fleet_dir = str(tmp_path / "fleet")
     run = lambda *argv: main(["fleet", "--fleet-dir", fleet_dir, *argv])  # noqa: E731
@@ -1706,3 +1708,59 @@ def test_fleet_cli_opt_in_roles_and_policy(tmp_path, capsys):
     capsys.readouterr()
     assert run("policy", "verify") == 0
     assert "approved by Pat Lee (CMIO)" in capsys.readouterr().out
+
+
+def test_policy_keygen_encrypts_or_refuses(tmp_path, capsys, monkeypatch):
+    from cryptography.hazmat.primitives import serialization
+
+    from openadapt_flow.__main__ import main
+    from openadapt_flow.fleet.signing import public_key_b64
+
+    fleet_dir = str(tmp_path / "fleet")
+    run = lambda *argv: main(["fleet", "--fleet-dir", fleet_dir, *argv])  # noqa: E731
+    monkeypatch.delenv("OPENADAPT_FLEET_KEY_PASSPHRASE", raising=False)
+
+    # No passphrase and no --unencrypted: nothing is written.
+    plain = tmp_path / "refused.pem"
+    with pytest.raises(SystemExit, match="unencrypted"):
+        run("policy", "keygen", "--out", str(plain))
+    assert not plain.exists()
+
+    # With a passphrase the key file is encrypted and unreadable without it.
+    monkeypatch.setenv("OPENADAPT_FLEET_KEY_PASSPHRASE", "correct horse battery")
+    encrypted = tmp_path / "approver.pem"
+    assert run("policy", "keygen", "--out", str(encrypted)) == 0
+    public = capsys.readouterr().out.strip().splitlines()[-1]
+    data = encrypted.read_bytes()
+    assert b"BEGIN ENCRYPTED PRIVATE KEY" in data
+    assert oct(encrypted.stat().st_mode & 0o777) == "0o600"
+    with pytest.raises(TypeError):
+        serialization.load_pem_private_key(data, password=None)
+    loaded = serialization.load_pem_private_key(data, password=b"correct horse battery")
+    assert public_key_b64(loaded) == public
+
+    # Signing opens the key with the passphrase, and refuses a wrong one.
+    assert run("roles", "--approver", "pat", "--public-key", public) == 0
+    draft = tmp_path / "draft.json"
+    draft.write_text(json.dumps({"auto_promote": False, "app_families": []}))
+    sign = [
+        "policy", "sign", "--draft", str(draft), "--key", str(encrypted),
+        "--approver-id", "pat", "--approver-name", "Pat Lee",
+        "--approver-title", "CMIO", "--security-official-name", "Sam Roe",
+        "--security-official-title", "HIPAA Security Official",
+        "--attest-security-official",
+    ]  # fmt: skip
+    monkeypatch.setenv("OPENADAPT_FLEET_KEY_PASSPHRASE", "wrong")
+    with pytest.raises(SystemExit, match="passphrase"):
+        run(*sign)
+    monkeypatch.delenv("OPENADAPT_FLEET_KEY_PASSPHRASE")
+    with pytest.raises(SystemExit, match="passphrase"):
+        run(*sign)
+    monkeypatch.setenv("OPENADAPT_FLEET_KEY_PASSPHRASE", "correct horse battery")
+    assert run(*sign) == 0
+
+    # --unencrypted is the explicit opt-out.
+    monkeypatch.delenv("OPENADAPT_FLEET_KEY_PASSPHRASE")
+    clear = tmp_path / "clear.pem"
+    assert run("policy", "keygen", "--out", str(clear), "--unencrypted") == 0
+    assert b"BEGIN PRIVATE KEY" in clear.read_bytes()
