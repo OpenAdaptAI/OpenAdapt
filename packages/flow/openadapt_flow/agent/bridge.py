@@ -37,6 +37,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
+from openadapt_flow.agent import delegated
 from openadapt_flow.agent.approval import report_approval
 from openadapt_flow.agent.attended import (
     ATTENDED_TOOLS,
@@ -351,7 +352,85 @@ class AgentBridge:
             )
         )
         specs.extend(self._repair_specs())
+        specs.extend(self._approval_specs())
         return specs
+
+    def _delegate_id(self) -> Optional[str]:
+        if not self.allow_run or self.sandbox is not None:
+            return None
+        return self.runner_config.delegate_approver_id
+
+    def _approval_specs(self) -> list[ToolSpec]:
+        """``get_approval_mode`` always; the answer tools only when the
+        operator started the server with ``--delegate-approvals``."""
+        if not self.allow_run or self.sandbox is not None:
+            return []
+        specs = [
+            ToolSpec(
+                name="get_approval_mode",
+                description=delegated.GET_MODE_DESCRIPTION,
+                input_schema={"type": "object", "properties": {}, "additionalProperties": False},
+                annotations=_READ_ONLY_ANNOTATIONS,
+            )
+        ]
+        if self._delegate_id() is None:
+            return specs
+        list_schema = delegated.list_schema()
+        answer_schema = delegated.answer_schema()
+        for schema in (list_schema, answer_schema):
+            schema["properties"]["run_id"]["pattern"] = _RUN_ID_PATTERN
+        specs += [
+            ToolSpec(
+                name="list_approval_requests",
+                description=delegated.LIST_DESCRIPTION,
+                input_schema=list_schema,
+                annotations=_READ_ONLY_ANNOTATIONS,
+            ),
+            ToolSpec(
+                name="answer_approval_request",
+                description=delegated.ANSWER_DESCRIPTION,
+                input_schema=answer_schema,
+                annotations={
+                    "readOnlyHint": False,
+                    "destructiveHint": True,
+                    "idempotentHint": True,
+                    "openWorldHint": True,
+                },
+            ),
+        ]
+        return specs
+
+    def _safe_run_dir(self, run_id: str) -> Path:
+        if not run_id or not is_safe_run_id(run_id):
+            raise BridgeError("run_id must be a single path component")
+        runs_candidate = Path(self.runner_config.runs_dir)
+        run_candidate = runs_candidate / run_id
+        if runs_candidate.is_symlink() or run_candidate.is_symlink():
+            raise BridgeError("the configured run evidence boundary is unavailable")
+        run_dir = run_candidate.resolve()
+        if runs_candidate.resolve() not in run_dir.parents or not run_dir.is_dir():
+            raise BridgeError("no such run in the server's runs directory")
+        return run_dir
+
+    def _approval_dispatch(self, name: str, arguments: dict) -> dict:
+        if name == "get_approval_mode":
+            return delegated.mode_view(self.runner_config.approval_mode, self._delegate_id())
+        delegate_id = self._delegate_id()
+        if delegate_id is None:
+            raise BridgeError(
+                "this agent can't answer approvals: the operator didn't start the "
+                "server with --delegate-approvals"
+            )
+        run_dir = self._safe_run_dir(str(arguments.get("run_id", "")))
+        if name == "list_approval_requests":
+            return delegated.project_requests(self.runner.item_approval("show", run_dir, []))
+        try:
+            verb, args = delegated.answer_args(arguments, delegate_id)
+        except delegated.DelegationRefused as exc:
+            raise BridgeError(str(exc)) from exc
+        result = self.runner.item_approval(verb, run_dir, args)
+        allowed = ("ok", "code", "message", "request_id", "decision", "answer_sha256")
+        return {k: result[k] for k in allowed if k in result}
 
     def _repair_tools_enabled(self) -> bool:
         from openadapt_flow.agent.repair import teach_supported
@@ -592,6 +671,10 @@ class AgentBridge:
                 )
             except ServiceError as exc:
                 raise BridgeError(str(exc)) from exc
+        if name in ("get_approval_mode", "list_approval_requests", "answer_approval_request"):
+            if not any(spec.name == name for spec in self._approval_specs()):
+                raise BridgeError("unknown tool name")
+            return self._approval_dispatch(name, arguments)
         if name in ("get_repair_screen", "teach_repair"):
             if not self._repair_tools_enabled():
                 raise BridgeError("repair tools are off on this server")

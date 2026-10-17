@@ -243,6 +243,20 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--delegate-approvals",
+        default=None,
+        metavar="AGENT_ID",
+        help=(
+            "Let the calling agent answer saves that wait for an approval, as "
+            "the opaque id AGENT_ID (for example agent:intake-bot). Adds the "
+            "list_approval_requests and answer_approval_request tools. Flow "
+            "accepts the agent's answer only where the run's approver policy "
+            "(openadapt-flow run --approver-policy) allows an agent for that "
+            "step; by default only a person may answer. Flow records the agent "
+            "as the approver."
+        ),
+    )
+    p.add_argument(
         "--allow-url-override",
         action="store_true",
         help=(
@@ -538,6 +552,25 @@ def _cmd_serve(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 2
+    if args.delegate_approvals is not None:
+        import re as _re
+
+        from openadapt_flow.agent.delegated import DELEGATE_ID_PATTERN
+
+        if mode not in {"production", "attended"}:
+            print(
+                "serve: --delegate-approvals needs --mode production or --mode "
+                "attended with --bundles",
+                file=sys.stderr,
+            )
+            return 2
+        if not _re.match(DELEGATE_ID_PATTERN, args.delegate_approvals):
+            print(
+                "serve: --delegate-approvals needs an opaque id such as "
+                "agent:intake-bot, never a name or email",
+                file=sys.stderr,
+            )
+            return 2
     if args.allow_synthetic_recorded_defaults and not (args.allow_run and args.bundles):
         print(
             "serve: --allow-synthetic-recorded-defaults requires --allow-run",
@@ -664,6 +697,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
             allow_url_override=args.allow_url_override,
             extra_run_args=tuple(extra_run_args),
             approval_mode=args.approval_mode,
+            delegate_approver_id=args.delegate_approvals,
             hold_on_halt_s=(
                 max(0.0, min(args.hold_on_halt, 1800.0)) if args.repair_access else 0.0
             ),
