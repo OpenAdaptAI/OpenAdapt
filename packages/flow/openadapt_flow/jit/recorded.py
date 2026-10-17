@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import Any, ClassVar
 
 from openadapt_flow.jit.adapters import DIALECTS, CaptureComputer
 from openadapt_flow.jit.compile_agent import TaskRequest
@@ -33,6 +33,8 @@ class RecordedTrajectoryAgent:
     actions: list[dict[str, Any]]
     #: How many times :meth:`run` was called.
     calls: int = field(default=0)
+    #: A recorded trajectory calls no model, so it needs no model key.
+    requires_model_key: ClassVar[bool] = False
 
     def __post_init__(self) -> None:
         if self.dialect not in DIALECTS:

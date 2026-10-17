@@ -2,13 +2,15 @@
 
 `openadapt_flow.jit` wraps a computer-use agent, such as Claude or OpenAI
 computer use. The first run of a task lets the agent do it while Flow records
-every action. Flow compiles the recording into a candidate program, and a
-person admits it. Later runs execute the admitted program: no model calls, and
-each save is read back from the system of record before the run reports
-`VERIFIED`.
+every action. Flow compiles the recording into a DRAFT program. A named
+person reviews it, watches it run once as a canary, and admits it. Later runs
+execute the admitted program: no model calls, and each save is read back from
+the system of record before the run reports `VERIFIED`.
 
 ```python
-from openadapt_flow.jit import TaskSignature, WebApp, compile_agent
+from openadapt_flow.jit import (
+    TaskSignature, WebApp, compile_agent, load_customer_model_key,
+)
 from openadapt_flow.runtime.effects import RestRecordVerifier
 
 jit = compile_agent(
@@ -22,12 +24,20 @@ jit = compile_agent(
     verifier=RestRecordVerifier("https://emr.example", records_path="/api/records"),
     policy="clinical-write",
     cache_dir="jit-cache",
+    model_key=load_customer_model_key("anthropic"),  # your key, not OpenAdapt's
 )
 
-first = jit.run(note="Follow up in two weeks")   # status: needs_human_admit
-jit.admit(accept_params=["note"], confirm="ok")   # a person, after review
+first = jit.run(note="Follow up in two weeks")   # status: needs_human_admit (DRAFT)
+steps = [s["id"] for s in jit.status()["steps"]]
+jit.review(principal_id="dana@clinic.example", reviewed_steps=steps,
+           accept_params=["note"], confirm="ok")
+jit.canary(principal_id="dana@clinic.example", note="Canary test note")
+jit.admit(principal_id="dana@clinic.example", confirm="ok")
 later = jit.run(note="Recheck knee in ten days")  # status: VERIFIED, model_calls: 0
 ```
+
+[JIT_ADMISSION.md](JIT_ADMISSION.md) describes the DRAFT to ADMITTED steps,
+the customer model key, and the warning shown before recording.
 
 To try it with no model and no setup, run the example. It uses a recorded
 Claude computer-use trajectory against the bundled MockMed app:
@@ -40,10 +50,11 @@ python examples/jit/run_mockmed.py
 
 | State of the task | `run(**params)` does | `status` |
 | --- | --- | --- |
-| Nothing cached | Runs the agent once, records it, compiles a candidate | `needs_human_admit` |
-| A candidate is waiting | Nothing. The agent is not run again | `needs_human_admit` |
-| A program is admitted | Runs the program under the standard profile and reads the save back | `VERIFIED`, or `HALTED` and others |
-| The admitted bundle changed | Nothing | `refused` |
+| Nothing cached | Shows the recording warning, runs the agent once, records it, compiles a DRAFT | `needs_human_admit` |
+| A DRAFT is waiting | Nothing. The agent is not run again, and the draft does not run | `needs_human_admit` |
+| A program is admitted | Checks the signed admission, runs the program under the standard profile, and reads the save back | `VERIFIED`, or `HALTED` and others |
+| The admitted bundle or its manifest changed | Nothing | `refused` |
+| The replay called a model | Sends the run to the inbox | `needs_review` |
 
 A run that does not end `VERIFIED` is written to the exception inbox
 (`<cache_dir>/inbox/`), passed to `on_halt` if you gave one, and returned. The
@@ -82,9 +93,28 @@ class ClaudeAgent:
             messages.append({"role": "user", "content": results})
 ```
 
+Create `client` with `request.model_key.secret()`, the customer key you
+passed to `compile_agent`. An agent that calls a model is not recorded
+without one. An agent that calls no model sets `requires_model_key = False`.
+
 This sketch is not shipped or tested. The tests and the example use
 `openadapt_flow.jit.recorded.RecordedTrajectoryAgent`, which replays a saved
 trajectory and refuses a request with other inputs.
+
+### Your own loop
+
+To keep the loop in your own code, leave out the agent and use
+`recording()` as a context manager:
+
+```python
+jit = compile_agent(task=..., app=..., verifier=..., policy="clinical-write",
+                    dialect="anthropic", model_key=load_customer_model_key("anthropic"))
+with jit.recording(note="Follow up in two weeks") as rec:
+    my_cua_loop(rec.request.instruction, rec.computer.execute)
+print(rec.result.status)  # needs_human_admit, unsupported, or capture_failed
+```
+
+An `UnsupportedAction` raised in the block ends the capture with no draft.
 
 ## Action formats
 
@@ -97,9 +127,15 @@ action has no faithful step in the recording format, `execute` raises
 
 | Dialect | Actions mapped | Actions refused |
 | --- | --- | --- |
+| `generic`: Flow's own steps, `{"kind": "click", "x": 10, "y": 20}` | `click`, `double_click`, `right_click` (at a point, a CSS `target`, or the pointer), `drag`, `type`, `press`, `hotkey`, `scroll`, `wait`, `observe` | Any other kind, and any field the kind does not take |
 | `anthropic`: the `input` of a `computer` tool call | `left_click`, `right_click`, `double_click`, `left_click_drag`, `type`, `key` (xdotool names and chords), `scroll`, `wait`, `screenshot`, `zoom`, `cursor_position` | `triple_click`, `middle_click`, `left_mouse_down`, `left_mouse_up`, `hold_key`, a click with held keys |
 | `openai`: a Responses `computer_call` (`actions` or `action`) | `click` (left, right), `double_click`, `drag` with two points, `keypress` (one key plus modifiers), `type`, `scroll`, `wait`, `screenshot` | `wheel`, `back` and `forward` buttons, held `keys`, a drag path with more than two points, a key sequence |
 | `playwright_mcp`: `{"name": ..., "arguments": ...}` | `browser_click` and `browser_type` with a unique CSS selector, `browser_press_key`, `browser_mouse_click_xy`, `browser_mouse_drag_xy`, `browser_mouse_wheel`, read-only tools | Snapshot refs such as `e12`, `browser_select_option`, `browser_fill_form`, `browser_evaluate`, tabs, uploads, dialogs, navigating away, and every other tool |
+
+Use `generic` when your loop already maps its model's actions itself. To add
+a format, pass a translator to `register_dialect(name, translator)`. It maps
+one native action to a list of `Op` and raises `UnsupportedAction` for
+anything it can't map exactly. The built-in names can't be replaced.
 
 Some mappings have conditions:
 
@@ -145,17 +181,24 @@ for the new value. `accept_params` must name exactly the task's parameters.
 
 ## Admission
 
-The candidate never admits itself, and `run` never calls `admit`. A person
-calls `admit`, which refuses unless:
+A draft is admitted in three calls, each by a named person, and only in this
+order: `review`, `canary`, `admit`. `run` never calls any of them, and a
+draft never runs unattended. [JIT_ADMISSION.md](JIT_ADMISSION.md) lists what
+each step checks. The admission manifest (`admission.json` in the bundle) is
+signed with a local Ed25519 key and pins the bundle's content digest. A run
+checks the signature and the digest, and the run gate pins the digest, so a
+bundle or manifest edited after admission is refused.
 
-- the program's parameters are the task's parameters;
-- the effect contract the demonstration proposed is bound to an observed
-  system-of-record delta (no placeholder effect);
-- the program passes the policy you named.
+`review`, `admit`, `reject` and `status` are also on the command line:
 
-The admission record (`admit.json` in the bundle) names the operator, the
-policy, the effects, and the bundle's content digest. A run checks that digest
-and the run gate pins it, so a bundle edited after admission is refused.
+```bash
+openadapt-flow jit status jit-cache/<task key>
+openadapt-flow jit review jit-cache/<task key> --principal dana@clinic.example \
+    --accept-param note --all-steps-shown
+openadapt-flow jit admit jit-cache/<task key> --principal dana@clinic.example
+```
+
+The canary needs the app and the verifier, so it runs from Python only.
 
 ## Files
 
@@ -165,15 +208,19 @@ and the run gate pins it, so a bundle edited after admission is refused.
     program/
       recording/            the agent's run as recorded
       recording-distilled/  what was compiled
-      bundle/               the program; admit.json after admission
-      candidate.json        what the reviewer sees
+      bundle/               the program; admission.json after admission
+      candidate.json        what the reviewer sees; state DRAFT
+      review.json           who reviewed which steps, for which digest
+      canary.json           the attended canary and its read-back coverage
+      lifecycle.jsonl       one line per review, canary, admission, rejection
       capture.json          each native action and the steps it became
     runs/                   one directory per run
     refused-*/, rejected-*/ captures that produced no program
   inbox/                    one JSON file per run that did not end VERIFIED
 ```
 
-`reject()` sets a waiting candidate aside, and the next run explores again.
+`reject(principal_id=...)` sets a waiting draft aside, and the next run
+explores again.
 
 ## Limits
 
@@ -183,9 +230,9 @@ and the run gate pins it, so a bundle edited after admission is refused.
   refuses it, and no run can reach `VERIFIED`.
 - Secret inputs are not lifted. A secret is typed by a person at a pause
   (see `AuthoringSession.pause_for_input`), not by the agent.
-- Admission recompiles the recording to apply the confirmed parameters. The
-  admitted digest is the recompiled bundle's, which can differ from the
-  candidate's.
+- The review recompiles the recording to apply the confirmed parameters, so
+  the step ids can change. If `review` refuses with "every step", read the
+  steps again with `status` and review those.
 - OpenAI `pending_safety_checks` are your loop's to acknowledge;
   `computer.execute` does not read them.
 - One admitted program per task signature. A task that needs branches still

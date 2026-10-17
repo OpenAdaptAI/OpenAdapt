@@ -4,11 +4,13 @@ Each test replays a recorded computer-use trajectory (tests/fixtures/jit/) as
 the agent, against MockMed served through its transactional system of record
 (``GET /api/db``). It asserts:
 
-* a cache miss runs the agent once and returns a candidate that waits for a
+* a cache miss runs the agent once and returns a DRAFT that waits for a
   person; the dead end in the trajectory is pruned and the typed input is
   proposed as a parameter;
-* the candidate never admits itself, and a second run does not re-run the
-  agent;
+* the draft never admits itself, a second run does not re-run the agent, and
+  admission refuses until a named person reviewed it and its canary passed;
+* the attended canary ends VERIFIED with an independent read-back on every
+  write step;
 * after a person admits it, a run with a NEW value replays with zero model
   calls and ends VERIFIED by an independent read of the system of record;
 * a run that halts goes to the exception inbox and never calls the agent;
@@ -22,7 +24,13 @@ from typing import Any, Iterator
 
 import pytest
 
-from openadapt_flow.jit import JitResult, TaskSignature, WebApp, compile_agent
+from openadapt_flow.jit import (
+    AdmissionError,
+    JitResult,
+    TaskSignature,
+    WebApp,
+    compile_agent,
+)
 from openadapt_flow.jit.recorded import RecordedTrajectoryAgent
 from openadapt_flow.mockmed.fault_server import serve
 from openadapt_flow.runtime.effects import RestRecordVerifier
@@ -72,6 +80,8 @@ def _jit(base: str, agent: Any, cache: Path, *, fault: str = "ok", on_halt: Any 
         policy="clinical-write",
         cache_dir=cache,
         on_halt=on_halt,
+        key_dir=cache.parent / "admission-keys",
+        on_warning=lambda text: None,
     )
 
 
@@ -100,9 +110,44 @@ def test_anthropic_trajectory_miss_admit_hit_and_halt(
     assert pending.status == "needs_human_admit" and pending.cache == "pending"
     assert agent.calls == 1 and not jit.admitted
 
-    record = jit.admit(accept_params=["note"], confirm="ok", operator="e2e-reviewer")
-    assert record["status"] == "accepted" and len(record["digest"]) == 64
-    assert {e["kind"] for e in record["effects"]} == {"record_written", "field_equals"}
+    with pytest.raises(AdmissionError, match="no human review"):
+        jit.admit(principal_id="e2e-reviewer", confirm="ok")
+    with pytest.raises(AdmissionError, match="not a human principal"):
+        jit.review(
+            principal_id="agent:anthropic",
+            reviewed_steps=[],
+            accept_params=["note"],
+            confirm="ok",
+        )
+    # The review confirms the parameter (a recompile), so read the steps of
+    # the program that will run, after a first pass that applies it.
+    with pytest.raises(AdmissionError, match="every step"):
+        jit.review(
+            principal_id="e2e-reviewer",
+            reviewed_steps=[],
+            accept_params=["note"],
+            confirm="ok",
+        )
+    steps = [s["id"] for s in jit.status()["steps"]]
+    jit.review(
+        principal_id="e2e-reviewer",
+        reviewed_steps=steps,
+        accept_params=["note"],
+        confirm="ok",
+    )
+    with pytest.raises(AdmissionError, match="no passing canary"):
+        jit.admit(principal_id="e2e-reviewer", confirm="ok")
+
+    canary = jit.canary(principal_id="e2e-operator", note="Canary test note")
+    assert canary.status == "VERIFIED", canary.halt_reason or canary.detail
+    assert canary.model_calls == 0 and not canary.agent_called and agent.calls == 1
+    record = jit.admit(principal_id="e2e-reviewer", confirm="ok")
+    assert record["state"] == "ADMITTED" and len(record["digest"]) == 64
+    assert record["admitted_by_principal_id"] == "e2e-reviewer"
+    assert record["readback"] and all(row["ok"] for row in record["readback"])
+    assert {e["evidence"] for row in record["readback"] for e in row["effects"]} == {
+        "independent_readback"
+    }
 
     # Cache hit with a new value: the governed program, no model calls, VERIFIED.
     hit = jit.run(note=NEW_NOTE)

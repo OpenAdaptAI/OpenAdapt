@@ -6,7 +6,8 @@ model calls. It serves the bundled MockMed app with its system of record:
     python examples/jit/run_mockmed.py
 
 Run 1 is a cache miss. The agent's actions are recorded and compiled into a
-candidate, which waits for you. You review it and type ok to admit it. Run 2
+DRAFT, which waits for you. You review its steps, it runs once as an attended
+canary against MockMed, and you admit it under your name. Run 2
 is a cache hit with a new note: the compiled program runs with no model calls
 and is checked against the system of record. Run 3 uses an app that shows
 "saved" and drops the note; the program stops and the run goes to the inbox.
@@ -20,7 +21,7 @@ import json
 import tempfile
 from pathlib import Path
 
-from openadapt_flow.jit import TaskSignature, WebApp, compile_agent
+from openadapt_flow.jit import AdmissionError, TaskSignature, WebApp, compile_agent
 from openadapt_flow.jit.recorded import RecordedTrajectoryAgent
 from openadapt_flow.mockmed.fault_server import serve
 from openadapt_flow.runtime.effects import RestRecordVerifier
@@ -40,6 +41,9 @@ def main() -> int:
     parser.add_argument("--cache", default=None, help="cache directory (default: temp)")
     parser.add_argument(
         "--yes", action="store_true", help="admit without the prompt (you still decide)"
+    )
+    parser.add_argument(
+        "--principal", default="example-reviewer", help="your name, for the review"
     )
     args = parser.parse_args()
     cache = Path(args.cache or tempfile.mkdtemp(prefix="openadapt-jit-"))
@@ -67,6 +71,7 @@ def main() -> int:
                 verifier=verifier,
                 policy="clinical-write",
                 cache_dir=cache,
+                key_dir=cache / "admission-keys",
             )
 
         jit = wrapped()
@@ -86,7 +91,30 @@ def main() -> int:
         if answer.strip().lower() not in ("ok", "yes", "y"):
             print("Not admitted. The candidate stays in", jit.program_dir)
             return 0
-        jit.admit(accept_params=["note"], confirm="ok")
+        steps = [s["id"] for s in jit.status()["steps"]]
+        try:
+            jit.review(
+                principal_id=args.principal,
+                reviewed_steps=steps,
+                accept_params=["note"],
+                confirm="ok",
+            )
+        except AdmissionError:
+            # Confirming the parameter recompiled the program; review its steps.
+            steps = [s["id"] for s in jit.status()["steps"]]
+            jit.review(
+                principal_id=args.principal,
+                reviewed_steps=steps,
+                accept_params=["note"],
+                confirm="ok",
+            )
+        canary = jit.canary(principal_id=args.principal, note="Canary test note")
+        print(f"Canary: {canary.status}; model calls: {canary.model_calls}")
+        if not canary.verified:
+            print(f"  {canary.halt_reason or canary.detail}")
+            return 1
+        manifest = jit.admit(principal_id=args.principal, confirm="ok")
+        print(f"  ADMITTED by {manifest['admitted_by_principal_id']}")
 
         print("Run 2: the admitted program, with a new note")
         second = jit.run(note="Recheck knee in ten days")

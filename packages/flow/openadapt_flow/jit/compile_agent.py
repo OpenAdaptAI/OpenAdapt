@@ -2,17 +2,23 @@
 
 ``compile_agent`` wraps a computer-use agent (CUA). The first run of a task is
 a cache miss: the agent does the task while :class:`CaptureComputer` records
-it, Flow compiles the recording, and the result is a CANDIDATE that waits for
-a person. Later runs of an admitted task are cache hits: Flow runs the
-compiled program under the standard profile, reads the system of record back
-through the verifier, and makes no model calls.
+it, Flow compiles the recording, and the result is a DRAFT bundle that waits
+for a person. :meth:`CompiledAgent.recording` is the same capture as a
+context manager, for a loop you keep in your own code. Later runs of an
+admitted task are cache hits: Flow runs the compiled program under the
+standard profile, reads the system of record back through the verifier, and
+makes no model calls.
+
+A draft becomes ADMITTED through :meth:`~CompiledAgent.review`,
+:meth:`~CompiledAgent.canary` and :meth:`~CompiledAgent.admit`, each by a
+named person (see :mod:`openadapt_flow.jit.lifecycle`).
 
 What it never does:
 
-* admit a candidate by itself. ``run`` returns ``needs_human_admit``; only
-  :meth:`CompiledAgent.admit`, called by a person, admits it. The admission
-  also confirms the effect contract the demonstration proposed, and the
-  parameters lifted from the task's inputs.
+* admit a draft by itself. ``run`` returns ``needs_human_admit`` and never
+  runs a draft; only the attended canary does.
+* record a model-driven run on a key that is not the customer's. An agent
+  that calls a model needs a :class:`~openadapt_flow.jit.keys.CustomerModelKey`.
 * call the agent on a cache hit, or after a halt. A run that does not end
   ``VERIFIED`` goes to the exception inbox and back to the caller.
 * match a task fuzzily. The cache key is the task id and the parameter schema.
@@ -22,14 +28,19 @@ from __future__ import annotations
 
 import json
 import shutil
+import sys
 import time
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Mapping, Optional, Protocol
+from types import TracebackType
+from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 from urllib.parse import urlsplit
 
-from openadapt_flow.jit.adapters import CaptureComputer, UnsupportedAction
+from openadapt_flow.jit import lifecycle
+from openadapt_flow.jit.adapters import CaptureComputer, UnsupportedAction, dialects
+from openadapt_flow.jit.keys import CustomerModelKey
+from openadapt_flow.jit.lifecycle import AdmissionError
 from openadapt_flow.jit.lift import lift_params
 from openadapt_flow.jit.signature import TaskSignature
 
@@ -38,18 +49,28 @@ __all__ = [
     "CompiledAgent",
     "ComputerUseAgent",
     "JitResult",
+    "RECORDING_WARNING",
+    "Recording",
     "TaskRequest",
     "WebApp",
     "compile_agent",
 ]
 
-CANDIDATE_FILE = "candidate.json"
-ADMIT_FILE = "admit.json"
+CANDIDATE_FILE = lifecycle.CANDIDATE_FILE
+ADMIT_FILE = lifecycle.ADMISSION_FILE
 NEEDS_HUMAN_ADMIT = "needs_human_admit"
 
+#: Shown before every recording starts, before the browser opens.
+RECORDING_WARNING = (
+    "Before you record: the recording keeps every screen the agent sees and "
+    "every value it types, and the trace may contain sensitive data such as "
+    "patient or customer records, names, and account numbers. Use a sandbox "
+    "or test environment and test data when you can."
+)
 
-class AdmissionError(RuntimeError):
-    """The candidate cannot be admitted as it stands."""
+
+def _print_warning(text: str) -> None:
+    print(f"WARNING: {text}", file=sys.stderr)
 
 
 @dataclass(frozen=True)
@@ -85,6 +106,9 @@ class TaskRequest:
     task_id: str
     instruction: str
     inputs: dict[str, Any]
+    #: The customer's key for the agent's model client, when the agent calls
+    #: a model. Never an OpenAdapt-held key.
+    model_key: Optional[CustomerModelKey] = field(default=None, repr=False)
 
 
 class ComputerUseAgent(Protocol):
@@ -92,6 +116,11 @@ class ComputerUseAgent(Protocol):
 
     ``run`` drives the task to the end, sending every action through
     ``computer.execute`` and giving the model the returned observation.
+
+    An agent that makes no model calls (a recorded trajectory) sets
+    ``requires_model_key = False``. Any other agent is recorded only with
+    the customer's own key. An agent may set ``principal_id``; that identity
+    can never review or admit what it recorded.
     """
 
     dialect: str
@@ -126,17 +155,142 @@ class JitResult:
         return self.status == "VERIFIED"
 
 
+class Recording:
+    """One capture, as a context manager. Get it from
+    :meth:`CompiledAgent.recording`.
+
+    Inside the ``with`` block, send each action to ``computer.execute`` and
+    give the model the observation. On exit the recording is compiled into a
+    DRAFT bundle, and :attr:`result` says what happened. An
+    :class:`UnsupportedAction` raised in the block ends the capture with no
+    draft and is not re-raised; any other exception is recorded as
+    ``capture_failed`` and re-raised.
+    """
+
+    def __init__(
+        self,
+        owner: "CompiledAgent",
+        params: Mapping[str, Any],
+        values: dict[str, str],
+        dialect: str,
+    ) -> None:
+        self._owner = owner
+        self._params = dict(params)
+        self._values = values
+        self._dialect = dialect
+        self._close: Optional[Callable[[], None]] = None
+        self._session: Any = None
+        self.computer: Optional[CaptureComputer] = None
+        self.request: Optional[TaskRequest] = None
+        self.result: Optional[JitResult] = None
+
+    def __enter__(self) -> "Recording":
+        from openadapt_flow.authoring import AuthoringSession
+        from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+        owner = self._owner
+        if owner.admitted or owner.candidate() is not None:
+            raise AdmissionError(
+                "this task already has a draft or an admitted program; reject the "
+                "draft to record again"
+            )
+        owner._check_model_key()
+        owner.on_warning(RECORDING_WARNING)
+        program = owner.program_dir
+        if program.exists():
+            shutil.rmtree(program)
+        program.mkdir(parents=True)
+        self.request = TaskRequest(
+            task_id=owner.task.task_id,
+            instruction=owner.task.render_instruction(self._params),
+            inputs=dict(self._params),
+            model_key=owner.model_key,
+        )
+        if owner.app.reset is not None:
+            owner.app.reset()
+        backend, self._close = PlaywrightBackend.launch(
+            owner.app.url, headless=owner.app.headless
+        )
+        try:
+            self._session = AuthoringSession(
+                backend,
+                program / "recording",
+                backend_kind="web",
+                app_url=owner.app.url,
+                system_of_record_reader=owner.app.record_reader,
+            )
+            self.computer = CaptureComputer(
+                self._session,
+                dialect=self._dialect,
+                page=backend.page,
+                sleep=owner._sleep,
+            )
+            self._session.start_record()
+        except BaseException:
+            self._close()
+            raise
+        return self
+
+    def __exit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc: Optional[BaseException],
+        tb: Optional[TracebackType],
+    ) -> bool:
+        assert self.computer is not None and self._close is not None
+        try:
+            self.result = self._finish(exc)
+        finally:
+            self._close()
+        return isinstance(exc, UnsupportedAction)
+
+    def _finish(self, exc: Optional[BaseException]) -> JitResult:
+        from openadapt_flow.authoring import AuthoringError
+
+        owner, session, computer = self._owner, self._session, self.computer
+        assert computer is not None
+        if isinstance(exc, UnsupportedAction):
+            session.halt()
+            return owner._capture_refused("unsupported", str(exc), computer)
+        if exc is not None:
+            session.halt()
+            return owner._capture_refused(
+                "capture_failed", f"{type(exc).__name__}: {exc}", computer
+            )
+        if computer.actions == 0:
+            session.halt()
+            return owner._capture_refused(
+                "capture_failed", "the agent performed no action", computer
+            )
+        try:
+            compiled = session.compile(
+                owner.bundle_dir,
+                name=owner.task.task_id,
+                distill=True,
+                mine_effects=owner.app.record_reader is not None,
+            )
+        except AuthoringError as exc2:
+            return owner._capture_refused("capture_failed", str(exc2), computer)
+        return owner._write_draft(
+            session, compiled, computer, self._values, self._dialect
+        )
+
+
 @dataclass
 class CompiledAgent:
     """A CUA wrapped in a compile-and-cache layer. Build with :func:`compile_agent`."""
 
-    agent: ComputerUseAgent
+    agent: Optional[ComputerUseAgent]
     task: TaskSignature
     app: WebApp
     verifier: Any
     policy: str
     cache_dir: Path
+    dialect: str = "generic"
     on_halt: Optional[Callable[[JitResult], None]] = None
+    model_key: Optional[CustomerModelKey] = field(default=None, repr=False)
+    key_dir: Optional[Path] = None
+    on_warning: Callable[[str], None] = _print_warning
     _sleep: Callable[[float], None] = field(default=time.sleep, repr=False)
 
     # -- layout --------------------------------------------------------------
@@ -167,7 +321,24 @@ class CompiledAgent:
 
     @property
     def admitted(self) -> bool:
+        """True when the bundle carries an admission manifest. A run still
+        verifies its signature and digest before anything executes."""
+
         return (self.bundle_dir / ADMIT_FILE).is_file()
+
+    def state(self) -> Optional[lifecycle.BundleState]:
+        """DRAFT, ADMITTED, or ``None`` when nothing is recorded.
+
+        Raises:
+            AdmissionError: an admission manifest that does not verify.
+        """
+
+        return lifecycle.state_of(self.program_dir, key_dir=self.key_dir)
+
+    def status(self) -> dict[str, Any]:
+        """The draft's steps and which admission requirements it meets."""
+
+        return lifecycle.admission_status(self.program_dir, key_dir=self.key_dir)
 
     # -- run -----------------------------------------------------------------
 
@@ -188,75 +359,94 @@ class CompiledAgent:
                 cache="pending",
                 agent_called=False,
                 candidate=self.candidate(),
-                detail="a candidate is waiting for a person to admit or reject it",
+                detail=(
+                    "a DRAFT is waiting for a person; a draft never runs unattended "
+                    "(review, canary, admit)"
+                ),
+            )
+        if self.agent is None:
+            return JitResult(
+                status="needs_recording",
+                task_key=self.task.key,
+                cache="miss",
+                agent_called=False,
+                detail="no agent to record with; use recording() around your loop",
             )
         return self._explore(params, values)
 
+    def recording(self, **params: Any) -> Recording:
+        """Record your own CUA loop: ``with jit.recording(note="x") as rec:``.
+
+        ``rec.request`` is what to ask the model, ``rec.computer.execute``
+        performs an action, and ``rec.result`` holds the draft after the
+        block. The task must have no draft and no admitted program.
+
+        Raises:
+            ParamError: ``params`` do not match the task's schema.
+            MissingModelKey: a model-driven agent and no customer key.
+        """
+
+        values = self.task.validate(params)
+        dialect = getattr(self.agent, "dialect", None) or self.dialect
+        return Recording(self, params, values, dialect)
+
     # -- cache miss ----------------------------------------------------------
 
-    def _explore(self, params: Mapping[str, Any], values: dict[str, str]) -> JitResult:
-        from openadapt_flow.authoring import AuthoringError, AuthoringSession
-        from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+    def _check_model_key(self) -> None:
+        from openadapt_flow.jit.keys import MissingModelKey
 
-        program = self.program_dir
-        if program.exists():
-            shutil.rmtree(program)
-        program.mkdir(parents=True)
-        request = TaskRequest(
-            task_id=self.task.task_id,
-            instruction=self.task.render_instruction(params),
-            inputs=dict(params),
+        if self.model_key is not None:
+            return
+        if (
+            self.agent is not None
+            and getattr(self.agent, "requires_model_key", True) is False
+        ):
+            return
+        raise MissingModelKey(
+            "recording a model-driven agent needs the customer's own model key: "
+            "pass model_key=load_customer_model_key(...) to compile_agent. "
+            "OpenAdapt does not supply one."
         )
-        if self.app.reset is not None:
-            self.app.reset()
-        backend, close = PlaywrightBackend.launch(
-            self.app.url, headless=self.app.headless
-        )
-        session = AuthoringSession(
-            backend,
-            program / "recording",
-            backend_kind="web",
-            app_url=self.app.url,
-            system_of_record_reader=self.app.record_reader,
-        )
-        computer = CaptureComputer(
-            session, dialect=self.agent.dialect, page=backend.page, sleep=self._sleep
-        )
+
+    def _explore(self, params: Mapping[str, Any], values: dict[str, str]) -> JitResult:
+        agent = self.agent
+        assert agent is not None
+        rec = self.recording(**params)
         try:
-            session.start_record()
-            try:
-                self.agent.run(request, computer)
-            except UnsupportedAction as exc:
-                session.halt()
-                return self._capture_refused("unsupported", str(exc), computer)
-            except Exception as exc:  # noqa: BLE001 - the agent's own failure
-                session.halt()
-                return self._capture_refused(
-                    "capture_failed", f"{type(exc).__name__}: {exc}", computer
-                )
-            if computer.actions == 0:
-                session.halt()
-                return self._capture_refused(
-                    "capture_failed", "the agent performed no action", computer
-                )
-            try:
-                compiled = session.compile(
-                    self.bundle_dir,
-                    name=self.task.task_id,
-                    distill=True,
-                    mine_effects=self.app.record_reader is not None,
-                )
-            except AuthoringError as exc:
-                return self._capture_refused("capture_failed", str(exc), computer)
-        finally:
-            close()
+            with rec:
+                assert rec.request is not None and rec.computer is not None
+                agent.run(rec.request, rec.computer)
+        except Exception:
+            # The agent's own failure is a capture_failed result. A failure
+            # before the capture started (no key, no browser) is raised.
+            if rec.result is None:
+                raise
+        assert rec.result is not None
+        return rec.result
+
+    def _write_draft(
+        self,
+        session: Any,
+        compiled: Mapping[str, Any],
+        computer: CaptureComputer,
+        values: dict[str, str],
+        dialect: str,
+    ) -> JitResult:
+        program = self.program_dir
         lifted = lift_params(self.bundle_dir, values)
         candidate = {
+            "state": lifecycle.BundleState.DRAFT.value,
             "status": NEEDS_HUMAN_ADMIT,
             "task": self.task.to_dict(),
             "workflow_id": compiled["workflow_id"],
             "demonstrated_by": "agent",
-            "dialect": self.agent.dialect,
+            "recorded_by": f"agent:{dialect}",
+            "agent_principal_id": getattr(self.agent, "principal_id", None),
+            "dialect": dialect,
+            "policy": self.policy,
+            "mine_effects": self.app.record_reader is not None,
+            "model_key": self.model_key.provenance() if self.model_key else None,
+            "sensitive_data_warning": RECORDING_WARNING,
             "recording": str(session.recording_dir),
             "compiled_recording": str(session.compiled_recording_dir),
             "bundle": str(self.bundle_dir),
@@ -267,11 +457,12 @@ class CompiledAgent:
         }
         (program / "capture.json").write_text(json.dumps(computer.log, indent=2) + "\n")
         (program / CANDIDATE_FILE).write_text(json.dumps(candidate, indent=2) + "\n")
+        lifecycle._event(program, "draft", recorded_by=candidate["recorded_by"])
         return JitResult(
             status=NEEDS_HUMAN_ADMIT,
             task_key=self.task.key,
             cache="miss",
-            agent_called=True,
+            agent_called=self.agent is not None,
             candidate=candidate,
         )
 
@@ -289,136 +480,125 @@ class CompiledAgent:
             status=status,
             task_key=self.task.key,
             cache="miss",
-            agent_called=True,
+            agent_called=self.agent is not None,
             detail=f"{detail} (capture kept at {kept})",
         )
 
-    # -- admission (a person) ------------------------------------------------
+    # -- DRAFT to ADMITTED (people) --------------------------------------------
 
-    def admit(
+    def review(
         self,
         *,
-        accept_params: list[str],
+        principal_id: str,
+        reviewed_steps: Sequence[str],
+        accept_params: Sequence[str],
         confirm: object = None,
-        operator: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Admit the waiting candidate. Called by a person, never by ``run``.
+        """Record that ``principal_id`` reviewed every step. See
+        :func:`openadapt_flow.jit.lifecycle.record_review`."""
 
-        Args:
-            accept_params: The proposals to make parameters, by name. They
-                must be exactly the task's parameters.
-            confirm: Empty, ``ok``, ``yes`` or ``True``, as for authoring admit.
-            operator: Who admits; defaults to the local OS user.
+        return lifecycle.record_review(
+            self.program_dir,
+            principal_id=principal_id,
+            reviewed_steps=reviewed_steps,
+            accept_params=accept_params,
+            confirm=confirm,
+        )
 
-        The confirmed parameters are applied by recompiling the recording
-        through :func:`~openadapt_flow.compiler.param_confirm.apply_decisions`.
-        The admitted bundle must then carry a bound effect contract and pass
-        the policy. The admission record pins the bundle's content digest.
+    def canary(self, *, principal_id: str, **params: Any) -> JitResult:
+        """Run the reviewed draft once on the target app, attended.
 
-        Raises:
-            AdmissionError: no candidate, a refused confirm, parameters that do
-                not match the task, a placeholder effect, or a policy failure.
+        Use a test record. The canary refuses to run unless the review is for
+        the current bundle and every write step has an independent read-back
+        through this agent's verifier. It passes only when the run ends
+        ``VERIFIED`` with zero model calls. A failed canary goes to the inbox;
+        the agent is not called.
         """
 
-        from openadapt_flow.authoring import _confirm_is_ok, _local_operator
-        from openadapt_flow.compiler.param_confirm import (
-            apply_decisions,
-            decisions_from_accept_list,
-            load_proposals,
-        )
         from openadapt_flow.ir import Workflow
-        from openadapt_flow.policy import evaluate_policy, load_policy
 
+        values = self.task.validate(params)
         candidate = self.candidate()
-        if candidate is None:
-            raise AdmissionError("no candidate to admit")
-        if self.admitted:
-            raise AdmissionError("this task already has an admitted program")
-        if not _confirm_is_ok(confirm):
-            raise AdmissionError("admit accepts empty, ok, yes, or True")
-        if sorted(accept_params) != sorted(self.task.params):
-            raise AdmissionError(
-                f"accept_params {sorted(accept_params)} must be the task's "
-                f"parameters {sorted(self.task.params)}"
-            )
-        try:
-            decisions = decisions_from_accept_list(
-                load_proposals(self.bundle_dir), accept_params
-            )
-        except ValueError as exc:
-            raise AdmissionError(str(exc)) from exc
-        if decisions:
-            apply_decisions(
-                candidate["compiled_recording"],
-                self.bundle_dir,
-                name=self.task.task_id,
-                decisions=decisions,
-                mine_effects=self.app.record_reader is not None,
-                bind_effect_params=True,
-            )
+        if candidate is None or self.admitted:
+            raise AdmissionError("a canary runs a DRAFT; there is none")
+        lifecycle.check_principal(principal_id, candidate)
         workflow = Workflow.load(self.bundle_dir)
-        if sorted(workflow.params) != sorted(self.task.params):
-            raise AdmissionError(
-                f"the program's parameters {sorted(workflow.params)} do not match "
-                f"the task's {sorted(self.task.params)}"
-            )
-        placeholders = [
-            step.id
-            for step in workflow.steps
-            for effect in step.effects
-            if effect.needs_operator_confirmation
-        ]
-        if placeholders:
-            raise AdmissionError(
-                "the demonstration showed a write with no system-of-record delta to "
-                f"bind on {sorted(set(placeholders))}; there is nothing to verify"
-            )
-        report = evaluate_policy(
-            workflow, load_policy(self.policy), require_current_risk_certification=True
+        digest = lifecycle._digest(workflow)
+        review = lifecycle._evidence_at(
+            self.program_dir / lifecycle.REVIEW_FILE, digest
         )
-        if not report.passed:
-            raise AdmissionError(
-                f"not certified under {self.policy!r}:\n{report.render()}"
+        if review is None:
+            raise AdmissionError("review the draft before its canary")
+        readback = lifecycle.readback_coverage(workflow, self.verifier)
+        problems = lifecycle._readback_problems(readback)
+
+        def finish(
+            report: Any, run_dir: Optional[Path], detail: Optional[str]
+        ) -> JitResult:
+            record = lifecycle.record_canary(
+                self.program_dir,
+                principal_id=principal_id,
+                digest=digest,
+                report=report,
+                readback=readback,
+                target_origin=self.app.origin,
+                run_dir=run_dir,
             )
-        digest = workflow.manifest.content_digest if workflow.manifest else None
-        if not digest:
-            raise AdmissionError("the compiled bundle carries no content digest")
-        record = {
-            "status": "accepted",
-            "kind": "local_operator_accept",
-            "workflow_id": candidate["workflow_id"],
-            "operator": operator or _local_operator(),
-            "digest": digest,
-            "task": self.task.to_dict(),
-            "params": sorted(accept_params),
-            "policy": self.policy,
-            "effects": _effect_summary(self.bundle_dir),
-            "admitted_at": _stamp(),
-        }
-        (self.bundle_dir / ADMIT_FILE).write_text(json.dumps(record, indent=2) + "\n")
-        return record
+            result = JitResult(
+                status=record["outcome"],
+                task_key=self.task.key,
+                cache="canary",
+                agent_called=False,
+                model_calls=record["model_calls"],
+                run_dir=run_dir,
+                report=report,
+                detail=detail,
+                halt_reason=(
+                    report.halt.reason
+                    if report is not None and report.halt is not None
+                    else None
+                ),
+            )
+            if not record["passed"]:
+                result = self._to_inbox(result)
+            return result
 
-    def reject(self, reason: str = "") -> Path:
-        """Set the waiting candidate aside; the next run explores again."""
-
-        if self.candidate() is None:
-            raise AdmissionError("no candidate to reject")
-        if self.admitted:
-            raise AdmissionError("an admitted program is not a candidate")
-        (self.program_dir / "rejected.json").write_text(
-            json.dumps({"reason": reason, "rejected_at": _stamp()}, indent=2) + "\n"
+        if problems:
+            return finish(
+                None,
+                None,
+                "no canary ran: a write step lacks an independent read-back: "
+                + "; ".join(problems),
+            )
+        run_dir = self.runs_dir / f"canary-{_stamp()}-{uuid.uuid4().hex[:8]}"
+        run_dir.parent.mkdir(parents=True, exist_ok=True)
+        gate_detail, report = self._run_governed(
+            workflow, digest, values, run_dir, attended_by=principal_id
         )
-        kept = self.task_dir / f"rejected-{_stamp()}"
-        self.program_dir.rename(kept)
-        return kept
+        return finish(report, run_dir if report is not None else None, gate_detail)
+
+    def admit(self, *, principal_id: str, confirm: object = None) -> dict[str, Any]:
+        """Admit the draft and write the signed manifest. Called by a person,
+        never by ``run``. See :func:`openadapt_flow.jit.lifecycle.admit`."""
+
+        return lifecycle.admit(
+            self.program_dir,
+            principal_id=principal_id,
+            confirm=confirm,
+            key_dir=self.key_dir,
+        )
+
+    def reject(self, *, principal_id: str, reason: str = "") -> Path:
+        """Set the draft aside; the next run records again."""
+
+        return lifecycle.reject(
+            self.program_dir, principal_id=principal_id, reason=reason
+        )
 
     # -- cache hit -----------------------------------------------------------
 
     def _run_admitted(self, values: dict[str, str]) -> JitResult:
-        from openadapt_flow.bundle_validation import BundleIntegrityError
         from openadapt_flow.ir import Workflow
-
-        record = json.loads((self.bundle_dir / ADMIT_FILE).read_text())
 
         def refused(detail: str) -> JitResult:
             return self._to_inbox(
@@ -432,14 +612,11 @@ class CompiledAgent:
             )
 
         try:
-            workflow = Workflow.load(self.bundle_dir)
-        except BundleIntegrityError as exc:
-            return refused(f"the admitted bundle failed its integrity check: {exc}")
-        digest = workflow.manifest.content_digest if workflow.manifest else None
-        if not digest:
-            return refused("the admitted bundle has no content digest")
-        if record.get("status") != "accepted" or record.get("digest") != digest:
-            return refused("the bundle is not the one a person admitted")
+            record = lifecycle.verify_admission(self.bundle_dir, key_dir=self.key_dir)
+        except AdmissionError as exc:
+            return refused(f"the admission does not hold: {exc}")
+        workflow = Workflow.load(self.bundle_dir)
+        digest = lifecycle._digest(workflow)
         if (record.get("task") or {}).get("key") != self.task.key:
             return refused("the admission is for a different task signature")
         if sorted(workflow.params) != sorted(self.task.params):
@@ -459,14 +636,30 @@ class CompiledAgent:
             report=report,
             halt_reason=report.halt.reason if report.halt is not None else None,
         )
+        if result.model_calls:
+            result.detail = (
+                f"the replay made {result.model_calls} model calls; a healthy replay "
+                "makes none"
+            )
+            result.status = "needs_review"
         if result.status != "VERIFIED":
             result = self._to_inbox(result)
         return result
 
     def _run_governed(
-        self, workflow: Any, digest: str, values: dict[str, str], run_dir: Path
+        self,
+        workflow: Any,
+        digest: str,
+        values: dict[str, str],
+        run_dir: Path,
+        *,
+        attended_by: Optional[str] = None,
     ) -> tuple[Optional[str], Any]:
-        """The standard-profile run: gate, authorization, Replayer, verifier."""
+        """The standard-profile run: gate, authorization, Replayer, verifier.
+
+        Runs an admitted bundle, or a draft only when ``attended_by`` names
+        the person attending its canary.
+        """
 
         from openadapt_flow.backends.playwright_backend import PlaywrightBackend
         from openadapt_flow.deployment import DeploymentConfig, PolicySection
@@ -480,6 +673,11 @@ class CompiledAgent:
         )
         from openadapt_flow.runtime import Replayer
 
+        if attended_by is None:
+            try:
+                lifecycle.verify_admission(self.bundle_dir, key_dir=self.key_dir)
+            except AdmissionError as exc:
+                return f"a DRAFT never runs unattended: {exc}", None
         gate = evaluate_run_gate(
             workflow,
             bundle_dir=self.bundle_dir,
@@ -493,7 +691,14 @@ class CompiledAgent:
         if not gate.passed:
             return f"the standard run gate refused; nothing ran:\n{gate.render()}", None
         authorization = build_runtime_authorization(
-            workflow, gate, approval_source="openadapt-flow-jit", params=values
+            workflow,
+            gate,
+            approval_source=(
+                f"openadapt-flow-jit-canary:{attended_by}"
+                if attended_by
+                else "openadapt-flow-jit"
+            ),
+            params=values,
         )
         if self.app.reset is not None:
             self.app.reset()
@@ -570,7 +775,7 @@ def _stamp() -> str:
 
 
 def compile_agent(
-    agent: ComputerUseAgent,
+    agent: Optional[ComputerUseAgent] = None,
     *,
     task: TaskSignature,
     app: WebApp,
@@ -578,11 +783,16 @@ def compile_agent(
     policy: str,
     cache_dir: Path | str = ".openadapt-jit",
     on_halt: Optional[Callable[[JitResult], None]] = None,
+    dialect: Optional[str] = None,
+    model_key: Optional[CustomerModelKey] = None,
+    key_dir: Optional[Path | str] = None,
+    on_warning: Optional[Callable[[str], None]] = None,
 ) -> CompiledAgent:
     """Wrap ``agent`` so a task is explored once and then run as a program.
 
     Args:
-        agent: The computer-use agent, used on a cache miss only.
+        agent: The computer-use agent, used on a cache miss only. Leave it
+            out to drive your own loop with :meth:`CompiledAgent.recording`.
         task: The task id, the instruction, and the typed parameter schema.
         app: The web app, with the read-only system-of-record snapshot used
             while the agent's run is recorded.
@@ -594,10 +804,24 @@ def compile_agent(
             inbox live.
         on_halt: Called with every run that does not end ``VERIFIED``, after it
             is written to the inbox.
+        dialect: The action format when there is no ``agent`` object
+            (default ``generic``). An agent declares its own.
+        model_key: The customer's key for the recording run, from
+            :func:`~openadapt_flow.jit.keys.load_customer_model_key`. Needed
+            unless the agent sets ``requires_model_key = False``.
+        key_dir: Where the admission signing key lives (default
+            :func:`~openadapt_flow.jit.lifecycle.default_key_dir`).
+        on_warning: Receives the pre-recording warning; prints to stderr by
+            default.
     """
 
-    if getattr(agent, "dialect", None) is None:
-        raise ValueError("agent must declare its action dialect")
+    if agent is not None:
+        dialect = getattr(agent, "dialect", None)
+        if dialect is None:
+            raise ValueError("agent must declare its action dialect")
+    dialect = dialect or "generic"
+    if dialect not in dialects():
+        raise ValueError(f"unknown dialect {dialect!r} (expected one of {dialects()})")
     return CompiledAgent(
         agent=agent,
         task=task,
@@ -605,5 +829,9 @@ def compile_agent(
         verifier=verifier,
         policy=policy,
         cache_dir=Path(cache_dir),
+        dialect=dialect,
         on_halt=on_halt,
+        model_key=model_key,
+        key_dir=Path(key_dir) if key_dir is not None else None,
+        on_warning=on_warning or _print_warning,
     )

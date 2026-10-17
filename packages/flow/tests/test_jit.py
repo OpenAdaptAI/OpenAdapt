@@ -353,18 +353,18 @@ def test_a_waiting_candidate_never_calls_the_agent_again(tmp_path: Path) -> None
     assert result.cache == "pending" and result.agent_called is False
 
 
-def test_admit_needs_a_person_confirm_and_the_task_parameters(tmp_path: Path) -> None:
+def test_admit_needs_a_named_person_and_a_draft(tmp_path: Path) -> None:
     jit = _compiled(tmp_path, NeverCalled())
-    with pytest.raises(AdmissionError, match="no candidate"):
-        jit.admit(accept_params=["note"])
+    with pytest.raises(AdmissionError, match="no draft"):
+        jit.admit(principal_id="Dana Reviewer", confirm="ok")
     jit.program_dir.mkdir(parents=True)
     (jit.program_dir / "candidate.json").write_text(
-        json.dumps({"status": "needs_human_admit"})
+        json.dumps({"status": "needs_human_admit", "recorded_by": "agent:anthropic"})
     )
+    with pytest.raises(AdmissionError, match="human principal"):
+        jit.admit(principal_id="", confirm="ok")
     with pytest.raises(AdmissionError, match="accepts"):
-        jit.admit(accept_params=["note"], confirm="maybe")
-    with pytest.raises(AdmissionError, match="must be the task's parameters"):
-        jit.admit(accept_params=[], confirm="ok")
+        jit.admit(principal_id="Dana Reviewer", confirm="maybe")
 
 
 def test_recorded_agent_refuses_other_inputs() -> None:
