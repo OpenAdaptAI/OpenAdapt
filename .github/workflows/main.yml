@@ -51,10 +51,10 @@ jobs:
           # instead of skipping. Issue #999 shipped because the
           # openadapt-ml seam was never tested in CI; the lazy
           # __getattr__ in openadapt/__init__.py imports from all of
-          # these. openadapt-grounding and openadapt-retrieval are archived
-          # and frozen on PyPI, so their seam checks skip here.
+          # these.
           pip install -e ".[dev]" openadapt-ml openadapt-capture \
-            openadapt-evals openadapt-viewer
+            openadapt-evals openadapt-viewer openadapt-grounding \
+            openadapt-retrieval
 
       - name: Lint with ruff
         run: |
