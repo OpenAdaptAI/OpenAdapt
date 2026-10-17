@@ -722,7 +722,13 @@ class RepairDesk:
                 "then, this workflow still stops at this step."
             ),
         }
-        branch_id = self._teach_branch(record, recording, work, store, agent_teach, provenance)
+        try:
+            branch_id = self._teach_branch(
+                record, recording, work, store, agent_teach, provenance
+            )
+        except Exception as exc:  # the single-step candidate already stands
+            _LOG.info("branch proposal skipped: %s", exc)
+            branch_id = None
         if branch_id is not None:
             response["branch_candidate_id"] = branch_id
             response["what_happened"] += (
