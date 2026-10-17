@@ -428,6 +428,58 @@ def countersign_document(
 
 # -- verification ------------------------------------------------------------
 
+MAX_SKEW_SECONDS = 300
+LATE_AFTER_SECONDS = 3600
+
+
+def _utc(value: Any) -> Optional[datetime]:
+    if not isinstance(value, str):
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    return parsed if parsed.tzinfo is not None else None
+
+
+def check_timing(
+    issued_at: Any,
+    gen_time: Any,
+    *,
+    max_skew_seconds: int = MAX_SKEW_SECONDS,
+    late_after_seconds: int = LATE_AFTER_SECONDS,
+) -> dict[str, Any]:
+    """Compare the TSA's genTime with the receipt's ``issued_at``.
+
+    ``delta_seconds`` is genTime minus issued_at. Within ``max_skew_seconds``
+    either way is ``ok``. A genTime more than the limit after issued_at is
+    ``backdated_receipt``: the receipt names a time earlier than any proof
+    that it existed. More than ``late_after_seconds`` after is
+    ``late_timestamp``: the timestamp was requested much later, so it bounds
+    nothing about issuance. A genTime before issued_at by more than the limit
+    is ``clock_skew``. Each is a warning, never a silent pass, and none says
+    who is at fault.
+    """
+    issued, stamped = _utc(issued_at), _utc(gen_time)
+    if issued is None or stamped is None:
+        return {"status": "issued_at_unreadable", "limit_seconds": max_skew_seconds}
+    delta = int((stamped - issued).total_seconds())
+    if delta > late_after_seconds:
+        status = "late_timestamp"
+    elif delta > max_skew_seconds:
+        status = "backdated_receipt"
+    elif delta < -max_skew_seconds:
+        status = "clock_skew"
+    else:
+        status = "ok"
+    return {
+        "status": status,
+        "delta_seconds": delta,
+        "limit_seconds": max_skew_seconds,
+        "issued_at": issued_at,
+        "gen_time": gen_time,
+    }
+
 
 @dataclass
 class CountersignReport:
@@ -451,6 +503,8 @@ class CountersignReport:
     commitments: dict[str, Any] = field(default_factory=dict)
     disclosures: list[dict[str, Any]] = field(default_factory=list)
     problems: list[str] = field(default_factory=list)
+    timing: dict[str, Any] = field(default_factory=dict)
+    warnings: list[str] = field(default_factory=list)
     accept_non_flow: bool = False
 
     @property
@@ -522,6 +576,8 @@ def verify_countersigned(
     tsa_certificates: Sequence[Any] = (),
     disclosures: Sequence[Mapping[str, Any]] = (),
     accept_non_flow: bool = False,
+    max_skew_seconds: int = MAX_SKEW_SECONDS,
+    late_after_seconds: int = LATE_AFTER_SECONDS,
 ) -> CountersignReport:
     """Offline check of a (possibly countersigned) Seal document. Pinned trust only.
 
@@ -671,6 +727,15 @@ def verify_countersigned(
             report.problems.append(
                 "receipt_timestamp_" + report.receipt_timestamp["status"]
             )
+        else:
+            report.timing = check_timing(
+                receipt.get("issued_at"),
+                report.receipt_timestamp.get("gen_time"),
+                max_skew_seconds=max_skew_seconds,
+                late_after_seconds=late_after_seconds,
+            )
+            if report.timing["status"] != "ok":
+                report.warnings.append(report.timing["status"])
     # Baseline timestamp: must name this run's nonce and the stated baseline.
     bts = block.get("baseline_timestamp")
     if bts is None:

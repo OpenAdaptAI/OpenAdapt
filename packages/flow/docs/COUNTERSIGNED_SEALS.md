@@ -17,11 +17,17 @@ adds both, plus a dossier file for disputes:
 A Seal with a trusted timestamp is a Timestamped Seal. One that also carries
 a countersignature is a Countersigned Seal.
 
-Neither kind is a notarial act or an eIDAS qualified electronic seal, and
-the timestamp is not an eIDAS qualified electronic timestamp unless
-`--tsa-url` names a qualified TSA. This page describes what the checks
-show technically. It makes no claim about legal effect or about the weight
-anyone gives the result.
+Neither a Countersigned Seal nor a Timestamped Seal is a notarial act, a
+government certification, or an eIDAS qualified electronic seal or qualified
+electronic time stamp. This verifier checks cryptographic integrity against
+pinned keys and RFC 3161 timestamp tokens; it does not consult EU Trusted
+Lists (EUTL) or attest to the accuracy of the underlying system of record. A
+Seal is a technical audit artifact and makes no representation as to legal
+admissibility or legal effect.
+
+OpenAdapt meters Seal issuance equally across all verification outcomes
+(VERIFIED, REFUTED, and INDETERMINATE); fees are never contingent on whether
+a workflow or verification check succeeds.
 
 Nothing here runs during replay, and nothing here calls a model. Only digests
 leave the machine: the TSA receives one 32-byte hash.
@@ -112,10 +118,19 @@ copy is in place.
 
 Timestamps come from Sigstore's public timestamp service
 (`https://timestamp.sigstore.dev/api/v1/timestamp`) unless you pass
-`--tsa-url` for another RFC 3161 service. A token from an eIDAS-qualified
-TSA is a qualified timestamp only by that TSA's own status; this verifier
-does not check the EU trusted lists. The Sigstore service is free, its tokens state 1-second accuracy, and it receives only the
-32-byte digest and a nonce. `--no-timestamp` skips the timestamp.
+`--tsa-url` for another RFC 3161 service. The Sigstore service is free, its
+tokens state 1-second accuracy, and it receives only the 32-byte digest and a
+nonce. `--no-timestamp` skips the timestamp.
+
+Sigstore's public TSA is the default for evaluation and low volume. It has no
+commercial SLA and may rate-limit. High-volume deployments should set their
+own RFC 3161 TSA with `--tsa-url`, or use timestamping through Cloud.
+
+Customers may point `--tsa-url` at a service run by an eIDAS qualified trust
+service provider (QTSP). Deciding whether a given token is qualified is the
+relying party's job, using an EUTL-conformant validator. `countersign verify`
+prints the TSA's subject DN, policy OID, serial number, and genTime, and never
+calls a token qualified.
 
 `countersign add` and `timestamp-baseline` check each new token before they
 write anything: the token must verify against `--tsa-cert` (default: the
@@ -142,7 +157,8 @@ SIGNATURE GENUINE, NOT A FLOW REPLAY (AGENT). Pass --accept-non-flow to accept a
   Seal signature      VERIFIED against a pinned key (seal-ed25519-…, issued 2026-10-17T05:00:00Z)
   Evidence manifest   bound: digest and labels match the receipt
   Statement           matches the receipt
-  Receipt timestamp   VERIFIED 2026-10-17T05:20:40Z (the TSA states no accuracy) by CN=DigiCert SHA256 RSA4096 Timestamp Responder 2026 1,… (chains to pinned CN=DigiCert Trusted Root G4,…)
+  Receipt timestamp   VERIFIED 2026-10-17T05:20:40Z (the TSA states no accuracy) by CN=DigiCert SHA256 RSA4096 Timestamp Responder 2026 1,…; policy …, serial … (chains to pinned CN=DigiCert Trusted Root G4,…)
+  Timestamp skew      ok, genTime - issued_at = +40 s (limit 300 s)
   Baseline timestamp  absent
   Countersignature    absent
   Field commitments   2 committed; bound by timestamp
@@ -167,6 +183,15 @@ Exit codes follow `openadapt seal verify`:
 | A disclosure checked against commitments that nothing binds | 1 |
 
 `--json` prints the same report as data.
+
+`verify` also compares the receipt timestamp's genTime with the receipt's
+`issued_at` and prints the difference. Within 300 seconds either way is `ok`.
+A genTime more than 300 seconds after `issued_at` is `backdated_receipt`, and
+more than an hour after is `late_timestamp`. A genTime more than 300 seconds
+before `issued_at` is `clock_skew`. Each prints as a `WARNING:` line under the
+headline and appears in `--json` as `warnings` and `timing`. The warning says
+the times disagree; it doesn't say who is at fault, and it doesn't change the
+exit code.
 
 ## Trust
 

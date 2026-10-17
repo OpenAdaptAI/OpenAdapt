@@ -116,13 +116,39 @@ def _ts(entry: dict[str, Any]) -> str:
             else " (the TSA states no accuracy)"
         )
         text += f" by {entry.get('tsa_subject')}"
+        text += (
+            f"; policy {entry.get('policy') or 'not stated'}"
+            f", serial {entry.get('serial_number') or 'not stated'}"
+        )
         if entry.get("trust_anchor_subject") != entry.get("tsa_subject"):
             text += f" (chains to pinned {entry.get('trust_anchor_subject')})"
     return text
 
 
+_TIMING_TEXT = {
+    "backdated_receipt": "the timestamp is later than issued_at by more than the limit",
+    "late_timestamp": "the timestamp came much later than issued_at",
+    "clock_skew": "issued_at is later than the timestamp by more than the limit",
+    "issued_at_unreadable": "issued_at is missing or unreadable",
+}
+
+
+def timing_line(report: CountersignReport) -> str:
+    t = report.timing
+    if not t:
+        return "not checked (no verified receipt timestamp)"
+    if "delta_seconds" not in t:
+        return f"WARNING {t.get('status')}: {_TIMING_TEXT.get(str(t.get('status')))}"
+    delta = f"genTime - issued_at = {t['delta_seconds']:+d} s (limit {t['limit_seconds']} s)"
+    if t["status"] == "ok":
+        return f"ok, {delta}"
+    return f"WARNING {t['status']}: {_TIMING_TEXT[t['status']]}; {delta}"
+
+
 def render_report(report: CountersignReport, *, show_names: bool = True) -> str:
-    lines = [headline(report), ""]
+    lines = [headline(report)]
+    lines += [f"WARNING: {timing_line(report)}" for _ in report.warnings[:1]]
+    lines.append("")
     rows: list[tuple[str, str]] = [
         ("Executor", executor_line(report)),
         ("Verification tier", tier_line(report)),
@@ -165,6 +191,7 @@ def render_report(report: CountersignReport, *, show_names: bool = True) -> str:
             )
         )
         rows.append(("Receipt timestamp", _ts(report.receipt_timestamp)))
+        rows.append(("Timestamp skew", timing_line(report)))
         rows.append(("Baseline timestamp", _ts(report.baseline_timestamp)))
         cs = report.countersignature
         cs_text = _SEAL_TEXT.get(str(cs.get("status")), str(cs.get("status")))

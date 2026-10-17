@@ -670,7 +670,7 @@ def test_dossier_embeds_no_phi_by_default_and_reverifies(issuer, tsa, tmp_path):
         assert leak not in page
     assert "left out: no redaction provider" in page
     assert "SEAL VERIFIED: AGENT RUN" in page
-    assert "not a notarial act" in page
+    assert "is a notarial act, a government certification" in page
     again = extract_dossier_data(page)
     re_report = verify_countersigned(
         again["document"],
@@ -1619,3 +1619,90 @@ def test_cli_exceptions_resolve_close_and_purge(issuer, approver, tmp_path, caps
         == 0
     )
     assert "Nothing is past" in capsys.readouterr().out
+
+
+# -- timing and verify output ---------------------------------------------------
+
+
+def test_check_timing_flags_skew_beyond_the_limit():
+    from openadapt_flow.countersign.document import check_timing
+
+    at = "2026-10-17T05:00:00Z"
+    assert check_timing(at, "2026-10-17T05:05:00Z")["status"] == "ok"
+    assert check_timing(at, "2026-10-17T04:55:00Z")["status"] == "ok"
+    late = check_timing(at, "2026-10-17T05:05:01Z")
+    assert late["status"] == "backdated_receipt" and late["delta_seconds"] == 301
+    assert check_timing(at, "2026-10-17T06:00:01Z")["status"] == "late_timestamp"
+    assert check_timing(at, "2026-10-17T04:54:59Z")["status"] == "clock_skew"
+    assert (
+        check_timing(None, "2026-10-17T05:00:00Z")["status"] == "issued_at_unreadable"
+    )
+    assert check_timing(at, "2026-10-17T05:00:30Z", max_skew_seconds=10)["status"] == (
+        "backdated_receipt"
+    )
+
+
+@pytest.mark.parametrize(
+    "offset,status",
+    [
+        (timedelta(minutes=1), "ok"),
+        (timedelta(minutes=10), "backdated_receipt"),
+        (timedelta(hours=3), "late_timestamp"),
+        (-timedelta(minutes=10), "clock_skew"),
+    ],
+)
+def test_verify_reports_timestamp_skew_visibly(issuer, offset, status):
+    stamp = LocalTsa.generate(
+        clock=_clock(T0 + offset), valid_from=T0 - timedelta(days=1)
+    )
+    out, _, _ = _countersigned(issuer, stamp)
+    report = verify_countersigned(
+        out,
+        registry=[issuer.registry_entry()],
+        tsa_certificates=[stamp.certificate],
+        accept_non_flow=True,
+    )
+    assert report.timing["status"] == status
+    assert report.timing["delta_seconds"] == int(offset.total_seconds())
+    text = render_report(report)
+    if status == "ok":
+        assert report.warnings == [] and "WARNING" not in text
+    else:
+        assert report.warnings == [status]
+        assert text.splitlines()[1].startswith(f"WARNING: WARNING {status}")
+        assert f"{int(offset.total_seconds()):+d} s" in text
+
+
+def test_verify_prints_tsa_facts_and_never_the_word_qualified(issuer, tsa):
+    out, _, _ = _countersigned(issuer, tsa)
+    report = verify_countersigned(
+        out, registry=[issuer.registry_entry()], tsa_certificates=[tsa.certificate]
+    )
+    text = render_report(report)
+    ts = report.receipt_timestamp
+    for fact in (ts["gen_time"], ts["tsa_subject"], ts["policy"], ts["serial_number"]):
+        assert fact and str(fact) in text
+    assert "qualified" not in text.lower()
+
+
+def test_dossier_and_docs_carry_the_disclaimer_and_metering_rule(issuer, tsa):
+    from openadapt_flow.countersign.dossier import (
+        DISCLAIMER,
+        METERING_NOTE,
+        render_html,
+    )
+
+    out, _, _ = _countersigned(issuer, tsa)
+    report = verify_countersigned(
+        out, registry=[issuer.registry_entry()], tsa_certificates=[tsa.certificate]
+    )
+    page = render_html({"document": out}, report)
+    import html as _html
+
+    assert _html.escape(DISCLAIMER) in page and _html.escape(METERING_NOTE) in page
+    docs = " ".join(
+        (Path(__file__).parents[1] / "docs" / "COUNTERSIGNED_SEALS.md")
+        .read_text()
+        .split()
+    )
+    assert DISCLAIMER in docs and METERING_NOTE in docs

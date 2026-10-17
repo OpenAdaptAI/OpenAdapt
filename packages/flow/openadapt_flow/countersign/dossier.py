@@ -38,12 +38,33 @@ from openadapt_flow.countersign.document import (
     locate,
     verify_countersigned,
 )
-from openadapt_flow.countersign.render import render_report
+from openadapt_flow.countersign.render import render_report, timing_line
 
-__all__ = ["DOSSIER_SCHEMA", "build_dossier", "extract_dossier_data", "write_dossier"]
+__all__ = [
+    "DISCLAIMER",
+    "METERING_NOTE",
+    "DOSSIER_SCHEMA",
+    "build_dossier",
+    "extract_dossier_data",
+    "write_dossier",
+]
 
 DOSSIER_SCHEMA = "openadapt.seal-dossier/v1"
 _DATA_ID = "openadapt-dossier-data"
+DISCLAIMER = (
+    "Neither a Countersigned Seal nor a Timestamped Seal is a notarial act,"
+    " a government certification, or an eIDAS qualified electronic seal or "
+    "qualified electronic time stamp. This verifier checks cryptographic "
+    "integrity against pinned keys and RFC 3161 timestamp tokens; it does "
+    "not consult EU Trusted Lists (EUTL) or attest to the accuracy of the "
+    "underlying system of record. A Seal is a technical audit artifact and "
+    "makes no representation as to legal admissibility or legal effect."
+)
+METERING_NOTE = (
+    "OpenAdapt meters Seal issuance equally across all verification "
+    "outcomes (VERIFIED, REFUTED, and INDETERMINATE); fees are never "
+    "contingent on whether a workflow or verification check succeeds."
+)
 
 
 def _json_for_script(value: Any) -> str:
@@ -247,9 +268,10 @@ def render_html(data: Mapping[str, Any], report: CountersignReport) -> str:
         "A signature proves who made the statement. A trusted timestamp proves the "
         "statement existed by a given time. Neither proves the record in the system "
         "of record is correct.</p>"
-        "<p>This file is not a notarial act, and it is not an eIDAS qualified "
-        "electronic seal or timestamp. It makes no claim about legal effect.</p>"
+        f"<p>{esc(DISCLAIMER)}</p><p>{esc(METERING_NOTE)}</p>"
     )
+    if report.warnings:
+        sections.append(f"<p class='warn'>WARNING: {esc(timing_line(report))}</p>")
     sections.append(
         "<h2>Verification at export</h2><pre>" + esc(render_report(report)) + "</pre>"
     )
