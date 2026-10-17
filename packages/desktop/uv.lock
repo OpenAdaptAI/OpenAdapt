@@ -1330,7 +1330,7 @@ wheels = [
 
 [[package]]
 name = "openadapt-desktop"
-version = "0.17.1"
+version = "0.18.0"
 source = { editable = "." }
 dependencies = [
     { name = "cryptography" },
