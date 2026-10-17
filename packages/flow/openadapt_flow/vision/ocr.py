@@ -1,7 +1,9 @@
-"""OCR utilities backed by rapidocr-onnxruntime.
+"""OCR utilities backed by RapidOCR or the operating system's own OCR.
 
-The RapidOCR engine is expensive to construct, so a single module-level
-instance is created lazily on first use and reused for the process lifetime.
+The backend comes from ``OPENADAPT_FLOW_OCR`` (see
+:mod:`openadapt_flow.vision.ocr_backends`). The engine is expensive to
+construct, so a single module-level instance is created lazily on first use
+and reused for the process lifetime.
 All returned coordinates are in *screen* (full-frame) pixel space, even when
 a ``region`` restricts the OCR input.
 """
@@ -14,11 +16,11 @@ import threading
 from collections import OrderedDict
 from typing import Any
 
-import cv2
 import numpy as np
 from pydantic import BaseModel
 
 from openadapt_flow.ir import Region
+from openadapt_flow.vision import imgops
 from openadapt_flow.vision.match import Match, _clamp_region
 
 _engine: Any = None
@@ -44,14 +46,22 @@ class ContradictoryOcrEvidenceError(OcrResolutionRefused):
 
 
 def _get_engine() -> Any:
-    """Return the process-wide RapidOCR engine, creating it on first use."""
+    """Return the process-wide OCR engine, creating it on first use."""
     global _engine
     if _engine is None:
         with _engine_lock:
             if _engine is None:
-                from rapidocr_onnxruntime import RapidOCR
+                from openadapt_flow.vision.ocr_backends import (
+                    active_backend_name,
+                    create_native_engine,
+                )
 
-                _engine = RapidOCR()
+                if active_backend_name() == "native":
+                    _engine = create_native_engine()
+                else:
+                    from rapidocr_onnxruntime import RapidOCR
+
+                    _engine = RapidOCR()
     return _engine
 
 
@@ -71,8 +81,7 @@ class OcrLine(BaseModel):
 
 def _decode_bgr(png: bytes) -> np.ndarray:
     """Decode PNG bytes to a BGR ``uint8`` image."""
-    arr = np.frombuffer(png, dtype=np.uint8)
-    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    img = imgops.decode_bgr(png)
     if img is None:
         raise ValueError("could not decode PNG bytes")
     return img
@@ -141,6 +150,8 @@ def _ocr_uncached(
     Returns:
         Recognized lines in engine order; empty list if nothing was found.
     """
+    if hasattr(engine, "recognize_png"):
+        return _native_ocr_uncached(engine, screen_png, region=region)
     img = _decode_bgr(screen_png)
     h, w = img.shape[:2]
     off_x, off_y = 0, 0
@@ -170,6 +181,34 @@ def _ocr_uncached(
     return lines
 
 
+def _native_ocr_uncached(
+    engine: Any, screen_png: bytes, *, region: Region | None = None
+) -> list[OcrLine]:
+    """Run a native engine on the full frame or on a cropped region."""
+    off_x, off_y = 0, 0
+    png = screen_png
+    if region is not None:
+        img = _decode_bgr(screen_png)
+        h, w = img.shape[:2]
+        clamped = _clamp_region(region, w, h)
+        if clamped is None:
+            return []
+        off_x, off_y, rw, rh = clamped
+        cropped = imgops.encode_png(img[off_y : off_y + rh, off_x : off_x + rw])
+        if cropped is None:
+            raise ValueError("could not encode OCR region")
+        png = cropped
+    return [
+        OcrLine(
+            text=text,
+            region=(off_x + x, off_y + y, lw, lh),
+            confidence=confidence,
+        )
+        for x, y, lw, lh, text, confidence in engine.recognize_png(png)
+        if text
+    ]
+
+
 def normalize_text(text: str) -> str:
     """Normalize text for fuzzy comparison: lowercase, collapse whitespace."""
     return " ".join(text.lower().split())
@@ -185,12 +224,11 @@ def upscale_png(screen_png: bytes, factor: int = 2) -> bytes:
     Returns:
         The upscaled PNG bytes (the input unchanged if decoding fails).
     """
-    img = cv2.imdecode(np.frombuffer(screen_png, np.uint8), cv2.IMREAD_COLOR)
+    img = imgops.decode_bgr(screen_png)
     if img is None:
         return screen_png
-    up = cv2.resize(img, None, fx=factor, fy=factor, interpolation=cv2.INTER_CUBIC)
-    ok, buf = cv2.imencode(".png", up)
-    return buf.tobytes() if ok else screen_png
+    encoded = imgops.encode_png(imgops.resize_cubic(img, factor))
+    return encoded if encoded is not None else screen_png
 
 
 def text_present(

@@ -8,7 +8,6 @@ format.
 
 from __future__ import annotations
 
-import cv2
 import numpy as np
 from PIL import Image
 
@@ -24,7 +23,8 @@ def _binary_array_to_hex(bits: np.ndarray) -> str:
 def _unnormalized_dct2(pixels: np.ndarray) -> np.ndarray:
     """Return SciPy fftpack-compatible unnormalized type-II 2-D DCT.
 
-    OpenCV computes an orthonormal DCT-II.  Scaling its frequency rows and
+    OpenCV (or its numpy equivalent in ``imgops``, when OpenCV isn't loaded)
+    computes an orthonormal DCT-II.  Scaling its frequency rows and
     columns converts it to the unnormalized transform used by
     ``scipy.fftpack.dct(..., type=2, norm=None)``.  Using OpenCV also preserves
     exact zero-frequency symmetry for constant images; a direct cosine-matrix
@@ -34,7 +34,9 @@ def _unnormalized_dct2(pixels: np.ndarray) -> np.ndarray:
     height, width = pixels.shape
     if height != width:
         raise ValueError("perceptual hash DCT input must be square")
-    normalized = cv2.dct(np.asarray(pixels, dtype=np.float64))
+    from openadapt_flow.vision import imgops
+
+    normalized = imgops.dct2_orthonormal(np.asarray(pixels, dtype=np.float64))
     scale = np.full(width, np.sqrt(2.0 * width), dtype=np.float64)
     scale[0] = 2.0 * np.sqrt(width)
     return normalized * scale[:, np.newaxis] * scale[np.newaxis, :]
