@@ -1,0 +1,64 @@
+{
+  "schema_version": 1,
+  "workflow_name": "mockmed-triage",
+  "step_index": 1,
+  "step_id": "step_001",
+  "intent": "click 'New Encounter'",
+  "state_id": null,
+  "next_step_index": 2,
+  "params": {
+    "note": "Synthetic follow-up in two weeks"
+  },
+  "effect_verified": null,
+  "effect_approved_unverified": false,
+  "effect_contract_hashes": [],
+  "effect_evidence": [],
+  "identity": {
+    "status": "verified",
+    "mode": "structured",
+    "coverage": 1.0,
+    "expected": "<structured identity template>",
+    "observed": "Jane Sample — MRN P1 — DOB 1980-01-01",
+    "param": null,
+    "signal_evidence": [],
+    "quorum_required": null,
+    "quorum_verified": null
+  },
+  "governed_authorization_id": "a4c1dd116c8e4f42910e667f06ad9214",
+  "governed_approval_source": "public-demo-qualified-campaign",
+  "postconditions_ok": true,
+  "skipped": false,
+  "actuation": "dom",
+  "delivery_uncertainty": null,
+  "resolution": {
+    "rung": "structural",
+    "point": [
+      114,
+      159
+    ],
+    "confidence": 1.0,
+    "elapsed_ms": 37.33066702261567,
+    "structural_handle": {
+      "point": [
+        114,
+        159
+      ],
+      "confidence": 1.0,
+      "region": [
+        24,
+        139,
+        180,
+        40
+      ],
+      "target_fingerprint": "fd86ee2bf88e429633c6af84556e583ca462f6e1ad0c2d1b6ff21d279d8976e4",
+      "candidate_count": 1,
+      "supported_operations": [
+        "dom_click",
+        "dom_double_click"
+      ]
+    }
+  },
+  "drift_oracle_calls": 0,
+  "heal": null,
+  "created_at": "2026-07-26T07:07:52.318215+00:00"
+}

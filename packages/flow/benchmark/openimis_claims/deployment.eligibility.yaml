@@ -1,0 +1,71 @@
+# Deployment config for the openIMIS coverage / eligibility-check reference
+# workflow (see README.md "The eligibility-check workflow" and
+# docs/EFFECT_KIT.md). SYNTHETIC reference environment only.
+#
+# The effects section wires the kit's read-only SQL verifier at the declared
+# eligibility outcome itself: the run's `insurance_no` plus the demonstrated
+# A1 service and reproducible 2026-07-21 as-of date bind into ONE read-only
+# SELECT (the same statement the fixture's coverage oracle runs --
+# benchmark/openimis_claims/fixture.py::ELIGIBILITY_ORACLE_SQL; a unit test
+# asserts the two never drift), executed as the dedicated read-only role
+# `oa_eligibility_oracle` that `bootstrap_eligibility()` creates with SELECT
+# on exactly the five policy/product/service lookup tables and
+# default_transaction_read_only=on. The role is the real read-only
+# enforcement; the kit's statement filter is defense in depth.
+#
+# Secrets are references, never literals: OPENIMIS_ORACLE_PASSWORD names the
+# environment variable holding the role's generated fixture secret (surfaced
+# from the ignored out/state/secrets.json by the demo driver). Requires a
+# PostgreSQL DB-API driver: `uv pip install "psycopg[binary]"`.
+name: openimis-eligibility-reference
+backend:
+  kind: web
+  url: http://localhost:9401/front/
+effects:
+  kind: sql
+  sql_driver: psycopg
+  sql_connect_args:
+    host: 127.0.0.1
+    port: 9402
+    user: oa_eligibility_oracle
+    dbname: IMIS
+  sql_password_env: OPENIMIS_ORACLE_PASSWORD
+  sql_query: |
+    SELECT i."CHFID" AS chf_id,
+           i."LastName" AS last_name,
+           i."OtherNames" AS other_names,
+           s."ServCode" AS service_code,
+           CAST(CAST(%(as_of_date)s AS date) AS text) AS as_of_date,
+           CAST(p."PolicyStatus" AS text) AS policy_status,
+           CAST(p."EffectiveDate" AS text) AS effective_date,
+           CAST(p."ExpiryDate" AS text) AS expiry_date,
+           CASE WHEN p."PolicyStatus" = 2
+                      AND p."EffectiveDate" IS NOT NULL
+                      AND p."EffectiveDate" <= CAST(%(as_of_date)s AS date)
+                      AND p."ExpiryDate" IS NOT NULL
+                      AND p."ExpiryDate" >= CAST(%(as_of_date)s AS date)
+                      AND ip."EffectiveDate" IS NOT NULL
+                      AND ip."EffectiveDate" <= CAST(%(as_of_date)s AS date)
+                      AND ip."ExpiryDate" IS NOT NULL
+                      AND ip."ExpiryDate" >= CAST(%(as_of_date)s AS date)
+                      AND CAST(ps."ValidityFrom" AS date)
+                          <= CAST(%(as_of_date)s AS date)
+                      AND CAST(s."ValidityFrom" AS date)
+                          <= CAST(%(as_of_date)s AS date)
+                THEN 'Eligible' ELSE 'Ineligible' END AS eligibility
+    FROM "tblInsuree" i
+    JOIN "tblInsureePolicy" ip ON ip."InsureeID" = i."InsureeID"
+    JOIN "tblPolicy" p ON p."PolicyID" = ip."PolicyId"
+    JOIN "tblProductServices" ps ON ps."ProdID" = p."ProdID"
+    JOIN "tblServices" s ON s."ServiceID" = ps."ServiceID"
+    WHERE i."CHFID" = %(insurance_no)s
+      AND s."ServCode" = %(service_code)s
+      AND i."ValidityTo" IS NULL
+      AND ip."ValidityTo" IS NULL
+      AND p."ValidityTo" IS NULL
+      AND ps."ValidityTo" IS NULL
+      AND s."ValidityTo" IS NULL
+  sql_query_params:
+    insurance_no: { param: insurance_no }
+    service_code: { param: service_code }
+    as_of_date: { param: as_of_date }

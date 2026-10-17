@@ -1,0 +1,261 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Compiled Replay vs. Computer-Use Agent &mdash; openadapt-flow</title>
+<style>
+
+:root{
+  --bg:#f6f7f9; --fg:#161a1f; --muted:#5b6570; --card:#ffffff; --line:#e2e6ea;
+  --safe:#137a3f; --safe-bg:#e7f5ec; --unsafe:#b3261e; --unsafe-bg:#fdeceb;
+  --halt:#8a5a00; --halt-bg:#fbf3e2; --verify:#137a3f; --verify-bg:#e7f5ec;
+  --code:#0b3d2e; --code-bg:#eef4f1; --accent:#1f3a5f;
+  --compiled:#137a3f; --compiled-soft:#e7f5ec;
+  --agent:#1f3a5f; --agent-soft:#e8eef6;
+  --grid:#e9edf1;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#0f1720; --fg:#e6edf3; --muted:#9fb0c0; --card:#161d26; --line:#263039;
+    --safe:#4ade80; --safe-bg:#12321f; --unsafe:#ff6b61; --unsafe-bg:#3a1512;
+    --halt:#e7b84b; --halt-bg:#332a12; --verify:#4ade80; --verify-bg:#12321f;
+    --code:#a5f3d0; --code-bg:#10231b; --accent:#8fb2e0;
+    --compiled:#4ade80; --compiled-soft:#12321f;
+    --agent:#8fb2e0; --agent-soft:#182432;
+    --grid:#222c36;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0f1720; --fg:#e6edf3; --muted:#9fb0c0; --card:#161d26; --line:#263039;
+  --safe:#4ade80; --safe-bg:#12321f; --unsafe:#ff6b61; --unsafe-bg:#3a1512;
+  --halt:#e7b84b; --halt-bg:#332a12; --verify:#4ade80; --verify-bg:#12321f;
+  --code:#a5f3d0; --code-bg:#10231b; --accent:#8fb2e0;
+  --compiled:#4ade80; --compiled-soft:#12321f;
+  --agent:#8fb2e0; --agent-soft:#182432;
+  --grid:#222c36;
+}
+:root[data-theme="light"]{
+  --bg:#f6f7f9; --fg:#161a1f; --muted:#5b6570; --card:#ffffff; --line:#e2e6ea;
+  --safe:#137a3f; --safe-bg:#e7f5ec; --unsafe:#b3261e; --unsafe-bg:#fdeceb;
+  --halt:#8a5a00; --halt-bg:#fbf3e2; --verify:#137a3f; --verify-bg:#e7f5ec;
+  --code:#0b3d2e; --code-bg:#eef4f1; --accent:#1f3a5f;
+  --compiled:#137a3f; --compiled-soft:#e7f5ec;
+  --agent:#1f3a5f; --agent-soft:#e8eef6;
+  --grid:#e9edf1;
+}
+*{box-sizing:border-box;}
+body{margin:0;background:var(--bg);color:var(--fg);
+  font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  line-height:1.5;}
+main{max-width:1040px;margin:0 auto;padding:32px 20px 64px;}
+.page-head h1{font-size:30px;margin:0 0 6px;letter-spacing:-0.02em;}
+.sub{color:var(--muted);margin:0 0 16px;max-width:74ch;}
+.sub strong{color:var(--fg);}
+.method{color:var(--muted);font-size:14px;max-width:80ch;}
+code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  background:var(--code-bg);color:var(--code);padding:1px 5px;border-radius:4px;
+  font-size:0.9em;}
+.headline{display:block;font-weight:700;font-size:18px;padding:12px 16px;
+  border-radius:8px;margin:6px 0 16px;}
+.headline.ok{background:var(--safe-bg);color:var(--safe);border:1px solid var(--safe);}
+.isnt{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:6px 0 16px;}
+@media (max-width:680px){.isnt{grid-template-columns:1fr;}}
+.isnt p{margin:0;background:var(--card);border:1px solid var(--line);
+  border-left:4px solid var(--accent);border-radius:8px;padding:11px 14px;
+  font-size:14px;color:var(--muted);}
+.isnt strong{color:var(--fg);}
+
+.bench{background:var(--card);border:1px solid var(--line);border-radius:12px;
+  padding:20px 20px 18px;margin:22px 0;box-shadow:0 1px 2px rgba(0,0,0,0.04);}
+.bench.lead{border-left:5px solid var(--compiled);}
+.bench-head{margin-bottom:6px;}
+.bench-tags{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:6px;}
+.tag{display:inline-block;font-size:11px;font-weight:800;letter-spacing:0.05em;
+  text-transform:uppercase;padding:3px 9px;border-radius:999px;}
+.tag.lead{background:var(--compiled);color:var(--bg);}
+.tag.field{background:var(--halt-bg);color:var(--halt);border:1px solid var(--halt);}
+.tag.repro{background:var(--agent-soft);color:var(--accent);border:1px solid var(--accent);}
+.bench h2{margin:2px 0 4px;font-size:21px;letter-spacing:-0.01em;}
+.bench-task{color:var(--muted);font-size:14px;margin:0 0 6px;max-width:86ch;}
+
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0 18px;}
+@media (max-width:680px){.tiles{grid-template-columns:1fr;}}
+.tile{border:1px solid var(--line);border-radius:10px;padding:12px 14px;
+  background:var(--bg);}
+.tile-k{font-size:11px;text-transform:uppercase;letter-spacing:0.05em;
+  color:var(--muted);font-weight:700;}
+.tile-v{font-size:22px;font-weight:800;margin:4px 0 3px;letter-spacing:-0.01em;
+  font-variant-numeric:tabular-nums;}
+.tile-v .vs{font-size:13px;font-weight:600;color:var(--muted);
+  text-transform:lowercase;letter-spacing:0;padding:0 3px;}
+.tile-s{font-size:12px;color:var(--muted);}
+.tile.ok{border-left:4px solid var(--safe);}
+.tile.cost{border-left:4px solid var(--compiled);}
+.tile.speed{border-left:4px solid var(--accent);}
+
+.charts{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin:8px 0 4px;}
+@media (max-width:760px){.charts{grid-template-columns:1fr;}}
+.chart-cell{min-width:0;border:1px solid var(--line);border-radius:10px;
+  padding:12px 14px 10px;background:var(--bg);}
+.chart-fig{margin:0;}
+.chart-title{font-size:13px;font-weight:700;color:var(--fg);margin-bottom:4px;}
+.chart-cap{font-size:12px;color:var(--muted);margin-top:6px;}
+svg.chart{display:block;overflow:visible;}
+svg.chart .grid{stroke:var(--grid);stroke-width:1;}
+svg.chart .axis{stroke:var(--muted);stroke-width:1.2;}
+svg.chart .tick{fill:var(--muted);font-size:11px;
+  font-family:ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;}
+svg.chart .axis-unit{fill:var(--muted);font-size:10.5px;text-transform:uppercase;
+  letter-spacing:0.04em;}
+svg.chart .row-label{fill:var(--fg);font-size:12.5px;}
+svg.chart .val{fill:var(--fg);font-size:12.5px;font-weight:600;
+  font-family:ui-monospace,Menlo,monospace;font-variant-numeric:tabular-nums;}
+svg.chart .val.emph{font-weight:800;}
+svg.chart .bar{opacity:0.92;}
+svg.chart .bar.emph{opacity:1;}
+svg.chart .bar-c{fill:var(--compiled);}
+svg.chart .bar-a{fill:var(--agent);}
+svg.chart circle.zero-dot{stroke:var(--bg);stroke-width:2;}
+
+.forever{margin:12px 0 6px;border:1px dashed var(--line);border-radius:10px;
+  padding:12px 14px;background:var(--compiled-soft);}
+.forever-h{font-size:14px;font-weight:800;color:var(--fg);}
+.forever-h .derived{font-size:11.5px;font-weight:600;color:var(--muted);}
+.forever-t{border-collapse:collapse;margin:8px 0 4px;font-size:14px;}
+.forever-t th{text-align:left;font-size:11px;text-transform:uppercase;
+  letter-spacing:0.04em;color:var(--muted);padding:3px 22px 4px 0;font-weight:700;}
+.forever-t td{padding:3px 22px 3px 0;font-variant-numeric:tabular-nums;
+  font-family:ui-monospace,Menlo,monospace;}
+.forever-t td.c{color:var(--compiled);font-weight:800;}
+.forever-t td.a{color:var(--accent);font-weight:700;}
+.forever-note{font-size:12.5px;color:var(--muted);margin:6px 0 0;max-width:88ch;}
+
+.bench-method{font-size:13px;color:var(--muted);margin:14px 0 0;max-width:92ch;}
+.bench-method .src{display:block;margin-top:4px;}
+.honest-inline{font-size:13px;color:var(--muted);margin:10px 0 0;max-width:92ch;
+  border-left:3px solid var(--halt);padding-left:12px;}
+.honest-inline strong,.honest-inline em{color:var(--fg);}
+
+.limits{margin-top:40px;border-top:2px solid var(--line);padding-top:22px;}
+.limits h2{font-size:22px;margin:0 0 8px;}
+.limits > p{color:var(--muted);max-width:82ch;}
+.limits ul{list-style:none;padding:0;margin:16px 0;display:flex;
+  flex-direction:column;gap:14px;}
+.limits li{background:var(--card);border:1px solid var(--line);
+  border-left:4px solid var(--halt);border-radius:8px;padding:12px 16px;}
+.limits li strong{display:block;font-size:15px;margin-bottom:4px;}
+.limits li p{margin:0;color:var(--muted);font-size:14px;max-width:90ch;}
+.foot{font-size:13px;color:var(--muted);margin-top:18px;max-width:90ch;}
+.page-foot{margin-top:34px;padding-top:14px;border-top:1px solid var(--line);
+  font-size:12px;color:var(--muted);}
+
+</style>
+</head>
+<body>
+<main>
+  <header class="page-head">
+    <h1>Compiled Replay vs. Computer-Use Agent</h1>
+    <p class="sub">One clinical task, two ways to automate it, one success check.
+      The wedge in one line: for a task you have already demonstrated, a compiled
+      replay is <strong>model-free</strong>, <strong>~$0 per run</strong>, and
+      <strong>faster</strong> on these measured trials. Each arm's success is
+      reported separately. Generated
+      straight from the repo's real benchmark <code>results.json</code> files; no
+      number here is hand-typed.</p>
+    <div class="headline ok">Same task, measured success (19/20 vs 10/10) &mdash; compiled replay costs $0 and runs 1.8&times; faster than the claude-sonnet-5 agent</div>
+    <div class="isnt">
+      <p><strong>What this is.</strong> The economics of the 500<sup>th</sup> run of
+        a <em>known</em> task: once a workflow has been demonstrated once, replaying
+        it should not cost a model call.</p>
+      <p><strong>What this isn't.</strong> A capability claim. Compiled replay is the
+        wrong tool for a task nobody has automated yet &mdash; exploring an unfamiliar
+        screen is exactly the agent's job. The agent explores; the compiled bundle
+        exploits a demonstration.</p>
+    </div>
+    <p class="method">Both arms drive the same vision-only interface against the same
+      app; the only difference is whether a model is in the per-action loop.
+      Reproduce with <code>python -m benchmark.comparison_artifact.generate</code>.</p>
+  </header>
+
+  
+    <section class="bench lead">
+      <header class="bench-head">
+        <div class="bench-titles">
+          <div class="bench-tags"><span class="tag lead">LEAD</span><span class="tag field">field result — real third-party app</span></div>
+          <h2>OpenEMR public demo — a real third-party EMR</h2>
+          <p class="bench-task">OpenEMR public demo: log in, search the demo patient, open the chart, scroll the dashboard to the Messages card, open Patient Messages, add a parameterized note, save &middot; 18 compiled steps</p>
+        </div>
+      </header>
+      <div class="tiles"><div class="tile ok"><div class="tile-k">measured success</div><div class="tile-v">19/20 &middot; 10/10</div><div class="tile-s">compiled &middot; agent — same arm-independent screen contract</div></div><div class="tile cost"><div class="tile-k">model cost / run</div><div class="tile-v">$0 <span class='vs'>vs</span> $0.5522</div><div class="tile-s">agent arm total $5.52 over 10 runs</div></div><div class="tile speed"><div class="tile-k">latency p50</div><div class="tile-v">39.2 s <span class='vs'>vs</span> 70.4 s</div><div class="tile-s">compiled is 1.8&times; faster at the median</div></div></div>
+      <div class="charts">
+        <div class="chart-cell"><figure class="chart-fig"><figcaption class="chart-title">Model cost per run</figcaption><svg class="chart" viewBox="0 0 680 118" role="img" width="100%" preserveAspectRatio="xMinYMin meet" aria-label="Model cost per run (USD / run (list price))"><line class="grid" x1="150.0" y1="8.0" x2="150.0" y2="84.0"/><text class="tick" x="150.0" y="100.0" text-anchor="middle">$0</text><line class="grid" x1="300.7" y1="8.0" x2="300.7" y2="84.0"/><text class="tick" x="300.7" y="100.0" text-anchor="middle">$0.2000</text><line class="grid" x1="451.3" y1="8.0" x2="451.3" y2="84.0"/><text class="tick" x="451.3" y="100.0" text-anchor="middle">$0.4000</text><line class="grid" x1="602.0" y1="8.0" x2="602.0" y2="84.0"/><text class="tick" x="602.0" y="100.0" text-anchor="middle">$0.6000</text><text class="axis-unit" x="602.0" y="114.0" text-anchor="end">USD / run (list price)</text><line class="axis" x1="150.0" y1="84.0" x2="602.0" y2="84.0"/><text class="row-label" x="138.0" y="27.0" text-anchor="end" dominant-baseline="central">compiled replay</text><circle class="zero-dot bar-c" cx="150.0" cy="27.0" r="6"/><text class="val emph" x="164.0" y="27.0" dominant-baseline="central">$0</text><text class="row-label" x="138.0" y="65.0" text-anchor="end" dominant-baseline="central">computer-use agent</text><rect class="bar bar-a" x="150.0" y="52.0" width="416.0" height="26" rx="3"/><text class="val" x="574.0" y="65.0" dominant-baseline="central">$0.5522</text></svg><figcaption class="chart-cap">In this measured sample, compiled replay made zero model calls and incurred $0 in model API charges.</figcaption></figure></div>
+        <div class="chart-cell"><figure class="chart-fig"><figcaption class="chart-title">Latency (wall-clock)</figcaption><svg class="chart" viewBox="0 0 680 204" role="img" width="100%" preserveAspectRatio="xMinYMin meet" aria-label="Latency (wall-clock) (seconds)"><line class="grid" x1="150.0" y1="8.0" x2="150.0" y2="170.0"/><text class="tick" x="150.0" y="186.0" text-anchor="middle">0</text><line class="grid" x1="263.0" y1="8.0" x2="263.0" y2="170.0"/><text class="tick" x="263.0" y="186.0" text-anchor="middle">25</text><line class="grid" x1="376.0" y1="8.0" x2="376.0" y2="170.0"/><text class="tick" x="376.0" y="186.0" text-anchor="middle">50</text><line class="grid" x1="489.0" y1="8.0" x2="489.0" y2="170.0"/><text class="tick" x="489.0" y="186.0" text-anchor="middle">75</text><line class="grid" x1="602.0" y1="8.0" x2="602.0" y2="170.0"/><text class="tick" x="602.0" y="186.0" text-anchor="middle">100</text><text class="axis-unit" x="602.0" y="200.0" text-anchor="end">seconds</text><line class="axis" x1="150.0" y1="170.0" x2="602.0" y2="170.0"/><text class="row-label" x="138.0" y="27.0" text-anchor="end" dominant-baseline="central">compiled p50</text><rect class="bar bar-c emph" x="150.0" y="14.0" width="177.1" height="26" rx="3"/><text class="val emph" x="335.1" y="27.0" dominant-baseline="central">39.2 s</text><text class="row-label" x="138.0" y="65.0" text-anchor="end" dominant-baseline="central">compiled p95</text><rect class="bar bar-c" x="150.0" y="52.0" width="185.5" height="26" rx="3"/><text class="val" x="343.5" y="65.0" dominant-baseline="central">41.0 s</text><text class="row-label" x="138.0" y="113.0" text-anchor="end" dominant-baseline="central">agent p50</text><rect class="bar bar-a" x="150.0" y="100.0" width="318.4" height="26" rx="3"/><text class="val" x="476.4" y="113.0" dominant-baseline="central">70.4 s</text><text class="row-label" x="138.0" y="151.0" text-anchor="end" dominant-baseline="central">agent p95</text><rect class="bar bar-a" x="150.0" y="138.0" width="373.3" height="26" rx="3"/><text class="val" x="531.3" y="151.0" dominant-baseline="central">82.6 s</text></svg><figcaption class="chart-cap">Per-run wall-clock around the replay / agent loop only.</figcaption></figure></div>
+      </div>
+      <div class="forever"><div class="forever-h">Illustrative repeat-run model cost <span class="derived">(measured model $/run &times; N; not new runs)</span></div><table class="forever-t"><thead><tr><th>modeled runs</th><th>compiled model API</th><th>agent model API</th></tr></thead><tbody><tr><td class='n'>1</td><td class='c'>$0</td><td class='a'>$0.5522</td></tr><tr><td class='n'>100</td><td class='c'>$0</td><td class='a'>$55.22</td></tr><tr><td class='n'>1,000</td><td class='c'>$0</td><td class='a'>$552</td></tr><tr><td class='n'>10,000</td><td class='c'>$0</td><td class='a'>$5,522</td></tr></tbody></table><p class="forever-note">Agent values multiply the measured per-run model charge ($0.5522) at list price; an introductory $2/$10 rate applies through 2026-08-31. The compiled column projects the sample's zero model calls only. It excludes authoring, maintenance, compute, storage, review, and exception-handling cost and assumes the measured task and rates remain unchanged. The one-time demonstration was about a minute of human demonstration.</p></div>
+      <p class="bench-method">Both arms drive the same vision-only interface
+        (screenshots in; pixel clicks / typed text / scrolls out) against the
+        same target; the agent is <code>claude-sonnet-5</code> with the
+        computer-use tool, prompted with user intent, not steps. Success is one
+        arm-independent OCR check applied to both arms — neither arm's
+        self-report is trusted. Not CI-reproducible: a single shared public instance that every internet visitor mutates and that resets daily. Treat as a field result.
+        <span class="src">figures: <code>benchmark/openemr/results.json</code></span></p>
+      <p class="honest-inline">One compiled run (#20) self-flagged expected-screen drift at <code>step_017</code> and aborted. The corrected saved-row OCR check also rejects it: the retained final frame shows the note in the unsaved entry form, not in a saved message row. It counts as a failure.</p>
+      
+    </section>
+    
+  
+    <section class="bench ">
+      <header class="bench-head">
+        <div class="bench-titles">
+          <div class="bench-tags"><span class="tag repro">CI-reproducible anchor</span></div>
+          <h2>MockMed — the bundled demo clinic (CI-reproducible anchor)</h2>
+          <p class="bench-task">MockMed triage: login, open first referral, create a Triage encounter, enter the note, save</p>
+        </div>
+      </header>
+      <div class="tiles"><div class="tile ok"><div class="tile-k">measured success</div><div class="tile-v">100/100 &middot; 20/20</div><div class="tile-s">compiled &middot; agent — same arm-independent screen contract</div></div><div class="tile cost"><div class="tile-k">model cost / run</div><div class="tile-v">$0 <span class='vs'>vs</span> $0.2716</div><div class="tile-s">agent arm total $5.43 over 20 runs</div></div><div class="tile speed"><div class="tile-k">latency p50</div><div class="tile-v">4.9 s <span class='vs'>vs</span> 37.5 s</div><div class="tile-s">compiled is 7.6&times; faster at the median</div></div></div>
+      <div class="charts">
+        <div class="chart-cell"><figure class="chart-fig"><figcaption class="chart-title">Model cost per run</figcaption><svg class="chart" viewBox="0 0 680 118" role="img" width="100%" preserveAspectRatio="xMinYMin meet" aria-label="Model cost per run (USD / run (list price))"><line class="grid" x1="150.0" y1="8.0" x2="150.0" y2="84.0"/><text class="tick" x="150.0" y="100.0" text-anchor="middle">$0</text><line class="grid" x1="300.7" y1="8.0" x2="300.7" y2="84.0"/><text class="tick" x="300.7" y="100.0" text-anchor="middle">$0.1000</text><line class="grid" x1="451.3" y1="8.0" x2="451.3" y2="84.0"/><text class="tick" x="451.3" y="100.0" text-anchor="middle">$0.2000</text><line class="grid" x1="602.0" y1="8.0" x2="602.0" y2="84.0"/><text class="tick" x="602.0" y="100.0" text-anchor="middle">$0.3000</text><text class="axis-unit" x="602.0" y="114.0" text-anchor="end">USD / run (list price)</text><line class="axis" x1="150.0" y1="84.0" x2="602.0" y2="84.0"/><text class="row-label" x="138.0" y="27.0" text-anchor="end" dominant-baseline="central">compiled replay</text><circle class="zero-dot bar-c" cx="150.0" cy="27.0" r="6"/><text class="val emph" x="164.0" y="27.0" dominant-baseline="central">$0</text><text class="row-label" x="138.0" y="65.0" text-anchor="end" dominant-baseline="central">computer-use agent</text><rect class="bar bar-a" x="150.0" y="52.0" width="409.1" height="26" rx="3"/><text class="val" x="567.1" y="65.0" dominant-baseline="central">$0.2716</text></svg><figcaption class="chart-cap">In this measured sample, compiled replay made zero model calls and incurred $0 in model API charges.</figcaption></figure></div>
+        <div class="chart-cell"><figure class="chart-fig"><figcaption class="chart-title">Latency (wall-clock)</figcaption><svg class="chart" viewBox="0 0 680 204" role="img" width="100%" preserveAspectRatio="xMinYMin meet" aria-label="Latency (wall-clock) (seconds)"><line class="grid" x1="150.0" y1="8.0" x2="150.0" y2="170.0"/><text class="tick" x="150.0" y="186.0" text-anchor="middle">0</text><line class="grid" x1="300.7" y1="8.0" x2="300.7" y2="170.0"/><text class="tick" x="300.7" y="186.0" text-anchor="middle">20</text><line class="grid" x1="451.3" y1="8.0" x2="451.3" y2="170.0"/><text class="tick" x="451.3" y="186.0" text-anchor="middle">40</text><line class="grid" x1="602.0" y1="8.0" x2="602.0" y2="170.0"/><text class="tick" x="602.0" y="186.0" text-anchor="middle">60</text><text class="axis-unit" x="602.0" y="200.0" text-anchor="end">seconds</text><line class="axis" x1="150.0" y1="170.0" x2="602.0" y2="170.0"/><text class="row-label" x="138.0" y="27.0" text-anchor="end" dominant-baseline="central">compiled p50</text><rect class="bar bar-c emph" x="150.0" y="14.0" width="37.1" height="26" rx="3"/><text class="val emph" x="195.1" y="27.0" dominant-baseline="central">4.9 s</text><text class="row-label" x="138.0" y="65.0" text-anchor="end" dominant-baseline="central">compiled p95</text><rect class="bar bar-c" x="150.0" y="52.0" width="38.1" height="26" rx="3"/><text class="val" x="196.1" y="65.0" dominant-baseline="central">5.1 s</text><text class="row-label" x="138.0" y="113.0" text-anchor="end" dominant-baseline="central">agent p50</text><rect class="bar bar-a" x="150.0" y="100.0" width="282.4" height="26" rx="3"/><text class="val" x="440.4" y="113.0" dominant-baseline="central">37.5 s</text><text class="row-label" x="138.0" y="151.0" text-anchor="end" dominant-baseline="central">agent p95</text><rect class="bar bar-a" x="150.0" y="138.0" width="327.3" height="26" rx="3"/><text class="val" x="485.3" y="151.0" dominant-baseline="central">43.4 s</text></svg><figcaption class="chart-cap">Per-run wall-clock around the replay / agent loop only.</figcaption></figure></div>
+      </div>
+      <div class="forever"><div class="forever-h">Illustrative repeat-run model cost <span class="derived">(measured model $/run &times; N; not new runs)</span></div><table class="forever-t"><thead><tr><th>modeled runs</th><th>compiled model API</th><th>agent model API</th></tr></thead><tbody><tr><td class='n'>1</td><td class='c'>$0</td><td class='a'>$0.2716</td></tr><tr><td class='n'>100</td><td class='c'>$0</td><td class='a'>$27.16</td></tr><tr><td class='n'>1,000</td><td class='c'>$0</td><td class='a'>$272</td></tr><tr><td class='n'>10,000</td><td class='c'>$0</td><td class='a'>$2,716</td></tr></tbody></table><p class="forever-note">Agent values multiply the measured per-run model charge ($0.2716) at list price; an introductory $2/$10 rate applies through 2026-08-31. The compiled column projects the sample's zero model calls only. It excludes authoring, maintenance, compute, storage, review, and exception-handling cost and assumes the measured task and rates remain unchanged. The one-time demonstration was about a minute of human demonstration.</p></div>
+      <p class="bench-method">Both arms drive the same vision-only interface
+        (screenshots in; pixel clicks / typed text / scrolls out) against the
+        same target; the agent is <code>claude-sonnet-5</code> with the
+        computer-use tool, prompted with user intent, not steps. Success is one
+        arm-independent OCR check applied to both arms — neither arm's
+        self-report is trusted. Anyone can rerun this deterministically — same orchestrator, same agent harness, same style of OCR success check, on a local app.
+        <span class="src">figures: <code>benchmark/results.json</code></span></p>
+      
+      <p class="honest-inline">Under a hostile theme swap (<code>?drift=theme</code>, which invalidates every recorded template crop), compiled still succeeded in 9.7 s with 8 self-heals; the agent succeeded in 87.4 s at $0.6319. This drift row is <strong>n=1 per arm</strong> — an existence result, not a rate.</p>
+    </section>
+    
+
+  <section class="limits">
+    <h2>Read before quoting these numbers</h2>
+    <p>This comparison would be dishonest without the caveats it does <em>not</em>
+      wave away. Pulled straight from the two <code>BENCHMARK.md</code> methodology
+      sections:</p>
+    <ul>
+      <li><strong>Small N, wide error bars.</strong><p>The agent arm is N=10 on OpenEMR and N=20 on MockMed, because agent runs cost real money, real minutes, and real load on a shared public service. A 100% success rate over ten runs is not a five-nines claim — its confidence interval is wide. The compiled arm (N=20 / 100) is cheap to repeat, so its bars are tighter, but the honest comparison is still small-sample on the agent side.</p></li>
+<li><strong>The lead result is a field result, not CI-reproducible.</strong><p>OpenEMR is a single shared public demo that anyone on the internet can mutate and that resets daily; every successful run also appends a message that grows the dashboard for the next run. Numbers depend on that instance's state and load on the day. The MockMed row is the reproducible anchor — treat OpenEMR as a real-world sighting, not a repeatable measurement.</p></li>
+<li><strong>Cost is list price with hard caps — billed cost is lower.</strong><p>Costs are computed from API token counts at list pricing. list price; an introductory $2/$10 rate applies through 2026-08-31, so the amount actually billed today is about a third lower than the figures shown. Every agent run is capped at $1.50 and the whole agent arm at $8.00 (list price); the caps stop the arm and the truncation is disclosed in the source data rather than hidden.</p></li>
+<li><strong>Success is corrected saved-row screen evidence, not a record read.</strong><p>The legacy whole-frame OCR check accepted one compiled run whose note was still in the unsaved entry form. The corrected contract requires the note in a saved Patient Messages row, and replay of all 30 retained final frames changes only that run. OCR can still miss dense text. This field result does not read the OpenEMR system of record out of band.</p></li>
+<li><strong>This measures bounded outcomes, cost, and latency — not capability.</strong><p>The OpenEMR outcomes are 19/20 and 10/10 under one corrected screen contract. The result shows the measured cost and latency difference. It is NOT a claim that compiled replay is more capable, more robust to novel situations, or a substitute for an agent on a task it has never seen. MockMed is also a deliberately simple app; harder surfaces would slow and likely degrade both arms, plausibly at different rates.</p></li>
+    </ul>
+    <p class="foot">Bottom line: on these measured trials, the compiled path removes
+      the model from the loop &mdash; $0 and
+      1.8&times; faster on the real EMR, and a tighter, reproducible
+      version of the same gap on MockMed. That is a cost/latency result on known
+      tasks, disclosed with its limits &mdash; not a general capability claim.</p>
+  </section>
+
+  <footer class="page-foot">
+    Generated by <code>benchmark.comparison_artifact.generate</code> from
+    <code>benchmark/openemr/results.json</code> and
+    <code>benchmark/results.json</code>. Zero model calls, zero network,
+    deterministic. Model pinned: <code>claude-sonnet-5</code> on 2026-07-08.
+  </footer>
+</main>
+</body>
+</html>

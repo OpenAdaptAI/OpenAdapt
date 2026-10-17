@@ -1,0 +1,5 @@
+# Never commit trial connector credentials or any secret material.
+secrets/
+*.env
+*.secret
+*.pem

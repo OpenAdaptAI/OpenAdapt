@@ -1,0 +1,18 @@
+{"i": 0, "kind": "click", "x": 705, "y": 404, "t": 1.266}
+{"i": 1, "kind": "type", "text": "admin", "t": 2.015}
+{"i": 2, "kind": "click", "x": 684, "y": 458, "t": 3.125}
+{"i": 3, "kind": "type", "text": "pass", "t": 3.864}
+{"i": 4, "kind": "click", "x": 639, "y": 566, "t": 7.655}
+{"i": 5, "kind": "click", "x": 1121, "y": 31, "t": 14.739}
+{"i": 6, "kind": "type", "text": "Phil", "t": 15.545}
+{"i": 7, "kind": "key", "key": "Enter", "t": 17.366}
+{"i": 8, "kind": "click", "x": 17, "y": 443, "t": 22.924}
+{"i": 9, "kind": "scroll", "dx": 0, "dy": 400, "t": 27.764}
+{"i": 10, "kind": "scroll", "dx": 0, "dy": 400, "t": 28.574}
+{"i": 11, "kind": "scroll", "dx": 0, "dy": 400, "t": 29.404}
+{"i": 12, "kind": "scroll", "dx": 0, "dy": 400, "t": 30.182}
+{"i": 13, "kind": "click", "x": 815, "y": 369, "t": 31.306}
+{"i": 14, "kind": "click", "x": 90, "y": 281, "t": 36.17}
+{"i": 15, "kind": "click", "x": 639, "y": 357, "t": 38.995}
+{"i": 16, "kind": "type", "text": "Reviewed hypertension follow-up; BP within target range today.", "param": "note", "t": 39.78}
+{"i": 17, "kind": "click", "x": 489, "y": 452, "t": 41.249}

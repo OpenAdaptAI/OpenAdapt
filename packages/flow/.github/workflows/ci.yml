@@ -1,0 +1,1005 @@
+name: CI
+
+# Triggers are deliberately asymmetric to keep PR feedback fast while still
+# blocking the merge on every gate a reviewer cares about:
+#   - pull_request: run the REQUIRED GATE on every PR --
+#       lint (ruff + lenient whole-package mypy),
+#       python-compatibility (lower-bound install + consistency tests),
+#       mypy-strict-safety (strict types on the safety path),
+#       phi-guard, docs-consistency, interop-types,
+#       effectbench-standalone (clean standalone benchmark install + tests),
+#       test (all non-E2E tests except the long deterministic qualification
+#         campaign + enforced safety coverage floor),
+#       e2e-browser (the GOLDEN TASK first -- the whole free path to VERIFIED,
+#         pinned against tests/golden/tutorial_run.json -- then the canonical
+#         record -> compile -> replay browser contract),
+#       linux-atspi-x11 (real GTK/AT-SPI actuation inside Xvfb + session D-Bus),
+#       wheel (clean-venv wheel install + CLI smoke),
+#       windows-mock (non-injecting Win32 ABI + fake behavior contract).
+#     The separate Validate claims workflow contributes its required CheckRun
+#     context named `gate`, bringing the app-pinned routine total to 13.
+#   - push to main: the same required gate as a PR, against the exact merge
+#     commit. This does not re-run the qualification campaign or the extra
+#     browser scenarios; those stay on schedule and dispatch.
+#   - schedule: run those gates plus the complete Python 3.10-3.12 / macOS
+#     matrix weekly, including the qualification campaign and extra e2e files.
+#     Release candidates can dispatch the same matrix on demand.
+#   - workflow_dispatch: run the same complete matrix on an exact ref as the
+#     explicit release-qualification lane.
+# There is intentionally NO bare `push:` -- a bare push trigger fires a SECOND
+# identical run alongside `pull_request` on every PR-branch push (double the
+# runner spend for zero extra signal).
+# There is intentionally NO paths-ignore on pull_request. The 13 required
+# CheckRun names must still report. The `scope` job classifies documentation-
+# only diffs; expensive jobs start, no-op, and report success. Dropping the
+# workflow would leave those checks pending and block the merge.
+#
+# REQUIRED_CONTEXTS (app-pinned; exact CheckRun names):
+#   - lint
+#   - python-compatibility
+#   - mypy-strict-safety
+#   - phi-guard
+#   - windows-mock
+#   - docs-consistency
+#   - effectbench-standalone
+#   - interop-types
+#   - test
+#   - e2e-browser
+#   - linux-atspi-x11
+#   - wheel
+#   - gate
+# `gate` comes from the separate Validate claims workflow.
+#   (test-matrix remains weekly/explicit release qualification.)
+on:
+  pull_request:
+  push:
+    branches: [main]
+  schedule:
+    - cron: "0 7 * * 0" # Sundays 07:00 UTC: full compatibility matrix
+  workflow_dispatch:
+
+# Cancel any superseded in-flight run for the same ref (e.g. a force-push or a
+# rapid second push to a PR branch) instead of letting both run to completion.
+#
+# The group includes the event, so a release-qualification `workflow_dispatch`
+# run is not cancelled by an ordinary push to the same ref. The release gate
+# requires the latest exact-SHA dispatched run to conclude `success`, and this
+# matrix takes about 50 minutes while merges to `main` land every 30, so a
+# shared group made qualifying `main` a race the release could not win.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.ref }}
+  cancel-in-progress: true
+
+# GitHub Actions are pinned to full commit SHAs (not mutable tags) as a
+# supply-chain control; the trailing comment records the human-readable
+# version. Dependabot (.github/dependabot.yml) proposes SHA bumps.
+
+jobs:
+  # Path classifier. Required checks cannot skip the job (GitHub would
+  # leave them pending), so expensive jobs still start and no-op when
+  # this outputs code_changed=false. docs-consistency keeps running on
+  # documentation-only PRs because that is the check those PRs need.
+  scope:
+    name: scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      code_changed: ${{ steps.classify.outputs.code_changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+      - name: Classify the change
+        id: classify
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+          if [ "$EVENT_NAME" = schedule ] || [ "$EVENT_NAME" = workflow_dispatch ]; then
+            printf 'code_changed=true\n' >> "$GITHUB_OUTPUT"
+            echo 'Scheduled or dispatched run. The full suite will run.'
+            exit 0
+          fi
+          if ! [[ "$BASE_SHA" =~ ^[0-9a-f]{40}$ && \
+                  "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || \
+             [ "$BASE_SHA" = '0000000000000000000000000000000000000000' ]; then
+            printf 'code_changed=true\n' >> "$GITHUB_OUTPUT"
+            echo 'The comparison range is incomplete. The full suite will run.'
+            exit 0
+          fi
+          git diff --name-only "$BASE_SHA" "$HEAD_SHA" | python scripts/classify_ci_scope.py
+
+  # --- Lint + type check (ruff + mypy) -------------------------------------
+  # Runs on PRs (and post-merge/weekly). Deliberately a SEPARATE job from the
+  # required `test` gate: it must NOT be wired as a dependency of `test` (that
+  # would leave `test` reporting a compound context and break branch
+  # protection, whose required context is exactly `test`). Add `lint` as its
+  # own required context in branch protection if you want it to block merges.
+  lint:
+    needs: [scope]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip expensive work on documentation-only changes
+        if: needs.scope.outputs.code_changed != 'true'
+        run: echo 'Documentation-only change. Required check reports success without the suite.'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.scope.outputs.code_changed == 'true'
+
+      - name: Install uv for immutable lock check
+        if: needs.scope.outputs.code_changed == 'true'
+        uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4 # v10.1.0
+        with:
+          version: "0.12.5"
+          enable-cache: false
+
+      - name: Verify dependency lock is current
+        if: needs.scope.outputs.code_changed == 'true'
+        run: uv lock --locked
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: needs.scope.outputs.code_changed == 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        if: needs.scope.outputs.code_changed == 'true'
+        run: pip install -e .[dev]
+
+      - name: Ruff lint
+        if: needs.scope.outputs.code_changed == 'true'
+        run: ruff check openadapt_flow
+
+      - name: Ruff format check
+        if: needs.scope.outputs.code_changed == 'true'
+        run: ruff format --check openadapt_flow tests
+
+      - name: Mypy
+        if: needs.scope.outputs.code_changed == 'true'
+        run: mypy
+
+  # --- Supported Python lower bound (required on PRs) ----------------------
+  # The full cross-platform matrix remains post-merge/weekly, but the oldest
+  # supported interpreter must install and execute the release-consistency gate
+  # before merge. This specifically prevents Python 3.11-only stdlib imports or
+  # dependency metadata drift from reaching PyPI unnoticed.
+  python-compatibility:
+    needs: [scope]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip expensive work on documentation-only changes
+        if: needs.scope.outputs.code_changed != 'true'
+        run: echo 'Documentation-only change. Required check reports success without the suite.'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.scope.outputs.code_changed == 'true'
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: needs.scope.outputs.code_changed == 'true'
+        with:
+          python-version: "3.10"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install package and compatibility test runner
+        if: needs.scope.outputs.code_changed == 'true'
+        run: pip install -e . pytest
+
+      - name: Verify release consistency on Python 3.10
+        if: needs.scope.outputs.code_changed == 'true'
+        run: |
+          python scripts/check_consistency.py
+          pytest -vv --durations=20 tests/test_consistency.py
+
+  # --- STRICT type check on the safety-critical path (required on PRs) ------
+  # A second, STRICTER mypy pass scoped to the safety modules ONLY: the
+  # compiler, the pre-action identity gate, the irreversible-effect verifiers,
+  # the policy engine, and the replayer/resolver. Its own required context so a
+  # regression in these files blocks the merge even though the lenient
+  # whole-package `lint` mypy stays green.
+  #
+  # It turns on the single highest-value strict knob the base config leaves off
+  # -- `--check-untyped-defs`, which type-checks the BODIES of un-annotated
+  # functions (where real safety bugs hide) -- plus no-implicit-optional, strict
+  # equality, and the redundant-cast / unused-ignore / untyped-decorator /
+  # extra checks. The full `--strict` superset (disallow-untyped-defs,
+  # disallow-any-generics, warn-return-any, warn-unreachable) is NOT yet green
+  # on these files without source edits and remains the ratchet to flip as
+  # annotations harden -- see the note in pyproject.toml [tool.mypy].
+  #
+  # The file list mirrors CODEOWNERS' safety path and the coverage --include
+  # globs; keep the three in sync. `disambiguation.py` and `effects/_common.py`
+  # stay on the tracked-debt list (base config `ignore_errors`) and are omitted.
+  mypy-strict-safety:
+    needs: [scope]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip expensive work on documentation-only changes
+        if: needs.scope.outputs.code_changed != 'true'
+        run: echo 'Documentation-only change. Required check reports success without the suite.'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.scope.outputs.code_changed == 'true'
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: needs.scope.outputs.code_changed == 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        if: needs.scope.outputs.code_changed == 'true'
+        run: pip install -e .[dev]
+
+      # Explicit files override the base config's `files=` while still honoring
+      # its [[tool.mypy.overrides]] (notably the numpy follow_imports=skip that
+      # keeps mypy from crashing on numpy 2.x's 3.12-only stub syntax).
+      # --follow-imports=silent so imported non-safety modules are analyzed for
+      # types but never report their own (debt) errors here.
+      - name: Mypy (strict, safety path only)
+        if: needs.scope.outputs.code_changed == 'true'
+        run: |
+          mypy \
+            --ignore-missing-imports --follow-imports=silent \
+            --check-untyped-defs --no-implicit-optional --strict-equality \
+            --warn-redundant-casts --warn-unused-ignores \
+            --disallow-untyped-decorators --extra-checks \
+            openadapt_flow/identity_signals.py \
+            openadapt_flow/policy.py \
+            openadapt_flow/qualification.py \
+            openadapt_flow/runtime/identity.py \
+            openadapt_flow/runtime/identity_template.py \
+            openadapt_flow/runtime/identity_vlm.py \
+            openadapt_flow/runtime/replayer.py \
+            openadapt_flow/runtime/resolver.py \
+            openadapt_flow/submit_binding.py \
+            openadapt_flow/runtime/effects/effect.py \
+            openadapt_flow/runtime/effects/adapter.py \
+            openadapt_flow/runtime/effects/auth.py \
+            openadapt_flow/runtime/effects/compensation.py \
+            openadapt_flow/runtime/effects/document_arrival.py \
+            openadapt_flow/runtime/effects/document_hash.py \
+            openadapt_flow/runtime/effects/email_delivery.py \
+            openadapt_flow/runtime/effects/fhir.py \
+            openadapt_flow/runtime/effects/file_arrival.py \
+            openadapt_flow/runtime/effects/graphql.py \
+            openadapt_flow/runtime/effects/onscreen.py \
+            openadapt_flow/runtime/effects/rest.py \
+            openadapt_flow/runtime/effects/sql.py \
+            openadapt_flow/runtime/effects/ui_readback.py \
+            openadapt_flow/compiler/compile.py \
+            openadapt_flow/compiler/codegen.py \
+            openadapt_flow/compiler/annotate.py \
+            openadapt_flow/compiler/effect_mining.py \
+            openadapt_flow/compiler/induction.py \
+            openadapt_flow/compiler/loop_authoring.py
+
+  # --- Docs / claims consistency (required on PRs) -------------------------
+  # Fails the PR if the docs drift from the code: a stale version, a broken file
+  # path in README/DESIGN/LIMITS or a workflow comment, or a banned stale phrase
+  # ("vision-only", "adapters to come", "864 tests"). Sub-second, no browser.
+  # Its own required context (previously only an inline step in `test`).
+  docs-consistency:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Consistency gate (docs vs. code)
+        run: python scripts/check_consistency.py
+
+  # --- EffectBench standalone benchmark artifact --------------------------
+  # The SWER benchmark ships as a SELF-CONTAINED, pip-installable package under
+  # benchmark/effectbench/ with pydantic as its ONLY dependency. This job proves
+  # a third party can install and run it WITHOUT the openadapt-flow codebase: it
+  # installs the package into a clean environment (no `-e .`, no PYTHONPATH into
+  # the engine) and runs the package's own test suite, including the
+  # source-availability boundary self-check that keeps crown-jewel material out
+  # of the artifact.
+  effectbench-standalone:
+    needs: [scope]
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        # Running from the checkout makes Python discover ``openadapt_flow``
+        # through the implicit current-directory entry on ``sys.path`` even
+        # when the engine package was never installed. Execute from outside
+        # the repository so this job tests the installed EffectBench artifact.
+        working-directory: /tmp
+    steps:
+      - name: Skip expensive work on documentation-only changes
+        if: needs.scope.outputs.code_changed != 'true'
+        run: echo 'Documentation-only change. Required check reports success without the suite.'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.scope.outputs.code_changed == 'true'
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: needs.scope.outputs.code_changed == 'true'
+        with:
+          python-version: "3.12"
+      - name: Install ONLY the standalone benchmark (no engine on the path)
+        if: needs.scope.outputs.code_changed == 'true'
+        run: pip install "$GITHUB_WORKSPACE/benchmark/effectbench[test]"
+      - name: Assert the engine is NOT importable (true standalone)
+        if: needs.scope.outputs.code_changed == 'true'
+        run: |
+          python - <<'PY'
+          import importlib.util
+          assert importlib.util.find_spec("openadapt_flow") is None, (
+              "openadapt_flow must not be installed for the standalone job"
+          )
+          import effectbench
+          from importlib.metadata import version
+          assert effectbench.__version__ == version("effectbench"), (
+              effectbench.__version__, version("effectbench")
+          )
+          print("effectbench", effectbench.__version__)
+          PY
+      - name: Reproduce the reference result
+        if: needs.scope.outputs.code_changed == 'true'
+        run: python -m effectbench reference
+      - name: Run the standalone benchmark test suite
+        if: needs.scope.outputs.code_changed == 'true'
+        run: python -m pytest "$GITHUB_WORKSPACE/benchmark/effectbench/tests" -q
+
+  # --- Cross-package schema boundary (required-check candidate) -----------
+  # This must remain a distinct job with the `interop` extra installed. The
+  # test module deliberately skips when openadapt-types is absent so a minimal
+  # user install stays valid; without the explicit import assertion, CI could
+  # silently skip the entire boundary while reporting green.
+  interop-types:
+    needs: [scope]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip expensive work on documentation-only changes
+        if: needs.scope.outputs.code_changed != 'true'
+        run: echo 'Documentation-only change. Required check reports success without the suite.'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.scope.outputs.code_changed == 'true'
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: needs.scope.outputs.code_changed == 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install flow and released interop schema
+        if: needs.scope.outputs.code_changed == 'true'
+        run: pip install -e '.[dev,interop]'
+
+      - name: Assert optional dependency is present
+        if: needs.scope.outputs.code_changed == 'true'
+        run: python -c "import openadapt_types; print(openadapt_types.__file__)"
+
+      - name: Test openadapt-types boundary (no skips)
+        if: needs.scope.outputs.code_changed == 'true'
+        run: pytest -vv --durations=20 tests/test_interop_types.py tests/test_runtime_control_overlay.py
+
+      - name: Type-check boundary against released schema
+        if: needs.scope.outputs.code_changed == 'true'
+        run: >-
+          mypy --config-file .github/mypy-interop.ini
+          openadapt_flow/interop/types.py
+          openadapt_flow/runtime/control_overlay.py
+
+  # --- PHI governance guard (PHI audit REM-1) ------------------------------
+  # Refuses to let a compiled bundle carrying a plaintext patient identity band
+  # reach the repo. Structural (no deps): scans every git-tracked workflow.json
+  # for a non-empty anchor.context_text / structured_identity or a
+  # contains_phi=true manifest. See scripts/check_bundle_phi.py.
+  phi-guard:
+    needs: [scope]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip expensive work on documentation-only changes
+        if: needs.scope.outputs.code_changed != 'true'
+        run: echo 'Documentation-only change. Required check reports success without the suite.'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.scope.outputs.code_changed == 'true'
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: needs.scope.outputs.code_changed == 'true'
+        with:
+          python-version: "3.12"
+      - name: Check bundles carry no plaintext PHI
+        if: needs.scope.outputs.code_changed == 'true'
+        run: python scripts/check_bundle_phi.py
+
+  # --- Required merge gate: unit suite + safety coverage floor -------------
+  # One of the required status checks (branch protection context: "test").
+  # It MUST stay a single, non-matrix job named exactly `test` so its reported
+  # context is exactly `test` -- a matrix would report `test (3.12)` etc. and
+  # the required `test` check would never report, permanently blocking merges.
+  # PRs and exact-main pushes exclude the long deterministic qualification
+  # campaign. Scheduled runs and explicit dispatches run it here. Every lane
+  # excludes the browser/OCR record->compile->replay suite (tests/e2e), which
+  # has its own required `e2e-browser` check. This keeps merge feedback
+  # bounded. Complete-suite evidence stays on the weekly/dispatch matrix.
+  test:
+    needs: [scope]
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    steps:
+      - name: Skip expensive work on documentation-only changes
+        if: needs.scope.outputs.code_changed != 'true'
+        run: echo 'Documentation-only change. Required check reports success without the suite.'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.scope.outputs.code_changed == 'true'
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: needs.scope.outputs.code_changed == 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      # The `capture` extra rides along so the desktop on-ramp adapter tests
+      # (tests/test_capture_adapter.py) run for REAL in this job instead of
+      # silently skipping: openadapt-capture >=0.5.4 imports clean headless
+      # (no screenshot at import), so no display is needed.
+      - name: Install
+        if: needs.scope.outputs.code_changed == 'true'
+        run: pip install -e '.[dev,capture]'
+
+      # Guard the invariant the adapter tests rely on: the capture extra must
+      # import headless. If this ever regresses upstream, fail here with a
+      # clear message rather than deep inside test collection.
+      - name: Verify openadapt-capture imports headless
+        if: needs.scope.outputs.code_changed == 'true'
+        run: python -c "import openadapt_capture"
+
+      # Exercise the fail-closed process-group contract before any browser
+      # download. This includes a real root-owned, SIGTERM-ignoring descendant
+      # on GitHub Linux and does not depend on an apt mirror.
+      - name: Linux retained installer process group (non-injecting)
+        if: needs.scope.outputs.code_changed == 'true'
+        run: pytest -vv --durations=20 tests/test_install_playwright_browser.py
+
+      # Cache the Playwright browser binaries (chromium) so the lightweight
+      # browser-backed unit tests don't re-download ~150MB every run. Keyed on
+      # the resolved playwright version so a dependency bump busts the cache.
+      - name: Resolve Playwright version
+        if: needs.scope.outputs.code_changed == 'true'
+        id: pw
+        run: |
+          python -c "import importlib.metadata as m; print('version=' + m.version('playwright'))" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        if: needs.scope.outputs.code_changed == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+
+      # The hosted runner supplies its OS libraries. This command owns only the
+      # versioned browser payload, so a cache miss downloads Chromium without
+      # refreshing apt indexes. The helper launches Chromium after installation
+      # and fails clearly if the runner image lacks a required library.
+      - name: Install and launch Playwright browser
+        if: needs.scope.outputs.code_changed == 'true'
+        timeout-minutes: 12
+        run: >-
+          python scripts/install_playwright_browser.py
+          --attempts 2 --attempt-timeout-seconds 270
+
+      # --basetemp pins pytest's tmp_path factory inside the workspace so
+      # run dirs (REPORT.md + step/heal PNGs) survive for artifact upload;
+      # by default they land in the system temp dir and are unrecoverable
+      # when a drift/heal test fails in CI. --ignore=tests/e2e drops the slow
+      # browser/OCR end-to-end suite from the fast required gate (it runs in the
+      # required `e2e-browser` job instead). The complete suite is repeated
+      # across supported interpreters/OSes weekly and for explicit release
+      # qualification. --cov collects coverage into
+      # .coverage for the enforced safety floor in the next step.
+      - name: Test (PR gate or complete post-merge suite)
+        if: needs.scope.outputs.code_changed == 'true'
+        run: |
+          mkdir -p runs
+          extra_args=(--ignore=tests/test_qualification_gate_campaign.py)
+          if [ "$GITHUB_EVENT_NAME" = schedule ] || [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            extra_args=()
+          fi
+          pytest -vv --durations=20 --ignore=tests/e2e \
+            --ignore=tests/test_install_playwright_browser.py \
+            "${extra_args[@]}" \
+            --basetemp=runs/ci \
+            --junitxml=runs/unit-claims-junit.xml \
+            --cov=openadapt_flow --cov-report=
+
+      # A supported claim is not a function of file existence. Bind every
+      # cited unit-test file to this job's real Pytest result. Missing and
+      # all-skipped files fail closed even when another test passed.
+      - name: Validate passing unit claim evidence
+        if: needs.scope.outputs.code_changed == 'true'
+        run: |
+          python scripts/validate_claims.py --check \
+            --ci-job test --junit runs/unit-claims-junit.xml
+
+      # Enforced RATCHET floor on the safety-critical path (branch-inclusive).
+      # Scoped via --include to exactly the safety modules (compiler, identity,
+      # effects, policy, replayer, resolver). 85% sits just under the fast
+      # suite's measured coverage of that path; NEVER lower it -- raise it as
+      # coverage climbs. Keep the globs in sync with CODEOWNERS + the mypy strict
+      # scope. A separate full report is printed first as a visibility number.
+      - name: Coverage (whole-package visibility)
+        if: needs.scope.outputs.code_changed == 'true'
+        run: coverage report || true
+
+      - name: Coverage floor (safety path, required)
+        if: needs.scope.outputs.code_changed == 'true'
+        run: |
+          coverage report --fail-under=85 \
+            --include='openadapt_flow/compiler/*,openadapt_flow/identity_signals.py,openadapt_flow/runtime/identity*,openadapt_flow/runtime/replayer.py,openadapt_flow/runtime/resolver.py,openadapt_flow/submit_binding.py,openadapt_flow/policy.py,openadapt_flow/runtime/effects/*'
+
+      - name: Upload run artifacts
+        if: always() && needs.scope.outputs.code_changed == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runs-test
+          path: |
+            runs/**/REPORT.md
+            runs/**/BENCH.md
+            runs/**/report.json
+            runs/**/*.png
+            runs/unit-claims-junit.xml
+          if-no-files-found: warn
+
+  # --- Browser record -> compile -> replay E2E (REQUIRED on PRs) -----------
+  # The end-to-end record -> compile -> replay-under-drift suite. It drives a
+  # HEADLESS Playwright browser against the bundled MockMed app, so it needs no
+  # OS-level input permissions and runs deterministically on a Linux runner --
+  # which is exactly why it is a REQUIRED PR check here, not a weekly-only one.
+  # PRs and exact-main pushes run the golden task and the canonical
+  # record/compile/replay contract. Schedules and explicit dispatches run all
+  # other browser scenarios. Desktop/Citrix/Parallels tests self-skip when
+  # their macOS/VM backends are absent on this Linux runner.
+  # The GOLDEN TASK (tests/e2e/test_free_path_e2e.py) runs as the job's FIRST
+  # step and is excluded from the later complete-suite run, so the core loop
+  # answers first without costing a second run of it.
+  e2e-browser:
+    needs: [scope]
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - name: Skip expensive work on documentation-only changes
+        if: needs.scope.outputs.code_changed != 'true'
+        run: echo 'Documentation-only change. Required check reports success without the suite.'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.scope.outputs.code_changed == 'true'
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: needs.scope.outputs.code_changed == 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        if: needs.scope.outputs.code_changed == 'true'
+        run: pip install -e .[dev]
+
+      - name: Resolve Playwright version
+        if: needs.scope.outputs.code_changed == 'true'
+        id: pw
+        run: |
+          python -c "import importlib.metadata as m; print('version=' + m.version('playwright'))" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        if: needs.scope.outputs.code_changed == 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+
+      # Do not make each PR depend on an apt mirror. The browser cache or CDN
+      # supplies Chromium; the helper then launches it to prove the runner's
+      # preinstalled host libraries.
+      - name: Install and launch Playwright browser
+        if: needs.scope.outputs.code_changed == 'true'
+        timeout-minutes: 12
+        run: >-
+          python scripts/install_playwright_browser.py
+          --attempts 2 --attempt-timeout-seconds 270
+
+      # The GOLDEN TASK, first and on its own. It is the core loop end to end
+      # -- record, compile, certify, run under the Standard profile against an
+      # independent system-of-record oracle, emit the receipt -- and it is
+      # pinned field by field against tests/golden/tutorial_run.json, so a run
+      # that still reaches VERIFIED on a weaker resolution rung, without an
+      # armed identity gate, or against a different mined effect contract fails
+      # here rather than passing quietly.
+      #
+      # It is excluded from the later complete-suite step, so it runs once on
+      # every event and gives the core result first.
+      - name: Golden task (free path -> VERIFIED, the same way as last release)
+        if: needs.scope.outputs.code_changed == 'true'
+        run: |
+          mkdir -p runs
+          pytest -vv --durations=20 tests/e2e/test_free_path_e2e.py --basetemp=runs/ci-golden
+
+      - name: E2E (PR gate or complete post-merge suite)
+        if: needs.scope.outputs.code_changed == 'true'
+        run: |
+          mkdir -p runs
+          test_paths=(tests/e2e/test_record_compile_replay.py)
+          if [ "$GITHUB_EVENT_NAME" = schedule ] || [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            test_paths=(tests/e2e --ignore=tests/e2e/test_free_path_e2e.py)
+          fi
+          pytest -vv --durations=20 "${test_paths[@]}" \
+            --junitxml=runs/e2e-claims-junit.xml \
+            --basetemp=runs/ci
+
+      # The browser maturity claims cite the record/compile/replay E2E file.
+      # Require that file to appear and pass in this required job's own JUnit.
+      - name: Validate passing browser claim evidence
+        if: needs.scope.outputs.code_changed == 'true'
+        run: |
+          python scripts/validate_claims.py --check \
+            --ci-job e2e-browser --junit runs/e2e-claims-junit.xml
+
+      - name: Upload run artifacts
+        if: always() && needs.scope.outputs.code_changed == 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runs-e2e-browser
+          path: |
+            runs/**/REPORT.md
+            runs/**/BENCH.md
+            runs/**/report.json
+            runs/**/*.png
+            runs/e2e-claims-junit.xml
+          if-no-files-found: warn
+
+  # --- Native Linux: real GTK3 + AT-SPI under isolated X11 (REQUIRED) ------
+  # This job owns its Xvfb display and session D-Bus. It never opens a window
+  # on a developer workstation. The fixed qualification matrix runs exactly
+  # three clean trials with an independent exact-file oracle, three ambiguous
+  # locator refusals, and three stale-handle refusals. This is scoped evidence
+  # for the in-tree GTK fixture, not a claim about arbitrary Linux apps. The
+  # job must install real Linux accessibility packages, so both that external
+  # apt boundary and the enclosing qualification have explicit limits.
+  linux-atspi-x11:
+    needs: [scope]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Skip expensive work on documentation-only changes
+        if: needs.scope.outputs.code_changed != 'true'
+        run: echo 'Documentation-only change. Required check reports success without the suite.'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.scope.outputs.code_changed == 'true'
+
+      - name: Install isolated X11, D-Bus, GTK3, and AT-SPI
+        if: needs.scope.outputs.code_changed == 'true'
+        timeout-minutes: 15
+        run: |
+          set -uo pipefail
+          # The hosted runner resolves its Ubuntu mirror through
+          # /etc/apt/apt-mirrors.txt, which points at azure.archive.ubuntu.com.
+          # That mirror fails intermittently, and every failure costs minutes of
+          # apt retries before the canonical archive is tried. The step timeout
+          # then expires on retries alone. Prefer the canonical archive up
+          # front. Keep this best-effort: if the file is absent or already
+          # canonical, the run continues unchanged.
+          sudo sed -i \
+            's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          # A transient mirror fault must not fail this required job outright.
+          update_ok=""
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              update_ok=1
+              break
+            fi
+            echo "::warning::apt-get update failed (attempt ${attempt}/3); retrying"
+            sleep $((attempt * 10))
+          done
+          if [ -z "$update_ok" ]; then
+            echo "::error::apt-get update failed three times; the Ubuntu mirror is unreachable"
+            exit 1
+          fi
+          set -e
+          sudo apt-get install -y \
+            at-spi2-core \
+            dbus-x11 \
+            gir1.2-atspi-2.0 \
+            gir1.2-gtk-3.0 \
+            libatk-adaptor \
+            python3-gi \
+            python3-venv \
+            xauth \
+            xvfb
+          /usr/bin/python3 -m venv --system-site-packages \
+            "$RUNNER_TEMP/linux-atspi-venv"
+          "$RUNNER_TEMP/linux-atspi-venv/bin/pip" install -e .
+          "$RUNNER_TEMP/linux-atspi-venv/bin/python" -c \
+            "import gi; gi.require_version('Atspi', '2.0'); gi.require_version('Gtk', '3.0'); from gi.repository import Atspi, Gtk; print(Atspi, Gtk)"
+
+      - name: Qualify GTK workflow on real AT-SPI
+        if: needs.scope.outputs.code_changed == 'true'
+        timeout-minutes: 10
+        run: |
+          mkdir -p runs/linux-atspi
+          dbus-run-session -- \
+            xvfb-run -a -s "-screen 0 1280x800x24" \
+            env XDG_SESSION_TYPE=x11 NO_AT_BRIDGE=0 GTK_MODULES=atk-bridge \
+            "$RUNNER_TEMP/linux-atspi-venv/bin/python" \
+            scripts/qualify_linux_atspi.py \
+            --output runs/linux-atspi/results.json
+
+      - name: Upload Linux AT-SPI qualification evidence
+        if: always() && needs.scope.outputs.code_changed == 'true'
+        timeout-minutes: 2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: linux-atspi-qualification
+          path: runs/linux-atspi/results.json
+          if-no-files-found: error
+
+  # --- Weekly / release qualification: full Python + macOS matrix -----------
+  # NOT a required merge check and NOT run on PRs or routine main pushes.
+  # Scheduled runs exercise it weekly; maintainers dispatch it on the exact
+  # release candidate ref. It runs the COMPLETE suite including the slow
+  # tests/e2e browser/OCR leg across Python 3.10-3.12 on Linux. The macOS leg
+  # preserves every OS-specific test while omitting one platform-neutral
+  # harness already counted on Ubuntu 3.12, as documented at its exact pytest
+  # selection below.
+  # Python 3.13 remains outside the supported boundary until the validated
+  # rapidocr-onnxruntime identity path can be safely migrated and requalified.
+  test-matrix:
+    needs: [scope]
+    if: >-
+      ${{
+        github.event_name == 'schedule' ||
+        github.event_name == 'workflow_dispatch'
+      }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: ["3.10", "3.11", "3.12"]
+        include:
+          # At least one non-Linux leg for the browser/OCR runtime.
+          - os: macos-latest
+            python-version: "3.12"
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        run: pip install -e .[dev]
+
+      - name: Resolve Playwright version
+        id: pw
+        run: |
+          python -c "import importlib.metadata as m; print('version=' + m.version('playwright'))" >> "$GITHUB_OUTPUT"
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ runner.os }}-playwright-${{ steps.pw.outputs.version }}
+
+      - name: Install Playwright browser
+        timeout-minutes: 24
+        run: >-
+          python scripts/install_playwright_browser.py
+          --attempts 2 --attempt-timeout-seconds 600
+          --with-system-deps
+
+      # The platform-neutral identity-ladder harness is intentionally counted
+      # on the canonical Ubuntu matrix (including Python 3.12). Running its
+      # same browser/OCR corpus again on macOS exceeded the 900-second test
+      # budget after all other macOS tests passed, without adding OS-specific
+      # coverage. Keep every other macOS test and deselect only that exact node.
+      # OPENADAPT_IDENTITY_LADDER_EXHAUSTIVE opts this slow lane into the
+      # EXHAUSTIVE identity-ladder corpus (every collapse pair); the fast PR
+      # `test` job runs the bounded class-covering subset instead, because the
+      # full sweep's runtime scales with runner speed and intermittently blew
+      # its 900s budget on shared PR runners. Pinned by
+      # tests/test_ci_workflow_contract.py.
+      - name: Test (full suite incl. e2e, canonical Ubuntu)
+        if: runner.os == 'Linux'
+        env:
+          OPENADAPT_IDENTITY_LADDER_EXHAUSTIVE: "1"
+        run: |
+          mkdir -p runs
+          pytest -vv --durations=20 --basetemp=runs/ci
+
+      # The gate-standard qualification campaign is deselected on macOS for the
+      # same reason as the identity harness above: it is platform-neutral by
+      # construction (no Docker, no network, no browser, no model calls), it
+      # runs in full on all three canonical Ubuntu legs, and re-running it here
+      # adds no OS-specific coverage. It is also the single most expensive node
+      # in the suite -- 535s measured on an M2 Max, so it exceeds the 600s
+      # per-test budget on a slower macOS runner and errors its whole
+      # module-scoped fixture, taking all seven dependent tests with it. The
+      # trial counts are a release contract (>=3 per condition) and are NOT
+      # reduced to fit a timeout. Pinned by tests/test_ci_workflow_contract.py.
+      - name: Test (full suite incl. e2e, macOS platform coverage)
+        if: runner.os == 'macOS'
+        run: |
+          mkdir -p runs
+          pytest -vv --durations=20 --basetemp=runs/ci \
+            --deselect=tests/test_identity_ladder.py::test_harness_zero_false_accept_all_configs \
+            --deselect=tests/test_qualification_gate_campaign.py
+
+      - name: Upload run artifacts
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: runs-${{ matrix.os }}-py${{ matrix.python-version }}
+          path: |
+            runs/**/REPORT.md
+            runs/**/BENCH.md
+            runs/**/report.json
+            runs/**/*.png
+          if-no-files-found: warn
+
+  # --- Windows: native ABI + read-only context + mock backend tests ---------
+  # Runs on PRs because 64-bit ctypes ABI mistakes cannot be validated on the
+  # Linux required matrix. The context probe reads the live logon-session
+  # identity through the typed loopback endpoint; every actuation behavior test
+  # uses fakes. Nothing opens a window or calls SendInput.
+  windows-mock:
+    needs: [scope]
+    runs-on: windows-latest
+    steps:
+      - name: Skip expensive work on documentation-only changes
+        if: needs.scope.outputs.code_changed != 'true'
+        run: echo 'Documentation-only change. Required check reports success without the suite.'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.scope.outputs.code_changed == 'true'
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: needs.scope.outputs.code_changed == 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Install
+        if: needs.scope.outputs.code_changed == 'true'
+        run: pip install -e .[dev]
+
+      - name: Windows live execution-context probe (read-only)
+        if: needs.scope.outputs.code_changed == 'true'
+        run: |
+          pytest -vv --durations=20 tests/test_windows_context_identity_native.py
+
+      - name: Windows retained installer Job Object (non-injecting)
+        if: needs.scope.outputs.code_changed == 'true'
+        run: |
+          pytest -vv --durations=20 tests/test_install_playwright_browser.py
+
+      # The remaining WindowsBackend + RDP backend suites mock the WAA/RDP
+      # servers with stdlib HTTP + fakes (no live VM, no Playwright browser),
+      # and the win32 window-client behavior suite mocks the entire Win32 API.
+      # Its one native test only constructs NativeWin32Api and verifies every
+      # ctypes prototype and structure size; it never enumerates a window or
+      # calls SendInput.
+      - name: Windows ABI and mock backend tests (non-injecting)
+        if: needs.scope.outputs.code_changed == 'true'
+        run: |
+          pytest -vv --durations=20 tests/test_windows_backend.py tests/test_rdp_backend.py tests/test_win32_window_client.py tests/test_remote_display_backend.py
+          pytest -vv --durations=20 tests/test_hosted.py -k client_run_id
+
+  # --- Clean-wheel install + CLI smoke (REQUIRED on PRs) -------------------
+  # Builds the wheel, installs it in a FRESH venv (no source tree), and proves
+  # the packaged distribution actually works end to end: core import +
+  # version/py.typed integrity, production privacy/hosted extras, then the
+  # installed `openadapt-flow` console script drives a real compile of a
+  # committed fixture recording and loads the compiled bundle. (The replay leg
+  # is covered by the required `e2e-browser` job, since replay needs a live
+  # target app + headless browser.)
+  # Runs on PRs now so packaging/CLI breakage blocks the merge instead of
+  # surfacing post-merge.
+  wheel:
+    needs: [scope]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip expensive work on documentation-only changes
+        if: needs.scope.outputs.code_changed != 'true'
+        run: echo 'Documentation-only change. Required check reports success without the suite.'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: needs.scope.outputs.code_changed == 'true'
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: needs.scope.outputs.code_changed == 'true'
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: pyproject.toml
+
+      - name: Build and validate publication artifacts
+        if: needs.scope.outputs.code_changed == 'true'
+        run: |
+          pip install build
+          rm -rf dist
+          python -m build
+          python scripts/check_release_consistency.py --require-dist
+
+      - name: Install the wheel in a clean venv and import
+        if: needs.scope.outputs.code_changed == 'true'
+        run: |
+          python -m venv /tmp/clean
+          /tmp/clean/bin/pip install dist/*.whl
+          # Import from a dir without the source tree; assert __version__ equals
+          # the installed distribution metadata (the drift bug this PR fixes --
+          # version-agnostic so it keeps holding across releases) and that the
+          # py.typed marker shipped inside the wheel.
+          cd /tmp && /tmp/clean/bin/python -c "import os, importlib.metadata as m, openadapt_flow; v = openadapt_flow.__version__; dist = m.version('openadapt-flow'); print('attr', v, 'dist', dist); assert v == dist, (v, dist); p = os.path.join(os.path.dirname(openadapt_flow.__file__), 'py.typed'); assert os.path.exists(p), 'py.typed missing from installed package'; print('py.typed present, import OK')"
+          # The public reliability MECHANISM remains importable, while frozen
+          # corpora, ROC tuning, and repository-only recipes are absent from
+          # the installed distribution (checked outside the source tree).
+          cd /tmp && /tmp/clean/bin/python -c "import importlib.util as u; import openadapt_flow.benchmark.reliability; forbidden = ('openadapt_flow.benchmark.reliability_corpus', 'openadapt_flow.validation.adversary_corpus', 'openadapt_flow.validation.adversary_corpus_v2', 'openadapt_flow.validation.adversary_corpus_v3', 'openadapt_flow.validation.identity_roc'); missing = [name for name in forbidden if u.find_spec(name) is not None]; assert not missing, missing; print('source-boundary carve OK')"
+
+      # This must use the built wheel and the released shared schema, not either
+      # editable checkout. The reconcile action crosses this package boundary:
+      # Flow maps its durable action to the portable Types enum and receipt.
+      - name: Install the attended reconciliation boundary in a clean venv
+        if: needs.scope.outputs.code_changed == 'true'
+        run: |
+          set -euo pipefail
+          WHEEL="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"
+          test -n "$WHEEL"
+          python -m venv /tmp/attended-reconcile
+          /tmp/attended-reconcile/bin/pip install "${WHEEL}[console]"
+          cd /tmp && /tmp/attended-reconcile/bin/python - <<'PY'
+          from openadapt_types import HumanDecisionAction, HumanDecisionReceiptReason
+          from openadapt_flow.runtime.durable.attended import AttendedActionRequest
+
+          assert HumanDecisionAction.RECONCILE.value == "reconcile"
+          assert (
+              HumanDecisionReceiptReason.RECONCILED_AND_RESUMED.value
+              == "reconciled_and_resumed"
+          )
+          request = AttendedActionRequest.model_validate(
+              {
+                  "capability_digest": "sha256:" + "0" * 64,
+                  "idempotency_key": "installed-reconcile-boundary-01",
+                  "action": "reconcile",
+                  "disposition": "reconciliation_requested",
+              }
+          )
+          assert request.action == "reconcile"
+          print("installed attended reconciliation boundary OK")
+          PY
+
+      - name: Install production extras and verify spaCy runtime imports
+        if: needs.scope.outputs.code_changed == 'true'
+        run: |
+          WHEEL="$(find dist -maxdepth 1 -name '*.whl' -print -quit)"
+          test -n "$WHEEL"
+          python -m venv /tmp/privacy
+          /tmp/privacy/bin/pip install "${WHEEL}[privacy,hosted]"
+          /tmp/privacy/bin/pip check
+          cd /tmp && /tmp/privacy/bin/python -c "import importlib.metadata as m, click, spacy; print('privacy imports OK:', m.version('click'), m.version('spacy'))"
+
+      # CLI smoke on the INSTALLED console script (not the source tree). --help
+      # must exit 0; the version is asserted via the import check above (there is
+      # no top-level --version flag -- argparse requires a subcommand). Then a
+      # real compile of the committed showcase-openemr fixture recording, and a
+      # load of the resulting bundle IR, proving the packaged compile path works.
+      - name: CLI smoke (--help + compile fixture + load bundle)
+        if: needs.scope.outputs.code_changed == 'true'
+        run: |
+          set -euo pipefail
+          BIN=/tmp/clean/bin
+          "$BIN/openadapt-flow" --help > /dev/null
+          echo "openadapt-flow --help OK"
+          rm -rf /tmp/smoke_bundle
+          "$BIN/openadapt-flow" compile "$GITHUB_WORKSPACE/docs/showcase-openemr/recording" \
+            --out /tmp/smoke_bundle --name smoke
+          test -f /tmp/smoke_bundle/workflow.json
+          test -f /tmp/smoke_bundle/workflow.py
+          "$BIN/python" -c "import json; from openadapt_flow.ir import Workflow; w = Workflow.model_validate(json.load(open('/tmp/smoke_bundle/workflow.json'))); assert w.steps, 'compiled bundle has no steps'; print('compile+load smoke OK:', len(w.steps), 'steps')"

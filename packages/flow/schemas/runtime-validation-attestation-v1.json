@@ -1,0 +1,112 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openadapt.ai/schemas/runtime-validation-attestation-v1.json",
+  "title": "OpenAdapt runtime validation operator attestation v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "challenge_id",
+    "nonce",
+    "source_recording_sha256",
+    "bundle_sha256",
+    "compiler",
+    "parameter_schema_sha256",
+    "parameters",
+    "execution",
+    "lint",
+    "certification",
+    "replay",
+    "signature"
+  ],
+  "properties": {
+    "schema": { "const": "openadapt.runtime-validation/v1" },
+    "challenge_id": { "type": "string", "minLength": 1, "maxLength": 200 },
+    "nonce": { "type": "string", "minLength": 16, "maxLength": 500 },
+    "source_recording_sha256": { "$ref": "#/$defs/sha256" },
+    "bundle_sha256": { "$ref": "#/$defs/sha256" },
+    "compiler": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "version", "config_sha256"],
+      "properties": {
+        "name": { "const": "openadapt-flow" },
+        "version": { "type": "string", "minLength": 1 },
+        "config_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "parameter_schema_sha256": { "$ref": "#/$defs/sha256" },
+    "parameters": {
+      "type": "array",
+      "maxItems": 100,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["name", "type", "required", "secret", "choices"],
+        "properties": {
+          "name": { "type": "string", "pattern": "^[A-Za-z_][A-Za-z0-9_]{0,63}$" },
+          "type": { "enum": ["string", "date", "enum", "number", "entity_ref"] },
+          "required": { "type": "boolean" },
+          "secret": { "type": "boolean" },
+          "choices": {
+            "type": "array",
+            "maxItems": 100,
+            "items": { "type": "string", "maxLength": 500 }
+          }
+        }
+      }
+    },
+    "execution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["entry_url", "target_origin", "allowed_hosts"],
+      "properties": {
+        "entry_url": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "target_origin": { "type": "string", "format": "uri", "pattern": "^https://" },
+        "allowed_hosts": {
+          "type": "array",
+          "minItems": 1,
+          "maxItems": 20,
+          "uniqueItems": true,
+          "items": { "type": "string", "minLength": 1, "maxLength": 253 }
+        }
+      }
+    },
+    "lint": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["strict", "passed", "evidence_sha256"],
+      "properties": {
+        "strict": { "const": true },
+        "passed": { "const": true },
+        "evidence_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "certification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["policy", "risk_class", "passed", "evidence_sha256"],
+      "properties": {
+        "policy": { "type": "string", "minLength": 1 },
+        "risk_class": { "enum": ["low", "consequential"] },
+        "passed": { "const": true },
+        "evidence_sha256": { "$ref": "#/$defs/sha256" }
+      }
+    },
+    "replay": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["success", "report_sha256", "environment_sha256", "validated_at"],
+      "properties": {
+        "success": { "const": true },
+        "report_sha256": { "$ref": "#/$defs/sha256" },
+        "environment_sha256": { "$ref": "#/$defs/sha256" },
+        "validated_at": { "type": "string", "format": "date-time" }
+      }
+    },
+    "signature": { "$ref": "#/$defs/sha256" }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }
+  }
+}

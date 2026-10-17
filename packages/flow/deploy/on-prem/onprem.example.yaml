@@ -1,0 +1,100 @@
+# openadapt-flow — ON-PREM (air-gapped clinic) install config.
+#
+# This file configures the LOCAL install wrapper (install.sh / run-queue.sh /
+# verify-airgap.sh). It is READ BY THE DEPLOY SCRIPTS, not by the engine — the
+# engine itself is configured by `deployment.yaml` (see
+# docs/deployment.example.yaml), referenced below.
+#
+# Copy to `onprem.yaml`, edit, keep it OFF version control (it names local
+# paths, not secrets — real secrets live in the OS keychain, never here).
+#
+# The guiding invariant: NOTHING leaves the clinic network. Every path below is
+# on the clinic machine; every URL below must be loopback or LAN.
+
+# Human-readable name for this install (audit/logs only).
+name: clinic-family-practice-onprem
+
+# -- storage: where local, encrypted-at-rest artifacts live ------------------
+# Put this on a FULL-DISK-ENCRYPTED volume (LUKS / BitLocker / FileVault). The
+# clinic operator owns the disk key; openadapt-flow never sees it. See
+# COMPLIANCE.md "What is encrypted".
+storage_root: /srv/openadapt
+
+# Compiled bundles (PHI-at-rest: identity evidence + template crops).
+bundles_dir: /srv/openadapt/bundles
+
+# Per-run outputs (report.json, REPORT.md, checkpoints/, step frames).
+runs_dir: /srv/openadapt/runs
+
+# The local job queue (inbox/processing/done/failed).
+jobs_dir: /srv/openadapt/jobs
+
+# -- audit: the local, append-only, PHI-free audit log -----------------------
+audit_log: /srv/openadapt/audit/audit.log
+
+# -- engine wiring: the deployment.yaml handed to `openadapt-flow run` --------
+# Its backend.url / effects.base_url MUST be loopback or LAN (verify-airgap.sh
+# checks this). For a Citrix/Accuro clinic the backend drives the RDP/Windows
+# session on the LAN; the system-of-record effect verifier points at the local
+# EMR API.
+deployment_config: /srv/openadapt/deployment.yaml
+
+# -- privacy posture (FAIL CLOSED) -------------------------------------------
+# A clinical deployment pins scrubbing ON: a missing scrubbing capability then
+# ABORTS instead of writing plaintext PHI. install.sh exports this into the
+# runner's environment; run-queue.sh refuses to start without it.
+scrub: on            # on | auto | off   -> OPENADAPT_FLOW_SCRUB
+scrub_images: on     # redact PHI in persisted screenshots (implied by scrub:on)
+
+# Keep hashed identity bands one-way even to a bundle+salt holder: set an
+# external salt, managed in the OS keychain, referenced by env NAME (never the
+# value). Leave blank to rely on the in-bundle salt + disk encryption only.
+identity_salt_env: OPENADAPT_FLOW_IDENTITY_SALT
+
+# -- egress posture (MUST stay all-false for air-gap) ------------------------
+egress:
+  # Permit wiring an OFF-box model grounder / identity-VLM / state-verifier.
+  # MUST be false for an air-gapped clinic. If you run the OPTIONAL on-prem VLM
+  # appliance, it is still LAN-only — set vlm_url below, not this flag's intent
+  # to reach the cloud.
+  allow_model_grounding: false
+
+  # OPTIONAL on-prem VLM appliance (GPU box on the LAN). Leave blank => the
+  # runner is fully local and model-free (default). If set, it MUST be a private
+  # LAN address; verify-airgap.sh rejects a public host.
+  vlm_url: ""          # e.g. https://gpu-box.lan:8077  (LAN only)
+  # The bearer token is read from this env NAME (value stays in the keychain).
+  vlm_token_env: OPENADAPT_FLOW_VLM_TOKEN
+
+# -- runner ------------------------------------------------------------------
+runner:
+  # watch-mode poll interval for the local queue (seconds).
+  poll_seconds: 10
+  # OS user the runner service runs as (install.sh / systemd unit).
+  service_user: openadapt
+
+# -- updates: OFFLINE, operator-pulled, signed -------------------------------
+# The clinic NEVER auto-updates over the internet. An engineer prepares a signed
+# release bundle out-of-band; the operator copies it in on removable media and
+# `install.sh --update` VERIFIES its signature (and optional checksum) and
+# SMOKE-TESTS the new release BEFORE it atomically flips the `current` symlink.
+# A bad release is discarded and the box stays on the running one.
+# `install.sh --rollback` reverts to the previous release instantly. See
+# deploy/on-prem/UPDATE.md.
+updates:
+  channel: offline
+  # Path (on removable media) to the release archive (a .tar.gz containing a
+  # VERSION file + a wheels/ offline wheelhouse). Left blank until staged.
+  release_archive: ""
+  # Detached signature over release_archive (AUTHENTICITY). REQUIRED. An update
+  # without a signature verified by vendor_pubkey is always refused.
+  release_signature: ""
+  # Optional sha256 corruption check. Leave blank to auto-detect
+  # "<release_archive>.sha256". A checksum never substitutes for a signature.
+  release_checksum: ""
+  # The vendor PUBLIC key used to verify release_signature (minisign / signify /
+  # GPG / an openssl PEM public key — a PUBLIC key, safe to store here).
+  vendor_pubkey: /srv/openadapt/keys/vendor.pub
+  # Which tool verifies the signature: minisign | signify | gpg | openssl.
+  # minisign and GPG extensions can be inferred; set this explicitly for .sig.
+  signature_tool: minisign

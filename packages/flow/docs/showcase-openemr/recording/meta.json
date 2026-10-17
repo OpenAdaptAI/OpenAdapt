@@ -1,0 +1,12 @@
+{
+  "id": "50758ec282e94c4a9f99f69ab7415678",
+  "created_at": "2026-07-08T16:48:10.457765+00:00",
+  "viewport": [
+    1280,
+    800
+  ],
+  "app_url": "https://demo.openemr.io/openemr/index.php",
+  "params": {
+    "note": "Reviewed hypertension follow-up; BP within target range today."
+  }
+}

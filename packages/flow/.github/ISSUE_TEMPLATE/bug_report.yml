@@ -1,0 +1,46 @@
+name: Bug report
+description: Report something that behaves incorrectly.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Please do **not** file security issues here —
+        see [SECURITY.md](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/SECURITY.md).
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you expect, and what happened instead?
+    validations:
+      required: true
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      description: Ideally the exact `openadapt-flow` commands you ran.
+      placeholder: |
+        1. openadapt-flow demo-record --out rec
+        2. openadapt-flow compile rec --out bundle --name my-task
+        3. openadapt-flow replay bundle
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: Run report / logs
+      description: Attach the run's REPORT.md or report.json if you have one (scrub any PHI/PII first).
+  - type: input
+    id: version
+    attributes:
+      label: openadapt-flow version
+      description: "Output of: python -c \"import openadapt_flow; print(openadapt_flow.__version__)\""
+    validations:
+      required: true
+  - type: input
+    id: env
+    attributes:
+      label: OS + Python version
+      placeholder: "macOS 14 / Python 3.12"
+    validations:
+      required: true

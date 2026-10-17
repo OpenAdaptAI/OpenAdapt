@@ -1,0 +1,78 @@
+{
+  "check": "all",
+  "ok": true,
+  "locks": {
+    "check": "locks",
+    "ok": true,
+    "environments": [
+      {
+        "name": "mockmed",
+        "ok": true,
+        "kind": "in-process (no external pins)",
+        "problems": []
+      },
+      {
+        "name": "openemr_local",
+        "ok": true,
+        "service_count": 2,
+        "services": {
+          "openemr": "openemr/openemr:8.0.0.3@sha256:0aa4d3d52b22fa69986c087e7c99e9854d8dfd70440634eb7c8af0e08f19f3ab",
+          "mariadb": "mariadb:11.8@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4"
+        },
+        "upstream_count": 1,
+        "problems": []
+      },
+      {
+        "name": "frappe_lending",
+        "ok": true,
+        "service_count": 4,
+        "services": {
+          "frappe_build": "frappe/build:v16.27.0@sha256:03e6e1266d8427cbc8b524d5dc1afcfdf313dd3e0dc01f384e1564a10df970b2",
+          "frappe_base": "frappe/base:v16.27.0@sha256:87f036846924f1b9be1b30d590e7156c1013f73bbf946e6a43d8f1560a1f0d33",
+          "mariadb": "mariadb:11.8@sha256:efb4959ef2c835cd735dbc388eb9ad6aab0c78dd64febcd51bc17481111890c4",
+          "redis": "redis:6.2-alpine@sha256:c9ab371a96b057d3642be9bd71cb1b3fe97920d345dc949860578bffb3d54460"
+        },
+        "upstream_count": 4,
+        "problems": []
+      },
+      {
+        "name": "openimis_claims",
+        "ok": true,
+        "service_count": 5,
+        "services": {
+          "backend": "ghcr.io/openimis/openimis-be:25.10@sha256:a77228c7469fab5f3523d3f7b9877d62aa116b303fd87a6d55aa3a46c1892592",
+          "frontend": "ghcr.io/openimis/openimis-fe:25.10@sha256:ed0e0b1dbe91308d4df3322a1aee40176b42d47bbf72fea79a59fa84ef63db4a",
+          "pgsql": "ghcr.io/openimis/openimis-pgsql:25.10@sha256:d4bc881e408b74b4cf47fb718534fe0f10940bb951b6cb7ee9a1a30048adf29d",
+          "redis": "redis@sha256:234c902a2db49461a129e2d4aeff85b28cf20187ed274a67f6e50995fa713c7b",
+          "rabbitmq": "rabbitmq:3-management@sha256:e582c0bc7766f3342496d8485efb5a1df782b5ce3886ad017e2eaae442311f69"
+        },
+        "upstream_count": 1,
+        "problems": []
+      }
+    ]
+  },
+  "mockmed": {
+    "check": "mockmed",
+    "base_url": "http://127.0.0.1:50520/",
+    "ok": true,
+    "queryable": true,
+    "non_gameable": true,
+    "clean_write_readback": {
+      "id": 1,
+      "patient_id": "p1",
+      "type": "Triage",
+      "note": "sig: amoxicillin 500mg PO TID x7d",
+      "source": "replay",
+      "key": null
+    },
+    "partial_write_readback": {
+      "id": 1,
+      "patient_id": "p1",
+      "type": "Triage",
+      "note": "",
+      "source": "replay",
+      "key": null
+    },
+    "note": "record is queryable via GET /api/db and non-gameable: a partial-save fault the screen reports as success is visible as a dropped note in the system-of-record."
+  }
+}

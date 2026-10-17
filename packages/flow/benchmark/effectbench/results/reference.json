@@ -1,0 +1,159 @@
+{
+  "suite": "mockmed-anchor",
+  "trials_per_task": 10,
+  "n_tasks": 9,
+  "arms": {
+    "screen_only": {
+      "swer": {
+        "numerator": 50,
+        "denominator": 90,
+        "rate": 0.5555555555555556,
+        "ci": {
+          "lo": 0.4527192645595967,
+          "hi": 0.6538434437110336,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "swer_wrong_write": {
+        "numerator": 40,
+        "denominator": 90,
+        "rate": 0.4444444444444444,
+        "ci": {
+          "lo": 0.3461565562889663,
+          "hi": 0.5472807354404032,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "swer_phantom": {
+        "numerator": 10,
+        "denominator": 90,
+        "rate": 0.1111111111111111,
+        "ci": {
+          "lo": 0.061483191892977115,
+          "hi": 0.19257785021261037,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "over_halt": {
+        "numerator": 0,
+        "denominator": 90,
+        "rate": 0.0,
+        "ci": {
+          "lo": 0.0,
+          "hi": 0.04093562556432678,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "task_success": {
+        "numerator": 20,
+        "denominator": 90,
+        "rate": 0.2222222222222222,
+        "ci": {
+          "lo": 0.14871335473639324,
+          "hi": 0.31847310391045497,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "screen_success": {
+        "numerator": 70,
+        "denominator": 90,
+        "rate": 0.7777777777777778,
+        "ci": {
+          "lo": 0.6815268960895451,
+          "hi": 0.8512866452636068,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "success_effect_gap": 0.5555555555555556,
+      "outcome_counts": {
+        "success": 20,
+        "silent_wrong_effect": 50,
+        "false_abort": 10,
+        "safe_halt": 10
+      }
+    },
+    "effect_verified": {
+      "swer": {
+        "numerator": 0,
+        "denominator": 90,
+        "rate": 0.0,
+        "ci": {
+          "lo": 0.0,
+          "hi": 0.04093562556432678,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "over_halt": {
+        "numerator": 0,
+        "denominator": 90,
+        "rate": 0.0,
+        "ci": {
+          "lo": 0.0,
+          "hi": 0.04093562556432678,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "task_success": {
+        "numerator": 30,
+        "denominator": 90,
+        "rate": 0.3333333333333333,
+        "ci": {
+          "lo": 0.24453505279444637,
+          "hi": 0.4357768223936625,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "screen_success": {
+        "numerator": 30,
+        "denominator": 90,
+        "rate": 0.3333333333333333,
+        "ci": {
+          "lo": 0.24453505279444637,
+          "hi": 0.4357768223936625,
+          "method": "wilson",
+          "confidence": 0.95
+        }
+      },
+      "success_effect_gap": 0.0,
+      "outcome_counts": {
+        "success": 30,
+        "wrong_action": 40,
+        "safe_halt": 20
+      }
+    }
+  },
+  "transactional_silently_mishandled": {
+    "silent": 5,
+    "total": 7
+  },
+  "reproducibility": {
+    "effectbench_version": "1.0.0",
+    "pack": "mockmed-anchor",
+    "pack_fingerprint": "sha256:ce941f1e8dfa41164f88f04eed7a6416f65fa2813c6ba3de9755cf3e5a402b1f",
+    "trials_per_task": 10,
+    "seeds": [
+      0,
+      1,
+      2,
+      3,
+      4,
+      5,
+      6,
+      7,
+      8,
+      9
+    ],
+    "dependencies": {
+      "pydantic": "2.13.4"
+    }
+  }
+}

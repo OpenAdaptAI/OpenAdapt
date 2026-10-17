@@ -1,0 +1,86 @@
+"""Security invariants for optional runtime dependency surfaces."""
+
+from __future__ import annotations
+
+from pathlib import Path
+
+try:
+    import tomllib
+except ModuleNotFoundError:  # Python 3.10 compatibility
+    import tomli as tomllib
+
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def _lock_packages() -> list[dict]:
+    return tomllib.loads((ROOT / "uv.lock").read_text(encoding="utf-8"))["package"]
+
+
+def _locked_version(name: str) -> tuple[int, ...]:
+    matches = [package for package in _lock_packages() if package["name"] == name]
+    assert len(matches) == 1, (
+        f"expected one locked {name} package, found {len(matches)}"
+    )
+    return tuple(int(part) for part in matches[0]["version"].split("."))
+
+
+def test_mlx_research_extra_keeps_transformers_in_patched_range() -> None:
+    """Do not reintroduce the three model-loading/Trainer RCE advisories."""
+
+    assert (5, 14) <= _locked_version("transformers") < (5, 18)
+    assert (0, 6, 17) <= _locked_version("mlx-vlm") < (0, 8)
+    assert (3, 1) <= _locked_version("jinja2") < (4,)
+
+
+def test_transformers_is_confined_to_the_mlx_research_extra() -> None:
+    roots = [
+        package
+        for package in _lock_packages()
+        if package["name"] == "openadapt-flow"
+        and package.get("source") == {"editable": "."}
+    ]
+    assert len(roots) == 1
+    root = roots[0]
+
+    core_names = {dependency["name"] for dependency in root["dependencies"]}
+    mlx_names = {
+        dependency["name"]
+        for dependency in root["optional-dependencies"]["service-mlx"]
+    }
+    assert "transformers" not in core_names
+    assert {"mlx-vlm", "transformers", "jinja2"} <= mlx_names
+
+
+def test_core_runtime_excludes_imagehash_scipy_closure() -> None:
+    """Keep SciPy and its compiled libraries out of the desktop/runtime core."""
+    roots = [
+        package
+        for package in _lock_packages()
+        if package["name"] == "openadapt-flow"
+        and package.get("source") == {"editable": "."}
+    ]
+    assert len(roots) == 1
+    core_names = {dependency["name"] for dependency in roots[0]["dependencies"]}
+    assert core_names.isdisjoint({"imagehash", "pywavelets", "scipy"})
+
+    locked_names = {package["name"] for package in _lock_packages()}
+    assert "imagehash" not in locked_names
+    assert "pywavelets" not in locked_names
+
+
+def test_privacy_extra_declares_spacy_runtime_click_dependency() -> None:
+    """Do not rely on Typer to make spaCy's direct Click import available."""
+
+    roots = [
+        package
+        for package in _lock_packages()
+        if package["name"] == "openadapt-flow"
+        and package.get("source") == {"editable": "."}
+    ]
+    assert len(roots) == 1
+    privacy_names = {
+        dependency["name"]
+        for dependency in roots[0]["optional-dependencies"]["privacy"]
+    }
+    assert {"click", "openadapt-privacy"} <= privacy_names

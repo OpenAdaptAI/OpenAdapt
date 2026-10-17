@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "workflow_name": "mockmed-triage",
+  "step_index": 5,
+  "step_id": "step_005",
+  "intent": "click 'Save Encounter'",
+  "state_id": null,
+  "category": "effect_escalated",
+  "reason": "System-of-record effect verification HALTED step 'step_005' (click 'Save Encounter'): field_equals refuted against the rest system of record and could not be reconciled (escalated) — [rest] field_equals: field 'note' is '', expected 'Synthetic follow-up in two weeks' (the system of record contradicts the declared outcome) -- no compensator available for an irreversible refuted effect -- durably halt and escalate — run aborted",
+  "detail": [
+    "[rest] record_written: CONFIRMED — exactly 1 record(s) match the target selector",
+    "[rest] field_equals: REFUTED → ESCALATED — no compensator available for an irreversible refuted effect -- durably halt and escalate"
+  ],
+  "proposed_options": [
+    "Inspect the system of record and correct it (the automatic compensation could not safely undo the fault)",
+    "Approve and RESUME from the last verified checkpoint (re-runs only this step onward; already-confirmed steps are not repeated)",
+    "Abort the run and discard the pending escalation"
+  ],
+  "resume_from_index": 5,
+  "resume_from_step_id": "step_004",
+  "params": {
+    "note": "Synthetic follow-up in two weeks"
+  },
+  "status": "pending",
+  "stale_after_s": 604800.0,
+  "program": false,
+  "program_frames": [],
+  "program_checkpoint_seq": 0,
+  "program_history_hash": "",
+  "delivery_uncertainty": null,
+  "created_at": "2026-07-26T07:07:49.334415+00:00"
+}

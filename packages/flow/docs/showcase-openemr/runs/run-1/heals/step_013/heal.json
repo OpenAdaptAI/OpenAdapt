@@ -1,0 +1,69 @@
+{
+  "step_id": "step_013",
+  "kind": "anchor_refresh",
+  "rung_used": "geometry",
+  "old_anchor": {
+    "template": "templates/step_013.png",
+    "region": [
+      735,
+      337,
+      160,
+      64
+    ],
+    "click_point": [
+      815,
+      369
+    ],
+    "ocr_text": null,
+    "landmarks": [
+      {
+        "relation": "right_of",
+        "ocr_text": "None",
+        "distance_px": 123,
+        "dx_px": -87,
+        "dy_px": 87
+      },
+      {
+        "relation": "above",
+        "ocr_text": "Yes",
+        "distance_px": 153,
+        "dx_px": 5,
+        "dy_px": 153
+      }
+    ],
+    "search_pad": 80
+  },
+  "new_anchor": {
+    "template": "templates/step_013.png",
+    "region": [
+      734,
+      736,
+      160,
+      64
+    ],
+    "click_point": [
+      814,
+      768
+    ],
+    "ocr_text": null,
+    "landmarks": [
+      {
+        "relation": "right_of",
+        "ocr_text": "None",
+        "distance_px": 123,
+        "dx_px": -87,
+        "dy_px": 87
+      },
+      {
+        "relation": "above",
+        "ocr_text": "Yes",
+        "distance_px": 153,
+        "dx_px": 5,
+        "dy_px": 153
+      }
+    ],
+    "search_pad": 80
+  },
+  "screenshot": "heals/step_013/screen.png",
+  "applied": true
+}

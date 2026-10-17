@@ -1,0 +1,392 @@
+"""OCR utilities backed by rapidocr-onnxruntime.
+
+The RapidOCR engine is expensive to construct, so a single module-level
+instance is created lazily on first use and reused for the process lifetime.
+All returned coordinates are in *screen* (full-frame) pixel space, even when
+a ``region`` restricts the OCR input.
+"""
+
+from __future__ import annotations
+
+import difflib
+import hashlib
+import threading
+from collections import OrderedDict
+from typing import Any
+
+import cv2
+import numpy as np
+from pydantic import BaseModel
+
+from openadapt_flow.ir import Region
+from openadapt_flow.vision.match import Match, _clamp_region
+
+_engine: Any = None
+_engine_lock = threading.Lock()
+
+
+class OcrResolutionRefused(RuntimeError):
+    """Base class for fail-closed OCR target-resolution refusals."""
+
+
+class AmbiguousOcrMatchError(OcrResolutionRefused):
+    """Raised when target resolution sees more than one qualifying OCR line.
+
+    Generic OCR consumers retain the historical best-match behavior. The
+    resolution ladder opts into this typed signal so it can distinguish
+    ambiguity (halt) from absence (continue to the next independent evidence
+    rung).
+    """
+
+
+class ContradictoryOcrEvidenceError(OcrResolutionRefused):
+    """Raised when independently located OCR evidence disagrees on target."""
+
+
+def _get_engine() -> Any:
+    """Return the process-wide RapidOCR engine, creating it on first use."""
+    global _engine
+    if _engine is None:
+        with _engine_lock:
+            if _engine is None:
+                from rapidocr_onnxruntime import RapidOCR
+
+                _engine = RapidOCR()
+    return _engine
+
+
+class OcrLine(BaseModel):
+    """One recognized text line.
+
+    Attributes:
+        text: Recognized text.
+        region: Bounding box ``(x, y, w, h)`` in screen coordinates.
+        confidence: Recognition confidence in ``[0, 1]``.
+    """
+
+    text: str
+    region: Region
+    confidence: float
+
+
+def _decode_bgr(png: bytes) -> np.ndarray:
+    """Decode PNG bytes to a BGR ``uint8`` image."""
+    arr = np.frombuffer(png, dtype=np.uint8)
+    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    if img is None:
+        raise ValueError("could not decode PNG bytes")
+    return img
+
+
+_OCR_MEMO_MAX = 16
+_ocr_memo: OrderedDict[tuple[str, Region | None], tuple[Any, tuple[OcrLine, ...]]] = (
+    OrderedDict()
+)
+_ocr_memo_lock = threading.Lock()
+
+
+def clear_ocr_memo() -> None:
+    """Drop every memoized OCR result."""
+
+    with _ocr_memo_lock:
+        _ocr_memo.clear()
+
+
+def ocr(screen_png: bytes, *, region: Region | None = None) -> list[OcrLine]:
+    """Run OCR on a screenshot (optionally restricted to a region).
+
+    Memoized on the SHA-256 of the exact PNG bytes, the region, and the
+    engine object: OCR is a pure function of those, and replay asks it about
+    the same frame several times per step (identity, landmark, postcondition).
+    One changed pixel is a different key, so a memo hit is never stale.
+    Callers always receive fresh copies.
+
+    Args:
+        screen_png: Full-frame screenshot as PNG bytes.
+        region: Optional ``(x, y, w, h)`` sub-region to OCR (clamped to the
+            frame). Returned line regions are offset back into full-screen
+            coordinates.
+
+    Returns:
+        Recognized lines in engine order; empty list if nothing was found.
+    """
+
+    engine = _get_engine()
+    key = (hashlib.sha256(screen_png).hexdigest(), region)
+    with _ocr_memo_lock:
+        hit = _ocr_memo.get(key)
+        if hit is not None and hit[0] is engine:
+            _ocr_memo.move_to_end(key)
+            return [line.model_copy() for line in hit[1]]
+    lines = _ocr_uncached(engine, screen_png, region=region)
+    with _ocr_memo_lock:
+        _ocr_memo[key] = (engine, tuple(line.model_copy() for line in lines))
+        _ocr_memo.move_to_end(key)
+        while len(_ocr_memo) > _OCR_MEMO_MAX:
+            _ocr_memo.popitem(last=False)
+    return lines
+
+
+def _ocr_uncached(
+    engine: Any, screen_png: bytes, *, region: Region | None = None
+) -> list[OcrLine]:
+    """Run OCR on a screenshot (optionally restricted to a region).
+
+    Args:
+        screen_png: Full-frame screenshot as PNG bytes.
+        region: Optional ``(x, y, w, h)`` sub-region to OCR (clamped to the
+            frame). Returned line regions are offset back into full-screen
+            coordinates.
+
+    Returns:
+        Recognized lines in engine order; empty list if nothing was found.
+    """
+    img = _decode_bgr(screen_png)
+    h, w = img.shape[:2]
+    off_x, off_y = 0, 0
+    if region is not None:
+        clamped = _clamp_region(region, w, h)
+        if clamped is None:
+            return []
+        off_x, off_y, rw, rh = clamped
+        img = img[off_y : off_y + rh, off_x : off_x + rw]
+
+    result, _elapse = engine(img)
+    lines: list[OcrLine] = []
+    if not result:
+        return lines
+    for box, text, score in result:
+        xs = [p[0] for p in box]
+        ys = [p[1] for p in box]
+        x0, y0 = int(min(xs)), int(min(ys))
+        x1, y1 = int(max(xs)), int(max(ys))
+        lines.append(
+            OcrLine(
+                text=str(text),
+                region=(off_x + x0, off_y + y0, x1 - x0, y1 - y0),
+                confidence=float(score),
+            )
+        )
+    return lines
+
+
+def normalize_text(text: str) -> str:
+    """Normalize text for fuzzy comparison: lowercase, collapse whitespace."""
+    return " ".join(text.lower().split())
+
+
+def upscale_png(screen_png: bytes, factor: int = 2) -> bytes:
+    """Upscale a PNG (cubic) so OCR can read dense or small text.
+
+    Args:
+        screen_png: PNG bytes.
+        factor: Integer upscale factor.
+
+    Returns:
+        The upscaled PNG bytes (the input unchanged if decoding fails).
+    """
+    img = cv2.imdecode(np.frombuffer(screen_png, np.uint8), cv2.IMREAD_COLOR)
+    if img is None:
+        return screen_png
+    up = cv2.resize(img, None, fx=factor, fy=factor, interpolation=cv2.INTER_CUBIC)
+    ok, buf = cv2.imencode(".png", up)
+    return buf.tobytes() if ok else screen_png
+
+
+def text_present(
+    screen_png: bytes,
+    text: str,
+    *,
+    region: Region | None = None,
+    min_ratio: float = 0.8,
+) -> bool:
+    """OCR-segmentation-tolerant presence check for a text snippet.
+
+    :func:`find_text` fuzzy-matches whole OCR lines, which makes a bare
+    presence check segmentation-dependent: the engine sometimes merges a
+    short target into one long box together with neighboring text (the
+    whole-line similarity then falls below ``min_ratio`` even though the
+    text is plainly on screen) and sometimes splits one rendered line into
+    several boxes. Presence must not depend on that coin flip, so this
+    check passes when EITHER
+
+    - some OCR line whole-line fuzzy-matches ``text`` at ``min_ratio``
+      (exactly :func:`find_text`'s criterion), or
+    - a contiguous run of at least ``min_ratio * len(target)`` squashed
+      (lowercased, whitespace-stripped) target characters appears in the
+      squashed concatenation of all OCR lines in engine reading order —
+      tolerant of the target being embedded in a longer box or split
+      across boxes, while scattered per-character coincidences (which
+      accumulate on dense screens) still fail because the matched run
+      must be contiguous.
+
+    When the raw frame misses, the frame is retried once at 2x resolution
+    (rapidocr drops dense lines at common screen resolutions).
+
+    Args:
+        screen_png: Full-frame screenshot as PNG bytes.
+        text: Target text snippet.
+        region: Optional ``(x, y, w, h)`` sub-region to search within.
+        min_ratio: Minimum whole-line similarity ratio / contiguous-run
+            fraction of the target to accept.
+
+    Returns:
+        Whether the text is considered present.
+    """
+    target = normalize_text(text)
+    squashed_target = "".join(target.split())
+    if not squashed_target:
+        return False
+    for factor in (1, 2):
+        png = screen_png if factor == 1 else upscale_png(screen_png, factor)
+        scaled_region = (
+            None
+            if region is None
+            else (
+                region[0] * factor,
+                region[1] * factor,
+                region[2] * factor,
+                region[3] * factor,
+            )
+        )
+        lines = ocr(png, region=scaled_region)
+        if not lines:
+            continue
+        for line in lines:
+            ratio = difflib.SequenceMatcher(
+                None, normalize_text(line.text), target
+            ).ratio()
+            if ratio >= min_ratio:
+                return True
+        hay = "".join(normalize_text(" ".join(line.text for line in lines)).split())
+        # autojunk=False: the default heuristic marks frequent characters
+        # of a long OCR haystack as junk, silently dropping real matches.
+        matcher = difflib.SequenceMatcher(None, squashed_target, hay, autojunk=False)
+        longest = max(
+            (block.size for block in matcher.get_matching_blocks()),
+            default=0,
+        )
+        if longest >= min_ratio * len(squashed_target):
+            return True
+    return False
+
+
+def find_text(
+    screen_png: bytes,
+    text: str,
+    *,
+    region: Region | None = None,
+    min_ratio: float = 0.8,
+    min_ocr_confidence: float = 0.0,
+    raise_on_ambiguity: bool = False,
+) -> Match | None:
+    """Locate a text label on screen via OCR plus fuzzy matching.
+
+    Each OCR line is compared to ``text`` with
+    ``difflib.SequenceMatcher.ratio()`` over normalized (lowercased,
+    whitespace-collapsed) strings. Generic callers receive the best qualifying
+    line, preserving the historical presence/readiness behavior. Targeting
+    callers set ``raise_on_ambiguity`` so repeated labels become a typed refusal
+    instead of silently selecting the first or highest-scoring control.
+
+    Args:
+        screen_png: Full-frame screenshot as PNG bytes.
+        text: Target text to find.
+        region: Optional ``(x, y, w, h)`` sub-region to search within.
+        min_ratio: Minimum similarity ratio in ``[0, 1]`` to accept.
+        min_ocr_confidence: Minimum OCR-engine confidence to accept. The
+            compatibility default keeps historical generic lookup behavior;
+            compiler-qualified exact labels opt into a stricter floor.
+        raise_on_ambiguity: Raise :class:`AmbiguousOcrMatchError` instead of
+            selecting the best line when multiple lines qualify. Target
+            resolution enables this so ambiguity cannot be mistaken for a miss
+            and fall through to weaker evidence.
+
+    Returns:
+        A :class:`Match` centered on the best qualifying line's bounding box,
+        or ``None`` if no line is similar enough.
+    """
+    exact_confidence_contract = (
+        raise_on_ambiguity and min_ratio == 1.0 and min_ocr_confidence > 0.0
+    )
+    qualifying = _qualifying_text_lines(
+        screen_png,
+        text,
+        region=region,
+        min_ratio=min_ratio,
+        min_ocr_confidence=(0.0 if exact_confidence_contract else min_ocr_confidence),
+    )
+    if len(qualifying) > 1:
+        if raise_on_ambiguity:
+            raise AmbiguousOcrMatchError(
+                f"{len(qualifying)} OCR lines qualify for target text"
+            )
+    if exact_confidence_contract:
+        qualifying = [
+            item for item in qualifying if item[1].confidence >= min_ocr_confidence
+        ]
+    if not qualifying:
+        return None
+    ratio, line = max(qualifying, key=lambda item: item[0])
+    x, y, w, h = line.region
+    return Match(point=(x + w // 2, y + h // 2), region=line.region, confidence=ratio)
+
+
+def find_text_candidates(
+    screen_png: bytes,
+    text: str,
+    *,
+    region: Region | None = None,
+    min_ratio: float = 0.8,
+    min_ocr_confidence: float = 0.0,
+) -> list[Match]:
+    """Return every OCR line that qualifies for ``text``.
+
+    Target resolution needs the complete candidate set so it can distinguish
+    repeated labels with independent retained evidence (for example the
+    recorded target region or landmark relations).  This API deliberately
+    makes no selection: candidate order is not evidence, and callers must
+    prove uniqueness before acting.
+
+    Generic callers should continue to use :func:`find_text`, whose default
+    best-match behavior remains backward compatible.
+    """
+    matches: list[Match] = []
+    for ratio, line in _qualifying_text_lines(
+        screen_png,
+        text,
+        region=region,
+        min_ratio=min_ratio,
+        min_ocr_confidence=min_ocr_confidence,
+    ):
+        x, y, w, h = line.region
+        matches.append(
+            Match(
+                point=(x + w // 2, y + h // 2),
+                region=line.region,
+                confidence=ratio,
+            )
+        )
+    return matches
+
+
+def _qualifying_text_lines(
+    screen_png: bytes,
+    text: str,
+    *,
+    region: Region | None,
+    min_ratio: float,
+    min_ocr_confidence: float,
+) -> list[tuple[float, OcrLine]]:
+    """Return qualifying ``(similarity, line)`` pairs without selecting one."""
+    target = normalize_text(text)
+    if not target:
+        return []
+    qualifying: list[tuple[float, OcrLine]] = []
+    for line in ocr(screen_png, region=region):
+        if line.confidence < min_ocr_confidence:
+            continue
+        ratio = difflib.SequenceMatcher(None, normalize_text(line.text), target).ratio()
+        if ratio >= min_ratio:
+            qualifying.append((ratio, line))
+    return qualifying

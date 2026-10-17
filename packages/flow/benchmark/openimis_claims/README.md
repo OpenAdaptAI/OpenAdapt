@@ -1,0 +1,272 @@
+# openIMIS claims-intake reference environment (synthetic and pinned)
+
+Status: **reference/demo environment — NOT a benchmark**. This directory gives
+OpenAdapt an INSURANCE vertical mirror of the healthcare (OpenEMR) and lending
+(Frappe Lending) reference environments: a real open-source insurance system,
+run locally from digest-pinned images, in which one health-facility claim is
+entered through the browser UI (claims intake), recorded once, compiled, and
+replayed — with success established only by a direct SQL read of the claim
+row, never by pixels or actor self-report.
+
+On 2026-07-21 the **paid computer-use agent arm was run** on this environment,
+so the insurance vertical is no longer agent-arm-free. On the pinned synthetic
+reference, the `claude-sonnet-5` agent drove the same claim-intake task and was
+scored by the same arm-independent effect contract:
+
+| metric | value |
+|---|---|
+| trials | 3 |
+| primary outcome | 3/3 `correct` (exactly one 'Entered' claim for the synthetic policyholder each time) |
+| over-halt | 0/3 |
+| silent incorrect success | 0/3 (no duplicate / wrong / collateral claim) |
+| model cost / run | $0.4793 (list price) |
+| total model cost | $1.4380 |
+| latency (wall) mean | 69.8 s |
+| model | `claude-sonnet-5`, `computer_20251124`, <=30 actions/run, <=$1.50/run cap |
+
+Raw per-run rows, environment fingerprints, application-specific
+adapter/oracle wiring, and the detailed cost ledger are retained in the private
+`OpenAdaptAI/openadapt-corpus` repository. The public generic cost-capped agent
+mechanism remains in
+`openadapt_flow/benchmark/agent_baseline.py`. See the
+[aggregate report](../agent_arm_verticals/README.md).
+
+There is still no full timing matrix and no publication protocol here: a
+publication reliability claim would need the full matched protocol the Frappe
+Lending and OpenEMR benchmarks define (compiled + agent + API arms, 10 fresh
+trials per cell, snapshot-reset baselines). Nothing in this directory is
+publication evidence.
+
+## The application
+
+[openIMIS](https://openimis.org/) (AGPL-3.0) is the open-source insurance
+management system used by national health-insurance and social-protection
+schemes. Its claims module is a real payer-side claims-intake surface: a
+health-facility claim references an insuree (policyholder), visit dates, an
+ICD diagnosis, and tariffed services/items, and is saved into claim status
+"Entered" — the step before checking and adjudication.
+
+It is a browser UI over a supported GraphQL API, so — exactly as the Frappe
+Lending README notes for lending — a real openIMIS deployment should prefer
+the API control arm. The browser demonstration isolates the value of compiled
+replay when a UI path is required, and stands in for the many commercial
+claims platforms that expose no such API.
+
+## Synthetic data only
+
+* The stack loads the upstream openIMIS **demo dataset**, a fictional fixture
+  shipped by the openIMIS project (invented regions such as "Tahida",
+  facilities such as "Vida District Hospital", fictional insurees, tariffs,
+  and the demo actor credential `Admin`).
+* `bootstrap` adds one more synthetic policyholder — **Avery Doe, insuree
+  no. 999000001**, with an in-force policy through 2027-12-31 — so the
+  recorded claim shows active coverage. All values are invented.
+* Everything binds to `127.0.0.1` only; generated stack secrets live in the
+  ignored `out/state/` directory.
+
+Any published screenshot or clip must be captured from this synthetic fixture,
+labelled "openIMIS reference environment", and must not imply a customer
+deployment, production readiness, or a completed benchmark.
+
+## The demonstrated workflow
+
+Authentication and opening the blank claim form (fixing the health facility
+`VIHOS001` and claim administrator context) are declared unmeasured setup,
+mirroring the Frappe Lending setup boundary. The recorded task is:
+
+> On the blank Health Facility Claim form, enter insuree no. `999000001`
+> (which resolves the synthetic policyholder and her active policy), a claim
+> number (parameter), main diagnosis `A000`, an explanation note (parameter),
+> and service `A1` (General Consultation, auto-tariffed); save the claim.
+
+The compiled bundle parameterizes the three values a claims clerk varies per
+claim: `insurance_no`, `claim_no`, and `explanation`. Replay substitutes a
+fresh `claim_no` (the claim-form input accepts at most 8 characters). The SQL
+oracle then requires **exactly one** non-voided `tblClaim` row with that code,
+in status 2 ("Entered"), for the demonstrated insuree and health facility — a
+duplicate or missing row fails the run loudly.
+
+## The unlabeled Save
+
+openIMIS saves a claim through a floating floppy-disk button with no text,
+accessible name, or tooltip. Flow treats that click as consequential and
+clicks it only through a submit binding (see
+[docs/LIMITS.md](../../docs/LIMITS.md)): the compiler records how the button
+relates to the fields the demonstration typed into, and a run checks the same
+relation right before it clicks.
+
+`scripts/openimis_submit_binding_probe.py` checks the binding on the live
+claim form without saving anything. It types a synthetic claim, records the
+binding, then types different values in a fresh browser and runs the engine's
+pre-click check against the Save and against the controls a run must never
+click. It cancels every check and never clicks.
+
+On openIMIS 25.10 ([`submit_binding_probe.json`](submit_binding_probe.json)):
+
+- The Save binds. It's a fixed `<button>` in `div > div > span`, outside the
+  `<form>` that holds the fields, and it's the only unlabeled control after
+  them. Of the 5 inputs the demonstration typed into, 3 are still on the page
+  when it clicks; openIMIS re-renders the other 2, at record time and at run
+  time alike.
+- The check passes on the unchanged Save, and again after the probe removes
+  the icon it added.
+- The check refuses 17 of 17 controls a run must never click: the 14 other
+  icon buttons in view, the Save and a second unlabeled icon after the probe
+  adds that icon beside it, and the Save after the probe moves the floating
+  buttons to the left.
+
+```bash
+python scripts/openimis_submit_binding_probe.py \
+  --out benchmark/openimis_claims/submit_binding_probe.json
+```
+
+## The eligibility-check workflow (effect-verified)
+
+`scripts/openimis_eligibility_demo.py` demonstrates the second reference
+workflow on the same stack: a front-office **coverage / eligibility check** —
+look up a policyholder by insuree number in openIMIS's Insuree Enquiry,
+confirm the policy panel and a service-eligibility answer, and **verify the
+declared outcome against the system of record** with the effect-verifier kit
+(`docs/EFFECT_KIT.md`) instead of trusting the screen.
+
+Why the contract is the point: for a policyholder whose coverage has LAPSED,
+the enquiry dialog still renders a service-eligibility thumbs-up next to the
+selected service — a screen a hurried human (or any screen-scraping
+automation) can misread as "covered". The committed
+`deployment.eligibility.yaml` wires ONE read-only SELECT over openIMIS's own
+policy, product-benefit, and service tables
+(`fixture.py::ELIGIBILITY_ORACLE_SQL`; a unit test pins the two to each
+other), executed as the dedicated read-only role
+`oa_eligibility_oracle` (SELECT on exactly five tables,
+`default_transaction_read_only=on`, no inherited/owner/schema/temp/write
+privileges, and a fail-closed effective-privilege audit at every bootstrap —
+the role, not the kit's statement filter, is the real enforcement). The
+bundle's single `field_equals` outcome
+contract binds to the run's `insurance_no` parameter and to the exact question
+shown in the UI: service **A1 (General Consultation)** on **2026-07-21**.
+
+The SELECT must yield exactly one policy/product/service row. It derives
+`eligibility=Eligible` only when both the policy and insuree-policy link are
+active and effective on the declared date, and the policy's product includes
+the current A1 service. Missing, duplicate, expired, not-yet-effective, and
+wrong-service rows all refuse; no mutation is invented for this read-only
+workflow.
+
+A replay for an eligible policyholder ends with the outcome CONFIRMED in
+the run report's effect-verification section; a replay for the lapsed
+policyholder completes the GUI lookup, then **HALTS** with
+`field_equals REFUTED — eligibility 'Ineligible', expected 'Eligible'` instead of
+reporting the check a success. Halt + evidence, never a guess.
+
+`bootstrap` (below) adds three more synthetic policyholders: **Jordan Roe,
+insuree no. 999000002** (policy expired 2026-05-31 — the halt scenario) and
+**Sam Poe, insuree no. 999000003** (eligible for A1 on 2026-07-21), so the
+green replay parameterizes onto a policyholder the demonstration never saw.
+It also adds **Taylor Foe, insuree no. 999000004** (effective 2026-08-01) so
+the not-yet-effective refusal is regression-tested. All values are invented.
+
+```bash
+# One-time: the SQL verifier needs a PostgreSQL DB-API driver.
+uv pip install "psycopg[binary]"
+
+.venv/bin/python scripts/openimis_eligibility_demo.py up         # same stack
+.venv/bin/python scripts/openimis_eligibility_demo.py bootstrap  # + role
+
+.venv/bin/python scripts/openimis_eligibility_demo.py record \
+  --out benchmark/openimis_claims/out/eligibility/recording --headed
+.venv/bin/python scripts/openimis_eligibility_demo.py compile \
+  --recording benchmark/openimis_claims/out/eligibility/recording \
+  --bundle benchmark/openimis_claims/out/eligibility/bundle
+.venv/bin/openadapt-flow lint benchmark/openimis_claims/out/eligibility/bundle
+.venv/bin/openadapt-flow certify \
+  benchmark/openimis_claims/out/eligibility/bundle --policy permissive
+
+# Green: A1 eligibility on 2026-07-21 CONFIRMED for a policyholder the demo never saw.
+.venv/bin/python scripts/openimis_eligibility_demo.py replay \
+  --bundle benchmark/openimis_claims/out/eligibility/bundle \
+  --insuree 999000003 --headed
+
+# Halt-on-anomaly: lapsed coverage -> field_equals REFUTED -> HALT.
+.venv/bin/python scripts/openimis_eligibility_demo.py replay \
+  --bundle benchmark/openimis_claims/out/eligibility/bundle \
+  --insuree 999000002 --expect-halt --headed
+```
+
+Honesty box: this is a **contract-proven fixture demo** on synthetic data —
+the same status the effect kit's SQL substrate documents. It is not a
+benchmark, not a customer deployment, and not a claim about any commercial
+payer portal; a real dental-office eligibility deployment would target the
+payer portal / clearinghouse the office actually uses and would need its own
+read-only oracle. Under the `permissive` policy the bundle certifies clean;
+the stricter `clinical-write` policy still flags the two unlabeled dialog
+clicks (compile-time confidence 0.70 < 0.80) and the parameter-typing step's
+vacuous postcondition — accurate findings for an unattended-write posture,
+acceptable for a demonstrated read-only check.
+
+## Pinning
+
+`environment.lock.json` pins every image by digest (openIMIS 25.10 backend /
+frontend / demo-dataset PostgreSQL, plus Redis and RabbitMQ) and every
+upstream configuration file by SHA-256. The compose topology and the
+`conf/nginx/` templates come from openIMIS's own distribution repo
+([openimis-dist_dkr](https://github.com/openimis/openimis-dist_dkr) commit
+`cd6220d1f0578e56a589c47953250c2ad3d0caa5`). They are not stored here:
+[`upstream.py`](upstream.py) fetches them at run time, refuses any file whose
+hash differs from the lock, caches them under `out/upstream/` (git-ignored),
+and derives the local compose file from them: only the services the claims
+workflow needs (no OpenSearch/dashboards/certbot), every image from a
+required digest-pinned variable, loopback-only ports, and generated secrets.
+The nginx templates are mounted unmodified. Set `OPENADAPT_UPSTREAM_CACHE` to
+reuse a cache elsewhere.
+
+The 25.10 images publish `linux/amd64` only; on Apple Silicon they run under
+Docker Desktop's Rosetta emulation (verified 2026-07-17: first bring-up
+including migrations and demo-dataset load completed in a few minutes).
+
+## License boundary
+
+This directory contains only OpenAdapt-authored, MIT-licensed code. The
+openIMIS distribution files (`AGPL-3.0-only`) are fetched from upstream at run
+time and never committed; see [`THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md).
+Running or automating the AGPL application does not change Flow's license.
+
+## Reproduction commands
+
+Requirements: Docker-compatible API with Compose v2, network for the one-time
+pinned image pull, and the repo's `.venv`.
+
+```bash
+# Start the pinned stack (loopback-only; first run pulls + migrates + loads
+# the synthetic demo dataset) and create the synthetic policyholder.
+.venv/bin/python scripts/openimis_claims_demo.py up
+.venv/bin/python scripts/openimis_claims_demo.py bootstrap
+
+# Record the scripted claims-intake demonstration, compile it, replay it
+# with a fresh claim number. Every replay is SQL-oracle-verified.
+.venv/bin/python scripts/openimis_claims_demo.py record \
+  --out benchmark/openimis_claims/out/recording --headed
+.venv/bin/python scripts/openimis_claims_demo.py compile \
+  --recording benchmark/openimis_claims/out/recording \
+  --bundle benchmark/openimis_claims/out/bundle
+.venv/bin/python scripts/openimis_claims_demo.py replay \
+  --bundle benchmark/openimis_claims/out/bundle --headed
+
+# Optional website-media capture (opt-in, unchanged recording/replay):
+#   ... record --record-video benchmark/openimis_claims/out/video
+#   ... replay --record-video benchmark/openimis_claims/out/video
+
+.venv/bin/python scripts/openimis_claims_demo.py down            # stop
+.venv/bin/python scripts/openimis_claims_demo.py down --volumes  # full reset
+```
+
+## Primary upstream references
+
+- [openIMIS](https://openimis.org/) and the
+  [openimis GitHub organization](https://github.com/openimis)
+- [openimis-dist_dkr](https://github.com/openimis/openimis-dist_dkr) — the
+  Docker distribution the compose file is derived from at run time
+- Image provenance: [ghcr.io/openimis/openimis-be](https://github.com/openimis/openimis-be_py/pkgs/container/openimis-be),
+  [ghcr.io/openimis/openimis-fe](https://github.com/openimis/openimis-fe_js/pkgs/container/openimis-fe),
+  [ghcr.io/openimis/openimis-pgsql](https://github.com/openimis/database_postgresql/pkgs/container/openimis-pgsql),
+  [redis](https://hub.docker.com/_/redis),
+  [rabbitmq](https://hub.docker.com/_/rabbitmq)

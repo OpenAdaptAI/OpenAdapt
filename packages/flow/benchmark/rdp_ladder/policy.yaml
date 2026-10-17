@@ -1,0 +1,18 @@
+name: rdp-ladder-qualified
+description: >-
+  Fail-closed policy for the synthetic real-RDP vision-ladder qualification:
+  every pointer action carries pixel identity, the write carries both a screen
+  postcondition and a system-of-record contract, and the write contract has an
+  idempotency key. This policy does not certify other RDP applications.
+
+prohibit_unarmed_clicks: true
+require_identity_for:
+  - entity_navigation
+  - write
+require_system_effects_for:
+  - write
+require_idempotency_key_for:
+  - write
+prohibit_unconfirmed_effect_bindings: true
+require_screen_postconditions_for:
+  - write

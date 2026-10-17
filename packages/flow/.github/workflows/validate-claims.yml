@@ -1,0 +1,202 @@
+name: Validate claims
+
+# Make every public maturity claim a FUNCTION of automated evidence.
+#
+#   - pull_request: run the fast claim->evidence STRUCTURE GATE
+#     (scripts/validate_claims.py --check --structure-only) on every PR. This is a
+#     required-check CANDIDATE: wire it into branch protection as the context
+#     "gate" (the actual CheckRun job name from the "Validate claims" workflow)
+#     to block a PR that overclaims (a `supported` claim whose only backing is
+#     an opt-in/infra-gated test, a `field` result labeled `supported`, or a
+#     missing evidence path). The required CI `test` and `e2e-browser` jobs
+#     separately bind every supported test file to their real JUnit results.
+#     It NEVER touches infra.
+#   - schedule + workflow_dispatch: the infra-gated leg runs only on a labeled
+#     self-hosted macOS runner with the declared local Parallels substrate. It
+#     binds its two selected tests to their real JUnit results and emits an
+#     exactly scoped report. Without that runner configuration the job SKIPS;
+#     it never publishes a fabricated green.
+#
+# GitHub Actions are pinned to full commit SHAs (supply-chain control); the
+# trailing comment records the human-readable version, matching ci.yml.
+
+on:
+  pull_request:
+  schedule:
+    - cron: "0 8 * * 1" # 08:00 UTC Mondays: refresh the validating-tier evidence
+  workflow_dispatch:
+    inputs:
+      run_infra:
+        description: "Run the configured macOS + Parallels evidence refresh"
+        type: boolean
+        default: false
+
+concurrency:
+  group: validate-claims-${{ github.workflow }}-${{ github.ref }}
+  # A pull-request structure check is safe to supersede. A physical Parallels
+  # run is not: cancellation could interrupt its exact-snapshot cleanup.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  # --- Required-check candidate: the fast claim->evidence GATE --------------
+  # Structural, sub-second, no browser/OS/infra: parses claims.yaml and fails
+  # if any claim's tier outranks its strongest backing evidence, or an evidence
+  # path is missing. Runs on every PR. See scripts/validate_claims.py.
+  gate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      # The validator needs only PyYAML + stdlib (no package install, no
+      # browser), so the gate stays fast and cannot be broken by heavy deps.
+      - name: Install PyYAML
+        run: pip install "pyyaml>=6"
+
+      - name: Claim -> evidence structure gate
+        run: python scripts/validate_claims.py --check --structure-only
+
+      # Prove the doc is regenerable and in sync with the registry: regenerate
+      # docs/VERIFICATION.md + docs/verification.json into a temp dir would be
+      # ideal, but the simplest honest check is to regenerate in place and fail
+      # if it drifts from what is committed (a stale report is itself a drift).
+      # The committed docs/VERIFICATION.md is generated with this FIXED sentinel
+      # `--now` (not a wall-clock) so the report is a deterministic function of
+      # the registry -- the sync diff then flags real content drift only, not a
+      # changing timestamp. The infra leg below regenerates with a real
+      # timestamp for its uploaded (non-committed) artifact.
+      - name: Report is in sync with the registry
+        run: |
+          python scripts/validate_claims.py --report \
+            --now "committed registry state (regenerate: scripts/validate_claims.py --report)" \
+            >/dev/null
+          if ! git diff --quiet -- docs/VERIFICATION.md docs/verification.json; then
+            echo "::error::docs/VERIFICATION.md is stale. Run:" \
+              "python scripts/validate_claims.py --report and commit the result."
+            git --no-pager diff -- docs/VERIFICATION.md docs/verification.json
+            exit 1
+          fi
+
+      - name: Also run the validator's own tests
+        run: |
+          pip install "pytest>=8"
+          pytest -vv --durations=20 tests/test_validate_claims.py
+
+  # --- Infra-gated: scoped validating evidence on its exact substrate -------
+  # These selected tests require macOS, local Parallels, a running configured
+  # Windows VM, and a known base snapshot. They cannot run on ubuntu-latest or
+  # against an unrelated hosted VM endpoint. A repository owner enables the
+  # job only after a self-hosted runner has all four labels below and the two
+  # required repository variables are configured.
+  #
+  # A skipped job means "not proven this run" and produces no report. A green
+  # job means BOTH named files contained a real pass and no failure/error/skip.
+  # RDP, Citrix stand-in, and retained OpenEMR evidence remain separate scopes;
+  # this job never implies that those files ran.
+  refresh-validating-evidence:
+    if: >-
+      ${{ vars.OPENADAPT_PARALLELS_VALIDATION_ENABLED == 'true' &&
+          (github.event_name == 'schedule' || inputs.run_infra == true) }}
+    runs-on: [self-hosted, macos, arm64, openadapt-parallels]
+    # The live-test step has a shorter timeout. This job reserve leaves time for
+    # its unconditional recovery step after a test timeout.
+    timeout-minutes: 110
+    concurrency:
+      group: openadapt-parallels-validation
+      cancel-in-progress: false
+    env:
+      OAFLOW_PARALLELS_VM_UUID: ${{ vars.OAFLOW_PARALLELS_VM_UUID }}
+      OAFLOW_PARALLELS_BASE_SNAPSHOT_ID: ${{ vars.OAFLOW_PARALLELS_BASE_SNAPSHOT_ID }}
+      OAFLOW_PARALLELS_STORAGE_PATH: ${{ github.workspace }}
+      # This path is outside the checkout, so checkout cleaning and a runner
+      # restart cannot erase an unresolved exact-base recovery record.
+      OAFLOW_PARALLELS_RECOVERY_JOURNAL: ${{ github.workspace }}/../.openadapt-flow/parallels-recovery.json
+      OAFLOW_WINDOWS_UIA_CANDIDATE_COMMIT: ${{ github.sha }}
+      OAFLOW_WINDOWS_UIA_MATRIX_ID: claims-${{ github.run_id }}-${{ github.run_attempt }}
+      OAFLOW_WINDOWS_UIA_EVIDENCE: ${{ github.workspace }}/runs/windows-uia-evidence.jsonl
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - name: Verify exact macOS + Parallels substrate
+        run: |
+          [ "$(uname -s)" = "Darwin" ] || {
+            echo "::error::validating evidence requires macOS"; exit 1;
+          }
+          command -v prlctl >/dev/null || {
+            echo "::error::Parallels prlctl is unavailable"; exit 1;
+          }
+          [ -n "$OAFLOW_PARALLELS_VM_UUID" ] || {
+            echo "::error::OAFLOW_PARALLELS_VM_UUID is not configured"; exit 1;
+          }
+          [ -n "$OAFLOW_PARALLELS_BASE_SNAPSHOT_ID" ] || {
+            echo "::error::OAFLOW_PARALLELS_BASE_SNAPSHOT_ID is not configured"; exit 1;
+          }
+
+      - name: Install validation dependencies
+        run: python -m pip install -e .[dev]
+
+      - name: Reconcile a prior interrupted run before new mutation
+        run: >-
+          python scripts/reconcile_parallels_recovery.py
+          --journal "$OAFLOW_PARALLELS_RECOVERY_JOURNAL"
+
+      - name: Prove configured VM and base are current before mutation
+        run: |
+          python -c '
+          import os
+          from openadapt_flow.backends.parallels_vm import ParallelsVM
+          vm = ParallelsVM(os.environ["OAFLOW_PARALLELS_VM_UUID"])
+          vm.require_host_free_space(
+              storage_path=os.environ["OAFLOW_PARALLELS_STORAGE_PATH"]
+          )
+          vm.require_current_snapshot(
+              os.environ["OAFLOW_PARALLELS_BASE_SNAPSHOT_ID"]
+          )
+          '
+
+      - name: Run scoped desktop and pixel evidence
+        timeout-minutes: 90
+        env:
+          OAFLOW_PARALLELS_E2E: "1"
+          OAFLOW_CITRIX_PIXEL_E2E: "1"
+        run: |
+          mkdir -p runs
+          python -m pytest -vv --durations=20 \
+            tests/e2e/test_citrix_pixel_e2e.py \
+            tests/e2e/test_parallels_desktop_e2e.py \
+            --junitxml=runs/validating-junit.xml --basetemp=runs/ci
+
+      - name: Restore exact base after success, failure, or test timeout
+        if: ${{ always() }}
+        timeout-minutes: 15
+        run: >-
+          python scripts/reconcile_parallels_recovery.py
+          --journal "$OAFLOW_PARALLELS_RECOVERY_JOURNAL"
+
+      - name: Require every selected evidence file to pass
+        run: |
+          python scripts/validate_claims.py --report \
+            --ci-job validating --junit runs/validating-junit.xml \
+            --evidence-path tests/e2e/test_parallels_desktop_e2e.py \
+            --evidence-path tests/e2e/test_citrix_pixel_e2e.py
+
+      - name: Upload scoped passing evidence
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: verification-evidence-macos-parallels
+          path: |
+            docs/VERIFICATION.md
+            docs/verification.json
+            runs/validating-junit.xml
+            runs/windows-uia-evidence.jsonl
+          if-no-files-found: warn

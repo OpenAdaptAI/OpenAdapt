@@ -1,0 +1,1071 @@
+{
+  "meta": {
+    "generated_at": "2026-07-11 16:57:55",
+    "platform": "Darwin arm64 py3.12.9",
+    "total_steps": 11,
+    "template_scales": [
+      0.85,
+      1.0,
+      1.18
+    ],
+    "template_threshold": 0.985,
+    "note_text": "E2E triage booking three months",
+    "target_hash": "#patient/p1"
+  },
+  "rows": [
+    {
+      "axis": "baseline",
+      "label": "baseline (100%, 1x, default font)",
+      "zoom": 1.0,
+      "dsf": 1.0,
+      "fontscale": 1.0,
+      "fontfamily": null,
+      "outcome": "pass",
+      "safe": true,
+      "success": true,
+      "saved_banner": "Encounter saved \u2014 E2E triage booking three months",
+      "final_hash": "#patient/p1",
+      "heal_count": 0,
+      "rung_counts": {
+        "template": 8
+      },
+      "failed_step": null,
+      "failed_reason": null,
+      "last_rung": "template",
+      "steps_completed": 11,
+      "total_steps": 11,
+      "elapsed_s": 7.5,
+      "steps": [
+        {
+          "step_id": "step_000",
+          "intent": "click at (214, 195)",
+          "ok": true,
+          "rung": "template",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_001",
+          "intent": "type 'nurse.demo'",
+          "ok": true,
+          "rung": null,
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_002",
+          "intent": "click at (214, 264)",
+          "ok": true,
+          "rung": "template",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_003",
+          "intent": "type 'mockmed-demo-pass'",
+          "ok": true,
+          "rung": null,
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_004",
+          "intent": "click 'Sign In'",
+          "ok": true,
+          "rung": "template",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_005",
+          "intent": "click 'Open'",
+          "ok": true,
+          "rung": "template",
+          "postconditions_ok": true,
+          "identity_status": "verified",
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_006",
+          "intent": "click 'New Encounter'",
+          "ok": true,
+          "rung": "template",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_007",
+          "intent": "click 'Triage'",
+          "ok": true,
+          "rung": "template",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_008",
+          "intent": "click at (344, 290)",
+          "ok": true,
+          "rung": "template",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_009",
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_010",
+          "intent": "click 'Save Encounter'",
+          "ok": true,
+          "rung": "template",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        }
+      ]
+    },
+    {
+      "axis": "zoom",
+      "label": "zoom 80%",
+      "zoom": 0.8,
+      "dsf": 1.0,
+      "fontscale": 1.0,
+      "fontfamily": null,
+      "outcome": "safe-halt",
+      "safe": true,
+      "success": false,
+      "saved_banner": null,
+      "final_hash": "",
+      "heal_count": 0,
+      "rung_counts": {},
+      "failed_step": "step_000",
+      "failed_reason": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted",
+      "last_rung": "geometry",
+      "steps_completed": 0,
+      "total_steps": 1,
+      "elapsed_s": 6.4,
+      "steps": [
+        {
+          "step_id": "step_000",
+          "intent": "click at (214, 195)",
+          "ok": false,
+          "rung": "geometry",
+          "postconditions_ok": false,
+          "identity_status": null,
+          "heal": false,
+          "error": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted"
+        }
+      ]
+    },
+    {
+      "axis": "zoom",
+      "label": "zoom 90%",
+      "zoom": 0.9,
+      "dsf": 1.0,
+      "fontscale": 1.0,
+      "fontfamily": null,
+      "outcome": "safe-halt",
+      "safe": true,
+      "success": false,
+      "saved_banner": null,
+      "final_hash": "",
+      "heal_count": 0,
+      "rung_counts": {},
+      "failed_step": "step_000",
+      "failed_reason": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted",
+      "last_rung": "geometry",
+      "steps_completed": 0,
+      "total_steps": 1,
+      "elapsed_s": 6.2,
+      "steps": [
+        {
+          "step_id": "step_000",
+          "intent": "click at (214, 195)",
+          "ok": false,
+          "rung": "geometry",
+          "postconditions_ok": false,
+          "identity_status": null,
+          "heal": false,
+          "error": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted"
+        }
+      ]
+    },
+    {
+      "axis": "zoom",
+      "label": "zoom 110%",
+      "zoom": 1.1,
+      "dsf": 1.0,
+      "fontscale": 1.0,
+      "fontfamily": null,
+      "outcome": "safe-halt",
+      "safe": true,
+      "success": false,
+      "saved_banner": null,
+      "final_hash": "",
+      "heal_count": 0,
+      "rung_counts": {},
+      "failed_step": "step_000",
+      "failed_reason": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted",
+      "last_rung": "geometry",
+      "steps_completed": 0,
+      "total_steps": 1,
+      "elapsed_s": 6.2,
+      "steps": [
+        {
+          "step_id": "step_000",
+          "intent": "click at (214, 195)",
+          "ok": false,
+          "rung": "geometry",
+          "postconditions_ok": false,
+          "identity_status": null,
+          "heal": false,
+          "error": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted"
+        }
+      ]
+    },
+    {
+      "axis": "zoom",
+      "label": "zoom 125%",
+      "zoom": 1.25,
+      "dsf": 1.0,
+      "fontscale": 1.0,
+      "fontfamily": null,
+      "outcome": "safe-halt",
+      "safe": true,
+      "success": false,
+      "saved_banner": null,
+      "final_hash": "",
+      "heal_count": 0,
+      "rung_counts": {},
+      "failed_step": "step_000",
+      "failed_reason": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted",
+      "last_rung": "geometry",
+      "steps_completed": 0,
+      "total_steps": 1,
+      "elapsed_s": 6.2,
+      "steps": [
+        {
+          "step_id": "step_000",
+          "intent": "click at (214, 195)",
+          "ok": false,
+          "rung": "geometry",
+          "postconditions_ok": false,
+          "identity_status": null,
+          "heal": false,
+          "error": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted"
+        }
+      ]
+    },
+    {
+      "axis": "zoom",
+      "label": "zoom 133%",
+      "zoom": 1.33,
+      "dsf": 1.0,
+      "fontscale": 1.0,
+      "fontfamily": null,
+      "outcome": "safe-halt",
+      "safe": true,
+      "success": false,
+      "saved_banner": null,
+      "final_hash": "",
+      "heal_count": 0,
+      "rung_counts": {},
+      "failed_step": "step_000",
+      "failed_reason": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted",
+      "last_rung": "geometry",
+      "steps_completed": 0,
+      "total_steps": 1,
+      "elapsed_s": 6.2,
+      "steps": [
+        {
+          "step_id": "step_000",
+          "intent": "click at (214, 195)",
+          "ok": false,
+          "rung": "geometry",
+          "postconditions_ok": false,
+          "identity_status": null,
+          "heal": false,
+          "error": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted"
+        }
+      ]
+    },
+    {
+      "axis": "zoom",
+      "label": "zoom 150%",
+      "zoom": 1.5,
+      "dsf": 1.0,
+      "fontscale": 1.0,
+      "fontfamily": null,
+      "outcome": "safe-halt",
+      "safe": true,
+      "success": false,
+      "saved_banner": null,
+      "final_hash": "",
+      "heal_count": 0,
+      "rung_counts": {},
+      "failed_step": "step_000",
+      "failed_reason": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted",
+      "last_rung": "geometry",
+      "steps_completed": 0,
+      "total_steps": 1,
+      "elapsed_s": 6.2,
+      "steps": [
+        {
+          "step_id": "step_000",
+          "intent": "click at (214, 195)",
+          "ok": false,
+          "rung": "geometry",
+          "postconditions_ok": false,
+          "identity_status": null,
+          "heal": false,
+          "error": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted"
+        }
+      ]
+    },
+    {
+      "axis": "zoom",
+      "label": "zoom 175%",
+      "zoom": 1.75,
+      "dsf": 1.0,
+      "fontscale": 1.0,
+      "fontfamily": null,
+      "outcome": "safe-halt",
+      "safe": true,
+      "success": false,
+      "saved_banner": null,
+      "final_hash": "",
+      "heal_count": 0,
+      "rung_counts": {},
+      "failed_step": "step_000",
+      "failed_reason": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted",
+      "last_rung": "geometry",
+      "steps_completed": 0,
+      "total_steps": 1,
+      "elapsed_s": 6.1,
+      "steps": [
+        {
+          "step_id": "step_000",
+          "intent": "click at (214, 195)",
+          "ok": false,
+          "rung": "geometry",
+          "postconditions_ok": false,
+          "identity_status": null,
+          "heal": false,
+          "error": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted"
+        }
+      ]
+    },
+    {
+      "axis": "zoom",
+      "label": "zoom 200%",
+      "zoom": 2.0,
+      "dsf": 1.0,
+      "fontscale": 1.0,
+      "fontfamily": null,
+      "outcome": "safe-halt",
+      "safe": true,
+      "success": false,
+      "saved_banner": null,
+      "final_hash": "",
+      "heal_count": 0,
+      "rung_counts": {},
+      "failed_step": "step_000",
+      "failed_reason": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted",
+      "last_rung": "geometry",
+      "steps_completed": 0,
+      "total_steps": 1,
+      "elapsed_s": 6.2,
+      "steps": [
+        {
+          "step_id": "step_000",
+          "intent": "click at (214, 195)",
+          "ok": false,
+          "rung": "geometry",
+          "postconditions_ok": false,
+          "identity_status": null,
+          "heal": false,
+          "error": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted"
+        }
+      ]
+    },
+    {
+      "axis": "dpi",
+      "label": "DPI 1.5x",
+      "zoom": 1.0,
+      "dsf": 1.5,
+      "fontscale": 1.0,
+      "fontfamily": null,
+      "outcome": "safe-halt",
+      "safe": true,
+      "success": false,
+      "saved_banner": null,
+      "final_hash": "",
+      "heal_count": 0,
+      "rung_counts": {},
+      "failed_step": "step_000",
+      "failed_reason": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted",
+      "last_rung": "geometry",
+      "steps_completed": 0,
+      "total_steps": 1,
+      "elapsed_s": 6.7,
+      "steps": [
+        {
+          "step_id": "step_000",
+          "intent": "click at (214, 195)",
+          "ok": false,
+          "rung": "geometry",
+          "postconditions_ok": false,
+          "identity_status": null,
+          "heal": false,
+          "error": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted"
+        }
+      ]
+    },
+    {
+      "axis": "dpi",
+      "label": "DPI 2.0x",
+      "zoom": 1.0,
+      "dsf": 2.0,
+      "fontscale": 1.0,
+      "fontfamily": null,
+      "outcome": "safe-halt",
+      "safe": true,
+      "success": false,
+      "saved_banner": null,
+      "final_hash": "",
+      "heal_count": 0,
+      "rung_counts": {},
+      "failed_step": "step_000",
+      "failed_reason": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted",
+      "last_rung": "geometry",
+      "steps_completed": 0,
+      "total_steps": 1,
+      "elapsed_s": 7.1,
+      "steps": [
+        {
+          "step_id": "step_000",
+          "intent": "click at (214, 195)",
+          "ok": false,
+          "rung": "geometry",
+          "postconditions_ok": false,
+          "identity_status": null,
+          "heal": false,
+          "error": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted"
+        }
+      ]
+    },
+    {
+      "axis": "dpi",
+      "label": "DPI 3.0x",
+      "zoom": 1.0,
+      "dsf": 3.0,
+      "fontscale": 1.0,
+      "fontfamily": null,
+      "outcome": "safe-halt",
+      "safe": true,
+      "success": false,
+      "saved_banner": null,
+      "final_hash": "",
+      "heal_count": 0,
+      "rung_counts": {},
+      "failed_step": "step_000",
+      "failed_reason": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted",
+      "last_rung": "geometry",
+      "steps_completed": 0,
+      "total_steps": 1,
+      "elapsed_s": 7.9,
+      "steps": [
+        {
+          "step_id": "step_000",
+          "intent": "click at (214, 195)",
+          "ok": false,
+          "rung": "geometry",
+          "postconditions_ok": false,
+          "identity_status": null,
+          "heal": false,
+          "error": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted"
+        }
+      ]
+    },
+    {
+      "axis": "fontsize",
+      "label": "font-size +10%",
+      "zoom": 1.0,
+      "dsf": 1.0,
+      "fontscale": 1.1,
+      "fontfamily": null,
+      "outcome": "safe-halt",
+      "safe": true,
+      "success": false,
+      "saved_banner": null,
+      "final_hash": "",
+      "heal_count": 0,
+      "rung_counts": {},
+      "failed_step": "step_000",
+      "failed_reason": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted",
+      "last_rung": "geometry",
+      "steps_completed": 0,
+      "total_steps": 1,
+      "elapsed_s": 6.1,
+      "steps": [
+        {
+          "step_id": "step_000",
+          "intent": "click at (214, 195)",
+          "ok": false,
+          "rung": "geometry",
+          "postconditions_ok": false,
+          "identity_status": null,
+          "heal": false,
+          "error": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted"
+        }
+      ]
+    },
+    {
+      "axis": "fontsize",
+      "label": "font-size +19% (19px)",
+      "zoom": 1.0,
+      "dsf": 1.0,
+      "fontscale": 1.1875,
+      "fontfamily": null,
+      "outcome": "safe-halt",
+      "safe": true,
+      "success": false,
+      "saved_banner": null,
+      "final_hash": "",
+      "heal_count": 0,
+      "rung_counts": {},
+      "failed_step": "step_000",
+      "failed_reason": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted",
+      "last_rung": "geometry",
+      "steps_completed": 0,
+      "total_steps": 1,
+      "elapsed_s": 6.2,
+      "steps": [
+        {
+          "step_id": "step_000",
+          "intent": "click at (214, 195)",
+          "ok": false,
+          "rung": "geometry",
+          "postconditions_ok": false,
+          "identity_status": null,
+          "heal": false,
+          "error": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted"
+        }
+      ]
+    },
+    {
+      "axis": "fontsize",
+      "label": "font-size +37%",
+      "zoom": 1.0,
+      "dsf": 1.0,
+      "fontscale": 1.375,
+      "fontfamily": null,
+      "outcome": "safe-halt",
+      "safe": true,
+      "success": false,
+      "saved_banner": null,
+      "final_hash": "",
+      "heal_count": 0,
+      "rung_counts": {},
+      "failed_step": "step_000",
+      "failed_reason": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted",
+      "last_rung": "geometry",
+      "steps_completed": 0,
+      "total_steps": 1,
+      "elapsed_s": 6.2,
+      "steps": [
+        {
+          "step_id": "step_000",
+          "intent": "click at (214, 195)",
+          "ok": false,
+          "rung": "geometry",
+          "postconditions_ok": false,
+          "identity_status": null,
+          "heal": false,
+          "error": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted"
+        }
+      ]
+    },
+    {
+      "axis": "fontfamily",
+      "label": "font Georgia (serif)",
+      "zoom": 1.0,
+      "dsf": 1.0,
+      "fontscale": 1.0,
+      "fontfamily": "Georgia, serif",
+      "outcome": "pass",
+      "safe": true,
+      "success": true,
+      "saved_banner": "Encounter saved \u2014 E2E triage booking three months",
+      "final_hash": "#patient/p1",
+      "heal_count": 8,
+      "rung_counts": {
+        "geometry": 3,
+        "ocr": 5
+      },
+      "failed_step": null,
+      "failed_reason": null,
+      "last_rung": "ocr",
+      "steps_completed": 11,
+      "total_steps": 11,
+      "elapsed_s": 13.3,
+      "steps": [
+        {
+          "step_id": "step_000",
+          "intent": "click at (214, 195)",
+          "ok": true,
+          "rung": "geometry",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": true,
+          "error": null
+        },
+        {
+          "step_id": "step_001",
+          "intent": "type 'nurse.demo'",
+          "ok": true,
+          "rung": null,
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_002",
+          "intent": "click at (214, 264)",
+          "ok": true,
+          "rung": "geometry",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": true,
+          "error": null
+        },
+        {
+          "step_id": "step_003",
+          "intent": "type 'mockmed-demo-pass'",
+          "ok": true,
+          "rung": null,
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_004",
+          "intent": "click 'Sign In'",
+          "ok": true,
+          "rung": "ocr",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": true,
+          "error": null
+        },
+        {
+          "step_id": "step_005",
+          "intent": "click 'Open'",
+          "ok": true,
+          "rung": "ocr",
+          "postconditions_ok": true,
+          "identity_status": "verified",
+          "heal": true,
+          "error": null
+        },
+        {
+          "step_id": "step_006",
+          "intent": "click 'New Encounter'",
+          "ok": true,
+          "rung": "ocr",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": true,
+          "error": null
+        },
+        {
+          "step_id": "step_007",
+          "intent": "click 'Triage'",
+          "ok": true,
+          "rung": "ocr",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": true,
+          "error": null
+        },
+        {
+          "step_id": "step_008",
+          "intent": "click at (344, 290)",
+          "ok": true,
+          "rung": "geometry",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": true,
+          "error": null
+        },
+        {
+          "step_id": "step_009",
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_010",
+          "intent": "click 'Save Encounter'",
+          "ok": true,
+          "rung": "ocr",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": true,
+          "error": null
+        }
+      ]
+    },
+    {
+      "axis": "fontfamily",
+      "label": "font Times New Roman (serif)",
+      "zoom": 1.0,
+      "dsf": 1.0,
+      "fontscale": 1.0,
+      "fontfamily": "\"Times New Roman\", serif",
+      "outcome": "pass",
+      "safe": true,
+      "success": true,
+      "saved_banner": "Encounter saved \u2014 E2E triage booking three months",
+      "final_hash": "#patient/p1",
+      "heal_count": 5,
+      "rung_counts": {
+        "template": 3,
+        "ocr": 5
+      },
+      "failed_step": null,
+      "failed_reason": null,
+      "last_rung": "ocr",
+      "steps_completed": 11,
+      "total_steps": 11,
+      "elapsed_s": 10.8,
+      "steps": [
+        {
+          "step_id": "step_000",
+          "intent": "click at (214, 195)",
+          "ok": true,
+          "rung": "template",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_001",
+          "intent": "type 'nurse.demo'",
+          "ok": true,
+          "rung": null,
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_002",
+          "intent": "click at (214, 264)",
+          "ok": true,
+          "rung": "template",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_003",
+          "intent": "type 'mockmed-demo-pass'",
+          "ok": true,
+          "rung": null,
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_004",
+          "intent": "click 'Sign In'",
+          "ok": true,
+          "rung": "ocr",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": true,
+          "error": null
+        },
+        {
+          "step_id": "step_005",
+          "intent": "click 'Open'",
+          "ok": true,
+          "rung": "ocr",
+          "postconditions_ok": true,
+          "identity_status": "verified",
+          "heal": true,
+          "error": null
+        },
+        {
+          "step_id": "step_006",
+          "intent": "click 'New Encounter'",
+          "ok": true,
+          "rung": "ocr",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": true,
+          "error": null
+        },
+        {
+          "step_id": "step_007",
+          "intent": "click 'Triage'",
+          "ok": true,
+          "rung": "ocr",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": true,
+          "error": null
+        },
+        {
+          "step_id": "step_008",
+          "intent": "click at (344, 290)",
+          "ok": true,
+          "rung": "template",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_009",
+          "intent": "type <note>",
+          "ok": true,
+          "rung": null,
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_010",
+          "intent": "click 'Save Encounter'",
+          "ok": true,
+          "rung": "ocr",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": true,
+          "error": null
+        }
+      ]
+    },
+    {
+      "axis": "fontfamily",
+      "label": "font Courier New (monospace)",
+      "zoom": 1.0,
+      "dsf": 1.0,
+      "fontscale": 1.0,
+      "fontfamily": "\"Courier New\", monospace",
+      "outcome": "safe-halt",
+      "safe": true,
+      "success": false,
+      "saved_banner": null,
+      "final_hash": "#tasks",
+      "heal_count": 1,
+      "rung_counts": {
+        "template": 2,
+        "ocr": 1
+      },
+      "failed_step": "step_005",
+      "failed_reason": "Identity check failed for step 'step_005' (click 'Open'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected 'JaneSample Knee pain referral High', observed 'Alex Testcase Cardiology follow-up Medium' (coverage 0.00) \u2014 refusing to act; run aborted",
+      "last_rung": "ocr",
+      "steps_completed": 5,
+      "total_steps": 6,
+      "elapsed_s": 5.8,
+      "steps": [
+        {
+          "step_id": "step_000",
+          "intent": "click at (214, 195)",
+          "ok": true,
+          "rung": "template",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_001",
+          "intent": "type 'nurse.demo'",
+          "ok": true,
+          "rung": null,
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_002",
+          "intent": "click at (214, 264)",
+          "ok": true,
+          "rung": "template",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_003",
+          "intent": "type 'mockmed-demo-pass'",
+          "ok": true,
+          "rung": null,
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": false,
+          "error": null
+        },
+        {
+          "step_id": "step_004",
+          "intent": "click 'Sign In'",
+          "ok": true,
+          "rung": "ocr",
+          "postconditions_ok": true,
+          "identity_status": null,
+          "heal": true,
+          "error": null
+        },
+        {
+          "step_id": "step_005",
+          "intent": "click 'Open'",
+          "ok": false,
+          "rung": "ocr",
+          "postconditions_ok": null,
+          "identity_status": "mismatch",
+          "heal": false,
+          "error": "Identity check failed for step 'step_005' (click 'Open'): a target was found positionally (rung 'ocr', confidence 1.00) but its surrounding text does not match the recorded target's \u2014 expected 'JaneSample Knee pain referral High', observed 'Alex Testcase Cardiology follow-up Medium' (coverage 0.00) \u2014 refusing to act; run aborted"
+        }
+      ]
+    },
+    {
+      "axis": "combo",
+      "label": "zoom 125% + DPI 2x",
+      "zoom": 1.25,
+      "dsf": 2.0,
+      "fontscale": 1.0,
+      "fontfamily": null,
+      "outcome": "safe-halt",
+      "safe": true,
+      "success": false,
+      "saved_banner": null,
+      "final_hash": "",
+      "heal_count": 0,
+      "rung_counts": {},
+      "failed_step": "step_000",
+      "failed_reason": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted",
+      "last_rung": "geometry",
+      "steps_completed": 0,
+      "total_steps": 1,
+      "elapsed_s": 7.0,
+      "steps": [
+        {
+          "step_id": "step_000",
+          "intent": "click at (214, 195)",
+          "ok": false,
+          "rung": "geometry",
+          "postconditions_ok": false,
+          "identity_status": null,
+          "heal": false,
+          "error": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted"
+        }
+      ]
+    },
+    {
+      "axis": "combo",
+      "label": "zoom 133% + DPI 1.5x",
+      "zoom": 1.33,
+      "dsf": 1.5,
+      "fontscale": 1.0,
+      "fontfamily": null,
+      "outcome": "safe-halt",
+      "safe": true,
+      "success": false,
+      "saved_banner": null,
+      "final_hash": "",
+      "heal_count": 0,
+      "rung_counts": {},
+      "failed_step": "step_000",
+      "failed_reason": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted",
+      "last_rung": "geometry",
+      "steps_completed": 0,
+      "total_steps": 1,
+      "elapsed_s": 6.8,
+      "steps": [
+        {
+          "step_id": "step_000",
+          "intent": "click at (214, 195)",
+          "ok": false,
+          "rung": "geometry",
+          "postconditions_ok": false,
+          "identity_status": null,
+          "heal": false,
+          "error": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted"
+        }
+      ]
+    },
+    {
+      "axis": "combo",
+      "label": "zoom 110% + font +19% + Georgia",
+      "zoom": 1.1,
+      "dsf": 1.0,
+      "fontscale": 1.1875,
+      "fontfamily": "Georgia, serif",
+      "outcome": "safe-halt",
+      "safe": true,
+      "success": false,
+      "saved_banner": null,
+      "final_hash": "",
+      "heal_count": 0,
+      "rung_counts": {},
+      "failed_step": "step_000",
+      "failed_reason": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted",
+      "last_rung": "geometry",
+      "steps_completed": 0,
+      "total_steps": 1,
+      "elapsed_s": 6.1,
+      "steps": [
+        {
+          "step_id": "step_000",
+          "intent": "click at (214, 195)",
+          "ok": false,
+          "rung": "geometry",
+          "postconditions_ok": false,
+          "identity_status": null,
+          "heal": false,
+          "error": "Postconditions failed for step 'step_000' (click at (214, 195)): expected screen state not reached (semantic drift) \u2014 failed: region_stable region=(17, 145, 394, 100) \u2014 run aborted"
+        }
+      ]
+    }
+  ]
+}

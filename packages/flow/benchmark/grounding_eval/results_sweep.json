@@ -1,0 +1,935 @@
+{
+  "method": "C_row_anchor",
+  "seeds": [
+    1,
+    2,
+    3,
+    4,
+    5
+  ],
+  "targets_per_seed": 10,
+  "aggregate": {
+    "n_targets": 50,
+    "returned_proposal_rate": 1.0,
+    "hit_rate@40": 0.88,
+    "hit_rate@60": 0.88,
+    "median_error_px": 3.0,
+    "mean_error_px": 11.283521650942593,
+    "clean_rows": {
+      "n": 40,
+      "hit_rate@40": 1.0,
+      "median_error_px": 2.23606797749979
+    },
+    "ocr_collision_rows": {
+      "n": 10,
+      "hit_rate@40": 0.4,
+      "median_error_px": 67.0184903648084
+    },
+    "latency_s": {
+      "median": 0.00018095970153808594,
+      "max": 0.00023508071899414062
+    }
+  },
+  "all_rows": [
+    {
+      "row": 0,
+      "name": "Halloran, Karen",
+      "mrn": "MG584224",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2059,
+        251
+      ],
+      "proposed": [
+        2060,
+        247
+      ],
+      "error_px": 4.123105625617661,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.0002079010009765625
+    },
+    {
+      "row": 5,
+      "name": "Castellano, Karen",
+      "mrn": "RC882486",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2059,
+        591
+      ],
+      "proposed": [
+        2057,
+        591
+      ],
+      "error_px": 2.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.0001819133758544922
+    },
+    {
+      "row": 10,
+      "name": "Ferreira, Daniel",
+      "mrn": "MG785743",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2059,
+        931
+      ],
+      "proposed": [
+        2057,
+        931
+      ],
+      "error_px": 2.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00017380714416503906
+    },
+    {
+      "row": 15,
+      "name": "Okafor, James",
+      "mrn": "MG126681",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2059,
+        1271
+      ],
+      "proposed": [
+        2057,
+        1270
+      ],
+      "error_px": 2.23606797749979,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00019598007202148438
+    },
+    {
+      "row": 20,
+      "name": "Nesbitt, Nell",
+      "mrn": "MG619896",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2059,
+        1611
+      ],
+      "proposed": [
+        2057,
+        1611
+      ],
+      "error_px": 2.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00018286705017089844
+    },
+    {
+      "row": 25,
+      "name": "Petrov, Patricia",
+      "mrn": "RC606753",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2059,
+        1951
+      ],
+      "proposed": [
+        2057,
+        1951
+      ],
+      "error_px": 2.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00018095970153808594
+    },
+    {
+      "row": 30,
+      "name": "Harrington, Patricia",
+      "mrn": "MG380371",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2059,
+        2291
+      ],
+      "proposed": [
+        2057,
+        2291
+      ],
+      "error_px": 2.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00018525123596191406
+    },
+    {
+      "row": 35,
+      "name": "Petrov, Robert",
+      "mrn": "C0X3834",
+      "ocr_mrn_collision": true,
+      "truth": [
+        2059,
+        2631
+      ],
+      "proposed": [
+        2057,
+        2631
+      ],
+      "error_px": 2.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.0001380443572998047
+    },
+    {
+      "row": 40,
+      "name": "Bianchi, Gregory",
+      "mrn": "2OO633",
+      "ocr_mrn_collision": true,
+      "truth": [
+        2059,
+        2971
+      ],
+      "proposed": [
+        2057,
+        2903
+      ],
+      "error_px": 68.0294054067798,
+      "hit@40": false,
+      "hit@60": false,
+      "latency_s": 0.00010895729064941406
+    },
+    {
+      "row": 45,
+      "name": "Kowalski, Maria",
+      "mrn": "RC571054",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2059,
+        3311
+      ],
+      "proposed": [
+        2057,
+        3311
+      ],
+      "error_px": 2.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.0001881122589111328
+    },
+    {
+      "row": 0,
+      "name": "Ferreira, Philip",
+      "mrn": "RC903088",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2059,
+        251
+      ],
+      "proposed": [
+        2060,
+        247
+      ],
+      "error_px": 4.123105625617661,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00020313262939453125
+    },
+    {
+      "row": 5,
+      "name": "Montgomery, Angela",
+      "mrn": "MG105924",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2059,
+        591
+      ],
+      "proposed": [
+        2057,
+        591
+      ],
+      "error_px": 2.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.0001900196075439453
+    },
+    {
+      "row": 10,
+      "name": "Underwood, Angela",
+      "mrn": "RC887031",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2059,
+        931
+      ],
+      "proposed": [
+        2045,
+        931
+      ],
+      "error_px": 14.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.000186920166015625
+    },
+    {
+      "row": 15,
+      "name": "Okafor, James",
+      "mrn": "MG544188",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2059,
+        1271
+      ],
+      "proposed": [
+        2057,
+        1270
+      ],
+      "error_px": 2.23606797749979,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.0001811981201171875
+    },
+    {
+      "row": 20,
+      "name": "Nesbitt, Nell",
+      "mrn": "MG243337",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2059,
+        1611
+      ],
+      "proposed": [
+        2045,
+        1611
+      ],
+      "error_px": 14.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00017404556274414062
+    },
+    {
+      "row": 25,
+      "name": "Whitfield, Nancy",
+      "mrn": "MG188122",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2059,
+        1951
+      ],
+      "proposed": [
+        2057,
+        1951
+      ],
+      "error_px": 2.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00018215179443359375
+    },
+    {
+      "row": 30,
+      "name": "Halloran, James",
+      "mrn": "PT267465",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2059,
+        2291
+      ],
+      "proposed": [
+        2045,
+        2291
+      ],
+      "error_px": 14.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.000179290771484375
+    },
+    {
+      "row": 35,
+      "name": "Kowalski, Angela",
+      "mrn": "C0X4634",
+      "ocr_mrn_collision": true,
+      "truth": [
+        2059,
+        2631
+      ],
+      "proposed": [
+        2057,
+        2631
+      ],
+      "error_px": 2.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00013685226440429688
+    },
+    {
+      "row": 40,
+      "name": "Whitfield, Gregory",
+      "mrn": "5OO675",
+      "ocr_mrn_collision": true,
+      "truth": [
+        2059,
+        2971
+      ],
+      "proposed": [
+        2057,
+        2903
+      ],
+      "error_px": 68.0294054067798,
+      "hit@40": false,
+      "hit@60": false,
+      "latency_s": 0.00010609626770019531
+    },
+    {
+      "row": 45,
+      "name": "Abernathy, Thomas",
+      "mrn": "MG412098",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2059,
+        3311
+      ],
+      "proposed": [
+        2057,
+        3311
+      ],
+      "error_px": 2.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.000186920166015625
+    },
+    {
+      "row": 0,
+      "name": "Okafor, Robert",
+      "mrn": "PT939066",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2061,
+        251
+      ],
+      "proposed": [
+        2062,
+        247
+      ],
+      "error_px": 4.123105625617661,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.0001919269561767578
+    },
+    {
+      "row": 5,
+      "name": "Kowalski, Nancy",
+      "mrn": "PT595992",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2061,
+        591
+      ],
+      "proposed": [
+        2059,
+        591
+      ],
+      "error_px": 2.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00017905235290527344
+    },
+    {
+      "row": 10,
+      "name": "Whitfield, Edward",
+      "mrn": "MG128651",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2061,
+        931
+      ],
+      "proposed": [
+        2059,
+        931
+      ],
+      "error_px": 2.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00018167495727539062
+    },
+    {
+      "row": 15,
+      "name": "Okafor, James",
+      "mrn": "MG267142",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2061,
+        1271
+      ],
+      "proposed": [
+        2059,
+        1270
+      ],
+      "error_px": 2.23606797749979,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00023508071899414062
+    },
+    {
+      "row": 20,
+      "name": "Nesbitt, Nell",
+      "mrn": "MG514149",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2061,
+        1611
+      ],
+      "proposed": [
+        2059,
+        1611
+      ],
+      "error_px": 2.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00019979476928710938
+    },
+    {
+      "row": 25,
+      "name": "Ferreira, Edward",
+      "mrn": "MG183558",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2061,
+        1951
+      ],
+      "proposed": [
+        2059,
+        1951
+      ],
+      "error_px": 2.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00017571449279785156
+    },
+    {
+      "row": 30,
+      "name": "Abernathy, Edward",
+      "mrn": "MG143587",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2061,
+        2291
+      ],
+      "proposed": [
+        2059,
+        2291
+      ],
+      "error_px": 2.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00017404556274414062
+    },
+    {
+      "row": 35,
+      "name": "Lindqvist, Thomas",
+      "mrn": "C0X2705",
+      "ocr_mrn_collision": true,
+      "truth": [
+        2061,
+        2631
+      ],
+      "proposed": [
+        2059,
+        2631
+      ],
+      "error_px": 2.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00013709068298339844
+    },
+    {
+      "row": 40,
+      "name": "Delgado, Angela",
+      "mrn": "4OO19O",
+      "ocr_mrn_collision": true,
+      "truth": [
+        2061,
+        2971
+      ],
+      "proposed": [
+        2059,
+        2903
+      ],
+      "error_px": 68.0294054067798,
+      "hit@40": false,
+      "hit@60": false,
+      "latency_s": 0.00010704994201660156
+    },
+    {
+      "row": 45,
+      "name": "Kowalski, Robert",
+      "mrn": "MG681536",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2061,
+        3311
+      ],
+      "proposed": [
+        2059,
+        3311
+      ],
+      "error_px": 2.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00017595291137695312
+    },
+    {
+      "row": 0,
+      "name": "Halloran, Susan",
+      "mrn": "MG294037",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2057,
+        251
+      ],
+      "proposed": [
+        2057,
+        247
+      ],
+      "error_px": 4.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00020384788513183594
+    },
+    {
+      "row": 5,
+      "name": "Halloran, Susan",
+      "mrn": "PT665335",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2057,
+        591
+      ],
+      "proposed": [
+        2057,
+        596
+      ],
+      "error_px": 5.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00017690658569335938
+    },
+    {
+      "row": 10,
+      "name": "Kowalski, Nancy",
+      "mrn": "PT880277",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2057,
+        931
+      ],
+      "proposed": [
+        2057,
+        936
+      ],
+      "error_px": 5.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00017714500427246094
+    },
+    {
+      "row": 15,
+      "name": "Okafor, James",
+      "mrn": "MG403710",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2057,
+        1271
+      ],
+      "proposed": [
+        2056,
+        1273
+      ],
+      "error_px": 2.23606797749979,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00018525123596191406
+    },
+    {
+      "row": 20,
+      "name": "Nesbitt, Nell",
+      "mrn": "MG393598",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2057,
+        1611
+      ],
+      "proposed": [
+        2057,
+        1616
+      ],
+      "error_px": 5.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00017213821411132812
+    },
+    {
+      "row": 25,
+      "name": "Castellano, Karen",
+      "mrn": "RC534841",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2057,
+        1951
+      ],
+      "proposed": [
+        2057,
+        1956
+      ],
+      "error_px": 5.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00017690658569335938
+    },
+    {
+      "row": 30,
+      "name": "Lindqvist, Philip",
+      "mrn": "RC579947",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2057,
+        2291
+      ],
+      "proposed": [
+        2056,
+        2293
+      ],
+      "error_px": 2.23606797749979,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00016808509826660156
+    },
+    {
+      "row": 35,
+      "name": "Delgado, Robert",
+      "mrn": "C0X4320",
+      "ocr_mrn_collision": true,
+      "truth": [
+        2057,
+        2631
+      ],
+      "proposed": [
+        2057,
+        2636
+      ],
+      "error_px": 5.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.0001399517059326172
+    },
+    {
+      "row": 40,
+      "name": "Lindqvist, Edward",
+      "mrn": "5OO3O3",
+      "ocr_mrn_collision": true,
+      "truth": [
+        2057,
+        2971
+      ],
+      "proposed": [
+        2056,
+        2905
+      ],
+      "error_px": 66.007575322837,
+      "hit@40": false,
+      "hit@60": false,
+      "latency_s": 0.00010275840759277344
+    },
+    {
+      "row": 45,
+      "name": "Petrov, Maria",
+      "mrn": "MG762076",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2057,
+        3311
+      ],
+      "proposed": [
+        2056,
+        3313
+      ],
+      "error_px": 2.23606797749979,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00018095970153808594
+    },
+    {
+      "row": 0,
+      "name": "Ferreira, Gregory",
+      "mrn": "RC905831",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2058,
+        251
+      ],
+      "proposed": [
+        2058,
+        247
+      ],
+      "error_px": 4.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00020694732666015625
+    },
+    {
+      "row": 5,
+      "name": "Ferreira, Angela",
+      "mrn": "MG237854",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2058,
+        591
+      ],
+      "proposed": [
+        2055,
+        591
+      ],
+      "error_px": 3.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.0001838207244873047
+    },
+    {
+      "row": 10,
+      "name": "Nakamura, Angela",
+      "mrn": "MG660655",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2058,
+        931
+      ],
+      "proposed": [
+        2055,
+        931
+      ],
+      "error_px": 3.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00017976760864257812
+    },
+    {
+      "row": 15,
+      "name": "Okafor, James",
+      "mrn": "MG747445",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2058,
+        1271
+      ],
+      "proposed": [
+        2055,
+        1270
+      ],
+      "error_px": 3.1622776601683795,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00017714500427246094
+    },
+    {
+      "row": 20,
+      "name": "Nesbitt, Nell",
+      "mrn": "MG403358",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2058,
+        1611
+      ],
+      "proposed": [
+        2055,
+        1611
+      ],
+      "error_px": 3.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00018477439880371094
+    },
+    {
+      "row": 25,
+      "name": "Whitfield, Philip",
+      "mrn": "RC305655",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2058,
+        1951
+      ],
+      "proposed": [
+        2055,
+        1951
+      ],
+      "error_px": 3.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00018405914306640625
+    },
+    {
+      "row": 30,
+      "name": "Lindqvist, James",
+      "mrn": "PT566291",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2058,
+        2291
+      ],
+      "proposed": [
+        2055,
+        2291
+      ],
+      "error_px": 3.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00019311904907226562
+    },
+    {
+      "row": 35,
+      "name": "Montgomery, Angela",
+      "mrn": "C0X8742",
+      "ocr_mrn_collision": true,
+      "truth": [
+        2058,
+        2631
+      ],
+      "proposed": [
+        2055,
+        2699
+      ],
+      "error_px": 68.06614430096654,
+      "hit@40": false,
+      "hit@60": false,
+      "latency_s": 0.0001418590545654297
+    },
+    {
+      "row": 40,
+      "name": "Nakamura, Diane",
+      "mrn": "4OO118",
+      "ocr_mrn_collision": true,
+      "truth": [
+        2058,
+        2971
+      ],
+      "proposed": [
+        2055,
+        2903
+      ],
+      "error_px": 68.06614430096654,
+      "hit@40": false,
+      "hit@60": false,
+      "latency_s": 0.00011110305786132812
+    },
+    {
+      "row": 45,
+      "name": "Abernathy, Thomas",
+      "mrn": "PT642022",
+      "ocr_mrn_collision": false,
+      "truth": [
+        2058,
+        3311
+      ],
+      "proposed": [
+        2055,
+        3311
+      ],
+      "error_px": 3.0,
+      "hit@40": true,
+      "hit@60": true,
+      "latency_s": 0.00018477439880371094
+    }
+  ]
+}

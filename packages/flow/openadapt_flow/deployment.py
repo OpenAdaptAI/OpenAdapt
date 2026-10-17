@@ -1,0 +1,1610 @@
+"""Deployment configuration: one YAML that wires a full openadapt-flow run.
+
+A recorded-and-compiled bundle is portable, but *running it in production*
+needs deployment-specific wiring the bundle deliberately does NOT carry: which
+GUI URL to drive, which system of record to verify writes against, whether an
+API actuation tier is available, whether the run is durable, and which safety
+policy certifies it. Scattering those across a dozen CLI flags makes a real
+deployment un-reviewable.
+
+This module is the single, documented schema for that wiring. One
+``deployment.yaml`` (see ``docs/deployment.example.yaml``) is read by
+``record`` / ``compile`` / ``certify`` / ``replay`` / ``run`` / ``resume`` so
+the same backend / actuation / effects / runtime / policy configuration drives
+every stage.
+
+The config only *constructs and injects* existing library objects
+(``EffectVerifier`` subclasses, ``ApiActuator``); it changes no library
+behavior. Every section is optional — an empty file is a valid (fully-default,
+fully-local, zero-egress) deployment.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+from pathlib import Path
+from typing import Any, Callable, Literal, Mapping, Optional
+
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+from openadapt_flow.remote_frame_contract import RemoteFrameContract
+
+# Import-light (pydantic only): the effect CONTRACT types double as the
+# declarative config vocabulary, so a deployment YAML binds run parameters
+# with the exact ``{param: ...}`` / ``{literal: ...}`` form bundles use.
+from openadapt_flow.runtime.effects.auth import AuthRef, ResolvedSecrets
+from openadapt_flow.runtime.effects.effect import Region, ValueExpr
+from openadapt_flow.runtime.effects.ui_readback import UiReadbackSpec
+
+
+class BackendConfig(BaseModel):
+    """Where and how to drive the target application's GUI.
+
+    ``kind`` selects the concrete :class:`~openadapt_flow.backend.Backend` the
+    CLI drives (built by :func:`openadapt_flow.backends.factory.build_backend`):
+
+    - ``web`` (default) — the Playwright/Chromium browser backend. Reproduces
+      the historical behavior exactly (``url`` / ``headed`` are browser fields);
+      every other field here is ignored.
+    - ``windows`` — the WAA (Windows Agent Arena) HTTP backend for native
+      Windows desktops. Requires ``agent_url`` (the in-guest agent's base URL);
+      ``agent_token`` authenticates a token-protected agent.
+    - ``macos`` — a local native macOS application window. Requires
+      ``macos_app``; ``macos_window_title`` should uniquely identify the target
+      window when the application owns more than one.
+    - ``linux`` — one exact local Linux application window through AT-SPI.
+      Requires ``linux_app`` and ``linux_window_title``. Native accessibility
+      actions are preferred; global pointer/keyboard fallback is opt-in.
+    - ``rdp`` — a pixel-only network-RDP or local remote-display backend.
+      ``rdp_host`` drives a network RDP session (FreeRDP/aardwolf);
+      ``rdp_window`` instead drives a local remote-display client window.
+    - ``citrix`` — the local Citrix Workspace/Viewer window preset over the
+      remote-display backend. It defaults the owner selector for the host OS,
+      accepts ``rdp_window`` / ``rdp_window_title`` overrides, and refuses an
+      ``rdp_host`` rather than silently constructing the wrong RDP substrate.
+
+    Every non-``web`` field is optional and defaults to None, so an existing
+    ``web`` deployment (or an empty config) is byte-for-byte unchanged.
+    """
+
+    #: Which backend to drive:
+    #: ``web`` (default) | ``windows`` | ``macos`` | ``linux`` | ``rdp`` |
+    #: ``citrix``.
+    kind: str = "web"
+
+    #: The GUI URL to drive (the app under automation). None => the caller's
+    #: own default (e.g. ``replay`` serves the bundled MockMed demo).
+    #: ``web`` only.
+    url: Optional[str] = None
+    #: Run the browser headed (visible). Default headless. ``web`` only.
+    headed: bool = False
+    #: Loopback DevTools endpoint of an already-running, signed-in local
+    #: Chromium (for example ``http://127.0.0.1:9222``). When set, a run
+    #: attaches to that browser instead of launching a new, signed-out one:
+    #: it binds the one open tab on the ``url`` origin, starts from the screen
+    #: that tab shows, and detaches afterwards without navigating or closing
+    #: the browser. This is the same attach contract the recorder uses, so a
+    #: practice run, a drill, and a production run start from the signed-in
+    #: session the task was recorded in. No credential enters the program, the
+    #: recording, or this config. ``web`` only.
+    browser_cdp_endpoint: Optional[str] = None
+    #: Exact current URL of the tab to bind when more than one open tab has
+    #: the ``url`` origin. Requires ``browser_cdp_endpoint``. ``web`` only.
+    browser_page_url: Optional[str] = None
+
+    # -- windows (WAA HTTP agent) --------------------------------------------
+    #: Base URL of the in-guest WAA agent (e.g. ``http://localhost:5001`` over
+    #: the standard SSH tunnel). REQUIRED for ``kind: windows``.
+    agent_url: Optional[str] = None
+    #: Optional bearer token for a token-authenticated WAA agent (sent as
+    #: ``Authorization: Bearer <token>``). None => no auth header (loopback).
+    agent_token: Optional[str] = None
+    #: SHA-256 fingerprint of the in-guest agent's TLS certificate. When set,
+    #: the Windows backend pins the exact certificate before sending screenshots
+    #: or UIA/input requests; a mismatch fails at the TLS handshake.
+    agent_tls_pin: Optional[str] = None
+
+    # -- native macOS --------------------------------------------------------
+    #: Owner application name/substring (e.g. ``"TextEdit"``). REQUIRED for
+    #: ``kind: macos``.
+    macos_app: Optional[str] = None
+    #: Window-title substring. The backend refuses ambiguous matches rather
+    #: than selecting the first window.
+    macos_window_title: Optional[str] = None
+
+    # -- native Linux / AT-SPI -----------------------------------------------
+    #: Exact case-insensitive AT-SPI application name. REQUIRED for
+    #: ``kind: linux``.
+    linux_app: Optional[str] = None
+    #: Exact case-insensitive top-level AT-SPI window title. REQUIRED for
+    #: ``kind: linux``; zero or multiple matches are refused.
+    linux_window_title: Optional[str] = None
+    #: Permit window-bound X11 pointer/keyboard synthesis when the uniquely
+    #: resolved target exposes no suitable native AT-SPI action. Disabled by
+    #: default; consequential deployments qualify and enable it explicitly.
+    linux_allow_physical_input: bool = False
+
+    # -- rdp (network RDP via FreeRDP/aardwolf) ------------------------------
+    #: RDP host/IP for a network RDP session. REQUIRED for ``kind: rdp`` unless
+    #: ``rdp_window`` is given instead (the local remote-display path).
+    rdp_host: Optional[str] = None
+    rdp_username: Optional[str] = None
+    rdp_password: Optional[str] = None
+    rdp_domain: Optional[str] = None
+    rdp_port: int = 3389
+    #: A resolved coordinate/input lease older than this is refused. The backend
+    #: intentionally halts so the governed runtime can capture and re-resolve.
+    rdp_max_frame_age_s: float = Field(default=10.0, gt=0)
+    #: Optional text that must be OCR-visible on the CURRENT remote frame before
+    #: each input. Deployments use stable app chrome here to reject lock/login/
+    #: disconnect or wrong-application screens. None leaves the generic hook
+    #: unwired and is not suitable for a governed consequential RDP write.
+    rdp_readiness_text: Optional[str] = None
+    rdp_readiness_min_ratio: float = Field(default=0.85, ge=0.0, le=1.0)
+    #: PHI-free markers observed from a fresh remote frame for qualification.
+    #: They are compared with the project boundary; they are not copied into
+    #: run evidence as plaintext.
+    rdp_application_marker: Optional[str] = None
+    rdp_application_version_marker: Optional[str] = None
+    rdp_environment_marker: Optional[str] = None
+    rdp_session_marker: Optional[str] = None
+
+    # -- rdp/citrix (local remote-display client window) ---------------------
+    #: Exact case-insensitive owner-app name of the local client WINDOW to drive
+    #: (e.g. ``"Citrix Workspace"`` / ``"Parallels Desktop"``). When set (and
+    #: ``rdp_host`` is not), the backend captures and injects into that on-screen
+    #: window instead of opening a network RDP session (macOS host).
+    rdp_window: Optional[str] = None
+    #: Optional exact case-insensitive title. Zero or multiple exact matches are
+    #: refused; the backend never selects a largest partial match.
+    rdp_window_title: Optional[str] = None
+    # Exact reviewed geometry for derived remote settle comparisons. The
+    # enclosing DeploymentConfig serialization binds this value at admission.
+    remote_frame_contract: Optional[RemoteFrameContract] = None
+
+
+#: ``effects.kind`` values served by the engine itself. A plugin can never
+#: shadow one of these (see ``build_effect_verifier``), and the plugin-only
+#: fields (``options`` / ``option_params`` / ``secret_env``) are refused on them.
+BUILTIN_EFFECT_KINDS = frozenset(
+    {
+        "",
+        "none",
+        "onscreen",
+        "rest",
+        "graphql",
+        "fhir",
+        "sql",
+        "file",
+        "email",
+        "document",
+        "document-hash",
+    }
+)
+
+_SECRET_SLOT = re.compile(r"[a-z][a-z0-9_]{0,63}")
+_ENV_VAR_NAME = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,127}")
+#: An option key whose last word is one of these names a credential
+#: (``password``, ``client_secret``, ``bearer_token``); ``token_path`` or
+#: ``password_env`` do not. ``*_env`` keys carry a variable NAME, the same
+#: convention as ``sql_password_env``.
+_SECRET_KEY_WORDS = frozenset(
+    {"password", "passwd", "passphrase", "secret", "token", "credential", "credentials"}
+)
+_SECRET_KEY_SUFFIXES = ("api_key", "apikey", "private_key")
+
+
+def _names_a_credential(key: str) -> bool:
+    lowered = key.lower()
+    words = [word for word in re.split(r"[_\-.\s]+", lowered) if word]
+    if not words or words[-1] == "env":
+        return False
+    return words[-1] in _SECRET_KEY_WORDS or lowered.endswith(_SECRET_KEY_SUFFIXES)
+
+
+def _check_plugin_option_value(path: str, value: Any, *, depth: int = 0) -> None:
+    """Refuse non-JSON values and credential-named keys in plugin options."""
+    if depth > 16:
+        raise ValueError(f"{path} nests deeper than 16 levels")
+    if value is None or isinstance(value, (bool, int, float, str)):
+        return
+    if isinstance(value, list):
+        for index, item in enumerate(value):
+            _check_plugin_option_value(f"{path}[{index}]", item, depth=depth + 1)
+        return
+    if isinstance(value, dict):
+        for key, item in value.items():
+            if not isinstance(key, str) or not key:
+                raise ValueError(f"{path} keys must be non-empty strings")
+            if _names_a_credential(key):
+                raise ValueError(
+                    f"{path}[{key!r}] names a credential; plugin options are "
+                    "non-secret data. Put the environment variable NAME in "
+                    "effects.secret_env instead"
+                )
+            _check_plugin_option_value(f"{path}[{key!r}]", item, depth=depth + 1)
+        return
+    raise ValueError(
+        f"{path} holds a {type(value).__name__}; plugin options must be JSON "
+        "values (string, number, boolean, null, list, mapping)"
+    )
+
+
+class EffectsConfig(BaseModel):
+    """Which system of record to verify consequential writes against.
+
+    ``kind`` selects the concrete
+    :class:`~openadapt_flow.runtime.effects.EffectVerifier`. ``none`` (default)
+    wires no verifier — a bundle that declares NO effects then replays exactly
+    as before, but a step that DOES declare effects HALTs (fail-safe: an
+    unverifiable consequential write is never silently accepted).
+
+    Effect-verifier kit conventions (``docs/EFFECT_KIT.md``):
+
+    - **Secrets are references, never literals.** ``auth`` /
+      ``access_token_env`` / ``sql_password_env`` name environment variables
+      staged by the operator; a missing variable fails LOUD at construction.
+    - **Run-parameter binding is explicit.** Every ``*_params`` /
+      ``*_exprs`` mapping takes the same ``{param: name}`` / ``{literal: v}``
+      :class:`~openadapt_flow.runtime.effects.ValueExpr` form bundles use (a
+      bare string is a literal), and is resolved against the governed run
+      parameters (``--params-file`` / ``--param``) when the verifier is
+      BUILT — so one bundle + one deployment YAML ships with its verification
+      bound to the record each run actually writes.
+    """
+
+    #: ``none`` | ``onscreen`` | ``ui_readback`` | ``rest`` | ``graphql`` |
+    #: ``fhir`` | ``sql`` | ``file`` | ``email`` | ``document`` |
+    #: ``document-hash``, or a PLUGIN
+    #: kind registered under the
+    #: ``openadapt_flow.effect_verifiers`` entry-point group (the customer
+    #: adapter SDK seam -- see docs/EFFECT_KIT.md). ``onscreen`` is the no-API
+    #: screen read-back oracle (the auto-derived default for GUI-only
+    #: recordings); it reads the saved value off the live backend, so it needs
+    #: no external system of record -- and it is explicitly the
+    #: LOWER-CONFIDENCE consistency tier, never independent proof.
+    #: ``ui_readback`` reads the saved record back through the application's
+    #: own record page in a separate, freshly signed-in, read-only browser
+    #: session (tier 2, ``INDEPENDENT_SESSION``): independent of the session
+    #: that typed, but not a system-of-record read.
+    kind: str = "none"
+
+    #: Reviewed alternatives for the same effect contract.  This is useful
+    #: where the application exposes more than one read boundary (for example,
+    #: a file export and a separately authenticated read session) but no direct
+    #: database connection.  The runtime builds every candidate before input,
+    #: then uses the candidate with the strongest declared evidence tier
+    #: (lowest numeric tier; declaration order breaks a tie).  It never falls
+    #: back after actuation: an unavailable selected verifier is uncertain and
+    #: therefore halts or enters reconciliation.
+    #:
+    #: The legacy single ``kind`` form and this list are mutually exclusive.
+    #: Nested lists are refused to keep the selected verifier and its evidence
+    #: unambiguous.
+    candidates: list["EffectsConfig"] = Field(default_factory=list)
+
+    # -- onscreen (no-API screen read-back; auto-derived per-effect region) ---
+    #: Explicit read-back region ``(x, y, w, h)`` for a hand-configured
+    #: deployment. Normally left None — the compiler auto-derives a per-effect
+    #: region into each effect's ``ReadbackSpec`` (this is only the fallback
+    #: for an effect that carries no region of its own).
+    readback_region: Optional[Region] = None
+    #: Fuzzy-match floor for accepting an OCR read-back as the expected value.
+    readback_min_ratio: float = 0.9
+
+    # -- ui_readback (separate-session read of the application's record page)
+    #: Where the record page is, how the read-back session signs in, and how
+    #: to read each field. See ``runtime/effects/ui_readback.py`` and
+    #: ``docs/EFFECT_KIT.md``. Required for ``kind: ui_readback``; ignored
+    #: otherwise.
+    ui_readback: Optional[UiReadbackSpec] = None
+
+    # -- rest (JSON REST system of record, e.g. MockMed /api/db) -------------
+    base_url: Optional[str] = None
+    records_path: str = "/api/db"
+    records_key: Optional[str] = "records"
+    #: Secret-isolated auth headers for the records read (bearer_env /
+    #: header+value_env / basic_env). Never a credential literal.
+    auth: Optional[AuthRef] = None
+    #: Values for ``{placeholder}``s in ``records_path``, resolved (and
+    #: URL-quoted) at construction — e.g.
+    #: ``records_path: "/api/resource/Loan Application?filters=...{applicant}..."``
+    #: with ``path_params: {applicant: {param: applicant}}``. Empty -> the
+    #: path is used verbatim (no formatting), byte-identical to before.
+    path_params: dict[str, ValueExpr] = Field(default_factory=dict)
+
+    # -- graphql (GraphQL read-back query against the SoR) -------------------
+    #: The READ-ONLY query document returning the candidate records
+    #: (a ``mutation``/``subscription`` refuses to construct). Uses the shared
+    #: ``base_url`` as the endpoint and the shared ``auth`` for headers.
+    graphql_query: Optional[str] = None
+    #: Query variables (entity/tenant binding): literal or ``{param: ...}``.
+    graphql_variables: dict[str, ValueExpr] = Field(default_factory=dict)
+    #: Dotted path to the records LIST in the response (``data.loans.nodes``).
+    graphql_records_path: str = "data"
+    #: Record field carrying a timestamp; with ``graphql_freshness_window_s``,
+    #: CONFIRMED evidence older than the window is demoted to STALE (halt).
+    graphql_freshness_field: Optional[str] = None
+    graphql_freshness_window_s: Optional[float] = None
+
+    # -- email (maildir / SMTP-capture delivery verification) ----------------
+    #: (uses the shared ``root``) filename glob for the flat-directory layout
+    #: (a Maildir root with ``cur``/``new`` is detected automatically).
+    mail_pattern: str = "*.eml"
+    #: (email also reuses ``file_mtime_window_s`` for the ``fresh`` flag and
+    #: ``file_content_probe`` as the body-content regex.)
+
+    # -- document (report arrival + parseable-content assertion) -------------
+    #: (uses the shared ``root`` + ``file_pattern`` + ``file_mtime_window_s``)
+    #: ``json`` extracts ``document_field_paths`` (record field -> dotted
+    #: path); ``text`` extracts ``document_text_pattern``'s named groups.
+    document_format: str = "json"
+    document_field_paths: dict[str, str] = Field(default_factory=dict)
+    document_text_pattern: Optional[str] = None
+
+    # -- evidence minimization (any kind) ------------------------------------
+    #: Record fields whose values must be replaced by an opaque redaction
+    #: marker in every emitted verdict's evidence -- matched records and, when
+    #: it names the effect's read-back field, observed/expected values. The
+    #: verdict itself is never altered (redaction cannot soften a failure).
+    evidence_redact_fields: list[str] = Field(default_factory=list)
+    #: Allowlist variant: when set, every evidence field NOT named is redacted.
+    evidence_keep_fields: Optional[list[str]] = None
+
+    # -- fhir (FHIR R4 search, e.g. OpenEMR) ---------------------------------
+    resource_type: str = "Observation"
+    search_params: dict[str, str] = Field(default_factory=dict)
+    field_paths: Optional[dict[str, str]] = None
+    #: OAuth2 bearer token literal. DEPRECATED for committed configs — prefer
+    #: ``access_token_env`` so the YAML never carries the secret.
+    access_token: Optional[str] = None
+    #: Name of the env var holding the OAuth2 bearer token (secret-isolated;
+    #: wins over ``access_token``; missing var fails loud).
+    access_token_env: Optional[str] = None
+    verify_tls: bool = True
+    #: FHIR search params whose VALUES bind to run parameters (merged over
+    #: ``search_params`` after resolution) — e.g.
+    #: ``search_param_exprs: {patient: {param: patient_id}}``.
+    search_param_exprs: dict[str, ValueExpr] = Field(default_factory=dict)
+
+    # -- sql (read-only SELECT against the app database) ---------------------
+    #: The single read-only SELECT returning candidate records (validated by
+    #: the kit's statement whitelist; a mutating query refuses to construct).
+    #: Use the driver's native parameter placeholders for dynamic values.
+    sql_query: Optional[str] = None
+    #: DB-API parameter values for ``sql_query`` (literal or ``{param: ...}``).
+    sql_query_params: dict[str, ValueExpr] = Field(default_factory=dict)
+    #: Path to a SQLite database file (stdlib driver; the CI-proven path).
+    sqlite_database: Optional[str] = None
+    #: Alternatively: an importable DB-API driver module name (``pymysql``,
+    #: ``mariadb``, ``psycopg``) ...
+    sql_driver: Optional[str] = None
+    #: ... plus its non-secret ``connect(**kwargs)`` arguments ...
+    sql_connect_args: dict[str, Any] = Field(default_factory=dict)
+    #: ... and the env var holding the database password (injected as the
+    #: ``password`` connect kwarg; secret-isolated, fails loud when missing).
+    sql_password_env: Optional[str] = None
+
+    # -- file (file / SFTP arrival; local directory via YAML) ----------------
+    #: (uses the shared ``root``) filename glob for candidate records.
+    file_pattern: str = "*"
+    #: Minimum byte size for a conforming arrival (size > 0 by default).
+    file_min_size: int = 1
+    #: Freshness window in seconds (``fresh`` flag); None -> always fresh.
+    file_mtime_window_s: Optional[float] = None
+    #: Optional regex probed against each candidate's leading content.
+    file_content_probe: Optional[str] = None
+
+    # -- document-hash (filesystem document store) ---------------------------
+    root: Optional[str] = None
+    glob: str = "*"
+
+    # -- plugin record-check packs (registered kinds only) --------------------
+    #: Non-secret settings for a PLUGIN verifier kind: the per-system record
+    #: check a private pack implements (which read endpoint, which record
+    #: fields, which normalization). Built-in kinds refuse a non-empty value
+    #: rather than silently ignore it. Values must be JSON-safe. A key that
+    #: names a credential (its last word is ``password``, ``secret``,
+    #: ``token``, ``credential``, or it ends in ``api_key``) is refused:
+    #: credentials go in :attr:`secret_env`. The options enter the verifier's
+    #: deployment identity, so a changed option is a changed verifier.
+    options: dict[str, Any] = Field(default_factory=dict)
+    #: Run-parameter bindings for a plugin kind, in the same ``{param: ...}`` /
+    #: ``{literal: ...}`` form as ``path_params``. Resolved at construction by
+    #: :func:`plugin_options`; an unresolved reference fails loud. A key may
+    #: not also appear in :attr:`options`.
+    option_params: dict[str, ValueExpr] = Field(default_factory=dict)
+    #: Credential slots for a plugin kind: logical name -> NAME of the
+    #: environment variable (staged by the operator or a secret manager) that
+    #: holds the value. Never the value itself. Resolved at construction by
+    #: :func:`plugin_secrets`, which fails loud on a missing variable. Only the
+    #: slot names and variable names are part of the config; the resolved
+    #: values never enter configs, reports, identities, or contract hashes.
+    secret_env: dict[str, str] = Field(default_factory=dict)
+
+    # -- shared --------------------------------------------------------------
+    timeout_s: float = 5.0
+    poll_interval_s: float = 0.2
+
+    @field_validator("options")
+    @classmethod
+    def _validate_plugin_options(cls, v: dict[str, Any]) -> dict[str, Any]:
+        """Options are JSON-safe, non-secret data (fail loud otherwise)."""
+        _check_plugin_option_value("effects.options", v)
+        return v
+
+    @field_validator("secret_env")
+    @classmethod
+    def _validate_secret_env(cls, v: dict[str, str]) -> dict[str, str]:
+        """Each slot names an environment variable, never a literal value."""
+        for slot, env_name in v.items():
+            if not _SECRET_SLOT.fullmatch(str(slot)):
+                raise ValueError(
+                    f"effects.secret_env slot {slot!r} must be a lowercase "
+                    "identifier (letters, digits, underscore)"
+                )
+            if not isinstance(env_name, str) or not _ENV_VAR_NAME.fullmatch(env_name):
+                raise ValueError(
+                    f"effects.secret_env[{slot!r}] must be the NAME of an "
+                    "environment variable (for example OPENEMR_READER_PASSWORD), "
+                    "never the credential itself"
+                )
+        return v
+
+    @field_validator(
+        "path_params",
+        "search_param_exprs",
+        "sql_query_params",
+        "graphql_variables",
+        "option_params",
+        mode="before",
+    )
+    @classmethod
+    def _coerce_value_exprs(cls, v: Any) -> Any:
+        """A bare YAML string is a literal (the same coercion ``Effect`` uses)."""
+        if isinstance(v, dict):
+            return {
+                k: ({"literal": val} if isinstance(val, str) else val)
+                for k, val in v.items()
+            }
+        return v
+
+    @model_validator(mode="after")
+    def _validate_plugin_fields(self) -> "EffectsConfig":
+        """Plugin-only fields never ride along on a built-in kind."""
+        kind = (self.kind or "none").strip().lower()
+        uses_plugin_fields = bool(self.options or self.option_params or self.secret_env)
+        if uses_plugin_fields and kind in BUILTIN_EFFECT_KINDS:
+            raise ValueError(
+                f"effects.options / option_params / secret_env configure a "
+                f"registered plugin kind; built-in kind {kind!r} does not read "
+                "them (use its own fields, for example auth or sql_password_env)"
+            )
+        overlap = sorted(set(self.options) & set(self.option_params))
+        if overlap:
+            raise ValueError(
+                "effects.option_params keys must not repeat effects.options keys: "
+                + ", ".join(overlap)
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_candidates(self) -> "EffectsConfig":
+        if not self.candidates:
+            return self
+        if (self.kind or "none").strip().lower() not in ("", "none"):
+            raise ValueError(
+                "effects.kind and effects.candidates are mutually exclusive"
+            )
+        for candidate in self.candidates:
+            if candidate.candidates:
+                raise ValueError("effects.candidates cannot contain nested candidates")
+            if (candidate.kind or "none").strip().lower() in ("", "none"):
+                raise ValueError(
+                    "every effects.candidates entry must configure a verifier kind"
+                )
+        return self
+
+
+EffectsConfig.model_rebuild()
+
+
+class ActuationConfig(BaseModel):
+    """The API/tool actuation tier (top of the capability ladder).
+
+    When enabled, a step carrying an ``ir.ApiBinding`` has its write PERFORMED
+    via the API (deterministic, $0, no GUI) and confirmed by the effect
+    verifier. Disabled (default) => every step actuates through the GUI ladder.
+    """
+
+    #: Wire an :class:`~openadapt_flow.runtime.actuators.ApiActuator`.
+    api: bool = False
+    #: API base URL for relative ``ApiBinding.url_template``s.
+    base_url: str = ""
+    timeout_s: float = 5.0
+
+
+class GroundingModelConfig(BaseModel):
+    """Operator-selected ("bring your own") model-grounding endpoint.
+
+    The last rung of the resolution ladder is a Grounder that PROPOSES a click
+    point when the deterministic rungs abstain. This section lets a deployment
+    point that fallback rung at a model of its choice instead of the built-in
+    Anthropic default: a self-hosted vLLM/Ollama, an OpenRouter/Azure/Bedrock
+    proxy, or the Anthropic API directly.
+
+    Two hard invariants:
+
+    * **Configuring a model NEVER enables egress by itself.** This section only
+      names WHICH model would be used; whether ANYTHING leaves the box is still
+      governed entirely by ``allow_model_grounding`` (default False => fully
+      local). An enabled model with egress off stays dormant.
+    * **The API key is a reference, never a literal.** ``api_key_env`` names the
+      environment variable holding the key; the key itself is never stored in
+      the config or in the repository.
+
+    Fail-safe: the constructed grounder only ever proposes a point; the identity
+    band and risk gate still dispose before any click, and any endpoint error
+    yields no proposal (the ladder halts).
+    """
+
+    #: Off by default. When False, no configured model grounder is built and the
+    #: on-prem appliance (if any) remains the only VLM fallback. Setting True
+    #: still does nothing unless ``allow_model_grounding`` is also True.
+    enabled: bool = False
+    #: ``anthropic`` (the built-in Anthropic API path) | ``openai_compatible``
+    #: (any ``{base_url}/chat/completions`` vision endpoint: OpenRouter, Azure
+    #: OpenAI, a Bedrock/OpenAI proxy, self-hosted vLLM / Ollama / LM Studio).
+    provider: Literal["anthropic", "openai_compatible"] = "anthropic"
+    #: Root URL of an ``openai_compatible`` endpoint (``/chat/completions`` is
+    #: appended). Required for ``openai_compatible``; ignored for ``anthropic``.
+    base_url: str = ""
+    #: The vision-capable model id to request. For ``anthropic`` an empty value
+    #: uses the shipped default; for ``openai_compatible`` it is required.
+    model: str = ""
+    #: NAME of the environment variable holding the API key (never the key
+    #: itself). Empty => no auth header sent (a loopback vLLM/Ollama needs none);
+    #: for ``anthropic`` an empty value falls back to the SDK's ``ANTHROPIC_API_KEY``.
+    api_key_env: str = ""
+
+
+class RuntimeSection(BaseModel):
+    """Runtime posture: durability and model-egress opt-in."""
+
+    #: Named posture for ``openadapt-flow run``. A direct ``--profile`` wins.
+    #: Omission preserves the pre-profile low-level flag contract for existing
+    #: deployments; new production deployments should select a profile.
+    #: ``replay`` remains the explicitly non-production Demo path.
+    profile: Optional[Literal["demo", "standard", "regulated"]] = None
+    #: Per-item approval for ``openadapt-flow run`` (see
+    #: ``openadapt_flow.approval_mode``): ``each_item`` (a person approves
+    #: every save), ``problems_only`` or ``not_gated``. A direct
+    #: ``--approval-mode`` wins. For the Standard and Regulated profiles a
+    #: missing or unknown value means ``each_item``.
+    approval_mode: Optional[str] = None
+    #: Tier-3 durable runtime: checkpoint each verified step, durably pause on
+    #: halt, resumable via ``resume``. Off by default.
+    durable: bool = False
+    #: Require a fresh settled frame before every action. Standard and
+    #: Regulated profiles force this on; unprofiled and Demo runs may opt in.
+    require_settled: bool = False
+    #: EGRESS OPT-IN (PHI audit REM-3): permit wiring an off-box model
+    #: grounder / identity-VLM / state-verifier. Off by default => fully local,
+    #: zero outbound calls.
+    allow_model_grounding: bool = False
+    #: Arm the pixel-compare identity tier's VERIFY branch (experimental,
+    #: evidence-gated). Off by default => the pixel tier only ever HALTs on a
+    #: localized glyph change or ABSTAINs; it never pixel-VERIFIES (a
+    #: would-be verify falls through to the next tier). See
+    #: :func:`openadapt_flow.runtime.identity.verify_pixel_identity` and
+    #: docs/LIMITS.md.
+    pixel_verify_enabled: bool = False
+    #: Operator-selected ("bring your own") model-grounding endpoint (the VLM
+    #: fallback rung). Off by default; configuring it never enables egress on its
+    #: own (``allow_model_grounding`` still governs whether anything leaves).
+    grounding_model: GroundingModelConfig = Field(default_factory=GroundingModelConfig)
+    #: PHI-mode egress allowlist (fail-closed). Admin-attested hostnames (or
+    #: URLs) for model-grounding endpoints. When PHI mode is active, a configured
+    #: grounding endpoint whose host is NOT listed here is REFUSED — the run
+    #: stays fully local. Empty (default) => no endpoint may egress under PHI.
+    #: Non-PHI runs ignore this list (the normal egress opt-in governs).
+    phi_grounding_allowlist: list[str] = Field(default_factory=list)
+    #: PHI-mode attestation that a Business Associate Agreement (or equivalent)
+    #: covers the known public aggregators (OpenRouter, OpenAI, Anthropic,
+    #: Google). Default False => those aggregators are BLOCKED under PHI even if
+    #: allowlisted. Non-aggregator allowlisted endpoints do not need it.
+    phi_egress_attested: bool = False
+
+
+class PolicySection(BaseModel):
+    """The safety policy that certifies a bundle for this deployment."""
+
+    #: Policy YAML path, or a shipped built-in name (permissive, clinical-write).
+    policy: Optional[str] = None
+
+
+_OPAQUE_DELIVERY_ID = r"^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$"
+
+
+class RemoteHumanDecisionConfig(BaseModel):
+    """Explicit remote attended-decision issuance policy.
+
+    This section does not configure a network provider and does not grant
+    execution authority.  It permits a customer-controlled runner to project
+    the current signed pause as a PHI-free AAL2 task for its configured control
+    plane.  The engine-owned pause capability and fresh live revalidation stay
+    authoritative when a decision returns.
+    """
+
+    #: Remote issuance is never inferred from identifiers or runner mode.
+    enabled: bool = False
+    #: Exact opaque control-plane tenant identity. Required when enabled.
+    tenant_id: Optional[str] = Field(default=None, pattern=_OPAQUE_DELIVERY_ID)
+    #: Exact opaque customer-controlled runner identity. Required when enabled.
+    runner_id: Optional[str] = Field(default=None, pattern=_OPAQUE_DELIVERY_ID)
+    #: How much pause context the remote projection may carry. See
+    #: :mod:`openadapt_flow.decision_delivery`. ``remote_closed_context`` (the
+    #: default) adds the closed-vocabulary "what broke" block, which contains no
+    #: string field and no image and is therefore no more capable of
+    #: representing protected content than ``remote_identifiers``, only more
+    #: useful. A deployment may still cap itself at ``remote_identifiers``; the
+    #: active execution profile applies its own ceiling on top of this.
+    #: ``local_full`` is refused here — a remote surface never gets pixels.
+    context_tier: Literal["remote_closed_context", "remote_identifiers"] = (
+        "remote_closed_context"
+    )
+    #: Exact schemas the authenticated remote peer advertised for this
+    #: deployment.  Empty means no V2 negotiation occurred, so Flow emits V1.
+    peer_task_schemas: list[
+        Literal[
+            "openadapt.human-decision-task/v1",
+            "openadapt.human-decision-task/v2",
+        ]
+    ] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _require_exact_remote_scope(self) -> "RemoteHumanDecisionConfig":
+        if self.enabled and (self.tenant_id is None or self.runner_id is None):
+            raise ValueError(
+                "human_decisions.remote.enabled requires exact tenant_id and "
+                "runner_id bindings"
+            )
+        if len(self.peer_task_schemas) != len(set(self.peer_task_schemas)):
+            raise ValueError("human decision peer task schemas must be unique")
+        return self
+
+
+class HumanDecisionsConfig(BaseModel):
+    """Attended-decision delivery posture; local issuance is the default."""
+
+    remote: RemoteHumanDecisionConfig = Field(default_factory=RemoteHumanDecisionConfig)
+
+
+class IdentitySection(BaseModel):
+    """Live identity revalidation before actuation.
+
+    Record identifiers stay in customer-controlled env vars. This section
+    never stores a live identity value.
+    """
+
+    require_fresh_frame: bool = True
+    #: NAME of the env var holding the record identifier (never the value).
+    record_id_env: Optional[str] = None
+
+
+class IdempotencySection(BaseModel):
+    """Idempotency key for a governed run. The value is an env reference."""
+
+    #: NAME of the env var holding the idempotency key (never the key itself).
+    key_env: Optional[str] = None
+
+
+#: Sentinel written by ``config init`` for fields the operator must fill.
+UNRESOLVED = "UNRESOLVED"
+
+
+class DeploymentConfig(BaseModel):
+    """The whole-deployment configuration (one ``deployment.yaml``)."""
+
+    #: Human-readable deployment name (audit / logs only).
+    name: str = "deployment"
+    #: Exact sealed bundle content digest this config is bound to, when known.
+    bundle_digest: Optional[str] = None
+    #: Field paths the operator still has to fill. ``load_deployment`` refuses
+    #: a non-empty list so certify/run cannot proceed on a draft.
+    unresolved: list[str] = Field(default_factory=list)
+    backend: BackendConfig = Field(default_factory=BackendConfig)
+    actuation: ActuationConfig = Field(default_factory=ActuationConfig)
+    effects: EffectsConfig = Field(default_factory=EffectsConfig)
+    identity: IdentitySection = Field(default_factory=IdentitySection)
+    idempotency: IdempotencySection = Field(default_factory=IdempotencySection)
+    runtime: RuntimeSection = Field(default_factory=RuntimeSection)
+    policy: PolicySection = Field(default_factory=PolicySection)
+    human_decisions: HumanDecisionsConfig = Field(default_factory=HumanDecisionsConfig)
+
+
+def incomplete_deployment_reasons(cfg: DeploymentConfig) -> list[str]:
+    """Return why a deployment is not ready for certify or run."""
+
+    reasons: list[str] = []
+    if cfg.unresolved:
+        reasons.append("unresolved: " + ", ".join(cfg.unresolved))
+    for path, value in (
+        ("backend.url", cfg.backend.url),
+        ("backend.agent_url", cfg.backend.agent_url),
+        ("backend.macos_app", cfg.backend.macos_app),
+        ("backend.macos_window_title", cfg.backend.macos_window_title),
+        ("backend.linux_app", cfg.backend.linux_app),
+        ("backend.linux_window_title", cfg.backend.linux_window_title),
+        ("backend.rdp_host", cfg.backend.rdp_host),
+        ("backend.rdp_window", cfg.backend.rdp_window),
+        ("effects.base_url", cfg.effects.base_url),
+        ("policy.policy", cfg.policy.policy),
+        ("identity.record_id_env", cfg.identity.record_id_env),
+        ("idempotency.key_env", cfg.idempotency.key_env),
+    ):
+        if value == UNRESOLVED:
+            reasons.append(f"{path} is {UNRESOLVED}")
+    return reasons
+
+
+def load_deployment(
+    source: str | Path, *, allow_unresolved: bool = False
+) -> DeploymentConfig:
+    """Load a :class:`DeploymentConfig` from a YAML file.
+
+    Raises:
+        FileNotFoundError: If ``source`` is not an existing file.
+        ValueError: If the YAML is malformed, violates the schema, or still
+            has unresolved fields (unless ``allow_unresolved`` is True).
+    """
+    import yaml
+
+    path = Path(source)
+    if not path.is_file():
+        raise FileNotFoundError(f"deployment config {source!r} is not an existing file")
+    try:
+        data = yaml.safe_load(path.read_text()) or {}
+    except yaml.YAMLError as e:  # pragma: no cover - passthrough
+        raise ValueError(f"could not parse deployment YAML {path}: {e}") from e
+    if not isinstance(data, dict):
+        raise ValueError(
+            f"deployment config {path} must be a YAML mapping, got "
+            f"{type(data).__name__}"
+        )
+    try:
+        cfg = DeploymentConfig.model_validate(data)
+    except Exception as e:
+        raise ValueError(f"invalid deployment config {path}: {e}") from e
+    if not allow_unresolved:
+        reasons = incomplete_deployment_reasons(cfg)
+        if reasons:
+            raise ValueError(
+                f"deployment config {path} is incomplete: " + "; ".join(reasons)
+            )
+    return cfg
+
+
+# --------------------------------------------------------------------------
+# Bring-your-own model grounding — construction + fail-closed PHI enforcement.
+# --------------------------------------------------------------------------
+
+_DEFAULT_ANTHROPIC_HOST = "api.anthropic.com"
+
+# Public multi-tenant aggregators. BLOCKED under PHI mode even if allowlisted,
+# unless the operator sets ``phi_egress_attested`` (an admin attestation that a
+# BAA / equivalent agreement covers the destination). Fail-closed default: no
+# PHI screenshot reaches a shared public endpoint without an explicit
+# attestation, whatever the allowlist says.
+_PHI_AGGREGATOR_DENYLIST = frozenset(
+    {
+        "openrouter.ai",
+        "api.openai.com",
+        "api.anthropic.com",
+        "generativelanguage.googleapis.com",
+    }
+)
+
+
+def _host_of(url_or_host: str) -> str:
+    """Extract a lowercase hostname from a URL or a bare host[:port] string.
+
+    Fail-closed helper: returns "" when nothing host-like can be parsed, so the
+    caller treats an unparseable endpoint as not-on-the-allowlist (refused).
+    """
+    from urllib.parse import urlsplit
+
+    raw = (url_or_host or "").strip()
+    if not raw:
+        return ""
+    candidate = raw if "//" in raw else f"//{raw}"
+    host = urlsplit(candidate).hostname or ""
+    return host.lower()
+
+
+def phi_grounding_endpoint_allowed(
+    host: str, *, allowlist: list[str], attested: bool
+) -> tuple[bool, str]:
+    """Decide whether a grounding endpoint may egress under PHI mode.
+
+    Fail-closed. Returns ``(allowed, reason)`` where ``reason`` is a
+    human-readable refusal message when ``allowed`` is False.
+
+    Rules (every wired PHI endpoint must clear ALL of them):
+
+    1. The host must be resolvable and present on the attested ``allowlist``.
+       Ambiguity (an empty/unparseable host) or absence => refuse.
+    2. A host on the public-aggregator denylist additionally requires
+       ``attested`` (a BAA attestation). Without it => refuse, even if the host
+       was allowlisted.
+    """
+    h = (host or "").strip().lower()
+    if not h:
+        return (False, "grounding endpoint host could not be determined")
+    allow = {_host_of(entry) for entry in allowlist}
+    allow.discard("")
+    if h not in allow:
+        return (False, f"grounding endpoint {h} is not on the attested allowlist")
+    if h in _PHI_AGGREGATOR_DENYLIST and not attested:
+        return (
+            False,
+            f"grounding endpoint {h} is a public aggregator blocked in PHI mode "
+            "without an explicit phi_egress_attested BAA attestation",
+        )
+    return (True, "")
+
+
+def _phi_mode_active(explicit: Optional[bool] = None) -> bool:
+    """Resolve PHI mode without importing the heavy hosted module.
+
+    Mirrors ``hosted._phi_mode``: explicit arg -> ``OPENADAPT_FLOW_PHI_MODE``
+    env -> ``OPENADAPT_FLOW_SCRUB=on``. Any failure resolves to False (PHI
+    enforcement then does not apply and the normal egress opt-in governs).
+    """
+    if explicit is not None:
+        return explicit
+    import os
+
+    env = os.environ.get("OPENADAPT_FLOW_PHI_MODE")
+    if env is not None:
+        return env.strip().lower() in ("1", "true", "yes", "on")
+    try:
+        from openadapt_flow import privacy
+
+        return privacy.scrub_mode() == "on"
+    except Exception:
+        return False
+
+
+def _grounding_model_host(cfg: GroundingModelConfig) -> str:
+    """The egress host a configured grounding model would reach.
+
+    ``anthropic`` always reaches the Anthropic API host; ``openai_compatible``
+    reaches the host of its ``base_url``.
+    """
+    if cfg.provider == "anthropic":
+        return _DEFAULT_ANTHROPIC_HOST
+    return _host_of(cfg.base_url)
+
+
+def build_model_grounder(cfg: GroundingModelConfig) -> Optional[Any]:
+    """Construct the configured "bring your own" model grounder, or None.
+
+    Returns None (and prints a clear reason) when the section is disabled, its
+    provider dependency is missing, or its configuration is incomplete —
+    degrading to fully local rather than raising. The caller is responsible for
+    the egress opt-in and PHI allowlist checks BEFORE wiring the result.
+    """
+    if not cfg.enabled:
+        return None
+    provider = (cfg.provider or "anthropic").strip().lower()
+
+    import os
+
+    api_key = os.environ.get(cfg.api_key_env, "") if cfg.api_key_env else ""
+
+    if provider == "anthropic":
+        from openadapt_flow.runtime.grounder import _DEFAULT_MODEL, AnthropicGrounder
+
+        model = (cfg.model or "").strip() or _DEFAULT_MODEL
+        try:
+            client = None
+            if api_key:
+                import anthropic
+
+                client = anthropic.Anthropic(api_key=api_key)
+            return AnthropicGrounder(model=model, client=client)
+        except ImportError:
+            print(
+                "grounding_model.provider 'anthropic' requires the 'anthropic' "
+                "package (pip install 'openadapt-flow[grounder]'); replaying "
+                "FULLY LOCAL."
+            )
+            return None
+
+    if provider == "openai_compatible":
+        if not cfg.base_url.strip():
+            print(
+                "grounding_model.provider 'openai_compatible' requires a "
+                "base_url; replaying FULLY LOCAL."
+            )
+            return None
+        from openadapt_flow.runtime.grounder import OpenAICompatibleGrounder
+
+        try:
+            return OpenAICompatibleGrounder(
+                base_url=cfg.base_url, model=cfg.model, api_key=api_key
+            )
+        except (ValueError, ImportError) as exc:
+            print(
+                f"grounding_model 'openai_compatible' not wired ({exc}); "
+                "replaying FULLY LOCAL."
+            )
+            return None
+
+    print(
+        f"unknown grounding_model.provider {cfg.provider!r} "
+        "(expected: anthropic | openai_compatible); replaying FULLY LOCAL."
+    )
+    return None
+
+
+def build_replayer(
+    backend: Any,
+    *,
+    allow_egress: bool,
+    effect_verifier: Any,
+    api_actuator: Any,
+    durable: bool,
+    use_structural: bool,
+    pixel_verify_enabled: bool = False,
+    governed_authorization: Any = None,
+    delivery_authority_kind: Literal[
+        "customer_local", "cloud_runner"
+    ] = "customer_local",
+    remote_delivery_run_id: Optional[str] = None,
+    managed_dispatch_binding: Any = None,
+    production_qualification_guard: Any = None,
+    qualification_campaign_guard: Any = None,
+    runtime_config: Optional["RuntimeSection"] = None,
+    phi_mode: Optional[bool] = None,
+    checkpoint_key: Optional[str] = None,
+    qualification_fault_driver: Any = None,
+    qualification_environment_observer: Any = None,
+    approval_gate: Any = None,
+) -> Any:
+    """Wire one deployment-qualified backend into the governed Replayer.
+
+    The caller owns the backend lifecycle. Keeping this construction in the
+    public deployment module lets CLI, console, and embedding services share
+    one egress/grounding/effect/actuation posture without importing CLI-private
+    helpers.
+
+    ``runtime_config`` (the deployment's ``runtime`` section) carries the
+    optional operator-selected model grounder (``grounding_model``) and the
+    fail-closed PHI allowlist (``phi_grounding_allowlist`` /
+    ``phi_egress_attested``). When absent, the behavior is exactly the historic
+    one: the on-prem appliance is the only VLM fallback and no model grounder is
+    configured. ``checkpoint_key`` domain-separates and encrypts durable state;
+    named-profile CLI runs supply it from ``OPENADAPT_BUNDLE_KEY`` whenever a
+    production bundle is application-sealed.
+    """
+    import os
+
+    from openadapt_flow.runtime import Replayer
+    from openadapt_flow.runtime.grounder import build_grounder
+    from openadapt_flow.runtime.remote_vlm import appliance_from_env
+
+    grounding_cfg = (
+        runtime_config.grounding_model
+        if runtime_config is not None
+        else GroundingModelConfig()
+    )
+    allowlist = (
+        list(runtime_config.phi_grounding_allowlist)
+        if runtime_config is not None
+        else []
+    )
+    attested = (
+        bool(runtime_config.phi_egress_attested)
+        if runtime_config is not None
+        else False
+    )
+    phi_on = _phi_mode_active(phi_mode)
+
+    # The on-screen read-back verifier reads the SAME live backend the replay
+    # drives; it is constructed backend-less (the backend does not exist at
+    # config time) and bound here. Never a system-of-record egress — the
+    # backend is the local screen it already drives.
+    if effect_verifier is not None and hasattr(effect_verifier, "bind_backend"):
+        effect_verifier.bind_backend(backend)
+
+    appliance = appliance_from_env()
+    if appliance is not None and not allow_egress:
+        print(
+            "On-prem VLM appliance is configured "
+            f"({os.environ.get('OPENADAPT_FLOW_VLM_URL')}) but NOT "
+            "wired: enable model grounding to send screenshots to it. "
+            "Replaying FULLY LOCAL (zero outbound calls)."
+        )
+        appliance = None
+    # PHI fail-closed: a configured on-prem appliance whose host is not attested
+    # is dropped entirely (identity veto tier + grounder + state verifier), so no
+    # PHI screenshot reaches it.
+    if appliance is not None and phi_on:
+        host = _host_of(os.environ.get("OPENADAPT_FLOW_VLM_URL", ""))
+        ok, reason = phi_grounding_endpoint_allowed(
+            host, allowlist=allowlist, attested=attested
+        )
+        if not ok:
+            print(f"PHI mode: {reason}; replaying FULLY LOCAL.")
+            appliance = None
+    if appliance is not None:
+        print(
+            "Using on-prem VLM appliance at "
+            f"{os.environ.get('OPENADAPT_FLOW_VLM_URL')} "
+            "(identity veto tier + remote-VLM grounder fallback; "
+            "fail-safe to halt). WARNING: screenshots WILL leave "
+            "the box for this run (model grounding is enabled)."
+        )
+
+    # Operator-selected ("bring your own") model grounder. Only ever built when
+    # egress is opted in; PHI mode further requires the endpoint be on the
+    # attested allowlist (and, for public aggregators, an explicit attestation).
+    model_grounder: Optional[Any] = None
+    if grounding_cfg.enabled:
+        if not allow_egress:
+            print(
+                "grounding_model is configured but model grounding is not "
+                "enabled (runtime.allow_model_grounding=false); replaying FULLY "
+                "LOCAL (zero outbound calls)."
+            )
+        else:
+            wire = True
+            if phi_on:
+                host = _grounding_model_host(grounding_cfg)
+                ok, reason = phi_grounding_endpoint_allowed(
+                    host, allowlist=allowlist, attested=attested
+                )
+                if not ok:
+                    print(f"PHI mode: {reason}; replaying FULLY LOCAL.")
+                    wire = False
+            if wire:
+                model_grounder = build_model_grounder(grounding_cfg)
+                if model_grounder is not None:
+                    print(
+                        "Model grounder wired: "
+                        f"{type(model_grounder).__name__} "
+                        f"(provider={grounding_cfg.provider}). WARNING: "
+                        "screenshots WILL leave the box for this run."
+                    )
+
+    # The configured model grounder takes precedence as the VLM fallback; the
+    # on-prem appliance grounder is used only when no model grounder is wired.
+    fallback = model_grounder
+    if fallback is None and appliance is not None:
+        fallback = appliance.grounder
+    grounder = build_grounder(fallback=fallback)
+    if grounder is not None:
+        print(f"Grounding rung active: {type(grounder).__name__}")
+    require_settled = (
+        bool(runtime_config.require_settled) if runtime_config is not None else False
+    )
+    profile_name = getattr(governed_authorization, "execution_profile", None)
+    if profile_name is not None:
+        from openadapt_flow.execution_profiles import execution_profile_contract
+
+        require_settled = (
+            require_settled or execution_profile_contract(profile_name).require_settled
+        )
+    if (
+        qualification_environment_observer is None
+        and getattr(governed_authorization, "qualification_case_id", None) is not None
+    ):
+        # Real deployment construction must not omit the observer merely
+        # because a test or embedding caller did not inject one.  Backends
+        # with the atomic tuple4 contract use the public adapter.  A project
+        # that declares another observer id/contract still fails closed in the
+        # Replayer and must pass that environment-owned observer explicitly.
+        from openadapt_flow.qualification_environment import (
+            BackendQualificationEnvironmentObserver,
+        )
+
+        qualification_environment_observer = BackendQualificationEnvironmentObserver(
+            backend
+        )
+    return Replayer(
+        backend,
+        grounder=grounder,
+        identity_vlm=appliance.identity_vlm if appliance else None,
+        state_verifier=(appliance.state_verifier if appliance else None),
+        allow_model_grounding=allow_egress,
+        effect_verifier=effect_verifier,
+        api_actuator=api_actuator,
+        durable=durable,
+        use_structural=use_structural,
+        pixel_verify_enabled=pixel_verify_enabled,
+        governed_authorization=governed_authorization,
+        delivery_authority_kind=delivery_authority_kind,
+        remote_delivery_run_id=remote_delivery_run_id,
+        managed_dispatch_binding=managed_dispatch_binding,
+        production_qualification_guard=production_qualification_guard,
+        qualification_campaign_guard=qualification_campaign_guard,
+        checkpoint_key=checkpoint_key,
+        require_settled=require_settled,
+        qualification_fault_driver=qualification_fault_driver,
+        qualification_environment_observer=qualification_environment_observer,
+        approval_gate=approval_gate,
+    )
+
+
+def _resolve_config_exprs(
+    section: str,
+    exprs: Mapping[str, ValueExpr],
+    params: Optional[Mapping[str, object]],
+) -> dict[str, str]:
+    """Resolve a config's ``ValueExpr`` mapping against the run's params.
+
+    Fail-safe is fail-LOUD here: a ``{param: ...}`` reference that the run did
+    not supply raises (the verifier would otherwise silently probe the wrong
+    record), and the message names the missing parameter.
+    """
+    resolved: dict[str, str] = {}
+    for key, expr in exprs.items():
+        value = expr.resolve(dict(params or {}))
+        if value is None:
+            raise ValueError(
+                f"effects.{section}[{key!r}] references run parameter "
+                f"{expr.param!r}, which was not supplied — pass it via "
+                "--param / --params-file (a verifier is never wired against "
+                "an unresolved selector)"
+            )
+        resolved[key] = value
+    return resolved
+
+
+def _require_env(name: str, what: str) -> str:
+    """Read a secret env var named by the config; fail loud when absent."""
+    import os
+
+    value = os.environ.get(name, "")
+    if not value:
+        raise ValueError(
+            f"{what} references environment variable {name!r}, which is not "
+            "set (or empty) — refusing to wire an unauthenticated/broken "
+            "effect verifier"
+        )
+    return value
+
+
+def plugin_options(
+    cfg: EffectsConfig, params: Optional[Mapping[str, object]] = None
+) -> dict[str, Any]:
+    """Return a plugin kind's options with its ``option_params`` resolved.
+
+    For use inside a registered verifier factory (``(cfg, params) -> verifier``).
+    ``options`` is deep-copied, so a factory can never mutate the reviewed
+    config, and each ``option_params`` entry is resolved against the governed
+    run parameters exactly like ``path_params``: a reference the run did not
+    supply fails loud.
+    """
+    resolved: dict[str, Any] = json.loads(json.dumps(cfg.options))
+    resolved.update(_resolve_config_exprs("option_params", cfg.option_params, params))
+    return resolved
+
+
+def plugin_secrets(
+    cfg: EffectsConfig, env: Optional[Mapping[str, str]] = None
+) -> ResolvedSecrets:
+    """Resolve a plugin kind's ``secret_env`` slots from the environment.
+
+    Every slot must resolve to a non-empty value, or construction fails loud
+    (a record check is never wired half-authenticated). The returned mapping
+    hides its values from ``repr`` / ``str`` so a factory that logs it leaks
+    only slot names.
+    """
+    return ResolvedSecrets.from_env(cfg.secret_env, env=env, what="effects.secret_env")
+
+
+def build_effect_verifier(
+    cfg: EffectsConfig, params: Optional[Mapping[str, object]] = None
+) -> Optional[Any]:
+    """Construct the configured ``EffectVerifier`` (or None for ``kind: none``).
+
+    Args:
+        cfg: The deployment's ``effects`` section.
+        params: The governed run parameters (``--params-file`` / ``--param``
+            values). Configs that bind ``{param: ...}`` references
+            (``path_params`` / ``search_param_exprs`` / ``sql_query_params`` /
+            ``graphql_variables``) are resolved against these AT CONSTRUCTION,
+            so the verifier probes the record THIS run writes. A config with
+            no references ignores ``params`` entirely (fully back-compatible).
+
+    Resolution order for ``kind``: built-in adapters, then plugin factories registered under the
+    ``openadapt_flow.effect_verifiers`` entry-point group or via
+    ``register_verifier_factory`` (the customer adapter SDK seam). ``candidates``
+    builds every reviewed alternative and selects the strongest declared tier;
+    it does not create a post-actuation fallback. When the config sets
+    ``evidence_redact_fields`` / ``evidence_keep_fields``, the built verifier
+    is wrapped so every verdict's evidence is minimized.
+
+    Raises:
+        ValueError: on an unknown ``kind``, a missing required field, an
+            unresolved ``{param: ...}`` reference, or a missing secret env var
+            (fail loud rather than wire a broken verifier).
+    """
+    if cfg.candidates:
+        built = [
+            build_effect_verifier(candidate, params) for candidate in cfg.candidates
+        ]
+        for candidate in built:
+            if candidate is None:  # guarded by EffectsConfig, retained fail-closed
+                raise ValueError("effects.candidates entry did not build a verifier")
+            missing = [
+                name
+                for name in ("capture_pre_state", "verify")
+                if not callable(getattr(candidate, name, None))
+            ]
+            if missing:
+                raise ValueError(
+                    "effects.candidates entry is not an EffectVerifier; missing "
+                    + ", ".join(missing)
+                )
+            tier = getattr(candidate, "verification_tier", None)
+            tier_for = getattr(candidate, "verification_tier_for", None)
+            if isinstance(tier, bool) or (tier is None and not callable(tier_for)):
+                raise ValueError(
+                    "effects.candidates entry has no valid verification tier"
+                )
+        from openadapt_flow.runtime.effects.adapter import (
+            CandidateEffectVerifier,
+            set_verifier_identity,
+        )
+
+        candidate_selector = CandidateEffectVerifier(built)
+        set_verifier_identity(
+            candidate_selector,
+            _effect_verifier_config_identity(cfg, candidate_selector),
+        )
+        if cfg.evidence_redact_fields or cfg.evidence_keep_fields is not None:
+            from openadapt_flow.runtime.effects.adapter import (
+                RedactingVerifier,
+                RedactionPolicy,
+            )
+
+            policy = RedactionPolicy(
+                redact_fields=list(cfg.evidence_redact_fields),
+                keep_fields=cfg.evidence_keep_fields,
+            )
+            return RedactingVerifier(candidate_selector, policy)
+        return candidate_selector
+
+    verifier = _build_effect_verifier_unredacted(cfg, params)
+    if verifier is None:
+        return None
+    from openadapt_flow.runtime.effects.adapter import set_verifier_identity
+
+    set_verifier_identity(verifier, _effect_verifier_config_identity(cfg, verifier))
+    if cfg.evidence_redact_fields or cfg.evidence_keep_fields is not None:
+        from openadapt_flow.runtime.effects.adapter import (
+            RedactingVerifier,
+            RedactionPolicy,
+        )
+
+        policy = RedactionPolicy(
+            redact_fields=list(cfg.evidence_redact_fields),
+            keep_fields=cfg.evidence_keep_fields,
+        )
+        return RedactingVerifier(verifier, policy)
+    return verifier
+
+
+_PLUGIN_ONLY_FIELDS = ("options", "option_params", "secret_env")
+
+
+def _identity_config_dump(cfg: EffectsConfig) -> dict[str, Any]:
+    """Serialize ``cfg`` for the verifier identity.
+
+    Unused plugin-only fields are left out, so every config written before
+    they existed keeps a byte-identical identity digest.
+    """
+
+    def prune(dumped: dict[str, Any]) -> dict[str, Any]:
+        for name in _PLUGIN_ONLY_FIELDS:
+            if not dumped.get(name):
+                dumped.pop(name, None)
+        dumped["candidates"] = [prune(item) for item in dumped.get("candidates", [])]
+        return dumped
+
+    return prune(cfg.model_dump(mode="json"))
+
+
+def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
+    """Hash the non-secret deployment fields that identify one verifier."""
+
+    sensitive = ("credential", "password", "secret", "token")
+
+    def sanitized(value: Any, *, key: str = "") -> Any:
+        lowered = key.lower()
+        if not lowered.endswith("_env") and any(
+            marker in lowered for marker in sensitive
+        ):
+            return "[secret-reference]"
+        if isinstance(value, dict):
+            return {
+                str(item_key): sanitized(item_value, key=str(item_key))
+                for item_key, item_value in value.items()
+            }
+        if isinstance(value, list):
+            return [sanitized(item) for item in value]
+        return value
+
+    config = _identity_config_dump(cfg)
+    # Fields added after identities were first issued enter the digest only
+    # when they are set, so every existing verifier keeps its identity.
+    for added in ("ui_readback",):
+        if config.get(added) is None:
+            config.pop(added, None)
+    for candidate in config.get("candidates") or []:
+        for added in ("ui_readback",):
+            if isinstance(candidate, dict) and candidate.get(added) is None:
+                candidate.pop(added, None)
+    payload = {
+        "schema": "openadapt.effect-verifier-identity/v1",
+        "implementation": (
+            f"{type(verifier).__module__}.{type(verifier).__qualname__}"
+        ),
+        "implementation_version": getattr(verifier, "adapter_version", None),
+        "substrate": getattr(verifier, "substrate", None),
+        "config": sanitized(config),
+    }
+    digest = hashlib.sha256(
+        json.dumps(payload, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()
+    return f"sha256:{digest}"
+
+
+def _build_effect_verifier_unredacted(
+    cfg: EffectsConfig, params: Optional[Mapping[str, object]] = None
+) -> Optional[Any]:
+    """The per-kind construction behind :func:`build_effect_verifier`."""
+    kind = (cfg.kind or "none").strip().lower()
+    if kind in ("none", ""):
+        return None
+
+    if kind == "onscreen":
+        # No-API screen read-back oracle. The live backend is bound later (it
+        # does not exist at config-build time) by ``build_replayer`` via
+        # ``bind_backend``; each mined effect carries its own read-back region
+        # and (for the different-path variant) re-navigation.
+        from openadapt_flow.runtime.effects.onscreen import OnScreenReadbackVerifier
+
+        return OnScreenReadbackVerifier(
+            backend=None,
+            region=cfg.readback_region,
+            min_ratio=cfg.readback_min_ratio,
+        )
+
+    if kind in ("ui_readback", "ui-readback"):
+        if cfg.ui_readback is None:
+            raise ValueError(
+                "effects.kind 'ui_readback' requires an effects.ui_readback section"
+            )
+        from openadapt_flow.runtime.effects.ui_readback import (
+            build_ui_readback_verifier,
+        )
+
+        return build_ui_readback_verifier(
+            cfg.ui_readback,
+            params,
+            timeout_s=cfg.timeout_s,
+            poll_interval_s=cfg.poll_interval_s,
+        )
+
+    if kind == "rest":
+        if not cfg.base_url:
+            raise ValueError("effects.kind 'rest' requires effects.base_url")
+        from openadapt_flow.runtime.effects import RestRecordVerifier
+
+        headers = cfg.auth.resolve_headers() if cfg.auth is not None else None
+        records_path = cfg.records_path
+        if cfg.path_params:
+            from urllib.parse import quote
+
+            values = {
+                key: quote(value, safe="")
+                for key, value in _resolve_config_exprs(
+                    "path_params", cfg.path_params, params
+                ).items()
+            }
+            try:
+                records_path = records_path.format(**values)
+            except (KeyError, IndexError, ValueError) as e:
+                raise ValueError(
+                    f"effects.records_path template does not match "
+                    f"effects.path_params: {e!r}"
+                ) from e
+        return RestRecordVerifier(
+            cfg.base_url,
+            records_path=records_path,
+            records_key=cfg.records_key,
+            headers=headers,
+            timeout_s=cfg.timeout_s,
+            poll_interval_s=cfg.poll_interval_s,
+        )
+
+    if kind == "fhir":
+        if not cfg.base_url:
+            raise ValueError("effects.kind 'fhir' requires effects.base_url")
+        from openadapt_flow.runtime.effects import FhirEffectVerifier
+
+        access_token = cfg.access_token
+        if cfg.access_token_env:
+            access_token = _require_env(
+                cfg.access_token_env, "effects.access_token_env"
+            )
+        search_params = dict(cfg.search_params)
+        if cfg.search_param_exprs:
+            search_params.update(
+                _resolve_config_exprs(
+                    "search_param_exprs", cfg.search_param_exprs, params
+                )
+            )
+        return FhirEffectVerifier(
+            cfg.base_url,
+            resource_type=cfg.resource_type,
+            search_params=search_params or None,
+            field_paths=cfg.field_paths,
+            access_token=access_token,
+            verify_tls=cfg.verify_tls,
+            timeout_s=cfg.timeout_s,
+            poll_interval_s=cfg.poll_interval_s,
+        )
+
+    if kind == "sql":
+        if not cfg.sql_query:
+            raise ValueError("effects.kind 'sql' requires effects.sql_query")
+        from openadapt_flow.runtime.effects import SqlRecordVerifier
+
+        connect: Callable[[], Any]
+        if cfg.sqlite_database:
+            import sqlite3
+
+            database = cfg.sqlite_database
+            connect = lambda: sqlite3.connect(database)  # noqa: E731
+        elif cfg.sql_driver:
+            import importlib
+
+            module = importlib.import_module(cfg.sql_driver)
+            connect_args = dict(cfg.sql_connect_args)
+            if cfg.sql_password_env:
+                connect_args["password"] = _require_env(
+                    cfg.sql_password_env, "effects.sql_password_env"
+                )
+            connect = lambda: module.connect(**connect_args)  # noqa: E731
+        else:
+            raise ValueError(
+                "effects.kind 'sql' requires effects.sqlite_database or "
+                "effects.sql_driver (+ sql_connect_args)"
+            )
+        return SqlRecordVerifier(
+            connect,
+            cfg.sql_query,
+            query_params=(
+                _resolve_config_exprs("sql_query_params", cfg.sql_query_params, params)
+                or None
+            ),
+            timeout_s=cfg.timeout_s,
+            poll_interval_s=cfg.poll_interval_s,
+        )
+
+    if kind == "file":
+        if not cfg.root:
+            raise ValueError("effects.kind 'file' requires effects.root")
+        from openadapt_flow.runtime.effects import FileArrivalVerifier
+
+        return FileArrivalVerifier(
+            cfg.root,
+            pattern=cfg.file_pattern,
+            min_size=cfg.file_min_size,
+            mtime_window_s=cfg.file_mtime_window_s,
+            content_probe=cfg.file_content_probe,
+        )
+
+    if kind in ("document-hash", "document_hash", "doc-hash"):
+        if not cfg.root:
+            raise ValueError("effects.kind 'document-hash' requires effects.root")
+        from openadapt_flow.runtime.effects import DocumentHashVerifier
+
+        return DocumentHashVerifier(cfg.root, glob=cfg.glob)
+
+    if kind == "graphql":
+        if not cfg.base_url:
+            raise ValueError("effects.kind 'graphql' requires effects.base_url")
+        if not cfg.graphql_query:
+            raise ValueError("effects.kind 'graphql' requires effects.graphql_query")
+        from openadapt_flow.runtime.effects import GraphQLRecordVerifier
+
+        headers = cfg.auth.resolve_headers() if cfg.auth is not None else None
+        variables: Optional[dict[str, str]] = None
+        if cfg.graphql_variables:
+            variables = _resolve_config_exprs(
+                "graphql_variables", cfg.graphql_variables, params
+            )
+        return GraphQLRecordVerifier(
+            cfg.base_url,
+            query=cfg.graphql_query,
+            variables=variables,
+            records_path=cfg.graphql_records_path,
+            headers=headers,
+            timeout_s=cfg.timeout_s,
+            poll_interval_s=cfg.poll_interval_s,
+            freshness_field=cfg.graphql_freshness_field,
+            freshness_window_s=cfg.graphql_freshness_window_s,
+        )
+
+    if kind == "email":
+        if not cfg.root:
+            raise ValueError("effects.kind 'email' requires effects.root")
+        from openadapt_flow.runtime.effects import MaildirDeliveryVerifier
+
+        return MaildirDeliveryVerifier(
+            cfg.root,
+            pattern=cfg.mail_pattern,
+            mtime_window_s=cfg.file_mtime_window_s,
+            content_probe=cfg.file_content_probe,
+            poll_interval_s=cfg.poll_interval_s,
+        )
+
+    if kind == "document":
+        if not cfg.root:
+            raise ValueError("effects.kind 'document' requires effects.root")
+        if cfg.document_format not in ("json", "text"):
+            raise ValueError(
+                "effects.document_format must be 'json' or 'text' "
+                f"(got {cfg.document_format!r})"
+            )
+        from typing import cast
+
+        from openadapt_flow.runtime.effects import DocumentArrivalVerifier
+
+        document_format = cast(Literal["json", "text"], cfg.document_format)
+        return DocumentArrivalVerifier(
+            cfg.root,
+            pattern=cfg.file_pattern,
+            format=document_format,
+            field_paths=cfg.document_field_paths or None,
+            text_pattern=cfg.document_text_pattern,
+            mtime_window_s=cfg.file_mtime_window_s,
+            poll_interval_s=cfg.poll_interval_s,
+        )
+
+    # Plugin seam: a customer adapter registered programmatically or under the
+    # 'openadapt_flow.effect_verifiers' entry-point group serves its own kind.
+    from openadapt_flow.runtime.effects.adapter import (
+        resolve_verifier_factory,
+        validate_verifier_adapter,
+    )
+
+    factory = resolve_verifier_factory(kind)
+    if factory is not None:
+        verifier = factory(cfg, params)
+        validate_verifier_adapter(verifier)
+        return verifier
+
+    raise ValueError(
+        f"unknown effects.kind {cfg.kind!r} "
+        "(expected: none | onscreen | ui_readback | rest | graphql | fhir | sql | "
+        "file | email | document | document-hash, or a registered plugin kind)"
+    )
+
+
+def build_api_actuator(cfg: ActuationConfig) -> Optional[Any]:
+    """Construct the configured ``ApiActuator`` (or None when ``api`` is off)."""
+    if not cfg.api:
+        return None
+    from openadapt_flow.runtime.actuators import ApiActuator
+
+    return ApiActuator(cfg.base_url, timeout_s=cfg.timeout_s)

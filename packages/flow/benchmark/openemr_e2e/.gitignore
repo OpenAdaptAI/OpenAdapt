@@ -1,0 +1,4 @@
+# Default CLI output (result.json, SUMMARY.md, compiled bundle, per-phase runs,
+# promoted skills library) — a run artifact, never committed. The harness is
+# reproducible from source; regenerate with `python -m benchmark.openemr_e2e`.
+/out/

@@ -1,0 +1,213 @@
+{
+  "workflow_name": "mockmed-triage",
+  "started_at": "2026-07-06T18:29:51.632497+00:00",
+  "params": {
+    "note": "Showcase triage booking three months"
+  },
+  "results": [
+    {
+      "step_id": "step_000",
+      "intent": "click at (214, 195)",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          214,
+          195
+        ],
+        "confidence": 0.999949038028717,
+        "elapsed_ms": 12.304292060434818
+      },
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_000_before.png",
+      "after_png": "steps/step_000_after.png",
+      "elapsed_ms": 371.8742076307535
+    },
+    {
+      "step_id": "step_001",
+      "intent": "type 'nurse.demo'",
+      "ok": true,
+      "resolution": null,
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_001_before.png",
+      "after_png": "steps/step_001_after.png",
+      "elapsed_ms": 552.5612076744437
+    },
+    {
+      "step_id": "step_002",
+      "intent": "click at (214, 264)",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          214,
+          264
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 10.409874841570854
+      },
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_002_before.png",
+      "after_png": "steps/step_002_after.png",
+      "elapsed_ms": 341.3387918844819
+    },
+    {
+      "step_id": "step_003",
+      "intent": "type 'mockmed-demo-pass'",
+      "ok": true,
+      "resolution": null,
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_003_before.png",
+      "after_png": "steps/step_003_after.png",
+      "elapsed_ms": 323.55908304452896
+    },
+    {
+      "step_id": "step_004",
+      "intent": "click 'Sign In'",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          119,
+          324
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 10.458959266543388
+      },
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_004_before.png",
+      "after_png": "steps/step_004_after.png",
+      "elapsed_ms": 627.1364586427808
+    },
+    {
+      "step_id": "step_005",
+      "intent": "click 'Open'",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          775,
+          186
+        ],
+        "confidence": 0.999998927116394,
+        "elapsed_ms": 12.340624816715717
+      },
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_005_before.png",
+      "after_png": "steps/step_005_after.png",
+      "elapsed_ms": 564.833041280508
+    },
+    {
+      "step_id": "step_006",
+      "intent": "click 'New Encounter'",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          114,
+          159
+        ],
+        "confidence": 0.999999463558197,
+        "elapsed_ms": 10.724333114922047
+      },
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_006_before.png",
+      "after_png": "steps/step_006_after.png",
+      "elapsed_ms": 545.851874165237
+    },
+    {
+      "step_id": "step_007",
+      "intent": "click 'Triage'",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          85,
+          160
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 11.193624697625637
+      },
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_007_before.png",
+      "after_png": "steps/step_007_after.png",
+      "elapsed_ms": 336.8252916261554
+    },
+    {
+      "step_id": "step_008",
+      "intent": "click at (344, 290)",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          344,
+          290
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 14.787041582167149
+      },
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_008_before.png",
+      "after_png": "steps/step_008_after.png",
+      "elapsed_ms": 333.91508273780346
+    },
+    {
+      "step_id": "step_009",
+      "intent": "type <note>",
+      "ok": true,
+      "resolution": null,
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_009_before.png",
+      "after_png": "steps/step_009_after.png",
+      "elapsed_ms": 343.4782503172755
+    },
+    {
+      "step_id": "step_010",
+      "intent": "click 'Save Encounter'",
+      "ok": true,
+      "resolution": {
+        "rung": "template",
+        "point": [
+          134,
+          391
+        ],
+        "confidence": 1.0,
+        "elapsed_ms": 12.072167359292507
+      },
+      "postconditions_ok": true,
+      "heal": null,
+      "error": null,
+      "before_png": "steps/step_010_before.png",
+      "after_png": "steps/step_010_after.png",
+      "elapsed_ms": 639.8275410756469
+    }
+  ],
+  "success": true,
+  "rung_counts": {
+    "template": 8
+  },
+  "heal_count": 0,
+  "model_calls": 0,
+  "est_model_cost_usd": 0.0,
+  "total_ms": 4981.266042217612
+}

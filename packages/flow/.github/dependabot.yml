@@ -1,0 +1,27 @@
+# Dependabot: keep the supply chain fresh. GitHub Actions are pinned by commit
+# SHA (see the workflows); Dependabot understands the trailing `# vX` comment
+# and proposes SHA bumps with the new version, so pinning does not freeze us on
+# stale, potentially-vulnerable action releases.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message:
+      prefix: ci
+
+  - package-ecosystem: pip
+    directory: "/"
+    schedule:
+      interval: weekly
+    # Group the minor/patch churn so we get one PR instead of a swarm; majors
+    # come as their own reviewable PRs.
+    groups:
+      python-minor:
+        update-types: ["minor", "patch"]
+    commit-message:
+      prefix: build

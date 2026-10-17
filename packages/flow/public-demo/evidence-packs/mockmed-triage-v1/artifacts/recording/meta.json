@@ -1,0 +1,13 @@
+{
+  "id": "d497e339298644d1b176d48b08cf7cd3",
+  "created_at": "2026-07-25T17:46:51.554900+00:00",
+  "viewport": [
+    1280,
+    800
+  ],
+  "app_url": "http://127.0.0.1:59433/?fault=ok&idempotency=demo#tasks",
+  "params": {
+    "note": "Synthetic follow-up in two weeks"
+  },
+  "secret_params": []
+}

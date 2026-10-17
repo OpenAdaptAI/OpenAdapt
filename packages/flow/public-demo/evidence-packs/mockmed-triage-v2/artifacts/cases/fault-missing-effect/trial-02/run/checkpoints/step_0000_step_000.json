@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "workflow_name": "mockmed-triage",
+  "step_index": 0,
+  "step_id": "step_000",
+  "intent": "click 'Open'",
+  "state_id": null,
+  "next_step_index": 1,
+  "params": {
+    "note": "Synthetic follow-up in two weeks"
+  },
+  "effect_verified": null,
+  "effect_approved_unverified": false,
+  "effect_contract_hashes": [],
+  "effect_evidence": [],
+  "identity": {
+    "status": "verified",
+    "mode": "structured",
+    "coverage": 1.0,
+    "expected": "<structured identity template>",
+    "observed": "Jane SampleKnee pain referralHigh",
+    "param": null,
+    "signal_evidence": [],
+    "quorum_required": null,
+    "quorum_verified": null
+  },
+  "governed_authorization_id": "4f82db83652e42869867c86dd7a96a7c",
+  "governed_approval_source": "public-demo-qualified-campaign",
+  "postconditions_ok": true,
+  "skipped": false,
+  "actuation": "dom",
+  "resolution": {
+    "rung": "structural",
+    "point": [
+      776,
+      186
+    ],
+    "confidence": 1.0,
+    "elapsed_ms": 6.757665891200304,
+    "structural_handle": {
+      "point": [
+        776,
+        186
+      ],
+      "confidence": 1.0,
+      "region": [
+        731,
+        168,
+        90,
+        36
+      ],
+      "target_fingerprint": "b1b4dc0048f62aea2d7b8dbe9cac94c7d242351d5d96dad4896439da93381a41",
+      "candidate_count": 1,
+      "supported_operations": [
+        "dom_click",
+        "dom_double_click"
+      ]
+    }
+  },
+  "drift_oracle_calls": 0,
+  "heal": null,
+  "created_at": "2026-07-25T19:28:38.640708+00:00"
+}

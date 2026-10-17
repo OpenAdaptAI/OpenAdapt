@@ -1,0 +1,216 @@
+# EffectBench
+
+**The Silent Wrong-Effect Rate (SWER) benchmark for automation agents.**
+
+EffectBench measures how often an agent **reports or renders success while the
+independent system of record is wrong or empty** — the failure that aggregate
+task-success benchmarks miss because they score the screen or the agent's own
+self-report, exactly the witness a partial save, a duplicate, an optimistic-UI
+reject, a lost update, or a wrong-record write all satisfy.
+
+- **Headline metric:** SWER = `silent-wrong-effect episodes / N`, reported
+  jointly with over-halt, task success, and the success–effect gap.
+- **Standalone:** installs with **pydantic as its only dependency** — no
+  OpenAdapt codebase required.
+- **Versioned:** the contract is `SPEC.md` + `VERSION`; the submission format is
+  `LEADERBOARD.md`.
+
+This is the standalone, independently runnable packaging of the SWER metric and
+its synthetic reference fixture. The full specification is in
+[`SPEC.md`](SPEC.md). For OpenAdapt's own **measured** end-to-end number, see
+[Where the measured result lives](#where-the-measured-result-lives).
+
+## Install
+
+```bash
+pip install effectbench          # from a release, or:
+pip install ./benchmark/effectbench   # from this repository subtree
+```
+
+## Run the reference (no agent needed)
+
+```bash
+python -m effectbench reference
+```
+
+```
+screen_only     SWER : 50/90 = 55.6%  (wrong-write 40, phantom 10)
+effect_verified SWER :  0/90 =  0.0%
+transactional silently mishandled by screen-only: 5/7
+```
+
+These are the reference fixture's **pinned expected values** — a regression
+anchor, not a measured result and not a published headline. MockMed is a
+deterministic, hand-authored fixture: the two shipped baselines (`screen_only`,
+which trusts the banner, and `effect_verified`, which gates success on an
+independent record readback) reproduce these exact counts on every run, which is
+precisely what makes them useful. `tests/test_reference.py` pins them so that a
+change to the schema, classifier, judge, or metrics fails loudly. Read them as a
+fixture invariant and a template for your own integration — never as evidence
+about a real system of record.
+
+## Where the measured result lives
+
+The measured, end-to-end silent-wrong-effect result is
+[`benchmark/effect_e2e/`](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/benchmark/effect_e2e/EFFECT_E2E.md)
+in the OpenAdapt engine repository. Every write there goes through the real
+governed replay path (`Replayer` → `ApiActuator` → a real HTTP write to an
+on-disk SQLite system of record); the verifier reads back over a different HTTP
+verb, endpoint, and connection; and the ground truth is a direct read-only SQLite
+connection that bypasses the service entirely and audits every table it
+discovers from `sqlite_master`. Its measured ladder, 90 runs per arm:
+
+| arm | silent-wrong-effect rate |
+|---|---|
+| screen-verify (success banner) | **60.0%** (54/90) |
+| effect-verify, one out-of-band REST record oracle | **10.0%** (9/90) |
+| effect-verify, complete SQL read path | **0.0%** (0/90) |
+
+The **middle rung is the most realistic oracle configuration measured**: one
+out-of-band record oracle, which cuts undetected wrong effects from 75.0% to
+12.5%. All nine residual misses are the single `collateral_unaudited` class — a
+collateral write to a surface the oracle's read path does not cover. The `0/90`
+arm closes that gap only by widening the read path to every mutable surface, so
+it is the best case under complete in-database instrumentation. Read every rung
+as fault coverage under a small, hand-authored fault taxonomy, not as an
+expected field or production rate.
+
+## Run it against YOUR system
+
+Implement one method — `effectbench.adapter.SystemUnderTest.run_task` — that
+attempts each task's goal against the reference (synthetic MockMed) system of
+record and returns your system's own (untrusted) self-report. EffectBench reads
+the true effect through an independent oracle you cannot reach, and computes your
+SWER.
+
+```python
+from typing import Mapping
+from effectbench import evaluate, summarize
+from effectbench.adapter import EnvHandle
+from effectbench.schema import AgentReport, TaskSpec
+
+
+class MySUT:
+    name = "my-agent"
+
+    def run_task(self, task: TaskSpec, env: EnvHandle, *,
+                 params: Mapping[str, str]) -> AgentReport:
+        # 1. Drive the reference system toward task.goal (intent, not steps).
+        obs = env.attempt_intended_action(params)
+        # 2. Decide success HOWEVER your system does. If you have your own
+        #    record-readback capability, use it (env.product_effect_verifier());
+        #    if you only trust the screen, you'll surface a SWER.
+        return AgentReport(reported_success=obs.banner_saved)
+
+
+episodes = evaluate(MySUT(), trials=10)
+summary = summarize(episodes, arm="my-agent")
+print(summary.swer.rate, summary.over_halt.rate)   # report BOTH, always
+```
+
+## The adapter contract
+
+```python
+@runtime_checkable
+class SystemUnderTest(Protocol):
+    name: str
+    def run_task(self, task: TaskSpec, env: EnvHandle,
+                 *, params: Mapping[str, str]) -> AgentReport: ...
+```
+
+- `task.goal` is the natural-language intent, **never a step list** (fairness).
+- `env` drives the reference system and reads back only the **screen banner** —
+  the oracle's read path is never exposed to your system.
+- `env.product_effect_verifier()` is your system's OWN optional record-readback
+  capability (a distinct object from the harness oracle) — the honest way to
+  refuse to trust the screen.
+- The return `AgentReport.reported_success` is the untrusted witness; the oracle,
+  not this value, decides the outcome.
+
+## Bring your OWN system of record + oracle
+
+The section above scores YOUR AGENT against OUR reference fixture (synthetic
+MockMed). MockMed ships its ground-truth oracle as a **freebie** - the benchmark
+authored a cheap, correct, independent record-readback oracle for its own
+synthetic app. On a **real** legacy system of record, authoring that oracle is
+the whole problem (SPEC §2.2, §5.2); the benchmark does not do it for you.
+
+To score EffectBench against a system of record **the benchmark authors did not
+build**, implement a `effectbench.provider.BenchmarkProvider`. It supplies (a)
+your environment/fixture + tasks and (b) your OWN independent ground-truth
+oracle, and runs through the same runner and the same two reference baselines:
+
+```python
+from effectbench import EpisodeSetup, evaluate_provider
+from effectbench.adapter import EffectVerifiedSUT, ScreenOnlySUT
+
+class MyProvider:
+    name = "my-system"
+    def tasks(self):                      # opaque task handles
+        ...
+    def provision(self, task, trial) -> EpisodeSetup:
+        # build a FRESH system-of-record state, an arm-facing env, and an
+        # INDEPENDENT oracle the SUT can never reach; return an EpisodeSetup.
+        ...
+
+episodes = evaluate_provider(ScreenOnlySUT(), MyProvider(), trials=10)
+```
+
+If your provider does **not** author a product verifier for the SUT
+(`EnvHandle.product_effect_verifier()` returns `None`), `EffectVerifiedSUT`
+**fails safe** - it halts rather than getting a correct oracle for free. That is
+the point: the freebie only exists on the built-in synthetic fixture.
+
+> **Honest status.** The public reusable surface currently ships **one** synthetic
+> reference fixture (MockMed). **No independent third-party system of record has
+> been scored yet** - the two baselines (`screen_only`, `effect_verified`) are
+> OpenAdapt's own arms on OpenAdapt's own fixture. This interface exists so a
+> third party *can* bring a real system of record + oracle; authoring that oracle
+> is the real-world cost the benchmark abstracts away on the reference fixture
+> only.
+
+## Submit a result
+
+```bash
+python -m effectbench submission --baseline effect_verified --trials 10 > sub.json
+python -m effectbench score sub.json     # verify it reproduces (exit 0)
+```
+
+See [`LEADERBOARD.md`](LEADERBOARD.md) for the submission format and the
+reproducibility manifest.
+
+## What's in the package
+
+| module | responsibility |
+|---|---|
+| `effectbench.schema` | the episode data contract + the outcome/fault taxonomy |
+| `effectbench.effect` | the typed `Effect` contract mechanism (system-of-record kinds) |
+| `effectbench.judge` | the substrate-independent effect judge |
+| `effectbench.oracle` | the classifier + `score_episode` + the snapshot oracle |
+| `effectbench.metrics` | `summarize` → SWER + co-metrics with Wilson / bootstrap CIs |
+| `effectbench.adapter` | the `SystemUnderTest` interface + two reference baselines |
+| `effectbench.provider` | the `BenchmarkProvider` seam - bring your OWN system of record + oracle |
+| `effectbench.fixtures.mockmed` | the public **synthetic**, **reference-only** MockMed system of record |
+| `effectbench.tasks.mockmed` | the public synthetic task pack (the anchor suite) |
+| `effectbench.runner` | `evaluate(sut, trials=…)` and `evaluate_provider(sut, provider, …)` → episode rows |
+| `effectbench.reference` | the reference fixture's pinned expected values (regression anchor) |
+| `effectbench.leaderboard` | submission build + reproducibility manifest + verifier |
+
+## Source-availability boundary
+
+This package ships the **mechanism + metric + a synthetic sample + the reference
+scorer** and nothing else. It contains none of the crown-jewel artifacts (grown
+hardening corpus, tuned adversary params, deployment-derived thresholds,
+per-system-of-record oracle recipes, real-EMR datasets). `tests/test_boundary.py`
+enforces that. See `SPEC.md` §7.
+
+## Run the tests
+
+```bash
+pip install ./benchmark/effectbench[test]
+python -m pytest benchmark/effectbench/tests -q
+```
+
+## License
+
+MIT. See `LICENSE`. All fixture data is synthetic.

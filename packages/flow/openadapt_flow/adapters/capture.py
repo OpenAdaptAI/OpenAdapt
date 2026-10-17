@@ -1,0 +1,1298 @@
+"""openadapt-capture -> openadapt-flow recording adapter.
+
+This module is the *recording adapter contract* for desktop demonstrations
+(docs/desktop/PHASE1.md): it converts an openadapt-capture session into the
+recording format the compiler consumes (``meta.json`` + ``events.jsonl`` +
+``frames/{i:04d}_before.png`` / ``_after.png``).
+
+Input contract (a real openadapt-capture >= 0.5 session directory):
+
+    <capture>/
+      recording.db            # SQLAlchemy per-capture database:
+                              #   recording(timestamp, monitor_width,
+                              #     monitor_height, platform, task_description,
+                              #     video_start_time, config, ...)
+                              #   action_event(name, timestamp, mouse_x,
+                              #     mouse_y, mouse_dx, mouse_dy,
+                              #     mouse_button_name, mouse_pressed, key_name,
+                              #     key_char, canonical_key_name, ...)
+      captured media         # external-FFmpeg video or supported frame store
+
+The adapter is a thin bridge over openadapt-capture's **public API** — it does
+*no* raw SQL and knows nothing about capture's schema. It calls
+``CaptureSession.load(dir)`` and iterates ``.actions(include_moves=False)``,
+which runs capture's own event-processing pipeline (raw mouse/keyboard streams
+-> merged clicks / drags / typed text) and exposes each merged action as a
+public ``Action`` (``.type``, ``.timestamp``, ``.x/.y/.dx/.dy``,
+``.button/.text/.keys``). Frames come from ``CaptureSession.get_frame_at`` (the
+same tested frame-extraction path ``Action.screenshot`` uses), so the adapter
+inherits capture's decoding and survives capture's future schema changes.
+
+Action mapping (capture ``Action.type`` -> flow event ``kind``):
+
+    mouse.singleclick   -> {"kind": "click", x, y}
+    mouse.doubleclick   -> {"kind": "double_click", x, y}
+    right single-click  -> {"kind": "right_click", x, y}
+    mouse.drag          -> {"kind": "drag", x, y, end_x, end_y}
+    mouse.scroll        -> {"kind": "scroll", dx, dy}
+    key.type            -> {"kind": "type", text[, param]}  OR
+                           {"kind": "key", key}             (see below)
+    key.shortcut        -> {"kind": "hotkey", modifiers, key}
+
+capture's processing merges *all* keyboard input into ``key.type``
+(``KeyTypeEvent``) actions, one per key-release burst — so a typed word arrives
+as a *run* of single-character ``key.type`` actions, and a named key such as
+Enter arrives as a ``key.type`` with **empty** ``.text`` and its name in
+``.keys``. This adapter therefore:
+
+  * coalesces consecutive character ``key.type`` actions (non-empty ``.text``,
+    including spaces and shifted characters) into one flow ``type`` event, so
+    the compiler sees a whole typed value (and per-run parameter marking works);
+  * emits a flow ``key`` event for a named special key (empty ``.text``, e.g.
+    Enter/Tab/Escape/arrows), mapped through ``_KEY_NAME_MAP``;
+  * skips a bare modifier press (no workflow meaning on its own).
+
+Loud rejection (a demonstrated action must never be *silently* dropped):
+middle clicks, right-button double-clicks/drags, malformed shortcuts, unmapped
+named keys, and any unknown input action type all raise instead of being ignored.
+
+Coordinate spaces: legacy full-screen capture mouse coordinates are in
+*logical points* while captured frames are *physical pixels*. openadapt-flow
+requires event coordinates in the same pixel space as the frames, so legacy
+points are scaled by ``CaptureSession.pixel_ratio`` (physical / logical).
+NOTE: sessions recorded with capture >=0.5.4 persist ``pixel_ratio`` on the
+recording model itself, so scaling is always correct for them. Older 0.5.x
+sessions carry it only when the recorder wrote it into the recording ``config``
+JSON; absent that it defaults to 1.0 and coordinates pass through unscaled —
+on such a legacy HiDPI session click coordinates would be under-scaled, an
+honest limitation of the old metadata that this adapter cannot recover from
+pixels alone.
+
+Current full-screen sessions capture MSS's combined virtual desktop and
+translate global input into that frame at source. Their
+``CaptureSession.desktop_capture["coordinate_space"]`` is
+``"virtual_desktop_pixels"``. The retained origin, viewport, and privacy-safe
+monitor rectangles let this adapter validate the combined coordinate space;
+it does NOT apply ``pixel_ratio`` again. This supports secondary displays and
+negative virtual-desktop origins without double-scaling input.
+
+Window-scoped sessions (capture's window recording mode, capture PR #30). A
+session recorded with ``Recorder(window=...)`` is scoped to ONE window: frames
+are that window's own pixels (the same viewport flow's ``rdp_window`` replay
+backend captures) and action coordinates were translated *at capture time*
+into the captured frame's pixel space
+(``CaptureSession.window_capture["coordinate_space"] == "window_pixels"``).
+This adapter detects such a session and:
+
+  * does NOT apply ``pixel_ratio`` — the coordinates are already frame
+    pixels, and rescaling them would double-scale every click (the exact
+    silent-mis-conversion this detection exists to prevent);
+  * takes frames as-is (already the client-window viewport);
+  * validates the fixed output viewport and bounds timeline. A source window
+    can resize: Capture scales the complete source frame to fit and letterboxes
+    it into the fixed output viewport, then maps actions into that same output
+    pixel space. The adapter validates this normalization metadata, verifies
+    extracted frame sizes, and screens every mouse action against that pixel
+    space. Window capture records out-of-window input at out-of-range
+    coordinates instead of clamping, and such an action targeted a DIFFERENT
+    window, so conversion refuses loudly (dropping it would silently lose a
+    demonstrated action; keeping it would compile a wrong-target step);
+  * stamps the output ``meta.json`` with the recorded scoping
+    (``window_capture``), but does not infer an execution surface from window
+    scope alone. Live ``record --backend rdp|citrix`` orchestration adds the
+    exact ``backend_hints`` (``rdp_window`` / ``rdp_window_title``). Native
+    Windows and macOS recording uses the same window primitive without remote
+    hints, so the compiler receives one consistent surface identity.
+
+A window-scoped session that declares a coordinate space this adapter does
+not understand is refused loudly rather than converted with guessed scaling.
+
+Frame selection: ``CaptureSession.get_frame_at`` abstracts captured media
+(default external-FFmpeg video and any supported frame store). For an event at
+wall-clock time ``T`` the *before* frame is ``get_frame_at(T)`` and the *after* frame is
+``get_frame_at(T + settle_s)`` clamped to just before the next event — an
+approximation of the live Recorder's perceptual-hash settle wait (see
+docs/desktop/PHASE1.md). A per-action frame may be unavailable; a missing
+*before* frame for a click is fatal (the compiler requires it), while a missing
+*after* frame simply yields no postconditions for that step.
+
+Scroll deltas: pynput reports wheel *notches* with positive ``dy`` = scroll up,
+while the flow recording stores *pixels* with positive ``dy`` = view down
+(Playwright wheel convention). Notches are converted at
+``SCROLL_PIXELS_PER_NOTCH`` px/notch and the vertical sign is flipped.
+
+openadapt-capture is an **optional** dependency (the ``capture`` extra:
+``pip install 'openadapt-flow[capture]'``); it is imported lazily so the flow
+core never pulls it onto the replay hot path.
+
+Native structural evidence. Current openadapt-capture sessions can retain a
+versioned Windows UIA observation beside each native action. This adapter maps
+the observation's AutomationId or ControlType+Name, plus its top-level window,
+into Flow's backend-neutral ``structural`` locator. The compiler therefore
+keeps UIA as the deterministic top resolution rung while retaining the same
+visual fallback evidence. Older captures and applications without accessible
+controls continue through the visual ladder.
+
+Window-scoped RDP/Citrix captures deliberately do NOT promote local UIA
+observations. UIA describes the local remote-client canvas, not controls inside
+the remote session, so those surfaces remain external black-box workflows using
+pixels, OCR, relational anchors, identity regions, and fresh-frame verification.
+"""
+
+from __future__ import annotations
+
+import json
+import math
+import uuid
+from datetime import datetime, timezone
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Optional, Sequence, TypeGuard
+
+if TYPE_CHECKING:  # pragma: no cover
+    from openadapt_capture.capture import Action, CaptureSession
+    from PIL.Image import Image
+
+# Wheel-notch -> pixel conversion (matches the WindowsBackend constant; the
+# exact ratio is not load-bearing — replay's closed-loop scroll re-resolves
+# after each gesture).
+SCROLL_PIXELS_PER_NOTCH = 100
+
+# Search window (seconds) for get_frame_at. Frames cluster around action
+# timestamps; a generous window finds the nearest one.
+FRAME_TOLERANCE_S = 2.0
+
+# The one coordinate space a window-scoped capture session may declare today:
+# action coordinates already translated into the captured frame's pixel space
+# (see openadapt_capture.window_capture). Any other declared space is refused.
+WINDOW_PIXEL_SPACE = "window_pixels"
+
+# Current full-screen Capture sessions translate global pointer positions into
+# MSS monitor zero (the combined virtual-desktop frame) before persistence.
+DESKTOP_PIXEL_SPACE = "virtual_desktop_pixels"
+
+# pynput key names (openadapt-capture ``key_name`` / ``.keys``) ->
+# flow/Playwright names.
+_KEY_NAME_MAP = {
+    "enter": "Enter",
+    "return": "Enter",
+    "tab": "Tab",
+    "esc": "Escape",
+    "escape": "Escape",
+    "backspace": "Backspace",
+    "delete": "Delete",
+    "home": "Home",
+    "end": "End",
+    "page_up": "PageUp",
+    "page_down": "PageDown",
+    "up": "ArrowUp",
+    "down": "ArrowDown",
+    "left": "ArrowLeft",
+    "right": "ArrowRight",
+}
+
+# Bare modifier presses carry no workflow meaning on their own (their effect is
+# only visible combined with another key).
+_MODIFIER_KEY_NAMES = {
+    "shift",
+    "shift_l",
+    "shift_r",
+    "ctrl",
+    "ctrl_l",
+    "ctrl_r",
+    "alt",
+    "alt_l",
+    "alt_r",
+    "alt_gr",
+    "cmd",
+    "cmd_l",
+    "cmd_r",
+    "caps_lock",
+}
+# Modifiers that, combined with another key, form a shortcut/chord with no flow
+# equivalent (shift is excluded — shift+char is just a shifted character).
+_CHORD_MODIFIER_NAMES = _MODIFIER_KEY_NAMES - {
+    "shift",
+    "shift_l",
+    "shift_r",
+    "caps_lock",
+}
+
+_CAPTURE_STRUCTURAL_SCHEMA = "openadapt.capture.structural-observation/v1"
+_WINDOWS_CONTROL_TYPE_TO_ROLE = {
+    "Button": "button",
+    "Hyperlink": "link",
+    "MenuItem": "menuitem",
+    "TabItem": "tab",
+    "ListItem": "listitem",
+    "CheckBox": "checkbox",
+    "RadioButton": "radio",
+    "Edit": "textbox",
+    "SplitButton": "button",
+}
+
+
+def _require_capture() -> "type[CaptureSession]":
+    """Return openadapt-capture's ``CaptureSession`` or raise a clear error.
+
+    openadapt-capture is an optional dependency (the ``capture`` extra); import
+    it lazily so the flow core never depends on it.
+    """
+    try:
+        from openadapt_capture import CaptureSession
+    except ImportError as exc:  # pragma: no cover - exercised via install state
+        raise ImportError(
+            "openadapt-capture is required to convert desktop recordings but "
+            "is not installed. Install the optional extra:\n\n"
+            "    pip install 'openadapt-flow[capture]'\n"
+        ) from exc
+    return CaptureSession
+
+
+def _window_capture_meta(session: "CaptureSession") -> Optional[dict[str, Any]]:
+    """Window-scoping metadata for a window-scoped session, else None.
+
+    Reads the public ``CaptureSession.window_capture`` property introduced in
+    openadapt-capture 0.6.0, with a defensive fallback to the recording's
+    ``config`` JSON — the persisted source of the same dict (key
+    ``capture_window``). Missing the scoping would silently rescale
+    already-frame-pixel coordinates by ``pixel_ratio`` (double-scaling every
+    click), the exact mis-conversion this detection exists to prevent.
+    """
+    window_capture = getattr(session, "window_capture", None)
+    if window_capture is not None:
+        if not isinstance(window_capture, dict):
+            raise ValueError(
+                "capture session declares malformed window-capture metadata; "
+                "expected an object or null"
+            )
+        return window_capture
+    recording = getattr(session, "_recording", None)
+    config = getattr(recording, "config", None)
+    if isinstance(config, dict):
+        fallback = config.get("capture_window")
+        if fallback is not None:
+            if not isinstance(fallback, dict):
+                raise ValueError(
+                    "capture session config declares malformed window-capture "
+                    "metadata; expected capture_window to be an object or null"
+                )
+            return fallback
+    return None
+
+
+def _desktop_capture_meta(session: "CaptureSession") -> Optional[dict[str, Any]]:
+    """Virtual-desktop metadata for a current full-screen session, else None.
+
+    Read Capture's public property when available. The config fallback keeps
+    this adapter compatible with a session produced by a newer Capture package
+    when an older compatible public API object is used to read the database.
+    """
+    desktop_capture = getattr(session, "desktop_capture", None)
+    if desktop_capture is not None:
+        if not isinstance(desktop_capture, dict):
+            raise ValueError(
+                "capture session declares malformed desktop-capture metadata; "
+                "expected an object or null"
+            )
+        return desktop_capture
+    recording = getattr(session, "_recording", None)
+    config = getattr(recording, "config", None)
+    if isinstance(config, dict):
+        fallback = config.get("capture_desktop")
+        if fallback is not None:
+            if not isinstance(fallback, dict):
+                raise ValueError(
+                    "capture session config declares malformed desktop-capture "
+                    "metadata; expected capture_desktop to be an object or null"
+                )
+            return fallback
+    return None
+
+
+def _is_viewport(value: Any) -> TypeGuard[Sequence[float]]:
+    """True when ``value`` is an exact positive integer pixel pair."""
+    return (
+        isinstance(value, (list, tuple))
+        and len(value) == 2
+        and all(
+            isinstance(v, (int, float))
+            and not isinstance(v, bool)
+            and math.isfinite(v)
+            and v > 0
+            and float(v).is_integer()
+            for v in value
+        )
+    )
+
+
+def _exact_integer(value: Any, field: str, *, positive: bool = False) -> int:
+    """Return one exact finite JSON integer, with a named validation error."""
+    if (
+        not isinstance(value, (int, float))
+        or isinstance(value, bool)
+        or not math.isfinite(value)
+        or not float(value).is_integer()
+        or (positive and value <= 0)
+    ):
+        qualifier = "positive " if positive else ""
+        raise ValueError(
+            f"desktop-capture metadata {field} must be a {qualifier}integer"
+        )
+    return int(value)
+
+
+def _validated_desktop_capture(
+    desktop_capture: dict[str, Any],
+) -> dict[str, Any]:
+    """Validate and sanitize virtual-desktop coordinate provenance.
+
+    Only numeric geometry is carried into Flow's recording metadata. Display
+    names, application data, or other unrecognized producer fields never cross
+    this adapter boundary.
+    """
+    space = desktop_capture.get("coordinate_space")
+    if space != DESKTOP_PIXEL_SPACE:
+        raise ValueError(
+            "desktop capture session declares "
+            f"coordinate_space={space!r}, which this adapter does not "
+            f"understand (expected {DESKTOP_PIXEL_SPACE!r}); converting it "
+            "could silently mis-scale action coordinates"
+        )
+
+    origin = desktop_capture.get("origin")
+    if not isinstance(origin, (list, tuple)) or len(origin) != 2:
+        raise ValueError(
+            "desktop-capture metadata origin must be a two-integer pixel pair"
+        )
+    parsed_origin = [
+        _exact_integer(origin[0], "origin[0]"),
+        _exact_integer(origin[1], "origin[1]"),
+    ]
+
+    viewport = desktop_capture.get("viewport")
+    if not _is_viewport(viewport):
+        raise ValueError(
+            "desktop-capture metadata viewport must be two positive integer pixels"
+        )
+    parsed_viewport = [int(viewport[0]), int(viewport[1])]
+
+    monitor_count = _exact_integer(
+        desktop_capture.get("monitor_count"), "monitor_count", positive=True
+    )
+    monitors = desktop_capture.get("monitors")
+    if not isinstance(monitors, (list, tuple)):
+        raise ValueError("desktop-capture metadata monitors must be an array")
+    if len(monitors) != monitor_count:
+        raise ValueError(
+            "desktop-capture metadata monitor_count does not match the number "
+            "of monitor rectangles"
+        )
+
+    parsed_monitors: list[list[int]] = []
+    for index, monitor in enumerate(monitors):
+        if not isinstance(monitor, (list, tuple)) or len(monitor) != 4:
+            raise ValueError(
+                "desktop-capture metadata monitor rectangle "
+                f"{index} must be [left, top, width, height]"
+            )
+        parsed_monitors.append(
+            [
+                _exact_integer(monitor[0], f"monitors[{index}][0]"),
+                _exact_integer(monitor[1], f"monitors[{index}][1]"),
+                _exact_integer(monitor[2], f"monitors[{index}][2]", positive=True),
+                _exact_integer(monitor[3], f"monitors[{index}][3]", positive=True),
+            ]
+        )
+
+    left, top = parsed_origin
+    width, height = parsed_viewport
+    right = left + width
+    bottom = top + height
+    for index, (monitor_left, monitor_top, monitor_width, monitor_height) in enumerate(
+        parsed_monitors
+    ):
+        if not (
+            left <= monitor_left
+            and top <= monitor_top
+            and monitor_left + monitor_width <= right
+            and monitor_top + monitor_height <= bottom
+        ):
+            raise ValueError(
+                "desktop-capture metadata monitor rectangle "
+                f"{index} falls outside the declared virtual-desktop viewport"
+            )
+
+    topology_bounds = [
+        min(monitor[0] for monitor in parsed_monitors),
+        min(monitor[1] for monitor in parsed_monitors),
+        max(monitor[0] + monitor[2] for monitor in parsed_monitors),
+        max(monitor[1] + monitor[3] for monitor in parsed_monitors),
+    ]
+    if topology_bounds != [left, top, right, bottom]:
+        raise ValueError(
+            "desktop-capture metadata monitor rectangles do not span the "
+            "declared virtual-desktop origin and viewport"
+        )
+
+    return {
+        "coordinate_space": DESKTOP_PIXEL_SPACE,
+        "origin": parsed_origin,
+        "viewport": parsed_viewport,
+        "monitor_count": monitor_count,
+        "monitors": parsed_monitors,
+    }
+
+
+def _validate_window_normalization(
+    state: dict[str, Any], output_viewport: tuple[int, int]
+) -> None:
+    """Validate optional resize-normalization metadata from current Capture.
+
+    Older window sessions do not have these fields. Current sessions retain all
+    three so a changed native source viewport remains auditable while actions
+    and frames stay in one fixed, letterboxed output viewport.
+    """
+    fields = ("source_viewport", "content_rect", "fit_scale")
+    present = [field in state for field in fields]
+    if not any(present):
+        return
+    if not all(present):
+        raise ValueError(
+            "window-scoped capture contains incomplete resize-normalization "
+            "metadata; source_viewport, content_rect, and fit_scale must occur "
+            "together"
+        )
+
+    source_viewport = state["source_viewport"]
+    if not _is_viewport(source_viewport):
+        raise ValueError("window-scoped capture contains an invalid source_viewport")
+    content_rect = state["content_rect"]
+    if not isinstance(content_rect, (list, tuple)) or len(content_rect) != 4:
+        raise ValueError(
+            "window-scoped capture content_rect must be [left, top, width, height]"
+        )
+    try:
+        rect = tuple(
+            _exact_integer(value, f"content_rect[{index}]", positive=index >= 2)
+            for index, value in enumerate(content_rect)
+        )
+    except ValueError as exc:
+        raise ValueError(
+            "window-scoped capture contains an invalid content_rect"
+        ) from exc
+    rect_left, rect_top, rect_width, rect_height = rect
+    output_width, output_height = output_viewport
+    if (
+        rect_left < 0
+        or rect_top < 0
+        or rect_left + rect_width > output_width
+        or rect_top + rect_height > output_height
+    ):
+        raise ValueError(
+            "window-scoped capture content_rect falls outside the fixed output viewport"
+        )
+    fit_scale = state["fit_scale"]
+    if (
+        not isinstance(fit_scale, (int, float))
+        or isinstance(fit_scale, bool)
+        or not math.isfinite(fit_scale)
+        or fit_scale <= 0
+    ):
+        raise ValueError("window-scoped capture fit_scale must be finite and positive")
+
+    source_width, source_height = int(source_viewport[0]), int(source_viewport[1])
+    expected_scale = min(output_width / source_width, output_height / source_height)
+    expected_width = max(1, min(output_width, round(source_width * expected_scale)))
+    expected_height = max(1, min(output_height, round(source_height * expected_scale)))
+    expected_rect = (
+        (output_width - expected_width) // 2,
+        (output_height - expected_height) // 2,
+        expected_width,
+        expected_height,
+    )
+    if not math.isclose(float(fit_scale), expected_scale) or rect != expected_rect:
+        raise ValueError(
+            "window-scoped capture resize-normalization metadata does not match "
+            "the declared source and fixed output viewports"
+        )
+
+
+def _window_viewport_timeline(
+    session: "CaptureSession", window_capture: dict[str, Any]
+) -> list[tuple[float, tuple[int, int]]]:
+    """Time-ordered ``(timestamp, (width, height))`` of the captured frame size.
+
+    Starts with the fixed output viewport captured before the input listeners
+    start, then validates the recording's bounds-timeline window events.
+    Capture appends one whenever the resolved window's bounds/title change.
+    ``state["viewport"]`` remains the fixed encoded frame size. Current Capture
+    also retains the changing ``source_viewport`` and its scale-to-fit,
+    letterbox mapping. Read through a public ``session.window_events`` accessor
+    when available, else through the session's underlying recording model.
+
+    Raises:
+        ValueError: When the initial viewport is absent or malformed, a
+            window-capture timeline row is malformed, or the encoded output
+            viewport changes during the recording.
+    """
+    initial = window_capture.get("viewport")
+    if not _is_viewport(initial):
+        raise ValueError(
+            "window-scoped capture session carries no valid initial "
+            "captured-frame viewport; out-of-window input and extracted frame "
+            "sizes cannot be verified, so the session cannot be converted "
+            "safely — re-record with a capture version that persists the "
+            "window viewport"
+        )
+    initial_size = (int(initial[0]), int(initial[1]))
+    _validate_window_normalization(window_capture, initial_size)
+    # The snapshot is taken after capture's initial frame and before input
+    # listeners start, so it is the only safe viewport for an action whose
+    # timestamp precedes the first persisted timeline row.
+    entries: list[tuple[float, tuple[int, int]]] = [(float("-inf"), initial_size)]
+    rows: Any = getattr(session, "window_events", None)
+    if callable(rows):
+        rows = rows()
+    if rows is None:
+        rows = getattr(getattr(session, "_recording", None), "window_events", None)
+    for row in rows or []:
+        state = getattr(row, "state", None)
+        if not isinstance(state, dict) or "window_capture" not in state:
+            continue
+        if state["window_capture"] is not True:
+            raise ValueError(
+                "window-scoped capture contains a bounds-timeline row with "
+                "a non-boolean window_capture marker"
+            )
+        ts = getattr(row, "timestamp", None)
+        viewport = state.get("viewport")
+        if ts is None:
+            raise ValueError(
+                "window-scoped capture contains a bounds-timeline row with "
+                "no timestamp; viewport history cannot be established safely"
+            )
+        try:
+            parsed_ts = float(ts)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "window-scoped capture contains a bounds-timeline row with "
+                f"invalid timestamp {ts!r}; viewport history cannot be "
+                "established safely"
+            ) from exc
+        if not math.isfinite(parsed_ts) or not _is_viewport(viewport):
+            raise ValueError(
+                "window-scoped capture contains a malformed bounds-timeline "
+                "row (timestamp and viewport must be finite, positive pixel "
+                "values); viewport history cannot be established safely"
+            )
+        size = (int(viewport[0]), int(viewport[1]))
+        if size != initial_size:
+            raise ValueError(
+                "window-scoped capture changed its fixed output viewport from "
+                f"{initial_size[0]}x{initial_size[1]} to {size[0]}x{size[1]}; "
+                "Capture media and Flow recordings each require one encoded "
+                "viewport, so conversion cannot prove the coordinate space"
+            )
+        _validate_window_normalization(state, initial_size)
+        entries.append((parsed_ts, size))
+    entries.sort(key=lambda entry: entry[0])
+    return entries
+
+
+def _reject_out_of_window(
+    actions: "list[Action]",
+    timeline: list[tuple[float, tuple[int, int]]],
+    *,
+    scope: str = "window-scoped",
+    boundary_error: str = "out-of-window input",
+) -> None:
+    """Refuse loudly on a mouse action outside a captured pixel viewport.
+
+    Window-scoped recording translates GLOBAL input into the captured frame's
+    pixel space *without clamping*, so input aimed at another window (or the
+    desktop) lands at out-of-range coordinates. Such an action cannot replay
+    faithfully inside the window: dropping it would silently lose a
+    demonstrated action, and keeping it would compile a wrong-target step —
+    so, per this module's loud-rejection policy, conversion refuses. Each
+    action is checked against the viewport in effect at its timestamp (the
+    latest bounds-timeline entry at or before it).
+    """
+    for action in actions:
+        if not action.type.startswith("mouse."):
+            continue
+        x, y = action.x, action.y
+        if x is None or y is None:
+            raise ValueError(
+                f"{scope} {action.type} carries no complete pointer "
+                "coordinates; its target window cannot be verified"
+            )
+        try:
+            parsed_x = float(x)
+            parsed_y = float(y)
+            ts = float(action.timestamp)
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                f"{scope} {action.type} carries non-numeric pointer "
+                "coordinates or timestamp; its target window cannot be verified"
+            ) from exc
+        if not all(math.isfinite(value) for value in (parsed_x, parsed_y, ts)):
+            raise ValueError(
+                f"{scope} {action.type} carries non-finite pointer "
+                "coordinates or timestamp; its target window cannot be verified"
+            )
+        points = [
+            (
+                parsed_x,
+                parsed_y,
+                "start" if action.type == "mouse.drag" else "",
+            )
+        ]
+        if action.type == "mouse.drag":
+            dx, dy = action.dx, action.dy
+            try:
+                parsed_dx = float(dx)
+                parsed_dy = float(dy)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(
+                    f"{scope} mouse.drag carries a non-numeric destination"
+                ) from exc
+            if not all(math.isfinite(value) for value in (parsed_dx, parsed_dy)):
+                raise ValueError(f"{scope} mouse.drag carries a non-finite destination")
+            points.append((parsed_x + parsed_dx, parsed_y + parsed_dy, "destination"))
+        active_size: Optional[tuple[int, int]] = None
+        for entry_ts, size in timeline:
+            if entry_ts <= ts:
+                active_size = size
+            else:
+                break
+        if active_size is None:
+            raise ValueError(
+                f"{scope} {action.type} at t={ts:.3f} precedes every "
+                "known viewport sample; its coordinate space cannot be "
+                "verified safely"
+            )
+        width, height = active_size
+        for point_x, point_y, point_name in points:
+            emitted_x = int(round(point_x))
+            emitted_y = int(round(point_y))
+            point_suffix = f" {point_name}" if point_name else ""
+            if not (
+                0 <= point_x < width
+                and 0 <= point_y < height
+                and 0 <= emitted_x < width
+                and 0 <= emitted_y < height
+            ):
+                raise ValueError(
+                    f"{boundary_error}: {action.type}{point_suffix} at "
+                    f"({point_x:.3f}, {point_y:.3f}) "
+                    f"(t={ts:.3f}) falls outside the captured {scope} viewport "
+                    f"{width}x{height}, or rounds outside it as "
+                    f"({emitted_x}, {emitted_y}); it has no corresponding "
+                    "captured pixel, so converting it would compile a "
+                    "wrong-target step"
+                )
+
+
+def _window_selectors(
+    window_capture: dict[str, Any],
+) -> tuple[Optional[str], Optional[str], Optional[str], Optional[str]]:
+    """Validate target/resolved owner and title metadata.
+
+    These strings become replay selector hints. Refuse malformed or empty
+    values instead of serializing arbitrary JSON types into a backend config.
+    """
+
+    def selector(value: Any, field: str) -> Optional[str]:
+        if value is None:
+            return None
+        if not isinstance(value, str) or not value.strip():
+            raise ValueError(
+                f"window-scoped capture metadata {field} must be a non-empty "
+                "string or null"
+            )
+        return value
+
+    target_value = window_capture.get("target")
+    if target_value is None:
+        target: dict[str, Any] = {}
+    elif isinstance(target_value, dict):
+        target = target_value
+    else:
+        raise ValueError(
+            "window-scoped capture metadata target must be an object with "
+            "optional owner/title strings"
+        )
+
+    target_owner = selector(target.get("owner"), "target.owner")
+    target_title = selector(target.get("title"), "target.title")
+    resolved_owner = selector(window_capture.get("owner"), "owner")
+    resolved_title = selector(window_capture.get("title"), "title")
+    owner = target_owner
+    title = target_title
+    if owner is None and title is None:
+        owner = resolved_owner
+        title = resolved_title
+    if owner is None and title is None:
+        raise ValueError(
+            "window-scoped capture metadata contains no valid target owner or "
+            "title; replay could not resolve the recorded window"
+        )
+    return owner, title, resolved_owner, resolved_title
+
+
+def _window_identity_int(value: Any) -> Optional[int]:
+    """Coerce a resolved-window identity field (pid / window id) to ``int``.
+
+    Capture's snapshot stores these as ints, but the persisted config fallback
+    can round-trip them as int-valued strings. Non-numeric/absent values yield
+    ``None`` (the field is simply omitted from meta.json) rather than raising —
+    a missing OS handle must not fail an otherwise-valid conversion.
+    """
+    if value is None or isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str) and value.strip().lstrip("-").isdigit():
+        return int(value)
+    return None
+
+
+def _capture_structural_locator(action: "Action") -> Optional[dict[str, str]]:
+    """Map a Capture Windows UIA observation to Flow's locator contract.
+
+    Unknown or malformed observation versions stay optional instead of being
+    guessed into a target. Capture's friendly-class ``role`` is intentionally
+    ignored: Flow's Windows resolver expects lowercase ARIA-style roles, which
+    are derived from the native UIA ``control_type`` through the same mapping
+    used by :class:`~openadapt_flow.backends.windows_backend.WindowsBackend`.
+    """
+
+    observation = getattr(action, "structural_observation", None)
+    if observation is None:
+        return None
+    if hasattr(observation, "model_dump"):
+        try:
+            observation = observation.model_dump(mode="json", exclude_none=True)
+        except Exception:
+            return None
+    if not isinstance(observation, dict):
+        return None
+    if (
+        observation.get("schema_version") != _CAPTURE_STRUCTURAL_SCHEMA
+        or observation.get("provider") != "windows_uia"
+        or observation.get("query_kind") != "point"
+    ):
+        return None
+
+    raw_element = observation.get("element")
+    if not isinstance(raw_element, dict):
+        return None
+
+    # Capture observes the exact element under the pointer. Common Windows
+    # controls expose a non-actionable Text child inside the actionable Button,
+    # Edit, or selection control. Use the nearest supported actionable node,
+    # matching WindowsBackend.structural_locator_at instead of compiling a
+    # child handle that the native actuator cannot safely invoke.
+    raw_ancestry = observation.get("ancestry")
+    candidates = [raw_element]
+    if isinstance(raw_ancestry, list):
+        candidates.extend(item for item in raw_ancestry if isinstance(item, dict))
+    selected: Optional[dict[str, Any]] = None
+    role: Optional[str] = None
+    for candidate in candidates:
+        control_type = candidate.get("control_type")
+        candidate_role = (
+            _WINDOWS_CONTROL_TYPE_TO_ROLE.get(control_type)
+            if isinstance(control_type, str)
+            else None
+        )
+        automation_id = candidate.get("automation_id")
+        name = candidate.get("name")
+        if candidate_role is not None and (
+            (isinstance(automation_id, str) and automation_id.strip())
+            or (isinstance(name, str) and name.strip())
+        ):
+            selected = candidate
+            role = candidate_role
+            break
+    if selected is None or role is None:
+        return None
+
+    automation_id = selected.get("automation_id")
+    name = selected.get("name")
+    window = observation.get("window")
+    window_name = window.get("title") if isinstance(window, dict) else None
+
+    locator = {
+        key: value.strip()
+        for key, value in {
+            "automation_id": automation_id,
+            "role": role,
+            "name": name,
+            "window_name": window_name,
+        }.items()
+        if isinstance(value, str) and value.strip()
+    }
+    if "automation_id" not in locator and not ("role" in locator and "name" in locator):
+        return None
+    return locator
+
+
+def _flow_events(
+    actions: "list[Action]",
+    scale: float,
+    value_to_param: dict[str, str],
+    *,
+    include_structural: bool = True,
+) -> list[dict[str, Any]]:
+    """Convert capture ``Action``s into ordered flow event dicts.
+
+    Each returned dict carries the flow event fields plus a private ``_ts``
+    (the source wall-clock timestamp, used later for frame selection). Runs of
+    character ``key.type`` actions are coalesced into a single ``type`` event.
+
+    Raises:
+        ValueError: On malformed or still-unsupported input (for example a
+            non-primary drag, unmapped named key, or unknown input type) rather
+            than silently dropping a demonstrated action.
+    """
+    events: list[dict[str, Any]] = []
+    # A run of typed characters, buffered so the compiler sees one ``type``
+    # event per typed value (capture emits one key.type per key-release burst).
+    text_run: dict[str, Any] = {"chars": [], "ts": None}
+
+    def flush_text() -> None:
+        if not text_run["chars"]:
+            return
+        text = "".join(text_run["chars"])
+        line: dict[str, Any] = {
+            "kind": "type",
+            "text": text,
+            "_ts": text_run["ts"],
+        }
+        if text in value_to_param:
+            line["param"] = value_to_param[text]
+        events.append(line)
+        text_run["chars"] = []
+        text_run["ts"] = None
+
+    for action in actions:
+        atype = action.type
+        ts = float(action.timestamp)
+
+        if atype in ("mouse.singleclick", "mouse.doubleclick"):
+            flush_text()
+            button = action.button or "left"
+            if button == "right" and atype == "mouse.singleclick":
+                kind = "right_click"
+            elif button == "left":
+                kind = "click" if atype == "mouse.singleclick" else "double_click"
+            else:
+                raise ValueError(
+                    f"{atype} with button={button!r} is not a supported governed "
+                    f"pointer action (t={ts:.3f})"
+                )
+            event = {
+                "kind": kind,
+                "x": int(round((action.x or 0.0) * scale)),
+                "y": int(round((action.y or 0.0) * scale)),
+                "_ts": ts,
+            }
+            structural = (
+                _capture_structural_locator(action) if include_structural else None
+            )
+            if structural is not None:
+                event["structural"] = structural
+            events.append(event)
+        elif atype == "mouse.scroll":
+            flush_text()
+            # pynput: notches, +dy = scroll up. Flow: pixels, +dy = view down.
+            events.append(
+                {
+                    "kind": "scroll",
+                    "dx": int(round((action.dx or 0.0) * SCROLL_PIXELS_PER_NOTCH)),
+                    "dy": int(round(-(action.dy or 0.0) * SCROLL_PIXELS_PER_NOTCH)),
+                    "_ts": ts,
+                }
+            )
+        elif atype == "mouse.drag":
+            flush_text()
+            button = action.button or "left"
+            if button != "left":
+                raise ValueError(
+                    f"mouse.drag with button={button!r} is not a supported "
+                    f"governed drag (t={ts:.3f})"
+                )
+            if None in (action.x, action.y, action.dx, action.dy):
+                raise ValueError(f"mouse.drag at t={ts:.3f} has incomplete endpoints")
+            start_x = float(action.x)
+            start_y = float(action.y)
+            event = {
+                "kind": "drag",
+                "x": int(round(start_x * scale)),
+                "y": int(round(start_y * scale)),
+                "end_x": int(round((start_x + float(action.dx)) * scale)),
+                "end_y": int(round((start_y + float(action.dy)) * scale)),
+                "_ts": ts,
+            }
+            structural = (
+                _capture_structural_locator(action) if include_structural else None
+            )
+            if structural is not None:
+                event["structural"] = structural
+            events.append(event)
+        elif atype == "key.type":
+            _convert_key_type(action, ts, events, text_run, flush_text)
+        elif atype == "key.shortcut":
+            flush_text()
+            keys = list(action.keys or [])
+            if len(keys) < 2:
+                raise ValueError(
+                    f"key.shortcut at t={ts:.3f} has no modifier and trigger"
+                )
+            modifiers = [str(value).strip().lower() for value in keys[:-1]]
+            trigger = str(keys[-1]).strip()
+            if (
+                not trigger
+                or not modifiers
+                or any(
+                    value not in {"ctrl", "alt", "shift", "meta"} for value in modifiers
+                )
+                or len(set(modifiers)) != len(modifiers)
+            ):
+                raise ValueError(
+                    f"key.shortcut at t={ts:.3f} has malformed keys {keys!r}"
+                )
+            events.append(
+                {
+                    "kind": "hotkey",
+                    "modifiers": modifiers,
+                    "key": trigger,
+                    "_ts": ts,
+                }
+            )
+        elif atype == "mouse.move":
+            continue  # defensive: include_moves=False already filters these
+        elif atype.startswith(("mouse.", "key.")):
+            raise ValueError(
+                f"unknown input action type {atype!r} (t={ts:.3f}); extend the "
+                "adapter before converting"
+            )
+        else:
+            continue  # non-input auxiliary action; safely ignored
+
+    flush_text()
+    return events
+
+
+def _convert_key_type(
+    action: "Action",
+    ts: float,
+    events: list[dict[str, Any]],
+    text_run: dict[str, Any],
+    flush_text: Callable[[], None],
+) -> None:
+    """Handle one ``key.type`` action: accumulate text, or emit a key event.
+
+    capture merges all keyboard input into ``key.type`` actions. This routes
+    each one:
+
+      * legacy modifier chord encoded as ``key.type`` -> reject (current
+        Capture emits the lossless ``key.shortcut`` action instead);
+      * non-empty ``.text`` -> typed characters, accumulated into ``text_run``
+        (spaces and shifted characters included);
+      * empty ``.text`` with a single named special key -> flow ``key`` event;
+      * bare modifier press -> skipped (no workflow meaning on its own).
+    """
+    keys = list(action.keys or [])
+    mods = [k for k in keys if k in _MODIFIER_KEY_NAMES]
+    non_mods = [k for k in keys if k not in _MODIFIER_KEY_NAMES]
+    if non_mods and any(k in _CHORD_MODIFIER_NAMES for k in mods):
+        raise ValueError(
+            f"keyboard shortcut {'+'.join(keys)!r} has no flow equivalent "
+            f"(t={ts:.3f}); converting would silently drop a user action"
+        )
+
+    if action.text:
+        # Literal typed characters (a shifted character carries shift in .keys
+        # but is still just text). Accumulated into the run buffer.
+        if not text_run["chars"]:
+            text_run["ts"] = ts
+        text_run["chars"].append(action.text)
+        return
+
+    # Empty text: a named special key press (Enter/Tab/...) or a bare modifier.
+    if not non_mods:
+        return  # bare modifier press: nothing to emit, do not break a text run
+    if len(non_mods) != 1:
+        raise ValueError(
+            f"key.type action with multiple named keys {non_mods!r} has no "
+            f"flow equivalent (t={ts:.3f})"
+        )
+    name = non_mods[0]
+    mapped = _KEY_NAME_MAP.get(name.lower())
+    if mapped is None:
+        raise ValueError(f"unmapped key {name!r} at t={ts:.3f}; extend _KEY_NAME_MAP")
+    flush_text()
+    events.append({"kind": "key", "key": mapped, "_ts": ts})
+
+
+def _write_png(path: Path, image: "Image") -> None:
+    """Write a PIL frame to ``path`` as PNG."""
+    image.save(path, format="PNG")
+
+
+def convert_capture(
+    capture_dir: Path | str,
+    out_recording_dir: Path | str,
+    *,
+    params: Optional[dict[str, str]] = None,
+    settle_s: float = 1.0,
+    include_structural: bool = False,
+) -> Path:
+    """Convert an openadapt-capture session into a flow recording directory.
+
+    Consumes a real openadapt-capture session through its public API
+    (``CaptureSession.load(dir).actions()``) and writes a compile-ready
+    recording (``meta.json`` + ``events.jsonl`` + ``frames/``).
+
+    A WINDOW-SCOPED session (``CaptureSession.window_capture`` not None; see
+    the module docstring) is converted in its own pixel space: coordinates
+    pass through unscaled (they are already captured-frame pixels), the
+    viewport/timeline/frame-size contract is verified, every mouse action is
+    screened against it (an out-of-window action refuses conversion), and the
+    output ``meta.json`` additionally carries ``window_capture`` provenance.
+    The orchestration layer adds replay hints only when the operator selected
+    an RDP or Citrix surface. A window alone does not prove that the captured
+    surface is remote.
+
+    A current FULL-SCREEN session with ``CaptureSession.desktop_capture`` is
+    also converted in its already-normalized frame pixel space. Its validated,
+    privacy-safe virtual-desktop geometry is retained as ``desktop_capture``
+    provenance. Legacy full-screen sessions have neither scope marker and keep
+    the historical ``pixel_ratio`` conversion.
+
+    Args:
+        capture_dir: An openadapt-capture session directory (contains
+            ``recording.db`` and frame media readable through
+            ``CaptureSession.get_frame_at``).
+        out_recording_dir: Output recording directory (created if missing).
+        params: Optional ``{param_name: demonstrated_value}`` map. A coalesced
+            ``type`` event whose text equals a demonstrated value is marked as
+            that parameter (the compiler then treats it as per-run input and
+            lints against value leakage).
+        settle_s: Seconds after each action at which the *after* frame is
+            sampled (clamped to just before the next event).
+        include_structural: Whether versioned native accessibility observations
+            may be promoted into Flow structural locators. ``True`` is used by
+            native Windows recording and ``False`` by external black-box
+            RDP/Citrix recording, whose local UIA tree describes only the
+            remote-client canvas. Direct conversion defaults to ``False``
+            because a capture directory alone does not prove which substrate
+            was recorded.
+
+    Returns:
+        The recording directory path (compile-ready).
+
+    Raises:
+        ImportError: If the optional ``capture`` extra (openadapt-capture) is
+            not installed.
+        FileNotFoundError: If ``capture_dir`` is not a valid capture session
+            (no ``recording.db``) — raised by ``CaptureSession.load``.
+        ValueError: On a session with no convertible actions, an action with no
+            flow equivalent (drag, non-left click, modifier chord, unmapped
+            named key, unknown input type), multiple params demonstrating the
+            same value, or a click whose before frame is missing from the
+            captured frame timeline. Also, for a window-scoped session: on an
+            out-of-window action, an unknown declared coordinate space,
+            malformed selector/viewport metadata, a changed encoded output
+            viewport, or an extracted frame whose dimensions disagree with the
+            recorded viewport. For a current full-screen session: on malformed
+            or conflicting desktop topology, an unknown coordinate space, an
+            out-of-desktop action, or a frame-size disagreement. These cases
+            refuse loudly instead of mis-converting.
+    """
+    CaptureSession = _require_capture()
+    capture_dir = Path(capture_dir)
+    out_dir = Path(out_recording_dir)
+
+    params = dict(params or {})
+    value_to_param: dict[str, str] = {}
+    for name, value in params.items():
+        if value in value_to_param:
+            raise ValueError(
+                f"params {value_to_param[value]!r} and {name!r} demonstrate "
+                "the same value; parameter marking would be ambiguous"
+            )
+        value_to_param[value] = name
+
+    session = CaptureSession.load(capture_dir)
+    try:
+        window_capture = _window_capture_meta(session)
+        desktop_capture = _desktop_capture_meta(session)
+        if window_capture is not None and desktop_capture is not None:
+            raise ValueError(
+                "capture session declares both window and desktop capture "
+                "metadata; its action coordinate space is ambiguous"
+            )
+        window_selectors: Optional[
+            tuple[Optional[str], Optional[str], Optional[str], Optional[str]]
+        ] = None
+        desktop_provenance: Optional[dict[str, Any]] = None
+        if window_capture is not None:
+            space = window_capture.get("coordinate_space")
+            if space != WINDOW_PIXEL_SPACE:
+                raise ValueError(
+                    "window-scoped capture session declares "
+                    f"coordinate_space={space!r}, which this adapter does not "
+                    f"understand (expected {WINDOW_PIXEL_SPACE!r}); converting "
+                    "it could silently mis-scale action coordinates — upgrade "
+                    "openadapt-flow to a version that supports this session's "
+                    "coordinate space"
+                )
+            window_selectors = _window_selectors(window_capture)
+            # Window mode: coordinates were translated at capture time into
+            # the captured frame's pixel space. Applying pixel_ratio here
+            # would DOUBLE-scale them; frames are already the window viewport.
+            scale = 1.0
+        elif desktop_capture is not None:
+            desktop_provenance = _validated_desktop_capture(desktop_capture)
+            # Current full-screen mode translates global input into the
+            # combined MSS frame before persistence. Applying pixel_ratio here
+            # would double-scale it, including points on secondary monitors.
+            scale = 1.0
+        else:
+            scale = float(session.pixel_ratio or 1.0)
+        actions = list(session.actions(include_moves=False))
+        scoped_viewport: Optional[tuple[int, int]] = None
+        scope_label: Optional[str] = None
+        if window_capture is not None:
+            timeline = _window_viewport_timeline(session, window_capture)
+            _reject_out_of_window(actions, timeline)
+            scoped_viewport = timeline[0][1]
+            scope_label = "window-scoped"
+        elif desktop_provenance is not None:
+            desktop_viewport = desktop_provenance["viewport"]
+            scoped_viewport = (desktop_viewport[0], desktop_viewport[1])
+            _reject_out_of_window(
+                actions,
+                [(float("-inf"), scoped_viewport)],
+                scope="virtual-desktop",
+                boundary_error="out-of-desktop input",
+            )
+            scope_label = "virtual-desktop"
+        events = _flow_events(
+            actions,
+            scale,
+            value_to_param,
+            include_structural=include_structural,
+        )
+        if not events:
+            raise ValueError(
+                "capture session produced no convertible actions "
+                f"({len(actions)} raw actions); nothing to compile"
+            )
+
+        started_at = float(session.started_at)
+        frames_dir = out_dir / "frames"
+        frames_dir.mkdir(parents=True, exist_ok=True)
+
+        used_params: dict[str, str] = {}
+        viewport: Optional[list[int]] = None
+        lines: list[str] = []
+
+        for i, event in enumerate(events):
+            ts = float(event["_ts"])
+            before_img = session.get_frame_at(ts, tolerance=FRAME_TOLERANCE_S)
+            t_after = ts + settle_s
+            if i + 1 < len(events):
+                t_after = min(t_after, float(events[i + 1]["_ts"]))
+            after_img = session.get_frame_at(t_after, tolerance=FRAME_TOLERANCE_S)
+
+            if scoped_viewport is not None:
+                assert scope_label is not None
+                for label, image in (("before", before_img), ("after", after_img)):
+                    if image is not None and image.size != scoped_viewport:
+                        raise ValueError(
+                            f"{scope_label} {label} frame for event {i} is "
+                            f"{image.width}x{image.height}, but the recorded "
+                            "viewport is "
+                            f"{scoped_viewport[0]}x{scoped_viewport[1]}; "
+                            "coordinates and visual evidence are not in one "
+                            "verified pixel space"
+                        )
+            if event["kind"] in ("click", "double_click") and before_img is None:
+                raise ValueError(
+                    f"no captured frame available for {event['kind']} at "
+                    f"t={ts - started_at:.3f}s: capture has no frame near "
+                    "this action, so its target cannot be "
+                    "anchored"
+                )
+            if before_img is not None:
+                _write_png(frames_dir / f"{i:04d}_before.png", before_img)
+                if viewport is None:
+                    viewport = [before_img.width, before_img.height]
+            if after_img is not None:
+                _write_png(frames_dir / f"{i:04d}_after.png", after_img)
+                if viewport is None:
+                    viewport = [after_img.width, after_img.height]
+
+            if "param" in event:
+                used_params[event["param"]] = event["text"]
+
+            line: dict[str, Any] = {"i": i}
+            line.update({k: v for k, v in event.items() if k != "_ts"})
+            line["t"] = round(ts - started_at, 3)
+            lines.append(json.dumps(line))
+
+        (out_dir / "events.jsonl").write_text("\n".join(lines) + "\n")
+
+        meta: dict[str, Any] = {
+            "id": uuid.uuid4().hex,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+            "viewport": viewport,
+            "app_url": None,
+            "params": used_params,
+            "source": "openadapt-capture",
+            "task_description": session.task_description,
+        }
+        # Name the space every recorded x/y is in, so a consumer fails closed
+        # instead of assuming. Window and desktop scope are mutually exclusive
+        # (a session carrying both is refused above). A session that declares
+        # neither leaves the key absent, which means the space is undeclared.
+        if window_capture is not None:
+            meta["coordinate_space"] = WINDOW_PIXEL_SPACE
+        elif desktop_provenance is not None:
+            meta["coordinate_space"] = DESKTOP_PIXEL_SPACE
+        if window_capture is not None:
+            # Additive window provenance (the compiler ignores unknown
+            # meta.json keys; a non-window session's meta is unchanged).
+            # Do not infer an RDP backend from window scope. Native Windows and
+            # macOS recordings use the same Capture primitive. The desktop
+            # orchestration layer adds exact replay hints only for an explicit
+            # RDP or Citrix recording.
+            assert window_selectors is not None
+            owner, title, resolved_owner, resolved_title = window_selectors
+            meta["window_capture"] = {
+                "coordinate_space": WINDOW_PIXEL_SPACE,
+                "target_owner": owner,
+                "target_title": title,
+                "resolved_owner": resolved_owner,
+                "resolved_title": resolved_title,
+            }
+            # Additive resolved-window IDENTITY (provenance for the LOCAL
+            # recording; these stay out of any report rail — a window title/pid
+            # can carry PHI). ``window_id`` is the OS handle (macOS
+            # kCGWindowNumber / Windows HWND) capture resolved the target to.
+            resolved_pid = _window_identity_int(window_capture.get("pid"))
+            resolved_window_id = _window_identity_int(window_capture.get("window_id"))
+            if resolved_pid is not None:
+                meta["window_capture"]["resolved_pid"] = resolved_pid
+            if resolved_window_id is not None:
+                meta["window_capture"]["resolved_window_id"] = resolved_window_id
+        elif desktop_provenance is not None:
+            meta["desktop_capture"] = desktop_provenance
+        (out_dir / "meta.json").write_text(json.dumps(meta, indent=2))
+        return out_dir
+    finally:
+        session.close()

@@ -1,0 +1,103 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://openadapt.ai/schemas/sanitized-artifact-manifest-v1.json",
+  "title": "OpenAdapt sanitized artifact manifest v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "policy_version",
+    "scrubber_version",
+    "created_at",
+    "source_name_sha256",
+    "kind",
+    "source_file_count",
+    "processed_file_count",
+    "coverage_complete",
+    "source_tree_sha256",
+    "derivative_tree_sha256",
+    "execution_semantics",
+    "runtime_semantics_validated",
+    "trusted_boundary_required_at_runtime",
+    "review_required",
+    "residual_findings",
+    "files",
+    "limitations"
+  ],
+  "properties": {
+    "schema_version": { "const": 1 },
+    "policy_version": { "type": "string", "minLength": 1 },
+    "scrubber_version": { "type": "string", "minLength": 1 },
+    "created_at": { "type": "string", "format": "date-time" },
+    "updated_at": { "type": "string", "format": "date-time" },
+    "source_name_sha256": { "$ref": "#/$defs/sha256" },
+    "approval_verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["verified_at", "method", "file_count", "unresolved"],
+      "properties": {
+        "verified_at": { "type": "string", "format": "date-time" },
+        "method": { "const": "full-stable-rescan" },
+        "file_count": { "type": "integer", "minimum": 1 },
+        "unresolved": { "const": 0 }
+      }
+    },
+    "kind": { "enum": ["recording", "bundle"] },
+    "source_file_count": { "type": "integer", "minimum": 1 },
+    "processed_file_count": { "type": "integer", "minimum": 1 },
+    "coverage_complete": { "const": true },
+    "source_tree_sha256": { "$ref": "#/$defs/sha256" },
+    "derivative_tree_sha256": { "$ref": "#/$defs/sha256" },
+    "execution_semantics": {
+      "enum": ["preserved", "requires-parameterization-validation", "not-preserved"]
+    },
+    "runtime_semantics_validated": { "type": "boolean" },
+    "trusted_boundary_required_at_runtime": { "type": "boolean" },
+    "review_required": { "type": "boolean" },
+    "residual_findings": {
+      "type": "array",
+      "items": { "type": "object" }
+    },
+    "files": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/$defs/file" }
+    },
+    "limitations": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "type": "string" }
+    }
+  },
+  "$defs": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "file": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "index",
+        "source_path_sha256",
+        "path",
+        "handler",
+        "source_sha256",
+        "derivative_sha256",
+        "changed",
+        "renamed",
+        "manual_redactions",
+        "verification"
+      ],
+      "properties": {
+        "index": { "type": "integer", "minimum": 0 },
+        "source_path_sha256": { "$ref": "#/$defs/sha256" },
+        "path": { "type": "string", "minLength": 1 },
+        "handler": { "enum": ["utf8-text", "image-ocr-redaction"] },
+        "source_sha256": { "$ref": "#/$defs/sha256" },
+        "derivative_sha256": { "$ref": "#/$defs/sha256" },
+        "changed": { "type": "boolean" },
+        "renamed": { "type": "boolean" },
+        "manual_redactions": { "type": "array", "items": { "type": "object" } },
+        "verification": { "const": "stable-second-pass" }
+      }
+    }
+  }
+}
