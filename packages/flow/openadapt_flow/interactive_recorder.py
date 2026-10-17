@@ -2280,6 +2280,10 @@ class InteractiveRecorder:
         self._init_js = ""
         self._pages_final = False
         self._pending_pages: list[Any] = []
+        # Attached browser: followed pages that already carry this session's
+        # binding and init script (an owned browser binds the whole context).
+        self._bound_followed_pages: list[Any] = []
+        self._attached_page_candidates: list[Any] = []
         self._privacy_cdp_by_page: list[tuple[Any, Any]] = []
         self._context_pages_at_start: tuple[Any, ...] = ()
         self._finalizing = False
@@ -2444,9 +2448,7 @@ class InteractiveRecorder:
                 self._recording_dir,
                 app_url=self._url,
                 system_of_record_reader=self._system_of_record_reader,
-                page_backend_factory=(
-                    self._surface_page_backend if self._owns_browser else None
-                ),
+                page_backend_factory=self._surface_page_backend,
                 **self._settle,
             )
             if self._owns_browser:
@@ -2857,8 +2859,20 @@ class InteractiveRecorder:
             self._retain_late_frame_error()
 
     def _handle_popup(self, _popup: Any = None) -> None:
-        """Refuse a second page that the selected recording tab opens."""
+        """Follow a popup the selected tab opens; refuse one after the end.
 
+        An attached tab's popup is followed like an owned browser's: it is
+        claimed as a surface by the recorded action that opened it. After the
+        final evidence is bound, any new page is refused.
+        """
+
+        if not self._finalizing and _popup is not None:
+            if not any(_popup is pending for pending in self._pending_pages):
+                self._pending_pages.append(_popup)
+            return
+        self._refuse_attached_new_page()
+
+    def _refuse_attached_new_page(self) -> None:
         self.done = True
         if self._listener_error is None:
             self._listener_error = BrowserAttachError(
@@ -2878,6 +2892,13 @@ class InteractiveRecorder:
 
         if self._owns_browser and not self._finalizing and _page is not None:
             self._pending_pages.append(_page)
+            return
+        if not self._owns_browser and not self._finalizing:
+            # Judged on the next drain (_assert_no_new_pages): a page one of
+            # the followed pages opened is followed, any other is refused,
+            # even one that already closed again.
+            if _page is not None:
+                self._attached_page_candidates.append(_page)
             return
         self.done = True
         if self._listener_error is None:
@@ -2970,14 +2991,93 @@ class InteractiveRecorder:
                 "the selected browser tab page inventory could not be read; "
                 "recording was refused"
             ) from exc
-        for candidate in current_pages:
-            if not any(
-                candidate is existing for existing in self._context_pages_at_start
-            ):
-                self._handle_popup(candidate)
+        candidates = list(current_pages)
+        for late in self._attached_page_candidates:
+            if not any(late is known for known in candidates):
+                candidates.append(late)
+        for candidate in candidates:
+            if any(candidate is existing for existing in self._context_pages_at_start):
+                continue
+            try:
+                closed = bool(candidate.is_closed())
+            except Exception:
+                closed = False  # unknown: judge it as an open page
+            if closed:
+                # A page that opened and closed between two drains is
+                # accounted for only when a followed page opened it.
+                if self._is_followed_page(candidate):
+                    continue
+                try:
+                    opener = candidate.opener()
+                except Exception:
+                    opener = None
+                if opener is not None and self._is_followed_page(opener):
+                    continue
+                self._refuse_attached_new_page()
                 break
+            if self._is_followed_page(candidate):
+                if (
+                    self._finalizing
+                    and self.recorder is not None
+                    and not self.recorder.knows_page(candidate)
+                ):
+                    # Still open at the end, and no recorded action opened it.
+                    self._refuse_attached_new_page()
+                    break
+                continue
+            if not self._finalizing and self._opened_by_followed_page(candidate):
+                self._pending_pages.append(candidate)
+                continue
+            self._refuse_attached_new_page()
+            break
         if self._listener_error is not None:
             raise self._listener_error
+
+    def _opened_by_followed_page(self, candidate: Any) -> bool:
+        """Attached browser: did one of the followed pages open ``candidate``?
+
+        ``window.opener`` answers for a popup. A ``noopener`` tab has none, but
+        the browser's target list still names the target that opened it. A
+        page with no such link (one the person opened by hand) is not
+        followed, so the recording is refused.
+        """
+
+        try:
+            opener = candidate.opener()
+        except Exception:
+            opener = None
+        if opener is not None:
+            return self._is_followed_page(opener)
+        opener_id = self._target_info(candidate).get("openerId")
+        if not opener_id:
+            return False
+        for page in self._followed_pages():
+            if page is candidate:
+                continue
+            if self._target_info(page).get("targetId") == opener_id:
+                return True
+        return False
+
+    @staticmethod
+    def _target_info(page: Any) -> dict[str, Any]:
+        """The DevTools target entry of ``page`` (empty when unreadable)."""
+
+        try:
+            if page.is_closed():
+                return {}
+            session = page.context.new_cdp_session(page)
+        except Exception:
+            return {}
+        try:
+            info = session.send("Target.getTargetInfo").get("targetInfo")
+            return dict(info) if isinstance(info, dict) else {}
+        except Exception:
+            return {}
+        finally:
+            try:
+                session.detach()
+            except Exception:
+                pass
 
     def _assert_pages_claimed(self) -> None:
         """Owned browser, at finish: every page must be a recorded surface."""
@@ -3010,9 +3110,9 @@ class InteractiveRecorder:
             raise self._listener_error
 
     def _is_followed_page(self, page: Any) -> bool:
-        """Owned browser: the start tab, a pending new page, or a surface."""
+        """The start tab, a pending new page, or a recorded surface."""
 
-        if not self._owns_browser or page is None:
+        if page is None:
             return False
         if page is self._primary_page:
             return True
@@ -3033,7 +3133,7 @@ class InteractiveRecorder:
         self._arm_followed_page(page)
         return PlaywrightBackend(
             page,
-            screenshot_scale="device",
+            screenshot_scale="device" if self._owns_browser else "css",
             screenshot_mask_selectors=_secret_screenshot_selectors(
                 self._secret_fields,
                 marker_attribute=self._secret_marker_attribute,
@@ -3072,8 +3172,44 @@ class InteractiveRecorder:
             except Exception:
                 continue
 
+    def _bind_attached_page(self, page: Any) -> None:
+        """Attached browser: give a followed popup this session's channel.
+
+        The selected tab carries the binding and init script on the PAGE (the
+        rest of the person's browser is left alone), so each popup or tab it
+        opens gets the same binding, script, and listener once.
+        """
+
+        if self._owns_browser or any(
+            page is bound for bound in self._bound_followed_pages
+        ):
+            return
+        self._bound_followed_pages.append(page)
+        try:
+            if page.is_closed():
+                return
+            page.expose_binding(
+                self._binding_name,
+                lambda source, detail: self._enqueue_browser_event(
+                    detail,
+                    source=source,
+                ),
+            )
+            page.add_init_script(self._init_js)
+        except Exception as exc:
+            try:
+                closed = page.is_closed()
+            except Exception:
+                closed = True
+            if closed:
+                return
+            raise BrowserAttachError(
+                "could not install the recording listener in a popup or tab "
+                "the selected tab opened; recording was refused"
+            ) from exc
+
     def _arm_followed_pages(self) -> None:
-        if not self._owns_browser or not self._init_js:
+        if not self._init_js:
             return
         pages = list(self._pending_pages)
         if self.recorder is not None:
@@ -3082,6 +3218,9 @@ class InteractiveRecorder:
                     getattr(self.recorder.surface_backend(surface_id), "page", None)
                 )
         for page in pages:
+            if page is None:
+                continue
+            self._bind_attached_page(page)
             self._arm_followed_page(page)
 
     def _follow_event_page(self, event: dict[str, Any]) -> None:
@@ -3093,7 +3232,7 @@ class InteractiveRecorder:
         """
 
         page = event.pop("_oaflow_page", None)
-        if page is None or page is self.page or not self._owns_browser:
+        if page is None or page is self.page:
             return
         self._flush_click()
         self._flush_type()
@@ -3134,12 +3273,17 @@ class InteractiveRecorder:
         self.recorder.switch_surface(
             surface_id, before_png=before, structural_before=structural_before
         )
-        self._advance()
+        if self._owns_browser:
+            self._advance()
+        else:
+            # Each attached page has its own CSS viewport: bind the new page's
+            # exact coordinate space and frame before its first action.
+            self._rebaseline_attached_viewport()
 
     def _active_page_closed(self) -> bool:
-        """Only a followed (non-primary) page of an owned browser may close."""
+        """Only a followed (non-primary) page may close during recording."""
 
-        if not self._owns_browser or self.page is self._primary_page:
+        if self.page is self._primary_page:
             return False
         try:
             return self.page is None or bool(self.page.is_closed())
@@ -3359,7 +3503,7 @@ class InteractiveRecorder:
             )
             self.done = True
             return
-        if self._owns_browser and source_page is not None:
+        if source_page is not None:
             # Which page the user acted in; _follow_event_page reads it.
             event["_oaflow_page"] = source_page
         self._pyq.append(event)
@@ -3458,13 +3602,7 @@ class InteractiveRecorder:
     def _cleanup_page_listeners(self) -> None:
         """Remove this session's current-document listeners before detach."""
 
-        if self.page is None:
-            return
-        try:
-            frames = list(self.page.frames)
-        except Exception:
-            frames = []
-        for frame in frames:
+        for frame in self._followed_frames():
             try:
                 frame.evaluate(
                     """sessionId => {
@@ -3485,13 +3623,7 @@ class InteractiveRecorder:
     def _cleanup_secret_markers(self) -> None:
         """Remove this session's temporary secret-mask attributes."""
 
-        if self.page is None:
-            return
-        try:
-            frames = list(self.page.frames)
-        except Exception:
-            frames = []
-        for frame in frames:
+        for frame in self._followed_frames():
             try:
                 frame.evaluate(
                     """([sessionId, marker]) => {
@@ -3520,6 +3652,32 @@ class InteractiveRecorder:
                 )
             except Exception:
                 continue
+
+    def _followed_pages(self) -> list[Any]:
+        """The active page, the start tab, and every followed popup or tab."""
+
+        pages: list[Any] = [self.page, self._primary_page, *self._pending_pages]
+        if self.recorder is not None:
+            for surface_id in getattr(self.recorder, "surface_ids", ()):
+                pages.append(
+                    getattr(self.recorder.surface_backend(surface_id), "page", None)
+                )
+        unique: list[Any] = []
+        for page in pages:
+            if page is not None and not any(page is seen for seen in unique):
+                unique.append(page)
+        return unique
+
+    def _followed_frames(self) -> list[Any]:
+        frames: list[Any] = []
+        for page in self._followed_pages():
+            try:
+                if page.is_closed():
+                    continue
+                frames.extend(page.frames)
+            except Exception:
+                continue
+        return frames
 
     def _stop_browser_connection(self) -> None:
         """Close an owned browser or detach without closing an external one."""
@@ -3552,8 +3710,8 @@ class InteractiveRecorder:
                 # Playwright connection has detached. They do not remain in
                 # Chromium after the connection closes.
                 tracked = [self.backend]
-                if self._owns_browser and self.recorder is not None:
-                    # Owned mode follows popups/tabs as surface backends.
+                if self.recorder is not None:
+                    # Popups and tabs are followed as surface backends.
                     tracked.extend(
                         self.recorder.surface_backend(surface_id)
                         for surface_id in getattr(self.recorder, "surface_ids", ())
@@ -3586,7 +3744,7 @@ class InteractiveRecorder:
         del self._pyq[:]
         self._validate_event_batch(batch)
         rebased = False
-        if not self._owns_browser:
+        if not self._owns_browser and not self._active_page_closed():
             current_geometry = self._read_attached_geometry()
             if self._viewport_dirty or current_geometry != self._attached_geometry:
                 if batch:
@@ -3598,6 +3756,9 @@ class InteractiveRecorder:
                 self._rebaseline_attached_viewport()
                 rebased = True
         for event in batch:
+            # A switch to another followed page comes first: the event's
+            # geometry belongs to the page it came from.
+            self._follow_event_page(event)
             if not self._owns_browser:
                 event_geometry = event.pop("_oaflow_geometry", None)
                 if event_geometry != self._attached_geometry:
@@ -3606,7 +3767,6 @@ class InteractiveRecorder:
                         "change; recording stopped because no exact pre-action "
                         "frame exists in the new coordinate space"
                     )
-            self._follow_event_page(event)
             self._process(event)
             # A binding callback can arrive while Playwright captures this
             # action's after-frame. Revalidate it against the action in flight
@@ -3614,9 +3774,13 @@ class InteractiveRecorder:
             # separate, falsely exact step. Same-field input and one scroll
             # batch remain safe to coalesce.
             self._validate_event_batch([event, *self._pyq])
-            if not self._owns_browser and (
-                self._viewport_dirty
-                or self._read_attached_geometry() != self._attached_geometry
+            if (
+                not self._owns_browser
+                and not self._active_page_closed()
+                and (
+                    self._viewport_dirty
+                    or self._read_attached_geometry() != self._attached_geometry
+                )
             ):
                 raise BrowserAttachError(
                     "the browser resized or changed monitor scale while an "

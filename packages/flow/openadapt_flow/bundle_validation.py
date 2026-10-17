@@ -231,6 +231,15 @@ _SEALED_CANONICAL_OMISSIONS_BY_VERSION: dict[
             ),
         ),
         _SealedCanonicalOmission(
+            owner=Step,
+            field_name="dialog",
+            omitted_values=(None,),
+            reason=(
+                "a step that raises no browser dialog is what every earlier "
+                "bundle held; a recorded dialog answer remains sealed content"
+            ),
+        ),
+        _SealedCanonicalOmission(
             owner=Effect,
             field_name="new_records",
             omitted_values=([],),

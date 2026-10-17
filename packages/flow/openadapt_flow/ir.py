@@ -1276,6 +1276,26 @@ def surface_contract_errors(workflow: "Workflow") -> list[str]:
     return errors
 
 
+class DialogResponse(BaseModel):
+    """How a step answers the JavaScript dialog its action raises.
+
+    A browser ``alert``/``confirm``/``prompt``/``beforeunload`` dialog is not a
+    surface: it is a screen state of the page that raised it, and it blocks
+    that page until it is answered. On the browser backend the step's action
+    arms a one-shot answer before delivering input; the dialog's message is
+    its identity. A dialog that does not show exactly ``message`` is
+    dismissed, never accepted, and the step halts. On a screen-driven backend
+    (desktop, RDP, Citrix) a dialog is just pixels and is recorded as the
+    clicks that answer it, so this field is browser-only
+    (docs/MULTI_SURFACE.md, "Dialogs").
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    response: Literal["accept", "dismiss"]
+    message: str = Field(min_length=1, max_length=2000)
+
+
 class Step(BaseModel):
     id: str
     intent: str = Field(description="Human-readable purpose of the step")
@@ -1423,6 +1443,13 @@ class Step(BaseModel):
             " the target page showed when the demonstration switched to it."
         ),
     )
+    dialog: Optional[DialogResponse] = Field(
+        default=None,
+        description=(
+            "Browser backend: the JavaScript dialog this step's action raises,"
+            " answered by the backend when its message matches exactly."
+        ),
+    )
 
     @model_validator(mode="after")
     def _validate_surface_contract(self) -> "Step":
@@ -1434,6 +1461,8 @@ class Step(BaseModel):
         if self.action is not ActionKind.SWITCH_SURFACE:
             if self.surface_origin is not None:
                 raise ValueError("surface_origin is valid only on SWITCH_SURFACE")
+            if self.dialog is not None and self.action is ActionKind.WAIT:
+                raise ValueError("a WAIT step delivers no input and raises no dialog")
             return self
         if self.surface is None:
             raise ValueError("SWITCH_SURFACE names the surface it switches to")
@@ -1448,6 +1477,7 @@ class Step(BaseModel):
             "effects": bool(self.effects),
             "api_binding": self.api_binding is not None,
             "opens": bool(self.opens),
+            "dialog": self.dialog is not None,
             "guard": self.guard is not None,
             "wait_until": self.wait_until is not None,
             "irreversible risk": self.risk == "irreversible",

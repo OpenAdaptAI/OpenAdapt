@@ -196,6 +196,7 @@ def _pre_frame_path_content(wf: Workflow, shape: str) -> dict:
         assert step.pop("surface") is None
         assert step.pop("opens") == []
         assert step.pop("surface_origin") is None
+        assert step.pop("dialog") is None
     for effect in _effect_payloads(content, shape):
         # Reviewed v2 omission: the exact_new_set over-write guard postdates
         # these seals. Navigated to the exact owning Effect, never stripped by
@@ -253,6 +254,7 @@ def _write_synthetic_pre_field_bundle(
         assert step.pop("surface") is None
         assert step.pop("opens") == []
         assert step.pop("surface_origin") is None
+        assert step.pop("dialog") is None
     for effect in _effect_payloads(raw, shape):
         assert effect.pop("new_records") == []
         assert effect.pop("identity_field") == "id"

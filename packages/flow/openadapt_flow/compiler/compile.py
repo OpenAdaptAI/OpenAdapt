@@ -32,6 +32,7 @@ from openadapt_flow.ir import (
     BackendHints,
     BundleManifest,
     BundleProvenance,
+    DialogResponse,
     ExecutionMode,
     ExecutionTargetKind,
     Landmark,
@@ -2602,6 +2603,10 @@ def compile_recording(
     binding_observations: dict[str, object] = {}
     for j, (step, step_before, step_after, event) in enumerate(pending):
         steps.append(step)
+        if isinstance(event.get("dialog"), dict):
+            # The browser dialog this action raised, answered by the backend
+            # at replay only when it shows the same message.
+            step.dialog = DialogResponse.model_validate(event["dialog"])
         if event.get("submit_binding") is not None:
             binding_observations[step.id] = event["submit_binding"]
         if step.action is ActionKind.SCROLL:

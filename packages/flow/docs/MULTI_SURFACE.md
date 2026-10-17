@@ -1,7 +1,8 @@
 # Multi-surface workflows: tabs, popups, and backend switches
 
-Status: recorder (scripted and interactive), compiler, IR, replayer, CLI
-binding, and governed/qualified/durable runs. This page is the design and its
+Status: recorder (scripted, interactive, and attach mode), compiler, IR,
+replayer, CLI binding, governed/qualified/durable runs, resume by identity,
+and managed dispatch. This page is the design and its
 limits. The audit that motivated it is at the end.
 
 A bundle used to run on exactly one surface: one browser tab, one desktop app,
@@ -25,6 +26,101 @@ Two rules come before coverage:
 
 A healthy multi-surface replay stays $0: no model call is needed to open,
 claim, identify, or switch a surface.
+
+## Vision first: what a surface is
+
+A bundle-level surface exists only at an **actuator boundary**: a browser
+driven through its pages, a local desktop, or a remote RDP/Citrix session.
+Tabs, popups, native windows and dialogs inside one actuator are **screen
+states** of that actuator. Per-step visual identity checks and preconditions
+handle them, the same way they handle a screen that changed inside one window.
+This design adds no surface kind.
+
+**A surface is a name plus an identity check, never a live handle.**
+
+- *Binding* means finding the one live target that passes the check. When no
+  target passes, or several do, the run halts. Flow never guesses.
+- *The check is vision first.* It looks at screen text and pixels first: the
+  step's anchor template, or for a switch the screen text mined from the first
+  frame of the target. Structured attributes (origin, URL pattern, title
+  pattern, opener link, window class) are used only where the actuator exposes
+  them. When both kinds are available, both must pass.
+- *Handles are a cache.* The runtime keeps the page or backend it bound, and
+  while that page stays open and is the only candidate, the next step uses it
+  without another check. The cache is never trusted across a process boundary
+  or a closed page. It is rebuilt by identity.
+- *Checkpoints store the name and the last-seen observation, never a handle*
+  (see "Resume").
+
+### Routing a step to a page
+
+Inside the browser backend each step goes to the page whose observation passes
+that step's own visual identity check (its anchor template), with structured
+attributes as an additional condition. If no other open page passes, the step
+falls back to the page used most recently. Several passing pages halt, and so
+does a step with no passing page and no live cached page. Steady state costs
+nothing extra: a live cached page that is the only candidate is used as is. A
+step never screenshots every page.
+
+### Explicit switches, never automatic returns
+
+Execution moves only through a recorded SWITCH_SURFACE step that has its own
+identity check. If a popup closes itself (an OAuth or approval window) and the
+person or agent acts on the original window again, the recorder writes an
+explicit switch back with that window's identity check. Nothing returns to an
+opener on its own. A bundle that omits the switch back is not a valid
+workflow. Once a page surface closes, it shows a blank frame, so a
+postcondition that expected the closed page still to be there fails.
+
+### Dialogs
+
+A JavaScript dialog (`alert`, `confirm`, `prompt`, `beforeunload`) is not a
+surface. It is modal state of the page that raised it, and it blocks that page
+until it is answered. **On the browser backend** the step whose action raises
+it carries `Step.dialog = {response: accept|dismiss, message}`:
+
+- before the input edge, the backend arms a one-shot answer;
+- the dialog's message is its identity: only that exact message is answered as
+  recorded;
+- a different message is **dismissed, never accepted**, and the step halts.
+  The step also halts if the dialog never appears;
+- an unarmed dialog keeps Playwright's default (dismiss), as before.
+
+The answer lives on the triggering step rather than a separate step because
+the dialog blocks the page's script until it is answered. A later step could
+answer it only by looking ahead or by guessing. **On screen-driven backends**
+(desktop, RDP, Citrix) a dialog is pixels, recorded as the clicks that answer
+it. A `dialog` on a step whose backend cannot see browser dialogs is refused
+before any input. The scripted recorder records it with
+`recorder.expect_dialog("accept")` before the action.
+
+### Two overlapping native windows on one desktop
+
+They are one surface: one desktop, one actuator. To act on the hidden window,
+the bundle needs an explicit, checkable focus step: a click on its visible part
+or a hotkey, whose postcondition is the target window's screen text. The next
+step then has the usual anchor and identity checks. No window enumeration and
+no new kind are involved.
+
+### Rejected alternatives
+
+- **Surface lifetimes** (long-lived vs transient surface types, automatic
+  return to the opener when a transient one closes). A lifetime is a guess
+  about the future. A popup that is "transient" in one run stays open in the
+  next, and an automatic return drives a window nobody checked. Explicit
+  switches with identity checks cover the same cases without a second state
+  machine.
+- **OS window enumeration and set-diffing in the recorder** (list top-level
+  windows before and after each action, call the difference a new surface).
+  It is platform-specific (Win32, AX, X11/Wayland, and nothing at all through
+  RDP/Citrix pixels). It races windows that appear late or briefly. And it
+  promotes screen states (dialogs, tool windows, a second window of the same
+  app) into surfaces that then need lifetimes. Vision checks already see what
+  the person saw.
+- **Routing every step by screenshotting every page.** Doing this on every
+  step costs one capture per page per step, and it can steal focus or wake
+  background tabs. The cache plus a check only on ambiguity or closure gives
+  the same safety.
 
 ## The model
 
@@ -67,9 +163,12 @@ binding, guard, or irreversible risk. Its identity check is:
 
 1. the target is declared and is available on this path (a page only after
    the step that opens it, a backend only when the caller supplied it);
-2. a page target is still open; it is the exact page object claimed when it
-   opened; its origin equals `surface_origin`, the origin the demonstration
-   saw when it switched;
+2. a page target is bound by identity: it is the cached page if that page is
+   still open and passes, otherwise the one open, unbound page that passes.
+   Several matches halt. Passing means the screen text the step expects is
+   visible on it, and, where exposed, its origin equals `surface_origin` (the
+   origin the demonstration saw when it switched) and its URL/title patterns
+   and opener link match. Leaving a page that closed itself is allowed;
 3. a backend target is of the declared kind (a Windows surface needs a Windows
    backend; a backend whose kind cannot be determined is refused);
 4. the step's `expect` postconditions, mined from the first frame of the new
@@ -136,14 +235,29 @@ when a switch is recorded. Rejected: a separate interactive bundle format
 step people forget, and the event source already says it); recording every
 focus change as a switch (focus without an action is not a step).
 
-Not covered: attach mode (`--cdp`, the user's own signed-in browser) stays
-bound to one tab and still stops on a popup, because that tab's accepted page
-baseline and origin checks are the privacy contract of attach mode. A popup
-that closes itself and then sends the user back to its opener is refused at
-the next action (returning from a closed page is not yet replayable). A click
-in a new page within the first poll tick after it loads can arrive before the
-listener is installed and is not recorded; replay then halts at the next step
-rather than skipping it silently.
+**Attach mode (`record --cdp`, the person's own browser)** follows popups and
+tabs through the same path. The browser's target list decides which pages are
+followed. A new page is followed only when one of the followed pages opened
+it: `window.opener` for a popup, or the target's opener id for a `noopener`
+tab. The binding and listener script are installed on that page alone, so the
+rest of the person's browser is left alone. Every page keeps attach mode's
+contract: the declared origin check on every event, its own exact CSS-viewport
+geometry, rebound at each switch, and the same masks and guards. A tab the
+person opens by hand, even one that closes again before the next poll, is
+still refused. So is a page that is still open when the recording ends and
+that no recorded action opened.
+
+**A popup that closes itself** (it writes back to its opener and calls
+`window.close()`) is recorded honestly. Its closing click gets a blank after
+frame and no structural state, and the next action on the original window is
+recorded as an explicit `switch_surface` back. One case is refused with a
+clear reason: a popup whose *first* action closes it before Flow captured any
+frame of it. Nothing would anchor that action. Act in the popup once more
+first, or record that step with the scripted recorder.
+
+A click in a new page within the first poll tick after it loads can arrive
+before the listener is installed and is not recorded. Replay then halts at the
+next step rather than skipping it silently.
 
 ## Compiling
 
@@ -167,8 +281,11 @@ context of every browser surface it holds.
 For every step in a multi-surface workflow:
 
 - **On entry**, the runtime halts if the browser has opened a page that no
-  step declared, if the active page has closed, or if the step names a surface
-  other than the active one.
+  step declared, if an active non-page backend has closed, or if the step
+  names a surface other than the active one. The step is then routed (see
+  "Routing a step to a page"). A page surface is bound by the step's own
+  anchor template plus its structured attributes. Zero or several matches
+  halt before any input.
 - **After the action**, a step with `opens` waits (bounded by the step
   timeout) for exactly that many new pages and claims them in creation order.
   Each one must match its opener relation, origin, URL pattern, and title
@@ -228,12 +345,55 @@ single-surface run does, and no gate is weakened:
   halts at the switch as a governed refusal; case evidence is
   `CASE_ENVIRONMENT_CHANGED` unless every used surface has a matching,
   recomputed observation.
-- **Durable runs work.** Checkpoints are written per step as usual; the step
+- **Durable runs work.** Checkpoints are written per step as usual. The step
   results carry their surface.
 
-Still refused, with a reason: **resume** of a multi-surface run (live page and
-backend handles cannot cross a process boundary, and re-claiming them would
-be a guess), and **managed Cloud dispatch** (not exercised end to end yet).
+### Resume
+
+Each linear checkpoint of a multi-surface run records:
+
+- the step's `surface`;
+- the `active_surface` after the step;
+- `surface_observations`: per surface, the step after which it was last
+  observed, its kind, its origin, and a perceptual hash of its screen.
+
+It holds no handle, URL path, title, or screen text. On resume, the
+checkpoint's active surface is re-bound **by identity** before the approval
+is consumed. For a page, the identity is the one open page that passes the
+retained postconditions of the checkpointed step and the recorded
+structured attributes. The retained postconditions are then revalidated on
+that surface. Several passing pages (an ambiguous re-bind) or none raise
+`StateDiverged`, and nothing is driven. Every other surface is re-bound
+lazily, at its next switch or step, by the same rule.
+
+A resume after a save that may have gone through still stops first at the
+existing **"Check the record"** outcome (`RECONCILIATION_REQUIRED`). A person
+confirms the record, then approves the resume. Re-binding never replaces that
+stop.
+
+Still refused, with a reason:
+
+- a linear checkpoint without a surface observation (written by an earlier
+  Flow): there is nothing to re-bind by;
+- resume of a multi-surface *program* (graph) run: program checkpoints do not
+  carry surface observations yet.
+
+### Cloud dispatch
+
+The old refusal of managed dispatch was only about handles, and it is gone.
+A Cloud run needs nothing but the deployment config's `surfaces:` map:
+
+- the bundle digest, which the managed authorization binds, seals the surface
+  map;
+- the hosted deployment profile, whose bytes are hashed into the dispatch,
+  carries the backend bindings;
+- page surfaces are bound by identity at run time.
+
+One refusal stays because it guards something real. An unattended managed
+run will not start while a declared backend surface (a Windows app, an RDP
+session) has no binding. Starting anyway would reach that switch with no
+backend and no person to supply one, after earlier steps may already have
+written.
 
 Design choice: bind surfaces through the digest the authorization already
 seals, record the surface per step, and add per-surface environment
@@ -280,20 +440,18 @@ per surface multiplies flags with every backend); guessing a default backend
 for an unbound surface (a guessed backend is a wrong action, so the run halts
 instead).
 
-**Native windows and JS dialogs.** A second native window can already be its
-own surface: bind it at replay as a backend surface (for example a macOS
-window by `macos_window_title`), and record it with
-`Recorder.switch_surface(name, backend=...)`. Automatic capture of a new
-native window during recording, and JavaScript dialogs (`alert`, `confirm`,
-`beforeunload`) as surfaces, are follow-up work: a native window has no
-"opened by this action" signal across backends, and a dialog is modal state
-of its page rather than a page, so both need their own contract.
+**Native windows and JS dialogs.** These are screen states, not surfaces (see
+"Vision first"). A window inside one desktop is reached with an explicit,
+checkable focus step. A browser dialog is answered by `Step.dialog`. A
+separate *actuator*, such as a second desktop agent or an RDP session, is a
+backend surface bound here.
 
 ## Backward compatibility
 
 - A bundle with no `surfaces` is single-surface. Every new field defaults
   empty, `Workflow.surfaces` is omitted from serialized bytes when empty, and
-  the three new `Step` fields have reviewed, version-scoped sealed-digest
+  the four new `Step` fields (`surface`, `opens`, `surface_origin`, `dialog`)
+  have reviewed, version-scoped sealed-digest
   omissions (`bundle_validation.py`), so existing sealed v2 bundles still
   verify byte-for-byte (`tests/test_bundle_schema_v2.py`).
 - The bundle schema stays at v2. The change is additive for every existing
@@ -304,22 +462,27 @@ of its page rather than a page, so both need their own contract.
 
 ## Limits
 
-- Native windows: a new top-level window inside one native backend (a Windows
-  app's modal dialog) is still part of that backend's screen. Only browser
-  pages are claimed as separate surfaces.
-- Browser JavaScript dialogs (`alert`, `confirm`, `beforeunload`) are not
-  pages. Playwright dismisses them when nothing listens. Treating them as
-  surfaces is follow-up work.
+- Native windows inside one desktop are screen states. The recorder does not
+  insert the focus step that reaches a hidden window; the author or the agent
+  records it as an ordinary click or hotkey.
+- Dialogs: only the scripted recorder captures them (`expect_dialog`). The
+  interactive recorder does not yet record a dialog answer, so record that
+  step with the scripted recorder. Qualification does not yet treat a dialog
+  answer as its own evidence. A `prompt()` answer with text is not supported.
 - A page that opens and closes itself before the step's check (a very fast
-  OAuth round trip) is seen as "did not open" and halts.
-- Resume of a multi-surface run and managed Cloud dispatch are refused
-  (above).
+  OAuth round trip) is seen as "did not open" and halts. In interactive
+  recording, a popup whose first action closes it is refused (above).
+- Resume of a multi-surface program (graph) run, and of a linear checkpoint
+  without a surface observation, is refused (above).
+- Re-binding a page is vision first, so two pages that look the same and share
+  every structured attribute halt as ambiguous. Two report tabs for the same
+  record are the example. This is by design.
+- Attach mode follows only same-origin pages that a followed page opened. An
+  OAuth popup on another origin is refused by attach mode's origin contract.
 - Qualification pinning and proposal do not yet propose per-surface
   environment boundaries; `surface_environments` is written by the operator.
-- Interactive recording follows popups and tabs only in a browser Flow
-  launched; attach mode stays one tab (see "Interactive recording").
-- A backend surface needs an explicit binding (`--surface` or `surfaces:`);
-  nothing is guessed.
+- A backend surface needs an explicit binding (`--surface` or `surfaces:`).
+  Nothing is guessed, and a managed run refuses to start without one.
 
 ## Tests
 
@@ -333,7 +496,25 @@ of its page rather than a page, so both need their own contract.
   when no backend is supplied, when the backend is the wrong kind, or when the
   Windows screen is a different app.
 - `tests/test_multi_surface_contract.py`: IR contract validation and the
-  replayer's refusals (resume, managed dispatch).
+  replayer's refusals (a resume without a surface observation, a program
+  resume, a managed run with an unbound backend surface).
+- `tests/test_multi_surface_identity.py`: a durable run pauses at "Check the
+  record" on the report tab. The checkpoint holds the surface name and
+  observation, with no handle. Resume needs approval, re-binds the tab by
+  identity, and finishes with zero model calls. A second identical tab makes
+  the re-bind ambiguous and it halts with nothing driven. A tab navigated
+  elsewhere fails page routing and halts. Router-level routing binds only the
+  page that passes.
+- `tests/test_multi_surface_selfclose.py`: a popup that closes itself. Both the
+  scripted and the interactive recorder write an explicit switch back, and the
+  bundle replays with zero model calls. Without the switch back the workflow
+  is invalid.
+- `tests/test_multi_surface_attach.py`: `record --cdp` against a separately
+  started Chromium follows a popup and a `noopener` tab and replays in the same
+  browser with zero model calls. A tab the person opens is refused.
+- `tests/test_multi_surface_dialog.py`: a `confirm()` answer is compiled onto
+  the step that raises it and replays. A dialog with a different message is
+  dismissed and the run halts. A screen-driven backend refuses a dialog step.
 - `tests/test_multi_surface_governed.py`: a governed, durable, Standard-profile
   run from a web primary to a Windows backend surface reaches `VERIFIED` with
   an independent-readback effect; a tampered surface record, or a persisted

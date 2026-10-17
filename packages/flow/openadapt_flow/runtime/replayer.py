@@ -206,6 +206,8 @@ from openadapt_flow.vision.ocr import OcrResolutionRefused
 
 _DeliveryResultT = TypeVar("_DeliveryResultT")
 _MAX_FRESH_ACTUATION_REACQUISITIONS = 2
+# How long a step that raises a browser dialog waits for it to open.
+_DIALOG_WAIT_S = 5.0
 # Private module capability.  The public ``run`` API cannot mint a durable
 # continuation.  ``runtime.durable.resume`` imports this object only after it
 # has validated the pause, approval, bundle, checkpoint, and live state.
@@ -4508,7 +4510,10 @@ class Replayer:
         """Bind the checkpoint's active surface by identity, or refuse."""
 
         active = checkpoint.active_surface
-        self._surface_identity_context = (workflow, bundle_dir)
+        self._surface_identity_context: tuple[Workflow, Optional[Path]] = (
+            workflow,
+            bundle_dir,
+        )
         try:
             router = SurfaceRouter(
                 workflow,
@@ -10755,6 +10760,65 @@ class Replayer:
             )
 
     def _act(
+        self,
+        step: Step,
+        resolution: Optional[Resolution],
+        params: Mapping[str, RuntimeParamScalar],
+        **kwargs: Any,
+    ) -> Optional[str]:
+        """Perform the step's action, answering the dialog it raises, if any.
+
+        A step with a recorded ``dialog`` arms a one-shot answer on the
+        browser backend before its input edge. The dialog's message is its
+        identity: a different message is dismissed, never accepted, and the
+        step halts; so does a dialog that never appears. A backend that cannot
+        see browser dialogs refuses the step before any input
+        (docs/MULTI_SURFACE.md, "Dialogs").
+        """
+
+        dialog = step.dialog
+        if dialog is None:
+            return self._act_without_dialog(step, resolution, params, **kwargs)
+        arm = getattr(self.backend, "arm_dialog", None)
+        take = getattr(self.backend, "take_dialogs", None)
+        if not callable(arm) or not callable(take):
+            return (
+                f"Step '{step.id}' ({step.intent}) answers a browser dialog, but "
+                "the active backend cannot see browser dialogs; run aborted"
+            )
+        arm(dialog.response, dialog.message)
+        try:
+            error = self._act_without_dialog(step, resolution, params, **kwargs)
+        finally:
+            seen = take(0.0)
+        if error is not None:
+            return error
+        if not seen:
+            seen = self._wait_for_dialog(take, dialog)
+        if not seen:
+            return (
+                f"Step '{step.id}' ({step.intent}): the recorded browser dialog "
+                f"{dialog.message!r} did not appear; run aborted"
+            )
+        mismatched = [entry for entry in seen if not entry.get("matched")]
+        if mismatched:
+            return (
+                f"Step '{step.id}' ({step.intent}): a browser dialog showed "
+                f"{str(mismatched[0].get('message'))!r}, not the recorded "
+                f"{dialog.message!r}; it was dismissed, not answered; run aborted"
+            )
+        return None
+
+    def _wait_for_dialog(self, take: Callable[..., Any], dialog: Any) -> list[Any]:
+        """Wait briefly for an armed dialog that opens after the input edge."""
+
+        arm = getattr(self.backend, "arm_dialog", None)
+        if callable(arm):
+            arm(dialog.response, dialog.message)
+        seen = take(_DIALOG_WAIT_S)
+        return list(seen) if isinstance(seen, list) else []
+
+    def _act_without_dialog(
         self,
         step: Step,
         resolution: Optional[Resolution],

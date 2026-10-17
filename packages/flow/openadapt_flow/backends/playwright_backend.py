@@ -1043,6 +1043,12 @@ class PlaywrightBackend:
         self.page = page
         self._closed_page_frame = closed_page_frame
         self._last_frame_size: Optional[tuple[int, int]] = None
+        # JavaScript dialogs (docs/MULTI_SURFACE.md, "Dialogs"): no listener
+        # is registered until a step arms one, so a bundle without dialog
+        # steps keeps Playwright's default (dismiss) exactly as before.
+        self._dialog_listening = False
+        self._dialog_armed: Optional[tuple[str, Optional[str]]] = None
+        self._dialogs_seen: list[dict[str, Any]] = []
         self._screenshot_scale = screenshot_scale
         self._screenshot_mask_selectors = screenshot_mask_selectors
         self._structural_state_reader = structural_state_reader
@@ -2912,6 +2918,74 @@ class PlaywrightBackend:
             except Exception:
                 pass
         return png
+
+    # -- JavaScript dialogs -------------------------------------------------
+
+    def arm_dialog(self, response: str, message: Optional[str]) -> None:
+        """Answer the next dialog with ``response`` if it shows ``message``.
+
+        ``message=None`` (recording) answers any dialog and reports its text.
+        A dialog whose text differs from ``message`` is DISMISSED, never
+        accepted, and reported as a mismatch. Every dialog this page shows
+        while the listener exists is answered and reported, so an unexpected
+        one can never be accepted by default.
+        """
+
+        if response not in ("accept", "dismiss"):
+            raise ValueError("a dialog response is 'accept' or 'dismiss'")
+        if not self._dialog_listening:
+            self.page.on("dialog", self._on_dialog)
+            self._dialog_listening = True
+        self._dialog_armed = (response, message)
+        self._dialogs_seen = []
+
+    def take_dialogs(self, timeout_s: float = 0.0) -> list[dict[str, Any]]:
+        """The dialogs answered since the last arm, then disarm.
+
+        Waits up to ``timeout_s`` for the first one (a dialog can open a
+        moment after the input edge). Playwright delivers the dialog event
+        only while its loop runs, so the wait runs on the page.
+        """
+
+        deadline = time.monotonic() + max(0.0, float(timeout_s))
+        while not self._dialogs_seen and time.monotonic() < deadline:
+            if self._page_is_closed():
+                break
+            try:
+                self.page.wait_for_timeout(50)
+            except Exception:
+                break
+        seen, self._dialogs_seen = self._dialogs_seen, []
+        self._dialog_armed = None
+        return seen
+
+    def _on_dialog(self, dialog: Any) -> None:
+        try:
+            message = str(dialog.message)
+        except Exception:
+            message = ""
+        try:
+            kind = str(dialog.type)
+        except Exception:
+            kind = ""
+        armed, self._dialog_armed = self._dialog_armed, None
+        matched = armed is not None and (armed[1] is None or armed[1] == message)
+        response = armed[0] if armed is not None and matched else "dismiss"
+        self._dialogs_seen.append(
+            {
+                "message": message,
+                "type": kind,
+                "response": response,
+                "matched": matched,
+            }
+        )
+        try:
+            if response == "accept":
+                dialog.accept()
+            else:
+                dialog.dismiss()
+        except Exception:
+            pass
 
     def _page_is_closed(self) -> bool:
         try:

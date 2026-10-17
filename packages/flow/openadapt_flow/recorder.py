@@ -70,6 +70,8 @@ from openadapt_flow.ir import (
 
 #: Bound on waiting for a newly opened page's first navigation.
 _NEW_PAGE_LOAD_TIMEOUT_S = 10.0
+# How long a recorded action that raises a browser dialog waits for it.
+_DIALOG_WAIT_S = 5.0
 
 
 def _has_window_opener(page: Any) -> bool:
@@ -134,6 +136,9 @@ class Recorder:
         self._surface_backends: dict[str, Backend] = {surface_id: backend}
         self._surface_meta: list[dict[str, Any]] = []
         self._multi_surface = False
+        # Set by expect_dialog(): how the NEXT action answers the dialog it
+        # raises (docs/MULTI_SURFACE.md, "Dialogs").
+        self._expected_dialog: Optional[str] = None
         self._page_counters = {"popup": 0, "tab": 0}
         self._known_pages: list[Any] = []
         self._remember_pages(backend)
@@ -307,6 +312,17 @@ class Recorder:
         """Whether ``page`` was open at the start or claimed by an action."""
 
         return any(page is known for known in self._known_pages)
+
+    def expect_dialog(self, response: str = "accept") -> None:
+        """The next action raises a browser dialog; answer it with ``response``.
+
+        Browser backend only. The dialog's message is recorded as its identity
+        and the compiled step answers only a dialog that shows that message.
+        """
+
+        if response not in ("accept", "dismiss"):
+            raise ValueError("a dialog response is 'accept' or 'dismiss'")
+        self._expected_dialog = response
 
     def switch_surface(
         self,
@@ -547,7 +563,30 @@ class Recorder:
                 binding = self._submit_binding_at(int(event["x"]), int(event["y"]))
                 if binding:
                     event = {**event, "submit_binding": binding}
+        dialog_response, self._expected_dialog = self._expected_dialog, None
+        if dialog_response is not None:
+            arm = getattr(self._backend, "arm_dialog", None)
+            if not callable(arm):
+                raise RuntimeError(
+                    "this backend cannot see browser dialogs; on a screen-driven "
+                    "backend record the clicks that answer the dialog instead"
+                )
+            arm(dialog_response, None)
         act()
+        if dialog_response is not None:
+            seen = self._backend.take_dialogs(_DIALOG_WAIT_S)  # type: ignore[attr-defined]
+            if len(seen) != 1:
+                raise RuntimeError(
+                    f"the action raised {len(seen)} browser dialogs; exactly one "
+                    "was expected"
+                )
+            event = {
+                **event,
+                "dialog": {
+                    "response": dialog_response,
+                    "message": str(seen[0]["message"]),
+                },
+            }
         after = self._wait_settled()
         opened = self._claim_new_pages(self._i)
         if opened:

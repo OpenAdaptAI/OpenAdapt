@@ -86,6 +86,13 @@ _SELFCLOSE = f"""<!doctype html><html><head><title>Sign In Window</title>
 <button id="approve-close" onclick="window.opener.document.getElementById('popup-status').textContent='Signed In Elsewhere';window.close();">Approve And Close</button>
 </body></html>"""
 
+_CONFIRM = f"""<!doctype html><html><head><title>Record Desk</title>
+{_STYLE}</head><body>
+<h1>Record Desk Ready</h1>
+<p id="record-status">Record Present</p>
+<button id="delete" onclick="const m=new URLSearchParams(location.search).get('msg')||'Delete record 42?';document.getElementById('record-status').textContent=confirm(m)?'Record Deleted':'Record Kept';">Delete Record</button>
+</body></html>"""
+
 _PROMO = f"""<!doctype html><html><head><title>Special Offer</title>
 {_STYLE}</head><body><h1>Unexpected Offer Window</h1></body></html>"""
 
@@ -102,6 +109,7 @@ class _Handler(BaseHTTPRequestHandler):
             "/report.html": _REPORT,
             "/promo.html": _PROMO,
             "/selfclose.html": _SELFCLOSE,
+            "/confirm.html": _CONFIRM,
         }
         if parts.path in ("/", "/index.html"):
             body = _index(parse_qs(parts.query))
