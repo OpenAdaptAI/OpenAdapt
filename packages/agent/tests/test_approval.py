@@ -192,6 +192,50 @@ def test_run_waiting_for_approval_is_needs_review_with_what_to_do(
     assert done["outcome"] == "done"
 
 
+def test_run_that_reaches_the_approval_wait_first_still_returns_at_once(
+    monkeypatch, bundles_root, runner_config, success_report
+):
+    """The starting call reports the wait even if the worker got there first.
+
+    Pins the race where the worker wrote its approval request before
+    run_workflow first checked, and the starting call then blocked for its
+    whole wait window instead of returning needs_review.
+    """
+    from openadapt_flow.agent import service as service_mod
+
+    answered = threading.Event()
+    requested = threading.Event()
+    stub = FlowCliStub(exit_code=0, report=success_report)
+
+    def flow_waiting_for_a_person(cmd, *args, **kwargs):
+        run_dir = Path(cmd[cmd.index("--run-dir") + 1])
+        run_dir.mkdir(parents=True, exist_ok=True)
+        request_id = _write_request(run_dir)
+        requested.set()
+        assert answered.wait(10)
+        (run_dir / "item-approval" / f"answer-{request_id}.json").write_text("{}")
+        return stub(cmd, *args, **kwargs)
+
+    original_start = service_mod.RunService._start
+
+    def start_and_let_the_worker_win(self, *args, **kwargs):
+        original_start(self, *args, **kwargs)
+        assert requested.wait(5)
+
+    monkeypatch.setattr(runner_mod, "_run_flow_process", flow_waiting_for_a_person)
+    monkeypatch.setattr(service_mod.RunService, "_start", start_and_let_the_worker_win)
+    bridge = _bridge(bundles_root, runner_config)
+    started = time.monotonic()
+    waiting = _run(bridge, wait=30)
+    assert time.monotonic() - started < 10
+    assert waiting["outcome"] == "needs_review"
+    assert waiting["reason"] == "waiting_for_approval"
+
+    answered.set()
+    done = bridge.dispatch("get_run", {"run_id": waiting["run_id"], "wait_seconds": 10})
+    assert done["outcome"] == "done"
+
+
 def test_agent_timeout_does_not_count_time_a_person_spends_approving():
     sleeper = [sys.executable, "-c", "import time; time.sleep(1.5)"]
     completed = runner_mod._run_flow_process(

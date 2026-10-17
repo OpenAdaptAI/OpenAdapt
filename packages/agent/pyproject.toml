@@ -77,10 +77,10 @@ tutorial = [
 openadapt-agent = "openadapt_agent.cli:main"
 
 [project.urls]
-Homepage = "https://github.com/OpenAdaptAI/openadapt-agent"
-Repository = "https://github.com/OpenAdaptAI/openadapt-agent"
-Documentation = "https://github.com/OpenAdaptAI/openadapt-agent#readme"
-"Bug Tracker" = "https://github.com/OpenAdaptAI/openadapt-agent/issues"
+Homepage = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent"
+Repository = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent"
+Documentation = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/README.md"
+"Bug Tracker" = "https://github.com/OpenAdaptAI/OpenAdapt/issues"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/openadapt_agent"]

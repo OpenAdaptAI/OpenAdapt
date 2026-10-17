@@ -1,7 +1,7 @@
 """Boundary interop between flow's compiler IR and ``openadapt-types``.
 
 This subpackage lets a flow bundle speak the ecosystem's *canonical action
-vocabulary* (``openadapt_types.Action`` / ``ActionType`` / ``ActionResult``)
+vocabulary* (``openadapt_flow.contracts.Action`` / ``ActionType`` / ``ActionResult``)
 at its boundaries (emit, benchmark/eval round-trip) WITHOUT dissolving flow's
 internal :mod:`openadapt_flow.ir` schema. ``ir.py`` remains the source of
 truth; this is an additive, optional shim (extra: ``openadapt-flow[interop]``).

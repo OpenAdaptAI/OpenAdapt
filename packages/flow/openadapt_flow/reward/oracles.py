@@ -1,6 +1,6 @@
 """Oracle adapters for the reward worker.
 
-Every adapter here satisfies ``openadapt_types.oracle.OracleAdapter``: a
+Every adapter here satisfies ``openadapt_flow.contracts.oracle.OracleAdapter``: a
 ``channel`` and a read-only ``read(identity)`` that returns one
 ``OracleObservation``. The channel sets the tier. The observation's value
 carries the system-of-record records the shared judge consumes, plus a
@@ -31,8 +31,11 @@ import sqlite3
 from pathlib import Path
 from typing import Any, Mapping, Optional
 
-from openadapt_types.oracle import OracleAdapter, OracleChannel, OracleObservation
-
+from openadapt_flow.contracts.oracle import (
+    OracleAdapter,
+    OracleChannel,
+    OracleObservation,
+)
 from openadapt_flow.reward.models import OracleRecipeV1
 from openadapt_flow.runtime.effects.effect import EffectState
 

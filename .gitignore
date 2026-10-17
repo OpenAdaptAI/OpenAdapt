@@ -67,3 +67,8 @@ deploy/.env
 # near-miss. Negate the committed template so it stays tracked.
 .env.*
 !.env.example
+
+# Monorepo packages: the unanchored `src` and `*.txt` patterns above would hide
+# package sources and the root llms.txt.
+!/packages/*/src/
+!/llms.txt

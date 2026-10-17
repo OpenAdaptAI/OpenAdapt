@@ -29,9 +29,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 from typing import Any, Callable, Iterable, Mapping, Optional, Sequence
 
-from openadapt_types.process_capability import _digest_payload
-from openadapt_types.reward import RewardOutcomeV1
-
+from openadapt_flow.contracts.process_capability import _digest_payload
+from openadapt_flow.contracts.reward import RewardOutcomeV1
 from openadapt_flow.runtime.effects.effect import Effect, EffectKind, ValueExpr
 
 

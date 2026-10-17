@@ -12,7 +12,7 @@ def test_agent_target_has_no_static_lifecycle() -> None:
             (ROOT / "README.md").read_text(encoding="utf-8"),
             (ROOT / "docs" / "DESIGN.md").read_text(encoding="utf-8"),
             (ROOT / "docs" / "DISTRIBUTION.md").read_text(encoding="utf-8"),
-            (ROOT / "llms.txt").read_text(encoding="utf-8"),
+            (ROOT .parents[1] / "llms.txt").read_text(encoding="utf-8"),
             (ROOT / "pyproject.toml").read_text(encoding="utf-8"),
             (ROOT / "server.json").read_text(encoding="utf-8"),
         ]

@@ -1095,7 +1095,7 @@ class AttendedActionStore:
         normal attended-action admission checks.
         """
         try:
-            from openadapt_types import sign_human_decision_task_hmac
+            from openadapt_flow.contracts import sign_human_decision_task_hmac
 
             task = sign_human_decision_task_hmac(
                 key=self._key(create=False),
@@ -1110,7 +1110,7 @@ class AttendedActionStore:
     def seal_human_decision_task_v2(self, unsigned: dict[str, Any]) -> dict[str, Any]:
         """Sign the negotiated V2 task under its distinct Types domain."""
         try:
-            from openadapt_types import sign_human_decision_task_v2_hmac
+            from openadapt_flow.contracts import sign_human_decision_task_v2_hmac
 
             task = sign_human_decision_task_v2_hmac(
                 key=self._key(create=False),
@@ -1125,7 +1125,10 @@ class AttendedActionStore:
     def verify_human_decision_task(self, task: dict[str, Any]) -> bool:
         """Verify a projected task without treating it as pause authority."""
         try:
-            from openadapt_types import HumanDecisionTaskV1, HumanDecisionTaskV2
+            from openadapt_flow.contracts import (
+                HumanDecisionTaskV1,
+                HumanDecisionTaskV2,
+            )
 
             if task.get("schema_version") == "openadapt.human-decision-task/v2":
                 validated_v2 = HumanDecisionTaskV2.model_validate(task)

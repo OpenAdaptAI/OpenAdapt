@@ -34,9 +34,12 @@ from pathlib import Path
 from typing import Any
 
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-from openadapt_types.process_capability import _digest_payload, canonical_json_bytes
-from openadapt_types.reward import RewardCertificateV1, RewardContractV1
 
+from openadapt_flow.contracts.process_capability import (
+    _digest_payload,
+    canonical_json_bytes,
+)
+from openadapt_flow.contracts.reward import RewardCertificateV1, RewardContractV1
 from openadapt_flow.reward.calibration import (
     CalibrationResult,
     confidence_delta,
@@ -324,8 +327,7 @@ def calibrate_bundle(directory: Path) -> CalibrationResult:
     covers.
     """
 
-    from openadapt_types.oracle import OracleChannel
-
+    from openadapt_flow.contracts.oracle import OracleChannel
     from openadapt_flow.reward.oracles import observation
     from openadapt_flow.reward.worker import judge_episode
     from openadapt_flow.runtime.effects.effect import EffectState

@@ -5,8 +5,9 @@
   "description": "Your AI agent decides what to enter. OpenAdapt enters it in the app and checks that it saved.",
   "websiteUrl": "https://docs.openadapt.ai",
   "repository": {
-    "url": "https://github.com/OpenAdaptAI/openadapt-agent",
-    "source": "github"
+    "url": "https://github.com/OpenAdaptAI/OpenAdapt",
+    "source": "github",
+    "subfolder": "packages/agent"
   },
   "version": "2.2.0",
   "packages": [
