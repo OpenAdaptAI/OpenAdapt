@@ -112,7 +112,7 @@ def test_plain_business_copy_passes(tmp_path: Path) -> None:
             [
                 "# Hand off the last step",
                 "",
-                "Show the task once. OpenAdapt builds the automation and runs it.",
+                "Show the task one or more times. OpenAdapt builds the automation and runs it.",
                 "Each run ends Done and checked, Stopped before saving, or Check the record.",
                 "A record check reads the saved entry back. A right-record check comes first.",
                 "Before it goes live, a readiness test uses your cases.",
