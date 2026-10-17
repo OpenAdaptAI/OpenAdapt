@@ -66,8 +66,10 @@ jobs:
               ;;
           esac
           changed="$(git diff --name-only "$base" HEAD)"
-          printf '%s\n' "$changed" | sed 's/^/changed: /'
-          hit() { if printf '%s\n' "$changed" | grep -Eq "$1"; then echo true; else echo false; fi; }
+          echo "$(grep -c . <<<"$changed" || true) changed paths"
+          # A here-string, not a pipe: with pipefail, `printf | grep -q` can
+          # fail on SIGPIPE and silently report "not changed".
+          hit() { if grep -Eq "$1" <<<"$changed"; then echo true; else echo false; fi; }
           wf='^\.github/workflows/packages\.yml$'
           flow="$(hit "^packages/flow/|$wf")"
           types="$(hit "^packages/types/|$wf")"
