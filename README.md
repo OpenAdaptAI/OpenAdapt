@@ -188,8 +188,8 @@ inside OpenAdapt. When an agent clicks during a demonstration, the person who
 admits the program watches.
 
 This repository holds the `openadapt` launcher and command, and under
-[`packages/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages) the engine and the MCP server. Each package is
-published to PyPI under its own name. [Where the code is](#where-the-code-is)
+[`packages/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages) the engine, the MCP server and the shared
+contracts. Each package is published to PyPI under its own name. [Where the code is](#where-the-code-is)
 lists them.
 
 ## Run the tutorial
