@@ -21,6 +21,8 @@ All patient strings here are synthetic (MockMed-style fakes), never real PHI.
 
 from __future__ import annotations
 
+import re
+
 import pytest
 
 from openadapt_flow.runtime import identity as I
@@ -87,7 +89,10 @@ def test_right_row_verifies_wrong_row_refuses_from_hash_only() -> None:
     tmpl = build_identity_template(band, param_examples={})
     assert tmpl is not None
     # No plaintext identifier survives in the serialized artifact.
-    blob = tmpl.model_dump_json()
+    # Hash and salt values are random hex; a digit-only needle such as
+    # "73842" can occur inside one by chance, so check the JSON with hex
+    # runs (16+ chars) blanked out.
+    blob = re.sub(r"[0-9a-f]{16,}", "#", tmpl.model_dump_json())
     for needle in ("Kramer", "Susan", "07/14/1983", "RC73842", "73842"):
         assert needle not in blob, needle
     # Right row verifies.
