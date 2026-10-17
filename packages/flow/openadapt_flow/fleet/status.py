@@ -39,6 +39,7 @@ from typing import Final, Literal, Optional, Protocol
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from openadapt_flow.fleet._lock import exclusive_lock
 from openadapt_flow.fleet.signing import (
     CLOCK_SKEW,
     CertificateChain,
@@ -287,7 +288,35 @@ class StatusHighWater:
         kill_switch_sequence: Optional[int],
         now: datetime,
     ) -> StatusHighWaterState:
-        """Raise the recorded sequences; never lower them."""
+        """Raise the recorded sequences; never lower them.
+
+        The read, compare and write run under an exclusive lock on
+        :attr:`lock_path`, so two processes cannot interleave and lower a
+        number the other just recorded.
+        """
+        try:
+            with exclusive_lock(self.lock_path):
+                return self._advance_locked(
+                    revocation_sequence=revocation_sequence,
+                    kill_switch_sequence=kill_switch_sequence,
+                    now=now,
+                )
+        except OSError as exc:
+            raise FleetStatusStateError(
+                f"cannot lock {self.path.name} ({type(exc).__name__})"
+            ) from exc
+
+    @property
+    def lock_path(self) -> Path:
+        return self.path.with_name(self.path.name + ".lock")
+
+    def _advance_locked(
+        self,
+        *,
+        revocation_sequence: Optional[int],
+        kill_switch_sequence: Optional[int],
+        now: datetime,
+    ) -> StatusHighWaterState:
         current = self.load()
         state = StatusHighWaterState(
             revocation_sequence=max(

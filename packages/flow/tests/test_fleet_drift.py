@@ -10,6 +10,7 @@ under the test's tmp directory, never in ``~/.openadapt``.
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -1077,6 +1078,65 @@ def test_status_high_water_refuses_older_kill_switch_history(tmp_path, core):
     no_entries = _status_feed(core, tmp_path / "none", sequence=1)
     assert not read_fleet_status(no_entries, trust, high_water=state).fresh
     assert state.load().kill_switch_sequence == 3
+
+
+def _blocked_while_locked(lock_path: Path, action) -> None:
+    """Run ``action`` in a thread while this test holds ``lock_path``.
+
+    Fails unless ``action`` waits for the lock, then finishes once it is
+    released. Uses fcntl directly so it does not depend on the code's helper.
+    """
+    fcntl = pytest.importorskip("fcntl")
+    import threading
+
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    descriptor = os.open(lock_path, os.O_CREAT | os.O_RDWR, 0o600)
+    errors: list[BaseException] = []
+
+    def run():
+        try:
+            action()
+        except BaseException as exc:  # noqa: BLE001
+            errors.append(exc)
+
+    worker = threading.Thread(target=run)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        worker.start()
+        worker.join(0.5)
+        assert worker.is_alive(), "the update ran without waiting for the lock"
+    finally:
+        fcntl.flock(descriptor, fcntl.LOCK_UN)
+        os.close(descriptor)
+    worker.join(10)
+    assert not worker.is_alive() and not errors, errors
+
+
+def test_status_state_update_waits_for_the_lock(tmp_path):
+    state = StatusHighWater(tmp_path / "tenant" / STATUS_STATE_FILE)
+    lock = state.path.with_name(state.path.name + ".lock")
+    _blocked_while_locked(
+        lock,
+        lambda: state.advance(
+            revocation_sequence=4,
+            kill_switch_sequence=2,
+            now=datetime.now(timezone.utc),
+        ),
+    )
+    assert state.load().revocation_sequence == 4
+
+
+def test_hub_state_updates_wait_for_the_lock(core):
+    key, chain = _contributor(core, "t-locked")
+    registration = register_fingerprint(sim.app_fingerprint("7.1"), key, chain)
+    lock = core.hub.root / "state.lock"
+    _blocked_while_locked(lock, lambda: core.hub.register(registration))
+    assert core.hub.tenants_on(sim.app_fingerprint("7.1").fingerprint_sha256()) == 1
+    before = core.hub._state()["status_sequence"]
+    _blocked_while_locked(lock, core.hub.issue_revocation_list)
+    assert core.hub._state()["status_sequence"] == before + 1
+    _blocked_while_locked(lock, lambda: core.hub.revoke_contributor("t-locked"))
+    assert "t-locked" in core.hub._state()["revoked_subjects"]
 
 
 @pytest.mark.parametrize(

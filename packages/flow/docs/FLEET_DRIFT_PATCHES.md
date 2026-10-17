@@ -264,7 +264,11 @@ refuses a revocation list with a lower sequence than the recorded one, and
 refuses kill-switch history whose newest entry is lower than the recorded
 one, which is what a feed that dropped a recent kill switch looks like. It
 raises the recorded numbers only for status it accepts, and never lowers
-them. The file is replaced atomically. If it exists but cannot be read or
+them. The read, compare and write run under an exclusive lock on
+`status-state.json.lock` (`flock`, or `msvcrt.locking` on Windows, as the
+durable checkpoint store does), and the file is replaced atomically. The
+hub holds a lock on `state.lock` the same way while it changes
+`state.json`. If it exists but cannot be read or
 parsed, or cannot be written, status is not fresh and auto-promotion stops
 until an admin repairs it; the damaged file is not overwritten. A missing
 file means the tenant has accepted nothing yet. `process_imported_patch`

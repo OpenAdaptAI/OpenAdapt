@@ -37,6 +37,7 @@ from typing import Any, Final, Iterable, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from openadapt_flow.fleet._lock import exclusive_lock
 from openadapt_flow.fleet.feed import FilePatchFeed
 from openadapt_flow.fleet.fingerprint import APP_FAMILY_PATTERN, AppVersionFingerprint
 from openadapt_flow.fleet.patch import (
@@ -198,6 +199,14 @@ class FleetHub:
     def _save_state(self, state: dict[str, Any]) -> None:
         _write_json(self.root / "state.json", state)
 
+    @property
+    def state_lock_path(self) -> Path:
+        return self.root / "state.lock"
+
+    def _state_lock(self) -> Any:
+        """Hold while reading, changing and saving ``state.json``. Not reentrant."""
+        return exclusive_lock(self.state_lock_path)
+
     def audit_log(self) -> list[dict[str, Any]]:
         if not self.audit_path.is_file():
             return []
@@ -235,16 +244,17 @@ class FleetHub:
             registration.signature,
             "registration",
         )
-        state = self._state()
         subject = registration.chain.signer.payload.subject
-        if subject in state["revoked_subjects"]:
-            raise HubRefused("this contributor is revoked")
         key = registration.payload.app_fingerprint_sha256
-        subjects = set(state["registrations"].get(key, []))
-        subjects.add(subject)
-        state["registrations"][key] = sorted(subjects)
-        self._save_state(state)
-        return len(subjects)
+        with self._state_lock():
+            state = self._state()
+            if subject in state["revoked_subjects"]:
+                raise HubRefused("this contributor is revoked")
+            subjects = set(state["registrations"].get(key, []))
+            subjects.add(subject)
+            state["registrations"][key] = sorted(subjects)
+            self._save_state(state)
+            return len(self._independent(state, key))
 
     @staticmethod
     def _independent(state: dict[str, Any], app_fingerprint_sha256: str) -> list[str]:
@@ -355,10 +365,11 @@ class FleetHub:
     # -- fleet status --------------------------------------------------------
 
     def _next_sequence(self) -> int:
-        state = self._state()
-        state["status_sequence"] += 1
-        self._save_state(state)
-        return state["status_sequence"]
+        with self._state_lock():
+            state = self._state()
+            state["status_sequence"] += 1
+            self._save_state(state)
+            return state["status_sequence"]
 
     def issue_revocation_list(
         self,
@@ -417,7 +428,6 @@ class FleetHub:
         on the next revocation list, and every patch it contributed goes on a
         kill switch rollback entry.
         """
-        state = self._state()
         keys, serials, patches = set(), set(), set()
         for entry in self.audit_log():
             if entry.get("contributor_subject") != subject:
@@ -427,10 +437,14 @@ class FleetHub:
                 serials.add(entry["contributor_serial"])
             elif entry["event"] == "patch_distributed":
                 patches.add(entry["patch_id"])
-        state["revoked_key_ids"] = sorted(set(state["revoked_key_ids"]) | keys)
-        state["revoked_serials"] = sorted(set(state["revoked_serials"]) | serials)
-        state["revoked_subjects"] = sorted(set(state["revoked_subjects"]) | {subject})
-        self._save_state(state)
+        with self._state_lock():
+            state = self._state()
+            state["revoked_key_ids"] = sorted(set(state["revoked_key_ids"]) | keys)
+            state["revoked_serials"] = sorted(set(state["revoked_serials"]) | serials)
+            state["revoked_subjects"] = sorted(
+                set(state["revoked_subjects"]) | {subject}
+            )
+            self._save_state(state)
         self._audit(
             {
                 "event": "contributor_revoked",
