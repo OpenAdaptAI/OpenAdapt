@@ -1,7 +1,9 @@
 # SOC 2: automated dependency updates (OA-C-23).
 version: 2
 updates:
-  - package-ecosystem: "pip"
+  # The uv ecosystem updates uv.lock with pyproject.toml; the pip ecosystem
+  # left the lock stale, so CI's `uv sync --locked` rejected every bump.
+  - package-ecosystem: "uv"
     directory: "/"
     schedule:
       interval: "weekly"
