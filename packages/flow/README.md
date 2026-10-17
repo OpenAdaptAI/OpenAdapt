@@ -60,6 +60,29 @@ or Edge. Without either, it downloads Playwright's headless Chromium once
 [OpenAdapt launcher](https://github.com/OpenAdaptAI/OpenAdapt) installed,
 `openadapt flow demo` runs the same command.
 
+On macOS, most of a first run in a new environment goes to loading OpenCV,
+which RapidOCR, the default OCR engine, needs. macOS checks each copy of a
+native library the first time it loads, and by default uv gives every new
+environment its own copy. Two settings cut this time:
+
+- `UV_LINK_MODE=hardlink` makes uv link packages from its cache instead of
+  copying them, so macOS checks each library only once. With it, OpenCV took
+  1.2 seconds to load in a second new environment, compared with 12.8 seconds
+  without it.
+- The `native-ocr` extra with `OPENADAPT_FLOW_OCR=native` reads the screen
+  with Apple Vision on macOS or Windows OCR on Windows. A run with it doesn't
+  load OpenCV or RapidOCR at all.
+
+```bash
+OPENADAPT_FLOW_OCR=native uvx --python 3.12 \
+  --from 'openadapt-flow[browser,native-ocr]' openadapt-flow demo
+```
+
+`OPENADAPT_FLOW_OCR` takes `auto` (the default), `native`, or `rapidocr`. For
+now, `auto` uses RapidOCR on every platform. Linux always uses RapidOCR.
+Program-predicate proofs record which OCR engine made them, so a proof made
+under one engine isn't reused under the other.
+
 ![Two runs of the same automation on a fake clinic app. Both final screens show "Encounter saved". The record check found 1 note after run 1, which is marked Done and checked, and 0 notes after run 2, which stopped and asked a person.](docs/showcase/demo-proof.png)
 
 *Synthetic recording. A screenshot of the page that `openadapt-flow demo`
