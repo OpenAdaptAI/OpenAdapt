@@ -411,6 +411,13 @@ def test_encrypted_save_seals_the_identifier_crop(
     assert loaded.decrypted_template(anchor.identifier_crop) == plaintext
 
 
+def _ocr_point(anchor, png: bytes) -> tuple[int, int]:
+    """Where the OCR rung would resolve ``anchor`` on ``png`` (label center)."""
+    match = vision.find_text(png, anchor.ocr_text)
+    assert match is not None
+    return (int(match.point[0]), int(match.point[1]))
+
+
 class _PixelBackend:
     """Minimal pixel-only backend: screenshots, no structured_text_at."""
 
@@ -448,7 +455,8 @@ def test_compiled_crop_arms_pixel_tier_in_replayer_ladder(tmp_path: Path) -> Non
     wrong_png = _png(_before_frame(IDENTITY_TEXT_WRONG))
     resolution = Resolution(
         rung="ocr",
-        point=anchor.click_point,
+        # The OCR rung resolves to the live label's center, not the click.
+        point=_ocr_point(anchor, wrong_png),
         confidence=0.9,
         elapsed_ms=1.0,
     )
@@ -506,7 +514,7 @@ def test_encrypted_bundle_crop_reaches_pixel_tier(
 
     wrong_png = _png(_before_frame(IDENTITY_TEXT_WRONG))
     resolution = Resolution(
-        rung="ocr", point=anchor.click_point, confidence=0.9, elapsed_ms=1.0
+        rung="ocr", point=_ocr_point(anchor, wrong_png), confidence=0.9, elapsed_ms=1.0
     )
     replayer = Replayer(_PixelBackend(wrong_png, VIEWPORT), vision=vision)
     check = replayer._verify_identity(step, resolution, wrong_png, {}, loaded, bundle)

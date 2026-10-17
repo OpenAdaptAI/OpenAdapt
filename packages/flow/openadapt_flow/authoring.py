@@ -214,12 +214,20 @@ class MissingSecretTypeError(AuthoringError):
         self.param = param
 
 
-class CompileResult(TypedDict):
-    """Authoring compile is not success of the job."""
-
+class _CompileResultRequired(TypedDict):
     status: Literal["needs_human_admit"]
     workflow_id: str
     recording_retained: bool
+
+
+class CompileResult(_CompileResultRequired, total=False):
+    """Authoring compile is not success of the job.
+
+    ``distilled`` (steps in, steps out, dropped steps) is present when the
+    recording was distilled before compile.
+    """
+
+    distilled: dict[str, Any]
 
 
 class AdmitResult(TypedDict, total=False):
@@ -573,6 +581,42 @@ class AuthoringSession:
         self._require_not_paused()
         recorder.press(key)
 
+    def double_click(self, x: int, y: int) -> None:
+        """Double-click at pixels through :class:`Recorder`."""
+
+        recorder = self._require_recording()
+        self._require_not_paused()
+        self._last_target = _NodePixels(x=int(x), y=int(y), w=0, h=0)
+        recorder.double_click(int(x), int(y))
+
+    def right_click(self, x: int, y: int) -> None:
+        """Right-click at pixels through :class:`Recorder`."""
+
+        recorder = self._require_recording()
+        self._require_not_paused()
+        recorder.right_click(int(x), int(y))
+
+    def drag(self, x: int, y: int, end_x: int, end_y: int) -> None:
+        """Drag between two pixel points through :class:`Recorder`."""
+
+        recorder = self._require_recording()
+        self._require_not_paused()
+        recorder.drag(int(x), int(y), int(end_x), int(end_y))
+
+    def hotkey(self, modifiers: list[str], key: str) -> None:
+        """Press an explicit modifier chord through :class:`Recorder`."""
+
+        recorder = self._require_recording()
+        self._require_not_paused()
+        recorder.hotkey(list(modifiers), key)
+
+    def scroll(self, dx: int, dy: int) -> None:
+        """Scroll at the current pointer through :class:`Recorder`."""
+
+        recorder = self._require_recording()
+        self._require_not_paused()
+        recorder.scroll(int(dx), int(dy))
+
     def pause_for_input(
         self,
         *,
@@ -765,6 +809,7 @@ class AuthoringSession:
         bundle_dir: Path | str | None = None,
         *,
         name: str = "authoring",
+        distill: bool = True,
     ) -> CompileResult:
         """Compile via :func:`compile_recording`; never paints ``VERIFIED``.
 
@@ -772,6 +817,10 @@ class AuthoringSession:
         secret-field pause with no TYPE/param event. The compiler signature
         and return type (``Workflow``) are unchanged; this wrapper is the
         admit gate. ``bundle_dir`` defaults to a sibling of the recording.
+
+        With ``distill`` (the default), steps that had no visible effect are
+        removed first (:func:`~openadapt_flow.compiler.distill.distill_recording`)
+        and the distilled copy is compiled. The original recording is kept.
         """
 
         self._require_not_halted()
@@ -796,10 +845,31 @@ class AuthoringSession:
                 "the check was started but no field was marked",
                 code="check_unmarked",
             )
+        distilled: Optional[dict[str, Any]] = None
+        compile_dir = recording_dir
+        if distill:
+            from openadapt_flow.compiler.distill import distill_recording
+
+            distilled_dir = recording_dir.parent / f"{recording_dir.name}-distilled"
+            if distilled_dir.exists():
+                raise AuthoringError(
+                    f"distilled recording already exists: {distilled_dir}",
+                    code="distilled_exists",
+                )
+            report = distill_recording(recording_dir, distilled_dir)
+            compile_dir = distilled_dir
+            distilled = {
+                "steps_in": report.steps_in,
+                "steps_out": report.steps_out,
+                "dropped": [
+                    {"index": d.index, "kind": d.kind, "rule": d.rule}
+                    for d in report.dropped
+                ],
+            }
         from openadapt_flow.compiler.readback_authoring import CheckError
 
         try:
-            workflow = compile_recording(recording_dir, out_bundle, name=name)
+            workflow = compile_recording(compile_dir, out_bundle, name=name)
         except CheckError as exc:
             raise AuthoringError(str(exc), code="check_refused") from exc
         recording_id = workflow.recording_id or uuid.uuid4().hex
@@ -809,6 +879,8 @@ class AuthoringSession:
             "workflow_id": workflow_id,
             "recording_retained": True,
         }
+        if distilled is not None:
+            result["distilled"] = distilled
         digest = None
         manifest = getattr(workflow, "manifest", None)
         raw_digest = getattr(manifest, "content_digest", None)

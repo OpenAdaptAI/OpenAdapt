@@ -256,6 +256,8 @@ def build_identity_template(
     # Mirror the compiler's context_from_lines gate: a band shorter than
     # MIN_CONTEXT_CHARS is too generic to discriminate and is never stored (any
     # sibling row sharing the generic columns would otherwise verify).
+    if context_text:
+        context_text = _id.strip_param_caret(context_text, param_examples)
     if context_text and len(_id.squash(context_text)) >= _id.MIN_CONTEXT_CHARS:
         context_names = _id.embedded_params(context_text, param_examples)
         tmpl.context_params = _add_signal_hashes(
@@ -611,6 +613,12 @@ def verify_template_identity(
     """
     params = params or {}
     param_examples = param_examples or {}
+    # The live field shows the run's value with the text caret drawn after it
+    # ("Grace" + caret -> "Gracel"); drop that one glyph exactly as the
+    # recorded band's caret is dropped at compile time.
+    run_values = {k: str(v) for k, v in params.items() if isinstance(v, str)}
+    if run_values:
+        observed_text = _id.strip_param_caret(observed_text, run_values)
     hay = _id.squash(observed_text)
     marker = "<identity template>"
 

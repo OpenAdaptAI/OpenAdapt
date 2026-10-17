@@ -6004,6 +6004,10 @@
       "sha256": "395573c928cee8c5bc61a0658cc2ada41698266e6fcf54af00d899f21502cc1a"
     },
     {
+      "path": "tests/fixtures/match_ridge/openemr_accordion_rdp.png",
+      "sha256": "96baeda5e5cb84da804897ba573b4b12bb9f1a6b5008855a6f18458ca8adc558"
+    },
+    {
       "path": "tests/fixtures/remote-safe-synthetic-flow-release-verification.json",
       "sha256": "bf170018cd1d3519f40ebd2788e158dd34a789c7bfe1e85e30e3a445e5e40af8"
     },
