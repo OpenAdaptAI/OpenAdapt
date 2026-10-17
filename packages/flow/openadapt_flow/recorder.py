@@ -492,7 +492,7 @@ class Recorder:
             self._surface_backends[surface_id] = (
                 self._page_backend_factory(page)
                 if self._page_backend_factory is not None
-                else PlaywrightBackend(page)
+                else PlaywrightBackend(page, closed_page_frame=True)
             )
             ids.append(surface_id)
         self._multi_surface = True

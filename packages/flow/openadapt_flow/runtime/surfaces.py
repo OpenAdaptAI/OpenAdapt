@@ -123,7 +123,7 @@ def _page_closed(page: Any) -> bool:
 def _default_page_backend(page: Any) -> Any:
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 
-    return PlaywrightBackend(page)
+    return PlaywrightBackend(page, closed_page_frame=True)
 
 
 class SurfaceRouter:

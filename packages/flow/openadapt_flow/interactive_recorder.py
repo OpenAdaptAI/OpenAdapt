@@ -3040,6 +3040,7 @@ class InteractiveRecorder:
             ),
             structural_state_reader=self._read_scrubbed_page_state,
             screenshot_guard=self._guard_screenshot_privacy,
+            closed_page_frame=True,
         )
 
     def _arm_followed_page(self, page: Any) -> None:
@@ -3099,21 +3100,30 @@ class InteractiveRecorder:
         self._flush_scroll()
         assert self.recorder is not None and self.backend is not None
         surface_id = self.recorder.surface_for_page(page)
+        try:
+            target_closed = page.is_closed()
+        except Exception:
+            target_closed = True
+        if target_closed:
+            # The user's FIRST action in a popup closed it before Flow could
+            # see the popup: there is no frame of it to anchor that action
+            # or the switch to it.
+            raise BrowserAttachError(
+                "a popup or tab closed on the first action in it, before Flow "
+                "captured a frame of it; act in it once more before the action "
+                "that closes it (or record that step with the scripted "
+                "recorder), so recording stopped"
+            )
         if surface_id is None:
             raise BrowserAttachError(
                 "an action happened in a browser page that no recorded action "
                 "opened; recording stopped before accepting the event"
             )
-        try:
-            active_closed = self.page is None or self.page.is_closed()
-        except Exception:
-            active_closed = True
-        if active_closed:
-            raise BrowserAttachError(
-                "a recorded popup or tab closed and the next action happened in "
-                "another page; returning from a closed page is not yet "
-                "replayable, so recording stopped"
-            )
+        # When the popup or tab the user was in closed itself (an OAuth or
+        # approval window), acting on another page again is recorded as an
+        # explicit switch back with its own identity check; nothing ever
+        # returns on its own. A closed page shows nothing: its before frame is
+        # blank and it has no structural state.
         before = self.backend.screenshot()
         structural_before = self._structural_state()
         self._swap_privacy_cdp(page)
@@ -3125,6 +3135,16 @@ class InteractiveRecorder:
             surface_id, before_png=before, structural_before=structural_before
         )
         self._advance()
+
+    def _active_page_closed(self) -> bool:
+        """Only a followed (non-primary) page of an owned browser may close."""
+
+        if not self._owns_browser or self.page is self._primary_page:
+            return False
+        try:
+            return self.page is None or bool(self.page.is_closed())
+        except Exception:
+            return True
 
     def _swap_privacy_cdp(self, page: Any) -> None:
         """Keep one closed-shadow privacy CDP session per followed page."""
@@ -4157,6 +4177,10 @@ class InteractiveRecorder:
         return state
 
     def _structural_state(self) -> dict[str, Any]:
+        if self._active_page_closed():
+            # A followed popup that closed itself has no structural state; the
+            # next action elsewhere is recorded as an explicit switch back.
+            return {}
         state: dict[str, Any] = dict(self._read_scrubbed_page_state())
         try:
             page_count = self.backend.page_count

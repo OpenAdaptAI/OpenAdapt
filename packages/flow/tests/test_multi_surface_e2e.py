@@ -78,6 +78,14 @@ _REPORT = f"""<!doctype html><html><head><title>Quarterly Report</title>
 <p id="ack"></p>
 </body></html>"""
 
+_SELFCLOSE = f"""<!doctype html><html><head><title>Sign In Window</title>
+{_STYLE}</head><body>
+<h1>Sign In Window Ready</h1>
+<p id="terms">Terms Pending</p>
+<button id="agree" onclick="document.getElementById('terms').textContent='Terms Accepted';">Accept Terms</button>
+<button id="approve-close" onclick="window.opener.document.getElementById('popup-status').textContent='Signed In Elsewhere';window.close();">Approve And Close</button>
+</body></html>"""
+
 _PROMO = f"""<!doctype html><html><head><title>Special Offer</title>
 {_STYLE}</head><body><h1>Unexpected Offer Window</h1></body></html>"""
 
@@ -93,6 +101,7 @@ class _Handler(BaseHTTPRequestHandler):
             "/other.html": _OTHER,
             "/report.html": _REPORT,
             "/promo.html": _PROMO,
+            "/selfclose.html": _SELFCLOSE,
         }
         if parts.path in ("/", "/index.html"):
             body = _index(parse_qs(parts.query))

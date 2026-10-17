@@ -1008,6 +1008,7 @@ class PlaywrightBackend:
         screenshot_mask_selectors: tuple[str, ...] = (),
         structural_state_reader: Optional[Callable[[], dict[str, Any]]] = None,
         screenshot_guard: Optional[Callable[[], None]] = None,
+        closed_page_frame: bool = False,
     ) -> None:
         """Wrap an existing Playwright page.
 
@@ -1031,8 +1032,17 @@ class PlaywrightBackend:
             screenshot_guard: Optional fail-closed check that runs before
                 Chromium creates screenshot bytes. Recording paths use it to
                 bind or refuse closed-shadow secret boundaries.
+            closed_page_frame: Multi-surface PAGE surfaces only (a popup or
+                tab, docs/MULTI_SURFACE.md). Once the page has closed itself,
+                ``screenshot`` returns an all-black frame of the last size
+                instead of raising: a closed popup shows nothing. It never
+                shows another window, every screen postcondition fails on it,
+                and acting elsewhere still needs an explicit surface switch.
+                The primary page keeps the default (a closed page raises).
         """
         self.page = page
+        self._closed_page_frame = closed_page_frame
+        self._last_frame_size: Optional[tuple[int, int]] = None
         self._screenshot_scale = screenshot_scale
         self._screenshot_mask_selectors = screenshot_mask_selectors
         self._structural_state_reader = structural_state_reader
@@ -2885,6 +2895,49 @@ class PlaywrightBackend:
 
     def screenshot(self) -> bytes:
         """Return a stable current full-viewport frame as PNG bytes."""
+        if self._closed_page_frame and self._page_is_closed():
+            return self._closed_frame()
+        try:
+            png = self._live_screenshot()
+        except Exception:
+            # The page closed itself while the frame was being captured.
+            if self._closed_page_frame and self._page_is_closed():
+                return self._closed_frame()
+            raise
+        if self._closed_page_frame:
+            try:
+                from openadapt_flow.runtime.resolver import png_size
+
+                self._last_frame_size = png_size(png)
+            except Exception:
+                pass
+        return png
+
+    def _page_is_closed(self) -> bool:
+        try:
+            return bool(self.page.is_closed())
+        except Exception:
+            return True
+
+    def _closed_frame(self) -> bytes:
+        """An all-black frame: what a closed popup or tab shows."""
+
+        from io import BytesIO
+
+        from PIL import Image
+
+        size = self._last_frame_size
+        if size is None:
+            try:
+                viewport = self.page.viewport_size or {}
+                size = (int(viewport["width"]), int(viewport["height"]))
+            except Exception:
+                size = (1280, 800)
+        buffer = BytesIO()
+        Image.new("RGB", size, (0, 0, 0)).save(buffer, format="PNG")
+        return buffer.getvalue()
+
+    def _live_screenshot(self) -> bytes:
         base_options: dict[str, Any] = {}
         if self._screenshot_scale == "css":
             base_options["scale"] = "css"
