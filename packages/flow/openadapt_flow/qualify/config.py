@@ -33,7 +33,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any, Literal, Optional, Union
+from typing import Any, Literal, Mapping, Optional, Union
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
@@ -266,7 +266,9 @@ class VerifyConfig(BaseModel):
         record = self.record
         missing = [f for f in record.match if f not in record.fields]
         if record.fields and missing:
-            raise ValueError(f"record.match names fields not in record.fields: {missing}")
+            raise ValueError(
+                f"record.match names fields not in record.fields: {missing}"
+            )
         if record.fields and not record.match:
             raise ValueError("record.match must name the fields that select the record")
         if (
@@ -287,13 +289,16 @@ class VerifyConfig(BaseModel):
 _ENV = re.compile(r"\$\{([A-Za-z_][A-Za-z0-9_]*)(?::-([^}]*))?\}")
 
 
-def _expand(value: Any, missing: list[str]) -> Any:
+def _expand(
+    value: Any, missing: list[str], env: Optional[Mapping[str, str]] = None
+) -> Any:
+    source = os.environ if env is None else env
     if isinstance(value, str):
 
         def sub(match: re.Match[str]) -> str:
             name, default = match.group(1), match.group(2)
-            if name in os.environ:
-                return os.environ[name]
+            if name in source:
+                return source[name]
             if default is not None:
                 return default
             missing.append(name)
@@ -301,17 +306,24 @@ def _expand(value: Any, missing: list[str]) -> Any:
 
         return _ENV.sub(sub, value)
     if isinstance(value, list):
-        return [_expand(item, missing) for item in value]
+        return [_expand(item, missing, env) for item in value]
     if isinstance(value, dict):
-        return {key: _expand(item, missing) for key, item in value.items()}
+        return {key: _expand(item, missing, env) for key, item in value.items()}
     return value
 
 
-def parse_verify_config(data: Any, *, base_dir: Optional[Path] = None) -> VerifyConfig:
+def parse_verify_config(
+    data: Any,
+    *,
+    base_dir: Optional[Path] = None,
+    env: Optional[Mapping[str, str]] = None,
+) -> VerifyConfig:
+    """Validate a parsed verify.yaml. ``env`` replaces ``os.environ`` for ``${}``."""
+
     if not isinstance(data, dict):
         raise QualifyConfigError("verify.yaml must be a YAML mapping")
     missing: list[str] = []
-    data = _expand(data, missing)
+    data = _expand(data, missing, env)
     if missing:
         raise QualifyConfigError(
             [f"environment variable {name} is not set" for name in sorted(set(missing))]
@@ -332,7 +344,9 @@ def parse_verify_config(data: Any, *, base_dir: Optional[Path] = None) -> Verify
     return config
 
 
-def load_verify_config(path: Path | str) -> VerifyConfig:
+def load_verify_config(
+    path: Path | str, *, env: Optional[Mapping[str, str]] = None
+) -> VerifyConfig:
     import yaml
 
     path = Path(path)
@@ -342,7 +356,7 @@ def load_verify_config(path: Path | str) -> VerifyConfig:
         data = yaml.safe_load(path.read_text())
     except yaml.YAMLError as exc:
         raise QualifyConfigError(f"could not parse {path}: {exc}") from exc
-    return parse_verify_config(data, base_dir=path.resolve().parent)
+    return parse_verify_config(data, base_dir=path.resolve().parent, env=env)
 
 
 def verify_config_schema() -> dict[str, Any]:

@@ -67,7 +67,9 @@ WEB_FAULT_DRIVER_CONTRACT_SHA256 = hashlib.sha256(_CONTRACT).hexdigest()
 WRONG_ACTION_LABEL = "Merge Into Existing Record"
 SCREEN_FAULTS = frozenset({"ambiguity", "wrong_identity", "stale_identity"})
 
-_CLONE_JS = """(el) => { el.parentNode.insertBefore(el.cloneNode(true), el); return 1; }"""
+_CLONE_JS = (
+    """(el) => { el.parentNode.insertBefore(el.cloneNode(true), el); return 1; }"""
+)
 _RELABEL_JS = """(el, label) => {
   if (el.tagName === 'INPUT') { el.value = label; }
   else { el.textContent = label; }
@@ -166,7 +168,9 @@ class WebFaultDriver:
                 continue
         return found[0] if len(found) == 1 else None
 
-    def _record_text_pairs(self, context: QualificationFaultContext, target: Any) -> list:
+    def _record_text_pairs(
+        self, context: QualificationFaultContext, target: Any
+    ) -> list:
         reader = getattr(context.backend, "structured_text_at", None)
         if not callable(reader):
             return []
@@ -194,8 +198,13 @@ class WebFaultDriver:
                 pairs[word] = altered
         return sorted(pairs.items(), key=lambda item: -len(item[0]))
 
-    def _settled_frame_sha256(self, context: QualificationFaultContext) -> Optional[str]:
-        from openadapt_flow.qualification_drills import _await_paint, _settled_screenshot
+    def _settled_frame_sha256(
+        self, context: QualificationFaultContext
+    ) -> Optional[str]:
+        from openadapt_flow.qualification_drills import (
+            _await_paint,
+            _settled_screenshot,
+        )
 
         _await_paint(context.backend.page)
         capture = context.capture_frame or context.backend.screenshot
@@ -274,7 +283,9 @@ class WebFaultDriver:
         )
         self.declined = None
         return QualificationFaultMutation(
-            receipt=sign_fault_mutation_receipt(receipt, private_key=self._key.private_key),
+            receipt=sign_fault_mutation_receipt(
+                receipt, private_key=self._key.private_key
+            ),
             replace_effect_verifier=replace_effect_verifier,
             effect_verifier=replacement,
         )

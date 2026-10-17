@@ -63,8 +63,9 @@ def fixture() -> Any:
 def _shared_browser() -> Any:
     global _browser
     if _browser is None:
-        from openadapt_flow._browser_setup import ensure_chromium_installed
         from playwright.sync_api import sync_playwright
+
+        from openadapt_flow._browser_setup import ensure_chromium_installed
 
         ensure_chromium_installed()
         pw = sync_playwright().start()
@@ -120,4 +121,3 @@ def oracle_session(config: Any, attempts: int = 5) -> Any:
                 raise
             time.sleep(2.0 * attempt)
     raise AssertionError("unreachable")
-

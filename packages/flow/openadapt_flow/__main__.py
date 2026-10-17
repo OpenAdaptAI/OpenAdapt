@@ -6295,8 +6295,7 @@ QUALIFY_DEFINITION = (
     "run it against the normal case and deliberate faults, and confirm it is "
     "verified by reading back the system of record and halts on every fault."
 )
-QUALIFY_HELP = (
-    """The faults are a duplicated save button, a relabeled save button, a blanked
+QUALIFY_HELP = """The faults are a duplicated save button, a relabeled save button, a blanked
 screen, and a weak or missing check that the write happened. Certifying
 (--certify) signs the result under a policy such as clinical-write; you get a
 signed report and a certified bundle the runner will admit. A certificate
@@ -6307,7 +6306,6 @@ Definitions of qualify, certify and certification policies:
 How to write verify.yaml:
   docs/QUALIFY_A_WORKFLOW.md
 """
-)
 
 
 def _definition_first(parser: argparse.ArgumentParser) -> None:
@@ -6355,7 +6353,8 @@ def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
     out = (
         Path(args.out)
         if args.out
-        else Path("runs") / f"qualify-{bundle.resolve().name}-{time.strftime('%Y%m%d-%H%M%S')}"
+        else Path("runs")
+        / f"qualify-{bundle.resolve().name}-{time.strftime('%Y%m%d-%H%M%S')}"
     )
     try:
         result = qualify(
@@ -6375,14 +6374,15 @@ def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
         print(f"qualify REFUSED: {exc}\nEvidence so far: {out}", file=sys.stderr)
         return 1
     verdict = "PASS" if result.passed else "FAIL"
-    print(f"\nqualify {verdict}: {len(result.rows)} trial(s) in {result.timing['campaign_wall_s']} s")
+    print(
+        f"\nqualify {verdict}: {len(result.rows)} trial(s) in {result.timing['campaign_wall_s']} s"
+    )
     if result.certified:
         print(f"Certified under {result.policy}. Bundle: {result.bundle_dir}")
     elif certify is None:
         print("Not certified (pass --certify to sign the result under a policy).")
     print(f"Report: {result.out / 'QUALIFICATION.md'}")
     return 0 if result.passed else 1
-
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -7704,7 +7704,12 @@ def build_parser() -> argparse.ArgumentParser:
             "fault-missing-effect). Certification needs all six."
         ),
     )
-    q.add_argument("--trials", type=int, default=None, help="Trials per case (default: verify.yaml, 3)")
+    q.add_argument(
+        "--trials",
+        type=int,
+        default=None,
+        help="Trials per case (default: verify.yaml, 3)",
+    )
     q.add_argument("--out", default=None, metavar="DIR", help="New output directory")
     q.add_argument(
         "--certify",
@@ -7723,7 +7728,11 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="JSON",
         help="After certifying, run the certified bundle once with these inputs",
     )
-    q.add_argument("--campaign-id", default=None, help="Campaign id (default: verify.yaml or generated)")
+    q.add_argument(
+        "--campaign-id",
+        default=None,
+        help="Campaign id (default: verify.yaml or generated)",
+    )
     q.set_defaults(func=_cmd_qualify_campaign)
 
     q = qsub.add_parser("schema", help="Print the qualification-project JSON Schema")

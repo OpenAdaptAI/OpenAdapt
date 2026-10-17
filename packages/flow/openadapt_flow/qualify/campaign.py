@@ -118,7 +118,11 @@ def resolve_save_step(workflow: Workflow, config: VerifyConfig) -> Any:
     found_ids = [s.id for s in (with_effects or irreversible)]
     raise QualifyConfigError(
         "save_step: auto found "
-        + (f"{len(found_ids)} candidate saves {found_ids}" if found_ids else "no irreversible step")
+        + (
+            f"{len(found_ids)} candidate saves {found_ids}"
+            if found_ids
+            else "no irreversible step"
+        )
         + "; name the save in verify.yaml (save_step: step_NNN)"
     )
 
@@ -160,7 +164,9 @@ def record_effects(config: VerifyConfig) -> list[Any]:
     return effects
 
 
-def apply_verify_config(workflow: Workflow, config: VerifyConfig) -> tuple[Any, list[dict[str, Any]]]:
+def apply_verify_config(
+    workflow: Workflow, config: VerifyConfig
+) -> tuple[Any, list[dict[str, Any]]]:
     """Bind the save step and its record checks; return (save step, notes)."""
 
     from openadapt_flow.runtime.effects import ValueExpr
@@ -228,13 +234,18 @@ def check_ready(
             f"app.target {config.app.target!r}: qualify runs web campaigns today; "
             "the pixel-surface fault driver for Windows, RDP and Citrix is not built"
         )
-    if config.app.reset is None and config.campaign.trials * len(config.campaign.cases) > 1:
+    if (
+        config.app.reset is None
+        and config.campaign.trials * len(config.campaign.cases) > 1
+    ):
         problems.append(
             "app.reset is missing: every trial must start from the same baseline "
             "(command, http or python)"
         )
     if not params:
-        problems.append("no test inputs: the bundle recorded none and inputs gives none")
+        problems.append(
+            "no test inputs: the bundle recorded none and inputs gives none"
+        )
     specs = getattr(workflow, "param_specs", None) or {}
     for name, spec in specs.items():
         if getattr(spec, "required", True) and name not in params:
@@ -256,7 +267,9 @@ def check_ready(
             "(and record.match) to verify.yaml"
         )
     if any(effect.needs_operator_confirmation for effect in save.effects):
-        problems.append(f"save step {save.id} has an unconfirmed placeholder record check")
+        problems.append(
+            f"save step {save.id} has an unconfirmed placeholder record check"
+        )
     if save.anchor is not None and (
         save.anchor.structural is None or not save.anchor.structural.selector
     ):
@@ -343,7 +356,9 @@ def configure_project(
             ActionRiskClassification(
                 step_id=step.id,
                 classification=(
-                    ActionRiskClass.IRREVERSIBLE if irreversible else ActionRiskClass.READ_ONLY
+                    ActionRiskClass.IRREVERSIBLE
+                    if irreversible
+                    else ActionRiskClass.READ_ONLY
                 ),
                 explanation=(
                     f"writes the {record} in the system of record (verify.yaml save)"
@@ -357,7 +372,9 @@ def configure_project(
         )
     set_identity_policy(
         workflow,
-        IdentityPolicy(step_id=save.id, enforcement=IdentityEnforcement.CANONICAL_LADDER),
+        IdentityPolicy(
+            step_id=save.id, enforcement=IdentityEnforcement.CANONICAL_LADDER
+        ),
     )
     for index, _effect in enumerate(save.effects):
         set_effect_policy(
@@ -374,11 +391,15 @@ def configure_project(
     )
     runner_key = new_local_test_key(f"{campaign_id}-runner")
     set_trusted_runner_key(
-        workflow, key_id=runner_key.key_id, public_key_base64=runner_key.public_key_base64
+        workflow,
+        key_id=runner_key.key_id,
+        public_key_base64=runner_key.public_key_base64,
     )
     driver = WebFaultDriver(workflow, key_id=f"{campaign_id}-fault-driver")
     set_trusted_fault_driver_key(
-        workflow, key_id=driver.attestation_key_id, public_key_base64=driver.public_key_base64
+        workflow,
+        key_id=driver.attestation_key_id,
+        public_key_base64=driver.public_key_base64,
     )
     input_sha256 = runtime_inputs_digest(workflow, dict(params), None)
     target = QualificationActionTarget(step_id=save.id, actuation_path="gui")
@@ -388,12 +409,16 @@ def configure_project(
             case_id=case.id,
             runtime_input_sha256=input_sha256,
             action_targets=[target],
-            fault_target=None if case.kind is QualificationCaseKind.REPRESENTATIVE else target,
+            fault_target=None
+            if case.kind is QualificationCaseKind.REPRESENTATIVE
+            else target,
         )
     return CampaignSetup(
         runner_key=runner_key,
         driver=driver,
-        observer=WebEnvironmentObserver(application_version=app.version, headless=app.headless),
+        observer=WebEnvironmentObserver(
+            application_version=app.version, headless=app.headless
+        ),
         environment=environment,
     )
 
@@ -403,8 +428,14 @@ def configure_project(
 # ---------------------------------------------------------------------------
 
 
-def _records_reader(verifier: Any) -> Optional[Callable[[], Optional[list[dict[str, Any]]]]]:
-    for candidate in (verifier, getattr(verifier, "inner", None), getattr(verifier, "_inner", None)):
+def _records_reader(
+    verifier: Any,
+) -> Optional[Callable[[], Optional[list[dict[str, Any]]]]]:
+    for candidate in (
+        verifier,
+        getattr(verifier, "inner", None),
+        getattr(verifier, "_inner", None),
+    ):
         fetch = getattr(candidate, "_fetch_records", None)
         if callable(fetch):
             return fetch
@@ -459,7 +490,9 @@ class RecordReadback:
                 "silent_incorrect_success": bool(not passed and report.success),
             }
         after = self._read() or []
-        written = next((e for e in self._effects if e.kind.value == "record_written"), None)
+        written = next(
+            (e for e in self._effects if e.kind.value == "record_written"), None
+        )
         selector = {
             k: v.literal if hasattr(v, "literal") else v
             for k, v in ((written.match if written else {}) or {}).items()
@@ -487,7 +520,9 @@ class RecordReadback:
             )
             observed = "exact_record" if passed else "record_mismatch"
         elif oracle_kind == "no_mutation":
-            passed = not matched and not changed_existing and len(after) == len(self.before)
+            passed = (
+                not matched and not changed_existing and len(after) == len(self.before)
+            )
             observed = "no_mutation" if passed else "unexpected_mutation"
         else:
             raise QualifyError(f"unknown oracle kind {oracle_kind!r}")
@@ -546,7 +581,9 @@ class QualifyHooks:
     """
 
     open_session: Optional[Callable[[], tuple[Any, Callable[[], None]]]] = None
-    open_session_for: Optional[Callable[[TrialContext], tuple[Any, Callable[[], None]]]] = None
+    open_session_for: Optional[
+        Callable[[TrialContext], tuple[Any, Callable[[], None]]]
+    ] = None
     reset: Optional[Callable[[], Any]] = None
     make_verifier: Optional[Callable[[Mapping[str, object]], Any]] = None
     before_trial: Optional[Callable[[TrialContext], None]] = None
@@ -554,9 +591,9 @@ class QualifyHooks:
     after_run: Optional[Callable[[TrialContext, Any, RunReport], None]] = None
     after_close: Optional[Callable[[TrialContext, RunReport], None]] = None
     oracle: Optional[Callable[[TrialContext, RunReport], dict[str, Any]]] = None
-    extra_checks: list[Callable[[TrialContext, RunReport], tuple[str, dict[str, Any]]]] = field(
-        default_factory=list
-    )
+    extra_checks: list[
+        Callable[[TrialContext, RunReport], tuple[str, dict[str, Any]]]
+    ] = field(default_factory=list)
     settle_s: float = 1.0
     runner_id: Optional[str] = None
 
@@ -598,7 +635,9 @@ def _run(
         gate_kwargs = dict(
             bundle_dir=bundle_dir,
             deployment=DeploymentConfig(
-                policy=PolicySection(policy=ctx.state.get("policy", config.campaign.policy))
+                policy=PolicySection(
+                    policy=ctx.state.get("policy", config.campaign.policy)
+                )
             ),
             effect_verifier=verifier,
             profile_contract=execution_profile_contract(ExecutionProfile.STANDARD),
@@ -615,7 +654,8 @@ def _run(
             durable=True,
             require_settled=True,
             pixel_verify_enabled=any(
-                s.anchor is not None and s.anchor.identifier_crop for s in workflow.steps
+                s.anchor is not None and s.anchor.identifier_crop
+                for s in workflow.steps
             ),
         )
         if hooks.replayer_kwargs is not None:
@@ -763,10 +803,19 @@ class QualifyResult:
     timing: dict[str, Any]
     notes: list[dict[str, Any]]
     certified_run: Optional[dict[str, Any]] = None
+    #: Every case's run reports, in trial order.
+    reports: dict[str, list[RunReport]] = field(default_factory=dict)
+    #: The environment observer, for runs after certification.
+    observer: Any = None
+    environment_digest: Optional[str] = None
 
 
 def _default_hooks(config: VerifyConfig, hooks: Optional[QualifyHooks]) -> QualifyHooks:
-    from openadapt_flow.qualify.session import reset_runner, session_opener, verifier_factory
+    from openadapt_flow.qualify.session import (
+        reset_runner,
+        session_opener,
+        verifier_factory,
+    )
 
     hooks = hooks or QualifyHooks()
     if hooks.open_session is None and hooks.open_session_for is None:
@@ -789,6 +838,10 @@ def qualify(
     run_params: Optional[Mapping[str, str]] = None,
     hooks: Optional[QualifyHooks] = None,
     campaign_id: Optional[str] = None,
+    run_id_prefix: Optional[str] = None,
+    evidence_root: Optional[Path | str] = None,
+    in_place: bool = False,
+    write_campaign_files: bool = True,
     log: Callable[[str], None] = print,
 ) -> QualifyResult:
     """Run the campaign; certify under ``certify`` (a policy name) if given.
@@ -796,6 +849,12 @@ def qualify(
     Raises :class:`QualifyConfigError` before running anything when
     verify.yaml or the bundle is missing something, and :class:`QualifyError`
     when a case does not behave as required or certification refuses.
+
+    Layout: ``out/bundle`` (a copy, or ``bundle_src`` itself with
+    ``in_place``), ``out/cases/<case>/trial-NN`` and ``out/qualification``.
+    ``evidence_root`` (default ``out``) is the root case evidence is relative
+    to. ``write_campaign_files=False`` leaves out the campaign summary,
+    timing, notes and ``QUALIFICATION.md`` (for packs that list every file).
     """
 
     from openadapt_flow.policy import load_policy
@@ -815,7 +874,8 @@ def qualify(
     t0 = time.time()
     bundle_src = Path(bundle_src)
     out = Path(out)
-    if out.exists():
+    root = Path(evidence_root) if evidence_root is not None else out
+    if (out / "cases").exists() or (out.exists() and not in_place):
         raise QualifyError(f"output already exists: {out}")
     selected = list(cases or config.campaign.cases)
     unknown = [c for c in selected if c not in CASE_IDS]
@@ -828,7 +888,9 @@ def qualify(
             raise QualifyConfigError(
                 "--certify needs all six cases; certification refuses a partial campaign"
             )
-    campaign_id = campaign_id or config.campaign.id or f"qualify-{bundle_src.name}-{int(t0)}"
+    campaign_id = (
+        campaign_id or config.campaign.id or f"qualify-{bundle_src.name}-{int(t0)}"
+    )
 
     workflow = Workflow.load(bundle_src)
     save, notes = apply_verify_config(workflow, config)
@@ -840,32 +902,43 @@ def qualify(
     if problems:
         raise QualifyConfigError(problems)
 
-    bundle_dir = out / "bundle"
-    out.mkdir(parents=True)
-    shutil.copytree(bundle_src, bundle_dir)
+    if in_place:
+        bundle_dir = bundle_src
+        out.mkdir(parents=True, exist_ok=True)
+    else:
+        bundle_dir = out / "bundle"
+        out.mkdir(parents=True)
+        shutil.copytree(bundle_src, bundle_dir)
     if notes:
         save_qualified_workflow(workflow, bundle_dir)
         workflow = Workflow.load(bundle_dir)
         save = next(s for s in workflow.steps if s.id == save.id)
-    write_json(out / "qualify-notes.json", notes)
-    write_json(out / "verify.resolved.json", config.model_dump(mode="json"))
+    if write_campaign_files:
+        write_json(out / "qualify-notes.json", notes)
+        write_json(out / "verify.resolved.json", config.model_dump(mode="json"))
 
     # The environment boundary is read from a live session.
     assert hooks.make_verifier is not None
     tier = getattr(hooks.make_verifier(params), "verification_tier", None)
     if tier is None:
-        raise QualifyConfigError("system_of_record verifier declares no verification tier")
+        raise QualifyConfigError(
+            "system_of_record verifier declares no verification tier"
+        )
     if hooks.reset is not None:
         hooks.reset()
     opener = hooks.open_session or (
         lambda: hooks.open_session_for(  # type: ignore[misc]
-            TrialContext("environment", "", "", 0, out, out, "environment", dict(params))
+            TrialContext(
+                "environment", "", "", 0, out, out, "environment", dict(params)
+            )
         )
     )
     backend, close = opener()
     try:
         environment = web_environment_payload(
-            backend, application_version=config.app.version, headless=config.app.headless
+            backend,
+            application_version=config.app.version,
+            headless=config.app.headless,
         )
     finally:
         close()
@@ -881,14 +954,21 @@ def qualify(
     save_qualified_workflow(workflow, bundle_dir)
     workflow = Workflow.load(bundle_dir)
     save = next(s for s in workflow.steps if s.id == save.id)
-    runner_id = hooks.runner_id or f"openadapt-flow/qualify-web-{'headless' if config.app.headless else 'headed'}"
+    runner_id = (
+        hooks.runner_id
+        or f"openadapt-flow/qualify-web-{'headless' if config.app.headless else 'headed'}"
+    )
     policy_name = certify or config.campaign.policy
 
     rows: list[dict[str, Any]] = []
+    reports: dict[str, list[RunReport]] = {}
     results: list[Any] = []
     trial_times: list[float] = []
     reset_times: list[float] = []
-    project_cases = {c.id: c for c in (workflow.qualification.cases if workflow.qualification else [])}
+    project_cases = {
+        c.id: c
+        for c in (workflow.qualification.cases if workflow.qualification else [])
+    }
     for case_id, expected, oracle_kind in CASES:
         if case_id not in selected:
             continue
@@ -902,7 +982,7 @@ def qualify(
                 trial=trial,
                 trial_dir=trial_dir,
                 run_dir=trial_dir / "run",
-                run_id=f"{campaign_id}-{case_id}-trial-{trial:02d}",
+                run_id=f"{run_id_prefix or campaign_id}-{case_id}-trial-{trial:02d}",
                 params=dict(params),
                 state={"policy": policy_name},
             )
@@ -916,8 +996,15 @@ def qualify(
             if hooks.before_trial is not None:
                 hooks.before_trial(ctx)
 
-            def authorize(_verifier: Any, gate_kwargs: dict[str, Any], _q: Any = qcase, _c: Any = ctx) -> Any:
-                gate = evaluate_run_gate(workflow, qualification_evidence_only=True, **gate_kwargs)
+            def authorize(
+                _verifier: Any,
+                gate_kwargs: dict[str, Any],
+                _q: Any = qcase,
+                _c: Any = ctx,
+            ) -> Any:
+                gate = evaluate_run_gate(
+                    workflow, qualification_evidence_only=True, **gate_kwargs
+                )
                 if not gate.passed:
                     raise QualifyError(gate.render())
                 return build_qualification_case_authorization(
@@ -929,7 +1016,9 @@ def qualify(
                     campaign_id=campaign_id,
                     run_id=_c.run_id,
                     fault_driver=(
-                        None if _q.kind is QualificationCaseKind.REPRESENTATIVE else setup.driver
+                        None
+                        if _q.kind is QualificationCaseKind.REPRESENTATIVE
+                        else setup.driver
                     ),
                 )
 
@@ -945,7 +1034,10 @@ def qualify(
                 fault_driver=setup.driver,
                 marks=marks,
             )
-            judged = _judge_trial(hooks=hooks, ctx=ctx, report=report, readback=readback)
+            reports.setdefault(case_id, []).append(report)
+            judged = _judge_trial(
+                hooks=hooks, ctx=ctx, report=report, readback=readback
+            )
             oracle = judged["oracle"]
             (trial_dir / "case-input.json").write_bytes(
                 runtime_inputs_bytes(workflow, dict(params), None)
@@ -968,10 +1060,14 @@ def qualify(
                 "oracle": oracle.get("observed"),
                 "trial_wall_s": round(trial_s, 1),
                 "fault_declined": setup.driver.declined,
-                **{f"{name}_passed": bool(res.get("passed")) for name, res in judged["extra"].items()},
+                **{
+                    f"{name}_passed": bool(res.get("passed"))
+                    for name, res in judged["extra"].items()
+                },
             }
             rows.append(row)
-            write_json(out / "campaign-summary.json", rows)
+            if write_campaign_files:
+                write_json(out / "campaign-summary.json", rows)
             log(json.dumps(row, default=str))
             failure = None
             if report.execution_outcome != expected:
@@ -994,7 +1090,7 @@ def qualify(
                 raise QualifyError(f"{case_id} trial {trial}: {failure}")
             results.append(
                 case_result(
-                    root=out,
+                    root=root,
                     workflow=workflow,
                     case_id=case_id,
                     observed_outcome=expected,
@@ -1007,32 +1103,47 @@ def qualify(
                 )
             )
     for result in results:
-        record_case_results(workflow, [result], evidence_root=out)
+        try:
+            record_case_results(workflow, [result], evidence_root=root)
+        except Exception as exc:
+            raise QualifyError(
+                f"case result refused for {result.case_id} ({result.detail_code}): {exc}"
+            ) from exc
     if certify is not None:
-        qreport = certify_project(workflow, policy=load_policy(certify), evidence_root=out)
+        qreport = certify_project(
+            workflow, policy=load_policy(certify), evidence_root=root
+        )
     else:
-        qreport = evaluate_qualification(workflow, evidence_root=out)
+        qreport = evaluate_qualification(workflow, evidence_root=root)
     write_json(out / "qualification" / "report.json", qreport.model_dump(mode="json"))
-    (out / "qualification" / "verdict.txt").write_text(qreport.render() + "\n")
+    if write_campaign_files:
+        (out / "qualification" / "verdict.txt").write_text(qreport.render() + "\n")
     log(qreport.render())
     t_campaign = time.time()
     timing: dict[str, Any] = {
         "campaign_wall_s": round(t_campaign - t0, 1),
         "trials": len(trial_times),
-        "trial_wall_s_mean": round(sum(trial_times) / len(trial_times), 1) if trial_times else None,
+        "trial_wall_s_mean": round(sum(trial_times) / len(trial_times), 1)
+        if trial_times
+        else None,
         "reset_s_total": round(sum(reset_times), 1),
         "engine_ms_by_case": {
-            row["case_id"]: [r["total_ms"] for r in rows if r["case_id"] == row["case_id"]]
+            row["case_id"]: [
+                r["total_ms"] for r in rows if r["case_id"] == row["case_id"]
+            ]
             for row in rows
         },
     }
     if certify is not None and not qreport.passed:
-        write_json(out / "timing.json", timing)
-        raise QualifyError("certification refused; see qualification/verdict.txt")
+        if write_campaign_files:
+            write_json(out / "timing.json", timing)
+        raise QualifyError(f"certification refused:\n{qreport.render()}")
     save_qualified_workflow(workflow, bundle_dir)
     write_json(
         out / "qualification" / "project.json",
-        workflow.qualification.model_dump(mode="json") if workflow.qualification else {},
+        workflow.qualification.model_dump(mode="json")
+        if workflow.qualification
+        else {},
     )
     result = QualifyResult(
         passed=bool(qreport.passed),
@@ -1044,6 +1155,9 @@ def qualify(
         rows=rows,
         timing=timing,
         notes=notes,
+        reports=reports,
+        observer=setup.observer,
+        environment_digest=web_environment_digest(environment),
     )
     if run_params is not None:
         if not result.certified:
@@ -1060,8 +1174,9 @@ def qualify(
             run_id=f"{campaign_id}-certified-run",
         )
         timing["certified_run"] = result.certified_run["timing"]
-    write_json(out / "timing.json", timing)
-    write_summary_markdown(result)
+    if write_campaign_files:
+        write_json(out / "timing.json", timing)
+        write_summary_markdown(result)
     return result
 
 
@@ -1151,7 +1266,9 @@ def write_summary_markdown(result: QualifyResult) -> Path:
         + (f", certified under `{result.policy}`" if result.certified else ""),
         f"- Campaign time: {result.timing.get('campaign_wall_s')} s for "
         f"{result.timing.get('trials')} trials",
-        f"- Certified bundle: `{result.bundle_dir.name}/`" if result.certified else "- Not certified",
+        f"- Certified bundle: `{result.bundle_dir.name}/`"
+        if result.certified
+        else "- Not certified",
         "",
         "| Case | Trial | Expected | Observed | Read-back | Model calls | Engine ms |",
         "|---|---|---|---|---|---|---|",

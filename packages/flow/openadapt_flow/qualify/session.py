@@ -27,7 +27,9 @@ def load_hook(reference: str) -> Callable[..., Any]:
     try:
         module = importlib.import_module(module_name)
     except ImportError as exc:
-        raise QualifyConfigError(f"cannot import {module_name!r} for {reference!r}: {exc}") from exc
+        raise QualifyConfigError(
+            f"cannot import {module_name!r} for {reference!r}: {exc}"
+        ) from exc
     hook = getattr(module, attr, None)
     if not callable(hook):
         raise QualifyConfigError(f"{reference!r} is not a callable")
@@ -136,7 +138,9 @@ def verifier_factory(config: VerifyConfig) -> Callable[[Mapping[str, object]], A
         from openadapt_flow.runtime.effects import RestRecordVerifier
 
         if not cfg.base_url:
-            raise QualifyConfigError("system_of_record.base_url is required for kind: rest")
+            raise QualifyConfigError(
+                "system_of_record.base_url is required for kind: rest"
+            )
 
         def build_rest(params: Mapping[str, object]) -> Any:
             return RestRecordVerifier(

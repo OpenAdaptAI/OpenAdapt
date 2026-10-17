@@ -1,0 +1,25 @@
+# Qualify the MockMed triage workflow (public demo evidence packs).
+# The exporter fills MOCKMED_BASE_URL (a fresh loopback server) and
+# MOCKMED_APP_VERSION (the digest of openadapt_flow/mockmed).
+version: 1
+app:
+  target: web
+  name: OpenAdapt MockMed synthetic reference
+  url: ${MOCKMED_BASE_URL}
+  entry_url: ${MOCKMED_BASE_URL}?fault=ok&idempotency=demo#tasks
+  version: sha256:${MOCKMED_APP_VERSION}
+  reset:
+    http: {method: POST, url: "${MOCKMED_BASE_URL}api/reset", body: {}}
+system_of_record:
+  kind: rest
+  base_url: ${MOCKMED_BASE_URL}
+  records_path: /api/db
+  records_key: records
+# The compiler mined the save's record checks from the demonstration.
+save_step: auto
+inputs:
+  source: recorded
+campaign:
+  id: public-demo-mockmed-qualified-campaign-v1
+  trials: 3
+  policy: clinical-write
