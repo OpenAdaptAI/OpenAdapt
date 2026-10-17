@@ -161,6 +161,21 @@ over-halts, and reports model calls in two numbers: `executor_model_calls`
 (calls made while judging; a read-back makes none). It holds no record
 values, workflow names or reason text.
 
+A fault case passes only when both hold: the read-back shows nothing landed
+(`REFUTED`, outcome `halted_before_effect`), and the engine halted. A store
+that shows nothing while the engine reported success counts as a silent
+incorrect success.
+
+Keep `result.json` inside the customer's systems when the campaign ran
+against real records. For now, each case's `receipt_sha256` is a plain,
+unsalted SHA-256 of that trial's `report.json`, and `evidence_digest` is the
+same over its read-back result. Those files hold the inputs and record
+details the run used, so someone with a guess at the values could confirm it
+against the digest. Effect receipts (RFC-0002), which bind identity values in
+a form that does not allow this, will replace these digests. A campaign on
+made-up test data, like the OpenEMR fixture or MockMed, has nothing to
+protect.
+
 How each read is labelled (`verification_tier`):
 
 - `independent_readback`: the system of record read without going through

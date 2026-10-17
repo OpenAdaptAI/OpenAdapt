@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from base64 import b64decode
 from pathlib import Path
 from types import SimpleNamespace
@@ -338,4 +339,52 @@ def test_digest_is_over_the_effective_effects_not_the_file():
     identity = "sha256:" + H
     assert verify_config_sha256(identity, expanded) == verify_config_sha256(
         identity, listed.effects
+    )
+
+
+def test_a_fault_passes_only_when_nothing_landed_and_the_engine_halted(tmp_path):
+    ok = _entry(tmp_path, "fault-ambiguity", "HALTED", NONE)
+    assert ok["passed"]
+    # The store shows nothing, but the engine did not halt (it reported success).
+    not_halted = _entry(tmp_path, "fault-ambiguity", "VERIFIED", NONE)
+    assert not not_halted["passed"] and not_halted["silent_incorrect_success"]
+    # Not halted and not verified either (the run failed some other way).
+    failed = _entry(tmp_path, "fault-weak-effect", "FAILED", NONE)
+    assert not failed["passed"]
+    # The engine halted, but part of a write landed: REFUTED, not "nothing".
+    partial = {**NONE, "observed": "unexpected_mutation", "landed": "some"}
+    landed = _entry(tmp_path, "fault-stale-identity", "HALTED", partial)
+    assert landed["observed_verdict"] == "REFUTED"
+    assert landed["outcome"] == "reconciliation_required"
+    assert not landed["passed"]
+
+
+def test_refusal_paths_carry_only_ids(tmp_path):
+    report = _qreport()
+    dumped = report.model_dump()
+    dumped["refusals"] = [
+        {"code": "step_identity_unarmed", "path": "steps.step_040.identity_armed",
+         "step_id": "step_040", "message": "free text"},
+        {"code": "case_not_passed", "path": "qualification.cases.fault-ambiguity.results",
+         "case_id": "fault-ambiguity", "message": "free text"},
+        {"code": "policy_violation", "path": "steps.jane.doe@example.invalid",
+         "step_id": "jane.doe@example.invalid", "message": "free text"},
+        {"code": "policy_violation", "path": "workflow note: Jane Doe, DOB 1971",
+         "message": "free text"},
+    ]  # fmt: skip
+    report = SimpleNamespace(model_dump=lambda **_: dumped)
+    result = build_result(
+        report=report,
+        verify_sha256="sha256:" + H,
+        verifier_identity="sha256:" + H,
+        fault_driver_version="abc",
+        cases=[],
+    )
+    paths = {r["path"] for r in result["refusals"]}
+    assert "steps.step_040.identity_armed" in paths
+    assert "qualification.cases.fault-ambiguity.results" in paths
+    assert "steps.redacted" in paths and "redacted" in paths
+    text = json.dumps(result["refusals"])
+    assert (
+        "example.invalid" not in text and "Jane" not in text and "free text" not in text
     )

@@ -30,6 +30,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal, Mapping, Optional
@@ -190,14 +191,27 @@ def case_entry(
     }
     # The normal case must reach ``verified``; a fault must match its verdict.
     # Both only at independent_readback.
-    entry["passed"] = bool(
-        observed == expected
-        and tier == "independent_readback"
-        and (expected != "CONFIRMED" or entry["outcome"] == "verified")
-    )
+    if expected == "CONFIRMED":
+        # The normal case: the record landed, read at independent_readback.
+        entry["passed"] = bool(
+            observed == "CONFIRMED"
+            and tier == "independent_readback"
+            and entry["outcome"] == "verified"
+        )
+    else:
+        # A fault (RFC-0002 decision 4): the read shows nothing landed AND
+        # the engine halted. Either alone is not enough.
+        entry["passed"] = bool(
+            observed == "REFUTED"
+            and landed == "none"
+            and tier == "independent_readback"
+            and report.execution_outcome == "HALTED"
+        )
+    # A write landed where nothing should have, or the engine reported a
+    # success that the system of record does not confirm.
     entry["silent_incorrect_success"] = bool(
         (expected != "CONFIRMED" and observed == "CONFIRMED")
-        or (report.success and observed != expected)
+        or (report.success and observed != "CONFIRMED")
     )
     entry["over_halt"] = bool(
         expected == "CONFIRMED" and report.execution_outcome == "HALTED"
@@ -206,6 +220,36 @@ def case_entry(
 
 
 # -- the result ----------------------------------------------------------------
+#: A refusal path is dot-separated identifiers: ``qualification.cases.<id>``,
+#: ``steps.<id>.identity_armed``. Nothing with spaces, ``@``, ``/``, ``:`` or
+#: quotes, so an input value or a sentence cannot pass for one.
+_PATH_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z0-9_-]{1,128}){0,8}$")
+_ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
+
+
+def closed_id(value: Optional[str]) -> Optional[str]:
+    """A step or case id, or ``None`` when it is not a plain id."""
+
+    if value is None:
+        return None
+    return value if _ID_RE.fullmatch(value) else "redacted"
+
+
+def closed_path(value: Optional[str]) -> Optional[str]:
+    """A refusal field path, cut back to its fixed prefix if a segment is not an id."""
+
+    if value is None:
+        return None
+    if _PATH_RE.fullmatch(value):
+        return value
+    head = value.split(".", 1)[0]
+    return (
+        f"{head}.redacted"
+        if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", head)
+        else "redacted"
+    )
+
+
 def build_result(
     *,
     report: Any,
@@ -227,9 +271,9 @@ def build_result(
                     k: v
                     for k, v in {
                         "code": r["code"],
-                        "path": r.get("path"),
-                        "step_id": r.get("step_id"),
-                        "case_id": r.get("case_id"),
+                        "path": closed_path(r.get("path")),
+                        "step_id": closed_id(r.get("step_id")),
+                        "case_id": closed_id(r.get("case_id")),
                     }.items()
                     if v is not None
                 },
