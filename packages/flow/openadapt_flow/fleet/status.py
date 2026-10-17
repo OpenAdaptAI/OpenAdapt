@@ -206,7 +206,13 @@ class FleetStatusSource(Protocol):
         """The newest list. Raise :class:`FleetStatusUnavailable` if none."""
         ...
 
-    def kill_switches(self) -> list[SignedKillSwitch]: ...
+    def kill_switch_documents(self) -> list[str]:
+        """Every kill-switch entry as raw JSON, oldest first.
+
+        Raw, so one malformed entry cannot hide the others: the reader parses
+        each entry on its own.
+        """
+        ...
 
 
 @dataclass
@@ -396,14 +402,21 @@ def read_fleet_status(
                 accepted_revocation = rl.payload.sequence
 
     try:
-        switches = source.kill_switches()
+        documents = source.kill_switch_documents()
     except Exception as exc:  # noqa: BLE001
         status.problems.append(
             f"kill switches unreachable ({type(exc).__name__}); failing closed"
         )
-        switches = []
+        documents = []
     verified: list[SignedKillSwitch] = []
-    for entry in switches:
+    for document in documents:
+        try:
+            entry = SignedKillSwitch.model_validate_json(document)
+        except ValueError:
+            # Its rollback ids are unknown, so nothing may auto-promote, but
+            # the verified entries around it still apply.
+            status.problems.append("a kill-switch entry is malformed")
+            continue
         try:
             _verify_status_chain(entry.chain, trust, current)
             verify_document(

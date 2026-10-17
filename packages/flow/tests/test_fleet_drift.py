@@ -956,6 +956,19 @@ def test_fleet_status_fails_closed(tmp_path, core):
     assert any("kill-switch entry does not verify" in p for p in status.problems)
 
 
+def test_a_malformed_kill_switch_entry_does_not_hide_a_rollback(core):
+    bad = "a" * 64
+    core.hub.issue_kill_switch(
+        disable_auto_promotion=False, rollback_patch_ids=[bad], reason="bad_patch"
+    )
+    # A junk entry sorts after the real one, as a newer entry would.
+    (core.feed.status_dir / "kill-switch-99999999.json").write_text("{not json")
+    status = read_fleet_status(core.feed, core.trust)
+    assert bad in status.rollback_patch_ids
+    assert not status.fresh
+    assert "a kill-switch entry is malformed" in status.problems
+
+
 def test_status_high_water_refuses_a_replayed_revocation_list(tmp_path, core):
     trust = core.trust
     state = StatusHighWater(tmp_path / "tenant" / STATUS_STATE_FILE)

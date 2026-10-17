@@ -42,7 +42,7 @@ class PatchFeed(Protocol):
 
     def revocation_list(self) -> SignedRevocationList: ...
 
-    def kill_switches(self) -> list[SignedKillSwitch]: ...
+    def kill_switch_documents(self) -> list[str]: ...
 
 
 def _write(path: Path, text: str) -> None:
@@ -111,12 +111,11 @@ class FilePatchFeed:
             raise FleetStatusUnavailable("the feed has no revocation list")
         return SignedRevocationList.model_validate_json(path.read_text())
 
-    def kill_switches(self) -> list[SignedKillSwitch]:
+    def kill_switch_documents(self) -> list[str]:
         if not self.status_dir.is_dir():
             return []
-        # A malformed entry raises, and the status reader fails closed.
         return [
-            SignedKillSwitch.model_validate_json(path.read_text())
+            path.read_text()
             for path in sorted(self.status_dir.glob("kill-switch-*.json"))
         ]
 
@@ -143,7 +142,7 @@ class CloudPatchFeed:
     def revocation_list(self) -> SignedRevocationList:
         raise FleetStatusUnavailable("the Cloud patch feed is not built yet")
 
-    def kill_switches(self) -> list[SignedKillSwitch]:
+    def kill_switch_documents(self) -> list[str]:
         raise FleetStatusUnavailable("the Cloud patch feed is not built yet")
 
 
