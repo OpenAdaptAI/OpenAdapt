@@ -1,7 +1,7 @@
 """How a write was checked, in three grades: the read-back assurance.
 
 ``VerificationTier`` (``openadapt_flow.verification``) ranks evidence in four
-steps, and the Seal ladder (``openadapt_types.oracle.OracleTier``) ranks it in
+steps, and the Seal ladder (``openadapt_flow.contracts.oracle.OracleTier``) ranks it in
 four other steps. A reviewer usually needs one plainer answer: was the save
 read back independently of the session that typed it, read back on the same
 screen, or not checked at all? :func:`assurance_for` gives that answer:
@@ -23,17 +23,18 @@ screen-only target such as Citrix gets an honest "screen-checked" grade,
 never ``independent_readback``. ``independent_readback`` still does not by
 itself mean a production Seal.
 
-ADAPTER POINT. The three names are the shared verification-grade vocabulary
-being added to ``openadapt-types``. Until that enum is published, this module
-defines them as plain strings. When it lands, replace :data:`Assurance` and
-the constants below with the ``openadapt_types`` enum and keep
-:func:`assurance_for` as the only mapping from Flow tiers.
+The three names are the shared verification-grade vocabulary published as
+:class:`openadapt_flow.contracts.approval.ReadBackTier` (RFC-0002
+``verification_tier``). :data:`Assurance` is that contract's wire type and the
+constants below are its labels; :func:`assurance_for` stays the only mapping
+from Flow tiers.
 """
 
 from __future__ import annotations
 
 from typing import Final, Literal, Optional
 
+from openadapt_flow.contracts.approval import VerificationTierLabel
 from openadapt_flow.verification import VerificationTier
 
 __all__ = [
@@ -46,18 +47,17 @@ __all__ = [
     "weakest_assurance",
 ]
 
-# -- ADAPTER POINT: replace with the openadapt-types enum when it is published.
-Assurance = Literal["independent_readback", "screen_readback", "unchecked"]
-INDEPENDENT_READBACK: Final = "independent_readback"
-SCREEN_READBACK: Final = "screen_readback"
-UNCHECKED: Final = "unchecked"
-#: Strongest first.
+#: The RFC-0002 ``verification_tier`` wire type from the shared contract.
+Assurance = VerificationTierLabel
+INDEPENDENT_READBACK: Final[Literal["independent_readback"]] = "independent_readback"
+SCREEN_READBACK: Final[Literal["screen_readback"]] = "screen_readback"
+UNCHECKED: Final[Literal["unchecked"]] = "unchecked"
+#: Strongest first, in the contract's order.
 ASSURANCE_GRADES: tuple[Assurance, ...] = (
     INDEPENDENT_READBACK,
     SCREEN_READBACK,
     UNCHECKED,
 )
-# -- end ADAPTER POINT
 
 
 def assurance_for(

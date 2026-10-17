@@ -688,3 +688,23 @@ def test_check_commands_through_main(tmp_path, capsys):
     marks = load_check(rec)
     assert marks.reset == DeclaredReset(kind="fresh_session", event=3)
     assert marks.fields[0].value_kind == "code"
+
+
+def test_assurance_grades_are_the_published_contract_labels() -> None:
+    """The grades are the shared ReadBackTier labels, strongest first."""
+
+    from openadapt_flow.assurance import ASSURANCE_GRADES, assurance_for
+    from openadapt_flow.contracts.approval import ReadBackTier
+
+    assert ASSURANCE_GRADES == tuple(tier.label for tier in sorted(ReadBackTier))
+    for flow_tier in (1, 2, 3, 4):
+        grade = assurance_for(flow_tier)
+        expected = (
+            ReadBackTier.INDEPENDENT_READBACK
+            if flow_tier == 1
+            else ReadBackTier.SCREEN_READBACK
+        )
+        assert ReadBackTier.from_label(grade) is expected
+    assert ReadBackTier.from_label(assurance_for(1, confirmed=False)) is (
+        ReadBackTier.UNCHECKED
+    )
