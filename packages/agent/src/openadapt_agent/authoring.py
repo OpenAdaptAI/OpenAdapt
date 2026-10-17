@@ -158,7 +158,7 @@ _AGENT_DRIVE_BACKENDS = frozenset({"web", "macos", "linux", "windows", "rdp", "c
 _SCREEN_ONLY_BACKENDS = frozenset({"rdp", "citrix"})
 _PIN_HINT = (
     "Start the server with --windows-agent-url for a native Windows app "
-    "(the Flow Windows agent server you started on this computer), or --remote-window / "
+    "(the Flow Windows agent server running on the Windows computer), or --remote-window / "
     "--citrix for an RDP or Citrix client window."
 )
 _ELEMENT_ROLES = frozenset(
