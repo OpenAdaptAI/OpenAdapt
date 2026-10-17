@@ -172,7 +172,9 @@ def test_v1_exports_with_keyed_digests_are_refused():
     with pytest.raises(ValueError, match="keyed digests"):
         induce_candidate({**data, "schema": "openadapt.shadow.episodes/v1"})
     with pytest.raises(ValidationError):
-        induce_candidate({**data, "tokens": ["focus|Mail", "click|Mail|button|0a1b2c3d"]})
+        induce_candidate(
+            {**data, "tokens": ["focus|Mail", "click|Mail|button|0a1b2c3d"]}
+        )
 
 
 @pytest.mark.parametrize("name", ["report_mail", "invoice_exact", "invoice_variant"])

@@ -110,7 +110,6 @@ class ShadowStep(BaseModel):
     modifiers: list[str] = Field(default_factory=list, max_length=4)
     secure: bool = False
 
-
     @field_validator("token")
     @classmethod
     def _no_digest_in_token(cls, value: str) -> str:
@@ -148,6 +147,7 @@ class ShadowEpisodesExport(BaseModel):
     @classmethod
     def _tokens_carry_no_digest(cls, value: list[str]) -> list[str]:
         return _check_tokens(value)
+
     apps: list[str]
     count_in_window: int = Field(ge=0)
     window_s: float
