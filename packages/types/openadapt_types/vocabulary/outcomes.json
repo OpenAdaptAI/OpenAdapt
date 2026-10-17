@@ -1,0 +1,587 @@
+{
+  "schema_version": "openadapt.plain-outcomes/v1",
+  "_about": [
+    "Maps every run outcome OpenAdapt emits to one plain result.",
+    "The plain result comes from the precise outcome (transaction_outcome or the Execute terminal outcome), never from the coarse HALTED label alone.",
+    "Only an outcome that proves no effect sets may_have_changed=false and safe_to_retry=true.",
+    "safe_to_retry means a new attempt can't duplicate or collide with a write from this attempt. It doesn't promise the new attempt will succeed.",
+    "openadapt_types.plain_results applies these rules in Python. Other languages apply the same merge_rules and check themselves against outcome-vectors.json."
+  ],
+  "emitters": [
+    {
+      "source": "transaction_outcome",
+      "repository": "OpenAdaptAI/openadapt-flow",
+      "symbol": "openadapt_flow/transaction.py TransactionOutcome",
+      "read_at": "origin/main 6e4e4ed0, read 2026-10-09",
+      "values": ["VERIFIED", "HALTED_BEFORE_EFFECT", "RECONCILIATION_REQUIRED", "FAILED_PLATFORM", "CANCELED", "REJECTED_POLICY", "COMPLETED_UNVERIFIED", "ROLLED_BACK"]
+    },
+    {
+      "source": "transaction_outcome",
+      "repository": "OpenAdaptAI/openadapt-flow",
+      "symbol": "openadapt_flow/ir.py RunReport.transaction_outcome (report.json)",
+      "read_at": "origin/main 6e4e4ed0, read 2026-10-09",
+      "values": ["VERIFIED", "HALTED_BEFORE_EFFECT", "RECONCILIATION_REQUIRED", "FAILED_PLATFORM", "CANCELED", "REJECTED_POLICY", "COMPLETED_UNVERIFIED", "ROLLED_BACK"]
+    },
+    {
+      "source": "transaction_outcome",
+      "repository": "OpenAdaptAI/openadapt-flow",
+      "symbol": "openadapt_flow/runner/hosted_adapter.py HostedTerminalEventV1.outcome and HostedTerminalEventV2.outcome. Pass started as dispatched and uncertain_delivery as delivery_uncertain.",
+      "read_at": "origin/main 6e4e4ed0, read 2026-10-09",
+      "values": ["VERIFIED", "HALTED_BEFORE_EFFECT", "RECONCILIATION_REQUIRED", "FAILED_PLATFORM", "CANCELED", "REJECTED_POLICY", "COMPLETED_UNVERIFIED", "ROLLED_BACK"]
+    },
+    {
+      "source": "transaction_outcome",
+      "repository": "OpenAdaptAI/openadapt-flow",
+      "symbol": "openadapt_flow/terminal_verification_v2.py production run receipt transaction_outcome",
+      "read_at": "origin/main 6e4e4ed0, read 2026-10-09",
+      "values": ["VERIFIED", "HALTED_BEFORE_EFFECT", "RECONCILIATION_REQUIRED"]
+    },
+    {
+      "source": "execution_outcome",
+      "repository": "OpenAdaptAI/openadapt-flow",
+      "symbol": "openadapt_flow/ir.py RunReport.execution_outcome and ExecutionOutcomeEnvelope.outcome",
+      "read_at": "origin/main 6e4e4ed0, read 2026-10-09",
+      "values": ["VERIFIED", "COMPLETED_UNVERIFIED", "HALTED", "FAILED", "ROLLED_BACK"]
+    },
+    {
+      "source": "execution_outcome",
+      "repository": "OpenAdaptAI/openadapt-flow",
+      "symbol": "openadapt_flow/terminal_verification_v2.py ProductionExecutionOutcome.outcome",
+      "read_at": "origin/main 6e4e4ed0, read 2026-10-09",
+      "values": ["VERIFIED", "HALTED", "FAILED", "ROLLED_BACK"]
+    },
+    {
+      "source": "connector_status",
+      "repository": "OpenAdaptAI/openadapt-flow",
+      "symbol": "openadapt_flow/connector/executor.py ExecutionResult.status and status_from_report",
+      "read_at": "origin/main 6e4e4ed0, read 2026-10-09",
+      "values": ["success", "halt", "failed"]
+    },
+    {
+      "source": "program_terminal_state",
+      "repository": "OpenAdaptAI/openadapt-flow",
+      "symbol": "openadapt_flow/ir.py RunReport.terminal_outcome and State.outcome. This is where the program graph ended, not the Execute terminal outcome.",
+      "read_at": "origin/main 6e4e4ed0, read 2026-10-09",
+      "values": ["success", "halt", "escalate"]
+    },
+    {
+      "source": "execute_terminal_outcome",
+      "repository": "OpenAdaptAI/openadapt-types",
+      "symbol": "openadapt_types/execute.py ExecuteTerminalOutcomeV1 (openadapt_flow/execute/dispatch.py sets it too)",
+      "read_at": "origin/main 07b8b0c, read 2026-10-09",
+      "values": ["verified", "halted_before_effect", "reconciliation_required", "rejected_policy", "failed_platform", "rolled_back_verified"]
+    },
+    {
+      "source": "execute_state",
+      "repository": "OpenAdaptAI/openadapt-types",
+      "symbol": "openadapt_types/execute.py ExecuteLifecycleStateV1",
+      "read_at": "origin/main 07b8b0c, read 2026-10-09",
+      "values": ["queued", "running", "decision_required", "waiting_for_reconciliation", "terminal"]
+    },
+    {
+      "source": "clinic_tool_status",
+      "repository": "OpenAdaptAI/openadapt-types",
+      "symbol": "openadapt_types/clinic_job.py ClinicToolStatusV1",
+      "read_at": "origin/main 07b8b0c, read 2026-10-09",
+      "values": ["VERIFIED", "HALTED", "RECONCILIATION_REQUIRED"]
+    },
+    {
+      "source": "agent_status",
+      "repository": "OpenAdaptAI/openadapt-agent",
+      "symbol": "src/openadapt_agent/runner.py RunOutcome.status",
+      "read_at": "origin/main 88b1dbd, read 2026-10-09",
+      "values": ["success", "halt", "refused", "timeout", "error"]
+    },
+    {
+      "source": "overlay_phase",
+      "repository": "OpenAdaptAI/openadapt-types",
+      "symbol": "openadapt_types/control_overlay.py ControlOverlayPhase (control_overlay.py ControlOverlayFrameV1.phase and control_overlay_tracking.py ControlOverlayFrameV2.phase)",
+      "read_at": "origin/main 07b8b0c, read 2026-10-09",
+      "values": ["idle", "observing", "recording", "executing", "pausing", "paused", "resuming", "stopping", "verifying", "verified", "completed_unverified", "halted", "failed", "rolled_back"]
+    },
+    {
+      "source": "overlay_phase",
+      "repository": "OpenAdaptAI/openadapt-flow",
+      "symbol": "openadapt_flow/runtime/control_overlay.py RuntimeControlOverlayEmitter. emit_terminal maps RunReport.execution_outcome one to one onto the five end phases; runtime/replayer.py emits observing, executing, and verifying during a run.",
+      "read_at": "origin/main 6e4e4ed0, read 2026-10-09",
+      "values": ["observing", "executing", "verifying", "verified", "completed_unverified", "halted", "failed", "rolled_back"]
+    }
+  ],
+  "not_run_outcomes": [
+    {
+      "symbol": "openadapt_flow/runtime/effects/effect.py Verdict (confirmed, refuted, indeterminate)",
+      "reason": "One effect check inside a step. The run's outcome already accounts for it."
+    },
+    {
+      "symbol": "openadapt_flow/runtime/durable/attended.py AttendedExecutionResult.status and AttendedDecision.status",
+      "reason": "The result of one person's action on a paused run. The run's own outcome arrives in its report."
+    },
+    {
+      "symbol": "openadapt_flow/validation/hardening/harness.py Outcome",
+      "reason": "A test-harness classification, never shown for a real run."
+    },
+    {
+      "symbol": "openadapt_flow/qualification.py case status, runtime/durable/checkpoint.py status, and authoring.py status",
+      "reason": "Readiness-test, checkpoint, and authoring states, not run results."
+    },
+    {
+      "symbol": "openadapt_types/reward.py RewardOutcomeV1 and RewardUncertaintyStateV1",
+      "reason": "The reward oracle's verdict on a training episode. It scores a policy and is never shown to a person as a run result."
+    },
+    {
+      "symbol": "openadapt_types/human_decision.py HumanDecisionReceiptState",
+      "reason": "What happened to one person's answer on a paused run. The run's own outcome arrives in its report."
+    },
+    {
+      "symbol": "openadapt_types/business_decision.py BusinessDecisionAnswerReceiptState",
+      "reason": "What happened to one business decision a person answered. The run's own outcome arrives in its report."
+    },
+    {
+      "symbol": "openadapt_types/authoring.py AuthoringCommandStatusV1 and AuthoringErrorCodeV1",
+      "reason": "The status of one command while someone builds a workflow, not a run result."
+    },
+    {
+      "symbol": "openadapt_types/authentication.py AuthenticationOutcome and AuthenticationMfaOutcome",
+      "reason": "Whether a sign-in step was confirmed, not whether a run saved anything."
+    },
+    {
+      "symbol": "openadapt_types/process_capability.py ArtifactVerificationState",
+      "reason": "Whether one artifact's content was checked, not whether a run saved anything."
+    },
+    {
+      "symbol": "openadapt_types/process_capability.py ProcessEvidenceReceiptV1.outcome (openadapt_flow/runtime/process_v1.py sets it)",
+      "reason": "The outcome of the step that ended a multi-step process. An earlier step may already have saved, so halted_before_effect, rejected_policy, or failed_platform here doesn't prove the process wrote nothing. Never pass it as execute_terminal_outcome."
+    }
+  ],
+  "results": {
+    "done": {
+      "label": "Done and checked",
+      "meaning": "It saved the entry and read the record back to confirm it."
+    },
+    "stopped_before_change": {
+      "label": "Stopped before saving",
+      "meaning": "Something didn't match, so it stopped before changing anything and asked a person. Nothing was written."
+    },
+    "check_the_record": {
+      "label": "Check the record",
+      "meaning": "A save may have gone through. A person checks the record before anything is retried."
+    },
+    "finished_not_checked": {
+      "label": "Finished, not checked",
+      "meaning": "It did the steps but didn't confirm the saved result."
+    },
+    "did_not_finish": {
+      "label": "Didn't finish",
+      "meaning": "It couldn't complete the task. The next step says what's known about whether anything was written."
+    },
+    "refused": {
+      "label": "Blocked before saving",
+      "meaning": "A rule, an approval, or the right-record check blocked the run before it saved anything. Nothing was written."
+    }
+  },
+  "proof": {
+    "sealed": {
+      "label": "Signed receipt",
+      "meaning": "OpenAdapt signed a receipt that records what was entered and how it was checked."
+    },
+    "local": {
+      "label": "Local run report",
+      "meaning": "A run report on the computer that ran it. OpenAdapt didn't sign it."
+    },
+    "none": {
+      "label": "No receipt",
+      "meaning": "Only the status itself backs this result."
+    }
+  },
+  "merge_rules": [
+    "1. Ignore any input whose value is listed in not_an_outcome for its source.",
+    "2. Use only the first tier in tiers that still has an input. Ignore the lower tiers, except for rule 4.",
+    "3. Each input in that tier selects one row from sources.<source>.values. A value listed under in_progress.<source> selects no row and marks the run as still in progress. A value with no row selects fallbacks.unrecognized and ends the merge.",
+    "4. When transaction_outcome and execution_outcome are both present, execution_outcome must appear in that transaction row's execution_outcomes list. Otherwise use fallbacks.conflict.",
+    "5. A row with if_not_dispatched uses that variant only when the caller states dispatched=false.",
+    "6. If the tier marks the run as in progress and selects no row, there's no result yet: report in_progress.execute_state.<state>. For an execute_state input, <state> is the value itself. For any other source, it's the state that the value's in_progress entry names. If the tier also selects a row, or marks the run as in progress twice, use fallbacks.conflict.",
+    "7. Rows that agree on result: use the most cautious row, which is the first in precedence order with may_have_changed=true, else the first with safe_to_retry=false, else the first.",
+    "8. Rows that disagree on result: if every row has may_have_changed=false, use the first in precedence order. Otherwise use fallbacks.conflict.",
+    "9. delivery_uncertain=true turns any result except check_the_record into fallbacks.delivery_uncertain.",
+    "10. No input at all selects fallbacks.missing.",
+    "11. proof defaults to none. proof=sealed needs an execute_terminal_outcome, because a signed receipt always carries one."
+  ],
+  "precedence": [
+    "transaction_outcome",
+    "execute_terminal_outcome",
+    "execute_state",
+    "execution_outcome",
+    "agent_status",
+    "connector_status",
+    "clinic_tool_status",
+    "program_terminal_state",
+    "overlay_phase"
+  ],
+  "tiers": [
+    ["transaction_outcome", "execute_terminal_outcome", "execute_state"],
+    ["execution_outcome"],
+    ["agent_status", "connector_status", "clinic_tool_status", "program_terminal_state", "overlay_phase"]
+  ],
+  "sources": {
+    "transaction_outcome": {
+      "meaning": "Flow's terminal transaction outcome: what the evidence proves about the business effect.",
+      "values": {
+        "VERIFIED": {
+          "result": "done",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "Nothing else to do. OpenAdapt read the record back and it matches.",
+          "execution_outcomes": ["VERIFIED"]
+        },
+        "HALTED_BEFORE_EFFECT": {
+          "result": "stopped_before_change",
+          "may_have_changed": false,
+          "safe_to_retry": true,
+          "next_action": "Nothing was written. Look at why it stopped, fix that, then run it again.",
+          "execution_outcomes": ["HALTED"]
+        },
+        "RECONCILIATION_REQUIRED": {
+          "result": "check_the_record",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "A save may have gone through. Check the record before anyone runs this again.",
+          "execution_outcomes": ["HALTED", "FAILED", "ROLLED_BACK", "COMPLETED_UNVERIFIED"]
+        },
+        "FAILED_PLATFORM": {
+          "result": "did_not_finish",
+          "may_have_changed": false,
+          "safe_to_retry": true,
+          "next_action": "OpenAdapt hit a problem before it changed anything, so nothing was written. You can run it again.",
+          "execution_outcomes": ["FAILED"]
+        },
+        "CANCELED": {
+          "result": "stopped_before_change",
+          "may_have_changed": false,
+          "safe_to_retry": true,
+          "next_action": "Someone canceled the run before it changed anything, so nothing was written. Run it again when you're ready.",
+          "execution_outcomes": ["HALTED", "FAILED"]
+        },
+        "REJECTED_POLICY": {
+          "result": "refused",
+          "may_have_changed": false,
+          "safe_to_retry": true,
+          "next_action": "Nothing was written. A rule, an approval, or the right-record check blocked this run. Fix that, then run it again.",
+          "execution_outcomes": ["HALTED", "FAILED"]
+        },
+        "COMPLETED_UNVERIFIED": {
+          "result": "finished_not_checked",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "The steps ran, but nothing confirmed the saved result. Check the record before you count it as done or run it again.",
+          "execution_outcomes": ["COMPLETED_UNVERIFIED"]
+        },
+        "ROLLED_BACK": {
+          "result": "check_the_record",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "OpenAdapt found an extra change and undid it. Check the record before anyone runs this again.",
+          "execution_outcomes": ["ROLLED_BACK"]
+        }
+      }
+    },
+    "execute_terminal_outcome": {
+      "meaning": "The terminal outcome on an Execute status or receipt.",
+      "values": {
+        "verified": {
+          "result": "done",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "Nothing else to do. OpenAdapt read the record back and it matches."
+        },
+        "halted_before_effect": {
+          "result": "stopped_before_change",
+          "may_have_changed": false,
+          "safe_to_retry": true,
+          "next_action": "Nothing was written. Look at why it stopped, fix that, then run it again."
+        },
+        "reconciliation_required": {
+          "result": "check_the_record",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "A save may have gone through. Check the record before anyone runs this again."
+        },
+        "rejected_policy": {
+          "result": "refused",
+          "may_have_changed": false,
+          "safe_to_retry": true,
+          "next_action": "Nothing was written. A rule, an approval, or the right-record check blocked this run. Fix that, then run it again."
+        },
+        "failed_platform": {
+          "result": "did_not_finish",
+          "may_have_changed": false,
+          "safe_to_retry": true,
+          "next_action": "OpenAdapt hit a problem before it changed anything, so nothing was written. You can run it again."
+        },
+        "rolled_back_verified": {
+          "result": "check_the_record",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "OpenAdapt found an extra change and undid it. Check the record before anyone runs this again."
+        }
+      }
+    },
+    "execute_state": {
+      "meaning": "The lifecycle state on an Execute status. Only one state is itself a result.",
+      "values": {
+        "waiting_for_reconciliation": {
+          "result": "check_the_record",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "A save may have gone through. Check the record before anyone runs this again."
+        }
+      }
+    },
+    "execution_outcome": {
+      "meaning": "Flow's coarse outcome. HALTED alone doesn't say whether anything was written.",
+      "values": {
+        "VERIFIED": {
+          "result": "done",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "Nothing else to do. OpenAdapt read the record back and it matches."
+        },
+        "COMPLETED_UNVERIFIED": {
+          "result": "finished_not_checked",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "The steps ran, but nothing confirmed the saved result. Check the record before you count it as done or run it again."
+        },
+        "HALTED": {
+          "result": "check_the_record",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "It stopped, and this status doesn't show whether anything was saved. Check the record before anyone runs this again."
+        },
+        "FAILED": {
+          "result": "did_not_finish",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "It didn't finish, and this status doesn't show whether anything was saved. Check the record before anyone runs this again."
+        },
+        "ROLLED_BACK": {
+          "result": "check_the_record",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "OpenAdapt found an extra change and undid it. Check the record before anyone runs this again."
+        }
+      }
+    },
+    "agent_status": {
+      "meaning": "The status the OpenAdapt Agent returns to a calling AI agent. It's coarse, so prefer the precise outcome when the result carries one.",
+      "values": {
+        "success": {
+          "result": "finished_not_checked",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "The steps ran, but this status doesn't show that the saved result was checked. Check the record before you count it as done or run it again."
+        },
+        "halt": {
+          "result": "check_the_record",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "It stopped, and this status doesn't show whether anything was saved. Check the record before anyone runs this again."
+        },
+        "refused": {
+          "result": "refused",
+          "may_have_changed": false,
+          "safe_to_retry": true,
+          "next_action": "Nothing was written. OpenAdapt refused to start this run. Fix the reason it gives, then run it again."
+        },
+        "timeout": {
+          "result": "check_the_record",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "No answer came back in time, so a save may have gone through. Check the record before anyone runs this again.",
+          "if_not_dispatched": {
+            "result": "did_not_finish",
+            "may_have_changed": false,
+            "safe_to_retry": true,
+            "next_action": "The run never reached the app, so nothing was written. You can send it again."
+          }
+        },
+        "error": {
+          "result": "did_not_finish",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "It didn't finish, and this status doesn't show whether anything was saved. Check the record before anyone runs this again.",
+          "if_not_dispatched": {
+            "result": "did_not_finish",
+            "may_have_changed": false,
+            "safe_to_retry": true,
+            "next_action": "The run never reached the app, so nothing was written. You can send it again."
+          }
+        }
+      }
+    },
+    "connector_status": {
+      "meaning": "The coarse status a Flow connector sends back for one job. Prefer the precise outcome when it's present.",
+      "values": {
+        "success": {
+          "result": "finished_not_checked",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "The steps ran, but this status doesn't show that the saved result was checked. Check the record before you count it as done or run it again."
+        },
+        "halt": {
+          "result": "check_the_record",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "It stopped, and this status doesn't show whether anything was saved. Check the record before anyone runs this again."
+        },
+        "failed": {
+          "result": "did_not_finish",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "It didn't finish, and this status doesn't show whether anything was saved. Check the record before anyone runs this again.",
+          "if_not_dispatched": {
+            "result": "did_not_finish",
+            "may_have_changed": false,
+            "safe_to_retry": true,
+            "next_action": "The run never reached the app, so nothing was written. You can send it again."
+          }
+        }
+      }
+    },
+    "clinic_tool_status": {
+      "meaning": "The status on a clinic tool result. HALTED here is coarse.",
+      "values": {
+        "VERIFIED": {
+          "result": "done",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "Nothing else to do. OpenAdapt read the record back and it matches."
+        },
+        "HALTED": {
+          "result": "check_the_record",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "It stopped, and this status doesn't show whether anything was saved. Check the record before anyone runs this again."
+        },
+        "RECONCILIATION_REQUIRED": {
+          "result": "check_the_record",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "A save may have gone through. Check the record before anyone runs this again."
+        }
+      }
+    },
+    "program_terminal_state": {
+      "meaning": "Where a workflow program's graph ended. It says where the program stopped, not whether the record was checked.",
+      "values": {
+        "success": {
+          "result": "finished_not_checked",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "The steps ran, but this status doesn't show that the saved result was checked. Check the record before you count it as done or run it again."
+        },
+        "halt": {
+          "result": "check_the_record",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "It stopped, and this status doesn't show whether anything was saved. Check the record before anyone runs this again."
+        },
+        "escalate": {
+          "result": "check_the_record",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "It stopped to ask a person, and this status doesn't show whether anything was saved. Check the record before anyone runs this again."
+        }
+      }
+    },
+    "overlay_phase": {
+      "meaning": "The phase on a control overlay frame, the on-screen status a person sees while a run goes. Its end phases mirror the coarse execution_outcome, so halted alone doesn't say whether anything was written.",
+      "values": {
+        "verified": {
+          "result": "done",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "Nothing else to do. OpenAdapt read the record back and it matches."
+        },
+        "completed_unverified": {
+          "result": "finished_not_checked",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "The steps ran, but nothing confirmed the saved result. Check the record before you count it as done or run it again."
+        },
+        "halted": {
+          "result": "check_the_record",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "It stopped, and this status doesn't show whether anything was saved. Check the record before anyone runs this again."
+        },
+        "failed": {
+          "result": "did_not_finish",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "It didn't finish, and this status doesn't show whether anything was saved. Check the record before anyone runs this again."
+        },
+        "rolled_back": {
+          "result": "check_the_record",
+          "may_have_changed": true,
+          "safe_to_retry": false,
+          "next_action": "OpenAdapt found an extra change and undid it. Check the record before anyone runs this again."
+        }
+      }
+    }
+  },
+  "in_progress": {
+    "execute_state": {
+      "queued": {
+        "label": "Waiting to start",
+        "next_action": "Wait for it to start. Don't send it again."
+      },
+      "running": {
+        "label": "Running",
+        "next_action": "Wait for the result. Don't send it again."
+      },
+      "decision_required": {
+        "label": "Waiting for a person",
+        "next_action": "A person needs to decide before it can go on. Don't send it again."
+      }
+    },
+    "overlay_phase": {
+      "observing": {"state": "running"},
+      "executing": {"state": "running"},
+      "verifying": {"state": "running"},
+      "pausing": {"state": "running"},
+      "resuming": {"state": "running"},
+      "stopping": {"state": "running"},
+      "paused": {"state": "decision_required"}
+    }
+  },
+  "not_an_outcome": {
+    "execute_state": ["terminal"],
+    "overlay_phase": ["idle", "recording"]
+  },
+  "fallbacks": {
+    "conflict": {
+      "result": "check_the_record",
+      "may_have_changed": true,
+      "safe_to_retry": false,
+      "next_action": "The results for this run disagree, so a save may have gone through. Check the record before anyone runs this again."
+    },
+    "unrecognized": {
+      "result": "check_the_record",
+      "may_have_changed": true,
+      "safe_to_retry": false,
+      "next_action": "OpenAdapt doesn't recognize this result, so a save may have gone through. Check the record before anyone runs this again."
+    },
+    "missing": {
+      "result": "check_the_record",
+      "may_have_changed": true,
+      "safe_to_retry": false,
+      "next_action": "No outcome came back for this run, so a save may have gone through. Check the record before anyone runs this again."
+    },
+    "delivery_uncertain": {
+      "result": "check_the_record",
+      "may_have_changed": true,
+      "safe_to_retry": false,
+      "next_action": "OpenAdapt can't tell whether a save reached the system. Check the record before anyone runs this again."
+    }
+  }
+}

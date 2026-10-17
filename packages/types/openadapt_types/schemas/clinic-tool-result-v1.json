@@ -1,0 +1,51 @@
+{
+  "$defs": {
+    "ClinicMcpToolNameV1": {
+      "enum": [
+        "run_harvest",
+        "run_attach_fax",
+        "run_create_triage_task"
+      ],
+      "title": "ClinicMcpToolNameV1",
+      "type": "string"
+    },
+    "ClinicToolStatusV1": {
+      "enum": [
+        "VERIFIED",
+        "HALTED",
+        "RECONCILIATION_REQUIRED"
+      ],
+      "title": "ClinicToolStatusV1",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Typed MCP result. Status is the outcome; there is no success flag to set.",
+  "properties": {
+    "patient_token": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{7,127}$",
+      "title": "Patient Token",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "openadapt.clinic-tool-result/v1",
+      "default": "openadapt.clinic-tool-result/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "status": {
+      "$ref": "#/$defs/ClinicToolStatusV1"
+    },
+    "tool": {
+      "$ref": "#/$defs/ClinicMcpToolNameV1"
+    }
+  },
+  "required": [
+    "tool",
+    "status",
+    "patient_token"
+  ],
+  "title": "ClinicToolResultV1",
+  "type": "object",
+  "x-openadapt-success-rule": "Only status VERIFIED is success. HALTED and RECONCILIATION_REQUIRED are not success and must not be summarized as success."
+}
