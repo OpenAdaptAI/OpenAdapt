@@ -10,9 +10,11 @@ installed `openadapt-flow` engine.
 ## First run
 
 ```bash
-python -m pip install --upgrade openadapt
-openadapt flow tutorial [--headed] [--break-it] [--out NEW_DIRECTORY]
+uvx --python 3.12 openadapt flow tutorial [--headed] [--break-it] [--out NEW_DIRECTORY]
 ```
+
+uv fetches Python 3.12 for the run. With `openadapt` installed, run
+`openadapt flow tutorial` directly.
 
 `openadapt flow tutorial` is the command that writes a `VERIFIED` receipt. It
 runs the bundled synthetic MockMed workflow from recording through an
@@ -23,9 +25,10 @@ saved record, and the run halts with transaction outcome
 `RECONCILIATION_REQUIRED`, so nothing is retried until a person checks the
 record.
 
-The engine supports Python 3.10 through 3.12. On Python 3.13 or newer, pip
-installs only the launcher (from the release after 1.16.0) and every engine
-command prints the fix: `uv tool install --python 3.12 openadapt`.
+The engine runs on Python 3.10 through 3.12. On Python 3.13 or newer, pip
+installs only the launcher and every engine command prints the fix:
+`uv tool install --python 3.12 openadapt`. The `uvx --python 3.12` form above
+needs no install step.
 
 To serve compiled programs to an MCP client, install the agent bridge by name.
 Launcher 1.16.0 on PyPI doesn't include it, and `openadapt-agent` 2.0.1

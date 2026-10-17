@@ -5,12 +5,13 @@
 
 ## Run the verified tutorial
 
-Use Python 3.10, 3.11, or 3.12:
-
 ```bash
-python -m pip install --upgrade openadapt
-openadapt flow tutorial
+uvx --python 3.12 openadapt flow tutorial
 ```
+
+uv fetches Python 3.12 for the run. On Python 3.10, 3.11, or 3.12,
+`python -m pip install --upgrade openadapt` and then `openadapt flow tutorial`
+do the same.
 
 The command runs one complete local lifecycle against synthetic MockMed data:
 

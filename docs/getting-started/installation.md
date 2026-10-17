@@ -4,17 +4,23 @@
 > [docs.openadapt.ai](https://docs.openadapt.ai). This repository page keeps the
 > launcher install contract close to the package that implements it.
 
-OpenAdapt supports Python 3.10, 3.11, and 3.12. Use a virtual environment for
-an isolated install. On Python 3.13 or newer, the engine doesn't install yet.
-Use uv, which downloads Python 3.12 for you:
+Run the browser tutorial with one command. [uv](https://docs.astral.sh/uv/getting-started/installation/)
+fetches Python 3.12 for the run, whatever Python your system has:
+
+```bash
+uvx --python 3.12 openadapt flow tutorial
+```
+
+## Install the launcher
+
+To keep `openadapt` on your PATH, install it with uv:
 
 ```bash
 uv tool install --python 3.12 openadapt
 ```
 
-## Install and run the browser tutorial
-
-Install the launcher:
+Or, on Python 3.10, 3.11, or 3.12, install it with pip in a virtual
+environment:
 
 ```bash
 python -m pip install --upgrade openadapt
