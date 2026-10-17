@@ -611,12 +611,15 @@ class ParallelsVM:
         port: int = SHIM_PORT,
         host_ip: Optional[str] = None,
         wait_s: float = 20.0,
+        token: Optional[str] = None,
     ) -> str:
-        """Deploy + start the WAA shim in session 1; return its URL.
+        """Deploy + start the benchmark shim in session 1; return its URL.
 
         Steps (all programmatic): ensure guest dir, push shim + launcher,
         open the firewall, kill stale Python, run the session-1 launcher as
-        SYSTEM, then poll until the shim answers a real PNG.
+        SYSTEM, then poll until the shim answers a real PNG. The shim binds
+        loopback by default, so this passes ``--host 0.0.0.0`` for host access;
+        ``token`` (recommended) is then required on every route but /health.
         """
         host_ip = host_ip or self.host_ip()
         shim, launcher = self._shim_paths()
@@ -647,23 +650,27 @@ class ParallelsVM:
                 self.python_guest,
                 f"{GUEST_DIR}/session1_launch.py",
                 f"{GUEST_DIR}/waa_shim.py",
+                "--host",
+                "0.0.0.0",
                 "--port",
                 str(port),
+                *(["--token", token] if token else []),
             ]
         )
         url = f"http://{self.guest_ip()}:{port}"
         deadline = time.time() + wait_s
         while time.time() < deadline:
-            if self._shim_alive(url):
+            if self._shim_alive(url, token=token):
                 return url
             time.sleep(1.5)
         raise ParallelsError(f"shim did not come up at {url}")
 
-    def _shim_alive(self, url: str) -> bool:
+    def _shim_alive(self, url: str, *, token: Optional[str] = None) -> bool:
         try:
             import requests
 
-            r = requests.get(f"{url}/screenshot", timeout=8)
+            headers = {"Authorization": f"Bearer {token}"} if token else {}
+            r = requests.get(f"{url}/screenshot", headers=headers, timeout=8)
             return r.status_code == 200 and r.content[:8] == b"\x89PNG\r\n\x1a\n"
         except Exception:  # noqa: BLE001
             return False

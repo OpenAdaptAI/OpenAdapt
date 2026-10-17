@@ -53,7 +53,7 @@ so `WindowsBackend` sees exactly what it drives).
 | File | Role |
 |---|---|
 | `openadapt_flow/backends/parallels_vm.py` | `ParallelsVM`: lifecycle, snapshot/revert, exec, `push_file`, `capture`, `guest_ip`/`host_ip`, `launch_shim` |
-| `scripts/desktop/waa_shim.py` | In-guest WAA-contract HTTP server (screenshot/execute_windows) + `/uia` tree dump |
+| `scripts/desktop/waa_shim.py` | In-guest benchmark shim: `/screenshot`, `/uia` tree dump and two fixed `/tasks/*` routes (no exec route; loopback default, optional bearer token) |
 | `scripts/desktop/session1_launch.py` | SYSTEM→session-1 launcher (`CreateProcessAsUser`) |
 | `scripts/desktop/patient_notes.ps1` | WinForms target app (list-select → edit note → save); drift knobs via `pn_env.json` |
 | `scripts/desktop/pn_db.py` | SQLite ground-truth CLI (seed/list/save/get/all) |

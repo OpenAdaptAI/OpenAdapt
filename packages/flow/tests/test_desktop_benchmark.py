@@ -9,14 +9,11 @@ from __future__ import annotations
 
 import json
 
-import pytest
-
 from openadapt_flow.benchmark import desktop_benchmark as db
 from openadapt_flow.benchmark.desktop_benchmark import (
     _classify,
     run_desktop_benchmark,
 )
-
 
 # --- _classify unit table ---------------------------------------------------
 
@@ -238,3 +235,37 @@ def test_harness_threads_auth_token_to_backend():
     assert harness.backend._auth_token == "tok"
     plain = db.DesktopHarness(object(), "http://10.211.55.3:5000")
     assert plain.backend._auth_token is None
+
+
+def test_harness_sends_shim_token_on_task_and_uia_calls(monkeypatch):
+    import requests
+
+    posted: list = []
+
+    class _Resp:
+        status_code = 200
+
+        @staticmethod
+        def json():
+            return {"status": "ok", "nodes": []}
+
+    def fake_post(url, **kwargs):
+        posted.append((url, kwargs))
+        return _Resp()
+
+    def fake_get(url, **kwargs):
+        posted.append((url, kwargs))
+        return _Resp()
+
+    monkeypatch.setattr(requests, "post", fake_post)
+    monkeypatch.setattr(requests, "get", fake_get)
+    harness = db.DesktopHarness(object(), "http://10.211.55.3:5000", auth_token="tok")
+    harness.quiet_desktop()
+    assert harness.uia_run("identity", "note") == {"status": "ok", "nodes": []}
+    harness.rects()
+    urls = [u for u, _ in posted]
+    assert urls[0].endswith("/tasks/quiet-desktop")
+    assert urls[1].endswith("/tasks/uia-arm")
+    assert "/execute_windows" not in " ".join(urls)
+    assert all(k["headers"] == {"Authorization": "Bearer tok"} for _, k in posted)
+    assert posted[1][1]["json"]["mode"] == "identity"
