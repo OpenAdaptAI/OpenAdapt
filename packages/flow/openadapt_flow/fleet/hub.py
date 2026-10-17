@@ -246,8 +246,18 @@ class FleetHub:
         self._save_state(state)
         return len(subjects)
 
+    @staticmethod
+    def _independent(state: dict[str, Any], app_fingerprint_sha256: str) -> list[str]:
+        """Registered subjects for a version, excluding revoked contributors."""
+        revoked = set(state["revoked_subjects"])
+        return [
+            subject
+            for subject in state["registrations"].get(app_fingerprint_sha256, [])
+            if subject not in revoked
+        ]
+
     def tenants_on(self, app_fingerprint_sha256: str) -> int:
-        return len(self._state()["registrations"].get(app_fingerprint_sha256, []))
+        return len(self._independent(self._state(), app_fingerprint_sha256))
 
     # -- contributions -------------------------------------------------------
 
@@ -261,7 +271,7 @@ class FleetHub:
         if subject in state["revoked_subjects"]:
             raise HubRefused("this contributor is revoked")
         base = contribution.payload.patch.app_before.fingerprint_sha256()
-        registered = state["registrations"].get(base, [])
+        registered = self._independent(state, base)
         if subject not in registered:
             raise HubRefused(
                 "the contributor has not registered the base application version"
@@ -328,7 +338,7 @@ class FleetHub:
             if contribution.chain.signer.payload.subject in state["revoked_subjects"]:
                 continue
             base = contribution.payload.patch.app_before.fingerprint_sha256()
-            if len(state["registrations"].get(base, [])) >= self.min_tenants:
+            if len(self._independent(state, base)) >= self.min_tenants:
                 out.append(self._distribute(contribution, current))
         return out
 

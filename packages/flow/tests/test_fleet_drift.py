@@ -820,8 +820,11 @@ def test_hub_resigns_so_receivers_cannot_link_patches_to_a_source(tmp_path, core
     assert core.hub.tenants_on(base.fingerprint_sha256()) == 3
     released = core.hub.release_held()
     assert [d.outcome for d in released] == ["distributed"]
-    second = core.hub.accept(contribute(a_key, a_chain, "#chart-go", "a2"))
-    third = core.hub.accept(contribute(b_key, b_chain, "#chart-view", "b1"))
+    contributions = [
+        contribute(a_key, a_chain, "#chart-go", "a2"),
+        contribute(b_key, b_chain, "#chart-view", "b1"),
+    ]
+    second, third = (core.hub.accept(c) for c in contributions)
     patches = [released[0].patch, second.patch, third.patch]
     assert all(p is not None for p in patches)
 
@@ -837,7 +840,7 @@ def test_hub_resigns_so_receivers_cannot_link_patches_to_a_source(tmp_path, core
             chain.serial,
             chain.signer.payload.signer_public_key,
         }
-    for contribution in (first,):
+    for contribution in (first, *contributions):
         source_values |= {
             contribution.payload.source_bundle_sha256,
             contribution.payload.source_prior_bundle_sha256,
@@ -871,6 +874,24 @@ def test_hub_resigns_so_receivers_cannot_link_patches_to_a_source(tmp_path, core
     }
     with pytest.raises(HubRefused):
         core.hub.accept(contribute(a_key, a_chain, "#chart-again", "a3"))
+
+
+def test_a_revoked_contributor_does_not_count_toward_three_tenants(tmp_path, core):
+    base = sim.app_fingerprint("7.1")
+    keys = {name: _contributor(core, name) for name in ("t-one", "t-two", "t-three")}
+    for key, chain in keys.values():
+        core.hub.register(register_fingerprint(base, key, chain))
+    assert core.hub.tenants_on(base.fingerprint_sha256()) == 3
+    core.hub.revoke_contributor("t-three")
+    assert core.hub.tenants_on(base.fingerprint_sha256()) == 2
+
+    key, chain = keys["t-one"]
+    store, candidate, _, _ = _approved(tmp_path, new_search="#chart-link")
+    contribution = _export(store, candidate.candidate_id, key, chain).contribution
+    decision = core.hub.accept(contribution)
+    assert decision.outcome == "held"
+    assert core.hub.release_held() == []
+    assert core.feed.list_patches(app_family=sim.APP_FAMILY) == []
 
 
 def test_hub_refuses_a_distribution_rule_below_three_tenants(core):
