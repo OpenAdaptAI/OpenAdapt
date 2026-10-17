@@ -117,6 +117,8 @@ def _step_line(step: Step, literals: list[str]) -> str:
         return "press " + "+".join([*step.modifiers, step.key or ""])
     if action is ActionKind.SCROLL:
         return f"scroll by ({step.scroll_dx or 0}, {step.scroll_dy or 0})"
+    if action is ActionKind.SWITCH_SURFACE:
+        return f"switch to surface '{step.surface}'"
     return action.value
 
 

@@ -195,6 +195,7 @@ from openadapt_flow.runtime.resolver import (
     visual_resolution_anchor_contract_sha256,
     visual_resolution_evaluator_contract_sha256,
 )
+from openadapt_flow.runtime.surfaces import SurfaceRouter
 from openadapt_flow.verification import (
     EffectContractMutationError,
     verifier_effect_tier,
@@ -635,6 +636,14 @@ class Replayer:
             the save so a person handles it. Its post-run decision is stamped
             on the report as ``approval``. It can only add refusals; it never
             changes an outcome word. None (default) leaves replay unchanged.
+        surface_backends: Multi-surface workflows only
+            (``Workflow.surfaces``, docs/MULTI_SURFACE.md): the live backend for
+            each BACKEND surface the workflow switches to (a native app, an
+            RDP/Citrix window), keyed by surface id. The primary surface is
+            ``backend``; browser tabs and popups the run opens need nothing
+            here. A switch to a surface with no supplied backend, or to one
+            whose backend is of a different kind, halts. Ignored (and must be
+            empty) for a single-surface workflow.
     """
 
     def __init__(
@@ -673,6 +682,7 @@ class Replayer:
             QualificationEnvironmentObserver
         ] = None,
         approval_gate: Optional["ApprovalGate"] = None,
+        surface_backends: Optional[Mapping[str, Backend]] = None,
     ) -> None:
         if vision is None:
             import openadapt_flow.vision as vision  # lazy: heavy OCR deps
@@ -707,6 +717,11 @@ class Replayer:
             )
 
         self.backend = backend
+        # Multi-surface routing (docs/MULTI_SURFACE.md). ``_surface_router`` is
+        # set only while a multi-surface workflow runs; ``self.backend`` is then
+        # the ACTIVE surface's backend, so every gate acts on that surface.
+        self.surface_backends: dict[str, Backend] = dict(surface_backends or {})
+        self._surface_router: Optional[SurfaceRouter] = None
         # Defaulted to the ``openadapt_flow.vision`` module above when None, so it
         # is always populated by the time replay runs; typed Any (a namespace-like
         # facade exposing find_template/ocr/wait_settled/...).
@@ -1832,6 +1847,24 @@ class Replayer:
             report.total_ms = (time.monotonic() - t_run) * 1000.0
             return self._finalize_report(report, workflow, run_dir)
 
+        surface_refusal = self._begin_surfaces(
+            workflow,
+            resume=resume_from is not None or resume_program is not None,
+        )
+        if surface_refusal is not None:
+            report.results.append(
+                StepResult(
+                    step_id="<surfaces>",
+                    intent="bind the workflow's declared surfaces",
+                    ok=False,
+                    failure_category="governed_refusal",
+                    error=surface_refusal,
+                )
+            )
+            report.success = False
+            report.total_ms = (time.monotonic() - t_run) * 1000.0
+            return self._finalize_report(report, workflow, run_dir)
+
         if resume_from is not None:
             from openadapt_flow.runtime.durable import resumed_step_results
 
@@ -2188,6 +2221,7 @@ class Replayer:
     ) -> RunReport:
         """Persist exact evidence first, then project its terminal outcome."""
 
+        self._end_surfaces()
         report.qualification_fault_mutations = list(self._qualification_fault_mutations)
         self._stamp_execution_outcome(report, workflow, run_dir)
         self._stamp_approval(report)
@@ -5790,7 +5824,271 @@ class Replayer:
         )
         return mutation.effect_verifier
 
+    # -- multi-surface routing (docs/MULTI_SURFACE.md) -----------------------
+
+    def _begin_surfaces(self, workflow: Workflow, *, resume: bool) -> Optional[str]:
+        """Bind the workflow's surfaces for this run, or say why not.
+
+        A single-surface workflow binds nothing and runs exactly as before.
+        A multi-surface workflow is refused where its evidence would bind one
+        surface only: governed or qualified runs, and durable runs/resumes,
+        whose checkpoints do not carry the active surface.
+        """
+
+        self._surface_router = None
+        if not workflow.surfaces:
+            if self.surface_backends:
+                return (
+                    "surface_backends were supplied, but this workflow declares "
+                    "no surfaces; refusing to run"
+                )
+            return None
+        blockers = [
+            name
+            for name, present in (
+                ("a governed authorization", self.governed_authorization is not None),
+                ("a qualification fault driver", self.qualification_fault_driver),
+                (
+                    "a qualification environment observer",
+                    self.qualification_environment_observer,
+                ),
+                (
+                    "a production qualification guard",
+                    self.production_qualification_guard,
+                ),
+                ("a qualification campaign guard", self.qualification_campaign_guard),
+                ("a managed dispatch binding", self._managed_dispatch_snapshot),
+                ("durable checkpoints", self.durable),
+                ("a resume", resume),
+            )
+            if present
+        ]
+        if blockers:
+            return (
+                "multi-surface workflows are not yet admitted with "
+                + ", ".join(blockers)
+                + " (that evidence binds one surface); refusing to run"
+            )
+        try:
+            self._surface_router = SurfaceRouter(
+                workflow,
+                self.backend,
+                self.surface_backends,
+                poll_interval_s=self.poll_interval_s,
+            )
+        except ValueError as exc:
+            return f"{exc}; refusing to run"
+        return None
+
+    def _end_surfaces(self) -> None:
+        """Restore the primary backend after a multi-surface run."""
+
+        router = self._surface_router
+        if router is None:
+            return
+        self._surface_router = None
+        if self.backend is not router.primary_backend:
+            self._activate_surface_backend(router.primary_backend)
+
+    def _activate_surface_backend(self, backend: Backend) -> None:
+        """Make ``backend`` current and drop every cache bound to the old one.
+
+        Nothing observed on one surface may be reused on another: the settle
+        seed, the on-screen read-back verifier, the last click point, and any
+        armed pointer/keyboard lease all belong to the surface they came from.
+        """
+
+        self._cancel_guarded_coordinate()
+        self._cancel_guarded_keyboard()
+        self.backend = backend
+        self._settle_seed = None
+        self._actuation_epoch += 1
+        self._readback_verifier = None
+        self._last_click_point = None
+        self._last_click_region = None
+        self._control_overlay_last_observation_png = None
+
+    def _active_surface_binding(
+        self, workflow: Workflow
+    ) -> tuple[Optional[ExecutionTargetKind], Optional[str]]:
+        """(kind, execution mode) of the surface the run is on right now.
+
+        Single-surface runs use the bundle-level binding, unchanged. In a
+        multi-surface run the remote-surface safety rules follow the ACTIVE
+        surface, so an RDP segment of a web-first bundle keeps them.
+        """
+
+        router = self._surface_router
+        if router is None:
+            return workflow.surface, workflow.execution_mode
+        from openadapt_flow.surface_selection import execution_mode_for_surface
+
+        kind = cast(ExecutionTargetKind, router.active_kind())
+        return kind, execution_mode_for_surface(kind)
+
+    def _active_surface_is_external_remote(self, workflow: Workflow) -> bool:
+        kind, mode = self._active_surface_binding(workflow)
+        return kind in ("rdp", "citrix") and mode == "external"
+
+    @staticmethod
+    def _surface_refusal_result(step: Step, error: str) -> StepResult:
+        return StepResult(
+            step_id=step.id,
+            intent=step.intent,
+            ok=False,
+            risk=step.risk,
+            risk_explanation=step.risk_explanation,
+            risk_review_required=step.risk_review_required,
+            delivery_attempted=False,
+            safety_halt=True,
+            failure_category="safety_halt",
+            error=error,
+        )
+
     def _run_step(
+        self,
+        step: Step,
+        *,
+        workflow: Workflow,
+        step_index: int,
+        params: Mapping[str, RuntimeParamScalar],
+        bundle_dir: Path,
+        run_dir: Path,
+        new_crops: dict[str, bytes],
+        graph_ctx: Optional["_GraphStepContext"] = None,
+    ) -> StepResult:
+        """Execute one step on the surface it names; never raises.
+
+        A single-surface run goes straight to the step pipeline. In a
+        multi-surface run the step is first checked against the live surface
+        map (no undeclared page, the active page still open, the step on the
+        active surface), a SWITCH_SURFACE step runs its identity check, and
+        after the action the pages the step declares are claimed and any other
+        new page halts.
+        """
+
+        router = self._surface_router
+        if router is None:
+            if step.action is ActionKind.SWITCH_SURFACE:
+                return self._surface_refusal_result(
+                    step,
+                    f"Step '{step.id}' switches surface, but this run has no "
+                    "declared surfaces; run halted",
+                )
+            return self._run_step_on_active_surface(
+                step,
+                workflow=workflow,
+                step_index=step_index,
+                params=params,
+                bundle_dir=bundle_dir,
+                run_dir=run_dir,
+                new_crops=new_crops,
+                graph_ctx=graph_ctx,
+            )
+        refusal = router.entry_refusal(step)
+        if refusal is not None:
+            return self._surface_refusal_result(step, refusal)
+        if step.action is ActionKind.SWITCH_SURFACE:
+            return self._run_switch_surface_step(
+                step, bundle_dir=bundle_dir, run_dir=run_dir
+            )
+        result = self._run_step_on_active_surface(
+            step,
+            workflow=workflow,
+            step_index=step_index,
+            params=params,
+            bundle_dir=bundle_dir,
+            run_dir=run_dir,
+            new_crops=new_crops,
+            graph_ctx=graph_ctx,
+        )
+        if not result.ok:
+            return result
+        # A guard-skipped step delivered nothing, so it cannot have opened its
+        # pages; any page that did appear is still undeclared.
+        checked = step.model_copy(update={"opens": []}) if result.skipped else step
+        error = router.after_action_refusal(checked, timeout_s=step.timeout_s)
+        if error is not None:
+            result.ok = False
+            result.safety_halt = True
+            result.failure_category = "safety_halt"
+            result.error = error
+        return result
+
+    def _run_switch_surface_step(
+        self, step: Step, *, bundle_dir: Path, run_dir: Path
+    ) -> StepResult:
+        """Switch to ``step.surface`` after its identity check; never raises.
+
+        Delivers no input. The router checks the target (declared, opened on
+        this run, the exact claimed page or a supplied backend of the declared
+        kind, the recorded origin); then the step's postconditions, mined from
+        the first frame of the new surface, must hold on it. No model may
+        rescue that screen check: it is an identity check, not drift.
+        """
+
+        router = self._surface_router
+        assert router is not None
+        t0 = time.monotonic()
+        evidence_step_id = self._new_step_evidence_key(run_dir, step.id)
+        result = StepResult(
+            step_id=step.id,
+            intent=step.intent,
+            ok=False,
+            risk=step.risk,
+            risk_explanation=step.risk_explanation,
+            risk_review_required=step.risk_review_required,
+            delivery_attempted=False,
+        )
+        try:
+            result.before_png = self._save_step_png(
+                run_dir, evidence_step_id, "before", self.backend.screenshot()
+            )
+        except Exception:
+            pass
+        backend, refusal = router.switch(step)
+        if refusal is not None or backend is None:
+            result.safety_halt = True
+            result.failure_category = "safety_halt"
+            result.error = refusal or "surface switch refused"
+            result.elapsed_ms = (time.monotonic() - t0) * 1000.0
+            return result
+        self._activate_surface_backend(backend)
+        failed: list[str] = []
+        try:
+            start_state = self._structural_state()
+            frame = self._settle_seeded()
+            ok, frame = self._poll_postconditions(step, frame, bundle_dir, start_state)
+            if not ok:
+                frame = self.vision.wait_settled(self.backend)
+                failed = [
+                    self._describe_postcondition(pc)
+                    for pc in step.expect
+                    if not self._postcondition_passes(
+                        pc, frame, bundle_dir, start_state
+                    )
+                ]
+            result.after_png = self._save_step_png(
+                run_dir, evidence_step_id, "after", frame
+            )
+        except Exception as exc:
+            failed = [f"the new surface could not be observed ({type(exc).__name__})"]
+        result.postconditions_ok = (not failed) if step.expect else None
+        if failed:
+            result.safety_halt = True
+            result.failure_category = "safety_halt"
+            result.error = (
+                f"Surface identity check failed for step '{step.id}' "
+                f"({step.intent}): surface '{step.surface}' does not show the "
+                f"recorded screen state — failed: {'; '.join(failed)} — run "
+                "halted"
+            )
+        else:
+            result.ok = True
+        result.elapsed_ms = (time.monotonic() - t0) * 1000.0
+        return result
+
+    def _run_step_on_active_surface(
         self,
         step: Step,
         *,
@@ -8462,8 +8760,7 @@ class Replayer:
 
         return (
             step.identity_armed is True
-            and workflow.surface in ("rdp", "citrix")
-            and workflow.execution_mode == "external"
+            and self._active_surface_is_external_remote(workflow)
             and isinstance(self.backend, RemoteActuationBackend)
         )
 
@@ -8490,10 +8787,8 @@ class Replayer:
                 f"Step '{step.id}' ({step.intent}) has an incomplete exact "
                 "option-selection contract; refusing input"
             )
-        if (
-            workflow.surface not in ("rdp", "citrix")
-            or workflow.execution_mode != "external"
-            or not isinstance(self.backend, RemoteActuationBackend)
+        if not self._active_surface_is_external_remote(workflow) or not isinstance(
+            self.backend, RemoteActuationBackend
         ):
             return (
                 f"Step '{step.id}' ({step.intent}) carries a remote "
@@ -8567,8 +8862,7 @@ class Replayer:
         """
         if (
             step.action is ActionKind.SELECT_OPTION
-            and workflow.surface in ("rdp", "citrix")
-            and workflow.execution_mode == "external"
+            and self._active_surface_is_external_remote(workflow)
             and isinstance(self.backend, RemoteActuationBackend)
         ):
             # A selection is a composite focus -> typeahead -> commit gesture.

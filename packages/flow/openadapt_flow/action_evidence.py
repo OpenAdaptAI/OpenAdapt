@@ -406,9 +406,12 @@ def action_evidence_error(
             receipt_error = _delivery_receipt_error(step, result, params=scoped_params)
             if receipt_error is not None:
                 return receipt_error
-    elif step.action is ActionKind.WAIT and actuation is None:
+    elif (
+        step.action in (ActionKind.WAIT, ActionKind.SWITCH_SURFACE)
+        and actuation is None
+    ):
         if result.delivery_attempted not in {None, False}:
-            return "wait action claims an input-delivery boundary"
+            return f"{step.action.value} action claims an input-delivery boundary"
     elif strict_production:
         return "production action lacks a closed runtime actuation path"
 

@@ -1033,7 +1033,6 @@ class SubmitBinding(BaseModel):
     )
 
 
-
 # -- multi-surface workflows (docs/MULTI_SURFACE.md) ---------------------------
 #
 # A workflow can span browser tabs, popups, and backends. Every surface it uses
@@ -1456,8 +1455,7 @@ class Step(BaseModel):
         present = sorted(name for name, value in carried.items() if value)
         if present:
             raise ValueError(
-                "SWITCH_SURFACE delivers no input and carries no "
-                + ", ".join(present)
+                "SWITCH_SURFACE delivers no input and carries no " + ", ".join(present)
             )
         return self
 

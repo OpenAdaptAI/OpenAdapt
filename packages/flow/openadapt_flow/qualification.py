@@ -1198,7 +1198,11 @@ def _inferred_action_classification(step: "Step") -> ActionRiskClassification:
     elif effects:
         classification = ActionRiskClass.STATE_CHANGING
         explanation = "step declares a business-effect contract"
-    elif step.action in {ActionKind.WAIT, ActionKind.SCROLL}:
+    elif step.action in {
+        ActionKind.WAIT,
+        ActionKind.SCROLL,
+        ActionKind.SWITCH_SURFACE,
+    }:
         classification = ActionRiskClass.READ_ONLY
         explanation = f"{step.action.value} does not actuate business state"
     else:
