@@ -70,8 +70,8 @@ native-ocr = [
     # on Windows. With it, the record, compile, and replay path loads neither
     # RapidOCR nor OpenCV. RapidOCR stays the default and the only engine on
     # Linux; see openadapt_flow/vision/ocr_backends.py.
-    "pyobjc-framework-Vision>=10.0; sys_platform == 'darwin'",
-    "pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'",
+    "pyobjc-core>=10.0; sys_platform == 'darwin'",
+    "pyobjc-framework-Cocoa>=10.0; sys_platform == 'darwin'",
     "winrt-runtime>=2.0; sys_platform == 'win32'",
     "winrt-Windows.Media.Ocr>=2.0; sys_platform == 'win32'",
     "winrt-Windows.Graphics.Imaging>=2.0; sys_platform == 'win32'",
