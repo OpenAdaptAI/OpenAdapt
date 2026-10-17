@@ -113,7 +113,9 @@ def build_dossier(
     screenshots: Sequence[Path] = (),
     accept_non_flow: bool = False,
     now: Optional[datetime] = None,
+    ledger: Optional[Mapping[str, Any]] = None,
 ) -> tuple[dict[str, Any], CountersignReport]:
+    """``ledger`` is :meth:`ExceptionQueue.ledger`; the CLI always passes it."""
     from openadapt_flow.countersign.tsa import load_pem_certificates
 
     certs = load_pem_certificates(tsa_certificates_pem) if tsa_certificates_pem else []
@@ -153,8 +155,99 @@ def build_dossier(
         "screenshots": shots,
         "notes": notes,
         "report_at_export": report.as_dict(),
+        "exception_ledger": _ledger_copy(ledger) if ledger is not None else None,
     }
     return data, report
+
+
+_ENTRY_KEYS = (
+    "receipt_sha256",
+    "receipt_id",
+    "execution_id",
+    "workflow_digest",
+    "outcome",
+    "verdict",
+    "category",
+    "issued_at",
+    "status",
+    "queued_at",
+    "terminal_at",
+    "retain_until",
+    "resolution_receipt_id",
+    "resolution_receipt_sha256",
+    "disposition",
+    "note",
+)
+
+
+def _ledger_copy(ledger: Mapping[str, Any]) -> dict[str, Any]:
+    """Counts and entries, with only the keys an entry defines. No notes, no values."""
+    counts = {
+        k: int((ledger.get("counts") or {}).get(k, 0))
+        for k in ("verified", "resolved_by_seal", "closed_by_attestation", "open")
+    }
+    return {
+        "total_seals": sum(counts.values()),
+        "counts": counts,
+        "exceptions": [
+            {k: e.get(k) for k in _ENTRY_KEYS if k in e}
+            for e in ledger.get("exceptions") or []
+        ],
+    }
+
+
+def _ledger_html(ledger: Optional[Mapping[str, Any]]) -> str:
+    esc = html.escape
+    if ledger is None:
+        return (
+            "<h2>Exceptions</h2><p class='warn'>No exception ledger was supplied. "
+            "Export with 'openadapt-flow countersign dossier', which includes it.</p>"
+        )
+    c = ledger["counts"]
+    out = [
+        "<h2>Exceptions</h2>",
+        f"<p class='headline'>Total Seals {ledger['total_seals']} = Verified "
+        f"{c['verified']} + Resolved_by_seal {c['resolved_by_seal']} + "
+        f"Closed_by_attestation {c['closed_by_attestation']} + Open {c['open']}</p>",
+        "<p>Every Seal in the holder's vault on a REFUTED or INDETERMINATE outcome "
+        "is listed, open and closed. A closed entry shows how it ended: a later "
+        "Seal, or a signed disposition.</p>",
+    ]
+    rows = []
+    for e in ledger["exceptions"]:
+        how = ""
+        if e.get("resolution_receipt_id"):
+            how = f"later Seal {e['resolution_receipt_id']}"
+        elif e.get("disposition"):
+            d = e["disposition"]
+            approver = d.get("approver") or {}
+            how = (
+                f"{d.get('disposition_code')} by {approver.get('id')} "
+                f"({approver.get('role')}), {d.get('verification_method')}, "
+                f"{d.get('dispositioned_at')}"
+            )
+        elif e.get("note"):
+            how = str(e["note"])
+        rows.append(
+            "<tr>"
+            + "".join(
+                f"<td>{esc(str(v))}</td>"
+                for v in (
+                    e.get("status"),
+                    e.get("verdict"),
+                    e.get("receipt_sha256"),
+                    e.get("issued_at"),
+                    how,
+                )
+            )
+            + "</tr>"
+        )
+    if rows:
+        out.append(
+            "<table><tr><th>Status</th><th>Verdict</th><th>Receipt sha256</th>"
+            "<th>Issued</th><th>How it ended</th></tr>" + "".join(rows) + "</table>"
+        )
+    return "".join(out)
 
 
 def _disclosure_copy(disclosure: Mapping[str, Any]) -> dict[str, Any]:
@@ -192,6 +285,7 @@ def extract_dossier_data(html_text: str) -> dict[str, Any]:
     return {
         "document": _document_from_data(data),
         "disclosures": data.get("disclosures") or [],
+        "exception_ledger": data.get("exception_ledger"),
     }
 
 
@@ -275,6 +369,7 @@ def render_html(data: Mapping[str, Any], report: CountersignReport) -> str:
     sections.append(
         "<h2>Verification at export</h2><pre>" + esc(render_report(report)) + "</pre>"
     )
+    sections.append(_ledger_html(data.get("exception_ledger")))
     sections.append(
         "<h2>Checks your browser ran just now</h2>"
         "<p>These use only the data in this file. The Seal key is the one embedded below; "

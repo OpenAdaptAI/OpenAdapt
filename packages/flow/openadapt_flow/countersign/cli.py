@@ -445,10 +445,18 @@ def cmd_dossier(args: argparse.Namespace) -> int:
     try:
         document = _read_json(args.document)
         disclosures = [_read_json(p) for p in args.disclosure or []]
+        registry = load_pinned_registry(args.keys)
+        pem = _tsa_pem(args.tsa_cert or [])
+        from openadapt_flow.countersign.tsa import load_pem_certificates
+
+        ledger = _queue(args).ledger(
+            registry, load_pem_certificates(pem) if pem else []
+        )
         data, report = build_dossier(
             document,
-            registry=load_pinned_registry(args.keys),
-            tsa_certificates_pem=_tsa_pem(args.tsa_cert or []),
+            registry=registry,
+            tsa_certificates_pem=pem,
+            ledger=ledger,
             disclosures=disclosures,
             screenshots=[Path(p).expanduser() for p in args.screenshot or []],
             accept_non_flow=args.accept_non_flow,
@@ -463,6 +471,13 @@ def cmd_dossier(args: argparse.Namespace) -> int:
         return 2
     print(f"Dossier written: {out}")
     print(headline(report))
+    print(
+        f"Exceptions: Total Seals {ledger['total_seals']} = Verified "
+        f"{ledger['counts']['verified']} + Resolved_by_seal "
+        f"{ledger['counts']['resolved_by_seal']} + Closed_by_attestation "
+        f"{ledger['counts']['closed_by_attestation']} + Open "
+        f"{ledger['counts']['open']}"
+    )
     for note in data["notes"]:
         print(note)
     if disclosures:
@@ -701,4 +716,5 @@ def add_countersign_parser(sub: Any) -> None:
         help="Embedded only after automatic redaction; left out when no redaction provider is installed",
     )
     _add_trust(x)
+    x.add_argument("--vault", help="Vault whose exception ledger the dossier includes")
     x.set_defaults(func=cmd_dossier)

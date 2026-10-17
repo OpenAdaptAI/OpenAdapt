@@ -315,6 +315,14 @@ the Ed25519 Seal signature against the embedded key, the evidence digest, and
 each disclosed commitment. RFC 3161 tokens need `openssl ts -verify` or
 `openadapt-flow countersign verify dossier.html`; the page prints the command.
 
+The dossier also lists every exception in the vault (`--vault`), open and
+closed, under a header that adds up: Total Seals = Verified +
+Resolved_by_seal + Closed_by_attestation + Open. A genuine Seal on an
+unverified outcome that was never queued counts as open. Each entry shows its
+status, verdict, receipt hash, and how it ended: the resolving receipt id, or
+the disposition code, approver id and role, verification method, and time.
+Notes, ticket ids, and field values are not included.
+
 By default the dossier has no PHI. Disclosed values appear only when you pass
 a disclosure bundle, and only when every bundle matches commitments that a
 verified timestamp or countersignature binds; otherwise `dossier` refuses.

@@ -79,6 +79,13 @@ def _no_network(monkeypatch):
     monkeypatch.setattr(httpx, "Client", refuse)
 
 
+@pytest.fixture(autouse=True)
+def _private_default_vault(monkeypatch, tmp_path):
+    # A command without --vault must never touch the real ~/.openadapt vault.
+    monkeypatch.setenv("OPENADAPT_COUNTERSIGN_VAULT", str(tmp_path / "default-vault"))
+    monkeypatch.delenv("OPENADAPT_EXCEPTION_RETENTION_DAYS", raising=False)
+
+
 @pytest.fixture
 def issuer() -> LocalCountersignIssuer:
     return LocalCountersignIssuer(
@@ -1706,3 +1713,57 @@ def test_dossier_and_docs_carry_the_disclaimer_and_metering_rule(issuer, tsa):
         .split()
     )
     assert DISCLAIMER in docs and METERING_NOTE in docs
+
+
+def test_dossier_lists_every_exception_with_the_four_bucket_header(
+    issuer, approver, tsa, queue, tmp_path, capsys
+):
+    from openadapt_flow.__main__ import main
+    from openadapt_flow.countersign.dossier import extract_dossier_data
+
+    registry = [issuer.registry_entry()]
+    verified, _, certs = _vaulted(issuer, tsa, queue.vault, _receipt_doc(issuer, n=20))
+    _, still_open, _ = _vaulted(issuer, tsa, queue.vault, _failed(issuer))
+    _, closed, _ = _vaulted(issuer, tsa, queue.vault, _failed(issuer, n=3))
+    rec = queue.disposition_record(
+        closed["receipt_sha256"],
+        signer=approver,
+        approver_id="appr-7f3a91",
+        role="nurse-manager",
+        disposition_code="verified_manually_oracle_unavailable",
+        verification_method="sor_direct_inspection",
+        external_reference="INC-555",
+        notes="secret note",
+    )
+    queue.close_by_attestation(
+        closed["receipt_sha256"], rec, [approver.registry_entry()]
+    )
+    keys = tmp_path / "keys.json"
+    keys.write_text(json.dumps({"keys": registry}))
+    pem = tmp_path / "tsa.pem"
+    pem.write_bytes(tsa.certificate_pem())
+    doc = tmp_path / "doc.json"
+    doc.write_text(json.dumps(verified))
+    out = tmp_path / "dossier.html"
+    argv = ["countersign", "dossier", str(doc), "-o", str(out), "--keys", str(keys)]
+    argv += [
+        "--tsa-cert",
+        str(pem),
+        "--vault",
+        str(queue.vault.root),
+        "--accept-non-flow",
+    ]
+    assert main(argv) == 0
+    header = (
+        "Total Seals 3 = Verified 1 + Resolved_by_seal 0 + "
+        "Closed_by_attestation 1 + Open 1"
+    )
+    assert header in capsys.readouterr().out
+    page = out.read_text()
+    assert header in page
+    for e in (still_open, closed):
+        assert e["receipt_sha256"] in page
+    assert "verified_manually_oracle_unavailable" in page
+    assert "INC-555" not in page and "secret note" not in page and "004217" not in page
+    ledger = extract_dossier_data(page)["exception_ledger"]
+    assert ledger["counts"]["open"] == 1 and len(ledger["exceptions"]) == 2
