@@ -356,6 +356,10 @@
       "sha256": "026dab7a2059332f8a62a7e5a24ed22ed94c14dc37a42c73eec7b1a10b4b6a19"
     },
     {
+      "path": "benchmark/openemr_local/verify.yaml",
+      "sha256": "c8b8cfc97f7ba654d3b016798a5ec442570fb3361b717b53b7363c6e0dd8d6ad"
+    },
+    {
       "path": "benchmark/openimis_claims/deployment.eligibility.yaml",
       "sha256": "03f46f4762bad3e465b65217f6080f203e8fe0b167288f65a7a76edfe469d538"
     },
@@ -5762,6 +5766,10 @@
     {
       "path": "public-demo/evidence-packs/mockmed-triage-v3/manifest.json",
       "sha256": "a4c531de62d875355a359dce4655fe80963ab1be421c99c1be317d82cdccd49d"
+    },
+    {
+      "path": "public-demo/mockmed-verify.yaml",
+      "sha256": "27257a28ed148fcbb19fe98791be4c100d45bb0ebff0739cb6be410d49daf311"
     },
     {
       "path": "registry/bundles/openemr/new-referral/benchmark-contract.json",

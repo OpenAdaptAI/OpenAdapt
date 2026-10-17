@@ -257,9 +257,10 @@ class WebFaultDriver:
             replacement = ScreenOnlyRecordCheck() if kind == "weak_effect" else None
             after = effect_verifier_input_sha256(replacement, context.effects)
         elif kind in SCREEN_FAULTS:
-            after = self._screen_fault(context)
-            if after is None:
+            screen_after = self._screen_fault(context)
+            if screen_after is None:
                 return None
+            after = screen_after
         else:
             return None
         receipt = FaultMutationReceipt(
