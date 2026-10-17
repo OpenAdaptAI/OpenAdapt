@@ -9623,6 +9623,14 @@ def _cmd_business_decisions_serve(args: argparse.Namespace) -> int:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point. Returns a process exit code."""
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if raw[:1] in (["demo"], ["tutorial"]):
+        # Building the parser imports for a second or two on a new install;
+        # start loading OCR and checking the browser driver meanwhile.
+        from openadapt_flow import _prewarm
+
+        _prewarm.start()
+
     from openadapt_flow._browser_setup import BrowserSupportMissing
 
     args = build_parser().parse_args(argv)

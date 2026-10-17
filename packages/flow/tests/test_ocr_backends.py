@@ -108,7 +108,7 @@ def test_runtime_imports_do_not_load_opencv() -> None:
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="Apple Vision is macOS-only")
 def test_apple_vision_reads_rendered_text() -> None:
-    pytest.importorskip("Vision")
+    pytest.importorskip("objc")
     engine = ob.AppleVisionEngine()
     image = Image.new("RGB", (480, 120), "white")
     draw = ImageDraw.Draw(image)
