@@ -19,12 +19,27 @@ import threading
 _started = False
 _lock = threading.Lock()
 
-#: A 1x1 white PNG, enough to make a native engine load its models.
-_TINY_PNG = bytes.fromhex(
-    "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
-    "1f15c4890000000d4944415478da63f8ffff3f0005fe02fea7d6a4b30000"
-    "000049454e44ae426082"
-)
+
+def _blank_png(width: int = 64, height: int = 16) -> bytes:
+    """A small white RGB PNG, built with the standard library.
+
+    Big enough for a native engine to run a real request and load its models.
+    """
+    import struct
+    import zlib
+
+    def chunk(tag: bytes, data: bytes) -> bytes:
+        crc = zlib.crc32(tag + data) & 0xFFFFFFFF
+        return struct.pack(">I", len(data)) + tag + data + struct.pack(">I", crc)
+
+    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    rows = b"".join(b"\x00" + b"\xff" * (width * 3) for _ in range(height))
+    return (
+        b"\x89PNG\r\n\x1a\n"
+        + chunk(b"IHDR", header)
+        + chunk(b"IDAT", zlib.compress(rows))
+        + chunk(b"IEND", b"")
+    )
 
 
 def _load() -> None:
@@ -40,7 +55,7 @@ def _load() -> None:
         engine = _get_engine()
         recognize = getattr(engine, "recognize_png", None)
         if recognize is not None:
-            recognize(_TINY_PNG)
+            recognize(_blank_png())
     except Exception:  # noqa: BLE001 - the first real call reports it
         pass
 
