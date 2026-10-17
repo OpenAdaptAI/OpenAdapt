@@ -42,6 +42,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Optional, Protocol
 
+from openadapt_flow.approval_mode.approver import (
+    Approver,
+    ApproverPolicyV1,
+    step_class_for,
+)
 from openadapt_flow.approval_mode.item_approval import (
     DEFAULT_APPROVAL_WAIT_S,
     ItemApprovalRefused,
@@ -253,12 +258,22 @@ class ApprovalGate:
         approval_wait_s: float = DEFAULT_APPROVAL_WAIT_S,
         sleep: Callable[[float], None] = time.sleep,
         approval_poll_s: float = 0.5,
+        approver_policy: Optional["ApproverPolicyV1"] = None,
+        approver: Optional["Approver"] = None,
+        policy_name: Optional[str] = None,
     ) -> None:
         self.mode = resolve_approval_mode(mode)
         if approval_store is None or isinstance(approval_store, ItemApprovalStore):
             self.approval_store = approval_store
         else:
             self.approval_store = ItemApprovalStore(approval_store)
+        # Who may answer a save. Person-only unless the deployment widened it;
+        # the run's store records the policy so every reader applies the same.
+        self.approver_policy = approver_policy
+        self.approver = approver
+        self._policy_name = policy_name
+        if approver_policy is not None and self.approval_store is not None:
+            self.approval_store.write_policy(approver_policy)
         self._approval_wait_s = float(approval_wait_s)
         self._approval_poll_s = float(approval_poll_s)
         self._sleep = sleep
@@ -594,6 +609,7 @@ class ApprovalGate:
                     frame_png=frame,
                     form_state=form,
                     qualification_case_kind=ctx.qualification_case_kind,
+                    step_class=step_class_for(ctx.step, policy_name=self._policy_name),
                 )
             except (OSError, ValueError, ItemApprovalRefused):
                 return wait_refusal("approval_request_unwritable")
@@ -604,6 +620,7 @@ class ApprovalGate:
                 poll_s=self._approval_poll_s,
                 monotonic=self._monotonic,
                 sleep=self._sleep,
+                approver=self.approver,
             )
             if waited is None:
                 return wait_refusal(code or "approval_wait_timed_out")
@@ -622,7 +639,11 @@ class ApprovalGate:
             check = CheckOutcome(
                 code="each_item",
                 passed=False,
-                detail="declined_by_person",
+                detail=(
+                    "declined_by_person"
+                    if answer.decided_by == "human"
+                    else "declined_by_delegate"
+                ),
                 step_id=ctx.step.id,
             )
             self._halt_step(ctx.step.id, decision, [check])

@@ -3048,6 +3048,25 @@ class SafetyRefusalEvidence(BaseModel):
     detector_input_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
 
 
+class EffectFieldCheck(BaseModel):
+    """One field the effect verifier compared on the saved record.
+
+    ``expected`` is what the run typed; ``observed`` is what the record held
+    (None when it wasn't found). Kept on the local report only, for the
+    reviewer's field-level diff and for decision triage; never sent to a
+    hosted lane.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    field: str
+    expected: Optional[str] = None
+    observed: Optional[str] = None
+    matched: bool
+    #: The verifier's Flow tier (1 independent system ... 4 same screen).
+    verification_tier: Optional[int] = None
+
+
 class StepResult(BaseModel):
     step_id: str
     intent: str
@@ -3099,6 +3118,8 @@ class StepResult(BaseModel):
     safety_halt: bool = False
     effect_results: list[str] = Field(default_factory=list)
     effect_evidence: list[EffectVerificationEvidence] = Field(default_factory=list)
+    #: Field-by-field read-back comparisons; omitted from the report when empty.
+    effect_field_checks: list[EffectFieldCheck] = Field(default_factory=list)
     #: Machine-readable terminal category. ``report.halt`` remains useful
     #: learning evidence but is not itself proof that a failure was a governed
     #: safety halt.
@@ -3164,6 +3185,13 @@ class StepResult(BaseModel):
     before_png: Optional[str] = None  # run-dir-relative paths
     after_png: Optional[str] = None
     elapsed_ms: float = 0.0
+
+    @model_serializer(mode="wrap")
+    def _omit_empty_field_checks(self, handler: Any) -> Any:
+        data = handler(self)
+        if isinstance(data, dict) and not self.effect_field_checks:
+            data.pop("effect_field_checks", None)
+        return data
 
 
 class UnarmedStep(BaseModel):
