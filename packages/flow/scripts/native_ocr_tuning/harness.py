@@ -292,6 +292,9 @@ CONFIGS: dict[str, dict[str, Any]] = {
     "t768f_union_pad24_pad12": {"passes": [{"tile_h": 768, "small_pad": 24}, {"tile_h": 768, "small_pad": 12}], "flip": "rev2", "merge": "union"},
     "t768f_union3_pad": {"passes": [{"tile_h": 768}, {"tile_h": 768, "small_pad": 24}, {"tile_h": 768, "small_pad": 12}], "flip": "rev2", "merge": "union"},
     "t768f_vote3_pad": {"passes": [{"tile_h": 768}, {"tile_h": 768, "small_pad": 24}, {"tile_h": 768, "small_pad": 12}], "flip": "rev2", "merge": "vote"},
+    "t768f_row2": {"passes": [{"tile_h": 768}], "flip": "rev2", "row_retry": True},
+    "t768f_row3": {"passes": [{"tile_h": 768}], "flip": "rev2", "row_retry": True, "row_factor": 3},
+    "t768f_small2_row2": {"passes": [{"tile_h": 768, "small_h": 300, "small_scale": 2.0}], "flip": "rev2", "row_retry": True},
     "t768f_gray": {"passes": [{"tile_h": 768, "gray": True}], "flip": "rev2"},
     "t768f_lc_on": {"passes": [{"tile_h": 768}], "flip": "rev2", "language_correction": True},
     "t768f_vote3": {"passes": [{"tile_h": 768}, {"tile_h": 768, "gray": True}, {"tile_h": 768, "small_h": 300, "small_scale": 2.0}], "flip": "rev2", "merge": "vote"},
@@ -306,9 +309,59 @@ CONFIGS: dict[str, dict[str, Any]] = {
 }
 
 
+def _patch_row_retry(factor: int) -> None:
+    """Prototype: after the band and 2x-band attempts, re-read only the
+    point's own text row (its extent from the first pass), upscaled."""
+    from openadapt_flow.runtime import identity as I
+    from openadapt_flow.validation import dense_surface as D
+
+    original = D.replay_observe
+    rank = {"unreadable": 0, "abstain": 1, "mismatch": 2, "verified": 3}
+
+    def observe(frame, resolved_point, recorded_click, crop_region, context_text):
+        obs = original(frame, resolved_point, recorded_click, crop_region, context_text)
+        if obs.check.status == "verified":
+            return obs
+        band = I.band_region(resolved_point, crop_region[3], frame.viewport)
+        lines = [ln for ln in D.ocr(frame.png, region=band) if ln.text.strip()]
+        near = I.lines_near_point(lines, resolved_point[1])
+        if not near:
+            return obs
+        y0 = min(ln.region[1] for ln in near)
+        y1 = max(ln.region[1] + ln.region[3] for ln in near)
+        hs = sorted(ln.region[3] for ln in near)
+        h = hs[len(hs) // 2]
+        top = max(0, y0 - h // 2)
+        region = (band[0], top, band[2], (y1 - y0) + h)
+        up = I.upscale_crop(frame.png, region, factor)
+        if up is None:
+            return obs
+        exclude = (
+            resolved_point[0] + (crop_region[0] - recorded_click[0]),
+            resolved_point[1] + (crop_region[1] - recorded_click[1]),
+            crop_region[2],
+            crop_region[3],
+        )
+        f = factor
+        retry, r_obs, retry_nf, r_obs_nf, _rl, _rn = D._band_attempt(
+            up, None, (resolved_point[1] - region[1]) * f,
+            ((exclude[0] - region[0]) * f, (exclude[1] - region[1]) * f,
+             exclude[2] * f, exclude[3] * f),
+            context_text,
+        )
+        if (rank[retry.status], retry.coverage) > (rank[obs.check.status], obs.check.coverage):
+            obs.check, obs.observed = retry, r_obs
+            obs.observed_no_rowfilter, obs.status_no_rowfilter = r_obs_nf, retry_nf.status
+        return obs
+
+    D.replay_observe = observe
+
+
 def install(name: str) -> TunedVision:
     cfg = dict(CONFIGS[name])
     rmc = cfg.pop("record_min_conf", None)
+    if cfg.pop("row_retry", False):
+        _patch_row_retry(cfg.pop("row_factor", 2))
     if rmc is not None:
         # The record-time confidence floor (compiler MIN_OCR_CONFIDENCE) as
         # bound by the record paths of the evidence harnesses.
