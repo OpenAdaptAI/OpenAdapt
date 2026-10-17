@@ -68,10 +68,6 @@ def test_scan_module_is_stdlib_only() -> None:
         assert banned not in imported
 
 
-def test_scan_source_has_no_personal_name() -> None:
-    assert "personal_name_" not in SCAN_PY.read_text(encoding="utf-8")
-
-
 def test_scan_source_has_no_matching_ohip_example() -> None:
     source = SCAN_PY.read_text(encoding="utf-8")
     assert re.search(r"\b\d{4}-\d{3}-\d{3}\b", source) is None

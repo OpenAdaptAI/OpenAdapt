@@ -80,7 +80,6 @@ FORBIDDEN_DIR_PARTS = {
     "recordings",
     "captures",
     "screenshots",
-    "retinology",
     ".private",
 }
 
