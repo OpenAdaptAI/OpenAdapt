@@ -59,6 +59,10 @@ testpaths = ["tests"]
 [tool.ruff]
 target-version = "py310"
 
+[tool.ruff.lint]
+# Spelled out because newer Ruff releases widen the default rule set.
+select = ["E4", "E7", "E9", "F"]
+
 [tool.semantic_release]
 version_toml = ["pyproject.toml:project.version"]
 commit_message = "chore: release {version}"
