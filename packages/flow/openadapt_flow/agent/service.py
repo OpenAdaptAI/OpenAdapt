@@ -386,7 +386,7 @@ class RunService:
                 self._active.pop(begin.run_id, None)
             event.set()
             raise
-        return self.get(begin.run_id, wait_seconds=wait)
+        return self.get(begin.run_id, wait_seconds=wait, just_started=True)
 
     def _start(
         self,
@@ -475,6 +475,7 @@ class RunService:
         wait_seconds: Any = DEFAULT_WAIT_SECONDS,
         *,
         replayed: bool = False,
+        just_started: bool = False,
     ) -> dict[str, Any]:
         if not isinstance(run_id, str) or not is_safe_run_id(run_id):
             raise ServiceError("run_id must be a run id returned by run_workflow")
@@ -482,7 +483,10 @@ class RunService:
             event = self._active.get(run_id)
         if event is not None:
             self._wait_for(
-                event, run_id, self._wait_seconds(wait_seconds, DEFAULT_WAIT_SECONDS)
+                event,
+                run_id,
+                self._wait_seconds(wait_seconds, DEFAULT_WAIT_SECONDS),
+                just_started=just_started,
             )
         # Check activity BEFORE reading the record. A worker writes its result
         # and only then leaves the active set, so "not active" followed by an
@@ -541,20 +545,33 @@ class RunService:
         except Exception:
             return None
 
-    def _wait_for(self, event: threading.Event, run_id: str, seconds: float) -> None:
+    def _wait_for(
+        self,
+        event: threading.Event,
+        run_id: str,
+        seconds: float,
+        *,
+        just_started: bool = False,
+    ) -> None:
         """Wait for the run to finish, or until it starts waiting for a person.
 
         A call that finds the run already waiting for a person keeps waiting
         for the answer (up to ``seconds``), so a caller polling get_run
         doesn't spin; a call that sees the wait begin returns at once, so the
         caller learns a person is needed.
+
+        The run_workflow call that started the run (``just_started``) has
+        never reported the wait, so it returns at once even when the worker
+        already reached the approval request before this first check.
+        Otherwise a fast worker made the starting call block for the whole
+        window instead of reporting needs_review.
         """
         record = {"run_id": run_id, "workflow": None}
         stored = self.store.read(run_id)
         if stored is not None:
             record["workflow"] = stored.get("workflow")
         _entry, hook = self._engine_hook(record, "awaiting_person")
-        if hook is None or self._awaiting_person(record):
+        if hook is None or (not just_started and self._awaiting_person(record)):
             event.wait(seconds)
             return
         deadline = time.monotonic() + seconds
