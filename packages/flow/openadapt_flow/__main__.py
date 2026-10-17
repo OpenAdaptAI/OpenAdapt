@@ -1562,7 +1562,14 @@ def _cmd_demo(args: argparse.Namespace) -> int:
         "OpenAdapt demo: one task, run twice on a fake clinic app on this "
         "computer. No AI calls."
     )
-    print("The first run can take a few minutes while the browser downloads.")
+    from openadapt_flow._browser_setup import BROWSER_ENV, installed_browser_channel
+
+    channel = installed_browser_channel()
+    if channel and (os.environ.get(BROWSER_ENV) or "auto").lower() in ("auto", channel):
+        name = "Chrome" if channel == "chrome" else "Edge"
+        print(f"Using your installed {name}, so nothing needs downloading.")
+    else:
+        print("The first run downloads a small browser (about 90 MB) once.")
 
     # The bundled demo app holds only fixed synthetic data. Keep an installed
     # but unconfigured privacy provider from blocking it, exactly as the

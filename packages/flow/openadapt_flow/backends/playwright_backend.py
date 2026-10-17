@@ -8,6 +8,7 @@ deviceScaleFactor=1 so CSS pixels equal screenshot pixels.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import hmac
 import json
@@ -17,7 +18,7 @@ import time
 import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
+from typing import TYPE_CHECKING, Any, Callable, Iterator, Literal, Optional
 from urllib.parse import urlsplit
 
 from openadapt_flow.backends._page_quiescence import PageQuiescence
@@ -3116,17 +3117,11 @@ class PlaywrightBackend:
             ``(backend, close)`` where ``close()`` shuts down the browser and
             the Playwright driver (flushing the video first, when recording).
         """
-        from openadapt_flow._browser_setup import ensure_chromium_installed
-
-        ensure_chromium_installed()
-        from playwright.sync_api import sync_playwright
-
-        pw = sync_playwright().start()
-        try:
-            browser = pw.chromium.launch(headless=headless)
-        except Exception:
-            pw.stop()
-            raise
+        shared = _SHARED_BROWSER.get(headless)
+        if shared is not None:
+            pw, browser = shared
+        else:
+            pw, browser = _start_browser(headless)
         viewport = {"width": VIEWPORT[0], "height": VIEWPORT[1]}
         context = None
         if record_video_dir is not None:
@@ -3146,6 +3141,14 @@ class PlaywrightBackend:
         backend = cls(page)
 
         def close() -> None:
+            if shared is not None:
+                # A shared browser outlives this page; closing the page's own
+                # context discards its cookies, storage, and cache.
+                if context is not None:
+                    context.close()
+                else:
+                    page.context.close()
+                return
             try:
                 if context is not None:
                     context.close()  # flush the recorded video to disk
@@ -3154,3 +3157,47 @@ class PlaywrightBackend:
                 pw.stop()
 
         return backend, close
+
+
+#: Browsers kept open by :func:`shared_browser`, keyed by ``headless``.
+_SHARED_BROWSER: dict[bool, tuple[Any, Any]] = {}
+
+
+def _start_browser(headless: bool) -> tuple[Any, Any]:
+    """Start Playwright and the selected Chromium (see _browser_setup)."""
+    from openadapt_flow._browser_setup import launch_chromium, require_browser_support
+
+    require_browser_support()
+    from playwright.sync_api import sync_playwright
+
+    pw = sync_playwright().start()
+    try:
+        browser = launch_chromium(pw.chromium, headless=headless)
+    except Exception:
+        pw.stop()
+        raise
+    return pw, browser
+
+
+@contextlib.contextmanager
+def shared_browser(headless: bool = True) -> Iterator[None]:
+    """Reuse one browser process for every ``PlaywrightBackend.launch`` inside.
+
+    Each launch still gets a fresh browser context (no cookies, storage, or
+    cache from an earlier run), exactly as a separate browser would; only the
+    process start and shutdown are paid once. Single-threaded use only, like
+    Playwright's sync API.
+    """
+    if headless in _SHARED_BROWSER:
+        yield
+        return
+    pw, browser = _start_browser(headless)
+    _SHARED_BROWSER[headless] = (pw, browser)
+    try:
+        yield
+    finally:
+        _SHARED_BROWSER.pop(headless, None)
+        try:
+            browser.close()
+        finally:
+            pw.stop()

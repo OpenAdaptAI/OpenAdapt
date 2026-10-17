@@ -55,6 +55,24 @@ def _get_engine() -> Any:
     return _engine
 
 
+def prewarm() -> None:
+    """Start loading the OCR engine on a background thread and return at once.
+
+    The first OCR call then finds the models loaded (or waits on the same lock
+    for the load already in progress). Errors are left for that first call.
+    """
+    if _engine is not None:
+        return
+
+    def _load() -> None:
+        try:
+            _get_engine()
+        except Exception:  # noqa: BLE001 - the first real call reports it
+            pass
+
+    threading.Thread(target=_load, name="ocr-prewarm", daemon=True).start()
+
+
 class OcrLine(BaseModel):
     """One recognized text line.
 
