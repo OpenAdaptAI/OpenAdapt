@@ -127,6 +127,8 @@ def test_match_template_scores(monkeypatch: pytest.MonkeyPatch) -> None:
         gray = cv2.cvtColor(np.asarray(frame)[:, :, ::-1].copy(), cv2.COLOR_BGR2GRAY)
         for y, x, h, w in ((40, 60, 30, 90), (200, 300, 24, 24), (0, 0, 50, 50)):
             tpl = gray[y : y + h, x : x + w]
+            if int(tpl.max()) == int(tpl.min()):
+                continue  # flat crops: see the end of this test
             e, n = _both(monkeypatch, imgops.match_template_ccoeff_normed, gray, tpl)
             assert n.shape == e.shape and n.dtype == e.dtype
             # OpenCV correlates in float32; the numpy path in float64. On a
@@ -147,10 +149,14 @@ def test_match_template_scores(monkeypatch: pytest.MonkeyPatch) -> None:
                 # flat patch matches a flat area everywhere) may resolve to
                 # different equal-scoring places.
                 assert n_loc == tuple(e_loc)
-    # A flat template matches everywhere, as in OpenCV.
-    flat = np.full((10, 10), 128, np.uint8)
-    e, n = _both(monkeypatch, imgops.match_template_ccoeff_normed, gray, flat)
-    np.testing.assert_array_equal(n, e)
+    # A flat template matches nowhere. OpenCV gives all ones or all zeros
+    # here depending on how its build rounds the template variance.
+    monkeypatch.setenv(imgops.IMAGE_OPS_ENV, "numpy")
+    for value in (0, 37, 128, 255):
+        flat = np.full((10, 10), value, np.uint8)
+        n = imgops.match_template_ccoeff_normed(gray, flat)
+        assert n.shape == (gray.shape[0] - 9, gray.shape[1] - 9)
+        assert n.dtype == np.float32 and not n.any()
 
 
 def test_perceptual_hash_identical(monkeypatch: pytest.MonkeyPatch) -> None:

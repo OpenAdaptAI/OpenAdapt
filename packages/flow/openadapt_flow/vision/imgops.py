@@ -368,8 +368,10 @@ def resize_area(img: np.ndarray, width: int, height: int) -> np.ndarray:
 def match_template_ccoeff_normed(image: np.ndarray, templ: np.ndarray) -> np.ndarray:
     """``cv2.matchTemplate(image, templ, cv2.TM_CCOEFF_NORMED)`` for 2-D ``uint8``.
 
-    Uses OpenCV's normalization and its rule for near-flat windows. Scores
-    agree with OpenCV to about 1e-5 (OpenCV correlates in float32).
+    Uses OpenCV's normalization and its rule for near-flat windows. OpenCV
+    correlates in float32, so its scores can differ by up to about 0.01 on
+    nearly flat windows and by less than 5e-4 where a match could be
+    accepted. A flat template scores 0 everywhere; see below.
     """
     if use_opencv():
         return cv2.matchTemplate(image, templ, cv2.TM_CCOEFF_NORMED)
@@ -381,23 +383,10 @@ def match_template_ccoeff_normed(image: np.ndarray, templ: np.ndarray) -> np.nda
     n = float(th * tw)
     tpl_zero = tpl - tpl.mean()
     if int(templ.max()) == int(templ.min()):
-        # A flat template. OpenCV computes its variance with meanStdDev and
-        # returns all ones when that is below DBL_EPSILON. Rounding can leave a
-        # tiny positive variance instead; then every window fails the
-        # near-flat rule below and scores 0.
-        # OpenCV's meanStdDev forms the variance with one fused multiply-add,
-        # sq * (1/n) - mean**2, rounded once; Fraction reproduces that rounding.
-        from fractions import Fraction
-
-        inv = 1.0 / n
-        mean = float(tpl.sum()) * inv
-        neg_mean2 = -(mean * mean)
-        var = float(
-            Fraction(float((tpl * tpl).sum())) * Fraction(inv) + Fraction(neg_mean2)
-        )
-        sdv = np.sqrt(max(var, 0.0))
-        if sdv * sdv < np.finfo(np.float64).eps:
-            return np.ones((rh, rw), dtype=np.float32)
+        # A flat template carries nothing to match. OpenCV returns all ones or
+        # all zeros here depending on how its build rounds the template
+        # variance, so the answer differs across platforms. This path always
+        # returns zeros: a flat template matches nowhere.
         return np.zeros((rh, rw), dtype=np.float32)
     templ_norm = float(np.sqrt((tpl_zero**2).sum()))
 
