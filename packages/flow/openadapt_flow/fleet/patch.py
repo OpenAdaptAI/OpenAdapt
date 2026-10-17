@@ -180,7 +180,8 @@ def sanitize_selector(selector: str, *, what: str = "selector") -> str:
     descendant / child / sibling combinators. Refuses:
 
     * text engines (``text=``, ``:has-text()``, ``>>``) and quoted free text;
-    * any token that looks like a record identifier;
+    * any token that looks like a record identifier or a person's name
+      (:func:`looks_name_like`);
     * a value on any ``data-*`` attribute other than the test hooks in
       :data:`TEST_HOOK_ATTRIBUTES`, because applications put record keys and
       names in ``data-*`` values; a test-hook value that looks dynamic
@@ -223,6 +224,8 @@ def sanitize_selector(selector: str, *, what: str = "selector") -> str:
                 raise PatchRedactionError(
                     f"{what} token looks like a record identifier"
                 )
+            if value is not None and looks_name_like(value):
+                raise PatchRedactionError(f"{what} token looks like a person's name")
         for group in ("id", "cls"):
             value = match.group(group)
             if value is not None and is_generated_name(value):
@@ -531,7 +534,9 @@ def verify_patch(
 
 
 def _normalize(text: str) -> str:
-    return " ".join(re.sub(r"[^0-9a-z]+", " ", text.lower()).split())
+    # Split camelCase first, so ``rowJaneDoe`` reads as ``row jane doe``.
+    split = re.sub(r"([a-z0-9])([A-Z])", r"\1 \2", text)
+    return " ".join(re.sub(r"[^0-9a-z]+", " ", split.lower()).split())
 
 
 def find_leaks(
@@ -539,19 +544,26 @@ def find_leaks(
 ) -> list[str]:
     """Return a redacted description of each forbidden value found.
 
-    ``values`` are compared after lowercasing and collapsing punctuation, as
-    whole word runs, so ``Jane Q. Sample`` is found in ``jane-q-sample``.
+    ``values`` are compared after splitting camelCase, lowercasing and
+    collapsing punctuation, as whole word runs, so ``Jane Q. Sample`` is found
+    in ``jane-q-sample`` and ``rowJaneQSample``. A value of two or more words
+    is also looked for with the spaces removed, anywhere, so it is found in
+    ``rowjaneqsample``.
     ``digests`` are compared verbatim. Values shorter than three characters
     after normalization are skipped (they would match everywhere).
     """
     haystack = f" {_normalize(serialized)} "
+    compact_haystack = haystack.replace(" ", "")
     raw = serialized.lower()
     found: list[str] = []
     for value in values:
         needle = _normalize(value)
         if len(needle.replace(" ", "")) < 3:
             continue
-        if f" {needle} " in haystack:
+        compact = needle.replace(" ", "")
+        if f" {needle} " in haystack or (
+            " " in needle and len(compact) >= 6 and compact in compact_haystack
+        ):
             found.append(f"value of length {len(value)}")
     for digest in digests:
         if digest and digest.lower() in raw:

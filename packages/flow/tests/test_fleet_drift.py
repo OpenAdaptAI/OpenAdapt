@@ -558,6 +558,23 @@ def test_test_hook_value_rules():
             sanitize_selector(f"[{attr}=save-note]")
 
 
+@pytest.mark.parametrize(
+    "selector",
+    ["#patient-Jane-Doe", ".row_Smith", "[name=member-Mary-Ann]", "[for=dob-Jane-Doe]"],
+)
+def test_sanitizer_refuses_name_like_ids_classes_and_values(selector):
+    with pytest.raises(PatchRedactionError, match="name"):
+        sanitize_selector(selector)
+
+
+def test_leak_check_finds_names_written_together():
+    for text in ("rowJaneQSample", "row-jane-q-sample", "rowjaneqsample"):
+        assert find_leaks(text, ["Jane Q. Sample"]), text
+    # Single words are still matched as whole words only.
+    assert not find_leaks("saveNote", ["ave"])
+    assert not find_leaks("savenote", ["note"])
+
+
 def test_export_carries_a_static_test_hook_value(tmp_path, core):
     store, candidate, _, _ = _approved(
         tmp_path, new_search="[data-testid=member-search-v2]"
