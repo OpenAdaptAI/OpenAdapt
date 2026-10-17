@@ -79,7 +79,7 @@ beside them in the same wire document:
 
 Every part of the block is optional except `statement`. Verifiers that
 predate this block look for `receipt` and ignore the rest, so
-`openadapt seal verify` and `openadapt_types.seal.verify_sealed_receipt`
+`openadapt seal verify` and `openadapt_flow.contracts.seal.verify_sealed_receipt`
 still give the same answer.
 
 The timestamp covers SHA-256 of the canonical `statement`. The statement
@@ -217,7 +217,7 @@ Verification reads only what the holder pinned:
 
 The countersignature is a `openadapt.seal-signature/v1` over an
 `openadapt.countersign-attestation/v1` object. It reuses the Seal key registry,
-pinning, and `openadapt_types.seal.verify_seal_signature` unchanged. The
+pinning, and `openadapt_flow.contracts.seal.verify_seal_signature` unchanged. The
 attestation's `schema_version` is inside the signed hash, which keeps an
 attestation from being read as a receipt. Cloud has no countersigning
 endpoint yet; `CloudCountersignIssuer` is an interface stub that raises, and

@@ -136,11 +136,10 @@ console = [
 ]
 # Countersigned and Timestamped Seals: `openadapt-flow countersign`. RFC 3161
 # timestamps need an ASN.1 codec for CMS/TSTInfo; asn1crypto is pure Python
-# with no dependencies, and signatures still go through `cryptography`.
-# openadapt_types.seal (the Seal verifier) first shipped in openadapt-types 0.20.
+# with no dependencies, and signatures still go through `cryptography`. The
+# Seal verifier is openadapt_flow.contracts.seal, part of the base package.
 countersign = [
     "asn1crypto>=1.5",
-    "openadapt-types>=0.20.0,<0.22.0",
 ]
 # Reference Execute server: `openadapt-flow serve-execute`. Same public
 # request schema as Cloud Execute, hosted in this process with a local

@@ -20,13 +20,12 @@ from typing import Any
 import pytest
 
 pytest.importorskip("asn1crypto")
-pytest.importorskip("openadapt_types.seal")
 
 from cryptography import x509  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (  # noqa: E402
     Ed25519PrivateKey,
 )
-from openadapt_types.seal import parse_key_registry, verify_sealed_receipt  # noqa: E402
+from openadapt_flow.contracts.seal import parse_key_registry, verify_sealed_receipt  # noqa: E402
 
 from openadapt_flow.countersign import commitments as C  # noqa: E402
 from openadapt_flow.countersign.document import (  # noqa: E402
