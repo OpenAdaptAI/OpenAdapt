@@ -53,10 +53,18 @@ passed and the bundle satisfies every rule of the policy. Nothing is marked
 certified when it refuses; the refusal reasons are in
 `qualification/verdict.txt`.
 
-The keys `qualify` signs with are local test keys made for one campaign and
-held in memory. They prove the campaign ran on this machine. They are not a
-production trust root; a production deployment admits results signed by its
-own trusted runner keys (see [PRODUCTION.md](PRODUCTION.md)).
+What is signed is `qualification/result.json`
+(`openadapt.qualification-result/v1`, RFC-0002): the coverage report without
+free text, the digest of the read-back contract it was judged against, and
+one read-back verdict per trial. Its digest goes into the existing
+qualification admission envelope; there is no separate signing scheme.
+
+The keys `qualify` signs with are local test keys. Case results are signed
+with runner and fault-driver keys made for one campaign and held in memory.
+The admission envelope is signed with Flow's well-known local-dev
+qualification key, which every production trust map refuses. None of them is
+a production trust root; a production deployment admits results signed by its
+own authority (see [PRODUCTION.md](PRODUCTION.md)).
 
 ## Certification policy
 

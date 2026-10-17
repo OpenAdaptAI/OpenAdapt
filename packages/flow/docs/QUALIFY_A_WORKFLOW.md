@@ -34,7 +34,9 @@ This is the file for the local OpenEMR fixture
 (`benchmark/openemr_local/verify.yaml`), shortened:
 
 ```yaml
-version: 1
+schema_version: openadapt.verify/v1
+environment_id: openemr-local-fixture-7c96c8eefe46   # optional
+minimum_effect_strength: independent_system_of_record
 
 app:
   name: OpenEMR (local benchmark fixture)
@@ -46,7 +48,7 @@ app:
     python: benchmark.openemr_local.qualify_hooks:reset
 
 # Where the write is read back from. Not the screen.
-system_of_record:
+verifier:
   kind: rest
   base_url: ${OPENEMR_API_URL:-https://127.0.0.1:9300}
   records_path: /apis/default/api/patient?_limit=1000
@@ -54,6 +56,7 @@ system_of_record:
   session: benchmark.openemr_local.qualify_hooks:oracle_session
 
 # The record the save must create, and which input fills each field.
+# Shorthand for the effects list (see below).
 record:
   name: patient
   match: [email, lname]     # how to find the new record
@@ -76,6 +79,12 @@ campaign:
   policy: clinical-write
 ```
 
+The first block is the read-back contract from RFC-0002
+(`openadapt.verify/v1`): `verifier`, `effects` (or the `record` shorthand) and
+`minimum_effect_strength`. The same contract can judge a run by any executor.
+`app`, `save_step`, `inputs` and `campaign` are what a qualification campaign
+adds.
+
 What each part does:
 
 - **app**: where the application is, its version (recorded in the report),
@@ -83,17 +92,37 @@ What each part does:
   one of `command` (a shell command), `http` (`method`, `url`, `body`) or
   `python` (`module:function`). For a web app without sign-in you can leave
   out `session`; `qualify` opens a fresh browser at `url`.
-- **system_of_record**: the read-back. `kind: rest` reads `records_path` under
+- **verifier**: the read-back. `kind: rest` reads `records_path` under
   `base_url` and takes the list at `records_key`. Authentication is
   `auth: {bearer_env: NAME}`, `{header: X-Api-Key, value_env: NAME}` or
   `{basic_env: NAME}`, with the secret in the named environment variable.
   `kind: sql`, `fhir` and `graphql` take the same keys as the effects section
   of a deployment file ([EFFECT_KIT.md](EFFECT_KIT.md)). An on-screen check is
   refused: it cannot tell a real write from a screen that only looks right.
-- **record**: what the save must write. `match` finds the record, `fields`
-  says which input each field must equal, and `duplicate_key` is the field
-  that makes a second write a duplicate. Leave `record` out when the compiler
-  already bound the save's record checks from the demonstration.
+- **effects**: the save's checks as an effect contract list, the same
+  entries an `effect_contract.yaml` holds:
+
+  ```yaml
+  effects:
+    - kind: record_written
+      match: {email: {param: email}, lname: {param: lname}}
+      expected_count: 1
+      idempotency_key: {param: email}
+      key_field: email
+    - kind: field_equals
+      match: {email: {param: email}}
+      field: DOB
+      value: {param: DOB}
+  ```
+
+- **record**: a shorter way to write the same list. `match` finds the record,
+  `fields` says which input each field must equal, and `duplicate_key` is the
+  field that makes a second write a duplicate. It expands to one
+  `record_written` plus a `field_equals` per other field. Give `effects` or
+  `record`, not both; leave both out when the compiler already bound the
+  save's checks from the demonstration.
+- **minimum_effect_strength**: `independent_system_of_record` (default) or
+  `independent_session`. `qualify` refuses a verifier that reads weaker.
 - **save_step**: `auto` picks the single irreversible step. If there are none
   or several, `qualify` says so and asks you to name one.
 - **inputs**: the test inputs. `recorded` reuses the demonstration's values;
@@ -112,12 +141,28 @@ variable without a default is an error.
 runs/qual-1/
   bundle/                     the bundle, with the qualification project
   cases/<case>/trial-NN/      run report, screenshots, oracle.json
-  qualification/report.json   the signed result
+  qualification/result.json   openadapt.qualification-result/v1
+  qualification/admission.local.json   the result bound into an admission
+                              envelope (with --certify, 3+ trials per case)
+  qualification/report.json   the project's coverage report
   qualification/verdict.txt   the result, or why certification refused
   campaign-summary.json       one row per trial
   timing.json                 wall-clock time per trial and in total
   QUALIFICATION.md            a summary to read
 ```
+
+`result.json` has one entry per trial: what the case expected the system of
+record to show (`CONFIRMED` for the normal case, `REFUTED` for a fault), what
+the independent read-back showed, and digests of the trial's run report and
+read-back. It counts silent incorrect successes (must be 0), over-halts and
+model calls. It holds no record values, workflow names or reason text.
+
+With `--certify`, its digest is bound into the existing
+`openadapt.qualification-admission/v1` envelope (`campaign.outcomes_sha256`;
+`campaign.oracle_contract_sha256` is the verify-config digest) and signed with
+the local-dev qualification key. Production trust maps refuse that key; a
+production admission is signed by the production authority from the same
+result. The envelope needs at least three trials per case.
 
 With `--run-params inputs.json` it also resets the application and runs the
 certified bundle once, as the runner would, into `runs/qual-1/certified-run/`.
