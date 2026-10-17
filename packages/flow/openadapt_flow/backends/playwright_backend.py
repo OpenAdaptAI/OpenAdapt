@@ -1008,6 +1008,7 @@ class PlaywrightBackend:
         screenshot_mask_selectors: tuple[str, ...] = (),
         structural_state_reader: Optional[Callable[[], dict[str, Any]]] = None,
         screenshot_guard: Optional[Callable[[], None]] = None,
+        closed_page_frame: bool = False,
     ) -> None:
         """Wrap an existing Playwright page.
 
@@ -1031,8 +1032,23 @@ class PlaywrightBackend:
             screenshot_guard: Optional fail-closed check that runs before
                 Chromium creates screenshot bytes. Recording paths use it to
                 bind or refuse closed-shadow secret boundaries.
+            closed_page_frame: Multi-surface PAGE surfaces only (a popup or
+                tab, docs/MULTI_SURFACE.md). Once the page has closed itself,
+                ``screenshot`` returns an all-black frame of the last size
+                instead of raising: a closed popup shows nothing. It never
+                shows another window, every screen postcondition fails on it,
+                and acting elsewhere still needs an explicit surface switch.
+                The primary page keeps the default (a closed page raises).
         """
         self.page = page
+        self._closed_page_frame = closed_page_frame
+        self._last_frame_size: Optional[tuple[int, int]] = None
+        # JavaScript dialogs (docs/MULTI_SURFACE.md, "Dialogs"): no listener
+        # is registered until a step arms one, so a bundle without dialog
+        # steps keeps Playwright's default (dismiss) exactly as before.
+        self._dialog_listening = False
+        self._dialog_armed: Optional[tuple[str, Optional[str]]] = None
+        self._dialogs_seen: list[dict[str, Any]] = []
         self._screenshot_scale = screenshot_scale
         self._screenshot_mask_selectors = screenshot_mask_selectors
         self._structural_state_reader = structural_state_reader
@@ -1147,9 +1163,37 @@ class PlaywrightBackend:
         """Open pages in the browser context (new tabs are visible here even
         though the single-page screenshot never shows them)."""
         try:
-            return len(self.page.context.pages)
+            return sum(1 for page in self.page.context.pages if not page.is_closed())
         except Exception:
             return None
+
+    def wait_for_page_count_above(self, count: int, timeout_s: float) -> bool:
+        """Wait on the context's ``page`` event until more than ``count``
+        pages are open, or ``timeout_s`` passes. True when they are.
+
+        Event-driven on purpose: with the sync API a sleep dispatches
+        nothing, so a popup a click opened can stay out of
+        ``context.pages`` until the next Playwright call.
+        """
+
+        import time as _time
+
+        deadline = _time.monotonic() + max(0.0, float(timeout_s))
+        while True:
+            current = self.page_count
+            if current is not None and current > count:
+                return True
+            remaining = deadline - _time.monotonic()
+            if remaining <= 0:
+                return False
+            try:
+                self.page.context.wait_for_event(
+                    "page", timeout=max(1.0, remaining * 1000.0)
+                )
+            except Exception:
+                # Timed out (or the context closed): one last look above.
+                current = self.page_count
+                return current is not None and current > count
 
     # -- live execution-context identity -------------------------------
 
@@ -2885,6 +2929,117 @@ class PlaywrightBackend:
 
     def screenshot(self) -> bytes:
         """Return a stable current full-viewport frame as PNG bytes."""
+        if self._closed_page_frame and self._page_is_closed():
+            return self._closed_frame()
+        try:
+            png = self._live_screenshot()
+        except Exception:
+            # The page closed itself while the frame was being captured.
+            if self._closed_page_frame and self._page_is_closed():
+                return self._closed_frame()
+            raise
+        if self._closed_page_frame:
+            try:
+                from openadapt_flow.runtime.resolver import png_size
+
+                self._last_frame_size = png_size(png)
+            except Exception:
+                pass
+        return png
+
+    # -- JavaScript dialogs -------------------------------------------------
+
+    def arm_dialog(self, response: str, message: Optional[str]) -> None:
+        """Answer the next dialog with ``response`` if it shows ``message``.
+
+        ``message=None`` (recording) answers any dialog and reports its text.
+        A dialog whose text differs from ``message`` is DISMISSED, never
+        accepted, and reported as a mismatch. Every dialog this page shows
+        while the listener exists is answered and reported, so an unexpected
+        one can never be accepted by default.
+        """
+
+        if response not in ("accept", "dismiss"):
+            raise ValueError("a dialog response is 'accept' or 'dismiss'")
+        if not self._dialog_listening:
+            self.page.on("dialog", self._on_dialog)
+            self._dialog_listening = True
+        self._dialog_armed = (response, message)
+        self._dialogs_seen = []
+
+    def take_dialogs(self, timeout_s: float = 0.0) -> list[dict[str, Any]]:
+        """The dialogs answered since the last arm, then disarm.
+
+        Waits up to ``timeout_s`` for the first one (a dialog can open a
+        moment after the input edge). Playwright delivers the dialog event
+        only while its loop runs, so the wait runs on the page.
+        """
+
+        deadline = time.monotonic() + max(0.0, float(timeout_s))
+        while not self._dialogs_seen and time.monotonic() < deadline:
+            if self._page_is_closed():
+                break
+            try:
+                self.page.wait_for_timeout(50)
+            except Exception:
+                break
+        seen, self._dialogs_seen = self._dialogs_seen, []
+        self._dialog_armed = None
+        return seen
+
+    def _on_dialog(self, dialog: Any) -> None:
+        try:
+            message = str(dialog.message)
+        except Exception:
+            message = ""
+        try:
+            kind = str(dialog.type)
+        except Exception:
+            kind = ""
+        armed, self._dialog_armed = self._dialog_armed, None
+        matched = armed is not None and (armed[1] is None or armed[1] == message)
+        response = armed[0] if armed is not None and matched else "dismiss"
+        self._dialogs_seen.append(
+            {
+                "message": message,
+                "type": kind,
+                "response": response,
+                "matched": matched,
+            }
+        )
+        try:
+            if response == "accept":
+                dialog.accept()
+            else:
+                dialog.dismiss()
+        except Exception:
+            pass
+
+    def _page_is_closed(self) -> bool:
+        try:
+            return bool(self.page.is_closed())
+        except Exception:
+            return True
+
+    def _closed_frame(self) -> bytes:
+        """An all-black frame: what a closed popup or tab shows."""
+
+        from io import BytesIO
+
+        from PIL import Image
+
+        size = self._last_frame_size
+        if size is None:
+            try:
+                viewport = self.page.viewport_size or {}
+                size = (int(viewport["width"]), int(viewport["height"]))
+            except Exception:
+                size = (1280, 800)
+        buffer = BytesIO()
+        Image.new("RGB", size, (0, 0, 0)).save(buffer, format="PNG")
+        return buffer.getvalue()
+
+    def _live_screenshot(self) -> bytes:
         base_options: dict[str, Any] = {}
         if self._screenshot_scale == "css":
             base_options["scale"] = "css"

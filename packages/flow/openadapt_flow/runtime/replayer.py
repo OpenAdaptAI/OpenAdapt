@@ -100,6 +100,7 @@ from openadapt_flow.ir import (
     InterstitialActionResult,
     LoopIterationBinding,
     LoopSpec,
+    ObservedSurfaceEnvironment,
     PixelIdentityEvidence,
     Point,
     Postcondition,
@@ -195,6 +196,7 @@ from openadapt_flow.runtime.resolver import (
     visual_resolution_anchor_contract_sha256,
     visual_resolution_evaluator_contract_sha256,
 )
+from openadapt_flow.runtime.surfaces import SurfaceRouter
 from openadapt_flow.verification import (
     EffectContractMutationError,
     verifier_effect_tier,
@@ -204,6 +206,8 @@ from openadapt_flow.vision.ocr import OcrResolutionRefused
 
 _DeliveryResultT = TypeVar("_DeliveryResultT")
 _MAX_FRESH_ACTUATION_REACQUISITIONS = 2
+# How long a step that raises a browser dialog waits for it to open.
+_DIALOG_WAIT_S = 5.0
 # Private module capability.  The public ``run`` API cannot mint a durable
 # continuation.  ``runtime.durable.resume`` imports this object only after it
 # has validated the pause, approval, bundle, checkpoint, and live state.
@@ -635,6 +639,14 @@ class Replayer:
             the save so a person handles it. Its post-run decision is stamped
             on the report as ``approval``. It can only add refusals; it never
             changes an outcome word. None (default) leaves replay unchanged.
+        surface_backends: Multi-surface workflows only
+            (``Workflow.surfaces``, docs/MULTI_SURFACE.md): the live backend for
+            each BACKEND surface the workflow switches to (a native app, an
+            RDP/Citrix window), keyed by surface id. The primary surface is
+            ``backend``; browser tabs and popups the run opens need nothing
+            here. A switch to a surface with no supplied backend, or to one
+            whose backend is of a different kind, halts. Ignored (and must be
+            empty) for a single-surface workflow.
     """
 
     def __init__(
@@ -673,6 +685,7 @@ class Replayer:
             QualificationEnvironmentObserver
         ] = None,
         approval_gate: Optional["ApprovalGate"] = None,
+        surface_backends: Optional[Mapping[str, Backend]] = None,
     ) -> None:
         if vision is None:
             import openadapt_flow.vision as vision  # lazy: heavy OCR deps
@@ -707,6 +720,14 @@ class Replayer:
             )
 
         self.backend = backend
+        # Multi-surface routing (docs/MULTI_SURFACE.md). ``_surface_router`` is
+        # set only while a multi-surface workflow runs; ``self.backend`` is then
+        # the ACTIVE surface's backend, so every gate acts on that surface.
+        self.surface_backends: dict[str, Backend] = dict(surface_backends or {})
+        self._surface_router: Optional[SurfaceRouter] = None
+        self._surface_environment_observations: dict[
+            str, ObservedSurfaceEnvironment
+        ] = {}
         # Defaulted to the ``openadapt_flow.vision`` module above when None, so it
         # is always populated by the time replay runs; typed Any (a namespace-like
         # facade exposing find_template/ocr/wait_settled/...).
@@ -1832,6 +1853,27 @@ class Replayer:
             report.total_ms = (time.monotonic() - t_run) * 1000.0
             return self._finalize_report(report, workflow, run_dir)
 
+        surface_refusal = self._begin_surfaces(
+            workflow,
+            resume=resume_from is not None or resume_program is not None,
+            resume_from=resume_from,
+            resume_program=resume_program is not None,
+            bundle_dir=bundle_dir,
+        )
+        if surface_refusal is not None:
+            report.results.append(
+                StepResult(
+                    step_id="<surfaces>",
+                    intent="bind the workflow's declared surfaces",
+                    ok=False,
+                    failure_category="governed_refusal",
+                    error=surface_refusal,
+                )
+            )
+            report.success = False
+            report.total_ms = (time.monotonic() - t_run) * 1000.0
+            return self._finalize_report(report, workflow, run_dir)
+
         if resume_from is not None:
             from openadapt_flow.runtime.durable import resumed_step_results
 
@@ -1910,6 +1952,9 @@ class Replayer:
                     # Tier-3: verified step -> checkpoint; halt -> pending
                     # escalation (resumable from the last checkpoint).
                     if post_action_refusal is None:
+                        router = self._surface_router
+                        if router is not None and result.ok:
+                            router.observe_active(step.id)
                         durable_run.record(
                             step_index,
                             step,
@@ -1920,6 +1965,12 @@ class Replayer:
                                 self._attended_transition_observation()
                                 if not result.ok
                                 else None
+                            ),
+                            active_surface=(
+                                router.active_id if router is not None else None
+                            ),
+                            surface_observations=(
+                                router.observations if router is not None else None
                             ),
                         )
                         if (
@@ -2188,6 +2239,11 @@ class Replayer:
     ) -> RunReport:
         """Persist exact evidence first, then project its terminal outcome."""
 
+        self._end_surfaces()
+        if self._surface_environment_observations:
+            report.observed_surface_environments = dict(
+                self._surface_environment_observations
+            )
         report.qualification_fault_mutations = list(self._qualification_fault_mutations)
         self._stamp_execution_outcome(report, workflow, run_dir)
         self._stamp_approval(report)
@@ -4414,13 +4470,87 @@ class Replayer:
         checkpoint: Any,
         *,
         bundle_dir: Path,
+        workflow: Optional[Workflow] = None,
     ) -> None:
-        """Prove that the live app still satisfies a linear resume cursor."""
+        """Prove that the live app still satisfies a linear resume cursor.
 
-        self._revalidate_retained_postconditions(
-            checkpoint.expected_postconditions,
-            bundle_dir=bundle_dir,
+        In a multi-surface run the retained contract belongs to the surface
+        that was active at the checkpoint. That surface is first bound by
+        identity (the one live target whose screen shows the retained
+        contract, plus its declared structured attributes); zero or several
+        matches refuse the resume.
+        """
+
+        active = getattr(checkpoint, "active_surface", None)
+        if (
+            workflow is None
+            or not workflow.surfaces
+            or active is None
+            or active == workflow.surfaces[0].id
+        ):
+            self._revalidate_retained_postconditions(
+                checkpoint.expected_postconditions,
+                bundle_dir=bundle_dir,
+            )
+            return
+        backend = self._bind_checkpoint_surface(workflow, checkpoint, bundle_dir)
+        primary = self.backend
+        self._activate_surface_backend(backend)
+        try:
+            self._revalidate_retained_postconditions(
+                checkpoint.expected_postconditions,
+                bundle_dir=bundle_dir,
+            )
+        finally:
+            self._activate_surface_backend(primary)
+
+    def _bind_checkpoint_surface(
+        self, workflow: Workflow, checkpoint: Any, bundle_dir: Path
+    ) -> Any:
+        """Bind the checkpoint's active surface by identity, or refuse."""
+
+        active = checkpoint.active_surface
+        self._surface_identity_context: tuple[Workflow, Optional[Path]] = (
+            workflow,
+            bundle_dir,
         )
+        try:
+            router = SurfaceRouter(
+                workflow,
+                self.backend,
+                self.surface_backends,
+                poll_interval_s=self.poll_interval_s,
+                identity_check=self._surface_identity_check,
+                resume_active=active,
+                observations=dict(checkpoint.surface_observations),
+            )
+        except ValueError as exc:
+            raise StateDiverged(f"{exc}; refusing to resume") from exc
+        probe = Step(
+            id=checkpoint.step_id,
+            intent=f"re-bind surface '{active}' for resume",
+            action=ActionKind.SWITCH_SURFACE,
+            surface=active,
+            expect=[
+                condition.model_copy(deep=True)
+                for condition in checkpoint.expected_postconditions
+            ],
+        )
+        prefix = f"Resume after step '{checkpoint.step_id}'"
+        if router.specs[active].is_page:
+            page, error = router._bind_page(active, probe, prefix)
+            if error is not None or page is None:
+                raise StateDiverged(error or f"{prefix}: surface not bound")
+            return router.backends[active]
+        backend, error = router._bind_backend(active, probe, prefix)
+        if error is not None or backend is None:
+            raise StateDiverged(error or f"{prefix}: surface not bound")
+        if self._surface_identity_check(backend, probe) is not True:
+            raise StateDiverged(
+                f"{prefix}: surface '{active}' does not show its retained "
+                "identity; refusing to resume"
+            )
+        return backend
 
     def _revalidate_retained_postconditions(
         self,
@@ -5639,6 +5769,11 @@ class Replayer:
             effect_verifier=effect_verifier,
             effects=effects,
             capture_frame=capture_frame,
+            surface_id=(
+                self._surface_router.active_id
+                if self._surface_router is not None
+                else None
+            ),
         )
 
     def _require_current_fault_driver_binding(self) -> QualificationFaultDriver:
@@ -5790,7 +5925,470 @@ class Replayer:
         )
         return mutation.effect_verifier
 
+    # -- multi-surface routing (docs/MULTI_SURFACE.md) -----------------------
+
+    def _begin_surfaces(
+        self,
+        workflow: Workflow,
+        *,
+        resume: bool,
+        resume_from: Optional[int] = None,
+        resume_program: bool = False,
+        bundle_dir: Optional[Path] = None,
+    ) -> Optional[str]:
+        """Bind the workflow's surfaces for this run, or say why not.
+
+        A single-surface workflow binds nothing and runs exactly as before.
+        A surface is a name plus an identity check, never a live handle, so a
+        linear resume re-binds every surface by identity from the last
+        checkpoint's surface observations (docs/MULTI_SURFACE.md).
+        """
+
+        self._surface_router = None
+        if not workflow.surfaces:
+            if self.surface_backends:
+                return (
+                    "surface_backends were supplied, but this workflow declares "
+                    "no surfaces; refusing to run"
+                )
+            return None
+        # Governed, qualified, durable, resumed, and managed (Cloud) runs are
+        # admitted: the governed authorization binds the sealed bundle, whose
+        # workflow.json carries the declared surface map; every step result
+        # records the surface it ran on; the outcome classifier requires that
+        # record to match the contract; a qualification case observes each
+        # surface against its own qualified boundary; and checkpoints carry
+        # each surface's last-seen identity observation, never a handle.
+        if resume_program:
+            return (
+                "a multi-surface workflow program cannot be resumed yet: program "
+                "checkpoints do not carry surface observations; refusing to run"
+            )
+        if self._managed_dispatch_snapshot is not None:
+            # An unattended run must not start when a surface it will switch
+            # to has no target: it would stop half-way after earlier writes.
+            unbound = [
+                spec.id
+                for spec in workflow.surfaces[1:]
+                if not spec.is_page and spec.id not in (self.surface_backends or {})
+            ]
+            if unbound:
+                return (
+                    "a managed dispatch of a multi-surface workflow needs a "
+                    "backend for every backend surface in the deployment "
+                    "profile's surfaces: map; unbound: "
+                    + ", ".join(unbound)
+                    + "; refusing to run"
+                )
+        resume_active: Optional[str] = None
+        resume_observations: dict[str, Any] = {}
+        if resume and resume_from:
+            last = None
+            for checkpoint in self._durable_linear_snapshot:
+                if getattr(checkpoint, "step_index", None) == resume_from - 1:
+                    last = checkpoint
+            if last is None or getattr(last, "active_surface", None) is None:
+                return (
+                    "the checkpoint this multi-surface run resumes from carries "
+                    "no surface observation, so its surfaces cannot be re-bound "
+                    "by identity; refusing to run"
+                )
+            resume_active = last.active_surface
+            resume_observations = dict(last.surface_observations)
+        authorization = self.governed_authorization
+        if (
+            authorization is not None
+            and authorization.qualification_case_id is not None
+        ):
+            project = workflow.qualification
+            if project is None:
+                return (
+                    "a multi-surface qualification case needs the bundle's "
+                    "qualification project; refusing to run"
+                )
+            for spec in workflow.surfaces[1:]:
+                boundary = project.surface_environments.get(spec.id)
+                if boundary is None:
+                    return (
+                        f"the qualification project has no environment boundary "
+                        f"for surface '{spec.id}'; every surface of a "
+                        "multi-surface workflow must be qualified; refusing to run"
+                    )
+                if boundary.target_kind != spec.kind:
+                    return (
+                        f"the qualification boundary for surface '{spec.id}' is "
+                        f"{boundary.target_kind}, but the surface is declared "
+                        f"{spec.kind}; refusing to run"
+                    )
+            extra = sorted(
+                set(project.surface_environments)
+                - {spec.id for spec in workflow.surfaces[1:]}
+            )
+            if extra:
+                return (
+                    "the qualification project bounds surfaces the workflow "
+                    "does not declare: " + ", ".join(extra) + "; refusing to run"
+                )
+        self._surface_environment_observations = {}
+        try:
+            self._surface_identity_context = (workflow, bundle_dir)
+            self._surface_router = SurfaceRouter(
+                workflow,
+                self.backend,
+                self.surface_backends,
+                poll_interval_s=self.poll_interval_s,
+                identity_check=self._surface_identity_check,
+                resume_active=resume_active,
+                observations=resume_observations,
+            )
+        except ValueError as exc:
+            return f"{exc}; refusing to run"
+        return None
+
+    def _surface_identity_check(self, backend: Any, step: Step) -> Optional[bool]:
+        """Vision-first identity check of one live target for ``step``.
+
+        Pixels and screen text only, on the candidate's own screenshot: the
+        step's anchor template for an action step, the recorded screen text
+        (TEXT_PRESENT) of a SWITCH_SURFACE step, which was mined from the
+        first frame of its target. None when the step carries neither; the
+        router then relies on the declared structured attributes alone.
+        """
+
+        workflow, bundle_dir = getattr(self, "_surface_identity_context", (None, None))
+        try:
+            png = backend.screenshot()
+        except Exception:
+            return False
+        evidence = False
+        if step.action is ActionKind.SWITCH_SURFACE:
+            for condition in step.expect:
+                text = condition.text
+                if (
+                    condition.kind is not PostconditionKind.TEXT_PRESENT
+                    or not text
+                    or "{" in text
+                ):
+                    continue
+                evidence = True
+                if self.vision.find_text(png, text) is None:
+                    return False
+        elif step.anchor is not None and step.anchor.template and bundle_dir:
+            template = self._asset_bytes(
+                Path(bundle_dir), step.anchor.template, workflow=workflow
+            )
+            if template:
+                evidence = True
+                if self.vision.find_template(png, template) is None:
+                    return False
+        return True if evidence else None
+
+    def _end_surfaces(self) -> None:
+        """Restore the primary backend after a multi-surface run."""
+
+        router = self._surface_router
+        if router is None:
+            return
+        self._surface_router = None
+        if self.backend is not router.primary_backend:
+            self._activate_surface_backend(router.primary_backend)
+        # Drop the qualification input-edge guard from every other surface
+        # backend; the primary's guard follows the single-surface lifecycle.
+        for backend in router.backends.values():
+            if backend is router.primary_backend:
+                continue
+            clear_guard = getattr(backend, "set_qualification_input_guard", None)
+            if callable(clear_guard):
+                try:
+                    clear_guard(None)
+                except Exception:
+                    pass
+
+    def _activate_surface_backend(self, backend: Backend) -> None:
+        """Make ``backend`` current and drop every cache bound to the old one.
+
+        Nothing observed on one surface may be reused on another: the settle
+        seed, the on-screen read-back verifier, the last click point, and any
+        armed pointer/keyboard lease all belong to the surface they came from.
+        """
+
+        self._cancel_guarded_coordinate()
+        self._cancel_guarded_keyboard()
+        self.backend = backend
+        self._settle_seed = None
+        self._actuation_epoch += 1
+        # The on-screen read-back verifier is bound to one backend; drop it so
+        # the next step builds one for the new surface.
+        vars(self).pop("_readback_verifier", None)
+        self._last_click_point = None
+        self._last_click_region = None
+        self._control_overlay_last_observation_png = None
+
+    def _bind_surface_qualification_environment(
+        self, workflow: Workflow, surface_id: str
+    ) -> Optional[str]:
+        """Observe the newly active surface against its qualified boundary.
+
+        Only a qualification case run observes environments. The primary
+        surface is checked against the project's ``environment`` (as at run
+        start); every other surface against ``surface_environments[id]``
+        (``_begin_surfaces`` already refused a case whose project lacks one).
+        On a match the input-edge guard moves to the new surface's backend,
+        so every later input on that surface rechecks that environment.
+        """
+
+        authorization = self.governed_authorization
+        if authorization is None or authorization.qualification_case_id is None:
+            return None
+        router = self._surface_router
+        project = workflow.qualification
+        if router is None or project is None:
+            return "qualification environment evidence is unavailable"
+        self._qualification_environment_call = None
+        self._qualification_environment_bound = None
+        boundary: Any
+        if surface_id == router.primary_id:
+            boundary = project.environment
+        else:
+            boundary = project.surface_environments.get(surface_id)
+            if boundary is None:
+                return "the qualification project does not bound this surface"
+        refusal, observed, ids = self._bind_qualification_boundary(
+            boundary, surface_scoped=surface_id != router.primary_id
+        )
+        if surface_id != router.primary_id and observed is not None and ids is not None:
+            self._surface_environment_observations[surface_id] = (
+                ObservedSurfaceEnvironment(
+                    target_kind=observed.target_kind,
+                    application_sha256=hashlib.sha256(
+                        observed.application_identity.encode("utf-8")
+                    ).hexdigest(),
+                    application_version_sha256=hashlib.sha256(
+                        observed.application_version.encode("utf-8")
+                    ).hexdigest(),
+                    session_sha256=observed.session_identity_sha256,
+                    environment_digest=observed.environment_digest,
+                    observer_id=ids[0],
+                    observer_contract_sha256=ids[1],
+                    binding_sha256=observed.binding_sha256(
+                        observer_id=ids[0], observer_contract_sha256=ids[1]
+                    ),
+                )
+            )
+        return refusal
+
+    def _active_surface_binding(
+        self, workflow: Workflow
+    ) -> tuple[Optional[ExecutionTargetKind], Optional[str]]:
+        """(kind, execution mode) of the surface the run is on right now.
+
+        Single-surface runs use the bundle-level binding, unchanged. In a
+        multi-surface run the remote-surface safety rules follow the ACTIVE
+        surface, so an RDP segment of a web-first bundle keeps them.
+        """
+
+        router = self._surface_router
+        if router is None:
+            return workflow.surface, workflow.execution_mode
+        from openadapt_flow.surface_selection import execution_mode_for_surface
+
+        kind = cast(ExecutionTargetKind, router.active_kind())
+        return kind, execution_mode_for_surface(kind)
+
+    def _active_surface_is_external_remote(self, workflow: Workflow) -> bool:
+        kind, mode = self._active_surface_binding(workflow)
+        return kind in ("rdp", "citrix") and mode == "external"
+
+    @staticmethod
+    def _surface_refusal_result(step: Step, error: str) -> StepResult:
+        return StepResult(
+            step_id=step.id,
+            intent=step.intent,
+            ok=False,
+            risk=step.risk,
+            risk_explanation=step.risk_explanation,
+            risk_review_required=step.risk_review_required,
+            delivery_attempted=False,
+            safety_halt=True,
+            failure_category="safety_halt",
+            error=error,
+        )
+
     def _run_step(
+        self,
+        step: Step,
+        *,
+        workflow: Workflow,
+        step_index: int,
+        params: Mapping[str, RuntimeParamScalar],
+        bundle_dir: Path,
+        run_dir: Path,
+        new_crops: dict[str, bytes],
+        graph_ctx: Optional["_GraphStepContext"] = None,
+    ) -> StepResult:
+        """Execute one step on the surface it names; never raises.
+
+        A single-surface run goes straight to the step pipeline. In a
+        multi-surface run the step is first checked against the live surface
+        map (no undeclared page, the active page still open, the step on the
+        active surface), a SWITCH_SURFACE step runs its identity check, and
+        after the action the pages the step declares are claimed and any other
+        new page halts.
+        """
+
+        router = self._surface_router
+        if router is None:
+            if step.action is ActionKind.SWITCH_SURFACE:
+                return self._surface_refusal_result(
+                    step,
+                    f"Step '{step.id}' switches surface, but this run has no "
+                    "declared surfaces; run halted",
+                )
+            return self._run_step_on_active_surface(
+                step,
+                workflow=workflow,
+                step_index=step_index,
+                params=params,
+                bundle_dir=bundle_dir,
+                run_dir=run_dir,
+                new_crops=new_crops,
+                graph_ctx=graph_ctx,
+            )
+        refusal = router.entry_refusal(step)
+        if refusal is None and step.action is not ActionKind.SWITCH_SURFACE:
+            # Route the step to its surface's live target; after a resume or
+            # a closed page this re-binds it by the step's identity check.
+            refusal = router.route(step)
+            if refusal is None and router.active_backend is not self.backend:
+                self._activate_surface_backend(router.active_backend)
+                refusal = self._bind_surface_qualification_environment(
+                    workflow, router.active_id
+                )
+        if refusal is not None:
+            refused = self._surface_refusal_result(step, refusal)
+            refused.surface = router.active_id
+            return refused
+        if step.action is ActionKind.SWITCH_SURFACE:
+            switched = self._run_switch_surface_step(
+                step, workflow=workflow, bundle_dir=bundle_dir, run_dir=run_dir
+            )
+            # The surface the run is on after the switch: the target on
+            # success, the unchanged surface on a refusal.
+            switched.surface = router.active_id
+            return switched
+        result = self._run_step_on_active_surface(
+            step,
+            workflow=workflow,
+            step_index=step_index,
+            params=params,
+            bundle_dir=bundle_dir,
+            run_dir=run_dir,
+            new_crops=new_crops,
+            graph_ctx=graph_ctx,
+        )
+        # Receipt: the surface this step ran on. The entry check above proved
+        # it is the step's declared surface; the outcome classifier re-checks
+        # the record against the contract.
+        result.surface = router.active_id
+        if not result.ok:
+            return result
+        # A guard-skipped step delivered nothing, so it cannot have opened its
+        # pages; any page that did appear is still undeclared.
+        checked = step.model_copy(update={"opens": []}) if result.skipped else step
+        error = router.after_action_refusal(checked, timeout_s=step.timeout_s)
+        if error is not None:
+            result.ok = False
+            result.safety_halt = True
+            result.failure_category = "safety_halt"
+            result.error = error
+        return result
+
+    def _run_switch_surface_step(
+        self, step: Step, *, workflow: Workflow, bundle_dir: Path, run_dir: Path
+    ) -> StepResult:
+        """Switch to ``step.surface`` after its identity check; never raises.
+
+        Delivers no input. The router checks the target (declared, opened on
+        this run, the exact claimed page or a supplied backend of the declared
+        kind, the recorded origin); then the step's postconditions, mined from
+        the first frame of the new surface, must hold on it. No model may
+        rescue that screen check: it is an identity check, not drift.
+        """
+
+        router = self._surface_router
+        assert router is not None
+        t0 = time.monotonic()
+        evidence_step_id = self._new_step_evidence_key(run_dir, step.id)
+        result = StepResult(
+            step_id=step.id,
+            intent=step.intent,
+            ok=False,
+            risk=step.risk,
+            risk_explanation=step.risk_explanation,
+            risk_review_required=step.risk_review_required,
+            delivery_attempted=False,
+        )
+        try:
+            result.before_png = self._save_step_png(
+                run_dir, evidence_step_id, "before", self.backend.screenshot()
+            )
+        except Exception:
+            pass
+        backend, refusal = router.switch(step)
+        if refusal is not None or backend is None:
+            result.safety_halt = True
+            result.failure_category = "safety_halt"
+            result.error = refusal or "surface switch refused"
+            result.elapsed_ms = (time.monotonic() - t0) * 1000.0
+            return result
+        self._activate_surface_backend(backend)
+        env_refusal = self._bind_surface_qualification_environment(
+            workflow, router.active_id
+        )
+        if env_refusal is not None:
+            result.safety_halt = True
+            result.failure_category = "governed_refusal"
+            result.error = (
+                f"Step '{step.id}' ({step.intent}): {env_refusal} on surface "
+                f"'{router.active_id}'; run halted"
+            )
+            result.elapsed_ms = (time.monotonic() - t0) * 1000.0
+            return result
+        failed: list[str] = []
+        try:
+            start_state = self._structural_state()
+            frame = self._settle_seeded()
+            ok, frame = self._poll_postconditions(step, frame, bundle_dir, start_state)
+            if not ok:
+                frame = self.vision.wait_settled(self.backend)
+                failed = [
+                    self._describe_postcondition(pc)
+                    for pc in step.expect
+                    if not self._postcondition_passes(
+                        pc, frame, bundle_dir, start_state
+                    )
+                ]
+            result.after_png = self._save_step_png(
+                run_dir, evidence_step_id, "after", frame
+            )
+        except Exception as exc:
+            failed = [f"the new surface could not be observed ({type(exc).__name__})"]
+        result.postconditions_ok = (not failed) if step.expect else None
+        if failed:
+            result.safety_halt = True
+            result.failure_category = "safety_halt"
+            result.error = (
+                f"Surface identity check failed for step '{step.id}' "
+                f"({step.intent}): surface '{step.surface}' does not show the "
+                f"recorded screen state — failed: {'; '.join(failed)} — run "
+                "halted"
+            )
+        else:
+            result.ok = True
+        result.elapsed_ms = (time.monotonic() - t0) * 1000.0
+        return result
+
+    def _run_step_on_active_surface(
         self,
         step: Step,
         *,
@@ -8462,8 +9060,7 @@ class Replayer:
 
         return (
             step.identity_armed is True
-            and workflow.surface in ("rdp", "citrix")
-            and workflow.execution_mode == "external"
+            and self._active_surface_is_external_remote(workflow)
             and isinstance(self.backend, RemoteActuationBackend)
         )
 
@@ -8490,10 +9087,8 @@ class Replayer:
                 f"Step '{step.id}' ({step.intent}) has an incomplete exact "
                 "option-selection contract; refusing input"
             )
-        if (
-            workflow.surface not in ("rdp", "citrix")
-            or workflow.execution_mode != "external"
-            or not isinstance(self.backend, RemoteActuationBackend)
+        if not self._active_surface_is_external_remote(workflow) or not isinstance(
+            self.backend, RemoteActuationBackend
         ):
             return (
                 f"Step '{step.id}' ({step.intent}) carries a remote "
@@ -8567,8 +9162,7 @@ class Replayer:
         """
         if (
             step.action is ActionKind.SELECT_OPTION
-            and workflow.surface in ("rdp", "citrix")
-            and workflow.execution_mode == "external"
+            and self._active_surface_is_external_remote(workflow)
             and isinstance(self.backend, RemoteActuationBackend)
         ):
             # A selection is a composite focus -> typeahead -> commit gesture.
@@ -10170,6 +10764,65 @@ class Replayer:
         step: Step,
         resolution: Optional[Resolution],
         params: Mapping[str, RuntimeParamScalar],
+        **kwargs: Any,
+    ) -> Optional[str]:
+        """Perform the step's action, answering the dialog it raises, if any.
+
+        A step with a recorded ``dialog`` arms a one-shot answer on the
+        browser backend before its input edge. The dialog's message is its
+        identity: a different message is dismissed, never accepted, and the
+        step halts; so does a dialog that never appears. A backend that cannot
+        see browser dialogs refuses the step before any input
+        (docs/MULTI_SURFACE.md, "Dialogs").
+        """
+
+        dialog = step.dialog
+        if dialog is None:
+            return self._act_without_dialog(step, resolution, params, **kwargs)
+        arm = getattr(self.backend, "arm_dialog", None)
+        take = getattr(self.backend, "take_dialogs", None)
+        if not callable(arm) or not callable(take):
+            return (
+                f"Step '{step.id}' ({step.intent}) answers a browser dialog, but "
+                "the active backend cannot see browser dialogs; run aborted"
+            )
+        arm(dialog.response, dialog.message)
+        try:
+            error = self._act_without_dialog(step, resolution, params, **kwargs)
+        finally:
+            seen = take(0.0)
+        if error is not None:
+            return error
+        if not seen:
+            seen = self._wait_for_dialog(take, dialog)
+        if not seen:
+            return (
+                f"Step '{step.id}' ({step.intent}): the recorded browser dialog "
+                f"{dialog.message!r} did not appear; run aborted"
+            )
+        mismatched = [entry for entry in seen if not entry.get("matched")]
+        if mismatched:
+            return (
+                f"Step '{step.id}' ({step.intent}): a browser dialog showed "
+                f"{str(mismatched[0].get('message'))!r}, not the recorded "
+                f"{dialog.message!r}; it was dismissed, not answered; run aborted"
+            )
+        return None
+
+    def _wait_for_dialog(self, take: Callable[..., Any], dialog: Any) -> list[Any]:
+        """Wait briefly for an armed dialog that opens after the input edge."""
+
+        arm = getattr(self.backend, "arm_dialog", None)
+        if callable(arm):
+            arm(dialog.response, dialog.message)
+        seen = take(_DIALOG_WAIT_S)
+        return list(seen) if isinstance(seen, list) else []
+
+    def _act_without_dialog(
+        self,
+        step: Step,
+        resolution: Optional[Resolution],
+        params: Mapping[str, RuntimeParamScalar],
         *,
         workflow: Workflow,
         step_index: int,
@@ -11271,56 +11924,120 @@ class Replayer:
             return "qualification run identity does not match its authorization"
         if execution_target_kind != project.environment.target_kind:
             return "qualification target kind does not match the project"
+        refusal, observed, observer_ids = self._bind_qualification_boundary(
+            project.environment
+        )
+        if observed is not None and observer_ids is not None:
+            report.observed_application_sha256 = hashlib.sha256(
+                observed.application_identity.encode("utf-8")
+            ).hexdigest()
+            report.observed_application_version_sha256 = hashlib.sha256(
+                observed.application_version.encode("utf-8")
+            ).hexdigest()
+            report.observed_session_sha256 = observed.session_identity_sha256
+            report.observed_environment_digest = observed.environment_digest
+            report.qualification_environment_observer_id = observer_ids[0]
+            report.qualification_environment_observer_contract_sha256 = observer_ids[1]
+            report.observed_environment_binding_sha256 = observed.binding_sha256(
+                observer_id=observer_ids[0],
+                observer_contract_sha256=observer_ids[1],
+            )
+        return refusal
+
+    def _bind_qualification_boundary(
+        self, boundary: Any, *, surface_scoped: bool = False
+    ) -> tuple[
+        Optional[str],
+        Optional[QualificationEnvironmentObservation],
+        Optional[tuple[str, str]],
+    ]:
+        """Observe ``self.backend`` against one qualified environment boundary.
+
+        Returns ``(refusal, observation, (observer_id, observer_contract))``.
+        The observation is returned whenever one was taken, even when it does
+        not match, so the caller can retain it. On a match the input-edge
+        environment guard is bound to ``self.backend``. A multi-surface
+        qualification case calls this once for the primary surface (the
+        project's ``environment``) and again on every surface switch, with that
+        surface's boundary (``QualificationProject.surface_environments``).
+        """
 
         configured_observer = self.qualification_environment_observer
+        if (
+            surface_scoped
+            and configured_observer is not None
+            and boundary.environment_observer_id is not None
+        ):
+            try:
+                configured_id = configured_observer.observer_id
+            except Exception:
+                configured_id = None
+            if configured_id != boundary.environment_observer_id:
+                # A run has one configured observer. A surface whose boundary
+                # names another observer uses that observer's own route below.
+                configured_observer = None
         if configured_observer is None:
             from openadapt_flow.qualification_web_session import (
                 SIGNED_IN_WEB_SESSION_OBSERVER_ID,
                 SignedInWebSessionObserver,
             )
 
-            if (
-                project.environment.environment_observer_id
-                == SIGNED_IN_WEB_SESSION_OBSERVER_ID
-            ):
+            if boundary.environment_observer_id == SIGNED_IN_WEB_SESSION_OBSERVER_ID:
                 # Real web apps carry no OpenAdapt markers: identify them by
                 # origin and signed-in session, with the version the operator
                 # confirmed in Check it. The contract and environment digests
                 # below still have to match the project exactly.
                 try:
                     configured_observer = SignedInWebSessionObserver(
-                        project.environment.application_version
+                        boundary.application_version
                     )
                 except ValueError:
-                    return "qualification confirmed application version is invalid"
+                    return (
+                        "qualification confirmed application version is invalid",
+                        None,
+                        None,
+                    )
         if configured_observer is None:
             if not callable(
                 getattr(self.backend, "qualification_environment_identity", None)
             ):
                 return (
-                    "qualification backend cannot observe the complete environment; "
-                    "configure the project's environment observer"
+                    "qualification backend cannot observe the complete "
+                    "environment; configure the project's environment observer",
+                    None,
+                    None,
                 )
             configured_observer = BackendQualificationEnvironmentObserver(self.backend)
+        observer = configured_observer
         expected_observer = (
-            project.environment.environment_observer_id,
-            project.environment.environment_observer_contract_sha256,
+            boundary.environment_observer_id,
+            boundary.environment_observer_contract_sha256,
         )
         try:
             observed_observer = (
-                configured_observer.observer_id,
-                configured_observer.contract_sha256,
+                observer.observer_id,
+                observer.contract_sha256,
             )
         except Exception:
-            return "qualification environment observer identity is unavailable"
+            return (
+                "qualification environment observer identity is unavailable",
+                None,
+                None,
+            )
         if expected_observer != observed_observer:
-            return "qualification environment observer does not match the project"
+            return (
+                "qualification environment observer does not match the project",
+                None,
+                None,
+            )
+        backend = self.backend
+        target_kind = boundary.target_kind
 
         def environment_call() -> QualificationEnvironmentObservation:
             try:
                 before_observer = (
-                    configured_observer.observer_id,
-                    configured_observer.contract_sha256,
+                    observer.observer_id,
+                    observer.contract_sha256,
                 )
             except Exception as exc:
                 raise StructuralResolutionRefused(
@@ -11330,14 +12047,11 @@ class Replayer:
                 raise StructuralResolutionRefused(
                     "qualification environment observer binding changed before input"
                 )
-            current = configured_observer.observe(
-                self.backend,
-                project.environment.target_kind,
-            )
+            current = observer.observe(backend, target_kind)
             try:
                 after_observer = (
-                    configured_observer.observer_id,
-                    configured_observer.contract_sha256,
+                    observer.observer_id,
+                    observer.contract_sha256,
                 )
             except Exception as exc:
                 raise StructuralResolutionRefused(
@@ -11352,40 +12066,38 @@ class Replayer:
         try:
             observed = environment_call()
         except Exception:
-            return "qualification environment observation failed"
-        application = observed.application_identity
-        application_version = observed.application_version
-        if observed.target_kind != project.environment.target_kind:
-            return "qualification environment observer returned the wrong surface"
-        session = observed.session_identity_sha256
-        report.observed_application_sha256 = hashlib.sha256(
-            application.encode("utf-8")
-        ).hexdigest()
-        report.observed_application_version_sha256 = hashlib.sha256(
-            application_version.encode("utf-8")
-        ).hexdigest()
-        report.observed_session_sha256 = session
-        report.observed_environment_digest = observed.environment_digest
-        report.qualification_environment_observer_id = observed_observer[0]
-        report.qualification_environment_observer_contract_sha256 = observed_observer[1]
-        report.observed_environment_binding_sha256 = observed.binding_sha256(
-            observer_id=observed_observer[0],
-            observer_contract_sha256=observed_observer[1],
-        )
-        if project.environment.expected_application_identity is None:
+            return "qualification environment observation failed", None, None
+        if observed.target_kind != boundary.target_kind:
+            return (
+                "qualification environment observer returned the wrong surface",
+                None,
+                None,
+            )
+        ids = (observed_observer[0], observed_observer[1])
+        if boundary.expected_application_identity is None:
             return (
                 "qualification project has no executable application identity; "
-                "set application_identity separately from the display name"
+                "set application_identity separately from the display name",
+                observed,
+                ids,
             )
-        if application != project.environment.expected_application_identity:
-            return "observed qualification application does not match the project"
-        if application_version != project.environment.application_version:
+        if observed.application_identity != boundary.expected_application_identity:
             return (
-                "observed qualification application version does not match the project"
+                "observed qualification application does not match the project",
+                observed,
+                ids,
             )
-        if observed.environment_digest != project.environment.environment_digest:
+        if observed.application_version != boundary.application_version:
             return (
-                "observed qualification environment digest does not match the project"
+                "observed qualification application version does not match the project",
+                observed,
+                ids,
+            )
+        if observed.environment_digest != boundary.environment_digest:
+            return (
+                "observed qualification environment digest does not match the project",
+                observed,
+                ids,
             )
         self._qualification_environment_call = environment_call
         # The observer owns ``observed`` and can legally reuse or mutate that
@@ -11397,9 +12109,13 @@ class Replayer:
         if not callable(set_guard):
             self._qualification_environment_call = None
             self._qualification_environment_bound = None
-            return "qualification backend cannot bind an input-edge environment guard"
+            return (
+                "qualification backend cannot bind an input-edge environment guard",
+                observed,
+                ids,
+            )
         set_guard(self._require_qualification_environment_current)
-        return None
+        return None, observed, ids
 
     def _require_qualification_environment_current(self) -> None:
         """Recheck the bound environment immediately before an input edge."""
@@ -13933,12 +14649,23 @@ class Replayer:
         """First pass: poll each postcondition until pass or timeout."""
         for pc in step.expect:
             deadline = time.monotonic() + pc.timeout_s
+            kind = pc.kind.value if hasattr(pc.kind, "value") else pc.kind
             while True:
                 if self._postcondition_passes(pc, frame_png, bundle_dir, start_state):
                     break
                 if time.monotonic() >= deadline:
                     return False, frame_png
-                time.sleep(self.poll_interval_s)
+                wait_for_page = getattr(self.backend, "wait_for_page_count_above", None)
+                start_pages = (start_state or {}).get("page_count")
+                if (
+                    kind == "new_tab_opened"
+                    and callable(wait_for_page)
+                    and isinstance(start_pages, int)
+                ):
+                    # Wait on the browser's page event, not a poll.
+                    wait_for_page(start_pages, deadline - time.monotonic())
+                else:
+                    time.sleep(self.poll_interval_s)
                 frame_png = self.backend.screenshot()
         return True, frame_png
 

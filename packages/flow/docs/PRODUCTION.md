@@ -87,10 +87,19 @@ windows belong to one synthetic fixture process, and the repository does not
 contain a completed campaign result. A real deployment needs its own
 qualification.
 
-The boundary is one backend per bundle. Worklists repeat that bundle over input
+A bundle that declares several surfaces ([MULTI_SURFACE.md](MULTI_SURFACE.md))
+runs governed, qualified, and durable under the same rules as one surface:
+the surface map is sealed in the authorized bundle digest, each step result
+records its surface, and qualification declares one environment boundary per
+surface. Resume re-binds each surface by identity (never by a stored
+handle) and still stops at "Check the record" first when a save may have gone
+through. Managed Cloud dispatch needs only the deployment config's `surfaces:`
+map, and it refuses to start while a backend surface is unbound. A program
+(graph) resume of such a bundle is still refused.
+Worklists repeat that bundle over input
 records, and subflows reuse steps inside it. Neither one switches backends.
-Browser recording owns one tab and refuses popups or new tabs. Browser attach
-mode stays on one origin. macOS and Linux bind one exact app and window, while a
+Browser recording follows popups and new tabs in a browser Flow launched and,
+in attach mode, only pages a followed page opened on the declared origin. macOS and Linux bind one exact app and window, while a
 governed Windows run binds its application identity.
 
 If a task crosses a browser and a native app, or otherwise changes backend,
