@@ -14650,12 +14650,23 @@ class Replayer:
         """First pass: poll each postcondition until pass or timeout."""
         for pc in step.expect:
             deadline = time.monotonic() + pc.timeout_s
+            kind = pc.kind.value if hasattr(pc.kind, "value") else pc.kind
             while True:
                 if self._postcondition_passes(pc, frame_png, bundle_dir, start_state):
                     break
                 if time.monotonic() >= deadline:
                     return False, frame_png
-                time.sleep(self.poll_interval_s)
+                wait_for_page = getattr(self.backend, "wait_for_page_count_above", None)
+                start_pages = (start_state or {}).get("page_count")
+                if (
+                    kind == "new_tab_opened"
+                    and callable(wait_for_page)
+                    and isinstance(start_pages, int)
+                ):
+                    # Wait on the browser's page event, not a poll.
+                    wait_for_page(start_pages, deadline - time.monotonic())
+                else:
+                    time.sleep(self.poll_interval_s)
                 frame_png = self.backend.screenshot()
         return True, frame_png
 

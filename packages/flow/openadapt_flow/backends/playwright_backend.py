@@ -1163,9 +1163,37 @@ class PlaywrightBackend:
         """Open pages in the browser context (new tabs are visible here even
         though the single-page screenshot never shows them)."""
         try:
-            return len(self.page.context.pages)
+            return sum(1 for page in self.page.context.pages if not page.is_closed())
         except Exception:
             return None
+
+    def wait_for_page_count_above(self, count: int, timeout_s: float) -> bool:
+        """Wait on the context's ``page`` event until more than ``count``
+        pages are open, or ``timeout_s`` passes. True when they are.
+
+        Event-driven on purpose: with the sync API a sleep dispatches
+        nothing, so a popup a click opened can stay out of
+        ``context.pages`` until the next Playwright call.
+        """
+
+        import time as _time
+
+        deadline = _time.monotonic() + max(0.0, float(timeout_s))
+        while True:
+            current = self.page_count
+            if current is not None and current > count:
+                return True
+            remaining = deadline - _time.monotonic()
+            if remaining <= 0:
+                return False
+            try:
+                self.page.context.wait_for_event(
+                    "page", timeout=max(1.0, remaining * 1000.0)
+                )
+            except Exception:
+                # Timed out (or the context closed): one last look above.
+                current = self.page_count
+                return current is not None and current > count
 
     # -- live execution-context identity -------------------------------
 

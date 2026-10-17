@@ -104,12 +104,19 @@ def _reset_person_browser(endpoint: str, url: str) -> None:
     with sync_playwright() as pw:
         browser = pw.chromium.connect_over_cdp(endpoint)
         context = browser.contexts[0]
-        pages = list(context.pages)
-        keep = pages[0]
-        for extra in pages[1:]:
-            extra.close()
+        # A fresh tab, never one an earlier test left behind: a leftover
+        # popup keeps its window.name, so the app's window.open(..., name)
+        # would navigate that tab instead of opening a popup, and the
+        # replay's new_tab_opened check would (rightly) fail. CDP lists
+        # pages in no fixed order, so "keep the first" could keep the popup.
+        keep = context.new_page()
+        for extra in list(context.pages):
+            if extra is not keep:
+                extra.close()
+        assert context.pages == [keep]
         keep.goto(url)
         keep.wait_for_load_state("load")
+        assert keep.evaluate("window.name") == ""
         resize_tab_viewport(keep, *_e2e.VIEWPORT.values())
 
 

@@ -126,6 +126,23 @@ def _default_page_backend(page: Any) -> Any:
     return PlaywrightBackend(page, closed_page_frame=True)
 
 
+def _pump_wait(page: Any, seconds: float) -> None:
+    """Wait ``seconds`` while Playwright keeps dispatching browser events.
+
+    ``page.wait_for_timeout`` runs the sync API's event loop; ``time.sleep``
+    would freeze it. Objects without it (test doubles, closed pages) sleep.
+    """
+
+    wait = getattr(page, "wait_for_timeout", None) if page is not None else None
+    if callable(wait) and not _page_closed(page):
+        try:
+            wait(max(1.0, seconds * 1000.0))
+            return
+        except Exception:
+            pass
+    time.sleep(seconds)
+
+
 class SurfaceRouter:
     """Live surface map for one run of a multi-surface workflow."""
 
@@ -207,6 +224,31 @@ class SurfaceRouter:
         for existing in pages:
             self._remember(existing)
         self._remember(page)
+
+    def _wait_for_new_page(self, remaining_s: float) -> None:
+        """Block until a watched context opens a page, or ``remaining_s``."""
+
+        remaining_s = max(0.0, remaining_s)
+        if remaining_s <= 0:
+            return
+        contexts = list(self._contexts)
+        if len(contexts) == 1:
+            wait = getattr(contexts[0], "wait_for_event", None)
+            if callable(wait):
+                try:
+                    wait("page", timeout=max(1.0, remaining_s * 1000.0))
+                except Exception:
+                    # A timeout (or a closed context): the caller re-reads
+                    # the inventory and decides.
+                    pass
+                return
+        # Several contexts, or a test double: wait one interval through a
+        # live page so Playwright still dispatches, then let the caller look.
+        live = next(
+            (p for p in self._known_pages if not _page_closed(p)),
+            None,
+        )
+        _pump_wait(live, min(self._poll_interval_s, remaining_s))
 
     def _remember(self, page: Any) -> None:
         if not any(page is known for known in self._known_pages):
@@ -325,7 +367,11 @@ class SurfaceRouter:
         deadline = time.monotonic() + max(0.0, float(timeout_s))
         pages = self.undeclared_pages()
         while len(pages) < len(expected) and time.monotonic() < deadline:
-            time.sleep(self._poll_interval_s)
+            # Wait on the browser's own "page" event, not a sleep: with the
+            # sync Playwright API a sleep dispatches nothing, so a popup the
+            # click opened stays invisible to ``context.pages`` until the
+            # next Playwright call, and a loaded machine misses it.
+            self._wait_for_new_page(deadline - time.monotonic())
             pages = self.undeclared_pages()
         if not expected:
             if pages:
@@ -390,7 +436,9 @@ class SurfaceRouter:
                 title_ok = bool(title_re.fullmatch(title or ""))
             if (origin_ok and url_ok and title_ok) or time.monotonic() >= deadline:
                 break
-            time.sleep(self._poll_interval_s)
+            # The page's URL and title update only as Playwright dispatches
+            # its events; wait through the page so they do.
+            _pump_wait(page, self._poll_interval_s)
         if not origin_ok:
             return (
                 f"{prefix}, but it is on a different origin than recorded; run halted"
