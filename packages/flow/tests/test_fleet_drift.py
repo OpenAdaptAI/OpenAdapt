@@ -56,6 +56,8 @@ from openadapt_flow.fleet.patch import (
     StructuralAnchorRef,
     find_leaks,
     is_generated_name,
+    is_static_hook_value,
+    looks_name_like,
     sanitize_selector,
     sign_patch,
 )
@@ -470,7 +472,12 @@ def test_export_redaction_carries_no_fixture_value_or_digest(tmp_path, core):
         "text=Jane Q Sample",
         '[aria-label="Open chart Jane Q Sample"]',  # a text-bearing attribute
         "[data-testid=chart-3f9a2c7d1b]",  # a hex id
-        "[data-testid=save-note]",  # any data-* value
+        "[data-track=save-note]",  # a data-* value outside the test hooks
+        "[data-testid=row-00012345]",  # a test hook holding a record key
+        "[data-cy=a1b2c3d4]",  # a test hook holding a hex id
+        "[data-qa=row-123e4567-e89b-12d3-a456-426614174000]",  # a UUID
+        "[data-test-id=patient-Jane-Doe]",  # a test hook holding a name
+        "[data-test=row_Smith]",
         "[data-patient=jane]",  # not an allowed attribute at all
         'iframe[src="/chart?mrn=1"]',  # an address with a query string
         "a.chart?mrn=1",
@@ -511,6 +518,50 @@ def test_sanitizer_keeps_developer_selectors_and_checks_frame_paths():
             StructuralAnchorRef(selector="#save", frame_path=(frame,))
     ok = StructuralAnchorRef(selector="#save", frame_path=("iframe#chart",))
     assert ok.frame_path == ("iframe#chart",)
+
+
+@pytest.mark.parametrize(
+    "selector",
+    [
+        "[data-testid=save-note]",
+        "button[data-test=submit]",
+        "[data-test-id=member_search]",
+        "[data-cy=runEligibility]",
+        "[data-qa=SaveButton]",
+        "#chart [data-testid='open-chart']",
+    ],
+)
+def test_sanitizer_allows_static_test_hook_values(selector):
+    assert sanitize_selector(selector) == selector
+
+
+def test_test_hook_value_rules():
+    for value in ("save-note", "step-2", "runEligibility", "SaveButton", "tab_3"):
+        assert is_static_hook_value(value), value
+    for value in (
+        "row-1234",
+        "deadbeef",
+        "123e4567e89b12d3a456426614174000",
+        "patient-Jane-Doe",
+        "Smith_row",
+    ):
+        assert not is_static_hook_value(value), value
+    assert looks_name_like("mary-Ann")
+    assert not looks_name_like("Mary")  # one word: indistinguishable from a control
+    # Only the fixed test hooks may carry a value.
+    for attr in ("data-id", "data-row", "data-patient-id", "data-name"):
+        with pytest.raises(PatchRedactionError):
+            sanitize_selector(f"[{attr}=save-note]")
+
+
+def test_export_carries_a_static_test_hook_value(tmp_path, core):
+    store, candidate, _, _ = _approved(
+        tmp_path, new_search="[data-testid=member-search-v2]"
+    )
+    key, chain = _contributor(core, "tenant-src")
+    exported = _export(store, candidate.candidate_id, key, chain)
+    selectors = {m.new.selector for m in exported.contribution.payload.patch.maps}
+    assert "[data-testid=member-search-v2]" in selectors
 
 
 def test_export_refuses_a_selector_that_spells_a_record_value(tmp_path, core):

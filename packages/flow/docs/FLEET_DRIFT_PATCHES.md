@@ -111,18 +111,22 @@ stay with the source tenant.
 
 Export refuses rather than redacts. A selector is accepted only if a
 tokenizer can read every part of it as a tag, `#id`, `.class`, positional
-pseudo-class, combinator, or an attribute test on one of `data-testid`,
-`data-test`, `data-qa`, `data-cy`, `name`, `type`, `role`, `for`. The
-sanitizer refuses:
+pseudo-class, combinator, or an attribute test on one of the test-hook
+attributes (`data-testid`, `data-test`, `data-test-id`, `data-cy`,
+`data-qa`) or `name`, `type`, `role`, `for`. The sanitizer refuses:
 
 - text engines (`text=`, `:has-text()`) and text or address attributes
   (`aria-label`, `title`, `placeholder`, `value`, `href`, `src`, `alt`);
 - any token with four or more consecutive digits or eight or more hex
   characters;
-- the *value* of any `data-*` attribute. `[data-testid]` is accepted;
-  `[data-testid=submit]` and `[data-patient-id=…]` are refused. Values are
-  refused rather than stripped, because stripping changes what the selector
-  matches;
+- the value of any `data-*` attribute that is not a test hook, such as
+  `[data-patient-id=…]`. Values are refused rather than stripped, because
+  stripping changes what the selector matches;
+- a test-hook value that looks dynamic: a run of four or more digits, eight
+  or more hex characters, a UUID, or a name-like value. A value is
+  name-like when it is split by `-` or `_` and any part is a capitalised
+  word (`patient-Jane-Doe`, `row_Smith`). `[data-testid=save-note]`,
+  `[data-cy=runEligibility]` and `[data-qa=SaveButton]` are accepted;
 - a query string, fragment, percent escape or URL (`?`, `&`, `%`, `://`, a
   leading `/`, `=/`) in a selector or in any frame path entry;
 - class and id names a build tool generated: CSS modules
@@ -424,8 +428,10 @@ directory rather than in `~/.openadapt/durable-authority`.
 - The security official's authorisation is asserted by the approver, not
   signed by the official.
 - The role registry is a local admin file and is not signed.
-- `data-*` values are refused outright, which also refuses common test
-  hooks such as `[data-testid=submit]`.
+- The name-like check is a heuristic. A single PascalCase word such as
+  `[data-qa=Smith]` cannot be told apart from a control name and is
+  accepted; the export leak check still refuses it if the bundle's own data
+  contains that word.
 - "Independent tenants" means distinct contributor certificate subjects. The
   hub cannot tell whether two subjects belong to the same organisation.
 

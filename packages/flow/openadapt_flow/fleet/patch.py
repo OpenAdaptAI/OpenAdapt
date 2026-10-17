@@ -69,12 +69,17 @@ class PatchRedactionError(ValueError):
 # Selector and id sanitizers
 # --------------------------------------------------------------------------- #
 
+#: Test-hook attributes. Developers set their values for test automation,
+#: so a value is allowed unless it looks dynamic
+#: (see :func:`is_static_hook_value`). Every other ``data-*`` value is refused.
+TEST_HOOK_ATTRIBUTES: Final[frozenset[str]] = frozenset(
+    {"data-testid", "data-test", "data-test-id", "data-cy", "data-qa"}
+)
 #: Attribute names a selector may test. ``aria-label``, ``title``, ``value``,
 #: ``href``, ``src``, ``alt`` and ``placeholder`` are excluded: they carry
-#: text or addresses. A ``data-*`` attribute may be tested for presence only;
-#: its value is refused (see :func:`sanitize_selector`).
-SELECTOR_ATTRIBUTES: Final[frozenset[str]] = frozenset(
-    {"data-testid", "data-test", "data-qa", "data-cy", "name", "type", "role", "for"}
+#: text or addresses.
+SELECTOR_ATTRIBUTES: Final[frozenset[str]] = TEST_HOOK_ATTRIBUTES | frozenset(
+    {"name", "type", "role", "for"}
 )
 _IDENT = r"-?[A-Za-z_][A-Za-z0-9_-]{0,63}"
 _SIMPLE = re.compile(
@@ -109,6 +114,12 @@ _GENERATED_NAME = re.compile(
     re.VERBOSE,
 )
 _HASH_SEGMENT = re.compile(r"(?:^|[-_])([A-Za-z0-9]{5,12})$")
+#: A UUID, with or without hyphens, anywhere in a value.
+_UUID = re.compile(
+    r"[0-9a-fA-F]{8}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{4}-?[0-9a-fA-F]{12}"
+)
+#: A capitalised word (``Smith``, ``Mary``), as a person's name is written.
+_CAPITALISED_WORD = re.compile(r"^[A-Z][a-z]+$")
 
 
 def _token_ok(value: str) -> bool:
@@ -118,6 +129,31 @@ def _token_ok(value: str) -> bool:
     UUID fragment) is treated as a possible record identifier and refused.
     """
     return not _DIGIT_RUN.search(value) and not _UPPER_HEX_OR_UUID.search(value)
+
+
+def looks_name_like(value: str) -> bool:
+    """Whether a test-hook value looks like it holds a person's name.
+
+    Test-hook values are written in kebab, snake or camel case
+    (``save-note``, ``save_note``, ``saveNote``, ``SaveNote``). A value
+    split by ``-`` or ``_`` with any capitalised word in it
+    (``patient-Jane-Doe``, ``row_Smith``) is how a name rendered into the
+    attribute looks, so it is refused. A single PascalCase word cannot be
+    told apart from a developer's name for a control and is allowed.
+    """
+    segments = [part for part in re.split(r"[-_]+", value) if part]
+    if len(segments) < 2:
+        return False
+    return any(_CAPITALISED_WORD.match(part) for part in segments)
+
+
+def is_static_hook_value(value: str) -> bool:
+    """Whether a test-hook attribute value is static, not data.
+
+    Refused: a run of four or more digits, eight or more hex characters, a
+    UUID, or a name-like value (:func:`looks_name_like`).
+    """
+    return _token_ok(value) and not _UUID.search(value) and not looks_name_like(value)
 
 
 def is_generated_name(value: str) -> bool:
@@ -145,8 +181,10 @@ def sanitize_selector(selector: str, *, what: str = "selector") -> str:
 
     * text engines (``text=``, ``:has-text()``, ``>>``) and quoted free text;
     * any token that looks like a record identifier;
-    * a value on any ``data-*`` attribute: applications put record keys and
-      names in ``data-*`` values;
+    * a value on any ``data-*`` attribute other than the test hooks in
+      :data:`TEST_HOOK_ATTRIBUTES`, because applications put record keys and
+      names in ``data-*`` values; a test-hook value that looks dynamic
+      (:func:`is_static_hook_value`);
     * a URL, query string, or fragment, as an iframe or frame selector would
       carry in ``src``;
     * class and id names with a build-generated suffix.
@@ -168,11 +206,17 @@ def sanitize_selector(selector: str, *, what: str = "selector") -> str:
             raise PatchRedactionError(
                 f"{what} tests attribute {attr!r}, which can carry text"
             )
-        if attr is not None and attr.startswith("data-") and match.group("val"):
-            raise PatchRedactionError(
-                f"{what} tests the value of {attr!r}; data-* values can carry "
-                "record data"
-            )
+        value = match.group("val")
+        if attr is not None and attr.startswith("data-") and value:
+            if attr not in TEST_HOOK_ATTRIBUTES:
+                raise PatchRedactionError(
+                    f"{what} tests the value of {attr!r}; data-* values can "
+                    "carry record data"
+                )
+            if not is_static_hook_value(value):
+                raise PatchRedactionError(
+                    f"{what} tests a {attr!r} value that looks dynamic or name-like"
+                )
         for group in ("id", "cls", "val"):
             value = match.group(group)
             if value is not None and not _token_ok(value):
@@ -526,7 +570,10 @@ __all__ = [
     "StructuralAnchorRef",
     "StructuralPatchPayload",
     "find_leaks",
+    "TEST_HOOK_ATTRIBUTES",
     "is_generated_name",
+    "is_static_hook_value",
+    "looks_name_like",
     "sanitize_automation_id",
     "sanitize_frame_selector",
     "sanitize_role",
