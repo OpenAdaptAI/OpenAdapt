@@ -51,6 +51,8 @@ from enum import Enum
 from pathlib import Path
 from typing import Any, Mapping, Optional, Sequence
 
+from openadapt_flow.assurance import INDEPENDENT_READBACK, SCREEN_READBACK
+
 __all__ = [
     "ADMISSION_FILE",
     "DRAFT_MARKER",
@@ -95,8 +97,6 @@ ADMISSION_MODES = ("person", "admitter_key", "agent_policy")
 ADMISSION_SCHEMA = "openadapt-flow/jit-admission/v1"
 KEY_DIR_ENV = "OPENADAPT_JIT_KEY_DIR"
 
-INDEPENDENT_READBACK = "independent_readback"
-SCREEN_READBACK = "screen_readback"
 
 _NOT_PRINCIPALS = frozenset(
     {
