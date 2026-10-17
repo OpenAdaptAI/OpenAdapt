@@ -26,7 +26,6 @@ outcome, and aggregate.
 from __future__ import annotations
 
 import argparse
-import base64
 import hashlib
 import ipaddress
 import json
@@ -41,7 +40,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from decimal import Decimal
 from pathlib import Path, PurePosixPath
-from typing import Any, Callable, Literal, Optional
+from typing import Any, Callable, Optional
 from urllib.parse import urlsplit
 from urllib.request import Request, urlopen
 
@@ -59,58 +58,27 @@ from openadapt_flow.execution_profiles import (
 )
 from openadapt_flow.ir import GovernedAuthorizationTemplate, RunReport, Workflow
 from openadapt_flow.mockmed.fault_server import serve
-from openadapt_flow.policy import has_structured_identity, load_policy
+from openadapt_flow.policy import has_structured_identity
 from openadapt_flow.qualification import (
-    ActionRiskClass,
-    ActionRiskClassification,
-    EnvironmentBoundary,
-    EvidenceRef,
-    IdentityEnforcement,
-    IdentityPolicy,
-    QualificationActionTarget,
-    QualificationCase,
-    QualificationCaseKind,
-    QualificationCaseResult,
-    QualificationOutcome,
-    add_case,
-    certify_project,
-    init_project,
-    qualification_campaign_id_sha256,
-    qualification_run_id_sha256,
-    record_case_results,
-    save_qualified_workflow,
-    set_action_classification,
-    set_case_scope,
-    set_effect_policy,
-    set_identity_policy,
-    set_trusted_fault_driver_key,
-    set_trusted_runner_key,
-    sign_case_result,
     workflow_contract_sha256,
 )
-from openadapt_flow.qualification_environment import (
-    QualificationEnvironmentObservation,
-)
-from openadapt_flow.qualification_faults import (
-    FaultMutationReceipt,
-    QualificationFaultContext,
-    QualificationFaultMutation,
-    effect_verifier_input_sha256,
-    sha256_bytes,
-    sign_fault_mutation_receipt,
+from openadapt_flow.qualify import (
+    CASES,
+    QualifyConfigError,
+    QualifyError,
+    QualifyHooks,
+    TrialContext,
+    VerifyConfig,
+    load_verify_config,
+    qualify,
 )
 from openadapt_flow.recorder import Recorder
 from openadapt_flow.report import render_run_report
 from openadapt_flow.run_gate import (
-    build_qualification_case_authorization,
     build_runtime_authorization,
     evaluate_run_gate,
 )
 from openadapt_flow.runtime import Replayer
-from openadapt_flow.runtime.authorization import (
-    runtime_inputs_bytes,
-    runtime_inputs_digest,
-)
 from openadapt_flow.runtime.effects import RestRecordVerifier
 from openadapt_flow.transaction import IdempotencyLedger
 from openadapt_flow.verification import VerificationTier
@@ -890,7 +858,9 @@ def _record(
     return environment
 
 
-def _save_step(workflow: Workflow) -> Any:
+def _require_structured_save(workflow: Workflow) -> Any:
+    """The public demo requires the save to carry retained structured identity."""
+
     candidates = [
         step for step in workflow.steps if step.risk == "irreversible" and step.effects
     ]
@@ -909,333 +879,7 @@ def _save_step(workflow: Workflow) -> Any:
             "consequential save did not compile with retained structured "
             "identity evidence"
         )
-    if any(effect.needs_operator_confirmation for effect in step.effects):
-        raise EvidencePackError("compiler emitted an unbound placeholder effect")
     return step
-
-
-def _environment_payload(
-    *,
-    backend: PlaywrightBackend,
-    app_digest: str,
-) -> dict[str, Any]:
-    """Read the PHI-free browser and application boundary from the live page."""
-
-    page = backend.page
-    browser = page.context.browser
-    if browser is None:
-        raise EvidencePackError("qualification page has no owning browser")
-    return {
-        "browser": "chromium",
-        "browser_version": browser.version,
-        "user_agent": page.evaluate("navigator.userAgent"),
-        "viewport": list(backend.viewport),
-        "device_scale_factor": page.evaluate("window.devicePixelRatio"),
-        "headless": True,
-        "platform": platform.platform(),
-        "python": platform.python_version(),
-        "application_sha256": app_digest,
-        "runtime_version": FLOW_VERSION,
-        "target_kind": "web",
-    }
-
-
-class _MockMedEnvironmentObserver:
-    """Observe the exact live MockMed browser boundary for qualification."""
-
-    observer_id = ENVIRONMENT_OBSERVER_ID
-    contract_sha256 = ENVIRONMENT_OBSERVER_CONTRACT_SHA256
-
-    def __init__(self, *, app_digest: str) -> None:
-        self._app_digest = app_digest
-
-    def observe(
-        self,
-        backend: Any,
-        target_kind: Literal["web", "windows", "macos", "linux", "rdp", "citrix"],
-    ) -> QualificationEnvironmentObservation:
-        if target_kind != "web" or not isinstance(backend, PlaywrightBackend):
-            raise ValueError("MockMed qualification requires its Playwright boundary")
-        page = backend.page
-        origin = page.evaluate("location.origin")
-        session_material = page.evaluate(
-            """() => JSON.stringify({
-                origin: location.origin,
-                timeOrigin: performance.timeOrigin,
-                userAgent: navigator.userAgent,
-            })"""
-        )
-        payload = _environment_payload(backend=backend, app_digest=self._app_digest)
-        return QualificationEnvironmentObservation(
-            target_kind="web",
-            application_identity=origin,
-            application_version=f"sha256:{self._app_digest}",
-            session_identity_sha256=_sha256_bytes(session_material.encode("utf-8")),
-            environment_digest=_sha256_bytes(_canonical_json(payload)),
-        )
-
-
-def _configure_qualification(
-    workflow: Workflow,
-    *,
-    base_url: str,
-    environment: dict[str, Any],
-    app_digest: str,
-) -> tuple[
-    bytes,
-    str,
-    _MockMedQualificationFaultDriver,
-    _MockMedEnvironmentObserver,
-]:
-    environment_payload = {
-        **environment,
-        "application_sha256": app_digest,
-        "runtime_version": FLOW_VERSION,
-        "target_kind": "web",
-    }
-    environment_digest = _sha256_bytes(_canonical_json(environment_payload))
-    boundary = EnvironmentBoundary(
-        target_kind="web",
-        application="OpenAdapt MockMed synthetic reference",
-        application_identity=_origin(base_url),
-        application_version=f"sha256:{app_digest}",
-        environment_observer_id=ENVIRONMENT_OBSERVER_ID,
-        environment_observer_contract_sha256=(
-            ENVIRONMENT_OBSERVER_CONTRACT_SHA256
-        ),
-        environment_digest=environment_digest,
-        runtime_version=FLOW_VERSION,
-        required_capabilities=[
-            "headless_chromium",
-            "independent_system_of_record",
-            "playwright_dom",
-        ],
-    )
-    project = init_project(
-        workflow,
-        environment=boundary,
-        minimum_effect_tier=VerificationTier.INDEPENDENT_SYSTEM,
-    )
-
-    for step in workflow.steps:
-        classification = (
-            ActionRiskClass.IRREVERSIBLE
-            if step.risk == "irreversible"
-            else ActionRiskClass.READ_ONLY
-        )
-        explanation = (
-            "compiler classified this as an irreversible system-of-record write"
-            if classification is ActionRiskClass.IRREVERSIBLE
-            else "reviewed as workflow preparation/navigation with no business-record effect"
-        )
-        set_action_classification(
-            workflow,
-            ActionRiskClassification(
-                step_id=step.id,
-                classification=classification,
-                explanation=explanation,
-                operator_confirmed=True,
-            ),
-        )
-
-    save = _save_step(workflow)
-    set_identity_policy(
-        workflow,
-        IdentityPolicy(
-            step_id=save.id,
-            enforcement=IdentityEnforcement.CANONICAL_LADDER,
-        ),
-    )
-    for index, _effect in enumerate(save.effects):
-        set_effect_policy(
-            workflow,
-            step_id=save.id,
-            effect_index=index,
-            tier=VerificationTier.INDEPENDENT_SYSTEM,
-        )
-    add_case(
-        workflow,
-        QualificationCase(
-            id="representative",
-            kind=QualificationCaseKind.REPRESENTATIVE,
-            expected_outcome=QualificationOutcome.VERIFIED,
-            description="Recorded workflow under its qualified application boundary",
-        ),
-    )
-    # This key is pack-local, generated for this immutable campaign, and never
-    # reused as a production trust root.
-    from cryptography.hazmat.primitives import serialization
-    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
-
-    private_key = Ed25519PrivateKey.generate()
-    private_raw = private_key.private_bytes(
-        encoding=serialization.Encoding.Raw,
-        format=serialization.PrivateFormat.Raw,
-        encryption_algorithm=serialization.NoEncryption(),
-    )
-    public_raw = private_key.public_key().public_bytes(
-        encoding=serialization.Encoding.Raw,
-        format=serialization.PublicFormat.Raw,
-    )
-    set_trusted_runner_key(
-        workflow,
-        key_id=RUNNER_KEY_ID,
-        public_key_base64=base64.b64encode(public_raw).decode("ascii"),
-    )
-    fault_driver = _MockMedQualificationFaultDriver()
-    set_trusted_fault_driver_key(
-        workflow,
-        key_id=fault_driver.attestation_key_id,
-        public_key_base64=fault_driver.public_key_base64,
-    )
-
-    input_sha256 = runtime_inputs_digest(workflow, {"note": NOTE}, None)
-    save_target = QualificationActionTarget(step_id=save.id, actuation_path="gui")
-    for case in list(project.cases):
-        fault_target = (
-            None
-            if case.kind is QualificationCaseKind.REPRESENTATIVE
-            else save_target
-        )
-        set_case_scope(
-            workflow,
-            case_id=case.id,
-            runtime_input_sha256=input_sha256,
-            action_targets=[save_target],
-            fault_target=fault_target,
-        )
-    assert workflow.qualification is project
-    return (
-        private_raw,
-        environment_digest,
-        fault_driver,
-        _MockMedEnvironmentObserver(app_digest=app_digest),
-    )
-
-
-class _WeakEffectVerifier:
-    """A real configured verifier whose evidence is too weak for Standard."""
-
-    verification_tier = VerificationTier.IMMEDIATE_SCREEN
-
-
-class _MockMedQualificationFaultDriver:
-    """Fixture-owned mutations for the first-party synthetic MockMed app.
-
-    The driver changes the real detector input at the runtime-selected gate.
-    The ordinary resolver, identity check, or effect gate must then refuse it.
-    It does not return a detector verdict.
-    """
-
-    driver_id = "openadapt.mockmed.public-demo-faults"
-    attestation_key_id = FAULT_DRIVER_KEY_ID
-    contract_sha256 = hashlib.sha256(
-        b"openadapt.mockmed.public-demo-faults/v1"
-    ).hexdigest()
-
-    def __init__(self) -> None:
-        from cryptography.hazmat.primitives import serialization
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import (
-            Ed25519PrivateKey,
-        )
-
-        key = Ed25519PrivateKey.generate()
-        self.private_key = key.private_bytes(
-            encoding=serialization.Encoding.Raw,
-            format=serialization.PrivateFormat.Raw,
-            encryption_algorithm=serialization.NoEncryption(),
-        )
-        self.public_key_base64 = base64.b64encode(
-            key.public_key().public_bytes(
-                encoding=serialization.Encoding.Raw,
-                format=serialization.PublicFormat.Raw,
-            )
-        ).decode("ascii")
-
-    @staticmethod
-    def mutation_bytes(kind: str) -> bytes:
-        return f"openadapt.mockmed.synthetic-fault/{kind}/v1\n".encode("ascii")
-
-    def mutate(
-        self, context: QualificationFaultContext
-    ) -> QualificationFaultMutation | None:
-        replacement = context.effect_verifier
-        replace_effect_verifier = False
-        if context.fault_kind == "ambiguity":
-            context.backend.page.evaluate(
-                """() => {
-                    const button = document.querySelector('#save-encounter');
-                    if (!button) throw new Error('synthetic save target missing');
-                    button.parentNode.insertBefore(button.cloneNode(true), button);
-                }"""
-            )
-            after_sha256 = sha256_bytes(context.backend.screenshot())
-        elif context.fault_kind == "wrong_identity":
-            context.backend.page.evaluate(
-                """() => {
-                    const record = document.querySelector('#encounter-record');
-                    const banner = document.querySelector('#patient-banner');
-                    if (!record || !banner) {
-                        throw new Error('synthetic record identity missing');
-                    }
-                    const changed = 'Alex Testcase — MRN P2 — DOB 1975-05-05';
-                    record.setAttribute('aria-label', changed);
-                    banner.textContent = changed;
-                }"""
-            )
-            after_sha256 = sha256_bytes(context.backend.screenshot())
-        elif context.fault_kind == "stale_identity":
-            context.backend.page.evaluate(
-                """() => {
-                    document.documentElement.style.background = '#ffffff';
-                    document.body.replaceChildren();
-                    document.body.style.background = '#ffffff';
-                }"""
-            )
-            mutated_png = context.backend.screenshot()
-            after_sha256 = sha256_bytes(mutated_png)
-        elif context.fault_kind in {"weak_effect", "missing_effect"}:
-            replace_effect_verifier = True
-            replacement = (
-                _WeakEffectVerifier()
-                if context.fault_kind == "weak_effect"
-                else None
-            )
-            after_sha256 = effect_verifier_input_sha256(
-                replacement,
-                context.effects,
-            )
-        else:
-            return None
-
-        mutation = self.mutation_bytes(context.fault_kind)
-        receipt = FaultMutationReceipt(
-            project_id=context.project_id,
-            project_revision=context.project_revision,
-            project_contract_sha256=context.project_contract_sha256,
-            campaign_id_sha256=context.campaign_id_sha256,
-            case_id_sha256=context.case_id_sha256,
-            case_input_sha256=context.case_input_sha256,
-            run_id_sha256=context.run_id_sha256,
-            step_id_sha256=sha256_bytes(context.step_id.encode("utf-8")),
-            actuation_path=context.actuation_path,
-            fault_kind=context.fault_kind,
-            gate=context.gate,
-            driver_id=self.driver_id,
-            driver_contract_sha256=self.contract_sha256,
-            before_input_sha256=context.before_input_sha256,
-            after_input_sha256=after_sha256,
-            mutation_artifact_sha256=sha256_bytes(mutation),
-            attestation_key_id=self.attestation_key_id,
-        )
-        return QualificationFaultMutation(
-            receipt=sign_fault_mutation_receipt(
-                receipt,
-                private_key=self.private_key,
-            ),
-            replace_effect_verifier=replace_effect_verifier,
-            effect_verifier=replacement,
-        )
 
 
 def _origin(url: str) -> str:
@@ -1291,55 +935,6 @@ def _browser_network_observation(page: Any, *, base_url: str) -> dict[str, Any]:
         "browser_request_count": len(urls),
         "off_box_or_third_party_egress_observed": False,
     }
-
-
-def _case_plan() -> list[dict[str, Any]]:
-    """Machine conditions keyed to the canonical qualification case ids."""
-
-    return [
-        {
-            "case_id": "representative",
-            "query": "?fault=ok&idempotency=demo",
-            "expected": "VERIFIED",
-            "oracle": "exact_record",
-            "use_structural": True,
-        },
-        {
-            "case_id": "fault-ambiguity",
-            "query": "?fault=ok&idempotency=demo",
-            "expected": "HALTED",
-            "oracle": "no_mutation",
-            "use_structural": True,
-        },
-        {
-            "case_id": "fault-wrong-identity",
-            "query": "?fault=ok&idempotency=demo",
-            "expected": "HALTED",
-            "oracle": "no_mutation",
-            "use_structural": True,
-        },
-        {
-            "case_id": "fault-stale-identity",
-            "query": "?fault=ok&idempotency=demo",
-            "expected": "HALTED",
-            "oracle": "no_mutation",
-            "use_structural": True,
-        },
-        {
-            "case_id": "fault-weak-effect",
-            "query": "?fault=ok&idempotency=demo",
-            "expected": "HALTED",
-            "oracle": "no_mutation",
-            "use_structural": True,
-        },
-        {
-            "case_id": "fault-missing-effect",
-            "query": "?fault=ok&idempotency=demo",
-            "expected": "HALTED",
-            "oracle": "no_mutation",
-            "use_structural": True,
-        },
-    ]
 
 
 def _oracle_snapshot(
@@ -1472,195 +1067,124 @@ def _reject_run_authority(relative: str) -> None:
         )
 
 
-def _run_case_trial(
-    *,
-    base_url: str,
-    workflow: Workflow,
-    bundle_dir: Path,
-    case: dict[str, Any],
-    trial: int,
-    case_dir: Path,
-    presentation_dir: Path,
-    pack_id: str,
-    fault_driver: _MockMedQualificationFaultDriver,
-    environment_observer: _MockMedEnvironmentObserver,
-) -> tuple[RunReport, dict[str, Any], dict[str, Any]]:
-    _http_json(f"{base_url}api/reset", method="POST", body={})
-    trial_dir = case_dir / f"trial-{trial:02d}"
-    run_dir = trial_dir / "run"
-    media_tmp = trial_dir / ".video"
-    record_video = trial == 1
-    if record_video:
-        media_tmp.mkdir(parents=True)
-    entry_url = f"{base_url.rstrip('/')}/{case['query']}#tasks"
-    backend, close = PlaywrightBackend.launch(
-        entry_url,
-        headless=True,
-        record_video_dir=str(media_tmp) if record_video else None,
-    )
-    active_backend: PlaywrightBackend = backend
-    clip_id = (
-        "verified"
-        if trial == 1 and case["case_id"] == "representative"
-        else "halted"
-        if trial == 1 and case["case_id"] == "fault-ambiguity"
-        else None
-    )
-    presentation = (
-        _PresentationCapture(mode="governed") if clip_id is not None else None
-    )
-    network_observation: dict[str, Any] | None = None
-    try:
-        verifier = RestRecordVerifier(
-            base_url,
-            records_path="/api/db",
-            records_key="records",
-            timeout_s=1.0,
-            poll_interval_s=0.05,
-        )
-        gate = evaluate_run_gate(
-            workflow,
-            bundle_dir=bundle_dir,
-            deployment=DeploymentConfig(policy=PolicySection(policy="clinical-write")),
-            effect_verifier=verifier,
-            profile_contract=execution_profile_contract(ExecutionProfile.STANDARD),
-            effective_durable=True,
-            effective_require_settled=True,
-            qualification_evidence_only=True,
-        )
-        if not gate.passed:
-            raise EvidencePackError(gate.render())
-        qualification_case = next(
-            item
-            for item in (workflow.qualification.cases if workflow.qualification else [])
-            if item.id == case["case_id"]
-        )
-        run_id = f"{pack_id}-{case['case_id']}-trial-{trial:02d}"
-        authorization = build_qualification_case_authorization(
-            workflow,
-            gate,
-            case_id=qualification_case.id,
-            params={"note": NOTE},
-            worklists=None,
-            campaign_id=CAMPAIGN_ID,
-            run_id=run_id,
-            fault_driver=(
-                None
-                if qualification_case.kind is QualificationCaseKind.REPRESENTATIVE
-                else fault_driver
-            ),
-        )
-        report = Replayer(
-            active_backend,
-            effect_verifier=verifier,
-            governed_authorization=authorization,
-            qualification_fault_driver=fault_driver,
-            qualification_environment_observer=environment_observer,
-            durable=True,
-            require_settled=True,
-            use_structural=bool(case["use_structural"]),
-            control_overlay=(
-                presentation.emitter if presentation is not None else None
-            ),
-        ).run(
-            workflow.model_copy(deep=True),
-            params={"note": NOTE},
-            bundle_dir=bundle_dir,
-            run_dir=run_dir,
-            execution_target_kind="web",
-            execution_origin=_origin(entry_url),
-            execution_entry_url=entry_url,
-            run_id=run_id,
-        )
-        backend.page.wait_for_timeout(200)
-        network_observation = _browser_network_observation(
-            backend.page,
-            base_url=base_url,
-        )
-    finally:
-        close()
-    if network_observation is None:
-        raise EvidencePackError("run retained no browser network observation")
-    if record_video:
-        _finish_video(
-            media_tmp,
-            trial_dir
-            / ("replay.webm" if case["expected"] == "VERIFIED" else "halt.webm"),
-        )
-    if presentation is not None and clip_id is not None:
-        _write_presentation_clip(
-            capture=presentation,
-            pack_id=pack_id,
-            clip_id=clip_id,
-            presentation_dir=presentation_dir,
+class _PackTrialHooks:
+    """What a public pack adds to each qualification trial.
+
+    Qualification itself (cases, faults, keys, case results, certification)
+    is :func:`openadapt_flow.qualify.qualify`, driven by
+    ``public-demo/mockmed-verify.yaml``. A pack also keeps a video of each
+    case's first trial, the presentation clips, the browser network
+    observation, MockMed's own database oracle, the run events and an outcome
+    envelope, and strips live run authority before the evidence is hashed.
+    """
+
+    def __init__(
+        self, *, base_url: str, entry_url: str, presentation_dir: Path, pack_id: str
+    ) -> None:
+        self.base_url = base_url
+        self.entry_url = entry_url
+        self.presentation_dir = presentation_dir
+        self.pack_id = pack_id
+
+    @staticmethod
+    def _clip_id(ctx: TrialContext) -> Optional[str]:
+        if ctx.trial != 1:
+            return None
+        return {"representative": "verified", "fault-ambiguity": "halted"}.get(
+            ctx.case_id
         )
 
-    report_path = run_dir / "report.json"
-    render_run_report(run_dir)
-    _strip_run_authority(run_dir)
-    oracle = _oracle_snapshot(
-        base_url,
-        oracle_kind=str(case["oracle"]),
-        report=report,
-    )
-    _write_json(trial_dir / "oracle.json", oracle)
-    (trial_dir / "case-input.json").write_bytes(
-        runtime_inputs_bytes(workflow, {"note": NOTE}, None)
-    )
-    if report.qualification_fault_mutations:
-        if len(report.qualification_fault_mutations) != 1:
-            raise EvidencePackError("fault case retained multiple mutation receipts")
-        receipt = report.qualification_fault_mutations[0]
-        (trial_dir / "fault-receipt.json").write_bytes(receipt.artifact_bytes())
-        (trial_dir / "fault-mutation.bin").write_bytes(
-            fault_driver.mutation_bytes(receipt.fault_kind)
+    def open_session_for(self, ctx: TrialContext) -> tuple[Any, Callable[[], None]]:
+        media_tmp = ctx.trial_dir / ".video"
+        record_video = ctx.trial == 1 and not ctx.certified_run
+        if record_video:
+            media_tmp.mkdir(parents=True)
+        ctx.state["record_video"] = record_video
+        clip_id = self._clip_id(ctx)
+        ctx.state["clip_id"] = clip_id
+        ctx.state["presentation"] = (
+            _PresentationCapture(mode="governed") if clip_id is not None else None
         )
-    (trial_dir / "events.jsonl").write_text(
-        _report_events(report),
-        encoding="utf-8",
+        return PlaywrightBackend.launch(
+            self.entry_url,
+            headless=True,
+            record_video_dir=str(media_tmp) if record_video else None,
+        )
+
+    def replayer_kwargs(self, ctx: TrialContext) -> dict[str, Any]:
+        presentation = ctx.state.get("presentation")
+        return {
+            "use_structural": True,
+            "control_overlay": presentation.emitter
+            if presentation is not None
+            else None,
+        }
+
+    def after_run(self, ctx: TrialContext, backend: Any, report: RunReport) -> None:
+        backend.page.wait_for_timeout(200)
+        ctx.state["network"] = _browser_network_observation(
+            backend.page, base_url=self.base_url
+        )
+
+    def after_close(self, ctx: TrialContext, report: RunReport) -> None:
+        if ctx.state.get("network") is None:
+            raise EvidencePackError("run retained no browser network observation")
+        if ctx.state.get("record_video"):
+            _finish_video(
+                ctx.trial_dir / ".video",
+                ctx.trial_dir
+                / ("replay.webm" if ctx.expected == "VERIFIED" else "halt.webm"),
+            )
+        presentation = ctx.state.get("presentation")
+        if presentation is not None:
+            _write_presentation_clip(
+                capture=presentation,
+                pack_id=self.pack_id,
+                clip_id=ctx.state["clip_id"],
+                presentation_dir=self.presentation_dir,
+            )
+        _strip_run_authority(ctx.run_dir)
+
+    def oracle(self, ctx: TrialContext, report: RunReport) -> dict[str, Any]:
+        """MockMed's own database oracle, plus the pack's events and envelope."""
+
+        oracle = _oracle_snapshot(
+            self.base_url, oracle_kind=ctx.oracle_kind, report=report
+        )
+        (ctx.trial_dir / "events.jsonl").write_text(
+            _report_events(report), encoding="utf-8"
+        )
+        _write_json(
+            ctx.trial_dir / "outcome.json",
+            _outcome_envelope(
+                case_id=ctx.case_id,
+                trial=ctx.trial,
+                expected_outcome=ctx.expected,
+                report=report,
+                report_path=ctx.run_dir / "report.json",
+                oracle=oracle,
+                network_observation=ctx.state["network"],
+            ),
+        )
+        return oracle
+
+    def hooks(self) -> QualifyHooks:
+        return QualifyHooks(
+            open_session_for=self.open_session_for,
+            replayer_kwargs=self.replayer_kwargs,
+            after_run=self.after_run,
+            after_close=self.after_close,
+            oracle=self.oracle,
+            settle_s=0.0,
+            runner_id="openadapt-flow/public-demo-headless",
+        )
+
+
+def _verify_config(base_url: str, app_digest: str) -> VerifyConfig:
+    return load_verify_config(
+        REPO_ROOT / "public-demo" / "mockmed-verify.yaml",
+        env={"MOCKMED_BASE_URL": base_url, "MOCKMED_APP_VERSION": app_digest},
     )
-    envelope = _outcome_envelope(
-        case_id=str(case["case_id"]),
-        trial=trial,
-        expected_outcome=str(case["expected"]),
-        report=report,
-        report_path=report_path,
-        oracle=oracle,
-        network_observation=network_observation,
-    )
-    _write_json(trial_dir / "outcome.json", envelope)
-    if report.execution_outcome != case["expected"]:
-        failures = [
-            result.error for result in report.results if not result.ok and result.error
-        ]
-        result_contract = [
-            {
-                "step_id": result.step_id,
-                "ok": result.ok,
-                "identity": (
-                    result.identity.status if result.identity is not None else None
-                ),
-                "postconditions_ok": result.postconditions_ok,
-                "effect_verified": result.effect_verified,
-                "effect_contracts": len(result.effect_contract_hashes),
-                "effect_evidence": len(result.effect_evidence),
-            }
-            for result in report.results
-        ]
-        raise EvidencePackError(
-            f"{case['case_id']} trial {trial} observed "
-            f"{report.execution_outcome}, expected {case['expected']}; "
-            f"failures={failures}; results={result_contract}"
-        )
-    if report.model_calls != 0 or report.screenshots_may_leave_box:
-        raise EvidencePackError(
-            f"{case['case_id']} trial {trial} violated zero-model/local boundary"
-        )
-    if not oracle["passed"] or oracle["silent_incorrect_success"]:
-        raise EvidencePackError(
-            f"{case['case_id']} trial {trial} failed independent oracle"
-        )
-    return report, oracle, envelope
 
 
 def _run_idempotency_campaign(
@@ -1669,7 +1193,7 @@ def _run_idempotency_campaign(
     base_url: str,
     workflow: Workflow,
     bundle_dir: Path,
-    environment_observer: _MockMedEnvironmentObserver,
+    environment_observer: Any,
 ) -> dict[str, Any]:
     """Prove at-most-once suppression after production certification.
 
@@ -1802,9 +1326,7 @@ def _run_idempotency_campaign(
                 "transaction_outcome": duplicate.transaction_outcome,
                 "idempotent_replay": duplicate.idempotent_replay,
                 "refusal_step_id": duplicate_results[0].step_id,
-                "delivery_attempted": bool(
-                    duplicate_results[0].delivery_attempted
-                ),
+                "delivery_attempted": bool(duplicate_results[0].delivery_attempted),
             },
             "independent_oracle": {
                 "sha256": _sha256(campaign_dir / "oracle.json"),
@@ -1858,9 +1380,7 @@ def _write_execute_acceptance_artifacts(
     template_path = qualification_dir / "governed-authorization-template.json"
     _write_json(template_path, template.model_dump(mode="json"))
     outcome_counts = Counter(
-        outcome["observed_outcome"]
-        for case in cases
-        for outcome in case["outcomes"]
+        outcome["observed_outcome"] for case in cases for outcome in case["outcomes"]
     )
     acceptance = {
         "schema_version": "openadapt.execute-transport-acceptance/v1",
@@ -1887,9 +1407,7 @@ def _write_execute_acceptance_artifacts(
                 "protocol_value": int(project.minimum_effect_tier),
                 "name": "INDEPENDENT_SYSTEM_OF_RECORD",
             },
-            "qualification_report_sha256": _sha256(
-                qualification_dir / "report.json"
-            ),
+            "qualification_report_sha256": _sha256(qualification_dir / "report.json"),
             "case_evidence_contract_sha256": (
                 certification.case_evidence_contract_sha256
             ),
@@ -1907,9 +1425,7 @@ def _write_execute_acceptance_artifacts(
     }
     _write_json(qualification_dir / "execute-transport-acceptance.json", acceptance)
 
-    representative = next(
-        case for case in cases if case["case_id"] == "representative"
-    )
+    representative = next(case for case in cases if case["case_id"] == "representative")
     representative_report = RunReport.model_validate_json(
         (root / representative["reports"][0]["path"]).read_text(encoding="utf-8")
     )
@@ -1944,94 +1460,6 @@ def _write_execute_acceptance_artifacts(
         "production_mutation_performed": False,
     }
     _write_json(qualification_dir / "cloud-ingestion-inputs.json", cloud_inputs)
-
-
-def _evidence_ref(
-    root: Path,
-    path: Path,
-    kind: Literal[
-        "run_report",
-        "identity",
-        "effect",
-        "case_input",
-        "fault_receipt",
-        "fault_mutation",
-        "fault_campaign",
-        "other",
-    ],
-) -> EvidenceRef:
-    return EvidenceRef(
-        kind=kind,
-        sha256=_sha256(path),
-        relative_path=path.relative_to(root).as_posix(),
-    )
-
-
-def _case_result(
-    *,
-    root: Path,
-    workflow: Workflow,
-    case_id: str,
-    observed_outcome: str,
-    run_id: str,
-    trial_dir: Path,
-    private_key: bytes,
-) -> QualificationCaseResult:
-    project = workflow.qualification
-    if project is None:
-        raise EvidencePackError("workflow qualification project disappeared")
-    run_dir = trial_dir / "run"
-    run_artifacts = [
-        _evidence_ref(root, path, "other")
-        for path in sorted(run_dir.rglob("*"))
-        if path.is_file() and path.name != "report.json"
-    ]
-    result = QualificationCaseResult(
-        case_id=case_id,
-        project_id=project.project_id,
-        project_revision=project.revision,
-        project_contract_sha256=project.contract_sha256(),
-        workflow_contract_sha256=workflow_contract_sha256(workflow),
-        environment_contract_sha256=project.environment.contract_sha256(),
-        environment_digest=project.environment.environment_digest,
-        runtime_version=project.environment.runtime_version,
-        runner_id="openadapt-flow/public-demo-headless",
-        runner_capabilities=list(project.environment.required_capabilities),
-        status="passed",
-        observed_outcome=QualificationOutcome(observed_outcome.lower()),
-        campaign_id_sha256=qualification_campaign_id_sha256(CAMPAIGN_ID),
-        case_input_sha256=runtime_inputs_digest(
-            workflow,
-            {"note": NOTE},
-            None,
-        ),
-        run_id_sha256=qualification_run_id_sha256(run_id),
-        evidence=[
-            _evidence_ref(root, trial_dir / "run" / "report.json", "run_report"),
-            _evidence_ref(root, trial_dir / "case-input.json", "case_input"),
-            _evidence_ref(root, trial_dir / "oracle.json", "effect"),
-            *run_artifacts,
-            *(
-                [
-                    _evidence_ref(
-                        root,
-                        trial_dir / "fault-receipt.json",
-                        "fault_receipt",
-                    ),
-                    _evidence_ref(
-                        root,
-                        trial_dir / "fault-mutation.bin",
-                        "fault_mutation",
-                    ),
-                ]
-                if (trial_dir / "fault-receipt.json").is_file()
-                else []
-            ),
-        ],
-        detail_code=f"{case_id}.{run_id.rsplit('-', 1)[-1]}",
-        attestation_key_id=RUNNER_KEY_ID,
-    )
-    return sign_case_result(result, private_key=private_key)
 
 
 def _copy_binding(
@@ -2477,7 +1905,6 @@ def export_pack(
         bundle_dir = artifacts / "bundle"
         media_dir = artifacts / "media"
         presentation_dir = artifacts / "presentation"
-        qualification_dir = artifacts / "qualification"
         media_dir.mkdir(parents=True)
         base_url, _db, stop = serve()
 
@@ -2494,7 +1921,7 @@ def export_pack(
             name=WORKFLOW_NAME,
             mine_effects=True,
         )
-        save = _save_step(workflow)
+        save = _require_structured_save(workflow)
         if not any(
             effect.kind.value == "record_written" for effect in save.effects
         ) or not any(effect.kind.value == "field_equals" for effect in save.effects):
@@ -2502,92 +1929,44 @@ def export_pack(
                 "recording did not compile the required source-of-record effects"
             )
         app_digest = _tree_digest(REPO_ROOT / "openadapt_flow" / "mockmed")
-        (
-            private_key,
-            environment_digest,
-            fault_driver,
-            environment_observer,
-        ) = _configure_qualification(
-            workflow,
+        config = _verify_config(base_url, app_digest)
+        pack_hooks = _PackTrialHooks(
             base_url=base_url,
-            environment=environment,
-            app_digest=app_digest,
+            entry_url=config.app.entry_url or base_url,
+            presentation_dir=presentation_dir,
+            pack_id=pack_id,
         )
-        save_qualified_workflow(workflow, bundle_dir)
-        workflow = Workflow.load(bundle_dir)
-
-        case_manifests: list[dict[str, Any]] = []
-        qualification_results: list[QualificationCaseResult] = []
-        for case in _case_plan():
-            case_dir = artifacts / "cases" / str(case["case_id"])
-            reports: list[RunReport] = []
-            for trial in range(1, trials + 1):
-                report, _oracle, _envelope = _run_case_trial(
-                    base_url=base_url,
-                    workflow=workflow,
-                    bundle_dir=bundle_dir,
-                    case=case,
-                    trial=trial,
-                    case_dir=case_dir,
-                    presentation_dir=presentation_dir,
-                    pack_id=pack_id,
-                    fault_driver=fault_driver,
-                    environment_observer=environment_observer,
-                )
-                reports.append(report)
-                trial_dir = case_dir / f"trial-{trial:02d}"
-                run_id = f"{pack_id}-{case['case_id']}-trial-{trial:02d}"
-                qualification_results.append(
-                    _case_result(
-                        root=temp_root,
-                        workflow=workflow,
-                        case_id=str(case["case_id"]),
-                        observed_outcome=str(case["expected"]),
-                        run_id=run_id,
-                        trial_dir=trial_dir,
-                        private_key=private_key,
-                    )
-                )
-            case_manifests.append(
-                _case_manifest(
-                    root=temp_root,
-                    workflow=workflow,
-                    case_config=case,
-                    reports=reports,
-                    case_dir=case_dir,
-                )
+        try:
+            result = qualify(
+                bundle_dir,
+                config,
+                out=artifacts,
+                trials=trials,
+                certify="clinical-write",
+                hooks=pack_hooks.hooks(),
+                campaign_id=CAMPAIGN_ID,
+                run_id_prefix=pack_id,
+                evidence_root=temp_root,
+                in_place=True,
+                write_campaign_files=False,
+                log=lambda _line: None,
             )
-
-        for qualification_result in qualification_results:
-            try:
-                record_case_results(
-                    workflow,
-                    [qualification_result],
-                    evidence_root=temp_root,
-                )
-            except Exception as exc:
-                raise EvidencePackError(
-                    "qualification result refused for "
-                    f"{qualification_result.case_id} "
-                    f"({qualification_result.detail_code}): {exc}"
-                ) from exc
-        qualification_report_model = certify_project(
-            workflow,
-            policy=load_policy("clinical-write"),
-            evidence_root=temp_root,
-        )
-        if not qualification_report_model.passed:
-            raise EvidencePackError(qualification_report_model.render())
-        qualification_report = qualification_report_model.model_dump(mode="json")
-        _write_json(
-            qualification_dir / "project.json",
-            workflow.qualification.model_dump(mode="json")
-            if workflow.qualification
-            else {},
-        )
-        _write_json(qualification_dir / "report.json", qualification_report)
-        save_qualified_workflow(workflow, bundle_dir)
+        except (QualifyError, QualifyConfigError) as exc:
+            raise EvidencePackError(str(exc)) from exc
         workflow = Workflow.load(bundle_dir)
+        environment_digest = result.environment_digest or ""
+        environment_observer = result.observer
+        qualification_report = result.report.model_dump(mode="json")
+        case_manifests = [
+            _case_manifest(
+                root=temp_root,
+                workflow=workflow,
+                case_config={"case_id": case_id, "expected": expected},
+                reports=result.reports[case_id],
+                case_dir=artifacts / "cases" / case_id,
+            )
+            for case_id, expected, _oracle in CASES
+        ]
 
         idempotency = _run_idempotency_campaign(
             root=temp_root,
@@ -2939,14 +2318,10 @@ def _validate_execute_transport_artifacts(
         or oracle.get("passed") is not True
         or len(oracle.get("snapshot", {}).get("records", [])) != 1
         or summary.get("first", {}).get("report_sha256") != _sha256(first_path)
-        or summary.get("duplicate", {}).get("report_sha256")
-        != _sha256(duplicate_path)
-        or summary.get("independent_oracle", {}).get("sha256")
-        != _sha256(oracle_path)
+        or summary.get("duplicate", {}).get("report_sha256") != _sha256(duplicate_path)
+        or summary.get("independent_oracle", {}).get("sha256") != _sha256(oracle_path)
     ):
-        raise EvidencePackError(
-            "post-certification idempotency evidence is not exact"
-        )
+        raise EvidencePackError("post-certification idempotency evidence is not exact")
 
     template_path = _safe_file(
         root,
@@ -2969,8 +2344,7 @@ def _validate_execute_transport_artifacts(
     )
     if (
         acceptance.get("result") != "PASS"
-        or acceptance.get("scope", {}).get("bundle_content_digest")
-        != compiled_digest
+        or acceptance.get("scope", {}).get("bundle_content_digest") != compiled_digest
         or acceptance.get("qualification", {}).get(
             "governed_authorization_template_sha256"
         )

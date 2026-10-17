@@ -1,0 +1,60 @@
+# Qualify the OpenEMR patient-registration workflow on the local fixture.
+#
+#   PYTHONPATH=. openadapt-flow qualify path/to/bundle \
+#     --verify benchmark/openemr_local/verify.yaml --out runs/openemr-qual \
+#     --certify clinical-write
+#
+# Made-up patients only. See docs/QUALIFY_A_WORKFLOW.md.
+schema_version: openadapt.verify/v1
+environment_id: openemr-local-fixture-7c96c8eefe46
+minimum_effect_strength: independent_system_of_record
+
+app:
+  target: web
+  name: OpenEMR (local fixture, made-up patients)
+  url: ${OPENEMR_UI_URL:-http://127.0.0.1:9301}
+  version: openemr@7c96c8eefe46 (benchmark/openemr_local lock)
+  # OpenEMR's sign-in opens the form through its tab shell, and the fixture
+  # resets by restoring a database snapshot; both are small functions.
+  session: benchmark.openemr_local.qualify_hooks:open_session
+  reset:
+    python: benchmark.openemr_local.qualify_hooks:reset
+
+# Read the patient back through OpenEMR's REST API with a separate,
+# read-only OAuth client. This is the existing RestRecordVerifier.
+verifier:
+  kind: rest
+  base_url: ${OPENEMR_API_URL:-https://127.0.0.1:9300}
+  records_path: /apis/default/api/patient?_limit=1000
+  records_key: data
+  session: benchmark.openemr_local.qualify_hooks:oracle_session
+
+# What the save writes; expands to the effect contract list (one
+# record_written plus a field_equals per field). A bare value is a parameter.
+record:
+  name: patient
+  match: [email, lname]
+  duplicate_key: email   # OpenEMR has no idempotency column; one chart per email
+  fields:
+    email: email
+    lname: lname
+    title: title
+    fname: fname
+    DOB: DOB
+    sex: sex
+    street: street
+    city: city
+    state: {literal: MA}  # the select shows "Massachusetts"; the record stores MA
+    postal_code: postal_code
+    phone_home: phone_home
+    country_code: country_code
+
+save_step: auto
+
+inputs:
+  source: recorded
+
+campaign:
+  id: openemr-local-patient-registration-v2
+  trials: 3
+  policy: clinical-write

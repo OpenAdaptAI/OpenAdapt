@@ -1,0 +1,73 @@
+{
+  "additionalProperties": false,
+  "description": "Evidence that one workflow may run in ``problems_only`` mode.\n\nProduced by the decision-triage engine from its calibration artifact and\nits audit sample of clean saves that a person reviewed anyway.",
+  "properties": {
+    "audit_fraction": {
+      "maximum": 1.0,
+      "minimum": 0.01,
+      "title": "Audit Fraction",
+      "type": "number"
+    },
+    "audit_miss_rate_upper_bound": {
+      "maximum": 1.0,
+      "minimum": 0.0,
+      "title": "Audit Miss Rate Upper Bound",
+      "type": "number"
+    },
+    "audit_misses": {
+      "minimum": 0,
+      "title": "Audit Misses",
+      "type": "integer"
+    },
+    "audited_items": {
+      "minimum": 0,
+      "title": "Audited Items",
+      "type": "integer"
+    },
+    "calibration_artifact_sha256": {
+      "pattern": "^sha256:[0-9a-f]{64}$",
+      "title": "Calibration Artifact Sha256",
+      "type": "string"
+    },
+    "evaluated_at": {
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}(\\.\\d+)?(Z|[+-]\\d{2}:\\d{2})$",
+      "title": "Evaluated At",
+      "type": "string"
+    },
+    "schema_version": {
+      "const": "openadapt.autonomy-eligibility/v1",
+      "default": "openadapt.autonomy-eligibility/v1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "target_miss_rate": {
+      "exclusiveMinimum": 0.0,
+      "maximum": 1.0,
+      "title": "Target Miss Rate",
+      "type": "number"
+    },
+    "verified_runs": {
+      "minimum": 0,
+      "title": "Verified Runs",
+      "type": "integer"
+    },
+    "workflow_id": {
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$",
+      "title": "Workflow Id",
+      "type": "string"
+    }
+  },
+  "required": [
+    "workflow_id",
+    "calibration_artifact_sha256",
+    "verified_runs",
+    "audited_items",
+    "audit_misses",
+    "audit_miss_rate_upper_bound",
+    "target_miss_rate",
+    "audit_fraction",
+    "evaluated_at"
+  ],
+  "title": "AutonomyEligibilityV1",
+  "type": "object"
+}
