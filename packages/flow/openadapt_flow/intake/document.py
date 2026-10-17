@@ -39,7 +39,9 @@ def _clean_lines(text: str) -> list[str]:
 _STREAM_RE = re.compile(rb"<<(.*?)>>\s*stream\r?\n(.*?)\r?\nendstream", re.S)
 _TEXT_OP_RE = re.compile(
     rb"\((?P<s>(?:\\.|[^\\)])*)\)\s*(?P<op>Tj|'|\")"
-    rb"|\[(?P<arr>(?:\\.|[^\]])*)\]\s*TJ"
+    # ``[^\]\\]`` excludes the backslash so the escape and plain-character
+    # alternatives cannot both match one byte (no exponential backtracking).
+    rb"|\[(?P<arr>(?:\\.|[^\]\\])*)\]\s*TJ"
     rb"|(?P<nl>T\*|Td|TD|Tm|ET)(?![A-Za-z])"
 )
 _ARR_STR_RE = re.compile(rb"\(((?:\\.|[^\\)])*)\)")

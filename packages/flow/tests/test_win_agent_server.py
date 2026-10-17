@@ -22,7 +22,9 @@ from openadapt_flow.backends.win_agent import AgentConfig, create_server
 from openadapt_flow.backends.win_agent.server import (
     AgentRequestError,
     _perform_input,
+    _perform_legacy_calls,
     _perform_uia,
+    parse_legacy_command,
 )
 
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
@@ -45,8 +47,11 @@ class RunningAgent:
         input_fn=None,
         uia_fn=None,
         context_fn=None,
+        legacy_fn=None,
     ) -> None:
         kwargs = {"grab_fn": grab_fn}
+        if legacy_fn is not None:
+            kwargs["legacy_fn"] = legacy_fn
         if input_fn is not None:
             kwargs["input_fn"] = input_fn
         if uia_fn is not None:
@@ -64,9 +69,22 @@ class RunningAgent:
         self.server.server_close()
 
 
+def _recording_legacy_fn(sink: list):
+    def legacy_fn(calls):
+        sink.extend(calls)
+        return {"status": "ok", "output": "", "calls": len(calls)}
+
+    return legacy_fn
+
+
 @pytest.fixture()
 def agent() -> Iterator[RunningAgent]:
-    a = RunningAgent(AgentConfig(host="127.0.0.1", port=0, allow_legacy_exec=True))
+    calls: list = []
+    a = RunningAgent(
+        AgentConfig(host="127.0.0.1", port=0, allow_legacy_exec=True),
+        legacy_fn=_recording_legacy_fn(calls),
+    )
+    a.legacy_calls = calls  # type: ignore[attr-defined]
     yield a
     a.close()
 
@@ -79,7 +97,8 @@ def authed_agent() -> Iterator[RunningAgent]:
             port=0,
             token="s3cret",
             allow_legacy_exec=True,
-        )
+        ),
+        legacy_fn=_recording_legacy_fn([]),
     )
     yield a
     a.close()
@@ -153,6 +172,7 @@ def test_default_agent_disables_arbitrary_exec_and_advertises_typed_contract(
     assert "typed_input_v1" in health["capabilities"]
     assert "uia_v1" in health["capabilities"]
     assert "legacy_exec" not in health["capabilities"]
+    assert "legacy_waa_input_v1" not in health["capabilities"]
     response = requests.post(
         f"{typed_agent.url}/execute_windows",
         json={"command": "print('must not execute')"},
@@ -530,32 +550,176 @@ def test_screenshot_500_when_grabber_raises() -> None:
 # -- execute_windows ----------------------------------------------------------
 
 
-def test_execute_windows_runs_bare_python_and_echoes_stdout(
+_CLICK = "import pyautogui; pyautogui.click(10, 20)"
+
+
+def test_legacy_route_advertised_only_when_enabled(agent: RunningAgent) -> None:
+    health = requests.get(f"{agent.url}/health", timeout=5).json()
+    assert "legacy_waa_input_v1" in health["capabilities"]
+    assert "legacy_exec" not in health["capabilities"]
+
+
+def test_execute_windows_dispatches_allow_listed_pyautogui_calls(
     agent: RunningAgent,
 ) -> None:
     r = requests.post(
         f"{agent.url}/execute_windows",
-        json={"command": "print('<<OAFLOW_STRUCTURED>>42<<END_OAFLOW_STRUCTURED>>')"},
+        json={
+            "command": (
+                "import pyautogui; pyautogui.moveTo(1, 2); "
+                "pyautogui.mouseDown(button='left'); "
+                "pyautogui.moveTo(30, 40, duration=0.2); "
+                "pyautogui.mouseUp(button='left')"
+            )
+        },
         timeout=5,
     )
     assert r.status_code == 200
-    body = r.json()
-    assert body["status"] == "ok"
-    assert "<<OAFLOW_STRUCTURED>>42<<END_OAFLOW_STRUCTURED>>" in body["output"]
+    assert r.json() == {"status": "ok", "output": "", "calls": 4}
+    assert agent.legacy_calls == [  # type: ignore[attr-defined]
+        ("moveTo", (1, 2), {}),
+        ("mouseDown", (), {"button": "left"}),
+        ("moveTo", (30, 40), {"duration": 0.2}),
+        ("mouseUp", (), {"button": "left"}),
+    ]
 
 
-def test_execute_windows_500_on_exception_with_traceback(agent: RunningAgent) -> None:
-    # A failing command must surface as an ERROR (non-200), never a silent no-op.
+@pytest.mark.parametrize(
+    "command",
+    [
+        "print('<<OAFLOW_STRUCTURED>>42<<END_OAFLOW_STRUCTURED>>')",
+        "raise ValueError('boom')",
+        "import os; os.system('whoami')",
+        "import subprocess",
+        "import pyautogui as p; p.click(1, 1)",
+        "from pyautogui import click; click(1, 1)",
+        "__import__('os').system('whoami')",
+        "pyautogui.click(1, 1).__class__",
+        "pyautogui.screenshot('C:/out.png')",
+        "pyautogui.click(*[1, 1])",
+        "pyautogui.click(**{'x': 1})",
+        "pyautogui.click(x=__import__('os').getpid())",
+        "pyautogui.click(1 + 1, 2)",
+        "pyautogui.click(logScreenshot=True)",
+        "pyautogui.write(open('C:/secret.txt').read())",
+        "x = 1",
+        "for _ in range(3): pyautogui.click(1, 1)",
+        "pyautogui.os.system('whoami')",
+        "import pyautogui",
+        "",
+        "pyautogui.click(1, 1",
+    ],
+)
+def test_execute_windows_refuses_anything_but_literal_input_calls(
+    agent: RunningAgent, command: str
+) -> None:
     r = requests.post(
-        f"{agent.url}/execute_windows",
-        json={"command": "raise ValueError('boom')"},
-        timeout=5,
+        f"{agent.url}/execute_windows", json={"command": command}, timeout=5
     )
+    assert r.status_code == 400
+    body = r.json()
+    assert body["code"] == "unsupported_legacy_command"
+    assert "trace" not in body
+    assert agent.legacy_calls == []  # type: ignore[attr-defined]
+
+
+def test_execute_windows_never_executes_client_code(
+    agent: RunningAgent, tmp_path, monkeypatch
+) -> None:
+    import builtins
+
+    def forbidden(*_args, **_kwargs):
+        raise AssertionError("client text reached exec/eval")
+
+    monkeypatch.setattr(builtins, "exec", forbidden)
+    monkeypatch.setattr(builtins, "eval", forbidden)
+    marker = tmp_path / "pwned"
+    payload = f"open({str(marker)!r}, 'w').write('x')"
+    r = requests.post(
+        f"{agent.url}/execute_windows", json={"command": payload}, timeout=5
+    )
+    assert r.status_code == 400
+    assert not marker.exists()
+    ok = requests.post(
+        f"{agent.url}/execute_windows", json={"command": _CLICK}, timeout=5
+    )
+    assert ok.status_code == 200
+
+
+def test_execute_windows_413_on_oversized_command(agent: RunningAgent) -> None:
+    command = "import pyautogui; pyautogui.write(" + repr("a" * 20_000) + ")"
+    r = requests.post(
+        f"{agent.url}/execute_windows", json={"command": command}, timeout=5
+    )
+    assert r.status_code == 413
+    assert r.json()["code"] == "legacy_command_too_large"
+
+
+def test_execute_windows_500_without_traceback_when_input_fails() -> None:
+    def boom(calls):
+        raise OSError("SendInput failed")
+
+    a = RunningAgent(
+        AgentConfig(host="127.0.0.1", port=0, allow_legacy_exec=True), legacy_fn=boom
+    )
+    try:
+        r = requests.post(
+            f"{a.url}/execute_windows", json={"command": _CLICK}, timeout=5
+        )
+    finally:
+        a.close()
+    # A failing input must surface as an ERROR (non-200), never a silent no-op,
+    # and must not leak a traceback to the network client.
     assert r.status_code == 500
     body = r.json()
-    assert body["status"] == "error"
-    assert "boom" in body["error"]
-    assert "Traceback" in body["trace"]
+    assert body == {
+        "status": "error",
+        "code": "operation_failed",
+        "error": "legacy input operation failed",
+    }
+
+
+def test_parse_accepts_every_command_shape_windows_backend_emits() -> None:
+    # The exact strings WindowsBackend's legacy fallback builds.
+    assert parse_legacy_command("import pyautogui; pyautogui.doubleClick(3, 4)") == [
+        ("doubleClick", (3, 4), {})
+    ]
+    assert parse_legacy_command(
+        "import pyautogui; pyautogui.click(3, 4, button='right')"
+    ) == [("click", (3, 4), {"button": "right"})]
+    assert parse_legacy_command(
+        "import pyautogui; pyautogui.write('hi there', interval=0.01)"
+    ) == [("write", ("hi there",), {"interval": 0.01})]
+    assert parse_legacy_command("import pyautogui; pyautogui.press('enter')") == [
+        ("press", ("enter",), {})
+    ]
+    assert parse_legacy_command("import pyautogui; pyautogui.hotkey('ctrl', 'a')") == [
+        ("hotkey", ("ctrl", "a"), {})
+    ]
+    assert parse_legacy_command(
+        "import pyautogui; pyautogui.scroll(-3); pyautogui.hscroll(2)"
+    ) == [("scroll", (-3,), {}), ("hscroll", (2,), {})]
+
+
+@pytest.mark.parametrize("value", ["1e400", "10**9", "2_000_000", "b'x'", "1j"])
+def test_parse_rejects_out_of_range_or_non_plain_literals(value: str) -> None:
+    with pytest.raises(AgentRequestError) as exc:
+        parse_legacy_command(f"import pyautogui; pyautogui.scroll({value})")
+    assert exc.value.code == "unsupported_legacy_command"
+
+
+def test_default_dispatch_calls_only_the_named_pyautogui_function(monkeypatch) -> None:
+    seen: list = []
+    fake = types.ModuleType("pyautogui")
+    fake.FAILSAFE = True  # type: ignore[attr-defined]
+    fake.click = lambda *a, **k: seen.append(("click", a, k))  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "pyautogui", fake)
+    result = _perform_legacy_calls(parse_legacy_command(_CLICK))
+    assert result == {"status": "ok", "output": "", "calls": 1}
+    assert seen == [("click", (10, 20), {})]
+    assert fake.FAILSAFE is False  # type: ignore[attr-defined]
+    with pytest.raises(AgentRequestError):
+        _perform_legacy_calls([("screenshot", (), {})])
 
 
 def test_execute_windows_400_on_non_string_command(agent: RunningAgent) -> None:
@@ -580,14 +744,14 @@ def test_execute_requires_token_when_configured(authed_agent: RunningAgent) -> N
     # No header -> 401.
     r = requests.post(
         f"{authed_agent.url}/execute_windows",
-        json={"command": "print('x')"},
+        json={"command": _CLICK},
         timeout=5,
     )
     assert r.status_code == 401
     # Wrong token -> 401.
     r = requests.post(
         f"{authed_agent.url}/execute_windows",
-        json={"command": "print('x')"},
+        json={"command": _CLICK},
         headers={"Authorization": "Bearer wrong"},
         timeout=5,
     )
@@ -595,7 +759,7 @@ def test_execute_requires_token_when_configured(authed_agent: RunningAgent) -> N
     # Correct token -> 200.
     r = requests.post(
         f"{authed_agent.url}/execute_windows",
-        json={"command": "print('x')"},
+        json={"command": _CLICK},
         headers={"Authorization": "Bearer s3cret"},
         timeout=5,
     )

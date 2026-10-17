@@ -622,37 +622,68 @@ class Policy(BaseModel):
 _BUILTIN_DIR = Path(__file__).parent / "policies"
 
 
+def _builtin_policy_paths() -> dict[str, Path]:
+    """Map each shipped policy stem to its file (built from a directory scan)."""
+    if not _BUILTIN_DIR.is_dir():
+        return {}
+    return {p.stem: p for p in sorted(_BUILTIN_DIR.glob("*.yaml"))}
+
+
 def builtin_policy_names() -> list[str]:
     """Names (stems) of the shipped example policies."""
-    if not _BUILTIN_DIR.is_dir():
-        return []
-    return sorted(p.stem for p in _BUILTIN_DIR.glob("*.yaml"))
+    return sorted(_builtin_policy_paths())
+
+
+def _not_found(source: object) -> FileNotFoundError:
+    return FileNotFoundError(
+        f"policy {source!r} is neither an existing file nor a built-in "
+        f"policy (built-ins: {', '.join(builtin_policy_names()) or 'none'})"
+    )
+
+
+def load_builtin_policy(name: str) -> Policy:
+    """Load a shipped policy by name (with or without ``.yaml``).
+
+    Only exact built-in stems are accepted, and the file comes from a scan of
+    the built-in directory -- never from a path built out of ``name`` -- so an
+    untrusted name (for example a console query parameter) cannot reach any
+    other file. Use this, not :func:`load_policy`, for untrusted input.
+
+    Raises:
+        FileNotFoundError: If ``name`` is not a built-in policy.
+        ValueError: If the shipped YAML is malformed or violates the schema.
+    """
+    stem = name[: -len(".yaml")] if name.endswith(".yaml") else name
+    path = _builtin_policy_paths().get(stem)
+    if path is None:
+        raise _not_found(name)
+    return _load_policy_file(path)
 
 
 def load_policy(source: str | Path) -> Policy:
     """Load a :class:`Policy` from a YAML file path, or by built-in name.
 
-    ``source`` is resolved as: an existing file path first, else a shipped
-    built-in name (with or without ``.yaml``; see :func:`builtin_policy_names`).
+    For operator-supplied input (the CLI). ``source`` is resolved as: an
+    existing file path first, else a shipped built-in name (with or without
+    ``.yaml``; see :func:`builtin_policy_names` and :func:`load_builtin_policy`).
 
     Raises:
         FileNotFoundError: If neither a file nor a built-in matches.
         ValueError: If the YAML is malformed or violates the schema (an
             unknown rule key, a wrong type).
     """
+    path = Path(source)
+    if path.is_file():
+        return _load_policy_file(path)
+    try:
+        return load_builtin_policy(str(source))
+    except FileNotFoundError:
+        raise _not_found(source) from None
+
+
+def _load_policy_file(path: Path) -> Policy:
     import yaml
 
-    path = Path(source)
-    if not path.is_file():
-        name = str(source)
-        candidate = _BUILTIN_DIR / (name if name.endswith(".yaml") else f"{name}.yaml")
-        if candidate.is_file():
-            path = candidate
-        else:
-            raise FileNotFoundError(
-                f"policy {source!r} is neither an existing file nor a built-in "
-                f"policy (built-ins: {', '.join(builtin_policy_names()) or 'none'})"
-            )
     try:
         data = yaml.safe_load(path.read_text()) or {}
     except yaml.YAMLError as e:  # pragma: no cover - passthrough

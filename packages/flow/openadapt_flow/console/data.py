@@ -34,7 +34,7 @@ from openadapt_flow.policy import (
     is_identity_applicable,
     is_identity_armed,
     lint_workflow,
-    load_policy,
+    load_builtin_policy,
     step_confidence,
 )
 from openadapt_flow.traversal import iter_workflow_steps
@@ -353,7 +353,7 @@ def certification_view(
             )
         else:
             try:
-                report: CertifyReport = evaluate_policy(wf, load_policy(source))
+                report: CertifyReport = evaluate_policy(wf, load_builtin_policy(source))
                 live = {
                     "policy_name": report.policy_name,
                     "passed": report.passed,

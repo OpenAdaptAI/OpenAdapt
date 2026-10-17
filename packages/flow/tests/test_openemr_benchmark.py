@@ -11,6 +11,7 @@ import json
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
+from urllib.parse import urlsplit
 
 import cv2
 import numpy as np
@@ -410,7 +411,8 @@ class TestOpenemrOrchestrator:
         assert a["success_count"] == 8
         assert a["cost_usd_total"] == 5.0
         assert results["model"] == agent_baseline.MODEL
-        assert results["target"].startswith("https://demo.openemr.io")
+        target = urlsplit(results["target"])
+        assert (target.scheme, target.hostname) == ("https", "demo.openemr.io")
         assert results["success_contract"]["kind"] == "screen_saved_message_row"
 
     def test_committed_result_preserves_oracle_adjudication(self) -> None:

@@ -14,9 +14,11 @@ matching the Windows Agent Arena Flask contract (the WAADirect pattern):
     POST /uia/text-at-point -> structured row text for identity verification
     POST /uia/find          -> zero / unique / ambiguous exact candidates
     POST /uia/act           -> unique native UIA action + delivery receipt
-    POST /execute_windows   -> legacy arbitrary Python execution, DISABLED by
-                               default and available only with the explicit
-                               ``--allow-legacy-exec`` development switch.
+    POST /execute_windows   -> legacy WAA-shaped input commands, DISABLED by
+                               default (``--allow-legacy-commands``). Commands
+                               are parsed into an allow-listed set of
+                               ``pyautogui`` input calls with literal
+                               arguments; nothing is ever exec()'d.
     GET  /health            -> ``{"status": "ok", ...}`` liveness + which
                                desktop session the process is attached to.
 
@@ -34,9 +36,12 @@ package's ``README.md`` starts it in-session at user logon.
 
 Hardening (vs the original ``scripts/desktop/waa_shim.py``)
 -----------------------------------------------------------
-* **Typed actions by default.** Production observation and actuation use a
-  bounded JSON schema. The legacy arbitrary-exec compatibility route is off
-  unless an operator explicitly enables it for local development.
+* **Typed actions by default, and no remote code execution at all.**
+  Production observation and actuation use a bounded JSON schema. The legacy
+  ``/execute_windows`` compatibility route is off unless an operator enables
+  it, and even then it only parses the WAA command shape into allow-listed
+  ``pyautogui`` input calls (see ``parse_legacy_command``); arbitrary Python is
+  refused with HTTP 400.
 * **Loopback by default.** The default bind is ``127.0.0.1``. Exposing the
   agent on the guest LAN interface is an explicit opt-in.
 * **Optional bearer token.** The PHI at-rest audit flagged this shim as
@@ -44,7 +49,7 @@ Hardening (vs the original ``scripts/desktop/waa_shim.py``)
   ``OAFLOW_AGENT_TOKEN`` env var) every ``/screenshot`` and ``/execute_windows``
   request must carry ``Authorization: Bearer <token>`` or is rejected 401. The
   comparison is constant-time. ``/health`` stays unauthenticated (liveness only,
-  no desktop bytes, no exec).
+  no desktop bytes, no input).
 * **TLS in transit (encryption + pinned server identity).** The channel carries
   PHI (screenshots of the patient chart, the commands that read/write it), so
   the 2026 HIPAA Security Rule requires it be encrypted. When a cert/key pair is
@@ -60,7 +65,7 @@ Self-contained by construction
 Only the Python standard library is imported at module load (no Flask), so the
 guest needs no third-party web framework and CI on macOS/Linux imports this
 module freely. The heavy, Windows-only pieces (mss/Pillow for the screenshot,
-pyautogui/uiautomation used by the exec'd commands) import LAZILY inside the
+pyautogui/uiautomation used by the input handlers) import LAZILY inside the
 request handlers, and the desktop grabber is injectable so tests exercise the
 full HTTP roundtrip with a fake frame.
 """
@@ -68,6 +73,7 @@ full HTTP roundtrip with a fake frame.
 from __future__ import annotations
 
 import argparse
+import ast
 import base64
 import hashlib
 import hmac
@@ -76,6 +82,7 @@ import json
 import os
 import secrets
 import subprocess
+import sys
 import time
 import traceback
 import unicodedata
@@ -161,6 +168,153 @@ def _bounded_int(value: object, label: str, *, limit: int = 1_000_000) -> int:
             400, "invalid_schema", f"{label} must be a bounded integer"
         )
     return value
+
+
+# -- legacy WAA command interpreter (no exec) -----------------------------------
+#
+# ``/execute_windows`` used to ``exec()`` whatever Python the client sent. It now
+# accepts only the closed WAA-shaped vocabulary that ``WindowsBackend``'s legacy
+# path emits -- ``import pyautogui`` plus ``pyautogui.<input>(<literals>)`` calls
+# -- parsed with ``ast`` and dispatched to a fixed table. Nothing the client sends
+# is compiled or executed, so the route grants no capability beyond the typed
+# ``/input`` route (pointer and keyboard input on the session-1 desktop).
+
+_LEGACY_PYAUTOGUI_CALLS = frozenset(
+    {
+        "click",
+        "doubleClick",
+        "tripleClick",
+        "rightClick",
+        "middleClick",
+        "moveTo",
+        "dragTo",
+        "mouseDown",
+        "mouseUp",
+        "scroll",
+        "hscroll",
+        "write",
+        "typewrite",
+        "press",
+        "hotkey",
+        "keyDown",
+        "keyUp",
+    }
+)
+_LEGACY_KEYWORDS = frozenset(
+    {"x", "y", "clicks", "interval", "button", "duration", "presses"}
+)
+_MAX_LEGACY_COMMAND_CHARS = 16_384
+_MAX_LEGACY_CALLS = 64
+_MAX_LEGACY_ARGS = 16
+
+LegacyCall = tuple[str, tuple[Any, ...], dict[str, Any]]
+LegacyFn = Callable[[list[LegacyCall]], dict[str, Any]]
+
+
+def _unsupported_legacy(message: str) -> AgentRequestError:
+    return AgentRequestError(400, "unsupported_legacy_command", message)
+
+
+def _legacy_literal(node: ast.expr) -> Any:
+    """Return a literal argument value, refusing anything that is not one."""
+    if isinstance(node, ast.Starred):
+        raise _unsupported_legacy("starred arguments are not allowed")
+    try:
+        value = ast.literal_eval(node)
+    except (ValueError, TypeError, SyntaxError, MemoryError, RecursionError):
+        raise _unsupported_legacy("arguments must be literals") from None
+    items = value if isinstance(value, (list, tuple)) else (value,)
+    if len(items) > _MAX_LEGACY_ARGS:
+        raise _unsupported_legacy("literal sequence too long")
+    for item in items:
+        if item is None or isinstance(item, bool):
+            continue
+        if isinstance(item, int):
+            if abs(item) > 1_000_000:
+                raise _unsupported_legacy("integer argument out of range")
+            continue
+        if isinstance(item, float):
+            if not (abs(item) <= 1_000_000.0):  # also rejects NaN
+                raise _unsupported_legacy("float argument out of range")
+            continue
+        if isinstance(item, str):
+            if len(item) > _MAX_TEXT_CHARS:
+                raise _unsupported_legacy("string argument too long")
+            continue
+        raise _unsupported_legacy(f"argument type {type(item).__name__} is not allowed")
+    return value
+
+
+def parse_legacy_command(command: str) -> list[LegacyCall]:
+    """Parse a legacy ``/execute_windows`` command into allowed input calls.
+
+    Accepted statements are ``import pyautogui`` and expression statements of
+    the form ``pyautogui.<name>(<literal>, ..., <kw>=<literal>)`` with ``name``
+    in a fixed input vocabulary. Every other construct -- other imports, names,
+    attribute chains, subscripts, operators, assignments, control flow,
+    ``**kwargs`` -- is refused with ``AgentRequestError`` (400). The command is
+    only parsed; it is never compiled to bytecode or executed.
+    """
+    if len(command) > _MAX_LEGACY_COMMAND_CHARS:
+        raise AgentRequestError(
+            413, "legacy_command_too_large", "legacy command is too large"
+        )
+    try:
+        tree = ast.parse(command, mode="exec")
+    except (SyntaxError, ValueError, MemoryError, RecursionError):
+        raise _unsupported_legacy("command is not a parseable statement list") from None
+    calls: list[LegacyCall] = []
+    for index, stmt in enumerate(tree.body):
+        if isinstance(stmt, ast.Import):
+            if [(alias.name, alias.asname) for alias in stmt.names] == [
+                ("pyautogui", None)
+            ]:
+                continue
+            raise _unsupported_legacy(f"statement {index}: only 'import pyautogui'")
+        call = stmt.value if isinstance(stmt, ast.Expr) else None
+        if not isinstance(call, ast.Call):
+            raise _unsupported_legacy(
+                f"statement {index}: only pyautogui input calls are allowed"
+            )
+        func = call.func
+        if not (
+            isinstance(func, ast.Attribute)
+            and isinstance(func.value, ast.Name)
+            and func.value.id == "pyautogui"
+            and func.attr in _LEGACY_PYAUTOGUI_CALLS
+        ):
+            raise _unsupported_legacy(
+                f"statement {index}: only pyautogui input calls are allowed"
+            )
+        if len(call.args) + len(call.keywords) > _MAX_LEGACY_ARGS:
+            raise _unsupported_legacy(f"statement {index}: too many arguments")
+        args = tuple(_legacy_literal(arg) for arg in call.args)
+        kwargs: dict[str, Any] = {}
+        for keyword in call.keywords:
+            if keyword.arg is None or keyword.arg not in _LEGACY_KEYWORDS:
+                raise _unsupported_legacy(
+                    f"statement {index}: keyword {keyword.arg!r} is not allowed"
+                )
+            kwargs[keyword.arg] = _legacy_literal(keyword.value)
+        calls.append((func.attr, args, kwargs))
+    if not calls:
+        raise _unsupported_legacy("command contains no pyautogui input call")
+    if len(calls) > _MAX_LEGACY_CALLS:
+        raise _unsupported_legacy("command contains too many calls")
+    return calls
+
+
+def _perform_legacy_calls(calls: list[LegacyCall]) -> dict[str, Any]:
+    """Dispatch parsed legacy calls to pyautogui's fixed input functions."""
+    import pyautogui  # noqa: PLC0415 - Windows guest only
+
+    # The compiled replay legitimately drives the cursor into screen corners.
+    pyautogui.FAILSAFE = False
+    for name, args, kwargs in calls:
+        if name not in _LEGACY_PYAUTOGUI_CALLS:  # parse_legacy_command guarantees
+            raise AgentRequestError(400, "unsupported_legacy_command", name)
+        getattr(pyautogui, name)(*args, **kwargs)
+    return {"status": "ok", "output": "", "calls": len(calls)}
 
 
 def _delivery_receipt(
@@ -764,8 +918,8 @@ class AgentConfig:
 
     Args:
         host: Bind address. Defaults to loopback (``127.0.0.1``) -- the
-            arbitrary-exec endpoint is not exposed off-host unless this is set
-            to ``0.0.0.0`` (or the guest IP) explicitly.
+            input endpoints are not exposed off-host unless this is set to
+            ``0.0.0.0`` (or the guest IP) explicitly.
         port: TCP port (matches the WAA default the SSH tunnel expects).
         token: Optional bearer token. When set, ``/screenshot`` and
             ``/execute_windows`` require ``Authorization: Bearer <token>``.
@@ -776,8 +930,11 @@ class AgentConfig:
             and the client pins this cert's fingerprint. Provisioned per run by
             the control plane (``win_agent.tls.generate_self_signed_cert``).
         keyfile: PEM private-key path matching ``certfile``. Required with it.
-        allow_legacy_exec: Expose the arbitrary-Python compatibility route.
-            False by default; production uses only bounded typed operations.
+        allow_legacy_exec: Expose the legacy ``/execute_windows`` route, which
+            accepts only allow-listed ``pyautogui`` input calls with literal
+            arguments (never arbitrary Python). False by default; production
+            uses only bounded typed operations. The field keeps its historical
+            name for API compatibility.
     """
 
     host: str = "127.0.0.1"
@@ -1039,6 +1196,7 @@ def make_handler_class(
     input_fn: InputFn = _perform_input,
     uia_fn: UiaFn = _perform_uia,
     context_fn: ContextFn = _execution_context_identity,
+    legacy_fn: LegacyFn = _perform_legacy_calls,
 ) -> type[BaseHTTPRequestHandler]:
     """Build the request-handler class bound to ``config`` and ``grab_fn``.
 
@@ -1096,7 +1254,11 @@ def make_handler_class(
                             "typed_input_v1",
                             "guarded_input_v1",
                             "uia_v1",
-                            *(["legacy_exec"] if config.allow_legacy_exec else []),
+                            *(
+                                ["legacy_waa_input_v1"]
+                                if config.allow_legacy_exec
+                                else []
+                            ),
                         ],
                     },
                 )
@@ -1108,14 +1270,10 @@ def make_handler_class(
                 try:
                     png = grab_fn()
                 except Exception as e:  # noqa: BLE001 - report, never crash loop
-                    self._send_json(
-                        500,
-                        {
-                            "status": "error",
-                            "error": str(e),
-                            "trace": traceback.format_exc(),
-                        },
-                    )
+                    # The traceback stays in the guest's own log; the HTTP
+                    # client gets only the bounded error message.
+                    traceback.print_exc(file=sys.stderr)
+                    self._send_json(500, {"status": "error", "error": str(e)})
                     return
                 if not png.startswith(_PNG_SIGNATURE):
                     self._send_json(
@@ -1345,47 +1503,38 @@ def make_handler_class(
                     400, {"status": "error", "error": "command must be a string"}
                 )
                 return
-            self._exec_command(command)
+            self._run_legacy_command(command)
 
-        def _exec_command(self, command: str) -> None:
-            """exec() bare Python; return 200 + captured stdout, 500 on error.
+        def _run_legacy_command(self, command: str) -> None:
+            """Run a legacy WAA command through the closed interpreter.
 
-            The command runs with a fresh module-like namespace. Its stdout is
-            captured and echoed in the response body so a UIA read snippet's
-            ``<<OAFLOW_STRUCTURED>>...<<END_OAFLOW_STRUCTURED>>`` sentinel
-            reaches the backend. A raised exception becomes HTTP 500 with the
-            traceback, so a wrong-write surfaces as an ERROR rather than a
-            silent no-op (the runtime halts on a non-200).
+            The command is parsed by :func:`parse_legacy_command` and only the
+            resulting allow-listed pyautogui input calls are dispatched; client
+            text is never compiled or executed. A refused command is HTTP 400
+            (or 413) with a stable ``code``; a failing input call is HTTP 500
+            with a bounded message and no traceback, so a wrong-write still
+            surfaces as an ERROR rather than a silent no-op.
             """
-            import contextlib  # noqa: PLC0415
-
-            # pyautogui's fail-safe raises when the cursor reaches a screen
-            # corner; the compiled replay legitimately drives the cursor
-            # anywhere, so disable it for this process (best-effort).
             try:
-                import pyautogui  # noqa: PLC0415
-
-                pyautogui.FAILSAFE = False
-            except Exception:  # noqa: BLE001 - not always present at exec time
-                pass
-
-            scope: dict = {"__name__": "__oaflow_agent_exec__"}
-            out = io.StringIO()
-            try:
-                with contextlib.redirect_stdout(out):
-                    exec(command, scope)  # noqa: S102 - the WAA contract IS remote exec
-            except Exception as e:  # noqa: BLE001
+                calls = parse_legacy_command(command)
+                result = legacy_fn(calls)
+            except AgentRequestError as exc:
+                self._send_json(
+                    exc.status,
+                    {"status": "error", "code": exc.code, "error": str(exc)},
+                )
+                return
+            except Exception:  # noqa: BLE001 - bounded error, no traceback/PHI
                 self._send_json(
                     500,
                     {
                         "status": "error",
-                        "error": str(e),
-                        "trace": traceback.format_exc(),
-                        "output": out.getvalue(),
+                        "code": "operation_failed",
+                        "error": "legacy input operation failed",
                     },
                 )
                 return
-            self._send_json(200, {"status": "ok", "output": out.getvalue()})
+            self._send_json(200, result)
 
     return AgentHandler
 
@@ -1397,6 +1546,7 @@ def create_server(
     input_fn: InputFn = _perform_input,
     uia_fn: UiaFn = _perform_uia,
     context_fn: ContextFn = _execution_context_identity,
+    legacy_fn: LegacyFn = _perform_legacy_calls,
 ) -> HTTPServer:
     """Build (but do not start) the COM-affine agent HTTP server.
 
@@ -1412,7 +1562,9 @@ def create_server(
         because UIA controls are COM-apartment-bound.
     """
     config = config or AgentConfig()
-    handler = make_handler_class(config, grab_fn, input_fn, uia_fn, context_fn)
+    handler = make_handler_class(
+        config, grab_fn, input_fn, uia_fn, context_fn, legacy_fn
+    )
     # UIAutomation controls and patterns are apartment/thread-affine. A
     # single-threaded HTTPServer keeps every request on the serve_forever
     # thread; _perform_uia initializes that thread's COM apartment per request.
@@ -1467,9 +1619,15 @@ def main(argv: Optional[list[str]] = None) -> None:
         help=f"PEM private key matching --certfile (falls back to ${KEYFILE_ENV_VAR})",
     )
     parser.add_argument(
+        "--allow-legacy-commands",
         "--allow-legacy-exec",
+        dest="allow_legacy_exec",
         action="store_true",
-        help="DEVELOPMENT ONLY: expose the arbitrary-Python compatibility route",
+        help=(
+            "DEVELOPMENT ONLY: expose /execute_windows for allow-listed pyautogui "
+            "input calls (arbitrary Python is always refused). "
+            "--allow-legacy-exec is the deprecated spelling."
+        ),
     )
     args = parser.parse_args(argv)
     config = AgentConfig(
@@ -1486,7 +1644,7 @@ def main(argv: Optional[list[str]] = None) -> None:
         f"[win-agent] listening on {scheme}://{config.host}:{config.port} "
         f"(tls={'on' if config.tls_enabled() else 'OFF'}, "
         f"auth={'on' if config.authed() else 'OFF'}, "
-        f"legacy_exec={'on' if config.allow_legacy_exec else 'OFF'}, "
+        f"legacy_commands={'on' if config.allow_legacy_exec else 'OFF'}, "
         f"session={_active_console_session()})",
         flush=True,
     )

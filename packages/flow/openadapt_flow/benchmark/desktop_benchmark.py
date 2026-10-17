@@ -145,6 +145,10 @@ class DesktopHarness:
         self.vm = vm
         self.shim_url = shim_url
         self.log = log
+        # The shim requires the same bearer token on every route but /health.
+        self._shim_headers = (
+            {"Authorization": f"Bearer {auth_token}"} if auth_token else {}
+        )
         from openadapt_flow.backends import WindowsBackend
 
         # This is the desktop BENCHMARK harness: it drives synthetic apps in a
@@ -172,9 +176,12 @@ class DesktopHarness:
 
         vm = ParallelsVM(vm_uuid or DEFAULT_VM_UUID)
         vm.ensure_running()
-        url = vm.launch_shim()
+        import secrets
+
+        token = secrets.token_urlsafe(32)
+        url = vm.launch_shim(token=token)
         log(f"[harness] shim up at {url}")
-        h = cls(vm, url, log=log)
+        h = cls(vm, url, log=log, auth_token=token)
         h.deploy_app_scripts()
         h.quiet_desktop()
         return h
@@ -184,18 +191,11 @@ class DesktopHarness:
         not pollute recorded postconditions/identity bands. Idempotent."""
         import requests
 
-        cmd = (
-            "import subprocess\n"
-            "for path,val in [(r'HKCU\\Software\\Microsoft\\Windows\\Current"
-            "Version\\PushNotifications','ToastEnabled'),(r'HKCU\\Software\\"
-            "Microsoft\\Windows\\CurrentVersion\\Notifications\\Settings',"
-            "'NOC_GLOBAL_SETTING_TOASTS_ENABLED')]:\n"
-            "    subprocess.run(['reg','add',path,'/v',val,'/t','REG_DWORD',"
-            "'/d','0','/f'],capture_output=True)\n"
-        )
         try:
             requests.post(
-                f"{self.shim_url}/execute_windows", json={"command": cmd}, timeout=20
+                f"{self.shim_url}/tasks/quiet-desktop",
+                headers=self._shim_headers,
+                timeout=20,
             )
         except Exception:  # noqa: BLE001
             pass
@@ -266,7 +266,9 @@ class DesktopHarness:
         import requests
 
         u = requests.get(
-            f"{self.shim_url}/uia?title=Patient%20Notes&depth=40", timeout=25
+            f"{self.shim_url}/uia?title=Patient%20Notes&depth=40",
+            headers=self._shim_headers,
+            timeout=25,
         ).json()
         out = {}
         for n in u.get("nodes", []):
@@ -296,7 +298,9 @@ class DesktopHarness:
         import requests
 
         u = requests.get(
-            f"{self.shim_url}/uia?title=Patient%20Notes&depth=40", timeout=25
+            f"{self.shim_url}/uia?title=Patient%20Notes&depth=40",
+            headers=self._shim_headers,
+            timeout=25,
         ).json()
         target = f"{col} Row {row}"
         for n in u.get("nodes", []):
@@ -369,22 +373,22 @@ class DesktopHarness:
     def uia_run(self, mode: str, note: str) -> dict:
         import requests
 
-        cmd = (
-            "import json,importlib.util\n"
-            "spec=importlib.util.spec_from_file_location('uia_arm', "
-            r"r'C:\oa\uia_arm.py')"
-            "\n"
-            "m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)\n"
-            f"res=m.run({DEMO['search']!r},{DEMO['first']!r},{DEMO['last']!r},"
-            f"{note!r},{mode!r})\n"
-            r"open(r'C:\oa\uia_result.json','w',encoding='utf-8')"
-            ".write(json.dumps(res))\n"
+        resp = requests.post(
+            f"{self.shim_url}/tasks/uia-arm",
+            json={
+                "search": DEMO["search"],
+                "first": DEMO["first"],
+                "last": DEMO["last"],
+                "note": note,
+                "mode": mode,
+            },
+            headers=self._shim_headers,
+            timeout=60,
         )
-        requests.post(
-            f"{self.shim_url}/execute_windows", json={"command": cmd}, timeout=60
-        )
-        out = self.vm.exec_cmd(r"type C:\oa\uia_result.json").stdout.strip()
-        return json.loads(out) if out else {"status": "error"}
+        if resp.status_code != 200:
+            return {"status": "error"}
+        result = resp.json()
+        return result if isinstance(result, dict) else {"status": "error"}
 
     def uia_tree_quality(self) -> dict:
         return self.uia_run("identity", "__probe__").get("uia_tree_quality", {})

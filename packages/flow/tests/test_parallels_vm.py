@@ -465,3 +465,23 @@ def test_launch_agent_raises_when_agent_never_comes_up(monkeypatch):
 
     with pytest.raises(ParallelsError, match="did not come up"):
         vm.launch_agent(port=5000, wait_s=0.05)
+
+
+def test_launch_shim_exposes_on_guest_ip_with_token(monkeypatch):
+    vm = ParallelsVM(UUID)
+    exec_calls: list[list] = []
+    _stub_agent_deps(monkeypatch, vm, exec_calls)
+    seen_tokens: list = []
+
+    def fake_alive(url, *, token=None):
+        seen_tokens.append(token)
+        return True
+
+    monkeypatch.setattr(vm, "_shim_alive", fake_alive)
+    url = vm.launch_shim(token="tok-shim")
+    assert url == "http://10.211.55.3:5000"
+    launch = next(a for a in exec_calls if any("waa_shim.py" in str(x) for x in a))
+    # The shim binds loopback by default; host access is an explicit opt-in.
+    assert launch[launch.index("--host") + 1] == "0.0.0.0"
+    assert launch[launch.index("--token") + 1] == "tok-shim"
+    assert seen_tokens == ["tok-shim"]
