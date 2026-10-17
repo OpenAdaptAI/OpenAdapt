@@ -1534,23 +1534,36 @@ def _print_break_it_narrative(broken: "BreakItResult") -> None:
     )
 
 
-def _demo_progress() -> Callable[[str], None]:
-    """Print one short line per demo stage as it starts, flushed at once."""
+def _demo_progress() -> Optional[Callable[[str], None]]:
+    """Show the current demo stage on one terminal line that rewrites itself.
+
+    Returns None when stdout is not a terminal, so piped output keeps only the
+    short summary. The line is cleared before the summary prints.
+    """
     import re
 
+    if not sys.stdout.isatty():
+        return None
     stage = re.compile(r"^\[(\d)/5\] (.+)$")
-    seen_break = False
 
     def echo(message: str) -> None:
-        nonlocal seen_break
         match = stage.match(message)
         if match:
-            print(f"  {match.group(1)}/5  {match.group(2)}", flush=True)
-        elif message.startswith("[break-it]") and not seen_break:
-            seen_break = True
-            print("  Run 2: the same task against an app that lies", flush=True)
+            text = f"Run 1, step {match.group(1)} of 5: {match.group(2)}"
+        elif message.startswith("[break-it]"):
+            text = "Run 2: the same task against an app that lies"
+        else:
+            return
+        sys.stdout.write("\r\033[K" + text[:100])
+        sys.stdout.flush()
 
     return echo
+
+
+def _clear_progress_line() -> None:
+    if sys.stdout.isatty():
+        sys.stdout.write("\r\033[K")
+        sys.stdout.flush()
 
 
 def _cmd_demo(args: argparse.Namespace) -> int:
@@ -1618,6 +1631,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
         )
         return 2
     finally:
+        _clear_progress_line()
         if scrub is None:
             os.environ.pop("OPENADAPT_FLOW_SCRUB", None)
         elif scrub == "auto":
