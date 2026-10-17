@@ -759,7 +759,10 @@ fn reject_unexpected_archive_members(
         let member = archive
             .by_index(index)
             .map_err(|error| format!("cannot inspect FFmpeg archive: {error}"))?;
-        let name = member.name();
+        let name_cow = member
+            .name()
+            .map_err(|error| format!("cannot read FFmpeg archive member name: {error}"))?;
+        let name: &str = &name_cow;
         validate_relative_path(name.trim_end_matches('/'))?;
         if member.is_dir() {
             if !expected_directories.contains(name) {
