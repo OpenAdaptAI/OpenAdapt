@@ -21,7 +21,6 @@ First release from the [OpenAdapt monorepo](https://github.com/OpenAdaptAI/OpenA
 
 ### Features
 
-- Multi-tab, popup, and backend-switching surfaces: a workflow can follow a popup or a new tab, switch between bound surfaces with an identity check, and answer browser dialogs by identity ([#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197), from [openadapt-flow#533](https://github.com/OpenAdaptAI/openadapt-flow/pull/533)).
 - `openadapt-flow verify-run` judges any executor's write from the system of record and emits an RFC-0002 effect receipt; it reads the same `verify.yaml` as qualify and accepts `--remediates` and `--correlation-id` ([#1198](https://github.com/OpenAdaptAI/OpenAdapt/pull/1198)).
 - Declarative qualify from `verify.yaml` ([#1186](https://github.com/OpenAdaptAI/OpenAdapt/pull/1186), from [openadapt-flow#532](https://github.com/OpenAdaptAI/openadapt-flow/pull/532)).
 - Delegated approvers, read-back field checks, triage, and eligibility ([#1190](https://github.com/OpenAdaptAI/OpenAdapt/pull/1190), from [openadapt-flow#534](https://github.com/OpenAdaptAI/openadapt-flow/pull/534)); approver identity, approver policy, and an approval record in the shared contracts ([#1187](https://github.com/OpenAdaptAI/OpenAdapt/pull/1187)).
