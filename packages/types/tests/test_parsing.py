@@ -7,7 +7,6 @@ import pytest
 from openadapt_types import (
     PARSE_ERROR_KEY,
     Action,
-    ActionTarget,
     ActionType,
     from_benchmark_action,
     parse_action,
