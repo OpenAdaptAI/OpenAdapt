@@ -124,7 +124,7 @@ PORTAL_VERSIONS: dict[str, tuple[Element, ...]] = {
     "7.2": (
         Element("#find-member", "button", "Search", (20, 40, 80, 24), "search"),
         Element(
-            "[data-testid=run-eligibility]",
+            "button[name=run-eligibility]",
             "button",
             "Check eligibility",
             (260, 112, 100, 24),
@@ -150,7 +150,7 @@ def portal_html(version: str, *, member_rows: int = 1) -> str:
     return (
         "<html><body><main class='portal'><section><button id='find-member' "
         f"type='button'>Search</button></section><table>{rows}</table>"
-        "<section><button data-testid='run-eligibility' type='button'>Check "
+        "<section><button name='run-eligibility' type='button'>Check "
         "eligibility</button></section></main></body></html>"
     )
 
