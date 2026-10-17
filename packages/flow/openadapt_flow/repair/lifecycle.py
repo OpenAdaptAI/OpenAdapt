@@ -34,8 +34,9 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+from datetime import datetime
 from pathlib import Path
-from typing import Literal, Optional
+from typing import TYPE_CHECKING, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -50,6 +51,11 @@ from openadapt_flow.repair.candidate import (
     TransitionRecord,
 )
 from openadapt_flow.repair.invariants import enforce_contract_invariants
+
+if TYPE_CHECKING:  # the fleet package imports this module at run time
+    from openadapt_flow.fleet.policy import RoleRegistry, SignedPromotionPolicy
+    from openadapt_flow.fleet.signing import FleetTrust
+    from openadapt_flow.fleet.status import FleetStatusSource, StatusHighWater
 
 _ACTIVE_NAME = "ACTIVE.json"
 _CANDIDATES_DIR = "candidates"
@@ -123,11 +129,12 @@ QUALIFICATION_CASE_KIND = "qualification_case"
 
 
 class PolicyPreApproval(BaseModel):
-    """A tenant policy's standing approval, as handed to the store.
+    """What a verified tenant policy grants, as recorded on the candidate.
 
-    ``approved_by`` is the person who approved the policy itself. The store
-    checks the candidate on its own before it uses this (see
-    :meth:`RepairStore.review_under_policy`); a grant alone authorizes nothing.
+    ``approved_by`` is the person who approved the policy itself. Callers do
+    not hand this to the store: :meth:`RepairStore.review_under_policy` and
+    :meth:`RepairStore.approve_under_policy` take the signed policy and derive
+    it themselves after verifying the signature.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
@@ -367,15 +374,23 @@ class RepairStore:
             )
 
     def review_under_policy(
-        self, candidate_id: str, grant: PolicyPreApproval
+        self,
+        candidate_id: str,
+        *,
+        policy: "SignedPromotionPolicy",
+        roles: "RoleRegistry",
     ) -> RepairCandidate:
         """Record the tenant policy as the diff review (candidate -> reviewed).
 
-        Only for fleet patches that touch no identity evidence. Every later
+        Only for fleet patches that touch no identity evidence, under a policy
+        whose signature this method verifies against ``roles``. Every later
         gate still runs: the qualification canary must pass on this tenant's
         own cases before :meth:`approve_under_policy` will approve.
         """
+        from openadapt_flow.fleet.policy import authorize_policy_step
+
         candidate = self.load_candidate(candidate_id)
+        grant = authorize_policy_step(candidate, policy=policy, roles=roles)
         self._require_policy_eligible(candidate, grant, "policy review")
         candidate.reviewed_by = f"{grant.label} (approved by {grant.approved_by})"
         return self._transition(
@@ -386,17 +401,40 @@ class RepairStore:
         )
 
     def approve_under_policy(
-        self, candidate_id: str, grant: PolicyPreApproval
+        self,
+        candidate_id: str,
+        *,
+        policy: "SignedPromotionPolicy",
+        roles: "RoleRegistry",
+        trust: "FleetTrust",
+        status_source: "FleetStatusSource",
+        status_state: "Optional[StatusHighWater]",
+        now: Optional[datetime] = None,
     ) -> RepairCandidate:
         """Approve under the tenant policy (fault_passed -> approved).
 
-        Refuses unless the candidate is eligible (see
+        Verifies, here and not only in the caller, that ``policy`` is signed
+        by an approver in ``roles`` and allows this candidate, and that fleet
+        status read now from ``status_source`` is fresh, verified against
+        ``trust``, not replayed (``status_state``), revokes nothing in the
+        patch's chain, and has no kill switch against it. Any doubt refuses.
+
+        Then refuses unless the candidate is eligible (see
         :meth:`_require_policy_eligible`), both campaigns passed and consist
         only of this tenant's qualification cases, and the contract
         invariants still hold against the bundles on disk. The approval binds
         the exact bundle digests and the policy digest.
         """
+        from openadapt_flow.fleet.policy import authorize_policy_step
+
         candidate = self.load_candidate(candidate_id)
+        grant = authorize_policy_step(
+            candidate,
+            policy=policy,
+            roles=roles,
+            status=(trust, status_source, status_state),
+            now=now,
+        )
         self._require_policy_eligible(candidate, grant, "policy approval")
         if candidate.state != "fault_passed":
             raise RepairLifecycleError(

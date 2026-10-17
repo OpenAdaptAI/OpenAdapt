@@ -186,7 +186,9 @@ enforced in code and covered by tests
 One exception to the human review and approval gates exists, and it is
 narrow: an imported fleet patch (source `fleet_patch`) can be reviewed and
 approved under a promotion policy that a named person approved in advance
-(`review_under_policy`, `approve_under_policy`). The store refuses it for any
+(`review_under_policy`, `approve_under_policy`). Both methods verify the
+policy signature themselves, and approval also reads fleet status itself and
+refuses unless it is fresh. The store refuses it for any
 other source, for any candidate that changes identity evidence or weakens the
 contract, and unless both campaigns passed on the tenant's own qualification
 cases. The approval record names the policy digest and the person who

@@ -14,9 +14,9 @@ tenant's policy allows:
     family;
   - a fresh, verified revocation list shows no certificate in the patch's
     chain as revoked, and no verified kill switch has turned auto-promotion
-    off. This is checked before the policy review and again right before
-    the policy approval. Stale, unreachable, or unverifiable status fails
-    closed;
+    off. This is checked before the policy review, and again inside
+    ``RepairStore.approve_under_policy``, which also re-verifies the signed
+    policy. Stale, unreachable, or unverifiable status fails closed;
   - the patch touches no identity-evidence anchor and the contract
     invariants hold;
   - the canary on this tenant's own qualification cases is green (every
@@ -371,6 +371,48 @@ def _read_status(
     return status
 
 
+def authorize_policy_step(
+    candidate: RepairCandidate,
+    *,
+    policy: Optional[SignedPromotionPolicy],
+    roles: RoleRegistry,
+    status: Optional[
+        tuple[FleetTrust, FleetStatusSource, Optional[StatusHighWater]]
+    ] = None,
+    now: Optional[datetime] = None,
+) -> PolicyPreApproval:
+    """Verify everything a policy step depends on; raise if anything fails.
+
+    Called by :class:`~openadapt_flow.repair.lifecycle.RepairStore` itself, so
+    a caller cannot skip it. With ``status`` (trust, source, high-water
+    state), fleet status is read now and must be fresh and allow this patch.
+    """
+    if policy is None:
+        raise RepairLifecycleError("refused: this tenant has no signed policy")
+    try:
+        verified = verify_policy(policy, roles)
+    except PolicyVerificationError as exc:
+        raise RepairLifecycleError(
+            f"refused: the promotion policy does not verify: {exc}"
+        ) from exc
+    reasons = _pre_canary_reasons(verified, candidate)
+    if status is not None:
+        # Approval: the canary must also meet this policy's case counts.
+        blocking, too_few = _canary_reasons(
+            verified.min_healthy_cases, verified.min_fault_cases, candidate
+        )
+        reasons += blocking + too_few
+        trust, source, state = status
+        current = _read_status(source, trust, verified, now, state)
+        reasons += _status_reasons(current, candidate)
+        fleet = candidate.fleet_patch
+        if fleet is not None and fleet.patch_id in current.rollback_patch_ids:
+            reasons.append("a fleet kill switch rolled this patch back")
+    if reasons:
+        raise RepairLifecycleError("refused: " + "; ".join(reasons))
+    return verified.grant()
+
+
 def process_imported_patch(
     store: RepairStore,
     candidate_id: str,
@@ -421,8 +463,8 @@ def process_imported_patch(
     person += _status_reasons(status, candidate)
 
     grant = verified.grant() if verified is not None else None
-    if not person and grant is not None:
-        candidate = store.review_under_policy(candidate_id, grant)
+    if not person and grant is not None and policy is not None:
+        candidate = store.review_under_policy(candidate_id, policy=policy, roles=roles)
 
     candidate = canary_patch(store, candidate_id, runner, cases, work_dir)
     min_healthy = verified.min_healthy_cases if verified is not None else 3
@@ -431,18 +473,24 @@ def process_imported_patch(
     if blocking:
         return PromotionDecision("blocked", blocking, candidate, status)
     person += person_after
-    if not person:
-        # Fresh check right before the approval: the canary takes time.
-        status = _read_status(status_source, trust, verified, now, status_state)
-        person += _status_reasons(status, candidate)
-        if candidate.fleet_patch is not None and (
-            candidate.fleet_patch.patch_id in status.rollback_patch_ids
-        ):
-            person.append("a fleet kill switch rolled this patch back")
     if person or grant is None or verified is None:
         return PromotionDecision("needs_person", person, candidate, status)
 
-    candidate = store.approve_under_policy(candidate_id, grant)
+    # The store reads fleet status again here (the canary takes time) and
+    # re-verifies the policy; it refuses on any doubt.
+    try:
+        candidate = store.approve_under_policy(
+            candidate_id,
+            policy=policy,  # type: ignore[arg-type]
+            roles=roles,
+            trust=trust,
+            status_source=status_source,
+            status_state=status_state,
+            now=now,
+        )
+    except RepairLifecycleError as exc:
+        # The store's own check disagreed (status changed in between).
+        return PromotionDecision("needs_person", [str(exc)], candidate, status)
     candidate = store.stage(candidate_id, grant.actor)
     candidate = store.start_canary(
         candidate_id, grant.actor, max_runs=verified.canary_max_runs
@@ -499,6 +547,7 @@ __all__ = [
     "SecurityOfficialAttestation",
     "SignedPromotionPolicy",
     "apply_fleet_kill_switches",
+    "authorize_policy_step",
     "process_imported_patch",
     "sign_policy",
     "verify_policy",

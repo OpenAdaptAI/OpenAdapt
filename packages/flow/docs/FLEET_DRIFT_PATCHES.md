@@ -376,10 +376,15 @@ does not match. An unverified policy never auto-promotes.
   it, and started the live canary window. The live window still reverts the
   pointer automatically on any regression.
 
-The rule is enforced in `RepairStore` itself, not only in the policy module:
-`review_under_policy` and `approve_under_policy` accept only `fleet_patch`
-candidates with no identity change and no weakening, and approval also
-requires both campaigns passed on cases of kind `qualification_case`. The
+The rule is enforced in `RepairStore` itself, not only in the policy module.
+`review_under_policy` and `approve_under_policy` take the signed policy and
+the role registry, not a ready-made grant, and verify the signature
+themselves (`authorize_policy_step`). They accept only `fleet_patch`
+candidates with no identity change and no weakening. `approve_under_policy`
+also takes the pinned roots, the status feed and the high-water state, reads
+fleet status itself and refuses unless it is fresh and allows the patch, and
+requires both campaigns passed on cases of kind `qualification_case` in at
+least the numbers the policy sets. The
 approval record carries `pre_approval_policy_sha256` and `pre_approved_by`
 ("Name (Title)" of the approver), so the audit shows which policy, and
 whose, promoted the repair.
@@ -450,16 +455,13 @@ directory rather than in `~/.openadapt/durable-authority`.
   files.
 - Only structural locators are remapped. A repair that changes pixels only,
   adds steps, or changes effects is not exportable.
-- `RepairStore.review_under_policy` and `approve_under_policy` check the
-  candidate, but trust their caller for the policy: a `PolicyPreApproval` is
-  a digest and a name, and the store does not verify the policy signature
-  or fleet status itself. `process_imported_patch` does both. Any code
-  that runs in the tenant's process could call the store directly.
+- The store verifies what it is given: the signed policy, the role
+  registry, the pinned roots and the status feed. A caller inside the
+  tenant's process could still pass a role registry or trust roots it made
+  up; those are local admin files, not something the store can check.
 - If fleet status goes stale between the first check and the approval, the
   candidate stays reviewed under the policy and waits for a person to
   approve it. That person's approval is the only human step.
-- Two processes updating `status-state.json` at once can race; the file is
-  replaced atomically but not locked.
 - There is no HSM adapter and no hub server. The hub runs in process over a
   file feed.
 - The security official's authorisation is asserted by the approver, not

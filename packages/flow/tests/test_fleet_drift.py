@@ -214,6 +214,17 @@ def _status_feed(fleet: sim.Fleet, path: Path, *, sequence: int = 1) -> FilePatc
     return feed
 
 
+def _authority(fleet, tenant, *, status_source=None):
+    """Everything approve_under_policy verifies for itself."""
+    return dict(
+        policy=tenant.policy,
+        roles=tenant.roles,
+        trust=tenant.trust,
+        status_source=status_source or fleet.feed,
+        status_state=tenant.status_state,
+    )
+
+
 def _kill(fleet, feed, *, sequence=2, disable=False, rollback=(), reason="bad_patch"):
     signer, chain = fleet.hub._status
     doc = sign_kill_switch(
@@ -1345,16 +1356,96 @@ def test_auto_promotion_only_under_policy(fleet_with_patch):
     assert approved.approval.pre_approval_policy_sha256 is None
 
 
+class _FlipAfterFirstRead:
+    """Fleet status that changes after the first revocation-list read."""
+
+    def __init__(self, first, then):
+        self.sources, self.reads = (first, then), 0
+
+    def _current(self):
+        return self.sources[min(self.reads, 1)]
+
+    def revocation_list(self):
+        current = self._current()
+        self.reads += 1
+        return current.revocation_list()
+
+    def kill_switch_documents(self):
+        return self.sources[min(self.reads - 1, 1)].kill_switch_documents()
+
+
+def test_approve_under_policy_verifies_policy_and_status_itself(
+    fleet_with_patch, tmp_path
+):
+    fleet, patch = fleet_with_patch
+    tenant = _receiver(fleet, "direct-approve")
+    fresh = _status_feed(fleet, tmp_path / "fresh")
+    killed = _status_feed(fleet, tmp_path / "killed")
+    _kill(fleet, killed, disable=True, reason="incident")
+    # Fresh for the first check, killed by the time the store approves.
+    decision = _receive(
+        fleet, tenant, patch, status_source=_FlipAfterFirstRead(fresh, killed)
+    )
+    assert decision.outcome == "needs_person"
+    assert any("kill switch" in r for r in decision.reasons), decision.reasons
+    cid = decision.candidate.candidate_id
+    store = tenant.store
+    assert store.load_candidate(cid).state == "fault_passed"
+
+    # A grant on its own (the old API) approves nothing.
+    with pytest.raises((TypeError, RepairLifecycleError)):
+        store.approve_under_policy(cid, tenant.policy.policy.grant())
+    refusals = {
+        "kill switch": _authority(fleet, tenant, status_source=killed),
+        "unreachable": _authority(
+            fleet, tenant, status_source=FilePatchFeed(tmp_path / "none")
+        ),
+        "persisted": {**_authority(fleet, tenant), "status_state": None},
+        "does not verify": {
+            **_authority(fleet, tenant),
+            "policy": tenant.policy.model_copy(
+                update={
+                    "policy": tenant.policy.policy.model_copy(
+                        update={"canary_max_runs": 1}
+                    )
+                }
+            ),
+        },
+        "healthy case": {
+            **_authority(fleet, tenant),
+            "policy": sign_policy(
+                tenant.policy.policy.model_copy(update={"min_healthy_cases": 50}),
+                tenant.policy_key,
+            ),
+        },
+    }
+    for match, authority in refusals.items():
+        with pytest.raises(RepairLifecycleError, match=match):
+            store.approve_under_policy(cid, **authority)
+        assert store.load_candidate(cid).state == "fault_passed"
+        assert store.load_candidate(cid).approval is None
+
+    # Once a later entry turns auto-promotion back on, the same call approves.
+    _kill(fleet, killed, sequence=3, disable=False, reason="resume")
+    approved = store.approve_under_policy(
+        cid, **_authority(fleet, tenant, status_source=killed)
+    )
+    assert approved.state == "approved"
+    assert approved.approval.pre_approval_policy_sha256 is not None
+
+
 def test_policy_grant_never_reviews_a_non_fleet_repair(tmp_path, fleet_with_patch):
     fleet, _ = fleet_with_patch
     _, candidate, prior, proposed = _approved(tmp_path, new_search="#chart-link")
     other = RepairStore(tmp_path / "s2")
     pending = other.add_candidate(build_candidate(prior, proposed, source="heal"))
-    grant = _receiver(fleet, "grant-check").policy.policy.grant()
+    tenant = _receiver(fleet, "grant-check")
     with pytest.raises(RepairLifecycleError):
-        other.review_under_policy(pending.candidate_id, grant)
+        other.review_under_policy(
+            pending.candidate_id, policy=tenant.policy, roles=tenant.roles
+        )
     with pytest.raises(RepairLifecycleError):
-        other.approve_under_policy(pending.candidate_id, grant)
+        other.approve_under_policy(pending.candidate_id, **_authority(fleet, tenant))
 
 
 def test_identity_anchor_patch_always_needs_a_person(tmp_path):
@@ -1378,11 +1469,14 @@ def test_identity_anchor_patch_always_needs_a_person(tmp_path):
     assert candidate.fleet_patch.identity_evidence_changed
     assert candidate.state == "candidate"
     assert candidate.replay_campaign is not None and candidate.replay_campaign.passed
-    grant = east.policy.policy.grant()
     with pytest.raises(RepairLifecycleError, match="identity"):
-        east.store.review_under_policy(candidate.candidate_id, grant)
+        east.store.review_under_policy(
+            candidate.candidate_id, policy=east.policy, roles=east.roles
+        )
     with pytest.raises(RepairLifecycleError):
-        east.store.approve_under_policy(candidate.candidate_id, grant)
+        east.store.approve_under_policy(
+            candidate.candidate_id, **_authority(fleet, east)
+        )
     assert east.store.active_pointer() is None
 
 
@@ -1429,7 +1523,7 @@ def test_canary_failure_blocks_the_patch(fleet_with_patch):
     assert candidate.state == "reviewed"
     with pytest.raises(RepairLifecycleError):
         east.store.approve_under_policy(
-            candidate.candidate_id, east.policy.policy.grant()
+            candidate.candidate_id, **_authority(fleet, east)
         )
     with pytest.raises(RepairLifecycleError):
         east.store.approve(candidate.candidate_id, PERSON)
