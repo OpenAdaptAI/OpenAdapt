@@ -882,6 +882,70 @@ def test_delayed_finalizing_message_cannot_erase_timeout(
     assert persisted[-1]["error_code"] == "finalization_timeout"
 
 
+def test_late_progress_update_cannot_rewrite_the_state_being_sealed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A drained "record.stopping" that lands mid-seal must not break the seal.
+
+    The status-drain thread can be scheduled late on a loaded host, so its
+    "finalizing" update may arrive after the worker staged the final state and
+    while the seal is inventorying the capture directory.
+    """
+    from openadapt_capture import terminal as terminal_module
+
+    capture_dir = tmp_path / "capture"
+    runtime_dir = tmp_path / "runtime"
+    recorder: recorder_module.Recorder | None = None
+
+    def fake_record(
+        *, capture_dir, terminate_processing, terminate_recording, status_pipe, **_kwargs
+    ) -> None:
+        _create_minimal_recording(Path(capture_dir))
+        status_pipe.send({"type": "record.started"})
+        terminate_processing.wait()
+        terminate_recording.set()
+
+    build_manifest = terminal_module.build_artifact_manifest
+    late_updates: list[str] = []
+
+    def build_then_receive_late_update(root):
+        manifest = build_manifest(root)
+        assert recorder is not None
+        recorder._transition_control("finalizing")
+        recorder._transition_control("finalizing", error_code="finalization_timeout")
+        late_updates.append("delivered")
+        return manifest
+
+    monkeypatch.setattr(recorder_module, "record", fake_record)
+    monkeypatch.setattr(
+        terminal_module, "build_artifact_manifest", build_then_receive_late_update
+    )
+    recorder = recorder_module.Recorder(
+        str(capture_dir),
+        capture_video=False,
+        capture_images=True,
+        plot_performance=False,
+        control_runtime_dir=str(runtime_dir),
+    )
+    with recorder:
+        assert recorder.wait_for_ready(timeout=15)
+        completed = stop_recording(
+            recorder.control_session_id, runtime_dir=runtime_dir, timeout=10
+        )
+
+    assert late_updates == ["delivered"]
+    assert completed.phase == "complete"
+    assert completed.complete
+    assert completed.integrity_verified
+    verify_capture_artifacts(capture_dir)
+    terminal = json.loads(
+        (capture_dir / control.TERMINAL_STATE_FILENAME).read_text(encoding="utf-8")
+    )
+    assert terminal["phase"] == "complete"
+    assert terminal["error_code"] is None
+
+
 def test_completion_race_after_stop_timeout_cannot_return_success(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

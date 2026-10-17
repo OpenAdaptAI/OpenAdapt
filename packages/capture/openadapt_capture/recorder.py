@@ -3697,6 +3697,10 @@ class Recorder:
         self._control_failure_stage: str | None = None
         self._control_started_at = time.time()
         self._control_finalized_at: float | None = None
+        # Set once the worker writes the final state that the seal inventories.
+        # From then on the state file belongs to the seal (see
+        # _transition_control).
+        self._control_state_staged = False
 
     def _control_payload(self) -> dict[str, Any]:
         """Return the secret-free state shared with the client and state file."""
@@ -3762,6 +3766,7 @@ class Recorder:
             # is disabled. Do not publish these values in memory until sealing
             # and its post-write verification succeed.
             self._persist_control_payload(terminal)
+            self._control_state_staged = True
             return finalized_at
 
     def _publish_completed_control_state(self, finalized_at: float) -> None:
@@ -3790,6 +3795,19 @@ class Recorder:
     ) -> None:
         with self._control_state_lock:
             if self._control_phase in {"complete", "failed", "crashed"}:
+                return
+            if self._control_state_staged and phase not in {
+                "complete",
+                "failed",
+                "crashed",
+            }:
+                # The final state is already on disk and is being (or has
+                # been) sealed into the artifact manifest. A late progress
+                # update, such as a status-pipe "record.stopping" drained after
+                # the worker moved on, or a stop caller's finalization timeout,
+                # must not rewrite that file: doing so changes a sealed
+                # artifact and fails or corrupts the seal. Only a terminal
+                # outcome may still replace it.
                 return
             previous = (
                 self._control_phase,
