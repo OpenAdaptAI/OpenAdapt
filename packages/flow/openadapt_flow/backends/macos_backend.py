@@ -1224,6 +1224,15 @@ class MacOSBackend(RemoteDisplayBackend):
             supported_operations=list(candidate.supported_operations),
         )
 
+    def displayed_text_at(self, x: int, y: int) -> Optional[str]:
+        """The text of the one AX element under (x, y), for a read-back.
+
+        Same read as :meth:`structured_text_at`: on this backend that is the
+        element's own text, not a row. A demonstrated read-back compares it
+        with the expected value for equality.
+        """
+        return self.structured_text_at(x, y)
+
     def structured_text_at(self, x: int, y: int) -> Optional[str]:
         """Return the exact AX text at/around pixel (x, y), or None."""
         try:

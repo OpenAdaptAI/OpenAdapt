@@ -79,6 +79,7 @@ ALLOWED_FIELDS = {
     "rung_histogram",
     "evidence_classes",
     "effect_tier_reached",
+    "effect_assurance",
     "authorization_required",
     "authorization_confirmed",
     "identity_required",
