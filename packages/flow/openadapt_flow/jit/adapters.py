@@ -8,7 +8,7 @@ recorded by the same :class:`~openadapt_flow.recorder.Recorder` a person's
 demonstration uses: a before and after frame for every step, the clicked
 element's locator, and the system-of-record delta when a reader is attached.
 
-Three action formats are mapped:
+Four action formats are built in, and :func:`register_dialect` adds more:
 
 ``anthropic``
     The ``input`` of a ``tool_use`` block for Anthropic's ``computer`` tool
@@ -21,6 +21,10 @@ Three action formats are mapped:
     {...}}``. Element targets must be unique CSS selectors. Snapshot refs
     (``e12``) are refused: only the Playwright MCP server's own page can
     resolve them.
+``generic``
+    Flow's own step vocabulary as a plain dict, for a loop that already has
+    its own action format and maps it itself
+    (``{"kind": "click", "x": 10, "y": 20}``). See :func:`translate_generic`.
 
 An action is refused with :class:`UnsupportedAction` when the recording
 format can't hold it without a guess: a triple-click, a held modifier, a
@@ -48,13 +52,17 @@ __all__ = [
     "Observation",
     "Op",
     "UnsupportedAction",
+    "dialects",
+    "register_dialect",
     "translate",
     "translate_anthropic",
+    "translate_generic",
     "translate_openai",
     "translate_playwright_mcp",
 ]
 
-DIALECTS = ("anthropic", "openai", "playwright_mcp")
+#: The built-in action formats. :func:`dialects` also lists registered ones.
+DIALECTS = ("anthropic", "openai", "playwright_mcp", "generic")
 
 #: Seconds a ``wait`` may pause during capture.
 MAX_WAIT_S = 2.0
@@ -427,18 +435,117 @@ def translate_playwright_mcp(call: Mapping[str, Any]) -> list[Op]:
     raise UnsupportedAction(d, tool, "no step in the recording format")
 
 
+# -- generic: Flow's own step vocabulary -------------------------------------
+
+#: For each ``kind``: the fields it requires, and the fields it may carry.
+_GENERIC_FIELDS: dict[str, tuple[frozenset[str], frozenset[str]]] = {
+    "click": (frozenset(), frozenset({"x", "y", "target"})),
+    "double_click": (frozenset(), frozenset({"x", "y", "target"})),
+    "right_click": (frozenset(), frozenset({"x", "y", "target"})),
+    "drag": (frozenset({"x", "y", "end_x", "end_y"}), frozenset()),
+    "type": (frozenset({"text"}), frozenset()),
+    "press": (frozenset({"key"}), frozenset()),
+    "hotkey": (frozenset({"key", "modifiers"}), frozenset()),
+    "scroll": (frozenset(), frozenset({"x", "y", "dx", "dy"})),
+    "wait": (frozenset(), frozenset({"seconds"})),
+    "observe": (frozenset(), frozenset()),
+}
+_INT_FIELDS = ("x", "y", "end_x", "end_y", "dx", "dy")
+
+
+def translate_generic(action: Mapping[str, Any]) -> list[Op]:
+    """Map one generic action to a step.
+
+    A generic action is a dict with a ``kind`` and that kind's fields:
+
+    * ``click``, ``double_click``, ``right_click``: ``x`` and ``y``, or a CSS
+      ``target``, or neither to click at the pointer.
+    * ``drag``: ``x``, ``y``, ``end_x``, ``end_y``.
+    * ``type``: ``text``. ``press``: ``key``. ``hotkey``: ``key`` and a
+      ``modifiers`` list. Key names use the same spellings as the other
+      formats (``Return``, ``ctrl``).
+    * ``scroll``: ``dx`` and ``dy`` in pixels, at the pointer.
+    * ``wait``: ``seconds``. ``observe``: nothing.
+
+    An unknown kind or an unknown field is refused, so a typo can't become a
+    silently dropped argument.
+    """
+
+    d = "generic"
+    kind = str(action.get("kind", ""))
+    if kind not in _GENERIC_FIELDS:
+        raise UnsupportedAction(
+            d, kind, f"unknown kind (expected one of {sorted(_GENERIC_FIELDS)})"
+        )
+    required, optional = _GENERIC_FIELDS[kind]
+    fields = set(action) - {"kind"}
+    missing = required - fields
+    extra = fields - required - optional
+    if missing:
+        raise UnsupportedAction(d, kind, f"missing {sorted(missing)}")
+    if extra:
+        raise UnsupportedAction(d, kind, f"unknown fields {sorted(extra)}")
+    values: dict[str, Any] = {}
+    for name in _INT_FIELDS:
+        if name in action:
+            values[name] = int(action[name])
+    if ("x" in values) != ("y" in values):
+        raise UnsupportedAction(d, kind, "x and y go together")
+    if "target" in action:
+        if "x" in values:
+            raise UnsupportedAction(d, kind, "give x and y, or a target, not both")
+        values["target"] = str(action["target"])
+    if kind == "type":
+        return [Op("type", text=str(action["text"]))]
+    if kind in ("press", "hotkey"):
+        mods = list(action.get("modifiers") or [])
+        if kind == "hotkey" and not mods:
+            raise UnsupportedAction(d, kind, "a hotkey needs at least one modifier")
+        op = _chord(d, kind, [*mods, str(action["key"])])
+        if (op.kind == "hotkey") != (kind == "hotkey"):
+            raise UnsupportedAction(d, kind, f"{action['key']!r} is a modifier")
+        return [op]
+    if kind == "wait":
+        return [Op("wait", seconds=float(action.get("seconds", 1.0)))]
+    return [Op(kind, **values)]
+
+
 _TRANSLATORS: dict[str, Callable[[Mapping[str, Any]], list[Op]]] = {
     "anthropic": translate_anthropic,
     "openai": translate_openai,
     "playwright_mcp": translate_playwright_mcp,
+    "generic": translate_generic,
 }
+
+
+def dialects() -> tuple[str, ...]:
+    """Every action format :class:`CaptureComputer` accepts now."""
+
+    return tuple(_TRANSLATORS)
+
+
+def register_dialect(
+    name: str, translator: Callable[[Mapping[str, Any]], list[Op]]
+) -> None:
+    """Add an action format.
+
+    ``translator`` maps one native action to a list of :class:`Op`, or raises
+    :class:`UnsupportedAction`. It must not perform anything. A built-in
+    format can't be replaced.
+    """
+
+    if not name or not isinstance(name, str):
+        raise ValueError("a dialect needs a name")
+    if name in DIALECTS:
+        raise ValueError(f"{name!r} is built in and can't be replaced")
+    _TRANSLATORS[name] = translator
 
 
 def translate(dialect: str, native: Mapping[str, Any]) -> list[Op]:
     """Map one native action in ``dialect`` to steps, or raise UnsupportedAction."""
 
     if dialect not in _TRANSLATORS:
-        raise ValueError(f"unknown dialect {dialect!r} (expected one of {DIALECTS})")
+        raise ValueError(f"unknown dialect {dialect!r} (expected one of {dialects()})")
     return _TRANSLATORS[dialect](native)
 
 
@@ -450,7 +557,7 @@ class CaptureComputer:
 
     Args:
         session: A started :class:`~openadapt_flow.authoring.AuthoringSession`.
-        dialect: The agent's action format (see :data:`DIALECTS`).
+        dialect: The agent's action format (see :func:`dialects`).
         page: The Playwright page behind the session, for CSS-selector targets
             and the text snapshot a Playwright MCP agent reads. Optional for
             the coordinate formats.
@@ -468,9 +575,9 @@ class CaptureComputer:
         page: Any = None,
         sleep: Callable[[float], None] = time.sleep,
     ) -> None:
-        if dialect not in DIALECTS:
+        if dialect not in _TRANSLATORS:
             raise ValueError(
-                f"unknown dialect {dialect!r} (expected one of {DIALECTS})"
+                f"unknown dialect {dialect!r} (expected one of {dialects()})"
             )
         self._session = session
         self.dialect = dialect
