@@ -25,6 +25,9 @@ openadapt-flow run bundle --profile standard --config deploy.yaml
 effects, identity, idempotency, actuation, durable, and policy sections from
 one config.
 
+To fill parameters from a referral PDF, fax image, or email, see
+[`INTAKE.md`](INTAKE.md).
+
 ## Choose an execution profile
 
 Select `--profile regulated` for encrypted, fail-closed production execution,
