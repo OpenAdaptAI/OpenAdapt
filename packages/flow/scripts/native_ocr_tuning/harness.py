@@ -82,6 +82,7 @@ class TunedVision(AppleVisionEngine):
         #: image with revision 2 (no orientation detection) when any is seen.
         self.flip = flip
         self.flipped_images = 0
+        self._pass_lc: bool | None = None
         self.passes = passes
         self.merge = merge
         self.lc = language_correction
@@ -104,6 +105,8 @@ class TunedVision(AppleVisionEngine):
         data = self._nsdata.dataWithBytes_length_(png, len(png))
         request = self._request()
         request.setRevision_(revision)
+        if self._pass_lc is not None:
+            request.setUsesLanguageCorrection_(self._pass_lc)
         handler = self._handler_class.alloc().initWithData_options_(data, None)
         with self._lock:
             handler.performRequests_error_([request], None)
@@ -135,6 +138,7 @@ class TunedVision(AppleVisionEngine):
         return [ln for ln, _ in obs]
 
     def _pass(self, img: Image.Image, p: dict[str, Any]) -> list[RawLine]:
+        self._pass_lc = p.get("lc")
         W, H = img.size
         tiles = int(p.get("tiles", 1))
         tile_h = int(p.get("tile_h", 0))
@@ -165,6 +169,9 @@ class TunedVision(AppleVisionEngine):
         if pad:
             work = ImageOps.expand(work, border=pad, fill=(255, 255, 255))
         s = float(p.get("scale", 1.0))
+        if p.get("small_h") and work.size[1] < int(p["small_h"]):
+            # Short crops (identity bands): upscale before recognition.
+            s = float(p.get("small_scale", 2.0))
         if s != 1.0:
             work = work.resize(
                 (max(1, round(work.size[0] * s)), max(1, round(work.size[1] * s))),
@@ -270,6 +277,17 @@ CONFIGS: dict[str, dict[str, Any]] = {
     "tile1024_conf0": {"passes": [{"tile_h": 1024}], "record_min_conf": 0.0},
     "conf0": {"passes": [{}], "record_min_conf": 0.0},
     "rev2": {"passes": [{}], "revision": 2},
+    "t768f_small2": {"passes": [{"tile_h": 768, "small_h": 300, "small_scale": 2.0}], "flip": "rev2"},
+    "t768f_small3": {"passes": [{"tile_h": 768, "small_h": 300, "small_scale": 3.0}], "flip": "rev2"},
+    "t768f_small1.5": {"passes": [{"tile_h": 768, "small_h": 300, "small_scale": 1.5}], "flip": "rev2"},
+    "t768f_small2_bicubic": {"passes": [{"tile_h": 768, "small_h": 300, "small_scale": 2.0, "resample": "bicubic"}], "flip": "rev2"},
+    "t768f_agree_lc": {"passes": [{"tile_h": 768}, {"tile_h": 768, "lc": True}], "flip": "rev2", "merge": "vote"},
+    "t768f_vote_offsets": {"passes": [{"tile_h": 768}, {"tile_h": 768, "dx": 1, "dy": 1}, {"tile_h": 768, "dx": 2}], "flip": "rev2", "merge": "vote"},
+    "t768f_union_offsets": {"passes": [{"tile_h": 768}, {"tile_h": 768, "dx": 1, "dy": 1}], "flip": "rev2", "merge": "union"},
+    "t768f_gray": {"passes": [{"tile_h": 768, "gray": True}], "flip": "rev2"},
+    "t768f_lc_on": {"passes": [{"tile_h": 768}], "flip": "rev2", "language_correction": True},
+    "t768f_vote3": {"passes": [{"tile_h": 768}, {"tile_h": 768, "gray": True}, {"tile_h": 768, "small_h": 300, "small_scale": 2.0}], "flip": "rev2", "merge": "vote"},
+    "t768f_union_small2": {"passes": [{"tile_h": 768}, {"tile_h": 768, "small_h": 300, "small_scale": 2.0}], "flip": "rev2", "merge": "union"},
     "flipdrop": {"passes": [{}], "flip": "drop"},
     "fliprev2": {"passes": [{}], "flip": "rev2"},
     "tile768_fliprev2": {"passes": [{"tile_h": 768}], "flip": "rev2"},
