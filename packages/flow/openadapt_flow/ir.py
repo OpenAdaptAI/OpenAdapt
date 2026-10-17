@@ -3560,6 +3560,8 @@ class StepResult(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.surface is None:
             data.pop("surface", None)
+        if isinstance(data, dict) and not self.effect_field_checks:
+            data.pop("effect_field_checks", None)
         return data
 
 
@@ -3583,13 +3585,6 @@ class ObservedSurfaceEnvironment(BaseModel):
     observer_id: str
     observer_contract_sha256: str = Field(pattern="^[a-f0-9]{64}$")
     binding_sha256: str = Field(pattern="^[a-f0-9]{64}$")
-
-    @model_serializer(mode="wrap")
-    def _omit_empty_field_checks(self, handler: Any) -> Any:
-        data = handler(self)
-        if isinstance(data, dict) and not self.effect_field_checks:
-            data.pop("effect_field_checks", None)
-        return data
 
 
 class SurfaceObservation(BaseModel):
