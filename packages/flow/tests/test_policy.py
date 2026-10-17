@@ -396,3 +396,41 @@ class TestPolicyLoading:
             ],
         )
         assert not evaluate_policy(wf, load_policy("permissive")).passed
+
+
+# -- untrusted policy names (console path) -----------------------------------
+
+
+def test_load_builtin_policy_accepts_shipped_names_with_or_without_suffix():
+    from openadapt_flow.policy import builtin_policy_names, load_builtin_policy
+
+    name = builtin_policy_names()[0]
+    assert load_builtin_policy(name) == load_builtin_policy(f"{name}.yaml")
+
+
+@pytest.mark.parametrize(
+    "name",
+    ["../policy", "../../pyproject", "/etc/hosts", "policies/../policy", ""],
+)
+def test_load_builtin_policy_never_reaches_other_files(name, tmp_path):
+    from openadapt_flow.policy import load_builtin_policy
+
+    with pytest.raises(FileNotFoundError):
+        load_builtin_policy(name)
+
+
+def test_load_builtin_policy_ignores_a_same_named_file_in_cwd(tmp_path, monkeypatch):
+    from openadapt_flow.policy import (
+        builtin_policy_names,
+        load_builtin_policy,
+        load_policy,
+    )
+
+    name = builtin_policy_names()[0]
+    (tmp_path / name).write_text("not: [valid")
+    monkeypatch.chdir(tmp_path)
+    # The operator CLI still prefers an explicit file path...
+    with pytest.raises(ValueError):
+        load_policy(name)
+    # ...but the untrusted-name loader only ever reads the shipped policy.
+    assert load_builtin_policy(name).name

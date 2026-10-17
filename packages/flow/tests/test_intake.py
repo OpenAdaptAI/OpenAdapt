@@ -281,3 +281,18 @@ def test_cli_writes_params_file(
         main(["intake", "b", str(weak), "--out", str(out2), "--accept", "patient_name"])
         == 0
     )
+
+
+def test_pdf_text_operator_regex_is_linear_on_backslash_runs() -> None:
+    """CodeQL py/redos: a TJ array of backslashes must not backtrack exponentially."""
+    import time
+
+    from openadapt_flow.intake.document import _TEXT_OP_RE
+
+    hostile = b"[" + b"\\" * 50_000  # unterminated array, worst case before the fix
+    start = time.perf_counter()
+    assert _TEXT_OP_RE.search(hostile) is None
+    assert time.perf_counter() - start < 2.0
+    # Escaped brackets and backslashes inside a TJ array still parse.
+    m = _TEXT_OP_RE.search(rb"[(a\]b) -20 (c\\d)] TJ")
+    assert m is not None and m.group("arr") == rb"(a\]b) -20 (c\\d)"

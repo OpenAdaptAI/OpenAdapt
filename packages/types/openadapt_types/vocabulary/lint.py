@@ -503,7 +503,15 @@ def _blank(text: str) -> str:
 
 def _markdown_fragments(lines: Sequence[str]) -> Iterator[Fragment]:
     fence = ""
+    in_comment = False
     for number, raw in enumerate(lines, 1):
+        if in_comment:
+            # Inside a multi-line HTML comment: skip until it closes.
+            close = raw.find("-->")
+            if close == -1:
+                continue
+            raw = " " * (close + 3) + raw[close + 3 :]
+            in_comment = False
         stripped = raw.strip()
         marker = re.match(r"(`{3,}|~{3,})", stripped)
         if marker:
@@ -514,11 +522,33 @@ def _markdown_fragments(lines: Sequence[str]) -> Iterator[Fragment]:
             continue
         if fence:
             continue
-        text = re.sub(r"`[^`]*`", " ", raw)
+        text, in_comment = _strip_html_comments(raw)
+        text = re.sub(r"`[^`]*`", " ", text)
         text = re.sub(r"\]\([^)]*\)", "]", text)
-        text = re.sub(r"<!--.*?-->", " ", text)
         text = re.sub(r"https?://\S+", " ", text)
         yield Fragment(number, text)
+
+
+def _strip_html_comments(line: str) -> tuple[str, bool]:
+    """Blank complete ``<!-- ... -->`` comments in one line.
+
+    Returns the line and whether an unclosed comment continues onto the next
+    line. Plain string scanning (no regex), so comments that span lines are
+    handled by the caller's state instead of being silently linted as prose.
+    """
+    out: list[str] = []
+    pos = 0
+    while True:
+        start = line.find("<!--", pos)
+        if start == -1:
+            out.append(line[pos:])
+            return "".join(out), False
+        out.append(line[pos:start])
+        end = line.find("-->", start + 4)
+        if end == -1:
+            return "".join(out), True
+        out.append(" ")
+        pos = end + 3
 
 
 def _html_fragments(text: str) -> Iterator[Fragment]:

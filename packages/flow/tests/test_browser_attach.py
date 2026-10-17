@@ -4809,7 +4809,7 @@ def test_launched_recording_withholds_a_redirect_that_puts_the_value_in_a_path(
         pytest.skip("no Chromium executable is installed")
     import threading
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-    from urllib.parse import parse_qs, urlparse
+    from urllib.parse import parse_qs, quote, urlparse
 
     secret = "hunter2-primary"
     form = (
@@ -4831,7 +4831,7 @@ def test_launched_recording_withholds_a_redirect_that_puts_the_value_in_a_path(
             if parsed.path == "/lookup":
                 value = parse_qs(parsed.query).get("token", [""])[0]
                 self.send_response(302)
-                self.send_header("Location", f"/results/{value}")
+                self.send_header("Location", f"/results/{quote(value, safe='')}")
                 self.send_header("Content-Length", "0")
                 self.end_headers()
                 return

@@ -578,3 +578,18 @@ def test_the_vocabulary_doc_matches_the_registry() -> None:
     assert f"{cases} hand-written cases" in doc
     words = {11: "eleven"}
     assert f"{words[len(lint.NO_EFFECT_PROOFS)]} rows allowed to say so" in doc
+
+
+def test_markdown_multiline_html_comments_are_not_linted_as_prose() -> None:
+    """CodeQL py/bad-tag-filter: comments spanning lines must be skipped too."""
+    from openadapt_types.vocabulary.lint import extract_fragments
+
+    text = (
+        "keep one <!-- hidden a --> keep two\n"
+        "open <!-- start\nhidden b\nend --> tail\n"
+    )
+    frags = extract_fragments(Path("doc.md"), text)
+    joined = "\n".join(f.text for f in frags)
+    assert "keep one" in joined and "keep two" in joined and "tail" in joined
+    assert "open" in joined
+    assert "hidden" not in joined
