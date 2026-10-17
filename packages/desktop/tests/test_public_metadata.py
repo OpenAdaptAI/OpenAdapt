@@ -308,7 +308,7 @@ def test_candidate_release_notes_describe_the_bundled_flow_runtime() -> None:
     flow_dependencies = [
         dependency for dependency in build_dependencies if dependency.startswith("openadapt-flow")
     ]
-    assert flow_dependencies == ["openadapt-flow[browser,console]==1.35.1"]
+    assert flow_dependencies == ["openadapt-flow[browser,console]==2.1.0"]
     # At or above the floor the bundled Flow declares for its ``capture``
     # extra; ``tests/test_capture_runtime_contract.py`` compares the two
     # authoritatively. 1.2.1 specifically, because 1.2.0 and every release
@@ -318,8 +318,8 @@ def test_candidate_release_notes_describe_the_bundled_flow_runtime() -> None:
     assert "openadapt-privacy>=1.0.0" in dependencies
     assert not any(item.startswith("Development Status ::") for item in classifiers)
     assert "Development Status :: 2 - Pre-Alpha" not in classifiers
-    assert bundled_flow_version() == "1.35.1"
-    assert bundled_flow_banner() == "openadapt-flow 1.35.1"
+    assert bundled_flow_version() == "2.1.0"
+    assert bundled_flow_banner() == "openadapt-flow 2.1.0"
     assert 'name = "playwright"\nversion = "1.61.0"' in lock
     assert flow_dependencies[0] in notes
     assert "playwright==1.61.0" in notes

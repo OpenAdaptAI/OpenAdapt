@@ -312,7 +312,7 @@ def test_doctor_flags_wrong_flow_version(cli_config: EngineConfig, capsys, monke
     out = capsys.readouterr().out
     (line,) = [row for row in out.splitlines() if "openadapt-flow (loop engine)" in row]
     assert "[OK]" not in line
-    assert "1.19.0" in line and "1.35.1" in line
+    assert "1.19.0" in line and "2.1.0" in line
 
 
 def test_compile_reports_failure_when_no_bundle(

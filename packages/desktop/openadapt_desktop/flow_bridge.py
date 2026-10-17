@@ -44,7 +44,7 @@ FLOW_BIN = "openadapt-flow"
 #: The exact Flow release Desktop is built and tested against. It equals the
 #: ``openadapt-flow`` pin in the ``build`` extra of pyproject.toml, which the
 #: native installer freezes (tests/test_engine/test_flow_bridge.py checks).
-REQUIRED_FLOW_VERSION = "1.35.1"
+REQUIRED_FLOW_VERSION = "2.1.0"
 #: A developer who runs another Flow (a source checkout, say) names it here.
 #: The signed installer ignores it.
 FLOW_OVERRIDE_ENV = "OPENADAPT_DESKTOP_FLOW_BIN"

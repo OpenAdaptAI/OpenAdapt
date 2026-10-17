@@ -6,7 +6,7 @@ document defines the outputs, ordering, and release-selection rules.
 
 ## Current Flow runtime
 
-`main` pins the published `openadapt-flow[browser,console]==1.35.1` release.
+`main` pins the published `openadapt-flow[browser,console]==2.1.0` release.
 That release contains the reviewed `openadapt.push-result/v1` contract and the
 governed hosted-runner adapter that Desktop calls for leased work. The lockfile
 binds the exact wheel and source archive hashes.

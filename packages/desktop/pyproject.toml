@@ -49,7 +49,7 @@ dependencies = [
     # projection is still checked against the exact locked version
     # (scripts/sync_control_overlay_contract.py), and
     # tests/test_dependency_compat.py keeps this range equal to Flow's.
-    "openadapt-types>=0.17.0,<0.18.0",
+    "openadapt-types>=0.18.0,<0.19.0",
     "pydantic>=2.0",
     "pydantic-settings>=2.0",
     "PyYAML>=6.0,<7",
@@ -95,7 +95,7 @@ build = [
     # purpose (see the pin below and the embedded ``-m playwright`` process
     # mode). Without it the driver becomes build-only and the artifact gate
     # correctly refuses the archive.
-    "openadapt-flow[browser,console]==1.35.1",
+    "openadapt-flow[browser,console]==2.1.0",
     # Desktop deliberately embeds the optional browser driver so selecting a
     # web workflow is one click. It does NOT bundle Chromium: that larger
     # runtime is fetched only after the operator chooses the browser surface.
