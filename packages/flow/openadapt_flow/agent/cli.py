@@ -236,10 +236,24 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Per-save approval passed to every `openadapt-flow run`. Unset "
             "(the default): Flow decides, and under the Standard and Regulated "
-            "profiles a person approves each save (each_item); a run waiting "
+            "profiles each save waits for approval (each_item); a run waiting "
             "for that approval reports needs_review. not_gated turns the pause "
             "off for every run this server starts, and each run's result and "
             "Flow's report record that. Callers can't change it."
+        ),
+    )
+    p.add_argument(
+        "--delegate-approvals",
+        default=None,
+        metavar="AGENT_ID",
+        help=(
+            "Let the calling agent answer saves that wait for an approval, as "
+            "the opaque id AGENT_ID (for example agent:intake-bot). Adds the "
+            "list_approval_requests and answer_approval_request tools. Flow "
+            "accepts the agent's answer only where the run's approver policy "
+            "(openadapt-flow run --approver-policy) allows an agent for that "
+            "step; by default only a person may answer. Flow records the agent "
+            "as the approver."
         ),
     )
     p.add_argument(
@@ -538,6 +552,25 @@ def _cmd_serve(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 2
+    if args.delegate_approvals is not None:
+        import re as _re
+
+        from openadapt_flow.agent.delegated import DELEGATE_ID_PATTERN
+
+        if mode not in {"production", "attended"}:
+            print(
+                "serve: --delegate-approvals needs --mode production or --mode "
+                "attended with --bundles",
+                file=sys.stderr,
+            )
+            return 2
+        if not _re.match(DELEGATE_ID_PATTERN, args.delegate_approvals):
+            print(
+                "serve: --delegate-approvals needs an opaque id such as "
+                "agent:intake-bot, never a name or email",
+                file=sys.stderr,
+            )
+            return 2
     if args.allow_synthetic_recorded_defaults and not (args.allow_run and args.bundles):
         print(
             "serve: --allow-synthetic-recorded-defaults requires --allow-run",
@@ -664,6 +697,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
             allow_url_override=args.allow_url_override,
             extra_run_args=tuple(extra_run_args),
             approval_mode=args.approval_mode,
+            delegate_approver_id=args.delegate_approvals,
             hold_on_halt_s=(
                 max(0.0, min(args.hold_on_halt, 1800.0)) if args.repair_access else 0.0
             ),
@@ -702,7 +736,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
                 + (
                     f"approval mode {args.approval_mode} (chosen with --approval-mode); "
                     if args.approval_mode
-                    else "approval mode set by Flow (a person approves each save "
+                    else "approval mode set by Flow (each save waits for approval "
                     "under the Standard and Regulated profiles); "
                 )
                 + f"runs folder {runs_dir}",
