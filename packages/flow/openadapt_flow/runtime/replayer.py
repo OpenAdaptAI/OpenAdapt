@@ -13351,10 +13351,9 @@ class Replayer:
         clamps it to the exact final frame.
         """
 
-        import cv2
-        import numpy as np
+        from openadapt_flow.vision import imgops
 
-        frame = cv2.imdecode(np.frombuffer(frame_png, np.uint8), cv2.IMREAD_COLOR)
+        frame = imgops.decode_bgr(frame_png)
         if frame is None:
             return None
         frame_h, frame_w = frame.shape[:2]

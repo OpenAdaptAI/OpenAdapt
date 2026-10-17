@@ -64,6 +64,22 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+native-ocr = [
+    # The operating system's own OCR (OPENADAPT_FLOW_OCR=native): Apple Vision
+    # through PyObjC on macOS, Windows.Media.Ocr through the winrt projections
+    # on Windows. With it, the record, compile, and replay path loads neither
+    # RapidOCR nor OpenCV. RapidOCR stays the default and the only engine on
+    # Linux; see openadapt_flow/vision/ocr_backends.py.
+    "pyobjc-framework-Vision>=10.0; sys_platform == 'darwin'",
+    "pyobjc-framework-Quartz>=10.0; sys_platform == 'darwin'",
+    "winrt-runtime>=2.0; sys_platform == 'win32'",
+    "winrt-Windows.Media.Ocr>=2.0; sys_platform == 'win32'",
+    "winrt-Windows.Graphics.Imaging>=2.0; sys_platform == 'win32'",
+    "winrt-Windows.Storage.Streams>=2.0; sys_platform == 'win32'",
+    "winrt-Windows.Globalization>=2.0; sys_platform == 'win32'",
+    "winrt-Windows.Foundation>=2.0; sys_platform == 'win32'",
+    "winrt-Windows.Foundation.Collections>=2.0; sys_platform == 'win32'",
+]
 browser = [
     # Browser recording/replay is an explicit substrate capability. Native
     # desktop, RDP, and Citrix users do not need this ~34-47 MB driver wheel or
