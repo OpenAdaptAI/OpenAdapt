@@ -12724,10 +12724,12 @@ class Replayer:
         :mod:`openadapt_flow.runtime.identity` for the matching rules and
         the param-mode substitution). Dense small text is undercounted by
         OCR at native resolution, so a non-verified first pass is retried
-        once at 2x resolution before the verdict.
+        once at 2x resolution, and then once more on the point's own text
+        row alone (:func:`openadapt_flow.runtime.identity.row_region`),
+        before the verdict.
 
         Returns:
-            The best :class:`IdentityCheck` across the two attempts.
+            The best :class:`IdentityCheck` across the attempts.
         """
         assert step.anchor is not None and (
             step.anchor.context_text
@@ -12776,6 +12778,7 @@ class Replayer:
             *,
             scoped_identifier: bool = False,
             identifier_filter: Optional[Region] = None,
+            row_lines: Optional[list[Any]] = None,
         ) -> IdentityCheck:
             lines = self.vision.ocr(png, region=ocr_region)
             if scoped_identifier:
@@ -12798,6 +12801,8 @@ class Replayer:
                     )
                 ]
                 lines = identity_mod.lines_near_point(lines, point_y)
+                if row_lines is not None:
+                    row_lines.extend(lines)
                 observed = " ".join(line.text.strip() for line in lines)
             if anchor.identity_template is not None and anchor.identity_template.tokens:
                 # PHI-free path: verify against the salted-hash template (audit
@@ -12822,6 +12827,7 @@ class Replayer:
             )
 
         live_region = identifier_region or band
+        first_row_lines: list[Any] = []
         check = attempt(
             before_png,
             # Match compilation: OCR the full frame, then retain only the
@@ -12832,6 +12838,7 @@ class Replayer:
             exclude,
             scoped_identifier=identifier_region is not None,
             identifier_filter=identifier_region,
+            row_lines=first_row_lines,
         )
         if check.status == "verified":
             return check
@@ -12861,7 +12868,39 @@ class Replayer:
             rank[check.status],
             check.coverage,
         ):
-            return retry
+            check = retry
+        if check.status == "verified" or identifier_region is not None:
+            return check
+        # Last, re-read the point's own text row alone (see
+        # identity.row_region): the same verdict rules, on a crop that holds
+        # no part of the neighbouring rows.
+        row = identity_mod.row_region(first_row_lines, band)
+        row_png = (
+            None
+            if row is None
+            else identity_mod.upscale_crop(
+                before_png, row, identity_mod.ROW_REREAD_FACTOR
+            )
+        )
+        if row is None or row_png is None:
+            return check
+        f = identity_mod.ROW_REREAD_FACTOR
+        row_check = attempt(
+            row_png,
+            None,
+            (resolution.point[1] - row[1]) * f,
+            (
+                (exclude[0] - row[0]) * f,
+                (exclude[1] - row[1]) * f,
+                exclude[2] * f,
+                exclude[3] * f,
+            ),
+        )
+        if (rank[row_check.status], row_check.coverage) > (
+            rank[check.status],
+            check.coverage,
+        ):
+            return row_check
         return check
 
     # -- typed-input verification -------------------------------------------------

@@ -238,8 +238,36 @@ class TunedVision(AppleVisionEngine):
         return lines
 
 
+class TimedVision(AppleVisionEngine):
+    """The shipped engine as is, with per-call timing."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.calls: list[tuple[int, int, float]] = []
+        self.flipped_images = 0
+
+    def _recognize(self, png: bytes, width: int, height: int) -> list[RawLine]:
+        observed = self._observe(png, width, height, None)
+        if self._upright_revision is not None and any(f for _, f in observed):
+            self.flipped_images += 1
+            observed = self._observe(png, width, height, self._upright_revision)
+        return [line for line, _ in observed]
+
+    def recognize_png(self, png: bytes) -> list[RawLine]:
+        from openadapt_flow.vision.imgops import png_size
+
+        t0 = time.perf_counter()
+        lines = super().recognize_png(png)
+        w, h = png_size(png) or (0, 0)
+        self.calls.append((w, h, time.perf_counter() - t0))
+        return lines
+
+
 L, B = "lanczos", "bicubic"
 CONFIGS: dict[str, dict[str, Any]] = {
+    # The shipped engine and replayer: strips + short-image 2x + upright
+    # re-read in AppleVisionEngine, and the replayer's row re-read.
+    "production": {"plain": True},
     "baseline": {"passes": [{}]},
     "lc_on": {"passes": [{}], "language_correction": True},
     "fast": {"passes": [{}], "level": 1},
@@ -295,6 +323,8 @@ CONFIGS: dict[str, dict[str, Any]] = {
     "t768f_row2": {"passes": [{"tile_h": 768}], "flip": "rev2", "row_retry": True},
     "t768f_row3": {"passes": [{"tile_h": 768}], "flip": "rev2", "row_retry": True, "row_factor": 3},
     "t768f_small2_row2": {"passes": [{"tile_h": 768, "small_h": 300, "small_scale": 2.0}], "flip": "rev2", "row_retry": True},
+    "t768f_small2_row1": {"passes": [{"tile_h": 768, "small_h": 300, "small_scale": 2.0}], "flip": "rev2", "row_retry": True, "row_factor": 1},
+    "t768f_small2_row1_union_pad": {"passes": [{"tile_h": 768, "small_h": 300, "small_scale": 2.0}, {"tile_h": 768, "small_h": 300, "small_scale": 2.0, "small_pad": 24}], "flip": "rev2", "merge": "union", "row_retry": True, "row_factor": 1},
     "t768f_gray": {"passes": [{"tile_h": 768, "gray": True}], "flip": "rev2"},
     "t768f_lc_on": {"passes": [{"tile_h": 768}], "flip": "rev2", "language_correction": True},
     "t768f_vote3": {"passes": [{"tile_h": 768}, {"tile_h": 768, "gray": True}, {"tile_h": 768, "small_h": 300, "small_scale": 2.0}], "flip": "rev2", "merge": "vote"},
@@ -359,6 +389,11 @@ def _patch_row_retry(factor: int) -> None:
 
 def install(name: str) -> TunedVision:
     cfg = dict(CONFIGS[name])
+    if cfg.pop("plain", False):
+        plain = TimedVision()
+        ocr_mod._engine = plain
+        ocr_mod.clear_ocr_memo()
+        return plain  # type: ignore[return-value]
     rmc = cfg.pop("record_min_conf", None)
     if cfg.pop("row_retry", False):
         _patch_row_retry(cfg.pop("row_factor", 2))
