@@ -8,7 +8,7 @@ than raw feature count.
 ## Development setup
 
 ```bash
-git clone https://github.com/OpenAdaptAI/openadapt-flow && cd openadapt-flow
+git clone https://github.com/OpenAdaptAI/OpenAdapt && cd OpenAdapt/packages/flow
 python -m venv .venv && source .venv/bin/activate
 pip install -e '.[dev]'
 playwright install chromium

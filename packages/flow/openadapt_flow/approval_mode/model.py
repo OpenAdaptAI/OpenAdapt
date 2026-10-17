@@ -9,9 +9,11 @@ closed codes, and identifiers are digests or workflow step ids.
 from __future__ import annotations
 
 from enum import Enum
-from typing import Literal, Optional
+from typing import Any, Literal, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
+
+from openadapt_flow.approval_mode.approver import ApproverIdentityV1
 
 #: A closed, machine-readable reason code. Never free text, never a value.
 CODE_PATTERN = r"^[a-z][a-z0-9_]{0,63}$"
@@ -184,16 +186,37 @@ class ItemApprovalRef(BaseModel):
     answer_sha256: str = Field(pattern=PREFIXED_SHA256_PATTERN)
     decision: Literal["approved", "declined"]
     decline_reason: Optional[DeclineReason] = None
-    decided_by: Literal["human"] = "human"
-    route: Literal["desktop_run_it"] = ITEM_APPROVAL_ROUTE
+    decided_by: Literal["human", "automation"] = "human"
+    #: ``desktop_run_it`` for a person; ``local_cli``, ``webhook`` or ``mcp``
+    #: for a delegated approver.
+    route: Literal["desktop_run_it", "local_cli", "webhook", "mcp"] = (
+        ITEM_APPROVAL_ROUTE
+    )
     approver_kind: Literal["cloud_user", "unauthenticated"]
     approver_id: Optional[str] = Field(default=None, pattern=OPAQUE_ID_PATTERN)
     auth_method: ApproverAuthMethod
+    #: The agent, rule or system that decided, when it wasn't a person. Its
+    #: id is opaque. Left out of the report when absent, so person rows keep
+    #: their bytes. Such a row is never a training label.
+    approver: Optional[ApproverIdentityV1] = None
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.approver is None:
+            data.pop("approver", None)
+        return data
 
     @model_validator(mode="after")
     def _consistent(self) -> "ItemApprovalRef":
         if (self.decision == "declined") != (self.decline_reason is not None):
             raise ValueError("a declined save needs exactly one closed reason")
+        if (self.decided_by == "automation") != (self.approver is not None):
+            raise ValueError("an automated decision, and only one, names its approver")
+        if self.approver is not None and self.approver.is_person:
+            raise ValueError("a person's decision uses the person fields")
+        if (self.route == ITEM_APPROVAL_ROUTE) != (self.decided_by == "human"):
+            raise ValueError("a person answers in Desktop; a delegate by its own route")
         if self.approver_kind == "cloud_user":
             if self.approver_id is None or self.auth_method == "none":
                 raise ValueError("a Cloud approver needs an id and a sign-in method")

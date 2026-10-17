@@ -10,7 +10,7 @@ There are two ways to show the task:
 - **A person** does the task while `openadapt-flow record` or OpenAdapt
   Desktop records it. See [desktop/RECORDING.md](desktop/RECORDING.md).
 - **An AI agent** does the task through the recording tools in
-  [openadapt-agent](https://github.com/OpenAdaptAI/openadapt-agent#record-a-first-workflow)
+  [openadapt-agent](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/README.md#record-a-first-workflow)
   (`openadapt-agent serve --authoring`). A person stays at the computer to sign
   in, type secrets, and accept the result.
 

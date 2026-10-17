@@ -76,10 +76,10 @@ and [`../manifest.json`](../manifest.json).
 - **Version:** `2.0.2` (staged in this repository; `2.0.1` is the newest version published to PyPI)
 - **Description:** Your AI agent decides what to enter. OpenAdapt enters it in the app and checks that it saved.
 - **Homepage / docs:** https://docs.openadapt.ai
-- **Repository:** https://github.com/OpenAdaptAI/openadapt-agent
+- **Repository:** https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent
 - **License:** MIT
 - **Transport:** stdio
-- **Run command (uvx):** `uvx --python 3.12 openadapt-agent serve` (the sandbox; from GitHub before 2.0.2 is on PyPI: `uvx --python 3.12 --from git+https://github.com/OpenAdaptAI/openadapt-agent openadapt-agent serve`)
+- **Run command (uvx):** `uvx --python 3.12 openadapt-agent serve` (the sandbox; from GitHub before 2.0.2 is on PyPI: `uvx --python 3.12 --from git+https://github.com/OpenAdaptAI/OpenAdapt#subdirectory=packages/agent openadapt-agent serve`)
 - **Config:** no flags (the synthetic sandbox; `--allow-run` and `--tutorial` without `--bundles` are older names for it), `--mode production --bundles <dir>` (run the operator's private workflows), `--mode attended` (also answer paused runs), `--bundles` alone (read-only), `--authoring` (local Claude Code first demo; not the published registry recipe), `authoring connect` (outbound hosted mailbox; not the registry recipe), `--runs-dir`, `--allow-attended-actions`, qualified `--config` for Continue/Skip, and optional secret `OPENADAPT_BUNDLE_KEY`
 - **Tools:**
   - `list_workflows` — one card per workflow: name, purpose, what done means, typed inputs.

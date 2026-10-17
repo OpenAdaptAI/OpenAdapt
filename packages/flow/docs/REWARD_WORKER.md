@@ -162,8 +162,8 @@ openadapt-flow serve-reward --seed-mockmed --port 8788
 For development, install from the repository head:
 
 ```bash
-git clone https://github.com/OpenAdaptAI/openadapt-flow
-cd openadapt-flow && pip install -e '.[reward]'
+git clone https://github.com/OpenAdaptAI/OpenAdapt
+cd OpenAdapt/packages/flow && pip install -e '.[reward]'
 python -m openadapt_flow serve-reward --seed-mockmed --port 8788
 ```
 

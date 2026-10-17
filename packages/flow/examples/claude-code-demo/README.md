@@ -2,7 +2,7 @@
 
 This example records one form fill in a small expenses app, compiles it with
 openadapt-flow, and serves it to Claude Code as an MCP tool through
-[openadapt-agent](https://github.com/OpenAdaptAI/openadapt-agent). Claude Code
+[openadapt-agent](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent). Claude Code
 passes a description and an amount. OpenAdapt fills in the form in a headless
 browser, with no model calls, and then reads the app's SQLite table itself. The
 tool returns `success` only when exactly one new row with those two values is

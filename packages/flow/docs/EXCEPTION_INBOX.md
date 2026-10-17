@@ -27,24 +27,27 @@ same visible session. The console owns that live session until it exits and
 closes it afterward.
 
 An engine-issued pause exposes only the governed decisions supported by that
-step's semantics:
+step's semantics. Desktop's Needs you shows them with its own button labels
+(`src/lib/attention.ts`), given in brackets:
 
-- **I fixed it — Continue:** observe fresh live state, verify the paused
+- **Continue** ("I fixed it. Check and continue"): observe fresh live state, verify the paused
   postconditions and independent effects, prove the expected next target and
   armed identity, checkpoint the human-completed step without actuating it,
   then resume after it.
-- **Skip / disposition:** resume only when the workflow already declares a
+- **Skip** ("Skip this one"): resume only when the workflow already declares a
   non-consequential `on_unmet: skip` path and its guard is currently unmet.
   Otherwise the decision remains a recorded non-success disposition.
-- **Stop this run / Reject:** terminate the run and preserve the rejected pause
+- **Stop this run** ("Don't do it"): terminate the run and preserve the rejected pause
   for audit. No later answer can resume it. Flow withholds this action when an
   earlier application action may already have arrived, because stopping the
   run cannot prove that the write did not occur.
-- **Teach the fix:** enter the existing governed teach/revision path. Regression
+- **Teach the fix** ("Show OpenAdapt the right way"): enter the existing governed teach/revision path. Regression
   and identity/effect/risk gates report accepted, banked progress, or refused;
   identity-evidence changes are never silently promoted.
-- **Needs more time:** record an escalation while preserving the durable pause.
-- **Reconcile:** when delivery is uncertain, perform a read-only check for the
+- **Needs more time** (no Desktop button): record an escalation while preserving the durable pause.
+- **Reconcile** ("It saved. Mark it done", "It didn't save. Run it again" or
+  "I finished it by hand", each enabled once the person says they checked the
+  record): when delivery is uncertain, perform a read-only check for the
   possibly completed effect. Never send the earlier action again. Resume only
   after the configured effect contract proves the result.
 

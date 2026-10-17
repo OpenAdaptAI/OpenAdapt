@@ -1,0 +1,72 @@
+{
+  "artifact": {
+    "calibrator": "isotonic",
+    "eligible": true,
+    "ineligible_reason": null,
+    "labels_bad": 130,
+    "labels_total": 7704,
+    "oof_brier": 0.011265471667793533,
+    "oof_ece": 0.0009282899565562108,
+    "t_low": 0.005263157894736842
+  },
+  "audit_rate": 0.1,
+  "data": "synthetic",
+  "each_item": {
+    "audit_estimated_miss_per_bad_save": null,
+    "audit_saves": 0,
+    "bad_in_batch": 0,
+    "bad_saves": 78,
+    "batch_approvals": 0,
+    "batch_saves": 0,
+    "halted": 185,
+    "miss_per_bad_save": 0.0,
+    "miss_per_batch_save": 0.0,
+    "miss_per_verified_save": 0.0,
+    "per_item_reviews": 4815,
+    "reviews_per_verified_save": 1.0,
+    "verified_saves": 4815
+  },
+  "learned": {
+    "audit_estimated_miss_per_bad_save": 0.0,
+    "audit_saves": 0,
+    "bad_in_batch": 0,
+    "bad_saves": 78,
+    "batch_approvals": 11,
+    "batch_saves": 11,
+    "halted": 185,
+    "miss_per_bad_save": 0.0,
+    "miss_per_batch_save": 0.0,
+    "miss_per_verified_save": 0.0,
+    "per_item_reviews": 4804,
+    "reviews_per_verified_save": 1.0,
+    "verified_saves": 4815
+  },
+  "learned_oracle_at_max_contamination": {
+    "brier": 0.012300593422381049,
+    "ece": 0.002775847295905804,
+    "max_contamination": 0.005,
+    "miss_per_batch_save": 0.0017574692442882249,
+    "miss_per_verified_save": 0.00020768431983385254,
+    "reviews_per_verified_save": 0.9019730010384216,
+    "threshold": 0.00773921200750469
+  },
+  "list_size": 50,
+  "rule_v0": {
+    "audit_estimated_miss_per_bad_save": 0.3225806451612903,
+    "audit_saves": 238,
+    "bad_in_batch": 12,
+    "bad_saves": 78,
+    "batch_approvals": 99,
+    "batch_saves": 2251,
+    "halted": 185,
+    "miss_per_bad_save": 0.15384615384615385,
+    "miss_per_batch_save": 0.0053309640159928924,
+    "miss_per_verified_save": 0.0024922118380062306,
+    "per_item_reviews": 2564,
+    "reviews_per_verified_save": 0.5530633437175493,
+    "verified_saves": 4815
+  },
+  "seed": 7,
+  "test_saves": 5000,
+  "train_saves": 8000
+}

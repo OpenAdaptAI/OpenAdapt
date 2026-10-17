@@ -12,7 +12,7 @@ maturity, hosted boundaries, and known limits.
 Start here:
 
 - [Current product documentation](https://docs.openadapt.ai)
-- [Canonical engine](https://github.com/OpenAdaptAI/openadapt-flow)
+- [Canonical engine](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow)
 - [Launcher and migration guidance](https://github.com/OpenAdaptAI/OpenAdapt#readme)
 
 The getting-started, CLI, architecture, and package-map pages keep selected
