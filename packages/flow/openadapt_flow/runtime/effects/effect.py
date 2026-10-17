@@ -240,8 +240,20 @@ class ReadbackField(BaseModel):
     #: The value the field must show: normally a run parameter.
     value: ValueExpr
     #: The DOM selector or accessibility path of the marked element, when the
-    #: surface exposed one. Recorded for review; this verifier reads the region.
+    #: surface exposed one. Recorded for review.
     locator: Optional[str] = None
+    #: How the verifier reads the field. ``ocr`` reads :attr:`region` from the
+    #: screenshot. ``structure`` reads the text of the element at the
+    #: region's center from the page structure (DOM, or accessibility tree);
+    #: when the backend can't, the read is INDETERMINATE, never OCR.
+    source: Literal["ocr", "structure"] = "ocr"
+
+    @model_serializer(mode="wrap")
+    def _drop_default_source(self, handler: Any) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.source == "ocr":
+            data.pop("source", None)
+        return data
 
 
 class ReadbackSpec(BaseModel):

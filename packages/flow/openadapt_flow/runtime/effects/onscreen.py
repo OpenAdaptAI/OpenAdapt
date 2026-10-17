@@ -437,6 +437,47 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
             }
         )
 
+    def _read_structure(self, expected: str, region: Region) -> EffectVerdict:
+        """Read the element at ``region``'s center from the page structure."""
+        reader = getattr(self._backend, "displayed_text_at", None)
+        if not callable(reader):
+            return EffectVerdict(
+                verdict=Verdict.INDETERMINATE,
+                kind=EffectKind.FIELD_EQUALS,
+                substrate=self.substrate,
+                reason="this backend can't read a field from the page structure",
+                expected_value=expected,
+            )
+        x, y, w, h = region
+        try:
+            text = reader(x + w // 2, y + h // 2)
+        except Exception:  # noqa: BLE001 - an unreadable field is uncertain
+            text = None
+        if not text or not text.strip():
+            return EffectVerdict(
+                verdict=Verdict.INDETERMINATE,
+                kind=EffectKind.FIELD_EQUALS,
+                substrate=self.substrate,
+                reason="no element text at the marked field",
+                expected_value=expected,
+            )
+        observed = _normalize(text)
+        # Equality, not containment: a container element would contain the
+        # value next to other fields and confirm by accident.
+        matched = observed == _normalize(expected)
+        return EffectVerdict(
+            verdict=Verdict.CONFIRMED if matched else Verdict.REFUTED,
+            kind=EffectKind.FIELD_EQUALS,
+            substrate=self.substrate,
+            reason=(
+                "expected value read from the page structure"
+                if matched
+                else "the marked element shows another value"
+            ),
+            observed_value=observed,
+            expected_value=expected,
+        )
+
     def _read_fields(self, fields: list, params: dict) -> EffectVerdict:
         """Read every marked field; all must read back.
 
@@ -456,7 +497,10 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
                     substrate=self.substrate,
                     reason=f"no expected value for field {field.name!r}",
                 )
-            one = self.read_back(want, region=tuple(field.region))
+            if getattr(field, "source", "ocr") == "structure":
+                one = self._read_structure(want, tuple(field.region))
+            else:
+                one = self.read_back(want, region=tuple(field.region))
             expected_all.append(f"{field.name}={want}")
             observed.append(f"{field.name}={one.observed_value or ''}")
             if one.verdict is Verdict.INDETERMINATE:

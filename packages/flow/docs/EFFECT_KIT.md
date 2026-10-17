@@ -253,9 +253,20 @@ node_id=...)`. The marks are stored beside the recording as `check.json`, and
   types a secret, marks an input that wasn't typed, or comes before any save is
   refused.
 
-It reads fields with OCR of the marked regions. A DOM selector or
-accessibility path for a marked element is recorded (`locator`) but not read
-yet.
+Each field is read one of two ways:
+
+- **From the page structure.** When the backend can read the text an element
+  shows (`displayed_text_at`; the browser backend reads the DOM) and, at
+  marking time, the marked element showed exactly the value typed for its
+  parameter, the field is compiled with `source: structure`. At runtime the
+  element at the field's center must show exactly the expected value. A
+  backend that can't read the structure makes the check `INDETERMINATE`; it
+  does not fall back to OCR. The page body is never read as a field.
+- **By OCR** of the marked region, otherwise.
+
+Reading the structure avoids OCR misreads. It is not more independent: it is
+still the same application and session, and the tier is the same. Native
+accessibility reads (macOS, Linux) and template matching aren't implemented.
 
 How strong it is, compared with a read outside the application:
 

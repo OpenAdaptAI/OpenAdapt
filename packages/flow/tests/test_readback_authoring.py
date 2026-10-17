@@ -423,3 +423,135 @@ def test_compile_recording_applies_the_check(tmp_path, monkeypatch):
     effect = wf.steps[2].effects[-1]
     assert effect.readback is not None and effect.readback.different_path
     assert Workflow.load(tmp_path / "bundle").steps[2].effects[-1].readback.fields
+
+
+# -- reading marked fields from the page structure --------------------------------
+
+
+class StructureBackend(RecordBackend):
+    """RecordBackend whose page structure shows the record's fields."""
+
+    def __init__(self, *, structure: bool = True, **kw):
+        super().__init__(**kw)
+        if not structure:
+            self.displayed_text_at = None  # type: ignore[assignment]
+
+    def displayed_text_at(self, x, y):  # noqa: D401 - fake DOM read
+        for key, (bx, by, bw, bh) in (("note", NOTE_BOX), ("visit", VISIT_BOX)):
+            if bx <= x < bx + bw and by <= y < by + bh:
+                return self.view.get(key)
+        return None
+
+
+def _structure_workflow(tmp_path):
+    rec = _recording(
+        tmp_path,
+        fields=[
+            MarkedField(param="note", region=NOTE_BOX, structure_matched=True),
+            MarkedField(param="visit", region=VISIT_BOX, structure_matched=True),
+        ],
+    )
+    # No OCR is needed: the fields were checked against the live page.
+    updated, _ = apply_check(_workflow(), rec, vision=_marked_screen({}))
+    return updated
+
+
+def _run_structure(tmp_path, monkeypatch, backend):
+    import openadapt_flow.vision as vision_mod
+
+    updated = _structure_workflow(tmp_path)
+    monkeypatch.setattr(vision_mod, "ocr", lambda png, region=None: [])
+    vision = FakeVision()
+    vision.text_results = {
+        "Saved": Match(point=(5, 5), region=(0, 0, 10, 10), confidence=0.9)
+    }
+    bundle = tmp_path / "bundle"
+    (bundle / "templates").mkdir(parents=True, exist_ok=True)
+    return Replayer(backend, vision=vision, poll_interval_s=0.01).run(
+        updated, params=RUN, bundle_dir=bundle, run_dir=tmp_path / "run"
+    )
+
+
+def test_fields_checked_on_the_page_are_read_from_the_structure(tmp_path):
+    updated = _structure_workflow(tmp_path)
+    fields = updated.steps[2].effects[0].readback.fields
+    assert [f.source for f in fields] == ["structure", "structure"]
+
+
+def test_a_structure_read_confirms_without_ocr(tmp_path, monkeypatch):
+    report = _run_structure(tmp_path, monkeypatch, StructureBackend())
+    assert report.success, report.halt
+
+
+def test_a_structure_read_refutes_a_wrong_field(tmp_path, monkeypatch):
+    report = _run_structure(
+        tmp_path, monkeypatch, StructureBackend(saved_visit="Triage")
+    )
+    assert not report.success
+    assert any("REFUTED" in line for line in report.results[-1].effect_results)
+
+
+def test_a_backend_without_structure_does_not_fall_back_to_ocr(tmp_path, monkeypatch):
+    report = _run_structure(tmp_path, monkeypatch, StructureBackend(structure=False))
+    assert not report.success
+    assert any("INDETERMINATE" in line for line in report.results[-1].effect_results)
+
+
+class StructureSessionBackend(ScriptedBackend):
+    def __init__(self, shows):
+        super().__init__()
+        self.shows = shows
+
+    def displayed_text_at(self, x, y):
+        return self.shows
+
+
+@pytest.mark.parametrize(
+    ("shows", "source"), [(NOTE, "structure"), ("other", "screen")]
+)
+def test_session_checks_the_mark_against_the_page(tmp_path, shows, source):
+    session = AuthoringSession(
+        StructureSessionBackend(shows),
+        tmp_path / "rec",
+        backend_kind="web",
+        settle_interval_s=0.01,
+        settle_stable_frames=1,
+        settle_timeout_s=0.2,
+    )
+    session.start_record()
+    session.type_text(NOTE, param="note")
+    session.press("Enter")
+    session.begin_check()
+    result = session.mark_field(
+        param="note", backend_pixels={"x": 100, "y": 200, "w": 300, "h": 40}
+    )
+    assert result["read_from"] == source
+    marks = load_check(session.stop_record())
+    assert marks.fields[0].structure_matched is (source == "structure")
+
+
+def test_playwright_reads_the_text_an_element_shows():
+    sync = pytest.importorskip("playwright.sync_api")
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    html = (
+        "<div id='note' style='position:absolute;left:10px;top:10px;"
+        f"width:300px;height:30px'>{NOTE}</div>"
+        "<input id='visit' style='position:absolute;left:10px;top:60px;"
+        f"width:200px' value='{VISIT}'>"
+    )
+    with sync.sync_playwright() as pw:
+        try:
+            browser = pw.chromium.launch(headless=True)
+        except Exception as exc:  # pragma: no cover - no browser installed
+            pytest.skip(f"chromium unavailable: {exc}")
+        try:
+            page = browser.new_page()
+            page.set_content(html, wait_until="load")
+            backend = PlaywrightBackend(page)
+            assert backend.displayed_text_at(50, 20) == NOTE
+            assert backend.displayed_text_at(50, 68) == VISIT
+            # Empty page area hits the body, which is never read as a field.
+            assert backend.displayed_text_at(700, 500) is None
+        finally:
+            browser.close()

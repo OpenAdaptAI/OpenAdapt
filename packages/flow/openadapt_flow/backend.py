@@ -511,6 +511,20 @@ class TextValueBackend(Protocol):
 
 
 @runtime_checkable
+class DisplayedTextBackend(Protocol):
+    """Optional read of the text an element shows, from the page structure.
+
+    Used by a read-back the person demonstrated: a marked field is read from
+    the DOM (or the accessibility tree) of the element under its center
+    instead of by OCR. The text is compared in memory and never logged.
+    """
+
+    def displayed_text_at(self, x: int, y: int) -> Optional[str]:
+        """Return the element's displayed text or value, or None."""
+        ...
+
+
+@runtime_checkable
 class SelectOptionBackend(Protocol):
     """Atomic parameterized option selection for opaque/native controls.
 

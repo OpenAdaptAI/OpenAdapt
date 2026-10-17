@@ -89,6 +89,10 @@ class MarkedField(BaseModel):
     region: tuple[int, int, int, int]
     #: DOM selector or accessibility path of the marked element, if known.
     locator: Optional[str] = None
+    #: True when, at marking time, the element's text read from the page
+    #: structure equaled the value typed for :attr:`param`. The field is then
+    #: read from the structure at runtime instead of by OCR.
+    structure_matched: bool = False
 
 
 class CheckMarks(BaseModel):
@@ -253,8 +257,14 @@ def apply_check(
         from openadapt_flow import vision as vision_module
 
         vision = vision_module
-    png = _marked_frame(recording, marks, _count_events(recording)).read_bytes()
+    png = (
+        _marked_frame(recording, marks, _count_events(recording)).read_bytes()
+        if not all(f.structure_matched for f in marks.fields)
+        else b""
+    )
     for field in marks.fields:
+        if field.structure_matched:
+            continue  # checked against the live page when it was marked
         lines = vision.ocr(png, region=field.region)
         text = " ".join(line.text for line in lines)
         if not _shows(text, str(params[field.param])):
@@ -269,6 +279,7 @@ def apply_check(
             region=field.region,
             value=ValueExpr(param=field.param),
             locator=field.locator,
+            source="structure" if field.structure_matched else "ocr",
         )
         for field in marks.fields
     ]

@@ -453,6 +453,9 @@ class AuthoringSession:
         self._draft_bundle: Optional[Path] = None
         self._check_start: Optional[int] = None
         self._check_fields: list[Any] = []
+        #: Values typed for each parameter in this session, kept in memory
+        #: only, to check a marked field against the page structure.
+        self._typed: dict[str, str] = {}
 
     @property
     def backend_kind(self) -> str:
@@ -560,6 +563,8 @@ class AuthoringSession:
         recorder = self._require_recording()
         self._require_not_paused()
         recorder.type_text(text, param=param)
+        if param:
+            self._typed[param] = text
 
     def press(self, key: str) -> None:
         """Press a key or chord through :class:`Recorder`."""
@@ -664,6 +669,8 @@ class AuthoringSession:
             redact_region=redact_region,
         )
         self._pause = None
+        if not pause.secret and text:
+            self._typed[pause.param] = text
         return {"recorded": True, "param": pause.param}
 
     def begin_check(self) -> dict[str, Any]:
@@ -709,10 +716,33 @@ class AuthoringSession:
             )
         if target.w <= 0 or target.h <= 0:
             raise AuthoringError("the marked element has no size", code="invalid_mark")
+        structure_matched = False
+        reader = getattr(self._backend, "displayed_text_at", None)
+        typed = self._typed.get(param)
+        if callable(reader) and typed:
+            cx, cy = target.center
+            try:
+                shown = reader(cx, cy)
+            except Exception:
+                shown = None
+            # The element must show exactly the typed value, as the runtime
+            # read requires.
+            structure_matched = bool(shown) and " ".join(
+                str(shown).lower().split()
+            ) == " ".join(typed.lower().split())
         self._check_fields.append(
-            MarkedField(param=param, region=target.region, locator=locator)
+            MarkedField(
+                param=param,
+                region=target.region,
+                locator=locator,
+                structure_matched=structure_matched,
+            )
         )
-        return {"marked": True, "param": param}
+        return {
+            "marked": True,
+            "param": param,
+            "read_from": ("structure" if structure_matched else "screen"),
+        }
 
     def stop_record(self) -> Path:
         """Finish the recording (``meta.json`` + events/frames)."""

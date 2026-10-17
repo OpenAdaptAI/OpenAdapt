@@ -631,6 +631,19 @@ _TEXT_VALUE_AT_JS = r"""([px, py]) => {
     return null;
 }"""
 
+# The text the element under a point shows: an input's value, else its
+# rendered text (innerText honours CSS visibility). Null when nothing is hit.
+_DISPLAYED_TEXT_AT_JS = r"""([px, py]) => {
+    const el = document.elementFromPoint(px, py);
+    if (!el || el === document.body || el === document.documentElement) {
+        return null;
+    }
+    if ('value' in el && typeof el.value === 'string' &&
+        el.matches('input, textarea, select')) return el.value;
+    const text = (el.innerText || el.textContent || '').trim();
+    return text || null;
+}"""
+
 _EDITABLE_VALUE_JS = r"""(el) => {
     if (!el.matches(
             'input, textarea, [contenteditable=""], [contenteditable="true"],' +
@@ -1468,6 +1481,21 @@ class PlaywrightBackend:
             if point is None:
                 return None
             result = point.scope.evaluate(_TEXT_VALUE_AT_JS, [point.x, point.y])
+        except Exception:
+            return None
+        return result if isinstance(result, str) else None
+
+    def displayed_text_at(self, x: int, y: int) -> Optional[str]:
+        """Return the text the element under ``(x, y)`` shows, from the DOM.
+
+        A read-only structural observation for a demonstrated read-back. Never
+        logged. Returns None when the point hits nothing or evaluation fails.
+        """
+        try:
+            point = self._frame_point(int(x), int(y))
+            if point is None:
+                return None
+            result = point.scope.evaluate(_DISPLAYED_TEXT_AT_JS, [point.x, point.y])
         except Exception:
             return None
         return result if isinstance(result, str) else None
