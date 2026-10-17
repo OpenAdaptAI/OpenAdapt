@@ -2298,15 +2298,15 @@ class InteractiveRecorder:
 
         self._prepare_recording_dir()
         try:
-            if self._owns_browser:
-                from openadapt_flow._browser_setup import ensure_chromium_installed
-
-                ensure_chromium_installed()
             from playwright.sync_api import sync_playwright
 
             self._pw = sync_playwright().start()
             if self._owns_browser:
-                self._browser = self._pw.chromium.launch(headless=self._headless)
+                from openadapt_flow._browser_setup import launch_chromium
+
+                self._browser = launch_chromium(
+                    self._pw.chromium, headless=self._headless
+                )
                 self.page = self._browser.new_page(
                     viewport={
                         "width": self._viewport[0],

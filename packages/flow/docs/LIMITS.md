@@ -45,6 +45,20 @@ class named with `--allow-halt`. A handoff copies an effect-bound parameter
 from a confirmed receipt. Missing evidence HALTs. Subflows and worklists
 stay inside each child, on that child's surface.
 
+## Save triage
+
+`openadapt-flow triage` orders verified saves for review under
+`problems_only` and proposes one batch approval for clean ones. A batch
+approval records that a person agreed with saves the engine already made and
+checked; it authorizes nothing, and a stopped save is never batched. The v0
+rule and the learned score see only what the record check compared and the
+item's history, so a wrong value in a field the record check doesn't read,
+or a value the source document got wrong, can look clean. The audit sample
+estimates how often that happens. The learned score's miss bound assumes new
+saves resemble the labelled ones; it doesn't survive an application,
+clinic or form change. The only evaluation is on synthetic data. See
+[`DECISION_TRIAGE.md`](DECISION_TRIAGE.md).
+
 ## What "deterministic" means
 
 The compiled program fixes the action sequence, parameters, target evidence,

@@ -3116,17 +3116,11 @@ class PlaywrightBackend:
             ``(backend, close)`` where ``close()`` shuts down the browser and
             the Playwright driver (flushing the video first, when recording).
         """
-        from openadapt_flow._browser_setup import ensure_chromium_installed
-
-        ensure_chromium_installed()
-        from playwright.sync_api import sync_playwright
-
-        pw = sync_playwright().start()
-        try:
-            browser = pw.chromium.launch(headless=headless)
-        except Exception:
-            pw.stop()
-            raise
+        shared = _SHARED_BROWSER.get(headless)
+        if shared is not None:
+            pw, browser = shared
+        else:
+            pw, browser = _start_browser(headless)
         viewport = {"width": VIEWPORT[0], "height": VIEWPORT[1]}
         context = None
         if record_video_dir is not None:
@@ -3146,6 +3140,14 @@ class PlaywrightBackend:
         backend = cls(page)
 
         def close() -> None:
+            if shared is not None:
+                # A shared browser outlives this page; closing the page's own
+                # context discards its cookies, storage, and cache.
+                if context is not None:
+                    context.close()
+                else:
+                    page.context.close()
+                return
             try:
                 if context is not None:
                     context.close()  # flush the recorded video to disk
@@ -3154,3 +3156,10 @@ class PlaywrightBackend:
                 pw.stop()
 
         return backend, close
+
+
+from openadapt_flow.backends._browser_process import (  # noqa: E402
+    _SHARED_BROWSER,
+    _start_browser,
+    shared_browser,  # noqa: F401 - re-exported
+)

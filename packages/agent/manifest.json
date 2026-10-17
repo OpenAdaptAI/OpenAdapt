@@ -12,11 +12,11 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/OpenAdaptAI/openadapt-agent.git"
+    "url": "https://github.com/OpenAdaptAI/OpenAdapt.git"
   },
   "homepage": "https://openadapt.ai",
   "documentation": "https://docs.openadapt.ai",
-  "support": "https://github.com/OpenAdaptAI/openadapt-agent/issues",
+  "support": "https://github.com/OpenAdaptAI/OpenAdapt/issues",
   "server": {
     "type": "uv",
     "entry_point": "src/openadapt_agent/mcpb_entry.py",

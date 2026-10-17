@@ -51,7 +51,7 @@ an individual is officially representing the community in public spaces.
 
 Instances of abusive, harassing, or otherwise unacceptable behavior may be
 reported to the community leaders responsible for enforcement privately through
-a [GitHub Security Advisory](https://github.com/OpenAdaptAI/openadapt-flow/security/advisories/new)
+a [GitHub Security Advisory](https://github.com/OpenAdaptAI/OpenAdapt/security/advisories/new)
 or by contacting the maintainer [@abrichr](https://github.com/abrichr).
 All complaints will be reviewed and investigated promptly and fairly.
 

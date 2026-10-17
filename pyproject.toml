@@ -152,9 +152,9 @@ openadapt = "openadapt.cli:main"
 [project.urls]
 Homepage = "https://openadapt.ai"
 Documentation = "https://docs.openadapt.ai"
-Repository = "https://github.com/OpenAdaptAI/openadapt"
-"Canonical Engine" = "https://github.com/OpenAdaptAI/openadapt-flow"
-"Bug Tracker" = "https://github.com/OpenAdaptAI/openadapt/issues"
+Repository = "https://github.com/OpenAdaptAI/OpenAdapt"
+"Canonical Engine" = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow"
+"Bug Tracker" = "https://github.com/OpenAdaptAI/OpenAdapt/issues"
 
 [build-system]
 requires = ["hatchling==1.32.4"]
