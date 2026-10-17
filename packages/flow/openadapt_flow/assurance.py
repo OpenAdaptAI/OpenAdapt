@@ -6,22 +6,22 @@ four other steps. A reviewer usually needs one plainer answer: was the save
 read back independently of the session that typed it, read back on the same
 screen, or not checked at all? :func:`assurance_for` gives that answer:
 
-- ``independent_readback``: a read that does not go through the acting
-  session. An API, database, FHIR, file or email read (tier 1), or the
-  application's record page read in a separate signed-in session
-  (``ui_readback``, tier 2).
-- ``screen_readback``: the acting session read the value back off the screen,
-  after re-opening the record (tier 3) or on the screen the save left
-  (tier 4).
+- ``independent_readback``: a read of the system of record that does not go
+  through the UI: an API, database, FHIR, GraphQL, file or email read
+  (tier 1).
+- ``screen_readback``: a read through the application's own screens. That is
+  the record page read in a separate signed-in session (``ui_readback``,
+  tier 2), the acting session re-opening the record (tier 3), or the screen
+  the save left (tier 4).
 - ``unchecked``: no effect verifier confirmed the write.
 
-Policy rule in the current code. A separate-session UI read counts as
-independent here because :meth:`VerificationTier.is_independent_of_actuation`
-is True for tier 2, and :data:`openadapt_flow.verification.VERIFIED_EFFECT_TIER`
-lets tier 2 reach ``VERIFIED``. It is still not a system-of-record read: the
-``regulated`` policy pack requires tier 1, and the Seal ladder puts a second
-session at oracle tier 1, below the production Seal minimum of 2. So
-``independent_readback`` does not by itself mean a production Seal.
+Policy rule. A separate-session UI read goes through the same interface the
+executor used, so a UI bug or a stale view can fool both. It is therefore
+``screen_readback`` here, even though
+:meth:`VerificationTier.is_independent_of_actuation` is True for tier 2. A
+screen-only target such as Citrix gets an honest "screen-checked" grade,
+never ``independent_readback``. ``independent_readback`` still does not by
+itself mean a production Seal.
 
 ADAPTER POINT. The three names are the shared verification-grade vocabulary
 being added to ``openadapt-types``. Until that enum is published, this module
@@ -77,7 +77,7 @@ def assurance_for(
         value = VerificationTier(int(tier))
     except ValueError:
         return UNCHECKED
-    if value.is_independent_of_actuation():
+    if value is VerificationTier.INDEPENDENT_SYSTEM:
         return INDEPENDENT_READBACK
     return SCREEN_READBACK
 

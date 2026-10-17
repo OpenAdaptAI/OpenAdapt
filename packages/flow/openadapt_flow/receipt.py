@@ -93,7 +93,7 @@ ReceiptAssurance = Literal["independent_readback", "screen_readback"]
 
 _ASSURANCE_BY_TIER: dict[str, ReceiptAssurance] = {
     "independent_system": "independent_readback",
-    "independent_session": "independent_readback",
+    "independent_session": "screen_readback",
     "persisted_state_reacquisition": "screen_readback",
 }
 

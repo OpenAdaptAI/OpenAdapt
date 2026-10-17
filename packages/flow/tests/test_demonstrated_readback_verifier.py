@@ -479,7 +479,7 @@ def test_native_backends_offer_displayed_text_but_windows_does_not():
 def test_assurance_grades_follow_the_tier():
     assert assurance_for(VerificationTier.INDEPENDENT_SYSTEM) == INDEPENDENT_READBACK
     # Current policy: a separate signed-in session is independent of actuation.
-    assert assurance_for(VerificationTier.INDEPENDENT_SESSION) == INDEPENDENT_READBACK
+    assert assurance_for(VerificationTier.INDEPENDENT_SESSION) == SCREEN_READBACK
     assert (
         assurance_for(VerificationTier.PERSISTED_STATE_REACQUISITION) == SCREEN_READBACK
     )

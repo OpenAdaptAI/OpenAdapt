@@ -359,7 +359,7 @@ A blank field never counts as proof that nothing was saved.
 |---|---|---|---|---|
 | taught by demonstration (reset, then read) | 3, `reacquired-state` | `screen_readback` | a save only the form showed; a wrong value in a marked field | a page served from a cache the write filled; a duplicate submit; a lost update by another writer; fields nobody marked |
 | hand-configured `onscreen`, same screen | 4, `screen-consistency` | `screen_readback` | a value the save's own screen shows wrong | anything the screen paints but the record never got |
-| `ui_readback` (separate signed-in browser session) | 2, `independent-session` | `independent_readback` | the above, without sharing the acting session | it is still the same application, not its record store |
+| `ui_readback` (separate signed-in browser session) | 2, `independent-session` | `screen_readback` | the above, without sharing the acting session | it is still the same application, not its record store |
 | REST, SQL, FHIR and other system-of-record reads | 1, `independent-system` | `independent_readback` | what the record store holds | |
 
 A check taught by demonstration is never a system-of-record read and never
@@ -373,21 +373,21 @@ Each piece of effect evidence carries one of three grades
 (`openadapt_flow/assurance.py`), and the on-screen and separate-session
 verifiers also state it on their verdicts:
 
-- `independent_readback`: an API, database, FHIR or file read, or the
-  record page read in a separate signed-in session;
-- `screen_readback`: the acting session read the value off the screen;
+- `independent_readback`: a read of the system of record that doesn't go
+  through the UI: an API, database, FHIR, GraphQL or file read;
+- `screen_readback`: a read through the application's screens, whether in
+  the acting session or in a separate signed-in session;
 - `unchecked`: no verifier confirmed the write.
 
 The grade comes from the verifier's tier and final verdict, so it can't
 disagree with them. The success receipt records the weakest effect's grade
 as `effect_assurance`, next to `effect_tier_reached`.
 
-Current rule: a separate-session UI read (tier 2) counts as
-`independent_readback`, because it doesn't go through the session that
-typed, and tier 2 can reach `VERIFIED`. It isn't a system-of-record read.
-The `regulated` policy pack requires tier 1, and the Seal ladder in
-`openadapt-types` puts a second session at oracle tier 1, below the
-production Seal minimum of 2. These three names are the shared vocabulary
+Current rule: a separate-session UI read (tier 2) is `screen_readback`. It
+doesn't go through the session that typed, but it goes through the same
+interface, so a UI bug or a stale view can fool both reads. A screen-only
+target such as Citrix gets an honest screen-checked grade, never
+`independent_readback`. These three names are the shared vocabulary
 being added to `openadapt-types`; until it ships, `assurance.py` defines
 them locally behind a marked adapter point.
 
