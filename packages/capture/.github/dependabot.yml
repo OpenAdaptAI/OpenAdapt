@@ -8,6 +8,11 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+    ignore:
+      # Keep PyGObject >=3.46,<3.51 so the Linux extra installs on GLib 2.64
+      # distros; 3.51+ needs newer GLib. See docs/DESIGN.md.
+      - dependency-name: "pygobject"
+        versions: [">=3.51"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
