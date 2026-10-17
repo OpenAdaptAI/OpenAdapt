@@ -248,7 +248,7 @@ def test_qualify_help_opens_with_the_definition():
         check=True,
     ).stdout
     assert out.splitlines()[0] == QUALIFY_DEFINITION
-    assert "QUALIFICATION_TERMS.md" in out
+    assert "https://docs.openadapt.ai/reference/glossary/#qualify" in out
 
 
 def test_cli_reports_config_errors(tmp_path):
