@@ -102,9 +102,9 @@ wrote on 2026-10-09 against the bundled fake clinic app; regenerate it with
 The two final screens are identical, pixel for pixel. Only the record check
 tells the runs apart. To watch each stage in the terminal instead, run
 `openadapt-flow tutorial`, then `openadapt-flow tutorial --break-it`;
-[docs/TUTORIAL.md](docs/TUTORIAL.md) shows the output.
-
-<!-- TODO(readme-links): link the 60-second demo here once it is published. -->
+[docs/TUTORIAL.md](docs/TUTORIAL.md) shows the output. The
+[live demo](https://app.openadapt.ai/demo) shows recorded runs on synthetic
+data.
 
 ## How it compares
 
@@ -154,8 +154,6 @@ final submit, can only be found by position, the run refuses to click. On a
 step with an identity check, the target goes through that check before the
 click, however it was found.
 
-<!-- TODO(readme-links): link the drift proof here once it is published. -->
-
 These are the changes the tests cover, on MockMed or a synthetic test page.
 Except where a row says otherwise, the tests switch off the element locator,
 to test the fallbacks that pixel-only surfaces such as Citrix depend on.
@@ -170,12 +168,6 @@ to test the fallbacks that pixel-only surfaces such as Citrix depend on.
 | Targets moved, relabeled, and re-themed, with their DOM ids unchanged (element locator on) | The element locator found 15 of 15. Image, text, and position matching alone found 0 of 15. | [`benchmark/structural_action/`](benchmark/structural_action/STRUCTURAL_ACTION.md) |
 | Browser zoom, display scaling, font size, or font family changed | Zoom, scaling, and font-size changes stopped the run at the first step. In a 21-point sweep there were no wrong actions and no crashes; only the recorded settings and two serif font swaps finished, and a monospace font stopped at the identity check. With the element locator on, four of these changes produced no wrong writes. | [`benchmark/cosmetic_drift/`](benchmark/cosmetic_drift/COSMETIC_DRIFT.md), [`test_structural_action.py`](tests/e2e/test_structural_action.py) |
 
-<!-- TODO(readme-visual): re-cut docs/showcase/demo.gif with
-scripts/make_demo_gif.py. Its first frame is a black title card (what a still
-preview shows), four frames show the login, the captions are engine telemetry
-(step ids, coordinates, rungs, milliseconds), and the end card says "Both runs
-succeeded". Keep it here, next to the resolution ladder it illustrates, not at
-the top of the README. -->
 ![One recording replayed on two UIs. Left: the theme it was recorded on. Right: a dark theme it had never seen, where each step resolves through text or position matching.](docs/showcase/demo.gif)
 
 Left: the UI the task was recorded on. Right: a dark theme the recording never
