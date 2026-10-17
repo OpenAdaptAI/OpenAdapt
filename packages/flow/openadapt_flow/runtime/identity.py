@@ -448,7 +448,12 @@ def row_region(lines: Iterable[Any], band: Region) -> Optional[Region]:
     if not rows:
         return None
     heights = sorted(r[3] for r in rows)
-    pad = max(1, heights[len(heights) // 2] // 2)
+    median = heights[len(heights) // 2]
+    # A box much taller than its row's other lines spans several rows (OCR
+    # merged a cell with the cells above and below); it must not stretch the
+    # row back over its neighbours.
+    rows = [r for r in rows if r[3] <= 1.5 * median] or rows
+    pad = max(1, median // 2)
     top = max(band[1], min(r[1] for r in rows) - pad)
     bottom = min(band[1] + band[3], max(r[1] + r[3] for r in rows) + pad)
     if bottom <= top:

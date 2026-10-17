@@ -132,6 +132,14 @@ def test_row_region_stays_inside_the_band() -> None:
     assert row[1] >= 100 and row[1] + row[3] <= 164
 
 
+def test_row_region_ignores_a_box_spanning_several_rows() -> None:
+    band = (0, 159, 1120, 64)
+    near = [_line(182, 15), _line(168, 50), _line(181, 18), _line(184, 15)]
+    row = I.row_region(near, band)
+    # median 18 -> 9 px pad around 181..199; the 50 px box is left out
+    assert row == (0, 172, 1120, 36)
+
+
 def test_row_region_without_lines_is_none() -> None:
     assert I.row_region([], (0, 0, 10, 10)) is None
 
