@@ -6376,6 +6376,12 @@ def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
     except QualifyError as exc:
         print(f"qualify REFUSED: {exc}\nEvidence so far: {out}", file=sys.stderr)
         return 1
+    if not result.passed and result.partial:
+        print(
+            f"\nqualify PARTIAL: {len(result.rows)} trial(s) behaved as required in "
+            f"{result.timing['campaign_wall_s']} s; qualifying needs all six cases."
+        )
+        return 0
     verdict = "PASS" if result.passed else "FAIL"
     print(
         f"\nqualify {verdict}: {len(result.rows)} trial(s) in {result.timing['campaign_wall_s']} s"

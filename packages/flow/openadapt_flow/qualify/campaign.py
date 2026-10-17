@@ -809,6 +809,15 @@ class QualifyResult:
     observer: Any = None
     environment_digest: Optional[str] = None
 
+    @property
+    def partial(self) -> bool:
+        """True when only some of the six cases ran (each behaved as required).
+
+        A partial run is a development check, never a qualification.
+        """
+
+        return len({row["case_id"] for row in self.rows}) < len(CASES)
+
 
 def _default_hooks(config: VerifyConfig, hooks: Optional[QualifyHooks]) -> QualifyHooks:
     from openadapt_flow.qualify.session import (

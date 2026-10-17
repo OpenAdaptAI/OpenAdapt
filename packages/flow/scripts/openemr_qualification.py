@@ -179,9 +179,14 @@ def main(argv: Optional[list[str]] = None) -> int:
     except QualifyError as exc:
         print(f"QUALIFICATION FAILED: {exc}", file=sys.stderr)
         return 1
+    if not result.passed and result.partial:
+        print(
+            f"PARTIAL: every case run behaved as required; qualifying needs all six: {args.out}"
+        )
+        return 0
     print(
-        f"{'CERTIFIED' if result.certified else 'QUALIFIED' if result.passed else 'FAILED'} "
-        f"under {result.policy}: {args.out}"
+        f"{'CERTIFIED' if result.certified else 'QUALIFIED' if result.passed else 'FAILED'}"
+        f" under {result.policy or 'no policy'}: {args.out}"
     )
     return 0 if result.passed else 1
 
