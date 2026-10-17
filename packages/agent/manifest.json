@@ -2,7 +2,7 @@
   "manifest_version": "0.4",
   "name": "openadapt-agent",
   "display_name": "OpenAdapt",
-  "version": "2.1.0",
+  "version": "2.2.0",
   "description": "Lets your AI agent enter information in an app with no API and get back whether it saved.",
   "long_description": "Your agent sends a workflow name, its inputs, and its own request id. OpenAdapt enters the values in the app's own screens on this computer, reads the saved record back, and returns done, needs review, not sure if saved, or did not run. The same request id never writes twice. Workflow files and evidence stay on this computer.",
   "author": {

@@ -8,13 +8,13 @@
     "url": "https://github.com/OpenAdaptAI/openadapt-agent",
     "source": "github"
   },
-  "version": "2.1.0",
+  "version": "2.2.0",
   "packages": [
     {
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "openadapt-agent",
-      "version": "2.1.0",
+      "version": "2.2.0",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"

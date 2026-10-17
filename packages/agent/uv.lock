@@ -1223,7 +1223,7 @@ wheels = [
 
 [[package]]
 name = "openadapt-agent"
-version = "2.1.0"
+version = "2.2.0"
 source = { editable = "." }
 dependencies = [
     { name = "anyio" },
@@ -1253,8 +1253,8 @@ requires-dist = [
     { name = "cryptography", specifier = ">=50.0.0" },
     { name = "jsonschema", specifier = ">=4.20.0" },
     { name = "mcp", specifier = ">=1.28,<3" },
-    { name = "openadapt-flow", specifier = ">=2.0.0,<3" },
-    { name = "openadapt-flow", extras = ["browser", "macos"], marker = "extra == 'tutorial'", specifier = ">=2.0.0,<3" },
+    { name = "openadapt-flow", specifier = ">=2.1.0,<3" },
+    { name = "openadapt-flow", extras = ["browser", "macos"], marker = "extra == 'tutorial'", specifier = ">=2.1.0,<3" },
     { name = "openadapt-privacy", extras = ["presidio"], marker = "extra == 'repair-screens'", specifier = ">=1.1.2" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=8.0.0" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.4.0" },
@@ -1263,7 +1263,7 @@ provides-extras = ["dev", "repair-screens", "tutorial"]
 
 [[package]]
 name = "openadapt-flow"
-version = "2.0.0"
+version = "2.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "cryptography" },
@@ -1278,9 +1278,9 @@ dependencies = [
     { name = "rapidocr-onnxruntime" },
     { name = "tomli", marker = "python_full_version < '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/52/9f/2cc42951965b3ef28da85bc065d0894d726365e0a04bf63f40bb8bdab782/openadapt_flow-2.0.0.tar.gz", hash = "sha256:76a18d19f390e4ef3ab1520f5d248a51f2b8086963b69057a293bdfe2fae10d9", size = 22244078, upload-time = "2026-10-15T09:01:06.322Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/60/01/0192fb6b027813d8c86c7a7b162c1c10cd2c4a10564dc12009c189855edf/openadapt_flow-2.1.0.tar.gz", hash = "sha256:e14e0258c8233d7e4a40e3f2d5f39080da9be70f7c7833e9af4b44436bff1290", size = 22308706, upload-time = "2026-10-17T03:12:15.383Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/c0/31/9dbe102c481edd4d5e6de0b77434708199a13b5c5fa2cf829c00415f8257/openadapt_flow-2.0.0-py3-none-any.whl", hash = "sha256:3db9f5b956304ebac54d554c999cba4feece6513d27b43f4c969134deeeca6b3", size = 2303072, upload-time = "2026-10-15T09:01:03.354Z" },
+    { url = "https://files.pythonhosted.org/packages/b7/3b/1e860427fe3908b92d36578c3c33b88665d73edcf56150c941da2f454be5/openadapt_flow-2.1.0-py3-none-any.whl", hash = "sha256:d441f0a01c2da52586b44d5173b940697747a5cf3f42351bc65bc1b4089fd1d0", size = 2350222, upload-time = "2026-10-17T03:12:13.248Z" },
 ]
 
 [package.optional-dependencies]

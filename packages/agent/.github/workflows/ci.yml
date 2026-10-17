@@ -34,7 +34,7 @@ jobs:
         if: matrix.dependency-set == 'floor'
         run: >-
           pip install -e ".[dev]"
-          "openadapt-flow==2.0.0"
+          "openadapt-flow==2.1.0"
           "mcp==1.28.0"
       - name: Install MCP 2 floor
         if: matrix.dependency-set == 'mcp2-floor'
@@ -82,8 +82,6 @@ jobs:
   repair-e2e:
     # halt -> needs_repair -> teach_repair -> approval -> replay, on Flow's
     # rendered dialog fixture with its real replayer, OCR, and campaigns.
-    # TEMPORARY: Flow comes from the openadapt-flow#504 branch until a release
-    # ships openadapt_flow.repair.dialog_fixture; then pin a PyPI floor.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -91,11 +89,9 @@ jobs:
         with:
           python-version: "3.12"
           cache: pip
-      - name: Install with Flow from its repair branch
+      - name: Install with the released Flow (ships openadapt_flow.repair.dialog_fixture)
         run: |
-          pip install -e ".[dev]"
-          # The PyPI release has the same version number, so force the branch.
-          pip install --force-reinstall --no-deps "openadapt-flow @ git+https://github.com/OpenAdaptAI/openadapt-flow@feat/teach-repair"
+          pip install -e ".[dev]" "openadapt-flow>=2.1.0,<3"
           pip install opencv-python-headless rapidocr-onnxruntime
       - name: Run the repair end-to-end test
         env:
