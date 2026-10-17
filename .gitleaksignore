@@ -44,3 +44,7 @@
 a6e3448303f3de14020abc75b38aff7e6c893771:packages/flow/tests/test_hosted_runner_product_release_gate.py:generic-api-key:93
 be6ad79ab99fb0881d2dd59ce8b98e0aec8b12d6:packages/flow/openadapt_flow/backends/playwright_backend.py:generic-api-key:1340
 eb78575c688f06d7edc04afc69389aad10e1f5fa:packages/flow/tests/fixtures/terminal_verification_v2_delivery_vector.json:generic-api-key:3
+# Play 1 port (PR #1207): Ed25519 type annotations in jit/authority.py, flagged in the
+# branch commit that added them. The lines carry gitleaks:allow from the next commit on.
+3f0df2191a649540e79a621ac5406ebe2ff228e2:packages/flow/openadapt_flow/jit/authority.py:generic-api-key:101
+3f0df2191a649540e79a621ac5406ebe2ff228e2:packages/flow/openadapt_flow/jit/authority.py:generic-api-key:390

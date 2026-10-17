@@ -98,7 +98,9 @@ def _utc(value: str) -> datetime:
 # -- keys ------------------------------------------------------------------------
 
 
-def public_hex(key: Ed25519PrivateKey | Ed25519PublicKey) -> str:
+def public_hex(
+    key: Ed25519PrivateKey | Ed25519PublicKey,  # gitleaks:allow (type annotation)
+) -> str:
     public = key.public_key() if isinstance(key, Ed25519PrivateKey) else key
     return public.public_bytes(
         serialization.Encoding.Raw, serialization.PublicFormat.Raw
@@ -387,7 +389,8 @@ class SignedAdmissionPolicy(BaseModel):
 
 
 def sign_policy(
-    policy: AdmissionPolicy, key: Ed25519PrivateKey
+    policy: AdmissionPolicy,
+    key: Ed25519PrivateKey,  # gitleaks:allow (type annotation)
 ) -> SignedAdmissionPolicy:
     """A person signs ``policy`` with their registered policy-signer key."""
 
