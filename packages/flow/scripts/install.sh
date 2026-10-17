@@ -1,7 +1,7 @@
 #!/bin/sh
-# OpenAdapt installer (browser quickstart) — https://github.com/OpenAdaptAI/openadapt-flow
+# OpenAdapt installer (browser quickstart) — https://github.com/OpenAdaptAI/OpenAdapt
 #
-#   curl -fsSL https://raw.githubusercontent.com/OpenAdaptAI/openadapt-flow/main/scripts/install.sh | sh
+#   curl -fsSL https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/packages/flow/scripts/install.sh | sh
 #
 # Installs uv (a fast Python toolchain) if you don't have it, provisions
 # Python 3.12 (downloading a managed interpreter only if no suitable system
