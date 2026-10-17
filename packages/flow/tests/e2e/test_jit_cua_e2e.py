@@ -85,8 +85,22 @@ def _jit(base: str, agent: Any, cache: Path, *, fault: str = "ok", on_halt: Any 
     )
 
 
+def _ci_key(key_dir: Path, monkeypatch: pytest.MonkeyPatch) -> Any:
+    """A registered admitter key: how a headless run (this test) admits."""
+
+    from openadapt_flow.jit import authority
+
+    monkeypatch.setenv(authority.KEY_PASSPHRASE_ENV, "e2e passphrase")
+    pem = key_dir / "ci.pem"
+    pub = authority.generate_encrypted_key(pem)
+    authority.register_principal(
+        key_dir, role="admitter_key", principal_id="ci:e2e", public_key_hex=pub
+    )
+    return authority.principal_from_key(authority.load_encrypted_key(pem), key_dir)
+
+
 def test_anthropic_trajectory_miss_admit_hit_and_halt(
-    mockmed: str, tmp_path: Path
+    mockmed: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     agent = RecordedTrajectoryAgent.from_file(FIXTURES / "anthropic_add_note.json")
     jit = _jit(mockmed, agent, tmp_path / "cache")
@@ -110,8 +124,9 @@ def test_anthropic_trajectory_miss_admit_hit_and_halt(
     assert pending.status == "needs_human_admit" and pending.cache == "pending"
     assert agent.calls == 1 and not jit.admitted
 
-    with pytest.raises(AdmissionError, match="no human review"):
-        jit.admit(principal_id="e2e-reviewer", confirm="ok")
+    ci = _ci_key(tmp_path / "admission-keys", monkeypatch)
+    with pytest.raises(AdmissionError, match="confirm the parameters"):
+        jit.admit_with_key(ci)
     with pytest.raises(AdmissionError, match="not a human principal"):
         jit.confirm_params(
             principal_id="agent:anthropic", accept_params=["note"], confirm="ok"
@@ -132,14 +147,19 @@ def test_anthropic_trajectory_miss_admit_hit_and_halt(
             principal_id="e2e-reviewer", accept_params=["note"], confirm="ok"
         )
     with pytest.raises(AdmissionError, match="no passing canary"):
-        jit.admit(principal_id="e2e-reviewer", confirm="ok")
+        jit.admit_with_key(ci)
 
     canary = jit.canary(principal_id="e2e-operator", note="Canary test note")
     assert canary.status == "VERIFIED", canary.halt_reason or canary.detail
     assert canary.model_calls == 0 and not canary.agent_called and agent.calls == 1
-    record = jit.admit(principal_id="e2e-reviewer", confirm="ok")
+    # No terminal here, so a name alone can't admit; the registered key can.
+    with pytest.raises(AdmissionError, match="interactive terminal"):
+        jit.admit(principal_id="e2e-reviewer", confirm="ok")
+    record = jit.admit_with_key(ci)["manifest"]
     assert record["state"] == "ADMITTED" and len(record["digest"]) == 64
-    assert record["admitted_by_principal_id"] == "e2e-reviewer"
+    assert record["admitted_by_principal_id"] == "ci:e2e"
+    assert record["admission_mode"] == "admitter_key"
+    assert record["reviewed_by_principal_id"] == "e2e-reviewer"
     assert record["readback"] and all(row["ok"] for row in record["readback"])
     assert {e["evidence"] for row in record["readback"] for e in row["effects"]} == {
         "independent_readback"

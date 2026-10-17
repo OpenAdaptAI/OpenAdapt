@@ -638,8 +638,9 @@ class CompiledAgent:
         return finish(report, run_dir if report is not None else None, gate_detail)
 
     def admit(self, *, principal_id: str, confirm: object = None) -> dict[str, Any]:
-        """Admit the draft and write the signed manifest. Called by a person,
-        never by ``run``. See :func:`openadapt_flow.jit.lifecycle.admit`."""
+        """A person admits the draft at an interactive terminal; headless, it
+        raises (use :meth:`admit_with_key`). Never called by ``run``. See
+        :func:`openadapt_flow.jit.lifecycle.admit`."""
 
         return lifecycle.admit(
             self.program_dir,

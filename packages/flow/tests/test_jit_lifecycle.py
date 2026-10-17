@@ -167,12 +167,41 @@ def _stub_runs(jit: Any, monkeypatch: pytest.MonkeyPatch, report: Any) -> list:
     return calls
 
 
+@pytest.fixture
+def at_terminal(monkeypatch: pytest.MonkeyPatch) -> None:
+    """For tests of mode (a): a person admitting at an interactive terminal."""
+
+    monkeypatch.setattr(lifecycle, "_has_terminal", lambda: True)
+
+
+CI_PRINCIPAL = "ci:test"
+
+
+def _ci(jit: Any, monkeypatch: pytest.MonkeyPatch) -> Any:
+    """A registered admitter key (mode b), for tests that admit headlessly."""
+
+    from openadapt_flow.jit import authority
+
+    monkeypatch.setenv(authority.KEY_PASSPHRASE_ENV, "test passphrase")
+    pem = jit.key_dir / "ci.pem"
+    if not pem.is_file():
+        pub = authority.generate_encrypted_key(pem)
+        authority.register_principal(
+            jit.key_dir,
+            role="admitter_key",
+            principal_id=CI_PRINCIPAL,
+            public_key_hex=pub,
+        )
+    return authority.principal_from_key(authority.load_encrypted_key(pem), jit.key_dir)
+
+
 def _admitted(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, **kw: Any) -> Any:
     jit = _jit(tmp_path, **kw)
     _review(jit)
     _stub_runs(jit, monkeypatch, _report())
     jit.canary(principal_id=REVIEWER)
-    jit.admit(principal_id=REVIEWER, confirm="ok")
+    decision = jit.admit_with_key(_ci(jit, monkeypatch))
+    assert decision["outcome"] == "admitted"
     return jit
 
 
@@ -234,6 +263,7 @@ def test_replay_and_run_refuse_a_draft_bundle(tmp_path: Path, monkeypatch) -> No
     lifecycle.refuse_unadmitted_draft(admitted.bundle_dir, key_dir=admitted.key_dir)
 
 
+@pytest.mark.usefixtures("at_terminal")
 def test_full_path_review_canary_admit_then_run(tmp_path: Path, monkeypatch) -> None:
     jit = _jit(tmp_path)
     with pytest.raises(AdmissionError, match="no human review"):
@@ -329,6 +359,7 @@ def test_an_admitted_program_runs_only_as_admitted(
     assert calls == []
 
 
+@pytest.mark.usefixtures("at_terminal")
 def test_review_and_canary_pin_the_digest(tmp_path: Path, monkeypatch) -> None:
     jit = _jit(tmp_path)
     _review(jit)
@@ -402,6 +433,7 @@ def test_no_agent_or_model_can_act_on_a_draft(tmp_path: Path, who: Any) -> None:
     assert jit.state() is BundleState.DRAFT
 
 
+@pytest.mark.usefixtures("at_terminal")
 def test_distinct_reviewer_and_admitter_is_optional(
     tmp_path: Path, monkeypatch
 ) -> None:
@@ -416,6 +448,7 @@ def test_distinct_reviewer_and_admitter_is_optional(
     assert manifest["require_distinct_reviewer_and_admitter"] is True
 
 
+@pytest.mark.usefixtures("at_terminal")
 def test_a_failing_policy_refuses_admission(tmp_path: Path, monkeypatch) -> None:
     import openadapt_flow.policy as policy
 
@@ -450,6 +483,7 @@ def test_a_failing_policy_refuses_admission(tmp_path: Path, monkeypatch) -> None
         (object(), None, "unverified"),
     ],
 )
+@pytest.mark.usefixtures("at_terminal")
 def test_only_a_system_of_record_read_lets_a_canary_run(
     tmp_path: Path, monkeypatch, verifier: Any, effect: Any, evidence: str
 ) -> None:
@@ -471,6 +505,7 @@ def test_only_a_system_of_record_read_lets_a_canary_run(
 
 
 @pytest.mark.parametrize("report", [_report("HALTED"), _report(model_calls=1)])
+@pytest.mark.usefixtures("at_terminal")
 def test_a_canary_that_halts_or_calls_a_model_fails(
     tmp_path: Path, monkeypatch, report: Any
 ) -> None:
@@ -623,6 +658,7 @@ def _cli(*argv: str, answer: str = "ok", tty: bool = True) -> int:
     return jit_cli.cmd_jit(args, ask=lambda prompt: answer, interactive=lambda: tty)
 
 
+@pytest.mark.usefixtures("at_terminal")
 def test_cli_review_and_admit_need_a_terminal(
     tmp_path: Path, monkeypatch, capsys
 ) -> None:

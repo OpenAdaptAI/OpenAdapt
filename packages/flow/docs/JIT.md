@@ -35,7 +35,8 @@ confirmed = jit.confirm_params(principal_id="dana@clinic.example",
 jit.review(principal_id="dana@clinic.example", reviewed_steps=confirmed["steps"],
            confirm="ok")
 jit.canary(principal_id="dana@clinic.example", note="Canary test note")
-jit.admit(principal_id="dana@clinic.example", confirm="ok")
+jit.admit(principal_id="dana@clinic.example", confirm="ok")  # at a terminal
+# Headless (CI): jit.admit_with_key(principal_from_key(load_encrypted_key(...), key_dir))
 later = jit.run(note="Recheck knee in ten days")  # status: VERIFIED, model_calls: 0
 ```
 

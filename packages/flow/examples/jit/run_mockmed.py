@@ -7,7 +7,9 @@ model calls. It serves the bundled MockMed app with its system of record:
 
 Run 1 is a cache miss. The agent's actions are recorded and compiled into a
 DRAFT, which waits for you. You review its steps, it runs once as an attended
-canary against MockMed, and you admit it under your name. Run 2
+canary against MockMed, and you admit it under your name at the terminal.
+With --yes, or with no terminal, a demo admitter key registered in the
+example's own key directory admits it instead (the CI mode). Run 2
 is a cache hit with a new note: the compiled program runs with no model calls
 and is checked against the system of record. Run 3 uses an app that shows
 "saved" and drops the note; the program stops and the run goes to the inbox.
@@ -18,6 +20,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
+import sys
 import tempfile
 from pathlib import Path
 
@@ -36,11 +40,32 @@ TASK = TaskSignature(
 )
 
 
+def _demo_admitter(key_dir: Path):
+    """A throwaway admitter key, registered in this example's key directory.
+
+    Stands in for a CI key a person provisioned. Real keys get their
+    passphrase from your secret store, not a default.
+    """
+
+    from openadapt_flow.jit import authority
+
+    os.environ.setdefault(authority.KEY_PASSPHRASE_ENV, "demo-only-passphrase")
+    pem = key_dir / "demo-ci.pem"
+    if not pem.is_file():
+        pub = authority.generate_encrypted_key(pem)
+        authority.register_principal(
+            key_dir, role="admitter_key", principal_id="ci:demo", public_key_hex=pub
+        )
+    return authority.principal_from_key(authority.load_encrypted_key(pem), key_dir)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--cache", default=None, help="cache directory (default: temp)")
     parser.add_argument(
-        "--yes", action="store_true", help="admit without the prompt (you still decide)"
+        "--yes",
+        action="store_true",
+        help="admit headlessly with a demo admitter key instead of at the terminal",
     )
     parser.add_argument(
         "--principal", default="example-reviewer", help="your name, for the review"
@@ -87,7 +112,10 @@ def main() -> int:
                 indent=2,
             )
         )
-        answer = "ok" if args.yes else input("Admit this program? Type ok to admit: ")
+        at_terminal = sys.stdin.isatty() and sys.stdout.isatty() and not args.yes
+        answer = (
+            input("Admit this program? Type ok to admit: ") if at_terminal else "ok"
+        )
         if answer.strip().lower() not in ("ok", "yes", "y"):
             print("Not admitted. The candidate stays in", jit.program_dir)
             return 0
@@ -104,8 +132,16 @@ def main() -> int:
         if not canary.verified:
             print(f"  {canary.halt_reason or canary.detail}")
             return 1
-        manifest = jit.admit(principal_id=args.principal, confirm="ok")
-        print(f"  ADMITTED by {manifest['admitted_by_principal_id']}")
+        if at_terminal:
+            manifest = jit.admit(principal_id=args.principal, confirm="ok")
+        else:
+            manifest = jit.admit_with_key(_demo_admitter(cache / "admission-keys"))[
+                "manifest"
+            ]
+        print(
+            f"  ADMITTED by {manifest['admitted_by_principal_id']} "
+            f"({manifest['admission_mode']})"
+        )
 
         print("Run 2: the admitted program, with a new note")
         second = jit.run(note="Recheck knee in ten days")

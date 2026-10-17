@@ -125,7 +125,10 @@ its signature.
 ## A person at a terminal
 
 `openadapt-flow jit review` and `jit admit --principal NAME` need an
-interactive terminal and a typed `ok`. The steps are in the table under
+interactive terminal and a typed `ok`. So does the Python `admit()`: with no
+terminal on stdin and stdout, a name-only `admit()` raises and points to
+`admit_with_key`. A name is only a claim, and without a terminal any script
+or agent could make it. The steps are in the table under
 [The steps](#the-steps). This is the only mode with a step review.
 
 ## What every mode keeps
@@ -160,9 +163,11 @@ interactive terminal and a typed `ok`. The steps are in the table under
 
 ### Limits
 
-- Flow checks keys and names, not people. Code that can call `admit()` with
-  a person's name can admit, and the Python methods don't check for a
-  terminal.
+- Flow checks keys and names, not people. `admit()` by name needs an
+  interactive terminal, but Flow can't tell who is typing at it, and a
+  process that fakes a terminal (a pseudo-terminal) gets past the check.
+  `confirm_params`, `review` and a person's canary take a name without a
+  terminal; none of them admits.
 - The registry, the local admission key and the canary signing key all live
   in the key directory. Whoever can write it can register a key or re-sign
   an admission. Run agents without access to the key directory. If an agent

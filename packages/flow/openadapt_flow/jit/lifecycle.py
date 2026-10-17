@@ -568,6 +568,14 @@ def _task_params(candidate: Mapping[str, Any]) -> list[str]:
     return sorted((candidate.get("task") or {}).get("params") or {})
 
 
+def _has_terminal() -> bool:
+    """True when stdin and stdout are an interactive terminal."""
+
+    import sys
+
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
 def _confirm_ok(confirm: object) -> bool:
     from openadapt_flow.authoring import _confirm_is_ok
 
@@ -754,7 +762,11 @@ def admit(
     key_dir: Optional[Path] = None,
     require_distinct_reviewer_and_admitter: bool = False,
 ) -> dict[str, Any]:
-    """Move a DRAFT to ADMITTED and write the signed admission manifest.
+    """A person admits a DRAFT and the signed admission manifest is written.
+
+    Needs an interactive terminal (stdin and stdout), the same as
+    ``jit admit --principal``: a name with no terminal behind it could come
+    from any script or agent. Headless callers use :func:`admit_with_key`.
 
     Refuses unless the review, the read-back coverage and a passing canary
     are all for the bundle's current digest, there are no placeholder
@@ -769,6 +781,15 @@ def admit(
     name = check_principal(principal_id, candidate)
     if not _confirm_ok(confirm):
         raise AdmissionError("admit accepts confirm empty, ok, yes, or True")
+    if not _has_terminal():
+        # A name is only a claim. Without a terminal, any script or agent
+        # could make it, so a headless admission goes through a registered key.
+        raise AdmissionError(
+            f"admit() by name ({name!r}) is for a person at an interactive "
+            "terminal, and there is none. A script or agent admits with a "
+            "registered key: admit_with_key, with an admitter key (a CI job) or "
+            "as an agent under a signed admission policy"
+        )
     distinct = bool(
         require_distinct_reviewer_and_admitter
         or candidate.get("require_distinct_reviewer_and_admitter")

@@ -239,7 +239,8 @@ def test_a_draft_outside_the_policy_goes_to_the_needs_person_queue(
     # jit review lists it, from a script.
     assert _cli("review", "--queue", str(jit.cache_dir), tty=False) == 0
     assert reason in capsys.readouterr().out
-    # A person can still admit it the ordinary way.
+    # A person at a terminal can still admit it the ordinary way.
+    monkeypatch.setattr(lifecycle, "_has_terminal", lambda: True)
     jit.review(principal_id=REVIEWER, reviewed_steps=["step_000", "step_001"])
     jit.canary(principal_id=REVIEWER)
     jit.admit(principal_id=REVIEWER, confirm="ok")
@@ -408,3 +409,18 @@ def test_canary_evidence_written_by_anything_else_does_not_count(
     ci = principal_from_key(keys["ci"], keys["dir"])
     with pytest.raises(AdmissionError, match="not signed by the local admission"):
         jit.admit_with_key(ci)
+
+
+def test_a_headless_admit_by_name_is_refused(tmp_path: Path, monkeypatch, keys) -> None:
+    # Everything a person's admission needs is in place except the terminal.
+    jit = _jit(tmp_path)
+    jit.review(principal_id=REVIEWER, reviewed_steps=["step_000", "step_001"])
+    _stub_runs(jit, monkeypatch, _report())
+    jit.canary(principal_id=REVIEWER)
+    monkeypatch.setattr(lifecycle, "_has_terminal", lambda: False)
+    with pytest.raises(AdmissionError, match="interactive terminal.*admit_with_key"):
+        jit.admit(principal_id=REVIEWER, confirm="ok")
+    assert jit.state() is BundleState.DRAFT
+    # The headless paths are unchanged: a registered admitter key admits.
+    ci = principal_from_key(keys["ci"], keys["dir"])
+    assert jit.admit_with_key(ci)["outcome"] == "admitted"
