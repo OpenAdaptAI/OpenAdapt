@@ -8,6 +8,10 @@ session 0, which is isolated from the logged-on desktop — a screenshot taken
 there is blank and injected input goes nowhere. The agent must live in
 session 1 so `mss`/`pyautogui`/`uiautomation` address the *real* desktop.
 
+To let an AI agent record a task in a Windows app, possibly from another
+computer, see
+[Recording on Windows, RDP and Citrix](../../../docs/RECORDING_ON_WINDOWS_RDP_CITRIX.md).
+
 ## Contract
 
 | Method | Path | Purpose |

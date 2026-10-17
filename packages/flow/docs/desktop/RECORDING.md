@@ -1,11 +1,16 @@
 # Desktop recording — `record --backend windows|macos|linux|rdp|citrix`
 
-`openadapt-flow record` records a workflow **once** so it can be compiled into a
-deterministic, vision-anchored script and replayed. This page documents the
-**desktop** side of that verb — capturing a workflow the operator performs on a
+`openadapt-flow record` records a demonstration of a workflow so it can be
+compiled into a deterministic, vision-anchored script and replayed. A task can
+be learned from one or more demonstrations. This page documents the
+**desktop** side of that verb — capturing a workflow a person performs on a
 native Windows desktop (`--backend windows`) or a remote display / Citrix
 (`--backend rdp|citrix`) — so `record → compile → replay` closes through the product
 CLI on the desktop substrate, not just the browser.
+
+An AI agent can also show the task on these surfaces, through openadapt-agent's
+recording tools. See
+[Recording on Windows, RDP and Citrix](../RECORDING_ON_WINDOWS_RDP_CITRIX.md).
 
 ```
 openadapt-flow record --backend windows --out rec/ --task "triage note"

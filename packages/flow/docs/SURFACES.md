@@ -99,6 +99,11 @@ to both capture and replay. `--task` records the operator's intent alongside
 the demonstration. A compiled bundle is bound to the exact surface it was
 recorded on.
 
+`record` captures a person doing the task. An AI agent can show the task
+instead, in a browser, a macOS, Linux, or native Windows app, or over RDP or
+Citrix, through openadapt-agent's recording tools; see
+[Recording on Windows, RDP and Citrix](RECORDING_ON_WINDOWS_RDP_CITRIX.md).
+
 Install the Capture component together with the runtime for the surface that
 will replay the workflow. Recorded parameter values become the defaults, and
 `--param` overrides them at replay; see [`PARAMETERS.md`](PARAMETERS.md).

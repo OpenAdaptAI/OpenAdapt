@@ -382,6 +382,9 @@ The full list, capability by capability: [docs/LIMITS.md](docs/LIMITS.md).
 - [docs/CAPABILITIES.md](docs/CAPABILITIES.md): workflow programs with branches
   and loops, `for-each` over a worklist, `induce` from several recordings,
   durable checkpoint and resume, and Agent Skill output.
+- [Recording on Windows, RDP and Citrix](docs/RECORDING_ON_WINDOWS_RDP_CITRIX.md):
+  how a person or an agent shows a task in a native Windows app or a remote
+  session, the Windows agent server, and the token.
 - [docs/BENCHMARKS.md](docs/BENCHMARKS.md): every benchmark, with method and
   caveats.
 - [docs/REWARD_WORKER.md](docs/REWARD_WORKER.md): `serve-reward` scores a
