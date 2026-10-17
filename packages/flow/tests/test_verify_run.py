@@ -19,16 +19,16 @@ import requests
 import yaml
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
-from openadapt_types.execute import ExecuteEvidenceReceiptV1
-from openadapt_types.seal import (
+
+import openadapt_flow.runtime.effects.adapter as adapter_mod
+import openadapt_flow.verify_run as verify_run_mod
+from openadapt_flow.contracts.execute import ExecuteEvidenceReceiptV1
+from openadapt_flow.contracts.seal import (
     parse_key_registry,
-    receipt_sha256,
     seal_key_id,
     signing_payload,
     verify_sealed_receipt,
 )
-
-import openadapt_flow.runtime.effects.adapter as adapter_mod
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.runtime.effects import (
     ConnectionProbe,
@@ -42,9 +42,13 @@ from openadapt_flow.verify_run import (
     EFFECT_RECEIPT_SCHEMA,
     VerifyConfig,
     VerifyRunError,
+    baseline_digest,
     capture_baseline,
     check_effect_receipt,
+    effect_signing_payload,
     load_verify_config,
+    receipt_sha256,
+    salted_digest,
     verify_run,
 )
 
@@ -114,7 +118,7 @@ def _baseline(cfg: VerifyConfig, tmp_path: Path) -> Path:
     return path
 
 
-def _run(cfg, tmp_path, *, baseline=True, record=AGENT_RECORD, pre=None):
+def _run(cfg, tmp_path, *, baseline=True, record=AGENT_RECORD, pre=None, **kw):
     path = _baseline(cfg, tmp_path) if baseline else None
     if pre is not None:
         pre()
@@ -124,6 +128,8 @@ def _run(cfg, tmp_path, *, baseline=True, record=AGENT_RECORD, pre=None):
         run_record=record,
         authorization_ref="ticket-0000-test",
         baseline_path=path,
+        private_dir=tmp_path / "private",
+        **kw,
     )
 
 
@@ -143,7 +149,25 @@ def _registry() -> list[dict]:
 
 
 def _issuer_sign(receipt: dict) -> dict:
-    """Stand in for the issuer: the same steps Cloud's signSeal takes."""
+    """Stand in for the issuer: openadapt.effect-seal-signature/v1 (RFC-0002)."""
+
+    key = Ed25519PrivateKey.from_private_bytes(TEST_SEED)
+    unsigned = {
+        "schema": "openadapt.effect-seal-signature/v1",
+        "issuer": "openadapt-cloud:unattested-verifier",
+        "algorithm": "ed25519",
+        "key_id": _registry()[0]["key_id"],
+        "receipt_schema": "openadapt.effect-receipt/v1",
+        "receipt_sha256": receipt_sha256(receipt),
+        "run_id": receipt["execution_id"],
+        "issued_at": receipt["issued_at"],
+    }
+    signature = base64.b64encode(key.sign(effect_signing_payload(unsigned))).decode()
+    return {**receipt, "seal_signature": {**unsigned, "signature": signature}}
+
+
+def _old_domain_sign(receipt: dict) -> dict:
+    """The pre-RFC Execute Seal signature, which an effect receipt must refuse."""
 
     key = Ed25519PrivateKey.from_private_bytes(TEST_SEED)
     unsigned = {
@@ -238,13 +262,14 @@ def test_unreachable_store_is_indeterminate(tmp_path):
         params=PARAMS,
         run_record=AGENT_RECORD,
         authorization_ref="ticket-0000-test",
+        private_dir=tmp_path,
     )
     assert result["receipt"]["effect_verdict"] == "INDETERMINATE"
     assert result["receipt"]["outcome"] == "reconciliation_required"
     assert result["receipt"]["verification_tier"] == "unchecked"
 
 
-def test_screen_readback_never_becomes_verified(clean_registry):
+def test_screen_readback_never_becomes_verified(clean_registry, tmp_path):
     register_verifier_factory(
         "fake-screen",
         lambda cfg, params: _FakeVerifier(
@@ -256,6 +281,7 @@ def test_screen_readback_never_becomes_verified(clean_registry):
         params=PARAMS,
         run_record=AGENT_RECORD,
         authorization_ref="ticket-0000-test",
+        private_dir=tmp_path,
     )
     receipt = result["receipt"]
     assert receipt["effect_verdict"] == "CONFIRMED"
@@ -268,7 +294,8 @@ def test_verified_without_independent_readback_fails_the_check(cfg, sor, tmp_pat
     result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base))
     forged = _issuer_sign({**result["receipt"], "verification_tier": "screen_readback"})
     verdict = check_effect_receipt({"receipt": forged}, _registry())
-    assert verdict == {"verified": False, "reason": "malformed"}
+    assert verdict["verified"] is False
+    assert verdict["reason"] == "malformed"
 
 
 # -- the executor's claims never count ---------------------------------------
@@ -303,7 +330,11 @@ def test_params_come_from_the_task_not_the_run_record(cfg, sor, tmp_path):
 def test_run_record_must_name_executor_kind(cfg):
     with pytest.raises(VerifyRunError, match="executor_kind"):
         verify_run(
-            cfg, params=PARAMS, run_record={}, authorization_ref="ticket-0000-test"
+            cfg,
+            params=PARAMS,
+            run_record={},
+            authorization_ref="ticket-0000-test",
+            private_dir=Path("/nonexistent"),
         )
 
 
@@ -362,7 +393,9 @@ def _fake_cfg(kind: str, **extra) -> VerifyConfig:
     return VerifyConfig.model_validate(doc)
 
 
-def test_separate_session_read_never_becomes_verified(clean_registry):
+def test_separate_session_read_is_screen_readback_and_never_verified(
+    clean_registry, tmp_path
+):
     register_verifier_factory(
         "fake-session",
         lambda cfg, params: _FakeVerifier(VerificationTier.INDEPENDENT_SESSION),
@@ -373,14 +406,19 @@ def test_separate_session_read_never_becomes_verified(clean_registry):
         params=PARAMS,
         run_record=AGENT_RECORD,
         authorization_ref="ticket-0000-test",
+        private_dir=tmp_path,
     )
     receipt = result["receipt"]
     assert receipt["effect_verdict"] == "CONFIRMED"
+    # RFC-0002 decision 6: a separate UI session (Flow tier 2) is a screen
+    # read, so it can never be independent_readback.
+    assert receipt["verification_tier"] == "screen_readback"
     assert receipt["outcome"] == "reconciliation_required"
     assert receipt["oracle_tier"] == 1
+    assert result["evidence"]["readback"]["effects"][0]["flow_verification_tier"] == 2
 
 
-def test_untyped_verifier_is_refused(clean_registry):
+def test_untyped_verifier_is_refused(clean_registry, tmp_path):
     register_verifier_factory("fake-untyped", lambda cfg, params: _FakeVerifier(None))
     with pytest.raises(VerifyRunError, match="verification_tier"):
         verify_run(
@@ -388,6 +426,7 @@ def test_untyped_verifier_is_refused(clean_registry):
             params=PARAMS,
             run_record=AGENT_RECORD,
             authorization_ref="ticket-0000-test",
+            private_dir=tmp_path,
         )
 
 
@@ -412,18 +451,22 @@ def test_receipt_keeps_every_execute_v1_field(cfg, sor, tmp_path):
         ExecuteEvidenceReceiptV1.model_validate(receipt)
 
 
-def test_signed_receipt_verifies_offline_with_the_existing_seal_code(
+def test_signed_receipt_verifies_offline_under_the_effect_seal_domain(
     cfg, sor, tmp_path
 ):
     base, _db = sor
     result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base))
     signed = _issuer_sign(result["receipt"])
     registry = _registry()
-    # The existing Seal check in openadapt-types, unchanged.
-    assert verify_sealed_receipt(signed, parse_key_registry(registry)).ok
+    # A pre-RFC Execute Seal verifier refuses it instead of passing it.
+    old = verify_sealed_receipt(signed, parse_key_registry(registry))
+    assert not old.ok and old.reason == "malformed"
     document = {**result, "receipt": signed}
     verdict = check_effect_receipt(document, registry)
     assert verdict["verified"] is True
+    assert verdict["verified_outcome"] is True
+    assert verdict["ok"] is True
+    assert verdict["issuer"] == "openadapt-cloud:unattested-verifier"
     assert verdict["evidence_bound"] is True
     assert verdict["executor_kind"] == "agent"
     assert verdict["effect_verdict"] == "CONFIRMED"
@@ -449,6 +492,24 @@ def test_tampering_is_caught(cfg, sor, tmp_path):
     )
     assert check_effect_receipt(result, registry)["reason"] == "unsigned"
     assert check_effect_receipt(result, [])["verified"] is False
+
+
+def test_execute_seal_signature_on_an_effect_receipt_is_refused(cfg, sor, tmp_path):
+    base, _db = sor
+    result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base))
+    old = _old_domain_sign(result["receipt"])
+    verdict = check_effect_receipt({**result, "receipt": old}, _registry())
+    assert verdict["verified"] is False
+    assert verdict["reason"] == "malformed"
+    # Same fields under the new schema but signed over the old domain.
+    forged = _issuer_sign(result["receipt"])
+    sig = dict(forged["seal_signature"])
+    key = Ed25519PrivateKey.from_private_bytes(TEST_SEED)
+    sig["signature"] = base64.b64encode(key.sign(signing_payload(sig))).decode()
+    verdict = check_effect_receipt(
+        {**result, "receipt": {**forged, "seal_signature": sig}}, _registry()
+    )
+    assert verdict["reason"] == "bad_signature"
 
 
 def test_receipt_carries_no_record_values(cfg, sor, tmp_path):
@@ -529,3 +590,283 @@ def test_cli_end_to_end(sor, tmp_path):
     )
     assert done.returncode == 0, done.stdout + done.stderr
     assert json.loads(done.stdout)["verified"] is True
+
+
+# -- RFC-0002: run salt, baseline binding, tiers, linking ---------------------
+
+
+def _hmac(salt: bytes, label: str, value) -> str:
+    import hashlib
+    import hmac as hmac_mod
+
+    message = (
+        label.encode()
+        + b"\0"
+        + json.dumps(
+            value, sort_keys=True, separators=(",", ":"), ensure_ascii=False
+        ).encode("utf-8")
+    )
+    return "hmac-sha256:" + hmac_mod.new(salt, message, hashlib.sha256).hexdigest()
+
+
+def test_customer_digests_are_salted_with_the_run_salt(cfg, sor, tmp_path):
+    import hashlib
+
+    base, _db = sor
+    path = _baseline(cfg, tmp_path)
+    baseline = json.loads(path.read_text())
+    salt = bytes.fromhex(baseline["salt"])
+    _actor_writes(base)
+    result = verify_run(
+        cfg,
+        params=PARAMS,
+        run_record=AGENT_RECORD,
+        authorization_ref="ticket-0000-test",
+        baseline_path=path,
+    )
+    evidence = result["evidence"]
+    assert evidence["salting"] == {
+        "scheme": "openadapt.run-salt/v1",
+        "salt_commitment": "sha256:" + hashlib.sha256(salt).hexdigest(),
+    }
+    assert evidence["executor"]["run_record_sha256"] == _hmac(
+        salt, "run_record", AGENT_RECORD
+    )
+    assert evidence["authorization"]["reference_sha256"] == _hmac(
+        salt, "authorization_reference", "ticket-0000-test"
+    )
+    # The baseline digest covers the five named fields, never the salt.
+    five = {
+        k: baseline[k]
+        for k in (
+            "schema_version",
+            "execution_id",
+            "baseline_read_at",
+            "verifier_identity",
+            "state",
+        )
+    }
+    assert evidence["readback"]["baseline_sha256"] == _hmac(salt, "baseline", five)
+    assert evidence["readback"]["baseline_sha256"] == baseline_digest(baseline, salt)
+    # The receipt continues the run the baseline started.
+    assert result["receipt"]["execution_id"] == baseline["execution_id"]
+    # The salt itself never leaves the private file.
+    assert baseline["salt"] not in json.dumps(result)
+    # The effect hash binds the parameters only through salted digests.
+    effect = cfg.effects[0]
+    unsalted = effect.resolve(PARAMS).contract_hash()
+    row = evidence["readback"]["effects"][0]
+    assert row["effect_contract_hash"] != unsalted
+    salted = {
+        name: salted_digest(salt, f"effect_param:{name}", PARAMS[name]).split(":", 1)[1]
+        for name in effect.referenced_params()
+    }
+    assert row["effect_contract_hash"] == effect.resolved_contract_hash(
+        {}, opaque_param_sha256=salted
+    )
+
+
+def test_two_runs_differ_in_salt_and_execution_but_not_in_contract(cfg, sor, tmp_path):
+    seen: list = []
+    original = verify_run_mod.build_effect_verifier
+
+    def spy(config, params):
+        verifier = original(config, params)
+        seen.append(verifier)
+        return verifier
+
+    base, _db = sor
+    _actor_writes(base)
+    with pytest.MonkeyPatch.context() as mp:
+        mp.setattr(verify_run_mod, "build_effect_verifier", spy)
+        one = verify_run(
+            cfg,
+            params=PARAMS,
+            run_record=AGENT_RECORD,
+            authorization_ref="ticket-0000-test",
+            private_dir=tmp_path / "a",
+        )
+        two = verify_run(
+            cfg,
+            params=PARAMS,
+            run_record=AGENT_RECORD,
+            authorization_ref="ticket-0000-test",
+            private_dir=tmp_path / "b",
+        )
+    r1, r2 = one["receipt"], two["receipt"]
+    assert r1["execution_id"] != r2["execution_id"]
+    assert r1["workflow_digest"] == r2["workflow_digest"]
+    assert (
+        one["evidence"]["readback"]["verifier_identity"]
+        == two["evidence"]["readback"]["verifier_identity"]
+    )
+    assert (
+        one["evidence"]["salting"]["salt_commitment"]
+        != two["evidence"]["salting"]["salt_commitment"]
+    )
+    assert (
+        one["evidence"]["executor"]["run_record_sha256"]
+        != two["evidence"]["executor"]["run_record_sha256"]
+    )
+    # Every REST read carries the run's own execution id and trace header.
+    for verifier, receipt in zip(seen, (r1, r2)):
+        assert verifier.headers["X-OpenAdapt-Execution-Id"] == receipt["execution_id"]
+        assert verifier.headers["traceparent"].startswith("00-")
+    # The run salt is kept privately, mode 0600.
+    private = tmp_path / "a" / "effect-run.private.json"
+    assert (private.stat().st_mode & 0o777) == 0o600
+    assert json.loads(private.read_text())["execution_id"] == r1["execution_id"]
+
+
+def test_a_baseline_with_an_extra_key_is_refused(cfg, sor, tmp_path):
+    path = _baseline(cfg, tmp_path)
+    doc = json.loads(path.read_text())
+    doc["note"] = "unbound"
+    path.write_text(json.dumps(doc))
+    with pytest.raises(VerifyRunError, match="exactly"):
+        verify_run(
+            cfg,
+            params=PARAMS,
+            run_record=AGENT_RECORD,
+            authorization_ref="ticket-0000-test",
+            baseline_path=path,
+        )
+
+
+def test_a_baseline_is_used_once(cfg, sor, tmp_path):
+    base, _db = sor
+    path = _baseline(cfg, tmp_path)
+    _actor_writes(base)
+    kw = dict(
+        params=PARAMS,
+        run_record=AGENT_RECORD,
+        authorization_ref="ticket-0000-test",
+        baseline_path=path,
+    )
+    assert verify_run(cfg, **kw)["receipt"]["outcome"] == "verified"
+    with pytest.raises(VerifyRunError, match="already used"):
+        verify_run(cfg, **kw)
+
+
+def test_a_baseline_outside_the_window_counts_as_absent(cfg, sor, tmp_path):
+    base, _db = sor
+    path = _baseline(cfg, tmp_path)
+    doc = json.loads(path.read_text())
+    doc["baseline_read_at"] = "2020-01-01T00:00:00Z"
+    path.write_text(json.dumps(doc))
+    _actor_writes(base)
+    result = verify_run(
+        cfg,
+        params=PARAMS,
+        run_record=AGENT_RECORD,
+        authorization_ref="ticket-0000-test",
+        baseline_path=path,
+    )
+    assert result["receipt"]["effect_verdict"] == "INDETERMINATE"
+    assert result["receipt"]["outcome"] == "reconciliation_required"
+    readback = result["evidence"]["readback"]
+    assert readback["baseline_sha256"] is None
+    assert readback["baseline_read_at"] is None
+
+
+def test_offline_check_refuses_a_broken_baseline_window(cfg, sor, tmp_path):
+    base, _db = sor
+    result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base))
+    evidence = json.loads(json.dumps(result["evidence"]))
+    evidence["readback"]["baseline_read_at"] = "2020-01-01T00:00:00Z"
+    receipt = dict(result["receipt"])
+    receipt["evidence_digest"] = verify_run_mod.sha256_tagged(evidence)
+    signed = _issuer_sign(receipt)
+    verdict = check_effect_receipt(
+        {"receipt": signed, "evidence": evidence}, _registry()
+    )
+    assert verdict["reason"] == "baseline_window"
+    assert verdict["verified"] is False
+
+
+def test_offline_check_refuses_unsalted_evidence(cfg, sor, tmp_path):
+    base, _db = sor
+    result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base))
+    evidence = json.loads(json.dumps(result["evidence"]))
+    evidence["executor"]["run_record_sha256"] = "sha256:" + "0" * 64
+    receipt = dict(result["receipt"])
+    receipt["evidence_digest"] = verify_run_mod.sha256_tagged(evidence)
+    verdict = check_effect_receipt(
+        {"receipt": _issuer_sign(receipt), "evidence": evidence}, _registry()
+    )
+    assert verdict["reason"] == "unsalted"
+
+
+def test_remediates_and_correlation_id_are_signed_into_the_receipt(cfg, sor, tmp_path):
+    base, _db = sor
+    earlier = "receipt-" + "a" * 32
+    result = _run(
+        cfg,
+        tmp_path,
+        pre=lambda: _actor_writes(base),
+        remediates=earlier,
+        correlation_id="ticket-INC-4242",
+    )
+    receipt = result["receipt"]
+    assert receipt["remediates"] == earlier
+    assert receipt["correlation_id"] == "ticket-INC-4242"
+    signed = _issuer_sign(receipt)
+    assert check_effect_receipt({**result, "receipt": signed}, _registry())["ok"]
+    # Both are inside receipt_sha256, so editing either breaks the seal.
+    for field, value in (
+        ("remediates", "receipt-" + "b" * 32),
+        ("correlation_id", "ticket-INC-9999"),
+    ):
+        edited = {**signed, field: value}
+        verdict = check_effect_receipt({**result, "receipt": edited}, _registry())
+        assert verdict["reason"] == "receipt_mismatch"
+    # Absent unless given, so a plain receipt keeps the RFC field set.
+    plain = _run(cfg, tmp_path / "plain", pre=lambda: _actor_writes(base))
+    assert "remediates" not in plain["receipt"]
+    assert "correlation_id" not in plain["receipt"]
+
+
+def test_link_ids_must_be_opaque(cfg, tmp_path):
+    with pytest.raises(VerifyRunError, match="correlation_id"):
+        verify_run(
+            cfg,
+            params=PARAMS,
+            run_record=AGENT_RECORD,
+            authorization_ref="ticket-0000-test",
+            private_dir=tmp_path,
+            correlation_id="jane.doe@example.com x",
+        )
+
+
+def test_a_self_approved_write_is_rejected_policy(cfg, sor, tmp_path):
+    base, _db = sor
+    approver = {
+        "kind": "agent",
+        "id": AGENT_RECORD["executor_id"],
+        "policy_ref": "sha256:" + "1" * 64,
+    }
+    result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base), approver=approver)
+    receipt = result["receipt"]
+    assert receipt["effect_verdict"] == "CONFIRMED"
+    assert receipt["outcome"] == "rejected_policy"
+    assert receipt["contracts"]["authorization_passed"] is False
+    assert receipt["contracts"]["effect_passed"] is True
+    assert result["evidence"]["authorization"]["self_approved"] is True
+    other = {**approver, "kind": "person", "id": "staff-00000042"}
+    ok = _run(cfg, tmp_path / "other", pre=lambda: _actor_writes(base), approver=other)
+    assert ok["evidence"]["authorization"]["self_approved"] is False
+
+
+def test_a_genuine_signature_over_a_refutation_is_not_a_pass(cfg, sor, tmp_path):
+    base, _db = sor
+    result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base, fault="no_persist"))
+    assert result["receipt"]["outcome"] == "halted_before_effect"
+    document = {**result, "receipt": _issuer_sign(result["receipt"])}
+    verdict = check_effect_receipt(document, _registry())
+    assert verdict["verified"] is True
+    assert verdict["verified_outcome"] is False
+    assert verdict["ok"] is False
+    accepted = check_effect_receipt(
+        document, _registry(), accept_outcomes=["halted_before_effect"]
+    )
+    assert accepted["ok"] is True

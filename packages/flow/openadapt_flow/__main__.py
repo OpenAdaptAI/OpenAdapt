@@ -2353,9 +2353,16 @@ def _cmd_verify_run(args: argparse.Namespace) -> int:
         registry = _json(args.keys)
         if isinstance(registry, dict):
             registry = registry.get("keys", [])
-        result = check_effect_receipt(_json(args.check), registry)
+        result = check_effect_receipt(
+            _json(args.check), registry, accept_outcomes=args.accept_outcome or ()
+        )
         print(json.dumps(result, indent=2, sort_keys=True))
-        return 0 if result.get("verified") else 1
+        if result.get("verified") and not result.get("verified_outcome"):
+            print(
+                "The signature is genuine, but the outcome is not verified.",
+                file=sys.stderr,
+            )
+        return 0 if result.get("ok") else 1
     if not args.verify:
         print("verify-run needs --verify verify.yaml", file=sys.stderr)
         return 2
@@ -2380,6 +2387,10 @@ def _cmd_verify_run(args: argparse.Namespace) -> int:
             run_record=_json(args.run_record),
             authorization_ref=args.authorization_ref,
             baseline_path=Path(args.baseline) if args.baseline else None,
+            private_dir=Path(args.out),
+            approver=_json(args.approver) if args.approver else None,
+            remediates=args.remediates,
+            correlation_id=args.correlation_id,
         )
     except VerifyRunError as exc:
         print(f"verify-run REFUSED: {exc}", file=sys.stderr)
@@ -7233,8 +7244,9 @@ def build_parser() -> argparse.ArgumentParser:
         "verify-run",
         help=(
             "Read the system of record and rule on an effect that an agent, "
-            "script, or person claims it made; writes an unsigned effect "
-            "receipt. The executor's own record is hashed, never trusted"
+            "script, or person claims it made; writes an unsigned "
+            "openadapt.effect-receipt/v1. The executor's own record is "
+            "hashed, never trusted"
         ),
     )
     p.add_argument(
@@ -7286,6 +7298,39 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="JSON",
         help="Pinned Seal key registry for --check",
+    )
+    p.add_argument(
+        "--accept-outcome",
+        action="append",
+        default=None,
+        choices=[
+            "halted_before_effect",
+            "reconciliation_required",
+            "rejected_policy",
+            "failed_platform",
+        ],
+        help=(
+            "With --check: also exit 0 for this outcome when the signature is "
+            "genuine (repeatable; no value accepts every outcome)"
+        ),
+    )
+    p.add_argument(
+        "--approver",
+        default=None,
+        metavar="JSON",
+        help="Who approved the write: {kind, id, policy_ref}; id is opaque",
+    )
+    p.add_argument(
+        "--remediates",
+        default=None,
+        metavar="RECEIPT_ID",
+        help="receipt_id of an earlier effect receipt this run remediates",
+    )
+    p.add_argument(
+        "--correlation-id",
+        default=None,
+        metavar="ID",
+        help="Your own opaque id linking this receipt to a ticket or trace",
     )
     p.set_defaults(func=_cmd_verify_run)
 
