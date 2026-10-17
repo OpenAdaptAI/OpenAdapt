@@ -9,7 +9,7 @@ Participation in this project is governed by the
 
 `OpenAdaptAI/OpenAdapt` is the launcher/meta-package and compatibility
 surface. The canonical compiler and governed runtime live in
-[`openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow). New engine,
+[`openadapt-flow`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow). New engine,
 replay, repair, policy, and backend work belongs there.
 
 The [signed Production record](https://docs.openadapt.ai/production-lifecycle.json)
@@ -94,9 +94,9 @@ appreciated but the certification applies to every contribution regardless.
 ## Contributor License Agreement
 
 A Contributor License Agreement is published:
-[`openadapt-flow/CLA.md`](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/CLA.md)
+[`packages/flow/CLA.md`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/CLA.md)
 for individuals, and
-[`openadapt-flow/CCLA.md`](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/CCLA.md)
+[`packages/flow/CCLA.md`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/CCLA.md)
 for companies whose employees contribute on company time. It gives MLDSAI Inc.
 an explicit copyright and patent license, which the MIT License alone doesn't
 provide, and it keeps the option of relicensing the combined work later.

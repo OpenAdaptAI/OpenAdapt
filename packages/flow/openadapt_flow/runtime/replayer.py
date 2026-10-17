@@ -224,6 +224,66 @@ if TYPE_CHECKING:
 PC_TEMPLATE_SEARCH_PAD = 80
 
 
+_FIELD_CHECK_LIMIT = 32
+_FIELD_VALUE_LIMIT = 256
+
+
+def _field_text(value: Any) -> Optional[str]:
+    if value is None:
+        return None
+    if isinstance(value, bool):
+        return "true" if value else "false"
+    if isinstance(value, (str, int, float)):
+        return str(value)[:_FIELD_VALUE_LIMIT]
+    return None
+
+
+def effect_field_checks(effect: Any, verdict: Any, tier: Any) -> list[Any]:
+    """The field comparisons one effect verdict made, for the local report.
+
+    A ``field_equals`` effect compares one field. A record effect compares
+    each literal ``match`` value against the first matched record. Values
+    that aren't plain text or numbers are left out rather than guessed.
+    """
+
+    from openadapt_flow.ir import EffectFieldCheck
+
+    tier_value = int(tier) if tier is not None else None
+    checks: list[EffectFieldCheck] = []
+    field = getattr(effect, "field", None)
+    expected_value = getattr(verdict, "expected_value", None)
+    if field and expected_value is not None:
+        checks.append(
+            EffectFieldCheck(
+                field=str(field)[:_FIELD_VALUE_LIMIT],
+                expected=_field_text(expected_value),
+                observed=_field_text(getattr(verdict, "observed_value", None)),
+                matched=bool(getattr(verdict, "confirmed", False)),
+                verification_tier=tier_value,
+            )
+        )
+        return checks
+    records = getattr(verdict, "matched_records", None) or []
+    record = records[0] if records and isinstance(records[0], dict) else None
+    for name, want in (getattr(effect, "match", None) or {}).items():
+        expected = _field_text(want)
+        if expected is None:
+            continue
+        observed = _field_text(record.get(name)) if record is not None else None
+        checks.append(
+            EffectFieldCheck(
+                field=str(name)[:_FIELD_VALUE_LIMIT],
+                expected=expected,
+                observed=observed,
+                matched=observed == expected,
+                verification_tier=tier_value,
+            )
+        )
+        if len(checks) >= _FIELD_CHECK_LIMIT:
+            break
+    return checks
+
+
 def _frame_viewport(frame_png: bytes) -> tuple[int, int]:
     """Return the viewport of THIS frame, read from the frame itself.
 
@@ -7974,6 +8034,9 @@ class Replayer:
                     f"'{step.id}' — refusing mutable verification evidence; "
                     "run aborted"
                 )
+            result.effect_field_checks.extend(
+                effect_field_checks(effect, verdict, tier)
+            )
             if verdict.confirmed:
                 result.effect_evidence.append(
                     EffectVerificationEvidence(

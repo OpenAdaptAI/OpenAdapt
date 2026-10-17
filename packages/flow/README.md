@@ -1,6 +1,6 @@
 # openadapt-flow
 
-[![CI](https://github.com/OpenAdaptAI/openadapt-flow/actions/workflows/ci.yml/badge.svg)](https://github.com/OpenAdaptAI/openadapt-flow/actions/workflows/ci.yml)
+[![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml)
 [![PyPI](https://img.shields.io/pypi/v/openadapt-flow)](https://pypi.org/project/openadapt-flow/)
 [![Python](https://img.shields.io/pypi/pyversions/openadapt-flow)](https://pypi.org/project/openadapt-flow/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
@@ -37,7 +37,7 @@ Agents can call a compiled workflow as one tool over MCP; see
 [Docs](https://docs.openadapt.ai) ·
 [Try it in your browser](https://app.openadapt.ai/demo) ·
 [Website](https://openadapt.ai) ·
-[Discussions](https://github.com/OpenAdaptAI/openadapt-flow/discussions)
+[Discussions](https://github.com/OpenAdaptAI/OpenAdapt/discussions)
 
 ## See it run
 
@@ -307,7 +307,7 @@ specific stop with `--allow-halt`.
 
 Instead of sending screenshots to a model and clicking, your agent calls a
 compiled workflow as one tool and gets back an outcome. The
-[openadapt-agent](https://github.com/OpenAdaptAI/openadapt-agent) package
+[openadapt-agent](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent) package
 serves bundles to an MCP client over stdio and writes Agent Skills:
 
 ```bash
@@ -343,7 +343,7 @@ server for one bundle. It replays without the record check.
 [`examples/claude-code-demo`](examples/claude-code-demo) records one form fill
 in a small expenses app backed by SQLite, compiles it, and serves it to Claude
 Code over MCP with
-[openadapt-agent](https://github.com/OpenAdaptAI/openadapt-agent). Claude Code
+[openadapt-agent](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent). Claude Code
 passes a description and an amount. OpenAdapt fills in the form with no model
 calls, then reads the `expenses` table itself. The tool returns `success` only
 when exactly one new row with those values is there. If the app shows "Expense
@@ -413,6 +413,10 @@ The full list, capability by capability: [docs/LIMITS.md](docs/LIMITS.md).
 
 ## More documentation
 
+- [Qualify a workflow](docs/QUALIFY_A_WORKFLOW.md): `openadapt-flow qualify`
+  runs a bundle against the normal case and deliberate faults, reads the write
+  back from the system of record, and certifies it under a policy. Terms are
+  defined in [docs/QUALIFICATION_TERMS.md](docs/QUALIFICATION_TERMS.md).
 - [Production setup](docs/PRODUCTION.md): qualifying a bundle from its
   recording, policies, multi-step processes, signed results, and release
   status.
@@ -431,7 +435,7 @@ The full list, capability by capability: [docs/LIMITS.md](docs/LIMITS.md).
 ## Development
 
 ```bash
-git clone https://github.com/OpenAdaptAI/openadapt-flow && cd openadapt-flow
+git clone https://github.com/OpenAdaptAI/OpenAdapt && cd OpenAdapt/packages/flow
 pip install -e '.[dev]'
 python -m playwright install chromium  # optional browser pre-provisioning
 pytest -q
@@ -456,7 +460,7 @@ OpenAdapt-authored package code is licensed under the [MIT License](LICENSE).
 The openIMIS and OpenEMR reference environments fetch their third-party
 configuration (`AGPL-3.0-only` and `GPL-3.0`) from upstream at run time,
 pinned by commit and SHA-256. None of it is stored in this repository; see the
-[third-party notice](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/THIRD_PARTY_NOTICES.md).
+[third-party notice](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/THIRD_PARTY_NOTICES.md).
 
 Published PyPI wheels and source distributions exclude the openIMIS benchmark
 surface and stay within the declared MIT package boundary.

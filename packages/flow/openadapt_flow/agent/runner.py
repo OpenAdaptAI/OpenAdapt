@@ -186,6 +186,11 @@ class RunnerConfig:
     #: start. None passes nothing, so Flow's default applies (a person
     #: approves each save under the Standard and Regulated profiles).
     approval_mode: Optional[str] = None
+    #: The calling agent's opaque id when the operator lets it answer
+    #: waiting saves (``serve --delegate-approvals ID``). None: it can't.
+    #: Flow still accepts its answer only where the run's approver policy
+    #: allows an agent for that step.
+    delegate_approver_id: Optional[str] = None
     #: Seconds Flow keeps a halted browser page open for ``teach_repair``
     #: (``openadapt-flow run --hold-on-halt``). 0 closes it at once.
     hold_on_halt_s: float = 0.0
@@ -846,6 +851,30 @@ class FlowRunner:
         if outcome.approval_mode is None:
             outcome.approval_mode = self.config.approval_mode
         return outcome
+
+    def item_approval(self, verb: str, run_dir: Path, args: list[str]) -> dict:
+        """Run ``openadapt-flow item-approval VERB RUN_DIR ARGS`` and parse it.
+
+        Flow prints one JSON object, ``{"ok": false, "code": ...}`` on a
+        refusal. Anything else is reported as ``flow_unreadable``.
+        """
+        cmd = [*self.config.flow_cli, "item-approval", verb, str(run_dir), *args]
+        try:
+            proc = _run_flow_process(cmd, capture_output=True, text=True, timeout=60)
+        except FileNotFoundError:
+            return {"ok": False, "code": "flow_not_found"}
+        except (OSError, subprocess.SubprocessError, ValueError):
+            _LOG.exception("Flow item-approval subprocess failed locally")
+            return {"ok": False, "code": "flow_failed"}
+        try:
+            payload = json.loads(proc.stdout or "")
+        except ValueError:
+            return {"ok": False, "code": "flow_unreadable"}
+        return (
+            payload
+            if isinstance(payload, dict)
+            else {"ok": False, "code": "flow_unreadable"}
+        )
 
     def certify(self, bundle_dir: Path) -> dict:
         """Evaluate certification status via ``openadapt-flow certify``.

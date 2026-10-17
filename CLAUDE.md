@@ -7,7 +7,7 @@ entry point for OpenAdapt. It owns `pip install openadapt`, the unified
 `openadapt` CLI, release compatibility, and launcher packaging.
 
 The canonical compiler and governed runtime live in
-[`OpenAdaptAI/openadapt-flow`](https://github.com/OpenAdaptAI/openadapt-flow).
+[`OpenAdaptAI/openadapt-flow`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow).
 Engine, replay, verification, repair, policy, and backend changes belong there;
 do not implement a second engine in this repository.
 

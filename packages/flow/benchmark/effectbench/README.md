@@ -52,7 +52,7 @@ about a real system of record.
 ## Where the measured result lives
 
 The measured, end-to-end silent-wrong-effect result is
-[`benchmark/effect_e2e/`](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/benchmark/effect_e2e/EFFECT_E2E.md)
+[`benchmark/effect_e2e/`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/effect_e2e/EFFECT_E2E.md)
 in the OpenAdapt engine repository. Every write there goes through the real
 governed replay path (`Replayer` → `ApiActuator` → a real HTTP write to an
 on-disk SQLite system of record); the verifier reads back over a different HTTP

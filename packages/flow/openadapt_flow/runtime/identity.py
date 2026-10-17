@@ -1876,6 +1876,56 @@ PIXEL_VERIFY_MAX_WINDOW = 0.040  # VERIFY: worst aligned window mean-abs-diff <=
 PIXEL_VERIFY_ENABLED = False
 
 
+# ---------------------------------------------------------------------------
+# Which identity evidence a runtime can turn into a VERIFIED verdict
+# ---------------------------------------------------------------------------
+#
+# A step that carries identity evidence is checked by the ladder above, and on
+# an irreversible step a check that cannot reach ``verified`` halts. So
+# evidence a runtime can only abstain on is not neutral: it turns a step that
+# ran into one that always stops. Anything that attaches identity evidence
+# (a compiler pass, a qualification hook) asks this function first and
+# attaches only evidence the surface that runs the step can verify.
+
+#: Surfaces whose backends expose ``structured_text_at`` (the browser DOM, or
+#: a native accessibility tree). RDP and Citrix are pixels only.
+STRUCTURED_TEXT_SURFACES: frozenset[str] = frozenset(
+    {"web", "windows", "macos", "linux"}
+)
+
+
+def verifiable_identity_evidence(
+    surface_kind: Optional[str],
+    *,
+    pixel_verify_enabled: Optional[bool] = None,
+) -> frozenset[str]:
+    """Identity evidence kinds the ladder can VERIFY on ``surface_kind``.
+
+    Returns a subset of ``{"structured_text", "context_band",
+    "identifier_crop"}``:
+
+    - ``structured_text`` (tier 1): the surface exposes structured text.
+    - ``context_band`` (the OCR tier): every surface.
+    - ``identifier_crop`` (tier 2): only when the runtime's pixel VERIFY path
+      is on. With it off, the pixel tier can still MISMATCH (and halt) but
+      never verify, so a crop alone can't pass an irreversible step.
+
+    ``surface_kind`` None means a legacy bundle with no recorded surface,
+    which runs in a browser. ``pixel_verify_enabled`` None reads the module
+    default :data:`PIXEL_VERIFY_ENABLED`; pass the target runtime's
+    ``runtime.pixel_verify_enabled`` when it is known.
+    """
+    if pixel_verify_enabled is None:
+        pixel_verify_enabled = PIXEL_VERIFY_ENABLED
+    kind = surface_kind or "web"
+    kinds = {"context_band"}
+    if kind in STRUCTURED_TEXT_SURFACES:
+        kinds.add("structured_text")
+    if pixel_verify_enabled:
+        kinds.add("identifier_crop")
+    return frozenset(kinds)
+
+
 def pixel_identity_evaluator_contract_sha256() -> str:
     """Return the exact PHI-free contract digest for the pixel evaluator."""
 

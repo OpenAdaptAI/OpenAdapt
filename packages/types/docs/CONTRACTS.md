@@ -21,6 +21,7 @@ A test checks that every file in that directory appears in this index.
 | `authentication-task-v1.json`, `authentication-receipt-v1.json`, `authentication-capture-policy-v1.json` | `AuthenticationTaskContractV1`, `AuthenticationReceiptV1`, `AuthenticationCapturePolicyV1` | A value-free login requirement bound to an existing attended task, its receipt, and the capture-exclusion policy | [Authentication tasks](#authentication-tasks) |
 | `authoring-observe-v1.json`, `authoring-command-v1.json`, `authoring-bind-v1.json` | `AuthoringObserveV1`, `AuthoringCommandV1`, `AuthoringBindV1` | The hosted authoring MCP wire: a PHI-safe observe tree, the mailbox command envelope, and bind status | [Authoring MCP wire](#authoring-mcp-wire) |
 | `clinic-inbox-v1.json`, `clinic-outbox-v1.json`, `clinic-tool-result-v1.json`, `clinic-mcp-tools-v1.json` | `ClinicInboxV1`, `ClinicOutboxV1`, `ClinicToolResultV1`, `ClinicMcpToolCatalogV1` | The clinic job handoff: an inbox job, an actuation intent, an MCP tool result, and the tool catalog | [Clinic job inbox and MCP tools](#clinic-job-inbox-and-mcp-tools) |
+| `approver-identity-v1.json`, `approver-policy-v1.json`, `approval-record-v1.json`, `autonomy-eligibility-v1.json` | `ApproverIdentityV1`, `ApproverPolicyV1`, `ApprovalRecordV1`, `AutonomyEligibilityV1` | Who approved a step (a person, a rule, an agent or a system), which approvers each step class allows, one approval decision for the audit trail and receipt, and the evidence a workflow needs before it runs on exceptions only | [Approvals and read-back](#approvals-and-read-back) |
 | `plain-outcome-v1.json`, `plain-progress-v1.json` | `PlainOutcomeV1`, `PlainProgressV1` | One run's result in plain words, or the state of a run that hasn't ended | [Plain results](#plain-results) |
 
 `OracleObservation` and `EffectStrengthV1` have no schema file of their own.
@@ -265,3 +266,46 @@ a fallback, which only adds caution. The JSON Schema names the rule in
 checks itself against `outcome-vectors.json`. `plain-progress-v1.json` covers
 a run that hasn't ended; it always has `safe_to_retry` false.
 [VOCABULARY.md](VOCABULARY.md) has the full mapping.
+
+## Approvals and read-back
+
+`openadapt_types.approval` is the one contract for who decides a
+consequential step, when a step waits, and how a save was checked.
+
+- `ApproverIdentityV1` names the approver: `person`, `rule`, `agent` or
+  `system`, with an opaque id and how it was identified (`cloud_user`,
+  `unauthenticated`, `policy`, `local_cli`, `signed_webhook`,
+  `mcp_session`). A rule pins its rule set by digest.
+  `approver_from_legacy` maps the older `decided_by` and `approver_kind`
+  fields onto it. A record that says only `automation` or `unknown` is
+  refused, because it doesn't say who decided.
+- `ApprovalModeV1` says when a step waits: `not_gated`, `each_item`
+  (the default, and what an unknown value means), `batch`, or
+  `problems_only` (exceptions only). The first three values and
+  `problems_only` are the ones Flow already stores.
+- `ApproverPolicyV1` says which approver kinds may decide each step class.
+  The default is a person for every class. A `clinical_write` step takes a
+  non-person approver only when the policy pins the customer's opt-in.
+- `ApprovalRecordV1` is one decision as the audit trail and receipt carry
+  it. `training_label` is true only when a person decided; rule, agent and
+  system decisions are recorded and never learned from.
+- `ReadBackTier` is the customer-facing check ladder. Its labels are
+  RFC-0002's `verification_tier` values: `independent_readback` (a read of
+  the system of record that doesn't go through the UI: REST, SQL, FHIR,
+  GraphQL or a file export), `screen_readback` (any read through the UI,
+  including a separate session) and `unchecked`. `read_back_tier` maps Flow
+  tiers and the finer strength names onto it, weakest wins, and anything
+  unknown maps to `unchecked`. `per_item_review_reason` returns a reason for
+  every save except a confirmed independent read-back, so a screen-only or
+  missing check always goes to a person.
+- `ApproverIdentityV1` carries RFC-0002's `authorization.approver` fields
+  (`kind`, opaque `id`, `policy_ref`), plus `auth`, `auth_method` and
+  `on_behalf_of`, which say how the approver was identified.
+- `AutonomyEligibilityV1` and `AutonomyEligibilityProvider` are the evidence
+  a workflow needs before `problems_only`: a pinned calibration artifact and
+  an audit miss-rate bound under the target, with at least 1% of clean saves
+  still audited. A provider raises `EligibilityUnavailable` when there is
+  none.
+
+Nothing in this module approves a step. Callers decide; these types record
+and check the decision.

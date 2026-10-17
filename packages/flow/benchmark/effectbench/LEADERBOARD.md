@@ -129,7 +129,7 @@ real-world cost the benchmark abstracts away on the reference fixture only.
 ### Where the measured end-to-end result lives
 
 OpenAdapt's measured silent-wrong-effect result is
-[`benchmark/effect_e2e/`](https://github.com/OpenAdaptAI/openadapt-flow/blob/main/benchmark/effect_e2e/EFFECT_E2E.md)
+[`benchmark/effect_e2e/`](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/effect_e2e/EFFECT_E2E.md)
 in the engine repository, where every write goes through the real governed
 replay path to an on-disk SQLite system of record, the verifier reads back over a
 different HTTP verb/endpoint/connection, and the ground truth is a direct

@@ -11,7 +11,7 @@ PHI/PII on the persist/log paths). We take security reports seriously.
 Report privately through GitHub's built-in channel:
 
 1. Go to the repository's **Security** tab → **Advisories** →
-   **Report a vulnerability** ([direct link](https://github.com/OpenAdaptAI/openadapt-flow/security/advisories/new)).
+   **Report a vulnerability** ([direct link](https://github.com/OpenAdaptAI/OpenAdapt/security/advisories/new)).
 2. Describe the issue, the impact, and a minimal reproduction if you have one.
 
 This opens a private advisory visible only to you and the maintainers. If you
