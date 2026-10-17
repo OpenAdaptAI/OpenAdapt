@@ -308,6 +308,43 @@ def _clamped_crop_region(
     return (x, y, w, h)
 
 
+#: Smallest template height kept when clipping parameter text out of a crop.
+MIN_CLIPPED_TEMPLATE_H = 24
+
+
+def _clip_away_param_lines(
+    region: Region,
+    click: Point,
+    lines: list[OcrLine],
+    exclude_texts: tuple[str, ...],
+) -> Region:
+    """Shrink a click template so it doesn't picture a typed parameter value.
+
+    A click on a form field right below (or above) a field the demonstration
+    just filled captures that value in its 64 px template. The value changes
+    every run, so the template never matches and the step falls to weaker
+    rungs. Move the crop's top or bottom edge past each OCR line that shows a
+    parameter value and doesn't contain the click. Keep the original crop when
+    the result would be shorter than ``MIN_CLIPPED_TEMPLATE_H``.
+    """
+    x, y, w, h = region
+    top, bottom = y, y + h
+    cy = click[1]
+    for line in lines:
+        lx, ly, lw, lh = (int(v) for v in line.region)
+        if lx >= x + w or lx + lw <= x or ly >= bottom or ly + lh <= top:
+            continue
+        if ly <= cy < ly + lh or not _contains_excluded(line.text, exclude_texts):
+            continue
+        if ly + lh <= cy:
+            top = max(top, ly + lh + 2)
+        else:
+            bottom = min(bottom, ly - 2)
+    if bottom - top < MIN_CLIPPED_TEMPLATE_H or not (top <= cy < bottom):
+        return region
+    return (x, top, w, bottom - top)
+
+
 def _discriminative_crop_region(frame: np.ndarray, click: Point) -> Region:
     """Crop region centered on ``click`` with enough structure to match.
 
@@ -1883,16 +1920,23 @@ def compile_recording(
                 ),
             )
             crop_region = _discriminative_crop_region(frame, click)
+            frame_lines = cached_lines(i, "before", before_png)
+            crop_region = _clip_away_param_lines(
+                crop_region, click, frame_lines, exclude_texts
+            )
             template_bytes = _crop_png(before_png, crop_region)
             template_rel = f"templates/{step_id}.png"
             (bundle / template_rel).write_bytes(template_bytes)
 
-            frame_lines = cached_lines(i, "before", before_png)
             ocr_text = _best_target_text(
                 ocr(before_png, region=crop_region),
                 frame_lines,
                 click,
             )
+            if ocr_text and _contains_excluded(ocr_text, exclude_texts):
+                # The text under the click is (part of) a value typed from a
+                # parameter, so it changes every run: never anchor on it.
+                ocr_text = None
             landmarks = _landmarks_for(
                 frame_lines,
                 crop_region,

@@ -33,7 +33,7 @@ by the executable Flow contract cannot be down-classified during qualification.
 
 ## CLI
 
-Demo once, get a checked program. After `record` and `compile`, propose the
+Show the task, get a checked program. After `record` and `compile`, propose the
 pins from the demonstration and confirm them in one command:
 
 ```bash

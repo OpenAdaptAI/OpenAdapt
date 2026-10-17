@@ -89,31 +89,31 @@
     },
     {
       "path": ".github/workflows/canvas-nodom-ladder.yml",
-      "sha256": "631569233910131ff7d417655907561005f0c61008f022149b13d2c2328b9bd4"
+      "sha256": "383ac2f646ca0e0d2beeb3c89fc9f7d4e4bbb5abab87e953b60997d5a2a7c1a8"
     },
     {
       "path": ".github/workflows/ci.yml",
-      "sha256": "a39023ffcfd890fcf9a63f984e764d31ee8f61cc417c4604fecd11104790318c"
+      "sha256": "fc0e1d56cc357bfd0f08ab2cd0d951e937c53cd39aae38542877a01003e5e4f3"
     },
     {
       "path": ".github/workflows/citrix-workspace-standin.yml",
-      "sha256": "a2ed4be20c8856126fbf91f2ad1be62832204f34aa7334083f9281f3afda6a84"
+      "sha256": "b35f7f02ffcf42be4026fe261f337d285d7fe33c011621e883d85f69ab2d2b69"
     },
     {
       "path": ".github/workflows/docker-rdp-multiapp-vision.yml",
-      "sha256": "2d68f74f02ecd91a2daa1c1efcf7e0939870ffaf58bbfa049883df1a04a20005"
+      "sha256": "9d71d797722cc000091fcd8f5858c1c8f03da9b87aad16fb21dc23a8b1467c5a"
     },
     {
       "path": ".github/workflows/docker-rdp-vision-ladder.yml",
-      "sha256": "9120f3fe6777ab4f7dc7f34e8bac6bdb0e821bbe06fad1d8f2a320232135ba35"
+      "sha256": "e87fae249d66ae6196f84d0bac8d8f3bdf9cb745bbb72a5852d7f64fb38f8e79"
     },
     {
       "path": ".github/workflows/paper.yml",
-      "sha256": "e97fc42f5153a51eb2ebe3a282a93f2e3d3fcdcc8acad108adb7f1b99bbe3464"
+      "sha256": "cc218be4f6b0553fd4a88efa03c85c6db86ab14d7ad6028449e69dfe7e68efed"
     },
     {
       "path": ".github/workflows/quickstart-lifecycle.yml",
-      "sha256": "8eae9755b0ba287c708dd078b996f4b139e949ae375cfc5bb7a6e0f441b38ece"
+      "sha256": "c6c9b4402885281e6bdf81cf61eb067173211b912c6e399b5f9d9f5f92d8fda0"
     },
     {
       "path": ".github/workflows/release-health.yml",
@@ -121,11 +121,11 @@
     },
     {
       "path": ".github/workflows/release.yml",
-      "sha256": "5bc6ae9c910933839b40db07fa8cef04fd8377724be437fefe1066f5a9bbcbc9"
+      "sha256": "ba50228701a5eb972baad75246439a3a7dc2ac71f95d503c01874fd08824c66e"
     },
     {
       "path": ".github/workflows/validate-claims.yml",
-      "sha256": "8739e95a294523fe5696e9c01602aaf52ee4941210db25ce625b0cf844d2a950"
+      "sha256": "f28dc91b54d20e1beabe239ae5872a486c63460260e8e3287db6786ef29389b1"
     },
     {
       "path": ".pre-commit-config.yaml",
@@ -165,7 +165,7 @@
     },
     {
       "path": "benchmark/comparison_artifact/comparison.html",
-      "sha256": "dcf4ca2df1b06c222341c16e968b0abe18b71a01868431ec8dfb23c9b504ccbf"
+      "sha256": "5e22e54dc92a053f1585468662b62f516a45c353c6b6c1a050d6742d47297d34"
     },
     {
       "path": "benchmark/comparison_artifact/comparison.json",
@@ -6002,6 +6002,10 @@
     {
       "path": "tests/fixtures/flow_v1_34_0_terminal_verified.json",
       "sha256": "395573c928cee8c5bc61a0658cc2ada41698266e6fcf54af00d899f21502cc1a"
+    },
+    {
+      "path": "tests/fixtures/match_ridge/openemr_accordion_rdp.png",
+      "sha256": "96baeda5e5cb84da804897ba573b4b12bb9f1a6b5008855a6f18458ca8adc558"
     },
     {
       "path": "tests/fixtures/remote-safe-synthetic-flow-release-verification.json",

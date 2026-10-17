@@ -153,9 +153,13 @@ saw. Neither run makes a model call. The run artifacts are in
 ## Try it on your app
 
 Record the task against a test copy of your web app, compile it, and replay
-it. An agent can drive the recording through the authoring tools; a person
-accepts the result, and agent recording is refused on native Windows, Citrix
-and RDP. With several recordings of the same task, `induce` finds which values
+it. An agent can drive the recording through the authoring tools in a
+browser, in macOS, Linux, and native Windows apps, and over RDP or Citrix. On
+Windows the agent's input goes through the same synthetic-input path that
+replay uses. RDP and Citrix are screen-only: the agent works from the client
+window's pixels and keys, as a person would. The recording says whether an
+agent or a person did each step, and a person accepts the result. With
+several recordings of the same task, `induce` finds which values
 change, which steps repeat and which are optional, or refuses if they
 disagree.
 
@@ -173,7 +177,7 @@ The same path from Python:
 from openadapt_flow import api
 
 url = "https://your-test-app.example"
-rec = api.record(url, out="rec")  # do the task once, then close the browser
+rec = api.record(url, out="rec")  # do the task, then close the browser
 bundle = api.compile(rec, out="bundle", name="my-task", accept_params=["note"])
 report = api.replay(bundle, url, params={"note": "Follow-up in 2 weeks"})
 print(report.transaction_outcome)  # COMPLETED_UNVERIFIED: a rehearsal
@@ -382,6 +386,9 @@ The full list, capability by capability: [docs/LIMITS.md](docs/LIMITS.md).
 - [docs/CAPABILITIES.md](docs/CAPABILITIES.md): workflow programs with branches
   and loops, `for-each` over a worklist, `induce` from several recordings,
   durable checkpoint and resume, and Agent Skill output.
+- [Recording on Windows, RDP and Citrix](docs/RECORDING_ON_WINDOWS_RDP_CITRIX.md):
+  how a person or an agent shows a task in a native Windows app or a remote
+  session, the Windows agent server, and the token.
 - [docs/BENCHMARKS.md](docs/BENCHMARKS.md): every benchmark, with method and
   caveats.
 - [docs/REWARD_WORKER.md](docs/REWARD_WORKER.md): `serve-reward` scores a

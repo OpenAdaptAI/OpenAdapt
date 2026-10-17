@@ -87,6 +87,9 @@ def _clamp_region(region: Region, width: int, height: int) -> Optional[Region]:
 # Floored so small icons still admit a few px of cross-render drift; otherwise
 # it scales with the smaller template dimension (~ the target's own size).
 LOCALITY_MIN_PX = 48
+# Pixels around the expected origin searched directly, so a target that sits
+# where it was recorded is found even when NMS kept another point of its ridge.
+EXPECTED_SPOT_JITTER_PX = 4
 # Bound on the number of peaks enumerated per frame (cost guard).
 MAX_PEAKS = 16
 # Correlation score at/above which a SECOND, spatially-distinct response on the
@@ -196,6 +199,20 @@ def _find_template_arrays(
         def _center_dist(peak: tuple[float, int, int]) -> float:
             return math.hypot(peak[1] + mw // 2 - px, peak[2] + mh // 2 - py)
 
+        # A self-similar template (a plain bar, a divider, a row stripe) gives
+        # a RIDGE of equal scores, and non-max suppression keeps an arbitrary
+        # point on each ridge: the true ridge's kept peak can sit farther from
+        # the expected spot than a look-alike ridge's, and the look-alike wins.
+        # Also consider the best score within a few pixels of the expected
+        # origin itself.
+        ex, ey = px - mw // 2, py - mh // 2
+        j = EXPECTED_SPOT_JITTER_PX
+        y0, y1 = max(0, ey - j), min(result.shape[0], ey + j + 1)
+        x0, x1 = max(0, ex - j), min(result.shape[1], ex + j + 1)
+        if y0 < y1 and x0 < x1:
+            _, spot_val, _, spot_loc = cv2.minMaxLoc(result[y0:y1, x0:x1])
+            if spot_val >= threshold:
+                peaks = [*peaks, (float(spot_val), x0 + spot_loc[0], y0 + spot_loc[1])]
         near = [p for p in peaks if _center_dist(p) <= radius]
         if near:
             # A degraded/occluded TRUE target at the expected spot beats a

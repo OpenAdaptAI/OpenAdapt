@@ -1133,3 +1133,54 @@ def test_split_chord() -> None:
     assert _split_chord("Enter") == ([], "Enter")
     with pytest.raises(ValueError):
         _split_chord("")
+
+
+@pytest.mark.parametrize("kind", ["rdp", "citrix"])
+def test_agent_drives_remote_session_recording_from_pixels(tmp_path, kind) -> None:
+    """An agent drives an RDP/Citrix client window through AuthoringSession.
+
+    The session is screen-only: observe has no tree, the agent reads the
+    client window's frame and clicks its pixels, and the backend maps them to
+    screen points and sends OS input to that window, as for a person.
+    """
+    import json
+
+    from openadapt_flow.authoring import AuthoringSession
+
+    backend, client = _backend()
+    session = AuthoringSession(
+        backend,
+        tmp_path / "rec",
+        backend_kind=kind,
+        backend_hints={"rdp_window": "Parallels Desktop"},
+        settle_interval_s=0.0,
+        settle_stable_frames=1,
+        settle_timeout_s=0.1,
+    )
+    observed = session.observe()
+    assert observed["agent_drive"] is True
+    assert observed["provider"] == "none"
+    assert observed["tree"] == []
+    frame = session.screenshot()
+    assert frame[:8] == b"\x89PNG\r\n\x1a\n"
+
+    session.start_record()
+    session.click(1000, 500)
+    session.press("Enter")
+    rec_dir = session.stop_record()
+
+    downs = [c for c in client.calls if c[0] == "mouse" and c[4] is True]
+    assert downs and downs[0][1] == pytest.approx(500.0)
+    assert downs[0][2] == pytest.approx(288.0)
+    events = [
+        json.loads(line) for line in (rec_dir / "events.jsonl").read_text().splitlines()
+    ]
+    assert [e["kind"] for e in events] == ["click", "key"]
+    assert all(e["actor"] == "agent" for e in events)
+    assert "structural" not in events[0]
+    meta = json.loads((rec_dir / "meta.json").read_text())
+    assert meta["demonstrated_by"] == "agent"
+    assert meta["surface"] == kind
+    assert meta["coordinate_space"] == "window_pixels"
+    assert meta["authoring"] == {"input": "remote_client_window", "screen_only": True}
+    assert meta["backend_hints"]["backend"] == kind

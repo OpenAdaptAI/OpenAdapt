@@ -233,7 +233,7 @@ The in-run gate protects the run; the lifecycle protects the fleet.
 `openadapt-agent` serves workflows to other agents over MCP. When a run halts
 there, the server can return a one-time repair token. If an administrator
 turned on screen access for that workflow or organization, the calling agent
-may demonstrate the stuck step once while OpenAdapt records it.
+may demonstrate the stuck step while OpenAdapt records it.
 `openadapt_flow.repair.agent_teach.teach_from_calling_agent` turns that
 recording into a candidate:
 
@@ -340,3 +340,18 @@ accepted. When a run's earlier frames can't be read, all of its halt-screen
 text counts as new, so text that every screen shows could become the
 condition; pass a `--normal-run` to rule that out. Tests: `tests/test_teach_branch.py` (MockMed save scenario on the
 fake backend; no browser).
+
+### A branch from several agent demonstrations
+
+`openadapt_flow.repair.agent_teach.teach_branch_from_calling_agent` takes two
+or more halted runs, each with the calling agent's recorded click, and learns
+one branch with `teach-branch` (see "Branches taught from several halts").
+The dismiss step's identity is the band of the dialog, around the click, that
+every demonstration shows pixel for pixel (`shared_dialog_band`). A title line
+that names the run's payer is left out, so the next payer's dialog still
+passes the identity check. When nothing around the click is shared, the whole
+dialog is used, and a dialog with other details halts. The candidate carries
+the latest demonstration's provenance, and the agent can't review or approve
+it. Tests: `tests/test_agent_teach_branch.py`. A reference number in the
+title makes the one-demonstration path abstain on identity too; the tests use
+payer names.

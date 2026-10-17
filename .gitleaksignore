@@ -1,6 +1,11 @@
-# Reviewed gitleaks false positives in the imported package histories (packages/*).
-# Each is a test literal, an Ed25519 type annotation, a published test vector or a
-# benchmark idempotency key. Fingerprints pin commit, file, rule and line; new findings still fail.
+# Reviewed gitleaks false positives in the monorepo import branches
+# (monorepo/phase1-import and monorepo/phase1-fold, draft PRs #1178 and #1179).
+# The secret-scan workflow runs `gitleaks git` over every fetched ref, so findings in
+# those branches fail unrelated PRs until this file is on main.
+# Each entry is a test literal, an Ed25519 type annotation, a published test vector or
+# a benchmark idempotency key from the openadapt-flow and openadapt-agent histories.
+# None is a credential. Each fingerprint pins commit:file:rule:line, so a new finding,
+# or the same text in any other commit, file or line, still fails. No rule is relaxed.
 01d9ead6895964e8236272296fad0d424dffd98f:packages/flow/tests/fixtures/terminal_verification_v2_terminal_vectors.json:generic-api-key:33
 0f5f39557513cd71d9e84996f5773eeca26b1005:packages/flow/tests/test_attended_actions.py:generic-api-key:122
 0f5f39557513cd71d9e84996f5773eeca26b1005:packages/flow/tests/test_attended_actions.py:generic-api-key:174

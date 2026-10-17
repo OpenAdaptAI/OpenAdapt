@@ -1,6 +1,6 @@
 # openadapt-flow — Design & Module Contracts (v0)
 
-**Product:** record a workflow demonstration once → compile it into a
+**Product:** record a workflow demonstration → compile it into a
 deterministic, vision-anchored script → replay it locally with a resolution
 ladder → when the UI drifts, heal the script (as a reviewable diff) instead of
 re-reasoning every run.

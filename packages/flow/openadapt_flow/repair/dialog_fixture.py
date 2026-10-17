@@ -49,7 +49,16 @@ _BANNER = (400, 300, 560, 340)
 class DialogApp:
     """A fake backend whose screenshots are rendered frames."""
 
-    def __init__(self, *, dialog: bool = True, saved: bool = False) -> None:
+    def __init__(
+        self,
+        *,
+        dialog: bool = True,
+        saved: bool = False,
+        title: str = "Survey Required",
+    ) -> None:
+        #: The dialog's title line. Tests vary it ("Survey Required - ref 4471")
+        #: to teach a branch from several demonstrations.
+        self.title = title
         #: Whether Save opens the dialog.
         self.dialog_on_save = dialog
         self.saved = saved
@@ -78,7 +87,7 @@ class DialogApp:
             x, y, w, h = DIALOG_REGION
             cv2.rectangle(img, (x, y), (x + w - 2, y + h - 2), (255, 255, 255), -1)
             cv2.rectangle(img, (x, y), (x + w - 2, y + h - 2), (90, 90, 90), 2)
-            cv2.putText(img, "Survey Required", (60, 95), font, 0.9, (0, 0, 0), 2)
+            cv2.putText(img, self.title, (60, 95), font, 0.9, (0, 0, 0), 2)
             bx0, by0, bx1, by1 = _DISMISS_BUTTON
             cv2.rectangle(img, (bx0, by0), (bx1, by1), (225, 225, 225), -1)
             cv2.rectangle(img, (bx0, by0), (bx1, by1), (60, 60, 60), 2)

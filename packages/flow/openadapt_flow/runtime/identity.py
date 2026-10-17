@@ -1296,6 +1296,35 @@ def _token_belongs_to(token: str, value_squashed: str) -> bool:
     return ratio >= TOKEN_SIM_RATIO
 
 
+#: Glyphs OCR reads for a text caret drawn right after typed text.
+CARET_GLYPHS = "|lI1!"
+
+
+def strip_param_caret(band_text: str, param_examples: dict[str, str]) -> str:
+    """Drop a text caret OCR glued onto a parameter value in the recorded band.
+
+    A pixel recording captures the field that was just typed into with its
+    caret still drawn, and OCR reads "Nadia" plus the caret as "Nadial". The
+    parameter value then fills only part of that token, so it can't be
+    re-anchored to the run's value and every later run halts on its own
+    input. Only a whole token equal to a parameter's demonstrated value plus
+    ONE caret glyph is rewritten; anything else is left for the matcher.
+    """
+    for example in param_examples.values():
+        if len(squash(example or "")) < MIN_PARAM_CHARS:
+            continue
+        band_text = re.sub(
+            r"(?i)(?<!\S)("
+            + re.escape(example)
+            + r")["
+            + re.escape(CARET_GLYPHS)
+            + r"](?!\S)",
+            lambda m: m.group(1),
+            band_text,
+        )
+    return band_text
+
+
 def substitute_param(band_text: str, example: str, value: str) -> str:
     """Replace a parameter's demonstrated value in the band with the run's.
 
@@ -1427,6 +1456,9 @@ def verify_target_identity(
     """
     params = params or {}
     param_examples = param_examples or {}
+    run_values = {k: str(v) for k, v in (params or {}).items() if isinstance(v, str)}
+    if run_values:
+        observed_text = strip_param_caret(observed_text, run_values)
     hay = squash(observed_text)
     expected = context_text
 
@@ -1439,6 +1471,7 @@ def verify_target_identity(
             status="unreadable", expected=expected, observed=observed_text
         )
 
+    context_text = strip_param_caret(context_text, param_examples)
     in_band = embedded_params(context_text, param_examples)
     if in_band:
         # Param mode: the demonstrated band embeds a parameter's demo value,

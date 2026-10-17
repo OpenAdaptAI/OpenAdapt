@@ -110,3 +110,35 @@ def test_citrix_backend_contract_over_canvas_standin(canvas_fixture, tmp_path):
     assert evidence["run_count"] == 6, evidence
     assert evidence["code_readiness_accepted"], evidence
     assert evidence["ica_hdx_accepted"] is False, evidence
+
+
+def test_agent_driven_recording_over_canvas_standin(canvas_fixture, tmp_path):
+    """The same stand-in, with the demonstration recorded through the
+    authoring session an agent drives (screen-only Citrix)."""
+    spec = importlib.util.spec_from_file_location("citrix_ws_harness", HARNESS)
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules["citrix_ws_harness"] = mod
+    spec.loader.exec_module(mod)  # type: ignore[union-attr]
+
+    candidate_commit = mod._git_output("rev-parse", "HEAD")
+    base_commit = mod._git_output("merge-base", candidate_commit, "origin/main")
+    evidence = mod.run_qualification(
+        canvas_fixture,
+        out_dir=tmp_path,
+        base_url="http://localhost",
+        port=PORT,
+        candidate_commit=candidate_commit,
+        base_commit=base_commit,
+        work_dir=tmp_path / "work",
+        agent_authored=True,
+    )
+    assert evidence["demonstrated_by"] == "agent", evidence
+    healthy = [
+        trial
+        for trial in evidence["trials"]
+        if trial["kind"] == "healthy_record_compile_replay"
+    ]
+    assert len(healthy) == 3, evidence
+    assert all(trial["success"] for trial in healthy), healthy
+    assert all(trial["effect_confirmed"] for trial in healthy), healthy
+    assert all(trial["model_calls"] == 0 for trial in healthy), healthy

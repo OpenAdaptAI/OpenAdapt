@@ -658,7 +658,7 @@ def render_html(oe: Benchmark, mm: Benchmark) -> str:
     <div class="headline ok">{headline}</div>
     <div class="isnt">
       <p><strong>What this is.</strong> The economics of the 500<sup>th</sup> run of
-        a <em>known</em> task: once a workflow has been demonstrated once, replaying
+        a <em>known</em> task: once a workflow has been demonstrated, replaying
         it should not cost a model call.</p>
       <p><strong>What this isn't.</strong> A capability claim. Compiled replay is the
         wrong tool for a task nobody has automated yet &mdash; exploring an unfamiliar

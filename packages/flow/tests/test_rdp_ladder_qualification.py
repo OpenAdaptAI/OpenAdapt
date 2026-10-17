@@ -480,7 +480,7 @@ def test_workflow_separates_required_evidence_from_optional_presentation() -> No
     assert "github.event_name == 'workflow_dispatch'" in presentation
     assert "github.ref == 'refs/heads/main'" in presentation
     assert "timeout-minutes: 22" in presentation
-    assert "actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c" in (
+    assert "actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333" in (
         presentation
     )
     assert "name: rdp-ladder-qualification" in presentation
