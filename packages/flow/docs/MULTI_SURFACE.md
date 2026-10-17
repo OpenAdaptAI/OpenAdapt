@@ -1,7 +1,8 @@
 # Multi-surface workflows: tabs, popups, and backend switches
 
-Status: core support (library: recorder, compiler, IR, replayer). This page is
-the design and its limits. The audit that motivated it is at the end.
+Status: recorder (scripted and interactive), compiler, IR, replayer, CLI
+binding, and governed/qualified/durable runs. This page is the design and its
+limits. The audit that motivated it is at the end.
 
 A bundle used to run on exactly one surface: one browser tab, one desktop app,
 or one remote-desktop window. Real tasks cross that boundary. A referral opens
@@ -105,10 +106,44 @@ demo drivers, and the Windows conformance tests) now:
 A recording that never opens a page or switches writes the same events and
 meta as before.
 
-The interactive browser recorder (`record --url`, browser attach mode) still
-binds one tab and still stops on a popup (`interactive_recorder.py`). Making
-it follow tabs needs its injected listeners, privacy masking, and secret
-boundaries applied per page; that is follow-up work, not part of this change.
+### Interactive recording (`record --url`)
+
+When Flow launched the browser (`record --url`, headed or headless), the
+interactive recorder follows popups and new tabs as surfaces and writes the
+same events and `meta.json` the scripted `Recorder` writes, because it records
+through that same `Recorder`:
+
+- the event binding and the listener script are installed on the browser
+  CONTEXT, so every page the app opens carries the same session id, privacy
+  masking, secret boundaries, and scrubbed structural reads;
+- a new page is claimed (`opens`) when the action that opened it is written,
+  via `Recorder.record_observed`; each claimed page gets a backend with the
+  same screenshot masks and guard as the start tab;
+- when the user acts in a different page, the pending action is written
+  first and a `switch_surface` event is recorded (before frame: the page the
+  user left; after frame: the page they acted in), then the action.
+
+Chromium runs a context init script in a popup's initial `about:blank`
+document but not in the document its first same-origin navigation commits
+into the same Window (HTML window reuse). The recorder therefore checks the
+followed pages on every poll tick and installs the listener where it is
+missing; the listener arms once per document.
+
+Design choice: reuse the scripted `Recorder`'s page claiming and switch
+events, and let the user's own action (which page the event came from) decide
+when a switch is recorded. Rejected: a separate interactive bundle format
+(two shapes to compile and audit); asking the user to mark switches (an extra
+step people forget, and the event source already says it); recording every
+focus change as a switch (focus without an action is not a step).
+
+Not covered: attach mode (`--cdp`, the user's own signed-in browser) stays
+bound to one tab and still stops on a popup, because that tab's accepted page
+baseline and origin checks are the privacy contract of attach mode. A popup
+that closes itself and then sends the user back to its opener is refused at
+the next action (returning from a closed page is not yet replayable). A click
+in a new page within the first poll tick after it loads can arrive before the
+listener is installed and is not recorded; replay then halts at the next step
+rather than skipping it silently.
 
 ## Compiling
 
@@ -125,7 +160,7 @@ surfaces.
 ## Replay
 
 `Replayer(..., surface_backends={"windows_1": backend})` supplies backend
-surfaces. The primary backend is the one passed to the constructor. Page
+surfaces (the CLI builds this map; see "Binding backends from the CLI"). The primary backend is the one passed to the constructor. Page
 surfaces need nothing from the caller: the runtime watches the browser
 context of every browser surface it holds.
 
@@ -161,18 +196,98 @@ that caused it or at the next step's entry, with a reason that names the
 surface the run was on and the number of undeclared pages, never their URL or
 title. Flow does not close the page, switch to it, or carry on in the opener.
 
-## What is refused for now
+## Governance, qualification, and verification
 
-Multi-surface workflows are refused, with a clear reason, under:
+A multi-surface run reaches `VERIFIED` under exactly the rules a
+single-surface run does, and no gate is weakened:
 
-- governed and qualified runs (a governed authorization, a qualification
-  fault driver, environment observer, production qualification guard, or
-  campaign guard), because their admission evidence binds one surface;
-- durable runs and resumes, because a checkpoint does not yet carry the
-  active surface and its page handles.
+- **The surface map is part of the sealed contract the authorization already
+  binds.** `workflow.json` (with `surfaces`, each step's `surface` and
+  `opens`, and every SWITCH_SURFACE step) is sealed into the bundle content
+  digest, and the governed authorization binds that digest. A changed surface
+  map is a different bundle and is refused at admission like any other edit.
+- **Evidence names the surface of every step.** In a multi-surface run each
+  `StepResult` records `surface`, the surface the step actually ran on.
+  `classify_execution_outcome` returns `COMPLETED_UNVERIFIED` unless every
+  result's `surface` equals its step's declared surface. A single-surface
+  report never carries the field, and one that does is not `VERIFIED`.
+- **Effects stay keyed by step.** An effect contract names its own system of
+  record, so the same `independent_readback` rule applies: only a non-UI read
+  of the system of record (tier 2 or stronger) reaches `VERIFIED`; a persisted
+  re-read or any screen read never does, on any surface. On-screen readback
+  state is reset at every switch so nothing read on one surface counts for
+  another.
+- **Qualification gets one environment boundary per surface.** A
+  `QualificationProject` may carry `surface_environments: {surface_id:
+  EnvironmentBoundary}`. A qualification case of a multi-surface bundle must
+  declare a boundary for every non-primary surface, with the right kind and no
+  extra ids. At each switch the runtime observes the target surface against
+  its boundary (the primary against `environment`), records an
+  `ObservedSurfaceEnvironment` in `report.observed_surface_environments`, and
+  moves the qualification input guard to the newly active backend. A mismatch
+  halts at the switch as a governed refusal; case evidence is
+  `CASE_ENVIRONMENT_CHANGED` unless every used surface has a matching,
+  recomputed observation.
+- **Durable runs work.** Checkpoints are written per step as usual; the step
+  results carry their surface.
 
-These are refusals, not silent fallbacks. Lifting them means binding the
-surface map into the governed authorization and the durable checkpoint.
+Still refused, with a reason: **resume** of a multi-surface run (live page and
+backend handles cannot cross a process boundary, and re-claiming them would
+be a guess), and **managed Cloud dispatch** (not exercised end to end yet).
+
+Design choice: bind surfaces through the digest the authorization already
+seals, record the surface per step, and add per-surface environment
+boundaries only where qualification needs a new observation. Rejected: a
+per-surface effect-verifier map (redundant with effect contracts, and two
+sources that could disagree); a separate surface binding inside the
+authorization (the bundle digest already seals the map, so a second binding
+could only drift); a bundle schema bump (single-surface bytes and hashes must
+stay identical, and they do: every new field is omitted when empty).
+
+## Binding backends from the CLI
+
+`replay` and `run` take a repeatable `--surface NAME=KIND[:TARGET]`, and a
+deployment config takes a `surfaces:` map of full backend configs:
+
+```bash
+openadapt-flow replay bundle/ --url https://portal.example \
+  --surface windows_1=windows:http://10.0.0.5:8000 \
+  --surface report=https://portal.example/report
+```
+
+```yaml
+surfaces:
+  windows_1: {kind: windows, agent_url: http://10.0.0.5:8000}
+  billing: {kind: macos, macos_app: Billing, macos_window_title: Invoices}
+```
+
+- `NAME` must be a backend surface the bundle declares; the primary and page
+  surfaces (which the runtime claims itself) are refused, as is an undeclared
+  name or a kind that differs from the bundle's.
+- `KIND` defaults from the bundle, so `NAME=TARGET` is enough. `TARGET` fills
+  the kind's usual field (web `url`, windows `agent_url`, macos `macos_app`,
+  linux `linux_app`, rdp `rdp_host`, citrix `rdp_window`). Flags apply on top
+  of config entries.
+- Every backend is built by the same factory as the primary
+  (`backends/factory.py`); a web surface opens as a new page in the primary's
+  browser. No per-workflow code is involved.
+- A declared backend surface left unbound is named on stderr before the run,
+  and the run halts at its switch with a hint naming the flag.
+
+Design choice: one generic flag plus one config map, both feeding the
+existing backend factory. Rejected: per-kind flag families (`--windows-agent`
+per surface multiplies flags with every backend); guessing a default backend
+for an unbound surface (a guessed backend is a wrong action, so the run halts
+instead).
+
+**Native windows and JS dialogs.** A second native window can already be its
+own surface: bind it at replay as a backend surface (for example a macOS
+window by `macos_window_title`), and record it with
+`Recorder.switch_surface(name, backend=...)`. Automatic capture of a new
+native window during recording, and JavaScript dialogs (`alert`, `confirm`,
+`beforeunload`) as surfaces, are follow-up work: a native window has no
+"opened by this action" signal across backends, and a dialog is modal state
+of its page rather than a page, so both need their own contract.
 
 ## Backward compatibility
 
@@ -197,15 +312,14 @@ surface map into the governed authorization and the durable checkpoint.
   surfaces is follow-up work.
 - A page that opens and closes itself before the step's check (a very fast
   OAuth round trip) is seen as "did not open" and halts.
-- CLI `replay` gets tab and popup support for free (the pages come from the
-  launched browser). It has no way yet to name backends for backend surfaces,
-  so a bundle that switches to one halts at that switch with "no backend was
-  supplied". The deployment config needs a per-surface backend map.
-- Qualification, governed runs, and durable resume are refused (above). So a
-  multi-surface run ends at most `COMPLETED_UNVERIFIED`: every step's own
-  checks held, but `VERIFIED` needs a governed run with confirmed effects.
-- The interactive browser recorder (`openadapt-flow record --url`) still owns
-  one tab and refuses popups; multi-surface recordings come from `Recorder`.
+- Resume of a multi-surface run and managed Cloud dispatch are refused
+  (above).
+- Qualification pinning and proposal do not yet propose per-surface
+  environment boundaries; `surface_environments` is written by the operator.
+- Interactive recording follows popups and tabs only in a browser Flow
+  launched; attach mode stays one tab (see "Interactive recording").
+- A backend surface needs an explicit binding (`--surface` or `surfaces:`);
+  nothing is guessed.
 
 ## Tests
 
@@ -219,7 +333,23 @@ surface map into the governed authorization and the durable checkpoint.
   when no backend is supplied, when the backend is the wrong kind, or when the
   Windows screen is a different app.
 - `tests/test_multi_surface_contract.py`: IR contract validation and the
-  replayer's refusals.
+  replayer's refusals (resume, managed dispatch).
+- `tests/test_multi_surface_governed.py`: a governed, durable, Standard-profile
+  run from a web primary to a Windows backend surface reaches `VERIFIED` with
+  an independent-readback effect; a tampered surface record, or a persisted
+  re-read verifier, does not. Per-surface qualification boundaries: missing or
+  wrong-kind boundaries are refused, a switch is observed and moves the input
+  guard, a mismatch halts, and case evidence needs every surface's
+  observation. Single-surface reports and qualification projects serialize
+  byte-for-byte as before.
+- `tests/test_surface_bindings.py`: `--surface` parsing, resolution against
+  the bundle and the config map, the factory, and a CLI `replay` that binds a
+  backend surface and finishes with zero model calls (and halts with a hint
+  when the binding is missing).
+- `tests/test_multi_surface_interactive.py`: a scripted user drives a browser
+  that `record --url` launched through a popup and a tab; the recording
+  compiles to the same surfaces, `opens`, and switch steps as the scripted
+  `Recorder`'s, and replays with zero model calls.
 
 ## Audit of origin/main (f21281fa)
 

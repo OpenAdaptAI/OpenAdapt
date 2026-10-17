@@ -76,8 +76,8 @@ Flow selects the sole open HTTP or HTTPS tab on the `--url` origin. It does not
 navigate the tab. It also does not close the tab or browser when recording
 finishes.
 
-This recorder owns one tab and refuses popups and new tabs. A workflow that
-spans them is recorded with the scripted `Recorder`; see
+Attach mode stays bound to the selected tab and refuses popups and new tabs.
+A browser Flow launched (`record --url`) follows them as surfaces instead; see
 [MULTI_SURFACE.md](MULTI_SURFACE.md).
 
 If two or more open tabs have that origin, Flow refuses to guess. Supply the
@@ -399,8 +399,11 @@ Refused loudly, never recorded silently wrong:
   dropdown UI that produces no recordable action events, so the choice would
   be silently absent from the compiled workflow. The recording stops with an
   explicit error at the moment of selection.
-- A new tab or popup. The recording is bound to one tab and stops when
-  another page appears.
+- A new tab or popup in attach mode. The recording is bound to one tab and
+  stops when another page appears. In a browser Flow launched, popups and
+  tabs are recorded as surfaces ([MULTI_SURFACE.md](MULTI_SURFACE.md)); a
+  popup that closes itself and returns the user to its opener still stops
+  the recording.
 - An action in a frame whose page-space position cannot be proven (see
   above).
 
