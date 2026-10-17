@@ -288,8 +288,17 @@ There are three ways to record it:
 
 The compiled check is marked `demonstrated` and has no admission. Until a
 person admits it, it can't confirm a save: the verifier rules
-`INDETERMINATE` and the run halts. The demonstration that taught the check,
-whether a person or an agent drove it, can't approve it.
+`INDETERMINATE` and the run halts. The check records who drove the
+demonstration (`demonstrated_by`, from the recording's `meta.json`), and
+`check show` and `check admit` print it.
+
+An admission in the name of an agent, a model or a service (`agent`,
+`agent:...`, `model:...`, `bot:...`, `service:...` and similar) is refused,
+and the verifier ignores such an admission if it gets into the bundle some
+other way. These are identity checks, not proof that a person acted. Code
+that calls `admit_check` with a person's name, or that writes the admission
+and re-seals the bundle, can still admit a check. The interactive terminal
+that `check admit` requires is what keeps a script from doing it by accident.
 
 ```bash
 openadapt-flow check show BUNDLE        # what each check does, and who admitted it

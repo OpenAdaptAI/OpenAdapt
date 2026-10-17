@@ -290,6 +290,52 @@ class ReadbackReset(BaseModel):
     evidence: Literal["detected", "declared"] = "detected"
 
 
+#: Names that are not a person: an admission by one of them admits nothing.
+_NOT_A_PERSON = frozenset(
+    {
+        "",
+        "agent",
+        "agent_and_person",
+        "person",
+        "model",
+        "assistant",
+        "cua",
+        "llm",
+        "ai",
+        "bot",
+        "system",
+        "service",
+        "auto",
+        "automatic",
+        "unknown",
+    }
+)
+_NOT_A_PERSON_PREFIXES = (
+    "agent:",
+    "model:",
+    "cua:",
+    "llm:",
+    "ai:",
+    "bot:",
+    "service:",
+    "svc:",
+    "system:",
+)
+
+
+def is_agent_identity(name: object) -> bool:
+    """True when ``name`` is empty or names an agent, a model or a service.
+
+    An identity check only: Flow can't prove a person typed a name, but it
+    can refuse the names it knows are not people.
+    """
+
+    if not isinstance(name, str):
+        return True
+    lower = name.strip().lower()
+    return lower in _NOT_A_PERSON or lower.startswith(_NOT_A_PERSON_PREFIXES)
+
+
 class ReadbackAdmission(BaseModel):
     """A person's acceptance of a read-back taught by demonstration.
 
@@ -347,6 +393,9 @@ class ReadbackSpec(BaseModel):
     #: (``check.json``). Such a check confirms nothing until
     #: :attr:`admission` records that a person accepted it.
     demonstrated: bool = False
+    #: Who drove the demonstration, from the recording's ``meta.json``:
+    #: ``person``, ``agent`` or ``agent_and_person``. None when unknown.
+    demonstrated_by: Optional[str] = None
     #: The state-busting step the demonstrated check shows before it reads.
     reset: Optional[ReadbackReset] = None
     #: A person's acceptance of this exact check.
@@ -361,6 +410,8 @@ class ReadbackSpec(BaseModel):
             data.pop("fields", None)
         if not self.demonstrated:
             data.pop("demonstrated", None)
+        if self.demonstrated_by is None:
+            data.pop("demonstrated_by", None)
         if self.reset is None:
             data.pop("reset", None)
         if self.admission is None:
@@ -375,11 +426,16 @@ class ReadbackSpec(BaseModel):
         return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     def admitted(self) -> bool:
-        """True when a person admitted this exact (unresolved) check."""
+        """True when a person admitted this exact (unresolved) check.
+
+        An admission in the name of an agent, a model or a service admits
+        nothing, however it got into the bundle.
+        """
 
         return (
             self.admission is not None
             and self.admission.role == "person"
+            and not is_agent_identity(self.admission.admitted_by)
             and self.admission.spec_digest == self.admission_digest()
         )
 

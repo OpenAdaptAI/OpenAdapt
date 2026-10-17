@@ -51,7 +51,7 @@ from urllib.parse import quote, urlsplit
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from openadapt_flow.assurance import INDEPENDENT_READBACK, UNCHECKED
+from openadapt_flow.assurance import SCREEN_READBACK, UNCHECKED
 from openadapt_flow.runtime.effects._common import judge_records
 from openadapt_flow.runtime.effects.adapter import ConnectionProbe, VerifierAdapterBase
 from openadapt_flow.runtime.effects.effect import (
@@ -1070,13 +1070,11 @@ class SeparateSessionReadbackVerifier(VerifierAdapterBase):
                 assurance=UNCHECKED,
             )
         assert isinstance(verdict, EffectVerdict)
-        # Separate session: independent of the one that typed, under the
-        # current policy rule (openadapt_flow.assurance). Not a
-        # system-of-record read.
+        # A separate session reads the same application's screens, so under
+        # the policy rule in openadapt_flow.assurance this is a screen
+        # read-back, not a system-of-record read (tier 2).
         return verdict.model_copy(
-            update={
-                "assurance": INDEPENDENT_READBACK if verdict.confirmed else UNCHECKED
-            }
+            update={"assurance": SCREEN_READBACK if verdict.confirmed else UNCHECKED}
         )
 
 

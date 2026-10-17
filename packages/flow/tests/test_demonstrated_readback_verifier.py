@@ -322,6 +322,58 @@ def test_an_admission_does_not_carry_over_to_a_changed_check():
     assert verdict.verdict is Verdict.INDETERMINATE
 
 
+def _admitted_by(spec, who):
+    """A hand-written admission with a correct digest, in ``who``'s name."""
+    from openadapt_flow.runtime.effects.effect import ReadbackAdmission
+
+    clean = spec.model_copy(update={"admission": None})
+    return clean.model_copy(
+        update={
+            "admission": ReadbackAdmission(
+                admitted_by=who,
+                admitted_at="2026-10-17T00:00:00Z",
+                spec_digest=clean.admission_digest(),
+            )
+        }
+    )
+
+
+@pytest.mark.parametrize(
+    "who", ["agent", "agent:anthropic", "model:x", "bot:ci", "person"]
+)
+def test_an_agent_cannot_admit_a_check(who):
+    effect = _effect(_spec())
+    wf = _workflow().model_copy(
+        update={
+            "steps": [_workflow().steps[2].model_copy(update={"effects": [effect]})]
+        }
+    )
+    with pytest.raises(CheckError, match="not a person"):
+        admit_check(wf, admitted_by=who)
+    # Written into the bundle by hand, with the right digest, it admits nothing.
+    forged = _admitted_by(_spec(), who)
+    assert not forged.admitted()
+    verdict = _verify(forged, "MG44O8")
+    assert verdict.verdict is Verdict.INDETERMINATE
+    assert verdict.assurance == UNCHECKED
+    # The same hand-written admission in a person's name is the control case.
+    assert _verify(_admitted_by(_spec(), "reviewer"), "MG44O8").confirmed
+
+
+def test_the_check_records_who_demonstrated_it(tmp_path):
+    rec = _recording(tmp_path)
+    meta = rec / "meta.json"
+    data = json.loads(meta.read_text()) if meta.is_file() else {}
+    meta.write_text(json.dumps({**data, "demonstrated_by": "agent"}))
+    updated, _ = apply_check(_workflow(), rec, vision=_marked_screen(SHOWS))
+    step = updated.steps[2]
+    spec = step.effects[0].readback
+    assert spec.demonstrated_by == "agent"
+    from openadapt_flow.compiler.readback_authoring import describe_check
+
+    assert "demonstrated by agent" in describe_check(step, step.effects[0])
+
+
 def test_a_check_without_reset_cannot_be_admitted():
     effect = _effect(_spec(reset=None))
     wf = _workflow().model_copy(
@@ -478,7 +530,9 @@ def test_native_backends_offer_displayed_text_but_windows_does_not():
 
 def test_assurance_grades_follow_the_tier():
     assert assurance_for(VerificationTier.INDEPENDENT_SYSTEM) == INDEPENDENT_READBACK
-    # Current policy: a separate signed-in session is independent of actuation.
+    # A separate signed-in session still reads the application's screens, so
+    # it is a screen read-back even though it is independent of actuation.
+    assert VerificationTier.INDEPENDENT_SESSION.is_independent_of_actuation()
     assert assurance_for(VerificationTier.INDEPENDENT_SESSION) == SCREEN_READBACK
     assert (
         assurance_for(VerificationTier.PERSISTED_STATE_REACQUISITION) == SCREEN_READBACK

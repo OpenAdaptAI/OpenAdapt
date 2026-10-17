@@ -31,10 +31,13 @@ person can also name the step in ``check.json`` (``reset``); the compiled
 check records whether the step was detected or only declared. A check with no
 reset is refused.
 
-Admission. The compiled check is marked ``demonstrated`` and has no
-admission, so it confirms nothing until a person admits it
-(:func:`admit_check`, ``openadapt-flow check admit``). The demonstration,
-whether a person or an agent drove it, can't approve the check it taught.
+Admission. The compiled check is marked ``demonstrated``, records who drove
+the demonstration (``demonstrated_by``), and has no admission, so it confirms
+nothing until a person admits it (:func:`admit_check`, ``openadapt-flow check
+admit``). The command needs an interactive terminal and a typed word. An
+admission in an agent, model or service name is refused, and the verifier
+ignores one that got into the bundle anyway. These are identity checks: code
+that can call :func:`admit_check` with a person's name can admit.
 
 How strong this is. The check reads the screen of the same application in
 the same session that did the save (``docs/EFFECT_KIT.md``):
@@ -78,6 +81,7 @@ from openadapt_flow.runtime.effects.effect import (
     ReadbackResetKind,
     ReadbackSpec,
     ValueExpr,
+    is_agent_identity,
 )
 from openadapt_flow.runtime.effects.readback_values import ValueKind, infer_value_kind
 
@@ -434,6 +438,7 @@ def apply_check(
             renavigation=renavigation,
             fields=read_fields,
             demonstrated=True,
+            demonstrated_by=_demonstrated_by(recording),
             reset=reset,
         ),
         probe=(
@@ -503,11 +508,25 @@ def demonstrated_checks(workflow: Workflow) -> list[tuple[Step, Effect]]:
     return found
 
 
+def _demonstrated_by(recording: Path) -> Optional[str]:
+    """``demonstrated_by`` from the recording's ``meta.json``, if it says."""
+
+    try:
+        meta = json.loads((recording / "meta.json").read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return None
+    value = meta.get("demonstrated_by") if isinstance(meta, dict) else None
+    return str(value) if value else None
+
+
 def describe_check(step: Step, effect: Effect) -> str:
     """What a person is asked to admit, in plain words."""
     spec = effect.readback
     assert spec is not None
-    lines = [f"Save step {step.id} ({step.intent}) is checked by:"]
+    lines = [
+        f"Save step {step.id} ({step.intent}) is checked by "
+        f"(demonstrated by {spec.demonstrated_by or 'unknown'}):"
+    ]
     for i, nav in enumerate(spec.renavigation):
         if nav.action == "click":
             what = f"click at {nav.point}"
@@ -550,6 +569,10 @@ def admit_check(
     who = (admitted_by or getpass.getuser() or "").strip()
     if not who:
         raise CheckError("an admission needs the name of the person admitting it")
+    if is_agent_identity(who):
+        raise CheckError(
+            f"{who!r} is not a person; an agent or model can't admit a check"
+        )
     stamp = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     when = stamp.replace(microsecond=0).isoformat().replace("+00:00", "Z")
     admitted: list[str] = []

@@ -194,6 +194,20 @@ def test_confirms_the_saved_row() -> None:
     assert driver.credentials == [(READER_USERNAME, READER_PASSWORD)] * 2
 
 
+def test_a_separate_session_read_is_graded_screen_readback() -> None:
+    # Tier 2 reads the application's own record page, so it is not an
+    # independent (system-of-record) read-back. See openadapt_flow.assurance.
+    confirmed = _verifier(FakeDriver([_page(_row("7"))])).verify(
+        _note_equals(), EMPTY_BEFORE
+    )
+    assert confirmed.verdict is Verdict.CONFIRMED
+    assert confirmed.assurance == "screen_readback"
+    refuted = _verifier(FakeDriver([_page(_row("7", note=""))])).verify(
+        _note_equals(), EMPTY_BEFORE
+    )
+    assert refuted.assurance == "unchecked"
+
+
 def test_partial_save_is_refuted_and_labeled_as_a_record_page() -> None:
     verdict = _verifier(FakeDriver([_page(_row("7", note=""))])).verify(
         _note_equals(), EMPTY_BEFORE
