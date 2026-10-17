@@ -583,3 +583,68 @@ def test_record_compile_replay_over_windows_backend(
     # through to the optional grounder on a clean run.
     assert report.model_calls == 0, report.model_calls
     assert waa.state == 3
+
+
+def test_agent_drives_authoring_recording_over_windows_backend(
+    waa: MockWaa, backend: WindowsBackend, tmp_path
+) -> None:
+    """An agent drives a native Windows demonstration through AuthoringSession.
+
+    Input goes out through the WindowsBackend (the replay driver's synthetic
+    input path), the Recorder writes the demonstration, every event is marked
+    as the agent's, and the unchanged compiler and replayer accept it.
+    """
+    from openadapt_flow.authoring import AuthoringSession
+    from openadapt_flow.ir import ActionKind
+    from openadapt_flow.runtime.replayer import Replayer
+
+    session = AuthoringSession(
+        backend,
+        tmp_path / "recording",
+        backend_kind="windows",
+        settle_interval_s=0.02,
+        settle_timeout_s=2.0,
+    )
+    observed = session.observe()
+    assert observed["agent_drive"] is True
+    assert observed["coach_only"] is False
+    assert observed["provider"] == "windows_uia"
+
+    session.start_record()
+    session.click(*BUTTON_CENTER)
+    session.type_text(NOTE_VALUE, param="note")
+    session.press("Enter")
+    recording_dir = session.stop_record()
+    assert waa.state == 3
+    assert any("pyautogui.click(640, 424)" in c for c in waa.commands)
+
+    events = [
+        json.loads(line)
+        for line in (recording_dir / "events.jsonl").read_text().splitlines()
+    ]
+    assert [e["actor"] for e in events] == ["agent", "agent", "agent"]
+    meta = json.loads((recording_dir / "meta.json").read_text())
+    assert meta["demonstrated_by"] == "agent"
+    assert meta["surface"] == "windows"
+    assert meta["authoring"] == {"input": "os_synthetic_input", "screen_only": False}
+
+    result = session.compile(tmp_path / "bundle", name="win-agent-demo")
+    assert result["status"] == "needs_human_admit"
+
+    from openadapt_flow.ir import Workflow
+
+    workflow = Workflow.load(tmp_path / "bundle")
+    assert [s.action for s in workflow.steps] == [
+        ActionKind.CLICK,
+        ActionKind.TYPE,
+        ActionKind.KEY,
+    ]
+    waa.reset()
+    report = Replayer(backend, poll_interval_s=0.02).run(
+        workflow,
+        params={"note": NOTE_VALUE},
+        bundle_dir=tmp_path / "bundle",
+        run_dir=tmp_path / "run",
+    )
+    assert report.success, [r.model_dump() for r in report.results]
+    assert waa.state == 3

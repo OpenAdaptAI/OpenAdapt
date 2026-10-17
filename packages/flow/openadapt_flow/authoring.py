@@ -22,9 +22,24 @@ not mint a Seal or a Production admission, and it does not ask the
 operator to re-supply schema, authority, effect contract, environment, or
 digest.
 
-Windows native, Citrix, and RDP are ``COACH_ONLY``: agent-drive is refused.
-Capture observers already drop OS-injected events; this module does not invent
-a ``record_injected`` flag.
+An agent can drive every substrate Flow has a backend for: a browser,
+macOS and Linux windows, native Windows apps, and a remote session (RDP or
+Citrix) shown in a local client window. On Windows the backend is
+:class:`~openadapt_flow.backends.windows_backend.WindowsBackend` talking to an
+operator-started ``win_agent`` on loopback, so input goes through the same
+OS-level synthetic input the Windows replay driver uses, and each click keeps
+the UIA locator when the agent can read one. RDP and Citrix are screen-only:
+the agent works from the client window's pixels and keys, with no DOM or UIA,
+exactly as a person would.
+
+The recording is the Recorder's normal demonstration format. Capture's input
+observers drop OS-injected events on purpose, so an agent-driven demonstration
+is recorded by the Recorder that sent the input, not by observing it. The
+Recorder writes a before/after frame for every action, like
+``record_desktop_demo``. ``meta.json`` says who did the demonstration
+(``demonstrated_by``) and every event carries ``actor`` (``agent`` for input
+this session sent, ``person`` for input recorded at a pause). This module
+never starts ``win_agent``; the caller pins a backend that is already running.
 
 ``observe`` returns a PHI-safe tree (no titles, field values, screenshots,
 URLs, or backend pixels on the payload). Pixel bounds stay on the session
@@ -46,7 +61,9 @@ from openadapt_flow.compiler.compile import compile_recording
 from openadapt_flow.recorder import Recorder
 
 __all__ = [
+    "AGENT_DRIVE_KINDS",
     "COACH_ONLY",
+    "SCREEN_ONLY_KINDS",
     "NEEDS_HUMAN_ADMIT",
     "OBSERVE_SCHEMA_VERSION",
     "AdmitResult",
@@ -62,12 +79,35 @@ COACH_ONLY = "COACH_ONLY"
 NEEDS_HUMAN_ADMIT: Literal["needs_human_admit"] = "needs_human_admit"
 OBSERVE_SCHEMA_VERSION = "openadapt.authoring.observe/v1"
 
-_AGENT_DRIVE_KINDS = frozenset({"web", "macos", "linux"})
-_COACH_ONLY_KINDS = frozenset({"windows", "rdp"})
+#: Substrates an agent can drive through this session.
+AGENT_DRIVE_KINDS = frozenset({"web", "macos", "linux", "windows", "rdp", "citrix"})
+#: Remote sessions: the agent sees only pixels and sends only pointer/keys.
+SCREEN_ONLY_KINDS = frozenset({"rdp", "citrix"})
+_AGENT_DRIVE_KINDS = AGENT_DRIVE_KINDS
+#: Kept for callers that import it. No substrate refuses agent drive now.
+_COACH_ONLY_KINDS: frozenset[str] = frozenset()
 _PROVIDERS = {
     "web": "playwright_ax",
     "macos": "macos_ax",
     "linux": "linux_atspi",
+    "windows": "windows_uia",
+}
+#: How the agent's input reaches the app, recorded in ``meta.json``.
+_INPUT_CHANNELS = {
+    "web": "browser_automation",
+    "macos": "os_synthetic_input",
+    "linux": "os_synthetic_input",
+    "windows": "os_synthetic_input",
+    "rdp": "remote_client_window",
+    "citrix": "remote_client_window",
+}
+_WINDOW_DEFAULT_NAMES = {
+    "web": "Chromium",
+    "macos": "App",
+    "linux": "App",
+    "windows": "Windows",
+    "rdp": "Remote Desktop",
+    "citrix": "Citrix Workspace",
 }
 _ELEMENT_ROLES = frozenset(
     {
@@ -192,7 +232,11 @@ class AuthoringError(RuntimeError):
 
 
 class CoachOnlyError(AuthoringError):
-    """Agent-drive is refused; the person actuates and Capture records."""
+    """Agent-drive is refused; the person actuates and Capture records.
+
+    No built-in substrate raises this now. It stays so callers that catch it
+    keep working.
+    """
 
     def __init__(self, backend_kind: str) -> None:
         super().__init__(
@@ -267,7 +311,7 @@ class _Pause:
 
 def _normalize_backend_kind(kind: str) -> str:
     k = (kind or "").strip().lower().replace("_", "-")
-    if k in {"remote-display", "citrix"}:
+    if k == "remote-display":
         return "rdp"
     if k in {"win", "win-agent"}:
         return "windows"
@@ -411,12 +455,16 @@ class AuthoringSession:
     """Wrap a live backend in :class:`Recorder` for one authoring demonstration.
 
     Args:
-        backend: Live actuation/screenshot backend (Playwright, macOS, Linux).
+        backend: Live actuation/screenshot backend (Playwright, macOS, Linux,
+            ``WindowsBackend``, or a remote-display client-window backend).
         out_dir: Recording directory passed to :class:`Recorder`.
         backend_kind: Substrate pin (``web`` / ``macos`` / ``linux`` /
-            ``windows`` / ``rdp`` / ``citrix``). Windows native, Citrix, and
-            RDP raise :class:`CoachOnlyError`.
+            ``windows`` / ``rdp`` / ``citrix``). ``rdp`` and ``citrix`` are
+            screen-only: ``observe`` has no tree and the agent clicks pixels.
         app_url: Optional app URL stored in ``meta.json``.
+        backend_hints: Optional ``{"rdp_window", "rdp_window_title"}`` for an
+            ``rdp`` / ``citrix`` client window, stamped into ``meta.json`` so
+            replay binds to the same window. Window titles stay on disk.
         settle_interval_s: Recorder frame-settle poll interval.
         settle_stable_frames: Consecutive stable frames required to settle.
         settle_timeout_s: Max seconds to wait for the frame to settle.
@@ -432,6 +480,7 @@ class AuthoringSession:
         settle_interval_s: float = 0.1,
         settle_stable_frames: int = 2,
         settle_timeout_s: float = 3.0,
+        backend_hints: Optional[Mapping[str, Any]] = None,
     ) -> None:
         kind = _normalize_backend_kind(backend_kind)
         if kind in _COACH_ONLY_KINDS:
@@ -461,6 +510,8 @@ class AuthoringSession:
         self._draft_bundle: Optional[Path] = None
         self._check_start: Optional[int] = None
         self._check_fields: list[Any] = []
+        self._backend_hints = _clean_backend_hints(kind, backend_hints)
+        self._actors: dict[int, str] = {}
         #: Values typed for each parameter in this session, kept in memory
         #: only, to check a marked field against the page structure.
         self._typed: dict[str, str] = {}
@@ -468,6 +519,23 @@ class AuthoringSession:
     @property
     def backend_kind(self) -> str:
         return self._kind
+
+    @property
+    def screen_only(self) -> bool:
+        """True for a remote session: pixels and keys, no DOM or UIA."""
+
+        return self._kind in SCREEN_ONLY_KINDS
+
+    def screenshot(self) -> bytes:
+        """The pinned window's current frame, as PNG bytes, for a local caller.
+
+        The frame is the coordinate space ``click(x, y)`` uses. It stays in
+        this process: MCP bridges must not forward it unless the operator
+        turned screen sharing on.
+        """
+
+        self._require_not_halted()
+        return self._backend.screenshot()
 
     @property
     def recording_dir(self) -> Optional[Path]:
@@ -492,7 +560,14 @@ class AuthoringSession:
 
         self._require_not_halted()
         viewport = self._viewport()
-        raw_nodes, raw_window, truncated = self._collect_raw_tree()
+        raw_nodes: list[Mapping[str, Any]]
+        raw_window: Optional[Mapping[str, Any]]
+        if self.screen_only:
+            # A remote session has no tree to read. The agent works from
+            # pixels, so never project anything the backend might offer.
+            raw_nodes, raw_window, truncated = [], None, False
+        else:
+            raw_nodes, raw_window, truncated = self._collect_raw_tree()
         tree: list[dict[str, Any]] = []
         for item in raw_nodes:
             node = self._project_node(item, viewport)
@@ -538,6 +613,7 @@ class AuthoringSession:
             settle_stable_frames=self._settle_stable_frames,
             settle_timeout_s=self._settle_timeout_s,
         )
+        self._actors = {}
 
     def click(
         self,
@@ -554,12 +630,12 @@ class AuthoringSession:
             target = self._lookup_node(node_id)
             px, py = target.center
             self._last_target = target
-            recorder.click(px, py)
+            self._as_agent(recorder, lambda: recorder.click(px, py))
             return
         if x is None or y is None:
             raise AuthoringError("click requires node_id or x/y", code="invalid_click")
         self._last_target = _NodePixels(x=int(x), y=int(y), w=0, h=0)
-        recorder.click(int(x), int(y))
+        self._as_agent(recorder, lambda: recorder.click(int(x), int(y)))
 
     def type_text(self, text: str, param: Optional[str] = None) -> None:
         """Agent-driven type through :class:`Recorder` (actuates the backend).
@@ -570,7 +646,7 @@ class AuthoringSession:
 
         recorder = self._require_recording()
         self._require_not_paused()
-        recorder.type_text(text, param=param)
+        self._as_agent(recorder, lambda: recorder.type_text(text, param=param))
         if param:
             self._typed[param] = text
 
@@ -579,7 +655,7 @@ class AuthoringSession:
 
         recorder = self._require_recording()
         self._require_not_paused()
-        recorder.press(key)
+        self._as_agent(recorder, lambda: recorder.press(key))
 
     def double_click(self, x: int, y: int) -> None:
         """Double-click at pixels through :class:`Recorder`."""
@@ -704,6 +780,7 @@ class AuthoringSession:
             redact_region = pause.target.region
         else:
             event["text"] = text
+        self._actors[recorder.event_count] = "person"
         recorder.record_observed(
             event,
             before_png=pause.before_png,
@@ -1022,6 +1099,7 @@ class AuthoringSession:
         recorder = self._require_recording()
         self._pause = None
         rec_dir = recorder.finish()
+        self._stamp_provenance(rec_dir)
         if self._check_start is not None and self._check_fields:
             from openadapt_flow.compiler.readback_authoring import write_check
 
@@ -1031,6 +1109,57 @@ class AuthoringSession:
         self._recording_dir = rec_dir
         self._recorder = None
         return rec_dir
+
+    def _as_agent(self, recorder: Recorder, act: Any) -> None:
+        """Run one Recorder action and mark the event it writes as the agent's."""
+
+        index = recorder.event_count
+        act()
+        if recorder.event_count > index:
+            self._actors[index] = "agent"
+
+    def _stamp_provenance(self, rec_dir: Path) -> None:
+        """Say who demonstrated each step, in ``events.jsonl`` and ``meta.json``.
+
+        Every event gets ``actor``. Events this session sent are ``agent``;
+        input a person typed during a pause is ``person``. ``meta.json`` gets
+        ``demonstrated_by`` (``agent``, ``person``, or ``agent_and_person``),
+        the ``surface`` the demonstration ran on, and how the input reached it.
+        """
+
+        events_path = rec_dir / "events.jsonl"
+        events = _load_events(rec_dir)
+        for event in events:
+            index = event.get("i")
+            event["actor"] = (
+                self._actors.get(index, "agent") if isinstance(index, int) else "agent"
+            )
+        if events:
+            events_path.write_text(
+                "".join(json.dumps(event) + "\n" for event in events)
+            )
+        actors = {event["actor"] for event in events}
+        if actors == {"person"}:
+            demonstrated_by = "person"
+        elif actors == {"agent", "person"}:
+            demonstrated_by = "agent_and_person"
+        else:
+            demonstrated_by = "agent"
+        meta_path = rec_dir / "meta.json"
+        meta = json.loads(meta_path.read_text())
+        meta["demonstrated_by"] = demonstrated_by
+        meta["surface"] = self._kind
+        meta["authoring"] = {
+            "input": _INPUT_CHANNELS[self._kind],
+            "screen_only": self.screen_only,
+        }
+        if self._backend_hints is not None:
+            meta["backend_hints"] = self._backend_hints
+        if self.screen_only:
+            # A remote session's frames are the client window's own pixels,
+            # the same space Capture's window-scoped recordings declare.
+            meta["coordinate_space"] = "window_pixels"
+        meta_path.write_text(json.dumps(meta, indent=2))
 
     def _refuse_missing_secret_type(self, recording_dir: Path) -> None:
         events = _load_events(recording_dir)
@@ -1130,11 +1259,7 @@ class AuthoringSession:
                 if process_name is not None:
                     break
         if process_name is None:
-            process_name = {
-                "web": "Chromium",
-                "macos": "App",
-                "linux": "App",
-            }.get(self._kind)
+            process_name = _WINDOW_DEFAULT_NAMES.get(self._kind)
         if process_name is None:
             return None
         if bounds is None:
@@ -1211,6 +1336,7 @@ def open_session(
     settle_interval_s: float = 0.1,
     settle_stable_frames: int = 2,
     settle_timeout_s: float = 3.0,
+    backend_hints: Optional[Mapping[str, Any]] = None,
 ) -> AuthoringSession:
     """Construct an :class:`AuthoringSession` (Desktop / stdio ``--authoring``)."""
 
@@ -1222,4 +1348,42 @@ def open_session(
         settle_interval_s=settle_interval_s,
         settle_stable_frames=settle_stable_frames,
         settle_timeout_s=settle_timeout_s,
+        backend_hints=backend_hints,
     )
+
+
+def _clean_backend_hints(
+    kind: str, hints: Optional[Mapping[str, Any]]
+) -> Optional[dict[str, str]]:
+    """Closed ``backend_hints`` for an ``rdp`` / ``citrix`` client window."""
+
+    if hints is None:
+        return None
+    if kind not in SCREEN_ONLY_KINDS:
+        raise AuthoringError(
+            "backend_hints apply only to an rdp or citrix client window",
+            code="invalid_backend_hints",
+        )
+    out: dict[str, str] = {"backend": kind}
+    for key in ("rdp_window", "rdp_window_title", "rdp_readiness_text"):
+        value = hints.get(key)
+        if value is None:
+            continue
+        if not isinstance(value, str) or not value.strip() or len(value) > 512:
+            raise AuthoringError(
+                f"backend_hints {key} must be a non-empty string",
+                code="invalid_backend_hints",
+            )
+        out[key] = value.strip()
+    unknown = set(hints) - {
+        "backend",
+        "rdp_window",
+        "rdp_window_title",
+        "rdp_readiness_text",
+    }
+    if unknown or hints.get("backend") not in (None, kind):
+        raise AuthoringError(
+            "backend_hints accepts rdp_window, rdp_window_title, and rdp_readiness_text",
+            code="invalid_backend_hints",
+        )
+    return out

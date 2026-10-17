@@ -17,11 +17,9 @@ import pytest
 from PIL import Image
 
 from openadapt_flow.authoring import (
-    COACH_ONLY,
     NEEDS_HUMAN_ADMIT,
     AuthoringError,
     AuthoringSession,
-    CoachOnlyError,
     MissingSecretTypeError,
     open_session,
 )
@@ -101,18 +99,116 @@ def _session(
     return session, backend
 
 
-# -- coach-only substrates ---------------------------------------------------
+# -- native Windows and remote sessions --------------------------------------
 
 
 @pytest.mark.parametrize(
-    "kind",
-    ["windows", "Windows", "win", "win_agent", "rdp", "citrix", "remote_display"],
+    ("kind", "canonical"),
+    [
+        ("windows", "windows"),
+        ("Windows", "windows"),
+        ("win", "windows"),
+        ("win_agent", "windows"),
+        ("rdp", "rdp"),
+        ("remote_display", "rdp"),
+        ("citrix", "citrix"),
+    ],
 )
-def test_citrix_rdp_windows_refuse_agent_drive(tmp_path: Path, kind: str) -> None:
-    with pytest.raises(CoachOnlyError, match=COACH_ONLY) as excinfo:
-        AuthoringSession(ScriptedBackend(), tmp_path / "rec", backend_kind=kind)
-    assert excinfo.value.code == COACH_ONLY
+def test_windows_rdp_citrix_accept_agent_drive(
+    tmp_path: Path, kind: str, canonical: str
+) -> None:
+    session = AuthoringSession(ScriptedBackend(), tmp_path / "rec", backend_kind=kind)
+    assert session.backend_kind == canonical
+    observed = session.observe()
+    assert observed["coach_only"] is False
+    assert observed["agent_drive"] is True
+    assert observed["backend"] == canonical
     assert not hasattr(AuthoringSession, "record_injected")
+
+
+@pytest.mark.parametrize("kind", ["rdp", "citrix"])
+def test_remote_session_is_screen_only(tmp_path: Path, kind: str) -> None:
+    class _OffersTree(_TreeBackend):
+        pass
+
+    session = AuthoringSession(_OffersTree(), tmp_path / "rec", backend_kind=kind)
+    observed = session.observe()
+    assert session.screen_only is True
+    assert observed["provider"] == "none"
+    assert observed["tree"] == []
+    assert observed["reason"] == "empty_projection"
+    assert session.screenshot()[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_agent_demonstration_is_marked_agent_authored(tmp_path: Path) -> None:
+    session, backend = _session(tmp_path)
+    session.start_record()
+    session.click(10, 20)
+    session.type_text("hello", param="note")
+    session.press("Enter")
+    rec_dir = session.stop_record()
+    events = _events(rec_dir)
+    assert [event["actor"] for event in events] == ["agent", "agent", "agent"]
+    meta = json.loads((rec_dir / "meta.json").read_text())
+    assert meta["demonstrated_by"] == "agent"
+    assert meta["surface"] == "web"
+    assert meta["authoring"] == {"input": "browser_automation", "screen_only": False}
+
+
+def test_person_pause_input_is_marked_person(tmp_path: Path) -> None:
+    session, backend = _session(tmp_path)
+    backend.values_at[(110, 220)] = "typed by a person"
+    session.start_record()
+    session.click(110, 220)
+    session.pause_for_input(param="note")
+    assert session.continue_input()["recorded"] is True
+    rec_dir = session.stop_record()
+    assert [event["actor"] for event in _events(rec_dir)] == ["agent", "person"]
+    meta = json.loads((rec_dir / "meta.json").read_text())
+    assert meta["demonstrated_by"] == "agent_and_person"
+
+
+def test_rdp_recording_stamps_window_hints(tmp_path: Path) -> None:
+    session = AuthoringSession(
+        ScriptedBackend(),
+        tmp_path / "rec",
+        backend_kind="citrix",
+        backend_hints={"rdp_window": "Citrix Viewer", "rdp_window_title": "Desktop"},
+        settle_interval_s=0.01,
+        settle_stable_frames=1,
+        settle_timeout_s=0.2,
+    )
+    session.start_record()
+    session.click(5, 5)
+    rec_dir = session.stop_record()
+    meta = json.loads((rec_dir / "meta.json").read_text())
+    assert meta["surface"] == "citrix"
+    assert meta["coordinate_space"] == "window_pixels"
+    assert meta["authoring"] == {"input": "remote_client_window", "screen_only": True}
+    assert meta["backend_hints"] == {
+        "backend": "citrix",
+        "rdp_window": "Citrix Viewer",
+        "rdp_window_title": "Desktop",
+    }
+    # The compiler accepts the stamps: one surface, matching window hints.
+    from openadapt_flow.ir import Workflow
+
+    session.compile(tmp_path / "bundle", name="citrix-agent-demo")
+    workflow = Workflow.load(tmp_path / "bundle")
+    assert workflow.surface == "citrix"
+    assert workflow.backend_hints is not None
+    assert workflow.backend_hints.rdp_window == "Citrix Viewer"
+
+
+def test_backend_hints_refused_off_remote_sessions(tmp_path: Path) -> None:
+    with pytest.raises(AuthoringError) as excinfo:
+        AuthoringSession(
+            ScriptedBackend(),
+            tmp_path / "rec",
+            backend_kind="windows",
+            backend_hints={"rdp_window": "x"},
+        )
+    assert excinfo.value.code == "invalid_backend_hints"
 
 
 def test_authoring_module_does_not_spawn_win_agent_or_copy_replay_mcp() -> None:

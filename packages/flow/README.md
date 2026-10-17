@@ -153,9 +153,13 @@ saw. Neither run makes a model call. The run artifacts are in
 ## Try it on your app
 
 Record the task against a test copy of your web app, compile it, and replay
-it. An agent can drive the recording through the authoring tools; a person
-accepts the result, and agent recording is refused on native Windows, Citrix
-and RDP. With several recordings of the same task, `induce` finds which values
+it. An agent can drive the recording through the authoring tools in a
+browser, in macOS, Linux, and native Windows apps, and over RDP or Citrix. On
+Windows the agent's input goes through the same synthetic-input path that
+replay uses. RDP and Citrix are screen-only: the agent works from the client
+window's pixels and keys, as a person would. The recording says whether an
+agent or a person did each step, and a person accepts the result. With
+several recordings of the same task, `induce` finds which values
 change, which steps repeat and which are optional, or refuses if they
 disagree.
 

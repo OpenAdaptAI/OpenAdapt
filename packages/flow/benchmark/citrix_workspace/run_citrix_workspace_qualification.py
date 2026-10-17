@@ -270,7 +270,15 @@ def run_qualification(
     candidate_commit: str,
     base_commit: str,
     work_dir: Optional[Path] = None,
+    agent_authored: bool = False,
 ) -> dict:
+    """Run the stand-in qualification.
+
+    With ``agent_authored`` the demonstration is recorded through
+    :class:`~openadapt_flow.authoring.AuthoringSession` (``backend_kind``
+    ``citrix``), the path an agent uses to drive the recording, instead of a
+    bare :class:`Recorder`. Input, frames, and replay are otherwise the same.
+    """
     from playwright.sync_api import sync_playwright
 
     from openadapt_flow.compiler import compile_recording
@@ -294,18 +302,28 @@ def run_qualification(
         browser, page = _make_page(pw, base_url, port, cm)
         try:
             backend = _citrix_backend(page, cm)
-            rec = Recorder(
-                backend,
-                rec_dir,
+            settle = dict(
                 settle_interval_s=0.3,
                 settle_stable_frames=2,
                 settle_timeout_s=6.0,
             )
+            if agent_authored:
+                from openadapt_flow.authoring import AuthoringSession
+
+                rec = AuthoringSession(
+                    backend, rec_dir, backend_kind="citrix", **settle
+                )
+                rec.start_record()
+            else:
+                rec = Recorder(backend, rec_dir, **settle)
             rec.click(*cm.ADA_ROW)
             rec.click(*cm.NOTE_FIELD)
             rec.type_text(cm.NOTE_VALUE, param=cm.NOTE_PARAM)
             rec.click(*cm.SAVE_BUTTON)
-            rec.finish()
+            if agent_authored:
+                rec.stop_record()
+            else:
+                rec.finish()
         finally:
             browser.close()
 
@@ -520,6 +538,9 @@ def run_qualification(
         "ica_hdx_accepted": False,
         "ica_hdx_status": "pending_real_environment_3_healthy_plus_3_drift",
     }
+    if agent_authored:
+        meta = json.loads((rec_dir / "meta.json").read_text())
+        evidence["demonstrated_by"] = meta.get("demonstrated_by")
     return evidence
 
 
