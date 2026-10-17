@@ -389,8 +389,10 @@ def test_webhook_setup_is_checked(url, secret, identity):
 # -- types conformance -------------------------------------------------------------
 
 
-def test_mirror_matches_openadapt_types_when_installed():
-    approval = pytest.importorskip("openadapt_types.approval")
+def test_mirror_matches_the_core_contract():
+    # Since the fold the contract ships in the core, so this always runs.
+    import openadapt_flow.contracts.approval as approval
+
     for name in ("ApproverKind", "ApproverAuth", "StepClass"):
         theirs = {m.value for m in getattr(approval, name)}
         ours = {m.value for m in globals()[name]}

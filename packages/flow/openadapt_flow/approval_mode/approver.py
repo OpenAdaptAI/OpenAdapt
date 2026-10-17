@@ -1,11 +1,11 @@
 """Who may approve a save, and delegated approvers.
 
-The contracts here are field-exact mirrors of ``openadapt_types.approval``
-(``ApproverIdentityV1``, ``ApproverPolicyV1``, ``StepClass``), which is the
-single schema the receipt and the other packages use. Flow keeps a local
-copy because its core must import without openadapt-types;
-``tests/test_approver_delegation.py`` checks the two stay identical whenever
-openadapt-types is installed.
+The contracts here are field-exact mirrors of
+``openadapt_flow.contracts.approval`` (``ApproverIdentityV1``,
+``ApproverPolicyV1``, ``StepClass``; also importable as
+``openadapt_types.approval``), which is the single schema the receipt and the
+other packages use. The mirror predates the fold of openadapt-types into the
+core; ``tests/test_approval_delegated.py`` checks the two stay identical.
 
 What this adds to per-item approval:
 
