@@ -204,6 +204,9 @@ class OpenEMRPlaywrightBackend(_BasePlaywrightBackend):
     value.
     """
 
+    # The registration form is a new-record form: no row ties its fields.
+    keyboard_admits_form_fields = True
+
     _INNER_TARGET_JS = """([px, py]) => {
         const el = document.elementFromPoint(px, py);
         if (!el) return null;
@@ -252,6 +255,17 @@ class OpenEMRPlaywrightBackend(_BasePlaywrightBackend):
                     matches.append(locator)
             if len(matches) != 1:
                 return None
+            # The confirm control's own visible label is part of its
+            # identity: the same element relabelled to another action (e.g.
+            # a merge) is not the recorded duplicate-check confirmation.
+            label = " ".join(
+                str(
+                    matches[0].evaluate(
+                        "(el) => el.tagName === 'INPUT' ? el.value : el.textContent"
+                    )
+                    or ""
+                ).split()
+            )
             box = matches[0].bounding_box()
             if box is None or not (
                 box["x"] <= x < box["x"] + box["width"]
@@ -266,6 +280,7 @@ class OpenEMRPlaywrightBackend(_BasePlaywrightBackend):
             "name": "Create New Patient",
             "target_kind": "action",
             "target_id": "confirm_create",
+            "label": label,
         }
 
     def _form_target(self, x: int, y: int) -> dict[str, str] | None:
@@ -375,9 +390,7 @@ class OpenEMRPlaywrightBackend(_BasePlaywrightBackend):
         except Exception:
             return None
 
-    def locate_structural(
-        self, locator: StructuralLocator
-    ) -> StructuralHandle | None:
+    def locate_structural(self, locator: StructuralLocator) -> StructuralHandle | None:
         selector = locator.selector or ""
         if selector == self._LEGACY_CONFIRM_SELECTOR:
             raise StructuralResolutionRefused(
@@ -409,12 +422,15 @@ class OpenEMRPlaywrightBackend(_BasePlaywrightBackend):
         target = self._confirm_target(x, y) or self._form_target(x, y)
         if target is None:
             return super().structured_text_at(x, y)
+        identity = {
+            "form_path": FORM_PATH,
+            "target_kind": target["target_kind"],
+            "target_id": target["target_id"],
+        }
+        if "label" in target:
+            identity["label"] = target["label"]
         return json.dumps(
-            {
-                "form_path": FORM_PATH,
-                "target_kind": target["target_kind"],
-                "target_id": target["target_id"],
-            },
+            identity,
             sort_keys=True,
             separators=(",", ":"),
         )
@@ -468,9 +484,7 @@ def _preauthenticate_browser(backend: Any, fixture: OpenEMRFixture) -> None:
     page.locator(f'iframe[name="{FORM_FRAME_NAME}"]').wait_for(
         state="visible", timeout=60_000
     )
-    _form_frame(page).locator("#form_fname").wait_for(
-        state="visible", timeout=60_000
-    )
+    _form_frame(page).locator("#form_fname").wait_for(state="visible", timeout=60_000)
     # The pinned image displays an installation-registration dialog in the top
     # shell for every fresh browser profile. It intercepts all child-frame
     # pointer input. Dismiss it in unmeasured setup through the explicit
@@ -483,9 +497,7 @@ def _preauthenticate_browser(backend: Any, fixture: OpenEMRFixture) -> None:
             telemetry.uncheck()
         if telemetry.count() and telemetry.is_checked():
             raise FixtureError("OpenEMR anonymous telemetry could not be disabled")
-        registration.get_by_role(
-            "button", name="Ask again later", exact=True
-        ).click()
+        registration.get_by_role("button", name="Ask again later", exact=True).click()
         registration.wait_for(state="hidden", timeout=30_000)
 
 
@@ -832,9 +844,9 @@ def compile_recording(recording_dir: Path, bundle_dir: Path) -> None:
     # forced to "reversible" while #create, which only opens the duplicate
     # check, stayed irreversible.)
     save_steps[0].risk = "irreversible"
-    save_steps[0].risk_explanation = (
-        "the marked #confirmCreate click creates the patient chart"
-    )
+    save_steps[
+        0
+    ].risk_explanation = "the marked #confirmCreate click creates the patient chart"
     save_steps[0].risk_review_required = False
     expected_params = set(SyntheticPatientSpec().params())
     if (

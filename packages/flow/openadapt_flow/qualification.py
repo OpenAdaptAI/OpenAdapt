@@ -3479,10 +3479,22 @@ def _case_run_report_integrity_error(
         # The profile classifier proves the ordered action trace and the broad
         # production outcome. Qualification also proves the exact compiled
         # action, path, identity policy, and resolved effect contracts.
+        from openadapt_flow.ir import ActionKind
         from openadapt_flow.policy import executable_actuation_paths
 
         for item in prior_action_results:
             step = steps_by_id.get(item.step_id)
+            if (
+                step is not None
+                and step.action in {ActionKind.WAIT, ActionKind.SCROLL}
+                and item.actuation is None
+                and item.step_id not in expected_action_paths
+                and item.step_id not in required_actions
+            ):
+                # A viewport scroll or wait is classified READ_ONLY (it never
+                # actuates business state) and carries no actuation receipt,
+                # so it has no qualified path to prove.
+                continue
             observed_path = _qualification_actuation_path(item.actuation)
             actuation_path = expected_action_paths.get(item.step_id, observed_path)
             if (

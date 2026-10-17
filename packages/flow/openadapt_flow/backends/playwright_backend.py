@@ -273,6 +273,21 @@ _INSTALL_GUARD_BODY_JS = (
             recordTie = 'submit-binding';
         }
     }
+    if (args.requireRowIdentity && !recordTie && args.admitFormField) {
+        // Opt-in (backend ``keyboard_admits_form_fields``): a focused,
+        // uniquely identified data-entry control on a form that has no record
+        // row yet (a new-record form). The lease binds this exact element;
+        // its identity is still verified against the compiled structured
+        // template by the readback that follows, so this only replaces the
+        // missing row tie, never the identity check.
+        const type = (el.getAttribute('type') || '').toLowerCase();
+        if (el.matches('input, select, textarea') && el.id &&
+                !['hidden', 'password', 'submit', 'button', 'reset', 'image',
+                  'file'].includes(type) &&
+                document.querySelectorAll('#' + CSS.escape(el.id)).length === 1) {
+            recordTie = 'form-field:' + el.id;
+        }
+    }
     if (args.requireRowIdentity && !recordTie) return null;
     const rect = el.getBoundingClientRect();
     const style = window.getComputedStyle(el);
@@ -978,6 +993,12 @@ class PlaywrightBackend:
         page: The underlying Playwright page (public so record-time helpers
             such as the demo driver may use locators; replay never does).
     """
+
+    # Guarded keyboard actuation normally requires the focused element to sit
+    # in a record row. A backend for a new-record form (no row exists yet) may
+    # opt in to admitting a focused, uniquely identified form control instead;
+    # identity readback against the compiled template still decides.
+    keyboard_admits_form_fields: bool = False
 
     def __init__(
         self,
@@ -1828,12 +1849,22 @@ class PlaywrightBackend:
                 if not (0 <= point[0] < vw and 0 <= point[1] < vh):
                     self._cleanup_guard(token, scope)
                     return None
-                region = (
-                    int(round(float(box["x"]))),
-                    int(round(float(box["y"]))),
-                    int(round(float(box["width"]))),
-                    int(round(float(box["height"]))),
-                )
+                # The handle's region is the target's VISIBLE box: its
+                # bounding box clipped to the viewport. A control that runs a
+                # few pixels past the viewport edge (a full-width section
+                # header at the bottom of the screen) is still evidenced only
+                # by the part the retained frame shows; the center point was
+                # already required to be inside the viewport above.
+                bx = int(round(float(box["x"])))
+                by = int(round(float(box["y"])))
+                bw = int(round(float(box["width"])))
+                bh = int(round(float(box["height"])))
+                x0, y0 = max(0, bx), max(0, by)
+                x1, y1 = min(vw, bx + bw), min(vh, by + bh)
+                if x1 <= x0 or y1 <= y0:
+                    self._cleanup_guard(token, scope)
+                    return None
+                region = (x0, y0, x1 - x0, y1 - y0)
             except Exception:
                 self._cleanup_guard(token, scope)
                 raise
@@ -2525,6 +2556,7 @@ class PlaywrightBackend:
                     "y": frame_point.y,
                     "requireRowIdentity": True,
                     "requireFocused": True,
+                    "admitFormField": bool(self.keyboard_admits_form_fields),
                 },
             )
             if not isinstance(observed, dict):
