@@ -1,7 +1,7 @@
 # OpenAdapt Execute v1 reference clients
 
 The public contract is the generated
-[`execute-v1-openapi.json`](../../openadapt_types/schemas/execute-v1-openapi.json)
+[`execute-v1-openapi.json`](../../../flow/openadapt_flow/contracts/schemas/execute-v1-openapi.json)
 document. These small clients show the three stable resource paths.
 
 Use a partner-provisioned endpoint and bearer token. OpenAdapt Cloud uses

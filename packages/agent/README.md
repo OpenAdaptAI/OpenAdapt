@@ -159,7 +159,7 @@ The check that stops a second entry covers one runs folder. See `--runs-dir` und
 ### Read the other fields
 
 - `label`: a short status you can display, such as "Done and checked".
-- `reason`: a code from a fixed list that names the cause, such as `invalid_input` or `request_id_conflict`. Every code is in `REASONS` in [contract.py](src/openadapt_agent/contract.py), and [docs/DESIGN.md](docs/DESIGN.md#the-result-contract) explains how each one is chosen.
+- `reason`: a code from a fixed list that names the cause, such as `invalid_input` or `request_id_conflict`. Every code is in `REASONS` in [contract.py](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/openadapt_flow/agent/contract.py), and [docs/DESIGN.md](docs/DESIGN.md#the-result-contract) explains how each one is chosen.
 - `what_happened` and `next_action`: fixed sentences you can show a person. They never contain input values or screen text.
 - `proof`: `local` for a `done` that was checked on your customer's computer, `simulated` for a sandbox run that didn't open the app, and `none` for every other outcome.
 - `model_calls`: on runs that reached Flow, how many AI model calls the run made. It's 0 unless model grounding, a fallback that asks an AI model where to click, is turned on (see [Security](#security)).
@@ -293,7 +293,7 @@ Under `standard` and `regulated`, Flow stops before each save and waits for a pe
 
 With `--bundles`, the server also registers read-only tools for workflows and runs: `get_workflow`, `get_run_report`, `list_needs_attention`, and `get_attention_item`. With `--mode production` or `--mode attended`, it also registers a deprecated `run_workflow_<id>` for each workflow. Those tools take no `request_id`, so a retry can enter the values twice. Use `run_workflow` instead.
 
-`list_workflows`, `run_workflow`, and `get_run` return `structuredContent` that matches their `outputSchema`, defined in [contract.py](src/openadapt_agent/contract.py), plus the same JSON as text.
+`list_workflows`, `run_workflow`, and `get_run` return `structuredContent` that matches their `outputSchema`, defined in [contract.py](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/openadapt_flow/agent/contract.py), plus the same JSON as text.
 
 ### Decide stopped runs
 
@@ -423,7 +423,7 @@ Under Flow's `standard` and `regulated` profiles, each workflow version also nee
 
 ## Package history
 
-Before version 2, this package ran AI agents that drove the screen. The name now refers to the agents that call it. A customer's workflows are supplied with `--bundles` and never ship in this package or its registry listing, and an install from a registry starts read-only. The MCP registry reads [server.json](server.json), Smithery packs from [manifest.json](manifest.json), and [llms.txt](llms.txt) describes the package for AI assistants. See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
+Before version 2, this package ran AI agents that drove the screen. The name now refers to the agents that call it. A customer's workflows are supplied with `--bundles` and never ship in this package or its registry listing, and an install from a registry starts read-only. The MCP registry reads [server.json](server.json), Smithery packs from [manifest.json](manifest.json), and [llms.txt](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/llms.txt) describes the package for AI assistants. See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
 
 <!-- mcp-name: io.github.OpenAdaptAI/openadapt-agent -->
 
