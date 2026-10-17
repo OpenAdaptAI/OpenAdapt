@@ -169,6 +169,7 @@ def cmd_add(args: argparse.Namespace) -> int:
             vault.put_secrets(rsha, kept)
         vault.put_json(rsha, "document.json", countersigned, overwrite=True)
         _write_out(args.out, countersigned)
+        queued = _queue_exception(args, vault, countersigned, tsa_pem)
     except (CountersignError, TimestampError) as exc:
         print(f"add REFUSED: {exc}", file=sys.stderr)
         return 2
@@ -183,6 +184,153 @@ def cmd_add(args: argparse.Namespace) -> int:
         print("Delete the fields file once you have checked the vault copy.")
     if tsa is None:
         print("No timestamp requested (--no-timestamp).")
+    if queued:
+        print(queued)
+    return 0
+
+
+def _queue_exception(
+    args: argparse.Namespace, vault: Any, document: Any, tsa_pem: Optional[bytes]
+) -> str:
+    """Queue a genuine Seal on a REFUTED or INDETERMINATE outcome. Returns a note."""
+    from openadapt_flow.countersign.document import verify_countersigned
+    from openadapt_flow.countersign.exceptions import ExceptionQueue
+
+    registry = load_pinned_registry(args.keys)
+    report = verify_countersigned(
+        document, registry=registry, tsa_certificates=_creation_pins(args, tsa_pem)
+    )
+    if report.outcome_verified:
+        return ""
+    if not report.signature_genuine:
+        return (
+            f"Not queued as an exception: the Seal is {report.seal.get('status')} "
+            "against the pinned keys."
+        )
+    entry = ExceptionQueue(vault).enqueue(
+        document, report, registry, retention=args.retention_days
+    )
+    assert entry is not None
+    return (
+        f"Exception {entry['status']}: {entry['receipt_sha256']} ({entry['verdict']})"
+    )
+
+
+def _queue(args: argparse.Namespace) -> Any:
+    from openadapt_flow.countersign.exceptions import ExceptionQueue
+    from openadapt_flow.countersign.vault import CountersignVault
+
+    return ExceptionQueue(
+        CountersignVault(Path(args.vault).expanduser() if args.vault else None)
+    )
+
+
+def cmd_exceptions(args: argparse.Namespace) -> int:
+    entries = _queue(args).entries(None if args.status == "all" else args.status)
+    if args.json:
+        print(json.dumps(entries, indent=2, sort_keys=True))
+        return 0
+    if not entries:
+        print(f"No {'' if args.status == 'all' else args.status + ' '}exceptions.")
+        return 0
+    for e in entries:
+        line = (
+            f"{e['status']:<21} {e['verdict']:<13} {e['receipt_sha256']} "
+            f"issued {e.get('issued_at')}"
+        )
+        if e.get("resolution_receipt_id"):
+            line += f", resolved by {e['resolution_receipt_id']}"
+        if e.get("disposition"):
+            line += f", closed: {e['disposition'].get('disposition_code')}"
+        print(line)
+    return 0
+
+
+def _trust_certs(args: argparse.Namespace) -> list[Any]:
+    from openadapt_flow.countersign.tsa import load_pem_certificates
+
+    pem = _tsa_pem(args.tsa_cert or [])
+    return load_pem_certificates(pem) if pem else []
+
+
+def cmd_resolve(args: argparse.Namespace) -> int:
+    from openadapt_flow.countersign.document import CountersignError
+
+    try:
+        resolution, _ = _read_document(args.with_document)
+        entry = _queue(args).resolve_by_seal(
+            args.entry,
+            resolution,
+            load_pinned_registry(args.keys),
+            tsa_certificates=_trust_certs(args),
+        )
+    except (CountersignError, OSError, ValueError) as exc:
+        print(f"resolve REFUSED: {exc}", file=sys.stderr)
+        return 2
+    print(
+        f"Exception {entry['receipt_sha256']} resolved_by_seal: receipt "
+        f"{entry['resolution_receipt_id']}"
+    )
+    return 0
+
+
+def cmd_close(args: argparse.Namespace) -> int:
+    from cryptography.hazmat.primitives import serialization
+
+    from openadapt_flow.countersign.document import (
+        CountersignError,
+        LocalCountersignIssuer,
+    )
+    from openadapt_flow.countersign.vault import VaultError
+
+    try:
+        queue = _queue(args)
+        key = serialization.load_pem_private_key(
+            Path(args.approver_key).expanduser().read_bytes(), None
+        )
+        notes = (
+            Path(args.notes_file).expanduser().read_text(encoding="utf-8")
+            if args.notes_file
+            else None
+        )
+        record = queue.disposition_record(
+            args.entry,
+            signer=LocalCountersignIssuer(key),
+            approver_id=args.approver_id,
+            role=args.role,
+            disposition_code=args.code,
+            verification_method=args.method,
+            external_reference=args.external_reference,
+            notes=notes,
+        )
+        entry = queue.close_by_attestation(
+            args.entry, record, load_pinned_registry(args.approver_keys)
+        )
+    except (CountersignError, OSError, ValueError, TypeError, VaultError) as exc:
+        print(f"close REFUSED: {exc}", file=sys.stderr)
+        return 2
+    print(
+        f"Exception {entry['receipt_sha256']} closed_by_attestation: "
+        f"{args.code} by {args.approver_id} ({args.role})"
+    )
+    if notes:
+        print("Notes stay in the vault; only their HMAC is in the record.")
+    return 0
+
+
+def cmd_purge(args: argparse.Namespace) -> int:
+    from openadapt_flow.countersign.document import CountersignError
+    from openadapt_flow.countersign.vault import VaultError
+
+    try:
+        purged = _queue(args).purge(Path(args.export).expanduser())
+    except (CountersignError, OSError, ValueError, VaultError) as exc:
+        print(f"purge REFUSED: {exc}", file=sys.stderr)
+        return 2
+    if not purged:
+        print("Nothing is past its retention period.")
+    else:
+        print(f"Exported {len(purged)} entries to {args.export}, then purged them.")
     return 0
 
 
@@ -406,7 +554,95 @@ def add_countersign_parser(sub: Any) -> None:
         "--vault",
         help="Vault directory (default $OPENADAPT_COUNTERSIGN_VAULT or ~/.openadapt/countersign-vault)",
     )
+    n.add_argument(
+        "--keys",
+        help="Pinned Seal key registry used to decide whether to queue an exception",
+    )
+    n.add_argument(
+        "--retention-days",
+        type=int,
+        help="Keep a closed exception this long (default 2190, minimum 183, or $OPENADAPT_EXCEPTION_RETENTION_DAYS)",
+    )
     n.set_defaults(func=cmd_add)
+
+    from openadapt_flow.countersign.exceptions import (
+        DISPOSITION_CODES,
+        VERIFICATION_METHODS,
+    )
+
+    q = nsub.add_parser(
+        "exceptions", help="List Seals queued on a REFUTED or INDETERMINATE outcome"
+    )
+    q.add_argument(
+        "--status",
+        choices=["open", "resolved_by_seal", "closed_by_attestation", "all"],
+        default="open",
+    )
+    q.add_argument("--json", action="store_true")
+    q.add_argument("--vault")
+    q.set_defaults(func=cmd_exceptions)
+
+    r = nsub.add_parser(
+        "resolve",
+        help="Resolve an exception with a later verified Seal that links to it",
+    )
+    r.add_argument("entry", help="receipt_sha256 of the open entry")
+    r.add_argument(
+        "--with",
+        dest="with_document",
+        required=True,
+        metavar="DOCUMENT",
+        help="Countersigned document of the later receipt (added with 'countersign add')",
+    )
+    r.add_argument(
+        "--keys", help="Pinned Seal key file; the keys the entry was queued under"
+    )
+    r.add_argument(
+        "--tsa-cert",
+        action="append",
+        metavar="PEM",
+        help="Pinned TSA certificate or CA (repeatable)",
+    )
+    r.add_argument("--vault")
+    r.set_defaults(func=cmd_resolve)
+
+    c = nsub.add_parser(
+        "close",
+        help="Close an exception with a disposition signed by a person whose key is pinned",
+    )
+    c.add_argument("entry", help="receipt_sha256 of the open entry")
+    c.add_argument(
+        "--approver-id", required=True, help="Opaque approver id (no name or email)"
+    )
+    c.add_argument(
+        "--role", required=True, help="Approver role, for example nurse-manager"
+    )
+    c.add_argument("--code", required=True, choices=sorted(DISPOSITION_CODES))
+    c.add_argument("--method", required=True, choices=sorted(VERIFICATION_METHODS))
+    c.add_argument(
+        "--external-reference",
+        required=True,
+        help="Ticket or case id; only its HMAC is recorded",
+    )
+    c.add_argument(
+        "--notes-file", help="Free-text notes; kept only in the vault (0600)"
+    )
+    c.add_argument("--approver-key", required=True, help="The approver's Ed25519 PEM")
+    c.add_argument(
+        "--approver-keys",
+        required=True,
+        help="Pinned approver key registry; the signature must verify against it",
+    )
+    c.add_argument("--vault")
+    c.set_defaults(func=cmd_close)
+
+    g = nsub.add_parser(
+        "purge",
+        help="Export, then delete, closed exceptions past their retention period",
+    )
+    g.add_argument("--export", required=True, help="Export file to write first (0600)")
+    g.add_argument("--vault")
+    g.set_defaults(func=cmd_purge)
 
     b = nsub.add_parser(
         "timestamp-baseline", help="Timestamp a baseline read before the executor runs"

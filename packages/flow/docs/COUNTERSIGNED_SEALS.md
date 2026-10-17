@@ -232,6 +232,54 @@ it the way you do the system of record. Losing it loses the ability to
 disclose; it never weakens the commitments. On Windows, the mode bits do not
 apply; rely on the profile directory's ACL.
 
+## The exception queue
+
+`countersign add --keys seal-keys.json` queues an exception for each genuine
+Seal on a REFUTED or INDETERMINATE outcome. A Seal that doesn't verify against
+the pinned keys isn't queued. Entries are stored in
+`<vault>/exceptions/<receipt_sha256>.json`, mode 0600. They hold digests,
+ids, and timestamps, and never field values or notes. The Needs Attention
+queue in the console is a read-only view of run folders, so it can't record
+how an exception ended. This queue uses the same category names
+(`effect_refuted`, `effect_indeterminate`).
+
+An entry starts `open` and ends in one of two states. One state never counts
+as the other:
+
+- **`resolved_by_seal`** (`countersign resolve <entry> --with fix.json`): a
+  later receipt carries a genuine Seal on a `verified` or
+  `rolled_back_verified` outcome, checked against the keys the entry was
+  queued under. The receipt must link to the failed run, through
+  `remediates_receipt_id` or a shared non-PHI `correlation_id`. Both runs must
+  have the same `workflow_digest`, contract, and committed parameters. The
+  parameters are compared on this machine, from the vault, against the
+  commitments each timestamp or countersignature binds. Commit the run's
+  parameters with `--fields-file` on both receipts. Any executor counts,
+  including a person's verify-run receipt (`executor_kind` `human`), because a
+  verified outcome already requires an independent readback. The entry records
+  `resolution_receipt_id`.
+- **`closed_by_attestation`** (`countersign close`): a signed
+  `openadapt.exception-disposition/v1` record. It names an opaque approver id
+  of kind `person` and a role, `dispositioned_at` in RFC 3339 UTC, a
+  `disposition_code` (`remediated_manually_in_sor`, `cancelled_by_requester`,
+  `superseded_by_external_workflow`, `verified_manually_oracle_unavailable`),
+  and a `verification_method` (`sor_direct_inspection`,
+  `ehr_audit_log_review`, `counterparty_confirmation`,
+  `task_cancelled_no_check_needed`). The ticket id goes in only as an
+  HMAC-SHA256 digest, under a key kept in the vault. Free-text notes
+  (`--notes-file`) stay in the vault, mode 0600; only their HMAC is in the
+  record. The signature must verify against `--approver-keys`. The key that
+  sealed the failed run, or the run's agent or script executor, can't close it.
+
+No flag marks an entry resolved or closed on someone's word.
+
+Closed entries are kept for 6 years (2,190 days) after they close. Set
+`--retention-days` on `add` or `OPENADAPT_EXCEPTION_RETENTION_DAYS`; the
+minimum is 183 days. `countersign purge --export FILE` first writes the
+expired entries to `FILE` (mode 0600, never overwritten) and reads it back,
+and only then deletes them. Open entries are never purged. `countersign
+exceptions` lists entries; `--status all --json` lists every one.
+
 ## The dossier
 
 `countersign dossier` writes one HTML page, or a zip with the page plus the raw

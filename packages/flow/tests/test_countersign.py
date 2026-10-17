@@ -1185,3 +1185,437 @@ def test_verify_output_states_tsa_accuracy(issuer, tsa):
         (FIXTURES / "digicert-trusted-root-g4.pem").read_bytes()
     )
     assert verify_timestamp_token(token, digest, root).accuracy_seconds is None
+
+
+# -- exception queue ----------------------------------------------------------
+
+APPROVER_SEED = bytes([11]) * 32
+LATER = "2026-10-17T06:00:00Z"
+
+
+def _receipt_doc(
+    signer,
+    *,
+    outcome="verified",
+    verdict="CONFIRMED",
+    kind="agent",
+    n=1,
+    issued_at="2026-10-17T05:00:00Z",
+    workflow="4",
+    **extra,
+):
+    doc = _effect_doc(signer, kind=kind, outcome=outcome, verdict=verdict)
+    receipt = doc["receipt"]
+    receipt.pop("seal_signature")
+    receipt["receipt_id"] = f"rcpt-{n:010d}"
+    receipt["execution_id"] = f"exec-{n:010d}"
+    receipt["issued_at"] = issued_at
+    receipt["workflow_digest"] = "sha256:" + workflow * 64
+    receipt.update(extra)
+    receipt["seal_signature"] = signer.countersign(receipt)
+    return doc
+
+
+def _failed(signer, n=1, **kw):
+    return _receipt_doc(signer, outcome="halted", verdict="REFUTED", n=n, **kw)
+
+
+def _fix(signer, n=2, **kw):
+    kw.setdefault("issued_at", LATER)
+    kw.setdefault("remediates_receipt_id", "rcpt-0000000001")
+    return _receipt_doc(signer, n=n, **kw)
+
+
+def _vaulted(issuer, tsa, vault, doc, *, params=None, enqueue=True):
+    """What 'countersign add' does: countersign, vault the secrets, queue."""
+    from openadapt_flow.countersign.exceptions import ExceptionQueue
+    from openadapt_flow.countersign.tsa import load_pem_certificates
+
+    out, _, kept = _countersigned(
+        issuer, tsa, doc=doc, fields=params or {"mrn": "004217", "dose": "5mg"}
+    )
+    certs = load_pem_certificates(tsa.certificate_pem())
+    report = verify_countersigned(
+        out, registry=[issuer.registry_entry()], tsa_certificates=certs
+    )
+    vault.put_secrets(report.receipt_sha256, kept)
+    vault.put_json(report.receipt_sha256, "document.json", out, overwrite=True)
+    entry = (
+        ExceptionQueue(vault).enqueue(out, report, [issuer.registry_entry()])
+        if enqueue
+        else None
+    )
+    return out, entry, certs
+
+
+@pytest.fixture
+def approver() -> LocalCountersignIssuer:
+    return LocalCountersignIssuer(
+        Ed25519PrivateKey.from_private_bytes(APPROVER_SEED), clock=_clock(T0)
+    )
+
+
+@pytest.fixture
+def queue(tmp_path):
+    from openadapt_flow.countersign.exceptions import ExceptionQueue
+    from openadapt_flow.countersign.vault import CountersignVault
+
+    return ExceptionQueue(
+        CountersignVault(tmp_path / "vault"), clock=lambda: "2026-10-17T07:00:00Z"
+    )
+
+
+def test_exception_queue_takes_only_genuine_seals_on_unverified_outcomes(
+    issuer, tsa, queue
+):
+    _, refuted, _ = _vaulted(issuer, tsa, queue.vault, _failed(issuer))
+    assert refuted["status"] == "open" and refuted["category"] == "effect_refuted"
+    assert refuted["resolution_receipt_id"] is None
+    assert refuted["retention_days"] == 2190
+    assert "004217" not in json.dumps(refuted)  # values stay in the vault
+    _, unclear, _ = _vaulted(
+        issuer,
+        tsa,
+        queue.vault,
+        _receipt_doc(issuer, outcome="halted", verdict="INDETERMINATE", n=2),
+    )
+    assert unclear["verdict"] == "INDETERMINATE"
+    assert _vaulted(issuer, tsa, queue.vault, _receipt_doc(issuer, n=3))[1] is None
+    stranger = LocalCountersignIssuer(
+        Ed25519PrivateKey.from_private_bytes(bytes([9]) * 32), clock=_clock(T0)
+    )
+    forged = _failed(stranger, n=4)
+    report = verify_countersigned(forged, registry=[issuer.registry_entry()])
+    assert queue.enqueue(forged, report, [issuer.registry_entry()]) is None
+    assert len(queue.entries("open")) == 2
+
+
+def test_resolved_by_seal_needs_a_later_linked_verified_seal_with_same_params(
+    issuer, tsa, queue
+):
+    _, entry, certs = _vaulted(issuer, tsa, queue.vault, _failed(issuer))
+    registry = [issuer.registry_entry()]
+    rsha = entry["receipt_sha256"]
+
+    def refused(code, resolution, reg=registry):
+        with pytest.raises(CountersignError) as exc:
+            queue.resolve_by_seal(rsha, resolution, reg, tsa_certificates=certs)
+        assert exc.value.code == code
+        assert queue.get(rsha)["status"] == "open"
+
+    def fix(n, params=None, **kw):
+        return _vaulted(
+            issuer, tsa, queue.vault, _fix(issuer, n=n, **kw), params=params
+        )[0]
+
+    refused("not_linked", fix(2, remediates_receipt_id=None))
+    refused("not_linked", fix(3, remediates_receipt_id="rcpt-0000000099"))
+    refused("different_params", fix(4, params={"mrn": "999999", "dose": "5mg"}))
+    refused("different_params", fix(5, params={"mrn": "004217"}))
+    refused("not_later", fix(6, issued_at="2026-10-17T04:00:00Z"))
+    refused("different_contract", fix(7, workflow="5"))
+    still_failing = _vaulted(
+        issuer,
+        tsa,
+        queue.vault,
+        _failed(issuer, n=8, issued_at=LATER, remediates_receipt_id="rcpt-0000000001"),
+    )[0]
+    refused("resolution_not_verified", still_failing)
+    good = fix(9)
+    tampered = json.loads(json.dumps(good))
+    tampered["receipt"]["issued_at"] = "2026-10-17T06:30:00Z"
+    refused("resolution_not_verified", tampered)
+    refused("no_pinned_keys", good, reg=[])
+    extra = LocalCountersignIssuer(
+        Ed25519PrivateKey.from_private_bytes(bytes([9]) * 32)
+    ).registry_entry()
+    refused("different_pinned_keys", good, reg=registry + [extra])
+    unvaulted, _, _ = _countersigned(
+        issuer, tsa, doc=_fix(issuer, n=10), fields={"mrn": "004217", "dose": "5mg"}
+    )
+    refused("params_unproven", unvaulted)
+
+    done = queue.resolve_by_seal(rsha, good, registry, tsa_certificates=certs)
+    assert done["status"] == "resolved_by_seal"
+    assert done["resolution_receipt_id"] == "rcpt-0000000009"
+    assert done["terminal_at"] == "2026-10-17T07:00:00Z"
+    assert done["retain_until"].startswith("2032-10-15")
+    with pytest.raises(CountersignError) as exc:
+        queue.resolve_by_seal(rsha, good, registry, tsa_certificates=certs)
+    assert exc.value.code == "not_open"
+
+
+def test_a_persons_verify_run_and_a_correlation_id_resolve(issuer, tsa, queue):
+    cid = "corr-2026-10-17-0001"
+    _, entry, certs = _vaulted(
+        issuer, tsa, queue.vault, _failed(issuer, correlation_id=cid)
+    )
+    human = _vaulted(
+        issuer,
+        tsa,
+        queue.vault,
+        _fix(issuer, kind="human", remediates_receipt_id=None, correlation_id=cid),
+    )[0]
+    done = queue.resolve_by_seal(
+        entry["receipt_sha256"],
+        human,
+        [issuer.registry_entry()],
+        tsa_certificates=certs,
+    )
+    assert done["status"] == "resolved_by_seal"
+
+
+def test_closed_by_attestation_needs_a_signed_disposition_from_another_person(
+    issuer, approver, tsa, queue
+):
+    from openadapt_flow.countersign.exceptions import DISPOSITION_SCHEMA
+
+    _, entry, _ = _vaulted(issuer, tsa, queue.vault, _failed(issuer))
+    rsha = entry["receipt_sha256"]
+    pinned = [approver.registry_entry()]
+    args = dict(
+        approver_id="appr-7f3a91",
+        role="nurse-manager",
+        disposition_code="remediated_manually_in_sor",
+        verification_method="ehr_audit_log_review",
+        external_reference="INC-004217",
+    )
+    record = queue.disposition_record(
+        rsha, signer=approver, notes="called MRN 004217", **args
+    )
+    assert record["schema"] == DISPOSITION_SCHEMA
+    assert record["external_reference"].startswith("hmac-sha256:")
+    assert "INC-004217" not in json.dumps(record)
+    assert "004217" not in json.dumps(record)
+    notes = queue.dir / f"{rsha}.notes.txt"
+    assert notes.read_text() == "called MRN 004217"
+    assert notes.stat().st_mode & 0o777 == 0o600
+
+    def refused(code, rec, reg=pinned):
+        with pytest.raises(CountersignError) as exc:
+            queue.close_by_attestation(rsha, rec, reg)
+        assert exc.value.code == code
+        assert queue.get(rsha)["status"] == "open"
+
+    refused("no_pinned_approver_keys", record, reg=[])
+    refused("bad_disposition_signature", record, reg=[issuer.registry_entry()])
+    edited = dict(record, disposition_code="cancelled_by_requester")
+    refused("bad_disposition_signature", edited)
+    for bad in (
+        dict(record, disposition_code="looked_fine"),
+        dict(record, verification_method="gut_feel"),
+        dict(record, external_reference="INC-004217"),
+        dict(record, approver={**record["approver"], "kind": "agent"}),
+        dict(record, dispositioned_at="2026-10-17 07:00"),
+        dict(record, notes="free text"),
+    ):
+        refused("bad_disposition", bad)
+    # The key that sealed the failed run cannot close it.
+    self_closed = queue.disposition_record(rsha, signer=issuer, **args)
+    refused("reviewer_is_executor", self_closed, reg=pinned + [issuer.registry_entry()])
+    # Nor can the agent executor under its own reference.
+    as_executor = queue.disposition_record(
+        rsha, signer=approver, **{**args, "approver_id": "sha256:" + "1" * 64}
+    )
+    refused("reviewer_is_executor", as_executor)
+
+    done = queue.close_by_attestation(rsha, record, pinned)
+    assert done["status"] == "closed_by_attestation"
+    assert done["resolution_receipt_id"] is None
+    assert done["disposition"]["disposition_code"] == "remediated_manually_in_sor"
+    # The two terminal states never stand in for each other.
+    good = _vaulted(issuer, tsa, queue.vault, _fix(issuer))[0]
+    with pytest.raises(CountersignError) as exc:
+        queue.resolve_by_seal(rsha, good, [issuer.registry_entry()])
+    assert exc.value.code == "not_open"
+
+
+def test_retention_defaults_to_six_years_with_export_before_purge(
+    issuer, approver, tsa, queue, tmp_path
+):
+    from openadapt_flow.countersign.exceptions import retention_days
+
+    assert retention_days(env={}) == 2190
+    assert retention_days(env={"OPENADAPT_EXCEPTION_RETENTION_DAYS": "400"}) == 400
+    with pytest.raises(CountersignError):
+        retention_days(182, env={})
+    _, closed, _ = _vaulted(issuer, tsa, queue.vault, _failed(issuer))
+    _, still_open, _ = _vaulted(issuer, tsa, queue.vault, _failed(issuer, n=3))
+    record = queue.disposition_record(
+        closed["receipt_sha256"],
+        signer=approver,
+        approver_id="appr-7f3a91",
+        role="nurse-manager",
+        disposition_code="cancelled_by_requester",
+        verification_method="task_cancelled_no_check_needed",
+        external_reference="INC-1",
+        notes="n",
+    )
+    queue.close_by_attestation(
+        closed["receipt_sha256"], record, [approver.registry_entry()]
+    )
+    export = tmp_path / "export.json"
+    assert queue.purge(export, now="2032-10-14T00:00:00Z") == []
+    assert not export.exists()
+    export.write_text("{}")  # an export already there: refuse, delete nothing
+    with pytest.raises(Exception):
+        queue.purge(export, now="2032-10-16T00:00:00Z")
+    assert queue.get(closed["receipt_sha256"])
+    export.unlink()
+    assert queue.purge(export, now="2032-10-16T00:00:00Z") == [closed["receipt_sha256"]]
+    body = json.loads(export.read_text())
+    assert (
+        body["entries"][0]["disposition"]["disposition_code"]
+        == "cancelled_by_requester"
+    )
+    assert export.stat().st_mode & 0o777 == 0o600
+    with pytest.raises(CountersignError):
+        queue.get(closed["receipt_sha256"])
+    assert not (queue.dir / f"{closed['receipt_sha256']}.notes.txt").exists()
+    assert queue.get(still_open["receipt_sha256"])["status"] == "open"
+
+
+def test_ledger_counts_add_up_across_all_four_buckets(issuer, approver, tsa, queue):
+    registry = [issuer.registry_entry()]
+    _vaulted(issuer, tsa, queue.vault, _receipt_doc(issuer, n=20))  # verified
+    _, resolved, certs = _vaulted(issuer, tsa, queue.vault, _failed(issuer))
+    fix = _vaulted(issuer, tsa, queue.vault, _fix(issuer))[0]  # verified too
+    queue.resolve_by_seal(
+        resolved["receipt_sha256"], fix, registry, tsa_certificates=certs
+    )
+    _, closed, _ = _vaulted(issuer, tsa, queue.vault, _failed(issuer, n=3))
+    rec = queue.disposition_record(
+        closed["receipt_sha256"],
+        signer=approver,
+        approver_id="appr-7f3a91",
+        role="nurse-manager",
+        disposition_code="superseded_by_external_workflow",
+        verification_method="counterparty_confirmation",
+        external_reference="INC-2",
+    )
+    queue.close_by_attestation(
+        closed["receipt_sha256"], rec, [approver.registry_entry()]
+    )
+    _vaulted(issuer, tsa, queue.vault, _failed(issuer, n=4))  # open
+    _vaulted(
+        issuer, tsa, queue.vault, _failed(issuer, n=5), enqueue=False
+    )  # never queued
+    ledger = queue.ledger(registry, certs)
+    assert ledger["counts"] == {
+        "verified": 2,
+        "resolved_by_seal": 1,
+        "closed_by_attestation": 1,
+        "open": 2,
+    }
+    assert ledger["total_seals"] == 6
+    assert len(ledger["exceptions"]) == 4
+    assert "004217" not in json.dumps(ledger)
+
+
+def test_cli_exceptions_resolve_close_and_purge(issuer, approver, tmp_path, capsys):
+    from cryptography.hazmat.primitives import serialization
+
+    from openadapt_flow.__main__ import main
+
+    keys = tmp_path / "seal-keys.json"
+    keys.write_text(json.dumps({"keys": [issuer.registry_entry()]}))
+    fields = tmp_path / "fields.json"
+    fields.write_text(json.dumps({"mrn": "004217"}))
+    vault = tmp_path / "vault"
+    tsa_dir = tmp_path / "tsa"
+    common = ["--fields-file", str(fields), "--vault", str(vault), "--keys", str(keys)]
+    common += ["--tsa-local", str(tsa_dir)]
+
+    def add(doc, name):
+        src = tmp_path / f"{name}.json"
+        src.write_text(json.dumps(doc))
+        out = tmp_path / f"{name}-cs.json"
+        assert main(["countersign", "add", str(src), "-o", str(out)] + common) == 0
+        printed = capsys.readouterr().out
+        return (
+            out,
+            verify_countersigned(
+                json.loads(out.read_text()), registry=[issuer.registry_entry()]
+            ).receipt_sha256,
+            printed,
+        )
+
+    _, rsha, printed = add(_failed(issuer), "failed")
+    assert "Exception open:" in printed
+    _, other, _ = add(_failed(issuer, n=3), "failed2")
+    assert main(["countersign", "exceptions", "--vault", str(vault)]) == 0
+    listed = capsys.readouterr().out
+    assert rsha in listed and other in listed and "REFUTED" in listed
+
+    with pytest.raises(SystemExit):  # --with is required: no resolve by assertion
+        main(["countersign", "resolve", rsha, "--vault", str(vault)])
+    capsys.readouterr()
+
+    fix, _, printed = add(_fix(issuer), "fix")
+    assert "Exception" not in printed
+    tsa_cert = tmp_path / "tsa.pem"
+    tsa_cert.write_bytes(LocalTsa.load_or_create(tsa_dir).certificate_pem())
+    resolve = [
+        "countersign",
+        "resolve",
+        rsha,
+        "--with",
+        str(fix),
+        "--vault",
+        str(vault),
+    ]
+    assert main(resolve + ["--keys", str(keys), "--tsa-cert", str(tsa_cert)]) == 0
+    assert "resolved_by_seal: receipt rcpt-0000000002" in capsys.readouterr().out
+
+    approver_pem = tmp_path / "approver.pem"
+    approver_pem.write_bytes(
+        Ed25519PrivateKey.from_private_bytes(APPROVER_SEED).private_bytes(
+            serialization.Encoding.PEM,
+            serialization.PrivateFormat.PKCS8,
+            serialization.NoEncryption(),
+        )
+    )
+    approver_keys = tmp_path / "approver-keys.json"
+    approver_keys.write_text(json.dumps({"keys": [approver.registry_entry()]}))
+    notes = tmp_path / "notes.txt"
+    notes.write_text("phoned the pharmacy")
+    close = ["countersign", "close", other, "--vault", str(vault)]
+    close += ["--approver-id", "appr-7f3a91", "--role", "pharmacist"]
+    close += [
+        "--code",
+        "remediated_manually_in_sor",
+        "--method",
+        "sor_direct_inspection",
+    ]
+    close += ["--external-reference", "INC-77", "--notes-file", str(notes)]
+    close += ["--approver-key", str(approver_pem)]
+    assert main(close + ["--approver-keys", str(keys)]) == 2  # approver not pinned
+    assert "bad_disposition_signature" in capsys.readouterr().err
+    assert main(close + ["--approver-keys", str(approver_keys)]) == 0
+    assert "closed_by_attestation" in capsys.readouterr().out
+
+    assert (
+        main(
+            [
+                "countersign",
+                "exceptions",
+                "--vault",
+                str(vault),
+                "--json",
+                "--status",
+                "all",
+            ]
+        )
+        == 0
+    )
+    entries = {e["receipt_sha256"]: e for e in json.loads(capsys.readouterr().out)}
+    assert entries[rsha]["status"] == "resolved_by_seal"
+    assert entries[other]["status"] == "closed_by_attestation"
+    assert "INC-77" not in json.dumps(entries) and "pharmacy" not in json.dumps(entries)
+
+    export = tmp_path / "export.json"
+    assert (
+        main(["countersign", "purge", "--export", str(export), "--vault", str(vault)])
+        == 0
+    )
+    assert "Nothing is past" in capsys.readouterr().out
