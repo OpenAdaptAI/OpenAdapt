@@ -1,16 +1,18 @@
 # OpenAdapt
 
 [![CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml)
+[![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml)
 [![PyPI](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/)
 [![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
 **A person or an agent shows OpenAdapt a task in your EHR, portal, or desktop app. It becomes a program on your computer that repeats the same steps with new details, with no model calls.**
 
-By default, a person approves each save. Where your system allows a
-second read, OpenAdapt reads the saved record back. When something doesn't
-match, it stops and asks a person instead of guessing.
+A person approves each workflow before it handles real work. Whether a run
+also waits for a person before each save is a setting of the run. Where your
+system allows a second read, OpenAdapt reads the saved record back. When
+something doesn't match, it stops and asks a person instead of guessing.
 
 To watch it work first, open the [live demo](https://app.openadapt.ai/demo).
 It shows recorded runs that use synthetic data.
@@ -185,12 +187,10 @@ Computer-use agents can call OpenAdapt programs. They aren't the executor
 inside OpenAdapt. When an agent clicks during a demonstration, the person who
 admits the program watches.
 
-This repository is the installer and the `openadapt` command. The compiler and
-the runtime live in
-[`openadapt-flow`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow), and this
-repository doesn't reimplement them.
-[`openadapt-agent`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent) exposes
-compiled programs to an agent over MCP.
+This repository holds the `openadapt` launcher and command, and under
+[`packages/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages) the engine, the MCP server and the shared
+contracts. Each package is published to PyPI under its own name. [Where the code is](#where-the-code-is)
+lists them.
 
 ## Run the tutorial
 
@@ -273,7 +273,7 @@ The independent read finds no saved record, so the run halts. Its transaction
 outcome is `RECONCILIATION_REQUIRED`, so nothing is retried until a person
 checks the record.
 
-The bundled workflow is a tutorial. Qualifying a real one means declaring its
+The bundled workflow is a tutorial. [Qualifying](https://docs.openadapt.ai/reference/glossary/#qualify) a real one means declaring its
 application boundary, its action risks, its identities, its effect verifiers,
 its fault cases, and its deployment policy. Start with the
 [five-minute walkthrough](https://docs.openadapt.ai/get-started/).
@@ -293,17 +293,17 @@ openadapt flow lint <out>/bundle
 
 ## Give an agent the run tool
 
-`openadapt-agent` serves compiled programs to an MCP client. Launcher releases
-after 1.16.0 install it with `openadapt`. With 1.16.0, install it by name:
+`openadapt-agent` serves compiled programs to an MCP client. `openadapt` 1.17.0
+and later installs it:
 
 ```bash
-python -m pip install --upgrade openadapt-agent
+python -m pip install --upgrade openadapt
 openadapt-agent serve --bundles <bundle or directory of bundles> --allow-run
 ```
 
-`uv tool install` and pipx put only `openadapt` on your PATH. With a launcher
-release after 1.16.0, run `openadapt agent serve ...` there instead. It passes
-every argument to `openadapt-agent`.
+`uv tool install` and pipx put only `openadapt` on your PATH. There, run
+`openadapt agent serve ...` instead. It passes every argument to
+`openadapt-agent`.
 
 Leave out `--allow-run` when the client should inspect workflows but not start
 them. A halted or refused run comes back as a halt or a refusal, never as a
@@ -501,12 +501,21 @@ exact compiled bundle, application, and environment.
 
 ## Where the code is
 
-- **Here:** installer, the unified `openadapt` CLI, release compatibility, and
-  the stable project URL.
-- **[`openadapt-flow`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow):** the
-  compiler, the governed runtime, the CLI implementation, conformance tests.
-- **[`openadapt-agent`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent):** the
-  MCP bridge that serves compiled programs to agents.
+In this repository:
+
+| Path | PyPI package | What it is |
+|---|---|---|
+| [`openadapt/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/openadapt) | [`openadapt`](https://pypi.org/project/openadapt/) | The launcher and the `openadapt` command. Start here. |
+| [`packages/flow/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow) | [`openadapt-flow`](https://pypi.org/project/openadapt-flow/) | The engine: the compiler, the governed runtime, and the `openadapt-flow` command. |
+| [`packages/agent/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent) | [`openadapt-agent`](https://pypi.org/project/openadapt-agent/) | The MCP server that gives compiled programs to an agent. On `main`, its code is in `openadapt_flow.agent`. This package keeps the old import and command working. |
+| [`packages/types/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/types) | [`openadapt-types`](https://pypi.org/project/openadapt-types/) | Shared request, result and receipt models. On `main`, its code is in `openadapt_flow.contracts`. This package keeps the old import working. |
+
+The standalone `openadapt-flow`, `openadapt-agent` and `openadapt-types`
+repositories are frozen. Their issues and pull requests stay readable there;
+open new ones here.
+
+In their own repositories:
+
 - **[`openadapt-capture`](https://github.com/OpenAdaptAI/openadapt-capture):**
   native screen, mouse, keyboard, timing, and window-scope capture.
 - **[`openadapt-privacy`](https://github.com/OpenAdaptAI/openadapt-privacy):**
@@ -533,10 +542,10 @@ has the methodology, results, and limits.
 `openadapt-consilium`, `openadapt-telemetry`, and `openadapt-viewer` support
 development and operations. The runtime doesn't need any of them.
 
-The pre-1.0 monolith (v0.46.0) is frozen under [`legacy/`](legacy/) and
+The pre-1.0 monolith (v0.46.0) is frozen under [`legacy/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/legacy) and
 published on PyPI as `openadapt==0.46.0` for Python 3.10 and 3.11. A plain
 `pip install` of it fails today.
-[docs/LEGACY_FREEZE.md](docs/LEGACY_FREEZE.md) has install steps that work and
+[docs/LEGACY_FREEZE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/docs/LEGACY_FREEZE.md) has install steps that work and
 the migration guide. Early demonstrations are on
 [Twitter](https://twitter.com/abrichr/status/1784307190062342237) and
 [Loom](https://www.loom.com/share/9d77eb7028f34f7f87c6661fb758d1c0).
@@ -545,14 +554,16 @@ the migration guide. Early demonstrations are on
 
 ## Contributing
 
-Launcher, packaging, and CLI changes belong here. Compiler, runtime,
-verification, repair, and backend changes belong in `openadapt-flow`.
+Launcher, packaging, CLI, engine, MCP server and contract changes all belong
+here. Engine changes (compiler, runtime, verification, repair and backends) go
+in [`packages/flow/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow). Terms such as qualify,
+certify and admission are defined in the [glossary](https://docs.openadapt.ai/reference/glossary/).
 
-[Contribution guide](CONTRIBUTING.md) ·
+[Contribution guide](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CONTRIBUTING.md) ·
 [Issues](https://github.com/OpenAdaptAI/OpenAdapt/issues) ·
 [Discussions](https://github.com/OpenAdaptAI/OpenAdapt/discussions) ·
 [Discord](https://discord.gg/yF527cQbDG) ·
-[Report a vulnerability](SECURITY.md)
+[Report a vulnerability](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/SECURITY.md)
 
 Maintained by [OpenAdaptAI](https://github.com/OpenAdaptAI) under the
-[MIT License](LICENSE).
+[MIT License](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE).

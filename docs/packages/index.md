@@ -36,6 +36,6 @@ historical surfaces. They are not required to record, compile, replay, or
 verify a workflow. The compatibility extras remain available for existing
 users, but new onboarding must not lead with model training.
 
-See the [project map](https://docs.openadapt.ai/concepts/ecosystem/) and the
+See the [project map](https://docs.openadapt.ai/ecosystem/) and the
 [current capability evidence](https://docs.openadapt.ai/get-started/what-works-today/)
 for the maintained status of each surface.
