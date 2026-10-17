@@ -1,5 +1,66 @@
 # Fleet drift patches
 
+## What a fleet is
+
+A fleet is a group of OpenAdapt Flow installs, each run by a separate
+organization (a tenant), that share repairs for workflows in the same
+third-party application. When the application changes its UI, one
+tenant's repair can fix the same break for the others. Each tenant's admin
+opts in per application family, separately for export and import. Both are
+off by default.
+
+It is meant for organizations that automate the same outside applications,
+such as a payer portal or an EHR, and would otherwise each repair the same
+break on their own.
+
+How a repair moves through the fleet:
+
+1. On the source tenant, a repaired workflow passes its replay and fault
+   campaigns, and a person approves it in the
+   [repair lifecycle](REPAIR_LIFECYCLE.md).
+2. The tenant exports a signed patch that holds only structural changes:
+   the old and new locator for each step, and fingerprints of the
+   application version before and after. The exporter refuses a repair it
+   cannot express without tenant data, and checks the result against every
+   data value in the bundles before signing.
+3. The fleet hub verifies the contributor's signature, records the
+   contributor's identity in an audit log that only the hub reads, and
+   re-signs the patch with its own distribution key. No field of the
+   distributed patch names the tenant that sent it (see
+   [Fleet hub](#fleet-hub) for what a receiver could still infer).
+4. The hub distributes a patch only after at least three independent
+   tenants, not counting revoked ones, have registered the application
+   version it was made for. This keeps a patch from showing which tenant
+   runs a version. It is not a confirmation that the patch works; each
+   receiving tenant tests the patch itself (next step).
+5. A receiving tenant imports the patch as a candidate. Nothing activates
+   on arrival. The patch runs on the tenant's own test cases: each healthy
+   case must end `VERIFIED` (an independent read-back of the result) with
+   zero model calls, and each fault case must refuse.
+6. The tenant's signed promotion policy decides what happens next. The
+   patch is promoted without a person only when a registered approver
+   signed a policy that allows it, the patch changes no identity evidence,
+   the tenant's own cases passed, and fresh signed fleet status revokes
+   nothing in its chain. Otherwise a person on that tenant reviews it.
+
+**Kill switch and revocation.** The hub signs a revocation list (revoked
+keys and certificates) and kill switches. A kill switch can turn off
+automatic promotion fleet-wide and can name patches to roll back. A
+tenant rolls a named patch back to the prior bundle if it is in canary or
+active, and rejects it in earlier states. If the hub revokes a contributor,
+it issues a kill switch for every patch that contributor sent. When
+status is missing, stale, or does not verify, automatic promotion stops
+and patches wait for a person.
+
+**What never leaves a tenant.** Record values, screen text, screenshots and
+image templates, the tenant's bundles, its test cases and run results, the
+application origin (which can name the tenant). The fleet code sends the
+hub nothing about whether a tenant promoted a patch. The hub receives the structural patch, the application
+fingerprints, the source bundles' digests, and the contributor's
+certificate identity. Other tenants receive only the hub-signed patch.
+
+## How it works
+
 When a common application changes its UI (a payer portal moves a button, an
 EHR renames a control), every tenant that automates it halts on the same
 change. A fleet drift patch lets one tenant's governed repair reach the
