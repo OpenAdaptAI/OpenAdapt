@@ -229,6 +229,11 @@ bundle's `compile_notes.json`:
   typed text already selected the option).
 - Ctrl+A on an empty field that changed no pixel is dropped.
 - A click into a text field gets a check that the field is still where it was.
-- A button with no label evidence gets a crop of itself as its identity check.
+- A button with no label evidence gets a crop of itself as its identity
+  check, but only when the bundle will run where that crop can be verified:
+  pass `compile --pixel-verify-enabled` when the deployment sets
+  `runtime.pixel_verify_enabled`. Without it, the pixel check can only reject
+  a crop, never accept one, so a crop-only check would stop an irreversible
+  step on every run. The button then compiles as it did before.
 
 These used to be hand edits in a per-workflow script.

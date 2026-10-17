@@ -1617,7 +1617,12 @@ def _cmd_compile(args: argparse.Namespace) -> int:
     from openadapt_flow.compiler import compile_recording
     from openadapt_flow.compiler import param_confirm as pc
 
-    workflow = compile_recording(Path(args.recording), Path(args.out), name=args.name)
+    workflow = compile_recording(
+        Path(args.recording),
+        Path(args.out),
+        name=args.name,
+        pixel_verify_enabled=bool(getattr(args, "pixel_verify_enabled", False)),
+    )
     print(
         f"Compiled {len(workflow.steps)} steps into {args.out} "
         f"(workflow: {workflow.name!r})"
@@ -6732,6 +6737,17 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Skip the interactive parameter review even on a TTY; flagged "
             "proposals stay demonstrated constants."
+        ),
+    )
+    p.add_argument(
+        "--pixel-verify-enabled",
+        action="store_true",
+        help=(
+            "The runtime that will run this bundle sets "
+            "runtime.pixel_verify_enabled. Lets the compiler give an unlabeled "
+            "button a pixel identifier crop as its identity check. Without it "
+            "the compiler doesn't, because a crop that can't be verified halts "
+            "an irreversible step on every run."
         ),
     )
     p.set_defaults(func=_cmd_compile)

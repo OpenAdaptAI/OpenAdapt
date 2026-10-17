@@ -43,13 +43,20 @@ Pass                               What it does, and the evidence it needs
                                    identifier crop of the control itself,
                                    from the recorded before-frame, checked by
                                    the pixel tier of the identity ladder.
-                                   Needs structural role ``button``; on a
-                                   pixel surface the compiler already emits
-                                   identifier crops for identity-armed steps.
+                                   Needs structural role ``button``, and only
+                                   runs where the step's surface can VERIFY a
+                                   crop (the target runtime has
+                                   ``pixel_verify_enabled``; see
+                                   :func:`identity.verifiable_identity_evidence`).
+                                   On a pixel surface the compiler already
+                                   emits identifier crops for identity-armed
+                                   steps.
 =================================  ==========================================
 
 A pass that lacks its evidence (no frame, no region, no structure) leaves the
-step exactly as compiled.
+step exactly as compiled. So does a pass whose evidence the surface that runs
+the step could not verify: an identity check that can only abstain halts an
+irreversible step on every run, which is worse than no new evidence.
 """
 
 from __future__ import annotations
@@ -160,12 +167,26 @@ def apply_fixup_passes(
     crop_png: CropFn,
     phash_png: Callable[..., str],
     surface: Optional[str] = None,
+    pixel_verify_enabled: bool = False,
+    surface_kind_for: Optional[Callable[[Step], Optional[str]]] = None,
 ) -> tuple[list[Step], list[dict[str, Any]]]:
     """Run the four passes; return the new step list and one note per change.
 
     ``steps`` is not modified; changed steps are deep copies. Templates are
     written under ``bundle_dir/templates``.
+
+    ``pixel_verify_enabled`` is the target runtime's
+    ``runtime.pixel_verify_enabled``. ``surface_kind_for`` names the surface
+    kind one step runs on, for a bundle whose steps span several surfaces;
+    without it every step runs on ``surface``.
     """
+    from openadapt_flow.runtime.identity import verifiable_identity_evidence
+
+    def checkable(step: Step) -> frozenset[str]:
+        kind = surface_kind_for(step) if surface_kind_for is not None else None
+        return verifiable_identity_evidence(
+            kind or surface, pixel_verify_enabled=pixel_verify_enabled
+        )
 
     notes: list[dict[str, Any]] = []
     dropped: set[str] = set()
@@ -264,6 +285,7 @@ def apply_fixup_passes(
             and structural is not None
             and structural.role == "button"
             and not _has_identity_evidence(step)
+            and "identifier_crop" in checkable(step)
         ):
             before, _after = frames.get(step.id, (None, None))
             if before is not None:

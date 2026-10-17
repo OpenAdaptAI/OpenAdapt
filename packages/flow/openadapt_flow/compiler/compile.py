@@ -1647,6 +1647,7 @@ def compile_recording(
     annotate: bool = False,
     annotator: Optional["StepAnnotator"] = None,
     target_surface: Optional[ExecutionTargetKind] = None,
+    pixel_verify_enabled: bool = False,
 ) -> Workflow:
     """Compile a recording directory into a workflow bundle.
 
@@ -1764,6 +1765,11 @@ def compile_recording(
         target_surface: Explicit surface binding for a legacy recording whose
             ``meta.json`` predates surface stamps. This may only fill missing
             metadata; contradicting a recorded surface fails compilation.
+        pixel_verify_enabled: The target runtime's
+            ``runtime.pixel_verify_enabled``. The default fix-up passes attach
+            a pixel identifier crop as a step's only identity evidence only
+            when that runtime can verify it (see
+            :func:`openadapt_flow.runtime.identity.verifiable_identity_evidence`).
 
     Returns:
         The compiled :class:`Workflow` (also saved to the bundle).
@@ -2667,6 +2673,7 @@ def compile_recording(
         crop_png=_crop_png,
         phash_png=phash_png,
         surface=surface,
+        pixel_verify_enabled=pixel_verify_enabled,
     )
     for note in compile_notes:
         logger.info("compile-pass %s: %s", note["step"], note["change"])

@@ -53,7 +53,7 @@ def _key(sid: str, key: str) -> Step:
     return Step(id=sid, intent=sid, action=ActionKind.KEY, key=key)
 
 
-def _run(steps, frames, tmp_path: Path, surface=None):
+def _run(steps, frames, tmp_path: Path, surface=None, **kw):
     return apply_fixup_passes(
         steps,
         frames,
@@ -61,6 +61,7 @@ def _run(steps, frames, tmp_path: Path, surface=None):
         crop_png=lambda png, region: png,
         phash_png=lambda png, region=None: "0" * 16,
         surface=surface,
+        **kw,
     )
 
 
@@ -128,15 +129,57 @@ def test_pixel_surface_field_click_detected_by_following_type(tmp_path):
 def test_unlabeled_button_gets_identifier_crop(tmp_path):
     frame = _png()
     steps = [_click("s1", "button")]
-    out, notes = _run(steps, {"s1": (frame, frame)}, tmp_path)
+    out, notes = _run(
+        steps, {"s1": (frame, frame)}, tmp_path, pixel_verify_enabled=True
+    )
     assert out[0].anchor.identifier_crop == "templates/identifiers/s1.png"
     assert out[0].identity_armed
     assert ("static_control_identifier_crop", "s1") in _changes(notes)
 
     labeled = [_click("s1", "button")]
     labeled[0].anchor.context_text = "Create New Patient"
-    out, notes = _run(labeled, {"s1": (frame, frame)}, tmp_path)
+    out, notes = _run(
+        labeled, {"s1": (frame, frame)}, tmp_path, pixel_verify_enabled=True
+    )
     assert out[0].anchor.identifier_crop is None and notes == []
+
+
+def test_button_crop_only_where_the_runtime_can_verify_it(tmp_path):
+    # With the runtime's pixel VERIFY off (the default), the pixel tier can
+    # reject a crop but never accept one, so a crop-only identity check would
+    # halt an irreversible step on every run. The pass leaves the step as
+    # compiled instead, on every surface.
+    frame = _png()
+    for surface in (None, "web", "windows", "rdp", "citrix"):
+        steps = [_click("s1", "button")]
+        out, notes = _run(steps, {"s1": (frame, frame)}, tmp_path, surface=surface)
+        assert out[0].anchor.identifier_crop is None, surface
+        assert not out[0].identity_armed, surface
+        assert notes == [], surface
+
+
+def test_button_crop_follows_each_steps_own_surface(tmp_path):
+    # A bundle whose steps run on several surfaces asks per step. The
+    # capability here depends only on the runtime flag, so both steps agree;
+    # the hook is what a multi-surface compile passes.
+    frame = _png()
+    steps = [_click("s1", "button"), _click("s2", "button")]
+    kinds = {"s1": "web", "s2": "windows"}
+    seen: list[str] = []
+
+    def kind_for(step):
+        seen.append(step.id)
+        return kinds[step.id]
+
+    out, _notes = _run(
+        steps,
+        {"s1": (frame, frame), "s2": (frame, frame)},
+        tmp_path,
+        pixel_verify_enabled=True,
+        surface_kind_for=kind_for,
+    )
+    assert seen == ["s1", "s2"]
+    assert all(step.identity_armed for step in out)
 
 
 def test_compile_notes_written_and_cleared(tmp_path):
