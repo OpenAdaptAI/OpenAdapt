@@ -130,7 +130,7 @@ jobs:
               )
           PY
 
-      - name: Require exact-main test, hosted, and live Linux evidence
+      - name: Require exact-main test and hosted qualification evidence
         env:
           GH_TOKEN: ${{ github.token }}
         shell: bash
@@ -279,7 +279,7 @@ jobs:
             exit 1
           fi
 
-      - name: Require exact-tag test, hosted, and live Linux evidence
+      - name: Require exact-tag test and hosted qualification evidence
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

@@ -43,7 +43,7 @@ def test_release_tag_requires_reviewed_exact_main_and_release_app() -> None:
         "- name: Require the reviewed release candidate on current main"
     )
     qualification_index = release.index(
-        "- name: Require exact-main test, hosted, and live Linux evidence"
+        "- name: Require exact-main test and hosted qualification evidence"
     )
     artifact_index = release.index("- name: Build and verify the exact release artifacts")
     tag_index = release.index("- name: Create and push one annotated release tag")
@@ -171,14 +171,30 @@ def test_the_release_gate_job_set_matches_the_qualification_workflow() -> None:
     assert produced == set(EXPECTED_QUALIFICATION_JOBS)
 
 
-def test_live_release_gate_job_set_matches_the_live_workflow() -> None:
-    """The exact-SHA Linux release check must name every live workflow job."""
-    from scripts.check_release_ci import EXPECTED_LIVE_QUALIFICATION_JOBS
+def test_hosted_linux_release_lane_runs_input_and_structural_trials() -> None:
+    """The hosted Linux lane must keep every test the self-hosted lane ran.
 
-    workflow = (ROOT / ".github/workflows/live-qualification.yml").read_text(encoding="utf-8")
-    produced = set(re.findall(r"^    name: (.+)$", workflow, flags=re.M))
+    It replaced the self-hosted Linux lane in the release gate on 2026-10-17.
+    It runs the same two test files, eight named tests per trial, three
+    trials, under Xvfb with X RECORD, XTEST, AT-SPI, and a focused GTK window.
+    """
+    workflow = (ROOT / ".github/workflows/production-qualification.yml").read_text(encoding="utf-8")
+    linux = workflow[workflow.index("\n  hosted-linux-live:") :]
+    release = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
 
-    assert produced == set(EXPECTED_LIVE_QUALIFICATION_JOBS)
+    assert "runs-on: ubuntu-latest" in linux
+    assert '"${candidate_wheels[0]}[linux]"' in linux
+    assert 'tests/test_structural_observation.py"' in linux
+    assert 'tests/test_performance.py"' in linux
+    assert "-k " not in linux
+    assert "+extension RECORD +extension XTEST" in linux
+    assert "at-spi-bus-launcher" in linux
+    assert "dbus-run-session" in linux
+    assert "entry.grab_focus()" in linux
+    assert "--expected-tests 8" in linux
+    assert "--expected-trials 3" in linux
+    assert 'OPENADAPT_CAPTURE_PRODUCTION_QUALIFICATION: "1"' in linux
+    assert "live-qualification.yml" not in release
 
 
 def _step_script(workflow: str, step_name: str) -> str:
@@ -234,9 +250,7 @@ live_lane_selection = pytest.mark.skipif(
 
 
 @live_lane_selection
-@pytest.mark.parametrize(
-    ("event", "platform"), [("schedule", ""), ("workflow_dispatch", "all")]
-)
+@pytest.mark.parametrize(("event", "platform"), [("schedule", ""), ("workflow_dispatch", "all")])
 def test_live_qualification_fails_when_no_lane_can_run(tmp_path, event, platform) -> None:
     """A run that qualifies nothing must not conclude success."""
     completed, outputs = _select_live_lanes(tmp_path, event, platform)
