@@ -2138,14 +2138,13 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         print(f"No --url given; replaying against bundled MockMed{drift_note}")
 
     video_dir = getattr(args, "record_video", None)
-    from openadapt_flow._browser_setup import ensure_chromium_installed
-
-    ensure_chromium_installed()
     from playwright.sync_api import sync_playwright
+
+    from openadapt_flow._browser_setup import launch_chromium
 
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=not headed)
+            browser = launch_chromium(p.chromium, headless=not headed)
             # OPT-IN session video (default off): a recorded replay lives in a
             # context so Playwright can attach the recorder; None keeps the old
             # direct-page path with zero effect.
@@ -3117,7 +3116,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
 
     try:
         if _normalize_kind(backend_cfg.kind) == "web":
-            from openadapt_flow._browser_setup import ensure_chromium_installed
+            from openadapt_flow._browser_setup import launch_chromium
 
             url = args.url or cfg.backend.url
             if url is None:
@@ -3134,11 +3133,10 @@ def _cmd_resume(args: argparse.Namespace) -> int:
                 ) as page:
                     report = _resume_with(build_backend(backend_cfg, page=page))
             else:
-                ensure_chromium_installed()
                 from playwright.sync_api import sync_playwright
 
                 with sync_playwright() as p:
-                    browser = p.chromium.launch(headless=not headed)
+                    browser = launch_chromium(p.chromium, headless=not headed)
                     page = browser.new_page(viewport=_VIEWPORT)
                     page.goto(url)
                     try:
@@ -3468,16 +3466,15 @@ def _cmd_bench(args: argparse.Namespace) -> int:
 
     @contextmanager
     def backend_factory():
-        from openadapt_flow._browser_setup import ensure_chromium_installed
+        from playwright.sync_api import sync_playwright
+
+        from openadapt_flow._browser_setup import launch_chromium
         from openadapt_flow.backends.playwright_backend import (
             PlaywrightBackend,
         )
 
-        ensure_chromium_installed()
-        from playwright.sync_api import sync_playwright
-
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=not args.headed)
+            browser = launch_chromium(p.chromium, headless=not args.headed)
             page = browser.new_page(viewport=_VIEWPORT)
             page.goto(target_url)
             try:

@@ -59,9 +59,9 @@ def {func_name}(url: str{param_sig}) -> dict:
         is RECONCILIATION_REQUIRED a write may have landed, so check the
         record before you call this tool again.
     """
-    from openadapt_flow._browser_setup import ensure_chromium_installed
-    ensure_chromium_installed()
     from playwright.sync_api import sync_playwright
+
+    from openadapt_flow._browser_setup import launch_chromium
 
     from openadapt_flow.backends.playwright_backend import PlaywrightBackend
     from openadapt_flow.ir import Workflow
@@ -71,7 +71,7 @@ def {func_name}(url: str{param_sig}) -> dict:
     params = {params_dict}
     run_dir = Path(tempfile.mkdtemp(prefix="openadapt_flow_run_"))
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = launch_chromium(p.chromium, headless=True)
         page = browser.new_page(viewport={{"width": 1280, "height": 800}})
         page.goto(url)
         try:
