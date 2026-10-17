@@ -26,7 +26,7 @@ itself mean a production Seal.
 The three names are the shared verification-grade vocabulary published as
 :class:`openadapt_flow.contracts.approval.ReadBackTier` (RFC-0002
 ``verification_tier``). :data:`Assurance` is that contract's wire type and the
-constants below are its labels; :func:`assurance_for` stays the only mapping
+constants below are its labels (a test keeps them equal); :func:`assurance_for` stays the only mapping
 from Flow tiers.
 """
 
@@ -34,7 +34,6 @@ from __future__ import annotations
 
 from typing import Final, Literal, Optional
 
-from openadapt_flow.contracts.approval import VerificationTierLabel
 from openadapt_flow.verification import VerificationTier
 
 __all__ = [
@@ -47,8 +46,11 @@ __all__ = [
     "weakest_assurance",
 ]
 
-#: The RFC-0002 ``verification_tier`` wire type from the shared contract.
-Assurance = VerificationTierLabel
+#: The RFC-0002 ``verification_tier`` wire type. It spells
+#: ``openadapt_flow.contracts.approval.VerificationTierLabel`` out rather than
+#: importing it, so importing Flow's runtime does not load the contracts
+#: package; tests/test_demonstrated_readback_verifier.py pins the two equal.
+Assurance = Literal["independent_readback", "screen_readback", "unchecked"]
 INDEPENDENT_READBACK: Final[Literal["independent_readback"]] = "independent_readback"
 SCREEN_READBACK: Final[Literal["screen_readback"]] = "screen_readback"
 UNCHECKED: Final[Literal["unchecked"]] = "unchecked"

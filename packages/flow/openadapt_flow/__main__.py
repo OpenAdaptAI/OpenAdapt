@@ -1056,15 +1056,16 @@ def _cmd_record(args: argparse.Namespace) -> int:
     code = _cmd_record_capture(args)
     if code == 0 and with_check:
         from openadapt_flow.cli_check import guided_check
+        from openadapt_flow.cli_hints import command
 
         recording = Path(args.out)
         if not (recording / "events.jsonl").is_file():
             print("record: no events.jsonl to mark a check in; skipped")
         elif not sys.stdin.isatty():
-            print(
-                "Mark the check with 'openadapt-flow check mark "
-                f"{recording} --start-event N --field PARAM=X,Y,W,H'."
+            mark = command(
+                f"check mark {recording} --start-event N --field PARAM=X,Y,W,H"
             )
+            print(f"Mark the check with '{mark}'.")
         else:
             guided_check(recording)
     return code

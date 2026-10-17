@@ -697,6 +697,12 @@ def test_assurance_grades_are_the_published_contract_labels() -> None:
     from openadapt_flow.contracts.approval import ReadBackTier
 
     assert ASSURANCE_GRADES == tuple(tier.label for tier in sorted(ReadBackTier))
+    from typing import get_args
+
+    from openadapt_flow.assurance import Assurance
+    from openadapt_flow.contracts.approval import VerificationTierLabel
+
+    assert get_args(Assurance) == get_args(VerificationTierLabel)
     for flow_tier in (1, 2, 3, 4):
         grade = assurance_for(flow_tier)
         expected = (

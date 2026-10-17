@@ -22,6 +22,7 @@ import sys
 from pathlib import Path
 from typing import Callable, Optional
 
+from openadapt_flow.cli_hints import command
 from openadapt_flow.compiler.readback_authoring import (
     CHECK_PROMPT,
     CheckError,
@@ -179,7 +180,8 @@ def cmd_check_mark(args: argparse.Namespace) -> int:
     except (ValueError, OSError) as exc:
         print(f"check mark: {exc}", file=sys.stderr)
         return 2
-    print(f"Wrote {path}. Compile the recording; a person then runs 'check admit'.")
+    admit = command("check admit")
+    print(f"Wrote {path}. Compile the recording; a person then runs '{admit}'.")
     return 0
 
 
@@ -299,7 +301,7 @@ def guided_check(
         echo(_summarize_event(index, event))
     start = ask("Index of the first event of the check (empty to skip): ").strip()
     if not start:
-        echo("No check marked. Mark it later with 'openadapt-flow check mark'.")
+        echo(f"No check marked. Mark it later with '{command('check mark')}'.")
         return None
     fields: list[str] = []
     while True:
@@ -324,5 +326,5 @@ def guided_check(
         reset=parse_reset(reset or None),
         prompt=CHECK_PROMPT,
     )
-    echo(f"Wrote {path}. After compile, a person runs 'openadapt-flow check admit'.")
+    echo(f"Wrote {path}. After compile, a person runs '{command('check admit')}'.")
     return path
