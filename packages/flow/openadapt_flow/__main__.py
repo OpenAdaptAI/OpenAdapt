@@ -2440,6 +2440,80 @@ def _cmd_attach_seal(args: argparse.Namespace) -> int:
     return 1
 
 
+def _cmd_verify_run(args: argparse.Namespace) -> int:
+    """``verify-run``: judge an effect another executor claims, from the store."""
+    from openadapt_flow.verify_run import (
+        VerifyRunError,
+        capture_baseline,
+        check_effect_receipt,
+        load_verify_config,
+        verify_run,
+        write_result,
+    )
+
+    def _json(path: str) -> Any:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+
+    if args.check:
+        if not args.keys:
+            print(
+                "verify-run --check needs --keys (a pinned Seal key registry)",
+                file=sys.stderr,
+            )
+            return 2
+        registry = _json(args.keys)
+        if isinstance(registry, dict):
+            registry = registry.get("keys", [])
+        result = check_effect_receipt(
+            _json(args.check), registry, accept_outcomes=args.accept_outcome or ()
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        if result.get("verified") and not result.get("verified_outcome"):
+            print(
+                "The signature is genuine, but the outcome is not verified.",
+                file=sys.stderr,
+            )
+        return 0 if result.get("ok") else 1
+    if not args.verify:
+        print("verify-run needs --verify verify.yaml", file=sys.stderr)
+        return 2
+    try:
+        cfg = load_verify_config(args.verify)
+        params = _json(args.params) if args.params else {}
+        if not isinstance(params, dict):
+            raise VerifyRunError("--params must be a JSON object")
+        if args.capture_baseline:
+            capture_baseline(cfg, params, Path(args.capture_baseline))
+            print(
+                f"baseline written: {args.capture_baseline} (private; holds raw records)"
+            )
+            return 0
+        if not args.run_record or not args.authorization_ref or not args.out:
+            raise VerifyRunError(
+                "verify-run needs --run-record, --authorization-ref, and --out"
+            )
+        result = verify_run(
+            cfg,
+            params=params,
+            run_record=_json(args.run_record),
+            authorization_ref=args.authorization_ref,
+            baseline_path=Path(args.baseline) if args.baseline else None,
+            private_dir=Path(args.out),
+            approver=_json(args.approver) if args.approver else None,
+            remediates=args.remediates,
+            correlation_id=args.correlation_id,
+        )
+    except VerifyRunError as exc:
+        print(f"verify-run REFUSED: {exc}", file=sys.stderr)
+        return 2
+    out = write_result(result, Path(args.out))
+    receipt = result["receipt"]
+    print(f"effect verdict: {receipt['effect_verdict']}")
+    print(f"outcome: {receipt['outcome']}  executor: {receipt['executor_kind']}")
+    print(f"receipt (unsigned): {out}")
+    return 0 if receipt["outcome"] == "verified" else 1
+
+
 def _cmd_run(args: argparse.Namespace) -> int:
     """Execute a bundle under a named deployment profile -- FAIL-CLOSED.
 
@@ -7481,6 +7555,100 @@ def build_parser() -> argparse.ArgumentParser:
         help="Cloud base URL (or OPENADAPT_CLOUD_URL; default https://app.openadapt.ai)",
     )
     sa.set_defaults(func=_cmd_attach_seal)
+
+    p = sub.add_parser(
+        "verify-run",
+        help=(
+            "Read the system of record and rule on an effect that an agent, "
+            "script, or person claims it made; writes an unsigned "
+            "openadapt.effect-receipt/v1. The executor's own record is "
+            "hashed, never trusted"
+        ),
+    )
+    p.add_argument(
+        "--verify",
+        default=None,
+        metavar="YAML",
+        help="verify.yaml: verifier wiring and effect contract",
+    )
+    p.add_argument(
+        "--params",
+        default=None,
+        metavar="JSON",
+        help="The authorized task's values the contract binds",
+    )
+    p.add_argument(
+        "--run-record",
+        default=None,
+        metavar="JSON",
+        help="The executor's run record (needs executor_kind)",
+    )
+    p.add_argument(
+        "--authorization-ref",
+        default=None,
+        help="Opaque id of the authorization in your own system",
+    )
+    p.add_argument(
+        "--baseline",
+        default=None,
+        metavar="JSON",
+        help="Baseline captured before the executor ran",
+    )
+    p.add_argument(
+        "--capture-baseline",
+        default=None,
+        metavar="JSON",
+        help="Read the store now and write a private baseline, then exit",
+    )
+    p.add_argument(
+        "--out", default=None, metavar="DIR", help="Directory for effect-receipt.json"
+    )
+    p.add_argument(
+        "--check",
+        default=None,
+        metavar="JSON",
+        help="Check a signed effect receipt offline instead",
+    )
+    p.add_argument(
+        "--keys",
+        default=None,
+        metavar="JSON",
+        help="Pinned Seal key registry for --check",
+    )
+    p.add_argument(
+        "--accept-outcome",
+        action="append",
+        default=None,
+        choices=[
+            "halted_before_effect",
+            "reconciliation_required",
+            "rejected_policy",
+            "failed_platform",
+        ],
+        help=(
+            "With --check: also exit 0 for this outcome when the signature is "
+            "genuine (repeatable; no value accepts every outcome)"
+        ),
+    )
+    p.add_argument(
+        "--approver",
+        default=None,
+        metavar="JSON",
+        help="Who approved the write: {kind, id, policy_ref}; id is opaque",
+    )
+    p.add_argument(
+        "--remediates",
+        default=None,
+        metavar="RECEIPT_ID",
+        help="receipt_id of an earlier effect receipt this run remediates",
+    )
+    p.add_argument(
+        "--correlation-id",
+        default=None,
+        metavar="ID",
+        help="Your own opaque id linking this receipt to a ticket or trace",
+    )
+    p.set_defaults(func=_cmd_verify_run)
 
     p = sub.add_parser(
         "resume",
