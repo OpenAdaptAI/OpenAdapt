@@ -6469,12 +6469,12 @@ signed report and a certified bundle the runner will admit. A certificate
 covers only the environment the workflow was qualified in.
 
 Definitions of qualify and certify:
-  docs/QUALIFICATION_TERMS.md
+  https://docs.openadapt.ai/reference/glossary/#qualify
 Certification policies (built-in clinical-write and permissive, or your own
 YAML file passed to --certify):
-  docs/QUALIFICATION_TERMS.md#certification-policy
+  https://docs.openadapt.ai/reference/glossary/#certification-policy
 How to write verify.yaml:
-  docs/QUALIFY_A_WORKFLOW.md
+  https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/QUALIFY_A_WORKFLOW.md
 """
 
 
@@ -7932,7 +7932,8 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="POLICY",
         help=(
             "Certify under this policy (default: campaign.policy in verify.yaml, "
-            "usually clinical-write). See docs/QUALIFICATION_TERMS.md#policies."
+            "usually clinical-write). See "
+            "https://docs.openadapt.ai/reference/glossary/#certification-policy."
         ),
     )
     q.add_argument(

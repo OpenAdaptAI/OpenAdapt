@@ -295,7 +295,7 @@ def _python_fix() -> str:
         installer = "  curl -LsSf https://astral.sh/uv/install.sh | sh\n"
         script = (
             "\nOr use the installer script: https://raw.githubusercontent.com/"
-            "OpenAdaptAI/openadapt-flow/main/scripts/install.sh"
+            "OpenAdaptAI/OpenAdapt/main/packages/flow/scripts/install.sh"
         )
     return (
         "Install OpenAdapt with uv, which downloads Python 3.12 if you don't "

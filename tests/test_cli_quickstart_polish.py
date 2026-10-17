@@ -78,8 +78,8 @@ def test_unsupported_python_preflight_prints_remedy_before_delegation(
     assert f"This is Python {version_info[0]}.{version_info[1]}" in result.output
     assert "uv tool install --python 3.12 openadapt" in result.output
     assert (
-        "https://raw.githubusercontent.com/OpenAdaptAI/openadapt-flow/"
-        "main/scripts/install.sh" in result.output
+        "https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/"
+        "main/packages/flow/scripts/install.sh" in result.output
     )
     assert engine_calls == []
 

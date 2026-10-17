@@ -1,0 +1,76 @@
+name: Link check
+
+# Links in the repository's Markdown, including every package README.
+# Pull requests check local files and anchors offline, so an external outage
+# can't block a merge. External targets break without a commit here, so they
+# are checked on a schedule. A failure lists each broken link in the job
+# summary. Frozen history (legacy/, CHANGELOG.md) and .github/ are skipped.
+on:
+  pull_request:
+    paths:
+      - "**/*.md"
+      - ".github/workflows/link-check.yml"
+  push:
+    branches: [main]
+    paths:
+      - "**/*.md"
+      - ".github/workflows/link-check.yml"
+  schedule:
+    - cron: "0 10 * * 1" # Every Monday 10 AM UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: link-check-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  LYCHEE_PATHS: >-
+    --exclude-path '(^|/)(legacy|node_modules|\.venv|growth-worktrees|\.claude)/'
+    --exclude-path 'CHANGELOG\.md$'
+    --exclude-path '/\.github/'
+    './**/*.md'
+
+jobs:
+  internal:
+    name: Internal links and anchors
+    if: github.event_name == 'pull_request' || github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check local links and anchors
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: >-
+            --offline --include-fragments --no-progress
+            ${{ env.LYCHEE_PATHS }}
+          jobSummary: false
+
+  external:
+    name: External links
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # 403 and 429 count as reachable: some sites refuse automated clients,
+      # and GitHub rate-limits. app. and api.openadapt.ai need a session.
+      - name: Check external links
+        uses: lycheeverse/lychee-action@e7477775783ea5526144ba13e8db5eec57747ce8 # v2.9.0
+        with:
+          args: >-
+            --no-progress --max-concurrency 8 --timeout 30 --max-retries 3
+            --accept '200..=299,403,429'
+            --exclude '^https?://(localhost|127\.0\.0\.1|0\.0\.0\.0)'
+            --exclude '^https://(app|api)\.openadapt\.ai'
+            --exclude 'linkedin\.com'
+            ${{ env.LYCHEE_PATHS }}
