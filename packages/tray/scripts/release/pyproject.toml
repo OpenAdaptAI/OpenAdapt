@@ -3,7 +3,7 @@
 [dependency-groups]
 release = [
     "uv==0.12.18",
-    "hatchling==1.32.0",
+    "hatchling==1.32.4",
     "python-semantic-release==10.6.2",
     "GitPython==3.1.62",
     "click==8.1.8",
