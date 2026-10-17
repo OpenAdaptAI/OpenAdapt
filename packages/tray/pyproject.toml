@@ -48,7 +48,7 @@ dev = [
     # keeping `main` green -- the next dependabot bump would have turned it red
     # with 216 findings and no code change. Raise the ceiling deliberately,
     # with the findings fixed in the same change.
-    "ruff>=0.16,<0.17",
+    "ruff>=0.16,<0.18",
 ]
 all = [
     "openadapt-tray[macos-native]",

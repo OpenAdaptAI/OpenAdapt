@@ -440,7 +440,7 @@ requires-dist = [
     { name = "pystray", specifier = ">=0.19.0" },
     { name = "pytest", marker = "extra == 'dev'", specifier = ">=9.0.3" },
     { name = "pytest-mock", marker = "extra == 'dev'", specifier = ">=3.10.0" },
-    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16,<0.17" },
+    { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.16,<0.18" },
     { name = "rumps", marker = "extra == 'macos-native'", specifier = ">=0.4.0" },
 ]
 provides-extras = ["macos-native", "dev", "all"]
