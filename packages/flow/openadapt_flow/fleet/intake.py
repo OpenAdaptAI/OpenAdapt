@@ -2,7 +2,12 @@
 
 Import never activates anything. It:
 
-1. verifies the signature chain against this tenant's pinned fleet roots;
+0. refuses unless an admin allowed import for this app family or its domain
+   (:mod:`openadapt_flow.fleet.optin`);
+1. verifies the chain root -> intermediate -> hub distribution certificate
+   -> patch against this tenant's pinned fleet roots, and, when given a
+   fleet status, refuses a patch whose chain is on the revocation list or
+   whose id a kill switch rolled back;
 2. checks that this tenant runs the application version the patch was made
    for (``app_after``), by structural fingerprint;
 3. applies the anchor maps to a COPY of this tenant's own bundle. Only the
@@ -24,8 +29,10 @@ from pathlib import Path
 from typing import Optional
 
 from openadapt_flow.fleet.fingerprint import AppVersionFingerprint
+from openadapt_flow.fleet.optin import FleetOptIn, FleetOptInError
 from openadapt_flow.fleet.patch import AnchorMap, SignedStructuralPatch, verify_patch
-from openadapt_flow.fleet.signing import FleetTrust, key_id
+from openadapt_flow.fleet.signing import FleetTrust, PatchSignatureError
+from openadapt_flow.fleet.status import FleetStatus
 from openadapt_flow.ir import (
     StructuralLocator,
     Workflow,
@@ -74,6 +81,9 @@ def import_patch(
     tenant_bundle: Path | str,
     tenant_app: AppVersionFingerprint,
     out_dir: Path | str,
+    opt_in: FleetOptIn,
+    origin_host: Optional[str] = None,
+    status: Optional[FleetStatus] = None,
     now: Optional[datetime] = None,
 ) -> ImportResult:
     """Verify, apply to a copy of ``tenant_bundle``, and register a candidate.
@@ -82,7 +92,17 @@ def import_patch(
     signature-chain failure and :class:`PatchImportError` when the patch does
     not apply. Neither leaves anything in the store or in ``out_dir``.
     """
+    try:
+        opt_in.require("import", patch.payload.app_after.app_family, origin_host)
+    except FleetOptInError as exc:
+        raise PatchImportError(str(exc)) from exc
     verify_patch(patch, trust, now=now)
+    if status is not None:
+        revoked = status.revocation_reason(patch.chain)
+        if revoked is not None:
+            raise PatchSignatureError(revoked)
+        if patch.patch_id in status.rollback_patch_ids:
+            raise PatchImportError("a fleet kill switch rolled this patch back")
     payload = patch.payload
     reason = payload.app_after.mismatch(tenant_app)
     if reason is not None:
@@ -134,12 +154,11 @@ def import_patch(
         candidate.fleet_patch = FleetPatchProvenance(
             patch_id=patch.patch_id,
             app_family=payload.app_after.app_family,
-            source_bundle_sha256=payload.source_bundle_sha256,
-            source_prior_bundle_sha256=payload.source_prior_bundle_sha256,
             app_fingerprint_sha256=payload.app_after.fingerprint_sha256(),
-            signer_key_id=patch.certificate.signer_key_id,
-            root_key_id=key_id(trust.roots[patch.certificate.payload.root_key_id]),
-            source_tenant_pseudonym=payload.source_tenant_pseudonym,
+            signer_key_id=patch.chain.signer_key_id,
+            signer_serial=patch.chain.serial,
+            intermediate_key_id=patch.chain.intermediate_key_id,
+            root_key_id=patch.chain.root_key_id,
             identity_evidence_changed=bool(identity_steps),
             patched_steps=patched,
             signature_chain_verified_at=verified_at.isoformat(),

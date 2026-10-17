@@ -1,22 +1,31 @@
-"""The signed structural patch format.
+"""The structural patch format: contributed, then re-signed for distribution.
 
 A :class:`StructuralPatchPayload` maps a step's OLD structural anchor (the
 DOM selector, frame path, ARIA or UIA role, and native automation id it was
-compiled against) to the NEW one after the application changed. It carries:
+compiled against) to the NEW one after the application changed. It carries
+the fingerprints of the application version before and after the change
+(:mod:`openadapt_flow.fleet.fingerprint`) and, for each map, which identity
+fields the source repair also changed on that step. Never the evidence
+itself.
 
-* the source tenant's approved repair, as the exact prior and proposed bundle
-  content digests (``source_prior_bundle_sha256``, ``source_bundle_sha256``);
-* the fingerprints of the application version before and after the change
-  (:mod:`openadapt_flow.fleet.fingerprint`);
-* for each map, whether the source repair also changed identity evidence on
-  that step, and which identity fields. Never the evidence itself.
+A patch travels in two envelopes:
 
-What it never carries, by schema: accessible names, OCR text, identity bands,
-identity templates or their salts, parameter values, typed text, effect
-match values, window titles, value digests, step ids, workflow names, file
-paths, or the tenant's application address. Every string field is a digest,
-a closed literal, a validated id, or a selector or automation id that passed
-:func:`sanitize_selector` / :func:`sanitize_automation_id`.
+* a :class:`PatchContribution`, which the source tenant signs with its
+  ``contributor`` certificate and sends to the fleet hub only. It adds the
+  exact prior and proposed bundle digests of the approved repair, for the
+  hub's audit log;
+* a :class:`SignedStructuralPatch`, which the hub signs with its
+  ``distribution`` certificate after it verified the contribution
+  (:mod:`openadapt_flow.fleet.hub`). Receivers get only this. It names no
+  source tenant, no tenant key, and no tenant bundle digest, so two patches
+  from the same source cannot be linked by any field.
+
+What a payload never carries, by schema: accessible names, OCR text,
+identity bands, identity templates or their salts, parameter values, typed
+text, effect match values, window titles, value digests, step ids, workflow
+names, file paths, or the tenant's application address. Every string field is
+a digest, a closed literal, a validated id, or a selector or automation id
+that passed :func:`sanitize_selector` / :func:`sanitize_automation_id`.
 
 :func:`find_leaks` is a second, independent check run at export: it refuses
 the patch if any value from the source bundles (or the digest of one) appears
@@ -34,19 +43,22 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from openadapt_flow.fleet.fingerprint import APP_FAMILY_PATTERN, AppVersionFingerprint
 from openadapt_flow.fleet.signing import (
+    CertificateChain,
     FleetTrust,
+    KeyCustody,
     PatchSignatureError,
-    SignerCertificate,
-    sign_bytes,
-    verify_bytes,
-    verify_certificate,
+    sign_document,
+    verify_chain,
+    verify_document,
 )
 from openadapt_flow.qualification_admission_v2 import canonical_json
 from openadapt_flow.runtime.healing.patch import IDENTITY_FIELDS
 
-PATCH_SCHEMA: Final[str] = "openadapt.fleet.structural-patch/v1"
+PATCH_SCHEMA: Final[str] = "openadapt.fleet.structural-patch/v2"
+PATCH_DOMAIN: Final[bytes] = b"openadapt.fleet.structural-patch/v2\x00"
+CONTRIBUTION_DOMAIN: Final[bytes] = b"openadapt.fleet.patch-contribution/v1\x00"
 _SHA256 = r"^[a-f0-9]{64}$"
-_PATCH_ID_DOMAIN = b"openadapt.fleet.structural-patch-id/v1\x00"
+_PATCH_ID_DOMAIN = b"openadapt.fleet.structural-patch-id/v2\x00"
 
 
 class PatchRedactionError(ValueError):
@@ -295,20 +307,21 @@ class AnchorMap(BaseModel):
 
 
 class StructuralPatchPayload(BaseModel):
+    """What receivers apply. Names no source tenant, key, or bundle."""
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    schema_version: Literal["openadapt.fleet.structural-patch/v1"] = (
-        "openadapt.fleet.structural-patch/v1"
+    schema_version: Literal["openadapt.fleet.structural-patch/v2"] = (
+        "openadapt.fleet.structural-patch/v2"
     )
     #: A registry workflow id (``availity/eligibility-check``), never the
     #: tenant's own bundle name.
     workflow_family: str = Field(pattern=APP_FAMILY_PATTERN)
-    source_prior_bundle_sha256: str = Field(pattern=_SHA256)
-    source_bundle_sha256: str = Field(pattern=_SHA256)
-    source_tenant_pseudonym: str = Field(pattern=r"^[a-z0-9-]{8,64}$")
     app_before: AppVersionFingerprint
     app_after: AppVersionFingerprint
     maps: tuple[AnchorMap, ...] = Field(min_length=1, max_length=256)
+    #: Set by the hub at distribution, truncated to the hour, so the time a
+    #: tenant contributed does not identify it.
     created_at: str = Field(min_length=20, max_length=64)
 
     @model_validator(mode="after")
@@ -332,7 +345,7 @@ class StructuralPatchPayload(BaseModel):
         These are the only fields that could carry a tenant value, so the
         export leak check compares data values against exactly these.
         """
-        out = [self.workflow_family, self.source_tenant_pseudonym]
+        out = [self.workflow_family]
         for item in self.maps:
             for ref in (item.old, item.new):
                 out.extend(v for v in (ref.selector, ref.role, ref.automation_id) if v)
@@ -344,12 +357,14 @@ class StructuralPatchPayload(BaseModel):
 
 
 class SignedStructuralPatch(BaseModel):
+    """A patch as receivers get it: signed by the hub's distribution key."""
+
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     payload: StructuralPatchPayload
     patch_id: str = Field(pattern=_SHA256)
     signature: str = Field(min_length=1, max_length=128)
-    certificate: SignerCertificate
+    chain: CertificateChain
 
     def to_json(self) -> str:
         return json.dumps(self.model_dump(mode="json"), indent=2, sort_keys=True)
@@ -359,22 +374,85 @@ class SignedStructuralPatch(BaseModel):
         return cls.model_validate_json(text)
 
 
-def sign_patch(
-    payload: StructuralPatchPayload, signer_key: Any, certificate: SignerCertificate
-) -> SignedStructuralPatch:
-    from openadapt_flow.fleet.signing import public_key_b64
+class ContributionPayload(BaseModel):
+    """What a source tenant sends the hub. Never distributed."""
 
-    if public_key_b64(signer_key) != certificate.payload.signer_public_key:
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    schema_version: Literal["openadapt.fleet.patch-contribution/v1"] = (
+        "openadapt.fleet.patch-contribution/v1"
+    )
+    patch: StructuralPatchPayload
+    #: The approved repair's exact bundle digests. For the hub's audit log.
+    source_prior_bundle_sha256: str = Field(pattern=_SHA256)
+    source_bundle_sha256: str = Field(pattern=_SHA256)
+    contributed_at: str = Field(min_length=20, max_length=64)
+
+
+class PatchContribution(BaseModel):
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    payload: ContributionPayload
+    signature: str = Field(min_length=1, max_length=128)
+    chain: CertificateChain
+
+    @property
+    def contribution_id(self) -> str:
+        return hashlib.sha256(
+            CONTRIBUTION_DOMAIN + canonical_json(self.payload)
+        ).hexdigest()
+
+    def to_json(self) -> str:
+        return json.dumps(self.model_dump(mode="json"), indent=2, sort_keys=True)
+
+
+def _require_signer(signer: KeyCustody, chain: CertificateChain, purpose: str) -> None:
+    if signer.public_key_b64() != chain.signer.payload.signer_public_key:
         raise PatchSignatureError("the signing key does not match its certificate")
-    if payload.source_tenant_pseudonym != certificate.payload.tenant_pseudonym:
-        raise PatchSignatureError(
-            "the patch names a different tenant than its certificate"
-        )
+    if chain.signer.payload.purpose != purpose:
+        raise PatchSignatureError(f"this needs a {purpose} certificate")
+
+
+def sign_contribution(
+    payload: ContributionPayload, signer: KeyCustody, chain: CertificateChain
+) -> PatchContribution:
+    _require_signer(signer, chain, "contributor")
+    return PatchContribution(
+        payload=payload,
+        signature=sign_document(signer, CONTRIBUTION_DOMAIN, payload),
+        chain=chain,
+    )
+
+
+def verify_contribution(
+    contribution: PatchContribution, trust: FleetTrust, *, now: Any = None
+) -> None:
+    verify_chain(
+        contribution.chain,
+        trust,
+        purpose="contributor",
+        app_family=contribution.payload.patch.app_after.app_family,
+        now=now,
+    )
+    verify_document(
+        contribution.chain.signer.payload.signer_public_key,
+        CONTRIBUTION_DOMAIN,
+        contribution.payload,
+        contribution.signature,
+        "contribution",
+    )
+
+
+def sign_patch(
+    payload: StructuralPatchPayload, signer: KeyCustody, chain: CertificateChain
+) -> SignedStructuralPatch:
+    """Sign a payload for distribution. Only the hub holds such a key."""
+    _require_signer(signer, chain, "distribution")
     return SignedStructuralPatch(
         payload=payload,
         patch_id=payload.patch_id(),
-        signature=sign_bytes(signer_key, canonical_json(payload)),
-        certificate=certificate,
+        signature=sign_document(signer, PATCH_DOMAIN, payload),
+        chain=chain,
     )
 
 
@@ -384,26 +462,22 @@ def verify_patch(
     *,
     now: Any = None,
 ) -> None:
-    """Verify the whole chain: root -> certificate -> patch. Raises on failure."""
-    verify_certificate(
-        patch.certificate,
+    """Verify root -> intermediate -> distribution signer -> patch. Raises."""
+    verify_chain(
+        patch.chain,
         trust,
+        purpose="distribution",
         app_family=patch.payload.app_after.app_family,
         now=now,
     )
-    if (
-        patch.payload.source_tenant_pseudonym
-        != patch.certificate.payload.tenant_pseudonym
-    ):
-        raise PatchSignatureError(
-            "the patch names a different tenant than its certificate"
-        )
     if patch.patch_id != patch.payload.patch_id():
         raise PatchSignatureError("patch id does not match its payload")
-    verify_bytes(
-        patch.certificate.payload.signer_public_key,
-        canonical_json(patch.payload),
+    verify_document(
+        patch.chain.signer.payload.signer_public_key,
+        PATCH_DOMAIN,
+        patch.payload,
         patch.signature,
+        "patch",
     )
 
 
@@ -443,16 +517,22 @@ def find_leaks(
 
 __all__ = [
     "AnchorMap",
+    "ContributionPayload",
     "PATCH_SCHEMA",
+    "PatchContribution",
     "PatchRedactionError",
     "SELECTOR_ATTRIBUTES",
     "SignedStructuralPatch",
     "StructuralAnchorRef",
     "StructuralPatchPayload",
     "find_leaks",
+    "is_generated_name",
     "sanitize_automation_id",
+    "sanitize_frame_selector",
     "sanitize_role",
     "sanitize_selector",
+    "sign_contribution",
     "sign_patch",
+    "verify_contribution",
     "verify_patch",
 ]

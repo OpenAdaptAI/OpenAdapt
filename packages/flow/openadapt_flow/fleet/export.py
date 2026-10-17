@@ -1,6 +1,8 @@
-"""Export a structural patch from an approved local repair.
+"""Export a structural patch contribution from an approved local repair.
 
-Only a repair that a person approved on this tenant can be exported. The
+Export is off until an admin allows the app family or its domain in this
+tenant's opt-in file (:mod:`openadapt_flow.fleet.optin`). Only a repair that
+a person approved on this tenant can be exported. The
 exporter reads the two bundles the approval bound (by content digest), keeps
 the structural anchor change of each step, flags identity-evidence changes by
 field name, and refuses anything it cannot express without tenant data:
@@ -15,7 +17,10 @@ field name, and refuses anything it cannot express without tenant data:
 
 After building the payload it runs :func:`~openadapt_flow.fleet.patch.find_leaks`
 against every data value in both bundles and their digests, and refuses on
-any hit. Then it signs.
+any hit. Then it signs a :class:`~openadapt_flow.fleet.patch.PatchContribution`
+with this tenant's ``contributor`` certificate. The contribution goes to the
+fleet hub (:mod:`openadapt_flow.fleet.hub`), which re-signs it for
+distribution; receivers never see this tenant's certificate.
 """
 
 from __future__ import annotations
@@ -28,16 +33,22 @@ from typing import Any, Iterable, Optional
 from pydantic import BaseModel
 
 from openadapt_flow.fleet.fingerprint import AppVersionFingerprint
+from openadapt_flow.fleet.optin import FleetOptIn, FleetOptInError
 from openadapt_flow.fleet.patch import (
     AnchorMap,
+    ContributionPayload,
+    PatchContribution,
     PatchRedactionError,
-    SignedStructuralPatch,
     StructuralAnchorRef,
     StructuralPatchPayload,
     find_leaks,
-    sign_patch,
+    sign_contribution,
 )
-from openadapt_flow.fleet.signing import SignerCertificate
+from openadapt_flow.fleet.signing import (
+    CertificateChain,
+    KeyCustody,
+    PatchSignatureError,
+)
 from openadapt_flow.ir import Anchor, StructuralLocator, Workflow
 from openadapt_flow.repair.candidate import RepairCandidate, value_digest
 from openadapt_flow.repair.lifecycle import RepairLifecycleError, RepairStore
@@ -53,7 +64,7 @@ class PatchExportError(ValueError):
 
 @dataclass
 class ExportResult:
-    patch: SignedStructuralPatch
+    contribution: PatchContribution
     #: Steps whose change was visual only and stayed local.
     visual_only_steps: int = 0
     notes: list[str] = field(default_factory=list)
@@ -239,11 +250,27 @@ def export_patch(
     workflow_family: str,
     app_before: AppVersionFingerprint,
     app_after: AppVersionFingerprint,
-    signer_key: Any,
-    certificate: SignerCertificate,
+    signer: KeyCustody,
+    chain: CertificateChain,
+    opt_in: FleetOptIn,
+    origin_host: Optional[str] = None,
     now: Optional[datetime] = None,
 ) -> ExportResult:
-    """Build, leak-check, and sign a patch from an approved local repair."""
+    """Build, leak-check, and sign a contribution from an approved local repair.
+
+    ``origin_host`` is the host of the application as this tenant recorded
+    it, used only to match a domain entry in ``opt_in``. It is not exported.
+    """
+    try:
+        opt_in.require("export", app_after.app_family, origin_host)
+    except FleetOptInError as exc:
+        raise PatchExportError(str(exc)) from exc
+    if chain.signer.payload.purpose != "contributor":
+        raise PatchExportError("export needs this tenant's contributor certificate")
+    if app_after.app_family not in chain.signer.payload.app_families:
+        raise PatchExportError(
+            "the contributor certificate does not cover this app family"
+        )
     try:
         candidate = store.load_candidate(candidate_id)
     except RepairLifecycleError as exc:
@@ -259,20 +286,19 @@ def export_patch(
         "proposed",
     )
     maps, visual_only = build_anchor_maps(prior, proposed)
+    current = (now or datetime.now(timezone.utc)).astimezone(timezone.utc)
     payload = StructuralPatchPayload(
         workflow_family=workflow_family,
-        source_prior_bundle_sha256=candidate.prior_content_digest,
-        source_bundle_sha256=candidate.proposed_content_digest,
-        source_tenant_pseudonym=certificate.payload.tenant_pseudonym,
         app_before=app_before,
         app_after=app_after,
         maps=tuple(maps),
-        created_at=(now or datetime.now(timezone.utc))
-        .astimezone(timezone.utc)
-        .isoformat(),
+        created_at=current.isoformat(),
     )
     values: list[str] = []
-    digests: list[str] = []
+    digests: list[str] = [
+        candidate.prior_content_digest,
+        candidate.proposed_content_digest,
+    ]
     for workflow in (prior, proposed):
         found_values, found_digests = bundle_data_values(workflow)
         values.extend(found_values)
@@ -287,14 +313,28 @@ def export_patch(
         raise PatchExportError(
             "the patch would carry tenant data (" + "; ".join(leaks) + "); refusing"
         )
-    patch = sign_patch(payload, signer_key, certificate)
+    try:
+        contribution = sign_contribution(
+            ContributionPayload(
+                patch=payload,
+                source_prior_bundle_sha256=candidate.prior_content_digest,
+                source_bundle_sha256=candidate.proposed_content_digest,
+                contributed_at=current.isoformat(),
+            ),
+            signer,
+            chain,
+        )
+    except PatchSignatureError as exc:
+        raise PatchExportError(str(exc)) from exc
     notes = []
     if payload.identity_evidence_changed:
         notes.append(
             "this patch flags identity evidence; every receiving tenant needs a "
             "person to review it"
         )
-    return ExportResult(patch=patch, visual_only_steps=visual_only, notes=notes)
+    return ExportResult(
+        contribution=contribution, visual_only_steps=visual_only, notes=notes
+    )
 
 
 __all__ = [

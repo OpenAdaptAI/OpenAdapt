@@ -300,12 +300,12 @@ class TaughtStep(BaseModel):
 
 
 class FleetPatchProvenance(BaseModel):
-    """Where an imported fleet patch came from, by digest only.
+    """Where an imported fleet patch came from, by digest and key id only.
 
-    Set on candidates with source ``fleet_patch``. Holds no value from the
-    source tenant's bundles: the patch id and bundle hashes are digests, the
-    signer is a key id, and the source tenant is an opaque pseudonym from its
-    signing certificate.
+    Set on candidates with source ``fleet_patch``. The patch was re-signed by
+    the fleet hub, so this names the hub's distribution certificate, not the
+    tenant that contributed the repair. It holds no value from any tenant's
+    bundles and nothing that links two patches to one source.
     """
 
     model_config = ConfigDict(extra="forbid")
@@ -314,12 +314,14 @@ class FleetPatchProvenance(BaseModel):
     app_family: str = Field(
         pattern=r"^[a-z0-9][a-z0-9._-]{0,63}/[a-z0-9][a-z0-9._-]{0,63}$"
     )
-    source_bundle_sha256: str = Field(pattern=_SHA256)
-    source_prior_bundle_sha256: str = Field(pattern=_SHA256)
     app_fingerprint_sha256: str = Field(pattern=_SHA256)
+    #: The hub's distribution signer, its certificate serial, and the
+    #: intermediate and root above it. Checked against the revocation list
+    #: again before any auto-promotion.
     signer_key_id: str = Field(pattern=r"^[a-f0-9]{16,64}$")
+    signer_serial: str = Field(pattern=r"^[a-f0-9]{32}$")
+    intermediate_key_id: str = Field(pattern=r"^[a-f0-9]{16,64}$")
     root_key_id: str = Field(pattern=r"^[a-f0-9]{16,64}$")
-    source_tenant_pseudonym: str = Field(pattern=r"^[a-z0-9-]{8,64}$")
     #: True when the patch flags any identity-evidence anchor. Such a
     #: candidate always needs a person; no policy can pre-approve it.
     identity_evidence_changed: bool
@@ -454,8 +456,8 @@ class RepairCandidate(BaseModel):
         if self.fleet_patch is not None:
             fleet = self.fleet_patch
             lines.append(
-                f"  fleet patch {fleet.patch_id[:16]}... from tenant "
-                f"{fleet.source_tenant_pseudonym} (signer {fleet.signer_key_id[:16]})"
+                f"  fleet patch {fleet.patch_id[:16]}... distributed by the fleet "
+                f"hub (signer {fleet.signer_key_id[:16]})"
                 + (
                     ", touches identity evidence"
                     if fleet.identity_evidence_changed
