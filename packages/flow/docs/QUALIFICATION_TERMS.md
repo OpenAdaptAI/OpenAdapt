@@ -1,7 +1,10 @@
 # Qualification terms
 
-This page defines the words `openadapt-flow qualify` uses. Other pages link
-here instead of repeating them.
+This page has the details behind the words `openadapt-flow qualify` uses: the
+fault cases, what gets signed, and the policy rules. The short definitions of
+qualify, certify and certification policy are in the OpenAdapt
+[glossary](https://docs.openadapt.ai/reference/glossary/#qualify), the one
+place OpenAdapt defines its terms.
 
 ## Qualify
 
