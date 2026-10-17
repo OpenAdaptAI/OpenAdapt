@@ -49,6 +49,7 @@ from __future__ import annotations
 import difflib
 from typing import Any, Optional
 
+from openadapt_flow.assurance import SCREEN_READBACK, UNCHECKED
 from openadapt_flow.runtime.effects.adapter import ConnectionProbe, VerifierAdapterBase
 from openadapt_flow.runtime.effects.effect import (
     MIN_RENAV_ACTIONS,
@@ -60,6 +61,7 @@ from openadapt_flow.runtime.effects.effect import (
     Region,
     Verdict,
 )
+from openadapt_flow.runtime.effects.readback_values import compare_value
 from openadapt_flow.verification import VerificationTier
 
 # Fuzzy-match floor for accepting an OCR read-back as the expected value.
@@ -101,10 +103,20 @@ def _is_persisted_reacquisition(spec: Any) -> bool:
     if spec is None or not spec.different_path or spec.region is None:
         return False
     _, _, width, height = spec.region
+    reset = getattr(spec, "reset", None)
+    if getattr(spec, "demonstrated", False) and reset is None:
+        # A demonstrated check must show a state-busting step; the compiler
+        # refuses one without it, and a hand-edited contract earns nothing.
+        return False
+    # A reset (a reload, a new search, a reopened window) re-fetches the
+    # record by itself, so one action is enough when it is the reset.
+    enough = len(spec.renavigation) >= MIN_RENAV_ACTIONS or (
+        reset is not None and 0 <= reset.at < len(spec.renavigation)
+    )
     return (
         width > 0
         and height > 0
-        and len(spec.renavigation) >= MIN_RENAV_ACTIONS
+        and enough
         and all(_valid_renavigation_step(nav) for nav in spec.renavigation)
     )
 
@@ -292,12 +304,20 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
     # -- direct API ----------------------------------------------------------
 
     def read_back(
-        self, expected_text: str, region: Optional[Region] = None
+        self,
+        expected_text: str,
+        region: Optional[Region] = None,
+        *,
+        value_kind: str = "text",
+        date_order: Optional[str] = None,
     ) -> EffectVerdict:
         """Rule on whether ``expected_text`` is on the saved-value region NOW.
 
-        - CONFIRMED   — the expected value reads back (fuzzy) in the region.
-        - INDETERMINATE — the region has no readable text -> HALT (cannot certify).
+        - CONFIRMED   — the expected value reads back in the region (fuzzy
+          for free text; normalized-exact for codes, dates and amounts).
+        - INDETERMINATE — the region has no readable text, or the read differs
+          from the expected value only in glyphs OCR confuses (``O``/``0``,
+          ``l``/``1``) or is a date that reads two ways -> HALT.
         - REFUTED     — the region has readable text that is NOT the expected
           value -> HALT (affirmative on-screen contradiction).
         """
@@ -323,7 +343,31 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
                 observed_value=text or None,
                 expected_value=expected_text,
             )
-        if self._match(text, expected_text):
+        comparison = compare_value(
+            text,
+            expected_text,
+            kind=value_kind,  # type: ignore[arg-type]
+            source="ocr",
+            date_order=date_order,
+            exact=False,
+        )
+        if comparison == "ambiguous":
+            return EffectVerdict(
+                verdict=Verdict.INDETERMINATE,
+                kind=EffectKind.FIELD_EQUALS,
+                substrate=self.substrate,
+                reason=(
+                    "the read differs from the expected value only in "
+                    "characters OCR can't tell apart (O/0, l/1) or reads as "
+                    "more than one date; cannot certify write"
+                ),
+                observed_value=text,
+                expected_value=expected_text,
+            )
+        matched = comparison == "match" or (
+            value_kind == "text" and self._match(text, expected_text)
+        )
+        if matched:
             return EffectVerdict(
                 verdict=Verdict.CONFIRMED,
                 kind=EffectKind.FIELD_EQUALS,
@@ -394,6 +438,21 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
         different_path = bool(spec is not None and spec.different_path)
         region = spec.region if spec is not None else None
 
+        # A check taught by demonstration confirms nothing until a person
+        # admits it. Effect.resolve drops an admission made for another check.
+        if spec is not None and spec.demonstrated and spec.admission is None:
+            return EffectVerdict(
+                verdict=Verdict.INDETERMINATE,
+                kind=expected.kind,
+                substrate=self.substrate,
+                reason=(
+                    "the read-back was taught by demonstration and no person "
+                    "has admitted it; cannot certify — HALT"
+                ),
+                expected_value=expected_text,
+                assurance=UNCHECKED,
+            )
+
         # DIFFERENT-PATH: re-open the record by an independent path BEFORE
         # reading. Any failure to re-navigate => INDETERMINATE (HALT), never a
         # CONFIRM off the write's own surface.
@@ -434,11 +493,30 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
             update={
                 "kind": expected.kind,
                 "reason": f"{verdict.reason} — {posture}",
+                "assurance": (
+                    SCREEN_READBACK
+                    if verdict.verdict is Verdict.CONFIRMED
+                    else UNCHECKED
+                ),
             }
         )
 
-    def _read_structure(self, expected: str, region: Region) -> EffectVerdict:
-        """Read the element at ``region``'s center from the page structure."""
+    def _read_structure(
+        self,
+        expected: str,
+        region: Region,
+        *,
+        value_kind: str = "text",
+        date_order: Optional[str] = None,
+    ) -> EffectVerdict:
+        """Read the element at ``region``'s center from the page structure.
+
+        ``displayed_text_at`` reads the DOM in the browser and the
+        accessibility tree on macOS (AX) and Linux (AT-SPI). A pixel-only
+        backend (RDP, Citrix) and the Windows backend, whose UIA read returns
+        a whole row rather than one element, don't offer it, and the read is
+        INDETERMINATE; it never falls back to OCR.
+        """
         reader = getattr(self._backend, "displayed_text_at", None)
         if not callable(reader):
             return EffectVerdict(
@@ -464,7 +542,41 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
         observed = _normalize(text)
         # Equality, not containment: a container element would contain the
         # value next to other fields and confirm by accident.
-        matched = observed == _normalize(expected)
+        comparison = compare_value(
+            observed,
+            expected,
+            kind=value_kind,  # type: ignore[arg-type]
+            source="structure",
+            date_order=date_order,
+            exact=True,
+        )
+        matched = comparison == "match"
+        contained = (
+            not matched
+            and compare_value(
+                observed,
+                expected,
+                kind=value_kind,  # type: ignore[arg-type]
+                source="structure",
+                date_order=date_order,
+                exact=False,
+            )
+            == "match"
+        )
+        if not matched and (comparison == "ambiguous" or contained):
+            # The element holds more than the field (an accessibility row,
+            # a container) or a date that reads two ways: not proof either way.
+            return EffectVerdict(
+                verdict=Verdict.INDETERMINATE,
+                kind=EffectKind.FIELD_EQUALS,
+                substrate=self.substrate,
+                reason=(
+                    "the marked element shows the value among other text, or "
+                    "a date that reads two ways"
+                ),
+                observed_value=observed,
+                expected_value=expected,
+            )
         return EffectVerdict(
             verdict=Verdict.CONFIRMED if matched else Verdict.REFUTED,
             kind=EffectKind.FIELD_EQUALS,
@@ -497,10 +609,16 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
                     substrate=self.substrate,
                     reason=f"no expected value for field {field.name!r}",
                 )
+            kind = getattr(field, "value_kind", "text")
+            order = getattr(field, "date_order", None)
             if getattr(field, "source", "ocr") == "structure":
-                one = self._read_structure(want, tuple(field.region))
+                one = self._read_structure(
+                    want, tuple(field.region), value_kind=kind, date_order=order
+                )
             else:
-                one = self.read_back(want, region=tuple(field.region))
+                one = self.read_back(
+                    want, region=tuple(field.region), value_kind=kind, date_order=order
+                )
             expected_all.append(f"{field.name}={want}")
             observed.append(f"{field.name}={one.observed_value or ''}")
             if one.verdict is Verdict.INDETERMINATE:

@@ -59,7 +59,7 @@ no "probably fine."
 
 | Substrate | Verifier | System of record | Status |
 |---|---|---|---|
-| **OpenEMR FHIR R4** (primary; the healthcare wedge) | `FhirEffectVerifier` | `GET {base}/Observation?patient=…` → FHIR `Bundle` search-set of nested resources | **Contract-gated in CI + verified LIVE.** CI runs against a byte-faithful fake FHIR R4 server (`tests/_fhir_fake.py`); a live end-to-end test (`tests/test_effect_fhir_live_openemr.py`) runs against a **real local OpenEMR** stood up by `benchmark/openemr_live/` when `OPENEMR_FHIR_BASE_URL` (+ token) is set. |
+| **OpenEMR FHIR R4** (primary) | `FhirEffectVerifier` | `GET {base}/Observation?patient=…` → FHIR `Bundle` search-set of nested resources | **Contract-gated in CI + verified LIVE.** CI runs against a byte-faithful fake FHIR R4 server (`tests/_fhir_fake.py`); a live end-to-end test (`tests/test_effect_fhir_live_openemr.py`) runs against a **real local OpenEMR** stood up by `benchmark/openemr_live/` when `OPENEMR_FHIR_BASE_URL` (+ token) is set. |
 | **REST/JSON** (MockMed transactional back end) | `RestRecordVerifier` | `GET /api/db` on `mockmed.fault_server` — the same in-process HTTP system of record the fault-model study judges by | **Live in CI** (localhost). Drives the proof matrix below. |
 | **Filesystem document store** | `DocumentHashVerifier` | a directory of written documents, verified by SHA-256 content hash | **Live in CI.** A non-HTTP verifier type — proves the protocol is substrate-agnostic, not OpenEMR-shaped. |
 

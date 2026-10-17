@@ -17,8 +17,8 @@ Material already published in Git history is public reference material. Moving
 a copy to a private repository does not make the historical version secret.
 The private boundary applies to successor corpora, new examples, derived
 tuning, deployment evidence, and recipes accumulated after the carve. Public
-historical snapshots should not be described as confidential or relied on as a
-future moat.
+historical snapshots stay public and should not be described as
+confidential.
 
 ## Adding a public artifact
 

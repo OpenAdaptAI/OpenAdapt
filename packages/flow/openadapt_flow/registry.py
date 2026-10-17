@@ -26,7 +26,10 @@ from pathlib import Path
 from typing import Any, Optional
 from urllib.parse import urljoin
 
-DEFAULT_INDEX_URL = "https://raw.githubusercontent.com/OpenAdaptAI/openadapt-flow/main/registry/index.json"
+DEFAULT_INDEX_URL = (
+    "https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/"
+    "packages/flow/registry/index.json"
+)
 STATUSES = ("example", "certified", "planned")
 MAX_FILE_BYTES = 20 * 1024 * 1024
 

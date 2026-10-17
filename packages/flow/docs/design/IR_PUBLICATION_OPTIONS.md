@@ -128,6 +128,4 @@ workflow.
 
 The through-line matches the source-availability boundary. Publish the mechanism
 and the interface freely, in whatever venue serves the reader. Keep the data,
-the oracle recipes, and the tuning private. The moat is data, control plane,
-trust, and speed, not secrecy about the IR.
-</content>
+the oracle recipes, and the tuning private.

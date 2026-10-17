@@ -301,7 +301,7 @@ class TestWrongEntities:
 
 class TestBandMatch:
     def test_exact_match(self):
-        assert band_match(ROW, ROW) == (1.0, 0, 0, 0, 0, 0, 0)
+        assert band_match(ROW, ROW) == (1.0, 0, 0, 0, 0, 0, 0, False)
 
     def test_adjacent_unmatched_tokens_merge_into_one_run(self):
         match = band_match(ROW, WRONG_ROW)
@@ -321,10 +321,10 @@ class TestBandMatch:
         # splits/joins are the ONLY sub-token acceptance left — full
         # consumption, no partial containment ('Phil' in 'Philip' is a
         # sibling, not a join; see TestSiblingProbes).
-        assert band_match("ShowActive", "Show Active") == (1.0, 0, 0, 0, 0, 0, 0)
-        assert band_match("Show Active", "ShowActive") == (1.0, 0, 0, 0, 0, 0, 0)
+        assert band_match("ShowActive", "Show Active") == (1.0, 0, 0, 0, 0, 0, 0, False)
+        assert band_match("Show Active", "ShowActive") == (1.0, 0, 0, 0, 0, 0, 0, False)
         # ... and with digit-class OCR noise inside the split form:
-        assert band_match("ShowActive", "Sh0w Active") == (1.0, 0, 0, 0, 0, 0, 0)
+        assert band_match("ShowActive", "Sh0w Active") == (1.0, 0, 0, 0, 0, 0, 0, False)
 
     def test_letter_letter_confusion_is_suspect_not_clean(self):
         # 'Cornprehensive' matches 'Comprehensive' canonically (rn/m) but
@@ -336,7 +336,7 @@ class TestBandMatch:
         assert match.suspect_chars == len("comprehensive")
 
     def test_empty_inputs(self):
-        assert band_match("", "anything") == (0.0, 0, 0, 0, 0, 0, 0)
+        assert band_match("", "anything") == (0.0, 0, 0, 0, 0, 0, 0, False)
         match = band_match("abcdef", "")
         assert match.coverage == 0.0 and match.max_uncovered_run == 6
         # ... and the fully absent alphabetic token registers as an
@@ -378,12 +378,15 @@ class TestOperatingPoint:
             "abcd efgh ijkl mnop qrst", "abcd efgh ijkl mnop"
         )
         assert check.status == "mismatch"
-        # The same absence with a NUMERIC token (trailing-numerics
-        # dropout) keeps the old tolerance: class-weighted, not blanket.
+        # The same absence with a NUMERIC token used to verify (trailing
+        # numerics dropout). FLIPPED by the identifying-field rule: '1234' is
+        # an identifier the recording held and OCR did not return, and the
+        # band matched no second kind of identifying field, so the OCR tier
+        # abstains (see identity_evidence_shortfall).
         check = verify_target_identity(
             "abcd efgh ijkl mnop 1234", "abcd efgh ijkl mnop"
         )
-        assert check.status == "verified"
+        assert check.status == "abstain"
         # A 5-char numeric absence still fails the generic run cap.
         check = verify_target_identity(
             "abcd efgh ijkl mnop 12345", "abcd efgh ijkl mnop"

@@ -87,6 +87,7 @@ from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
+    Callable,
     Iterator,
     Literal,
     Mapping,
@@ -1046,6 +1047,31 @@ def _record_until_stop(args: argparse.Namespace):
 
 
 def _cmd_record(args: argparse.Namespace) -> int:
+    """Record, then (with ``--with-check``) ask for the demonstrated check."""
+    with_check = bool(getattr(args, "with_check", False))
+    if with_check:
+        from openadapt_flow.cli_check import RECORD_GUIDANCE
+
+        print(RECORD_GUIDANCE)
+    code = _cmd_record_capture(args)
+    if code == 0 and with_check:
+        from openadapt_flow.cli_check import guided_check
+        from openadapt_flow.cli_hints import command
+
+        recording = Path(args.out)
+        if not (recording / "events.jsonl").is_file():
+            print("record: no events.jsonl to mark a check in; skipped")
+        elif not sys.stdin.isatty():
+            mark = command(
+                f"check mark {recording} --start-event N --field PARAM=X,Y,W,H"
+            )
+            print(f"Mark the check with '{mark}'.")
+        else:
+            guided_check(recording)
+    return code
+
+
+def _cmd_record_capture(args: argparse.Namespace) -> int:
     # The interactive (web) recorder installs in-page DOM listeners against a
     # headed Playwright page. The DESKTOP recorder (--backend windows) captures
     # the operator's native OS input over the win_agent contract; both emit the
@@ -1533,6 +1559,38 @@ def _print_break_it_narrative(broken: "BreakItResult") -> None:
     )
 
 
+def _demo_progress() -> Optional[Callable[[str], None]]:
+    """Show the current demo stage on one terminal line that rewrites itself.
+
+    Returns None when stdout is not a terminal, so piped output keeps only the
+    short summary. The line is cleared before the summary prints.
+    """
+    import re
+
+    if not sys.stdout.isatty():
+        return None
+    stage = re.compile(r"^\[(\d)/5\] (.+)$")
+
+    def echo(message: str) -> None:
+        match = stage.match(message)
+        if match:
+            text = f"Run 1, step {match.group(1)} of 5: {match.group(2)}"
+        elif message.startswith("[break-it]"):
+            text = "Run 2: the same task against an app that lies"
+        else:
+            return
+        sys.stdout.write("\r\033[K" + text[:100])
+        sys.stdout.flush()
+
+    return echo
+
+
+def _clear_progress_line() -> None:
+    if sys.stdout.isatty():
+        sys.stdout.write("\r\033[K")
+        sys.stdout.flush()
+
+
 def _cmd_demo(args: argparse.Namespace) -> int:
     """Run the checked run and the lying-app run, then write one proof page.
 
@@ -1562,7 +1620,14 @@ def _cmd_demo(args: argparse.Namespace) -> int:
         "OpenAdapt demo: one task, run twice on a fake clinic app on this "
         "computer. No AI calls."
     )
-    print("The first run can take a few minutes while the browser downloads.")
+    from openadapt_flow._browser_setup import BROWSER_ENV, installed_browser_channel
+
+    channel = installed_browser_channel()
+    if channel and (os.environ.get(BROWSER_ENV) or "auto").lower() in ("auto", channel):
+        name = "Chrome" if channel == "chrome" else "Edge"
+        print(f"Using your installed {name}, so nothing needs downloading.")
+    else:
+        print("The first run downloads a small browser (about 90 MB) once.")
 
     # The bundled demo app holds only fixed synthetic data. Keep an installed
     # but unconfigured privacy provider from blocking it, exactly as the
@@ -1574,7 +1639,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
         result = run_tutorial(
             out_dir,
             headed=bool(args.headed),
-            echo=print if args.verbose else None,
+            echo=print if args.verbose else _demo_progress(),
             break_it=True,
         )
     except TutorialError as exc:
@@ -1591,6 +1656,7 @@ def _cmd_demo(args: argparse.Namespace) -> int:
         )
         return 2
     finally:
+        _clear_progress_line()
         if scrub is None:
             os.environ.pop("OPENADAPT_FLOW_SCRUB", None)
         elif scrub == "auto":
@@ -2104,14 +2170,13 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         print(f"No --url given; replaying against bundled MockMed{drift_note}")
 
     video_dir = getattr(args, "record_video", None)
-    from openadapt_flow._browser_setup import ensure_chromium_installed
-
-    ensure_chromium_installed()
     from playwright.sync_api import sync_playwright
+
+    from openadapt_flow._browser_setup import launch_chromium
 
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=not headed)
+            browser = launch_chromium(p.chromium, headless=not headed)
             # OPT-IN session video (default off): a recorded replay lives in a
             # context so Playwright can attach the recorder; None keeps the old
             # direct-page path with zero effect.
@@ -2373,6 +2438,80 @@ def _cmd_attach_seal(args: argparse.Namespace) -> int:
         return 0
     print(f"not attached: {result.code}", file=sys.stderr)
     return 1
+
+
+def _cmd_verify_run(args: argparse.Namespace) -> int:
+    """``verify-run``: judge an effect another executor claims, from the store."""
+    from openadapt_flow.verify_run import (
+        VerifyRunError,
+        capture_baseline,
+        check_effect_receipt,
+        load_verify_config,
+        verify_run,
+        write_result,
+    )
+
+    def _json(path: str) -> Any:
+        return json.loads(Path(path).read_text(encoding="utf-8"))
+
+    if args.check:
+        if not args.keys:
+            print(
+                "verify-run --check needs --keys (a pinned Seal key registry)",
+                file=sys.stderr,
+            )
+            return 2
+        registry = _json(args.keys)
+        if isinstance(registry, dict):
+            registry = registry.get("keys", [])
+        result = check_effect_receipt(
+            _json(args.check), registry, accept_outcomes=args.accept_outcome or ()
+        )
+        print(json.dumps(result, indent=2, sort_keys=True))
+        if result.get("verified") and not result.get("verified_outcome"):
+            print(
+                "The signature is genuine, but the outcome is not verified.",
+                file=sys.stderr,
+            )
+        return 0 if result.get("ok") else 1
+    if not args.verify:
+        print("verify-run needs --verify verify.yaml", file=sys.stderr)
+        return 2
+    try:
+        cfg = load_verify_config(args.verify)
+        params = _json(args.params) if args.params else {}
+        if not isinstance(params, dict):
+            raise VerifyRunError("--params must be a JSON object")
+        if args.capture_baseline:
+            capture_baseline(cfg, params, Path(args.capture_baseline))
+            print(
+                f"baseline written: {args.capture_baseline} (private; holds raw records)"
+            )
+            return 0
+        if not args.run_record or not args.authorization_ref or not args.out:
+            raise VerifyRunError(
+                "verify-run needs --run-record, --authorization-ref, and --out"
+            )
+        result = verify_run(
+            cfg,
+            params=params,
+            run_record=_json(args.run_record),
+            authorization_ref=args.authorization_ref,
+            baseline_path=Path(args.baseline) if args.baseline else None,
+            private_dir=Path(args.out),
+            approver=_json(args.approver) if args.approver else None,
+            remediates=args.remediates,
+            correlation_id=args.correlation_id,
+        )
+    except VerifyRunError as exc:
+        print(f"verify-run REFUSED: {exc}", file=sys.stderr)
+        return 2
+    out = write_result(result, Path(args.out))
+    receipt = result["receipt"]
+    print(f"effect verdict: {receipt['effect_verdict']}")
+    print(f"outcome: {receipt['outcome']}  executor: {receipt['executor_kind']}")
+    print(f"receipt (unsigned): {out}")
+    return 0 if receipt["outcome"] == "verified" else 1
 
 
 def _cmd_run(args: argparse.Namespace) -> int:
@@ -3130,7 +3269,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
 
     try:
         if _normalize_kind(backend_cfg.kind) == "web":
-            from openadapt_flow._browser_setup import ensure_chromium_installed
+            from openadapt_flow._browser_setup import launch_chromium
 
             url = args.url or cfg.backend.url
             if url is None:
@@ -3147,11 +3286,10 @@ def _cmd_resume(args: argparse.Namespace) -> int:
                 ) as page:
                     report = _resume_with(build_backend(backend_cfg, page=page))
             else:
-                ensure_chromium_installed()
                 from playwright.sync_api import sync_playwright
 
                 with sync_playwright() as p:
-                    browser = p.chromium.launch(headless=not headed)
+                    browser = launch_chromium(p.chromium, headless=not headed)
                     page = browser.new_page(viewport=_VIEWPORT)
                     page.goto(url)
                     try:
@@ -3521,16 +3659,15 @@ def _cmd_bench(args: argparse.Namespace) -> int:
 
     @contextmanager
     def backend_factory():
-        from openadapt_flow._browser_setup import ensure_chromium_installed
+        from playwright.sync_api import sync_playwright
+
+        from openadapt_flow._browser_setup import launch_chromium
         from openadapt_flow.backends.playwright_backend import (
             PlaywrightBackend,
         )
 
-        ensure_chromium_installed()
-        from playwright.sync_api import sync_playwright
-
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=not args.headed)
+            browser = launch_chromium(p.chromium, headless=not args.headed)
             page = browser.new_page(viewport=_VIEWPORT)
             page.goto(target_url)
             try:
@@ -6431,12 +6568,12 @@ signed report and a certified bundle the runner will admit. A certificate
 covers only the environment the workflow was qualified in.
 
 Definitions of qualify and certify:
-  docs/QUALIFICATION_TERMS.md
+  https://docs.openadapt.ai/reference/glossary/#qualify
 Certification policies (built-in clinical-write and permissive, or your own
 YAML file passed to --certify):
-  docs/QUALIFICATION_TERMS.md#certification-policy
+  https://docs.openadapt.ai/reference/glossary/#certification-policy
 How to write verify.yaml:
-  docs/QUALIFY_A_WORKFLOW.md
+  https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/QUALIFY_A_WORKFLOW.md
 """
 
 
@@ -6732,6 +6869,15 @@ def build_parser() -> argparse.ArgumentParser:
             "(macos/windows/linux), or to the browser when --url is given, "
             "and prints a visible notice. Omitted: the same permissive "
             "pre-profile default."
+        ),
+    )
+    p.add_argument(
+        "--with-check",
+        action="store_true",
+        help=(
+            "After the save, also show how you'd check it saved (reload or "
+            "search again, open the record). Flow then asks which fields show "
+            "the values you typed and writes check.json"
         ),
     )
     _add_backend_flags(p)
@@ -7411,6 +7557,100 @@ def build_parser() -> argparse.ArgumentParser:
     sa.set_defaults(func=_cmd_attach_seal)
 
     p = sub.add_parser(
+        "verify-run",
+        help=(
+            "Read the system of record and rule on an effect that an agent, "
+            "script, or person claims it made; writes an unsigned "
+            "openadapt.effect-receipt/v1. The executor's own record is "
+            "hashed, never trusted"
+        ),
+    )
+    p.add_argument(
+        "--verify",
+        default=None,
+        metavar="YAML",
+        help="verify.yaml: verifier wiring and effect contract",
+    )
+    p.add_argument(
+        "--params",
+        default=None,
+        metavar="JSON",
+        help="The authorized task's values the contract binds",
+    )
+    p.add_argument(
+        "--run-record",
+        default=None,
+        metavar="JSON",
+        help="The executor's run record (needs executor_kind)",
+    )
+    p.add_argument(
+        "--authorization-ref",
+        default=None,
+        help="Opaque id of the authorization in your own system",
+    )
+    p.add_argument(
+        "--baseline",
+        default=None,
+        metavar="JSON",
+        help="Baseline captured before the executor ran",
+    )
+    p.add_argument(
+        "--capture-baseline",
+        default=None,
+        metavar="JSON",
+        help="Read the store now and write a private baseline, then exit",
+    )
+    p.add_argument(
+        "--out", default=None, metavar="DIR", help="Directory for effect-receipt.json"
+    )
+    p.add_argument(
+        "--check",
+        default=None,
+        metavar="JSON",
+        help="Check a signed effect receipt offline instead",
+    )
+    p.add_argument(
+        "--keys",
+        default=None,
+        metavar="JSON",
+        help="Pinned Seal key registry for --check",
+    )
+    p.add_argument(
+        "--accept-outcome",
+        action="append",
+        default=None,
+        choices=[
+            "halted_before_effect",
+            "reconciliation_required",
+            "rejected_policy",
+            "failed_platform",
+        ],
+        help=(
+            "With --check: also exit 0 for this outcome when the signature is "
+            "genuine (repeatable; no value accepts every outcome)"
+        ),
+    )
+    p.add_argument(
+        "--approver",
+        default=None,
+        metavar="JSON",
+        help="Who approved the write: {kind, id, policy_ref}; id is opaque",
+    )
+    p.add_argument(
+        "--remediates",
+        default=None,
+        metavar="RECEIPT_ID",
+        help="receipt_id of an earlier effect receipt this run remediates",
+    )
+    p.add_argument(
+        "--correlation-id",
+        default=None,
+        metavar="ID",
+        help="Your own opaque id linking this receipt to a ticket or trace",
+    )
+    p.set_defaults(func=_cmd_verify_run)
+
+    p = sub.add_parser(
         "resume",
         help=(
             "Resume a durably-paused run from its last verified checkpoint "
@@ -7894,7 +8134,8 @@ def build_parser() -> argparse.ArgumentParser:
         metavar="POLICY",
         help=(
             "Certify under this policy (default: campaign.policy in verify.yaml, "
-            "usually clinical-write). See docs/QUALIFICATION_TERMS.md#policies."
+            "usually clinical-write). See "
+            "https://docs.openadapt.ai/reference/glossary/#certification-policy."
         ),
     )
     q.add_argument(
@@ -9523,8 +9764,10 @@ def build_parser() -> argparse.ArgumentParser:
     pr.set_defaults(func=_cmd_connector)
 
     from openadapt_flow.cli_admit import register_admit_parser
+    from openadapt_flow.cli_check import register_check_parser
 
     register_admit_parser(sub)
+    register_check_parser(sub)
 
     return parser
 
@@ -9936,6 +10179,14 @@ def _qualify_default_form(argv: list[str]) -> list[str]:
 
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point. Returns a process exit code."""
+    raw = list(sys.argv[1:] if argv is None else argv)
+    if raw[:1] in (["demo"], ["tutorial"]):
+        # Building the parser imports for a second or two on a new install;
+        # start loading OCR and checking the browser driver meanwhile.
+        from openadapt_flow import _prewarm
+
+        _prewarm.start()
+
     from openadapt_flow._browser_setup import BrowserSupportMissing
 
     argv = list(sys.argv[1:] if argv is None else argv)

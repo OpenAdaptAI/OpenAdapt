@@ -13,11 +13,12 @@ from __future__ import annotations
 import math
 from typing import Optional
 
-import cv2
 import numpy as np
 from pydantic import BaseModel
 
 from openadapt_flow.ir import Point, Region
+from openadapt_flow.vision import imgops
+from openadapt_flow.vision.imgops import cv2
 
 
 class Match(BaseModel):
@@ -46,8 +47,7 @@ def _decode_gray(png: bytes) -> np.ndarray:
     Raises:
         ValueError: If the bytes cannot be decoded as an image.
     """
-    arr = np.frombuffer(png, dtype=np.uint8)
-    img = cv2.imdecode(arr, cv2.IMREAD_GRAYSCALE)
+    img = imgops.decode_gray(png)
     if img is None:
         raise ValueError("could not decode PNG bytes")
     return img
@@ -119,7 +119,7 @@ def _peaks_above(
     sy = max(1, th // 2)
     peaks: list[tuple[float, int, int]] = []
     while len(peaks) < MAX_PEAKS:
-        _, max_val, _, max_loc = cv2.minMaxLoc(work)
+        _, max_val, _, max_loc = imgops.min_max_loc(work)
         if max_val < threshold:
             break
         x, y = int(max_loc[0]), int(max_loc[1])
@@ -169,9 +169,9 @@ def _find_template_arrays(
         if scale == 1.0:
             scaled = template
         else:
-            scaled = cv2.resize(template, (tw, th), interpolation=cv2.INTER_AREA)
-        result = cv2.matchTemplate(haystack, scaled, cv2.TM_CCOEFF_NORMED)
-        _, max_val, _, max_loc = cv2.minMaxLoc(result)
+            scaled = imgops.resize_area(template, tw, th)
+        result = imgops.match_template_ccoeff_normed(haystack, scaled)
+        _, max_val, _, max_loc = imgops.min_max_loc(result)
         if best is None or max_val > best[0]:
             best = (float(max_val), max_loc[0], max_loc[1], tw, th, result)
 
@@ -210,7 +210,7 @@ def _find_template_arrays(
         y0, y1 = max(0, ey - j), min(result.shape[0], ey + j + 1)
         x0, x1 = max(0, ex - j), min(result.shape[1], ex + j + 1)
         if y0 < y1 and x0 < x1:
-            _, spot_val, _, spot_loc = cv2.minMaxLoc(result[y0:y1, x0:x1])
+            _, spot_val, _, spot_loc = imgops.min_max_loc(result[y0:y1, x0:x1])
             if spot_val >= threshold:
                 peaks = [*peaks, (float(spot_val), x0 + spot_loc[0], y0 + spot_loc[1])]
         near = [p for p in peaks if _center_dist(p) <= radius]
@@ -387,5 +387,5 @@ def pixels_changed(
         x, y, w, h = clamped
         before = before[y : y + h, x : x + w]
         after = after[y : y + h, x : x + w]
-    diff = cv2.absdiff(before, after)
+    diff = imgops.absdiff(before, after)
     return int(np.count_nonzero(diff > threshold)) >= min_pixels

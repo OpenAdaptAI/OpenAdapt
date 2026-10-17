@@ -1927,9 +1927,14 @@ def test_attended_web_playwright_lifecycle_stays_on_owner_thread(monkeypatch):
         mark("replayer-build")
         return object()
 
+    def fake_launch_options(*, headless):
+        assert headless is False
+        mark("ensure-browser")
+        return {}
+
     monkeypatch.setattr(
-        "openadapt_flow._browser_setup.ensure_chromium_installed",
-        lambda: mark("ensure-browser"),
+        "openadapt_flow._browser_setup.chromium_launch_options",
+        fake_launch_options,
     )
     monkeypatch.setattr(
         "playwright.sync_api.sync_playwright",
@@ -1965,8 +1970,8 @@ def test_attended_web_playwright_lifecycle_stays_on_owner_thread(monkeypatch):
     assert owner_thread != main_thread
     assert {thread_id for _, thread_id in lifecycle} == {owner_thread}
     assert [name for name, _ in lifecycle] == [
-        "ensure-browser",
         "playwright-enter",
+        "ensure-browser",
         "browser-launch",
         "new-page",
         "goto",

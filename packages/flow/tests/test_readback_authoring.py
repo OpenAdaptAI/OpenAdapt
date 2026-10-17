@@ -22,6 +22,7 @@ from openadapt_flow.compiler.readback_authoring import (
     CHECK_PROMPT,
     CheckError,
     MarkedField,
+    admit_check,
     apply_check,
     load_check,
     write_check,
@@ -171,15 +172,13 @@ def test_check_becomes_the_saves_readback_and_leaves_the_task(tmp_path):
     )
 
 
-def test_marking_on_the_saves_own_screen_is_only_a_screen_check(tmp_path):
+def test_marking_on_the_saves_own_screen_is_refused(tmp_path):
+    # No step between the save and the marks: the check would read the form
+    # the save left behind. Before the reset rule this compiled to tier 4.
     wf = _workflow().model_copy(update={"steps": _workflow().steps[:3]})
     rec = _recording(tmp_path, start_event=3, n_events=3)
-    updated, outcome = apply_check(wf, rec, vision=_marked_screen(SHOWS))
-    assert not outcome.different_path and outcome.tier == "immediate_screen"
-    effect = updated.steps[2].effects[0]
-    assert OnScreenReadbackVerifier.verification_tier_for(effect) is (
-        VerificationTier.IMMEDIATE_SCREEN
-    )
+    with pytest.raises(CheckError, match="without first throwing away"):
+        apply_check(wf, rec, vision=_marked_screen(SHOWS))
 
 
 def test_refuses_a_box_that_does_not_show_the_typed_value(tmp_path):
@@ -257,6 +256,7 @@ def _run(tmp_path, monkeypatch, backend, params):
     updated, _ = apply_check(
         _workflow(), _recording(tmp_path), vision=_marked_screen(SHOWS)
     )
+    updated, _ = admit_check(updated, admitted_by="reviewer")
     monkeypatch.setattr(vision_mod, "ocr", _screen_of(backend))
     vision = FakeVision()
     vision.text_results = {
@@ -405,7 +405,7 @@ def test_compile_recording_applies_the_check(tmp_path, monkeypatch):
     session.type_text(NOTE, param="note")
     session.press("Enter")
     session.begin_check()
-    session.click(10, 10)
+    session.press("F5")
     session.click(50, 60)
     session.mark_field(
         param="note", backend_pixels={"x": 100, "y": 200, "w": 300, "h": 40}
@@ -453,6 +453,7 @@ def _structure_workflow(tmp_path):
     )
     # No OCR is needed: the fields were checked against the live page.
     updated, _ = apply_check(_workflow(), rec, vision=_marked_screen({}))
+    updated, _ = admit_check(updated, admitted_by="reviewer")
     return updated
 
 

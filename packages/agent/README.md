@@ -1,7 +1,9 @@
 # OpenAdapt Agent
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
-[![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)](https://www.python.org/downloads/)
+[![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml)
+[![PyPI](https://img.shields.io/pypi/v/openadapt-agent)](https://pypi.org/project/openadapt-agent/)
+[![Python](https://img.shields.io/pypi/pyversions/openadapt-agent)](https://pypi.org/project/openadapt-agent/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/agent/LICENSE)
 
 Your AI agent decides what to enter. OpenAdapt enters it in the app and checks that it saved.
 
@@ -157,7 +159,7 @@ The check that stops a second entry covers one runs folder. See `--runs-dir` und
 ### Read the other fields
 
 - `label`: a short status you can display, such as "Done and checked".
-- `reason`: a code from a fixed list that names the cause, such as `invalid_input` or `request_id_conflict`. Every code is in `REASONS` in [contract.py](src/openadapt_agent/contract.py), and [docs/DESIGN.md](docs/DESIGN.md#the-result-contract) explains how each one is chosen.
+- `reason`: a code from a fixed list that names the cause, such as `invalid_input` or `request_id_conflict`. Every code is in `REASONS` in [contract.py](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/openadapt_flow/agent/contract.py), and [docs/DESIGN.md](docs/DESIGN.md#the-result-contract) explains how each one is chosen.
 - `what_happened` and `next_action`: fixed sentences you can show a person. They never contain input values or screen text.
 - `proof`: `local` for a `done` that was checked on your customer's computer, `simulated` for a sandbox run that didn't open the app, and `none` for every other outcome.
 - `model_calls`: on runs that reached Flow, how many AI model calls the run made. It's 0 unless model grounding, a fallback that asks an AI model where to click, is turned on (see [Security](#security)).
@@ -276,7 +278,8 @@ Flow's [execution profiles](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/p
 | `--config YAML` | Flow's deployment config ([example](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/deployment.example.yaml)), which sets the profile and whether model grounding is allowed. |
 | `--policy NAME-OR-PATH` | The policy Flow certifies against, such as `clinical-write` or `permissive`. |
 | `--timeout SECONDS` | How long one run may work (default 600). Time a person spends approving a save doesn't count. A run stopped at the limit is `not_sure_if_saved`. |
-| `--approval-mode MODE` | Whether a person approves each save. Without it, Flow decides: under `standard` and `regulated` a run stops before each save until a person approves it (`each_item`). `not_gated` turns that off for every run this server starts; each result records it under `technical.approval_mode`. |
+| `--approval-mode MODE` | Whether each save waits for approval. Without it, Flow decides: under `standard` and `regulated` a run stops before each save until it's approved (`each_item`). `not_gated` turns that off for every run this server starts; each result records it under `technical.approval_mode`. |
+| `--delegate-approvals AGENT_ID` | Lets your agent answer a waiting save as `AGENT_ID` (an opaque id such as `agent:intake-bot`), with `list_approval_requests` and `answer_approval_request`. Flow accepts the answer only where the run's approver policy allows an agent for that step, and records the agent as the approver. By default only a person may answer. Needs an openadapt-flow with delegated approvers (not released yet). |
 | `--headed` | Shows the browser. A person needs it to continue or skip a stopped run in a web app. |
 | `--extra-run-arg ARG`, `--flow-cli CMD` | Change how Flow is called. Either one can relax Flow's checks, for example `--extra-run-arg=--allow-unencrypted`. |
 | `--allow-protected-export`, `--allow-synthetic-recorded-defaults`, `--allow-model-grounding` | Off by default. See [Security](#security). |
@@ -291,7 +294,7 @@ Under `standard` and `regulated`, Flow stops before each save and waits for a pe
 
 With `--bundles`, the server also registers read-only tools for workflows and runs: `get_workflow`, `get_run_report`, `list_needs_attention`, and `get_attention_item`. With `--mode production` or `--mode attended`, it also registers a deprecated `run_workflow_<id>` for each workflow. Those tools take no `request_id`, so a retry can enter the values twice. Use `run_workflow` instead.
 
-`list_workflows`, `run_workflow`, and `get_run` return `structuredContent` that matches their `outputSchema`, defined in [contract.py](src/openadapt_agent/contract.py), plus the same JSON as text.
+`list_workflows`, `run_workflow`, and `get_run` return `structuredContent` that matches their `outputSchema`, defined in [contract.py](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/openadapt_flow/agent/contract.py), plus the same JSON as text.
 
 ### Decide stopped runs
 
@@ -409,7 +412,7 @@ openadapt-agent seal verify https://example.com/receipt.json --json
 - The check that stops a second entry covers one runs folder. Pass the same absolute `--runs-dir` every time.
 - If the server exits during a run, the run reads as `not_sure_if_saved`, and Flow may still finish it.
 - This server issues no signed receipts itself. `proof` is `sealed` only when a run is connected to OpenAdapt Cloud Execute, Cloud signed its receipt, and that signature verifies against keys you pinned (see [Seals](#seals)).
-- With openadapt-flow 2, every save waits for a person's approval unless the operator names another mode (`serve --approval-mode problems_only` or `not_gated`). Your agent gets `needs_review` with the reason `waiting_for_approval`, and a person approves on the computer that runs OpenAdapt. Nothing is saved without that answer.
+- With openadapt-flow 2, each save waits for approval unless the operator names another mode (`serve --approval-mode problems_only` or `not_gated`). Your agent gets `needs_review` with the reason `waiting_for_approval`. A person answers on the computer that runs OpenAdapt, or your agent does when the server runs with `--delegate-approvals` and the run's approver policy allows an agent for that step. Nothing is saved without that answer. `get_approval_mode` tells your agent which mode applies; no tool changes it.
 - Each call carries one request. There's no batch call.
 - Accounts, separation between customers, fleet policy, and hosted runs belong to OpenAdapt Cloud.
 
@@ -421,7 +424,7 @@ Under Flow's `standard` and `regulated` profiles, each workflow version also nee
 
 ## Package history
 
-Before version 2, this package ran AI agents that drove the screen. The name now refers to the agents that call it. A customer's workflows are supplied with `--bundles` and never ship in this package or its registry listing, and an install from a registry starts read-only. The MCP registry reads [server.json](server.json), Smithery packs from [manifest.json](manifest.json), and [llms.txt](llms.txt) describes the package for AI assistants. See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
+Before version 2, this package ran AI agents that drove the screen. The name now refers to the agents that call it. A customer's workflows are supplied with `--bundles` and never ship in this package or its registry listing, and an install from a registry starts read-only. The MCP registry reads [server.json](server.json), Smithery packs from [manifest.json](manifest.json), and [llms.txt](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/llms.txt) describes the package for AI assistants. See [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md).
 
 <!-- mcp-name: io.github.OpenAdaptAI/openadapt-agent -->
 

@@ -37,6 +37,7 @@ import subprocess
 import sys
 import threading
 from pathlib import Path
+from typing import Any
 
 #: Environment variable that disables the auto-install (air-gapped / CI that
 #: pre-provisions the browser itself). Any non-empty value opts out.
@@ -274,3 +275,177 @@ def ensure_chromium_installed() -> None:
         if not present:
             _install_chromium()
         _ensured = True
+
+
+# ---------------------------------------------------------------------------
+# Browser selection: the installed Chrome or Edge first, a download last.
+# ---------------------------------------------------------------------------
+
+#: Choose the browser: ``auto`` (default), ``chrome``, ``msedge``, or
+#: ``bundled`` (always Playwright's own build, downloading it when missing).
+BROWSER_ENV = "OPENADAPT_FLOW_BROWSER"
+
+_INSTALLED_BROWSER_PATHS: dict[str, dict[str, tuple[str, ...]]] = {
+    "chrome": {
+        "darwin": ("/Applications/Google Chrome.app",),
+        "linux": ("/opt/google/chrome/chrome",),
+        "win32": (
+            r"%PROGRAMFILES%\Google\Chrome\Application\chrome.exe",
+            r"%PROGRAMFILES(X86)%\Google\Chrome\Application\chrome.exe",
+            r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe",
+        ),
+    },
+    "msedge": {
+        "darwin": ("/Applications/Microsoft Edge.app",),
+        "linux": ("/opt/microsoft/msedge/msedge",),
+        "win32": (
+            r"%PROGRAMFILES(X86)%\Microsoft\Edge\Application\msedge.exe",
+            r"%PROGRAMFILES%\Microsoft\Edge\Application\msedge.exe",
+        ),
+    },
+}
+
+
+def installed_browser_channel() -> str | None:
+    """Return the Playwright channel of an installed Chrome or Edge, or None.
+
+    Checks the vendors' standard install paths only: no subprocess and no
+    network. Playwright resolves the same paths when it launches a channel.
+    """
+    platform = "win32" if sys.platform.startswith("win") else sys.platform
+    for channel, by_platform in _INSTALLED_BROWSER_PATHS.items():
+        for raw in by_platform.get(platform, ()):
+            if Path(os.path.expandvars(raw)).exists():
+                return channel
+    return None
+
+
+def _bundled_present(*, only_shell: bool) -> bool:
+    """Return whether Playwright's own build is installed (see _chromium_present)."""
+    if not only_shell:
+        return _chromium_present()
+    require_browser_support()
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-m",
+            "playwright",
+            "install",
+            "--dry-run",
+            "--only-shell",
+            "chromium",
+        ],
+        check=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.STDOUT,
+        text=True,
+        encoding="utf-8",
+    )
+    locations = [
+        Path(match.group(1).strip())
+        for match in re.finditer(
+            r"(?m)^\s*Install location:\s*(.+?)\s*$", result.stdout
+        )
+        if "headless_shell" in match.group(1)
+    ]
+    return bool(locations) and all(
+        (location / "INSTALLATION_COMPLETE").is_file() for location in locations
+    )
+
+
+def _install_headless_shell() -> None:
+    """Download only Chromium's headless shell (about a fifth of the full build)."""
+    require_browser_support()
+    _require_linux_system_libs()
+    print(
+        "openadapt-flow: no Chrome or Edge found, so downloading Playwright's "
+        "headless Chromium once (about 90 MB). Later runs reuse it.",
+        file=sys.stderr,
+        flush=True,
+    )
+    try:
+        subprocess.run(
+            [sys.executable, "-m", "playwright", "install", "--only-shell", "chromium"],
+            check=True,
+        )
+    except (subprocess.CalledProcessError, OSError) as exc:
+        raise RuntimeError(
+            "openadapt-flow could not download the headless Chromium it needs. "
+            "Install Google Chrome or Microsoft Edge, or run:\n\n"
+            f"    {_playwright_module_command('install', '--only-shell', 'chromium')}"
+            f"\n\nSet {NO_AUTO_INSTALL_ENV}=1 to disable auto-install."
+        ) from exc
+
+
+_bundled_ready: set[bool] = set()
+
+
+def ensure_bundled_chromium(*, headless: bool) -> None:
+    """Make Playwright's own Chromium available, downloading the smallest build.
+
+    Headless launches need only the headless shell. Headed launches need the
+    full browser.
+    """
+    if _opted_out() or headless in _bundled_ready:
+        return
+    with _lock:
+        if headless in _bundled_ready:
+            return
+        if headless:
+            try:
+                present = _bundled_present(only_shell=True)
+            except Exception:
+                present = False
+            if not present:
+                _install_headless_shell()
+        else:
+            ensure_chromium_installed()
+        _bundled_ready.add(headless)
+
+
+def chromium_launch_options(*, headless: bool) -> dict[str, str]:
+    """Return the extra ``chromium.launch`` options for this machine.
+
+    Default order: an installed Chrome, then an installed Edge, then
+    Playwright's own build (downloaded once when missing). ``{}`` means
+    Playwright's own build, which this call has already made available.
+    """
+    require_browser_support()
+    choice = (os.environ.get(BROWSER_ENV) or "auto").strip().lower()
+    if choice in ("chrome", "msedge"):
+        return {"channel": choice}
+    if choice == "auto":
+        channel = installed_browser_channel()
+        if channel is not None:
+            return {"channel": channel}
+    elif choice != "bundled":
+        raise RuntimeError(
+            f"{BROWSER_ENV}={choice!r} is not one of auto, chrome, msedge, bundled"
+        )
+    ensure_bundled_chromium(headless=headless)
+    return {}
+
+
+def launch_chromium(chromium: Any, *, headless: bool) -> Any:
+    """Launch the selected browser; fall back to Playwright's own on failure.
+
+    A channel browser that is present but does not start (a broken install, a
+    managed-policy block) must not end the run, so the bundled build is the
+    fallback for ``auto``.
+    """
+    options = chromium_launch_options(headless=headless)
+    if not options:
+        return chromium.launch(headless=headless)
+    try:
+        return chromium.launch(headless=headless, **options)
+    except Exception as exc:
+        if (os.environ.get(BROWSER_ENV) or "auto").strip().lower() != "auto":
+            raise
+        print(
+            f"openadapt-flow: {options['channel']} did not start ({exc}); "
+            "using Playwright's own Chromium instead.",
+            file=sys.stderr,
+            flush=True,
+        )
+        ensure_bundled_chromium(headless=headless)
+        return chromium.launch(headless=headless)

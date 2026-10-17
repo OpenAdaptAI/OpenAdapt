@@ -757,7 +757,6 @@ These are additive to the document and the tests. They do not change the IR.
 - PBD disambiguation-dialog tradition (SMARTedit, version-space PBD, "Watch What I
   Do", "Your Wish is My Command"): resolving demonstration ambiguity by asking
   concrete questions.
-</content>
 
 ## Composition of separately recorded bundles
 

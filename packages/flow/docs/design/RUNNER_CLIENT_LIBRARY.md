@@ -117,8 +117,8 @@ these land is wasted work — that is why this PR contains no poll loop.**
    channel keyed to the active run — not FIFO queue jobs. This library
    deliberately refuses verb-in-queue.
 5. **Params by reference mandatory for regulated orgs (PHI-3/S2, P0 when
-   built).** Cloud-lane `params.values` are patient identifiers for the
-   wedge ICP and persist in `runner_dispatches` rows. Required: the
+   built).** Cloud-lane `params.values` can be patient identifiers in
+   healthcare deployments and persist in `runner_dispatches` rows. Required: the
    `{ref, expected_digest}` lane becomes mandatory server-side for regulated
    orgs, plus a local reference resolver in flow. Until then this library
    refuses ref-lane dispatches (no resolver) and lets operators refuse the

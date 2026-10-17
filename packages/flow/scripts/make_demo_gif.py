@@ -2,8 +2,12 @@
 
 Composes a side-by-side animation from two runs of the SAME compiled bundle:
 the baseline replay (left) and the theme-drift replay that self-healed
-(right), with per-step captions showing the resolution rung each side used.
+(right), with a plain caption saying how each side found each step.
 No mockups: every frame is a real screenshot saved by the replayer.
+
+The first frame is a real step, so a still preview shows the app, not a title
+card. Login steps are skipped (``--start-after``); captions use plain words,
+not engine telemetry.
 
 Usage:
     python scripts/make_demo_gif.py \
@@ -79,19 +83,36 @@ def _panel(draw, img, shot: Path, x: int, label: str, label_color):
     )
 
 
+_PLAIN_RUNG = {
+    "template": "found by image match",
+    "ocr": "found by text match",
+    "geometry": "found by position",
+    "dom": "found by element locator",
+}
+
+
 def _step_caption(result: dict, healed: bool) -> tuple[str, tuple]:
     res = result.get("resolution")
     if not res:
-        return "keyboard", DIM
-    rung = res["rung"]
-    ms = f"{res['elapsed_ms']:.0f}ms"
-    if rung == "template":
-        return f"template · {ms}", OK
-    suffix = " · healed" if healed else ""
-    return f"{rung} · {ms}{suffix}", WARN if not healed else OK
+        return "typed", DIM
+    text = _PLAIN_RUNG.get(res["rung"], f"found by {res['rung']}")
+    if healed:
+        return f"{text}, repaired", WARN
+    return text, OK
 
 
-def build(baseline_dir: Path, drift_dir: Path, out: Path) -> Path:
+def _plain_intent(intent: str) -> str:
+    if intent.startswith("click at ("):
+        return "Click the field"
+    return intent[:1].upper() + intent[1:]
+
+
+def build(
+    baseline_dir: Path,
+    drift_dir: Path,
+    out: Path,
+    start_after: str = "click 'Sign In'",
+) -> Path:
     base = json.loads((baseline_dir / "report.json").read_text())
     drift = json.loads((drift_dir / "report.json").read_text())
     drift_by_id = {r["step_id"]: r for r in drift["results"]}
@@ -99,52 +120,43 @@ def build(baseline_dir: Path, drift_dir: Path, out: Path) -> Path:
     frames: list[Image.Image] = []
     durations: list[int] = []
 
-    # Title frame.
-    img, draw = _frame()
     cx = CANVAS_W / 2
-    _text_center(
-        draw, (cx, CANVAS_H / 2 - 70),
-        "One demonstration. Two UIs. Same compiled workflow.",
-        F_TITLE, FG,
-    )
-    _text_center(
-        draw, (cx, CANVAS_H / 2 - 20),
-        "Left: the UI it was recorded on.   Right: a theme it has never seen.",
-        F_BODY, DIM,
-    )
-    _text_center(
-        draw, (cx, CANVAS_H / 2 + 20),
-        "Every frame below is a real screenshot saved by the replayer.",
-        F_SMALL, DIM,
-    )
-    frames.append(img)
-    durations.append(2600)
+    results = base["results"]
+    intents = [r["intent"] for r in results]
+    if start_after in intents:
+        results = results[intents.index(start_after) + 1 :]
 
     # Per-step frames.
-    for res_b in base["results"]:
+    for number, res_b in enumerate(results, start=1):
         step_id = res_b["step_id"]
         res_d = drift_by_id.get(step_id)
         if res_d is None:
             continue
         img, draw = _frame()
         _text_center(
-            draw, (CANVAS_W / 2, 18),
-            f"{step_id}  —  {res_b['intent']}", F_BODY, FG,
+            draw, (CANVAS_W / 2, 8),
+            "Left: the theme it was recorded on.   Right: a dark theme it never saw.",
+            F_SMALL, DIM,
+        )
+        _text_center(
+            draw, (CANVAS_W / 2, 32),
+            f"Step {number} of {len(results)}: {_plain_intent(res_b['intent'])}",
+            F_BODY, FG,
         )
         cap_b, col_b = _step_caption(res_b, healed=False)
         cap_d, col_d = _step_caption(res_d, healed=res_d.get("heal") is not None)
         _panel(
             draw, img, baseline_dir / res_b["after_png"], MARGIN,
-            f"baseline · {cap_b}", col_b,
+            f"Recorded theme: {cap_b}", col_b,
         )
         _panel(
             draw, img, drift_dir / res_d["after_png"],
             MARGIN + PANEL_W + GUTTER,
-            f"drift=theme · {cap_d}", col_d,
+            f"Dark theme: {cap_d}", col_d,
         )
         _text_center(
             draw, (CANVAS_W / 2, CANVAS_H - FOOTER_H + 12),
-            "openadapt-flow · deterministic replay, self-healing on drift",
+            "One recording, replayed on two themes. No model calls.",
             F_SMALL, DIM,
         )
         frames.append(img)
@@ -152,26 +164,24 @@ def build(baseline_dir: Path, drift_dir: Path, out: Path) -> Path:
 
     # Summary frame.
     img, draw = _frame()
-    _text_center(draw, (cx, CANVAS_H / 2 - 96), "Both runs succeeded.", F_TITLE, FG)
+    _text_center(draw, (cx, CANVAS_H / 2 - 96), "Both runs finished.", F_TITLE, FG)
+    base_clicks = sum(base["rung_counts"].values())
     lines = [
         (
-            f"baseline: {base['rung_counts'].get('template', 0)}/"
-            f"{sum(base['rung_counts'].values())} steps on the template rung"
-            f" · {base['heal_count']} heals",
+            f"Recorded theme: {base['rung_counts'].get('template', 0)} of "
+            f"{base_clicks} clicks matched their recorded image.",
             OK,
         ),
         (
-            f"drift=theme: {drift['heal_count']} anchors healed via "
-            f"{'/'.join(sorted(drift['rung_counts']))} — fixes saved as a"
-            " reviewable diff",
+            f"Dark theme: {drift['heal_count']} clicks found by text or position,"
+            " saved as repairs for review.",
             WARN,
         ),
         (
-            f"model calls: {base['model_calls'] + drift['model_calls']}"
-            "  ·  cost per run: $0.00",
+            f"Model calls: {base['model_calls'] + drift['model_calls']}.",
             ACCENT,
         ),
-        ("pip install openadapt-flow", FG),
+        ("pip install openadapt", FG),
     ]
     for i, (line, color) in enumerate(lines):
         _text_center(draw, (cx, CANVAS_H / 2 - 40 + i * 34), line, F_BODY, color)
@@ -195,8 +205,13 @@ def main() -> None:
     ap.add_argument("--baseline", type=Path, required=True)
     ap.add_argument("--drift", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument(
+        "--start-after",
+        default="click 'Sign In'",
+        help="Skip the steps up to and including this intent (the login).",
+    )
     args = ap.parse_args()
-    path = build(args.baseline, args.drift, args.out)
+    path = build(args.baseline, args.drift, args.out, args.start_after)
     print(f"Wrote {path} ({path.stat().st_size / 1e6:.1f} MB)")
 
 
