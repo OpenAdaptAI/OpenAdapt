@@ -82,6 +82,11 @@ WORDS = (
     "thirty-eight",
     "thirty-nine",
     "forty",
+    "forty-one",
+    "forty-two",
+    "forty-three",
+    "forty-four",
+    "forty-five",
 )
 
 # Tied to the sentence itself, so an unrelated "N files" elsewhere in the
