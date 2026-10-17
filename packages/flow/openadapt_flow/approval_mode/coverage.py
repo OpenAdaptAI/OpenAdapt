@@ -72,6 +72,10 @@ def _effect_read_params(effect: "Effect") -> set[str]:
     if effect.field is not None and effect.value is not None:
         if effect.value.param is not None:
             names.add(effect.value.param)
+    if effect.readback is not None:
+        for field in effect.readback.fields:
+            if field.value.param is not None:
+                names.add(field.value.param)
     return names
 
 

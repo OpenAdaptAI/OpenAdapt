@@ -89,7 +89,7 @@ def _valid_renavigation_step(nav: ReadbackNav) -> bool:
     if action == "click":
         return nav.point is not None
     if action == "type":
-        return nav.text is not None
+        return nav.text is not None or bool(nav.param)
     if action == "key":
         return bool(nav.key)
     return False
@@ -119,6 +119,24 @@ def is_default_readback_effect(effect: Any) -> bool:
 
 def _normalize(text: str) -> str:
     return " ".join(text.lower().split())
+
+
+def value_matches(
+    haystack: str, expected: str, *, min_ratio: float = READBACK_MIN_RATIO
+) -> bool:
+    """Whether ``expected`` is present in normalized ``haystack`` at ``min_ratio``."""
+    want = _normalize(expected)
+    if not want:
+        return False
+    if want in haystack:
+        return True
+    # Longest contiguous run (tolerant of the value embedded in surrounding
+    # label text, e.g. "saved note for patient 3" containing the value).
+    squashed_want = "".join(want.split())
+    squashed_hay = "".join(haystack.split())
+    matcher = difflib.SequenceMatcher(None, squashed_want, squashed_hay, autojunk=False)
+    longest = max((b.size for b in matcher.get_matching_blocks()), default=0)
+    return longest >= min_ratio * len(squashed_want)
 
 
 class OnScreenReadbackVerifier(VerifierAdapterBase):
@@ -231,24 +249,13 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
 
     def _match(self, haystack: str, expected: str) -> bool:
         """Whether ``expected`` is present in ``haystack`` at ``min_ratio``."""
-        want = _normalize(expected)
-        if not want:
-            return False
-        if want in haystack:
-            return True
-        # Longest contiguous run (tolerant of the value embedded in surrounding
-        # label text, e.g. "saved note for patient 3" containing the value).
-        squashed_want = "".join(want.split())
-        squashed_hay = "".join(haystack.split())
-        matcher = difflib.SequenceMatcher(
-            None, squashed_want, squashed_hay, autojunk=False
-        )
-        longest = max((b.size for b in matcher.get_matching_blocks()), default=0)
-        return longest >= self._min_ratio * len(squashed_want)
+        return value_matches(haystack, expected, min_ratio=self._min_ratio)
 
     # -- re-navigation (DIFFERENT-PATH only) ---------------------------------
 
-    def _renavigate(self, steps: list[ReadbackNav]) -> Optional[str]:
+    def _renavigate(
+        self, steps: list[ReadbackNav], params: Optional[dict] = None
+    ) -> Optional[str]:
         """Replay the recorded re-navigation to re-open the record.
 
         Returns ``None`` on success, or a short failure reason (the read-back
@@ -265,9 +272,13 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
                         return f"re-navigation step {i} (click) not performable"
                     backend.click(int(nav.point[0]), int(nav.point[1]))
                 elif action == "type":
-                    if nav.text is None or not hasattr(backend, "type_text"):
+                    text = nav.text
+                    if nav.param:
+                        value = (params or {}).get(nav.param)
+                        text = None if value is None else str(value)
+                    if text is None or not hasattr(backend, "type_text"):
                         return f"re-navigation step {i} (type) not performable"
-                    backend.type_text(nav.text)
+                    backend.type_text(text)
                 elif action == "key":
                     if not nav.key or not hasattr(backend, "press"):
                         return f"re-navigation step {i} (key) not performable"
@@ -395,7 +406,7 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
                     reason="different-path read-back needs a backend; none bound — HALT",
                     expected_value=expected_text,
                 )
-            nav_error = self._renavigate(spec.renavigation)
+            nav_error = self._renavigate(spec.renavigation, params)
             if nav_error is not None:
                 return EffectVerdict(
                     verdict=Verdict.INDETERMINATE,
@@ -408,7 +419,10 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
                     expected_value=expected_text,
                 )
 
-        verdict = self.read_back(expected_text, region=region)
+        if spec is not None and spec.fields:
+            verdict = self._read_fields(spec.fields, params)
+        else:
+            verdict = self.read_back(expected_text, region=region)
         posture = (
             "DIFFERENT-PATH (re-opened by an independent path; same-application, "
             "not independent system of record)"
@@ -421,6 +435,55 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
                 "kind": expected.kind,
                 "reason": f"{verdict.reason} — {posture}",
             }
+        )
+
+    def _read_fields(self, fields: list, params: dict) -> EffectVerdict:
+        """Read every marked field; all must read back.
+
+        One unreadable field makes the whole read INDETERMINATE. A readable
+        field that shows another value makes it REFUTED. CONFIRMED needs every
+        field to show its expected value.
+        """
+        observed: list[str] = []
+        expected_all: list[str] = []
+        refuted: list[str] = []
+        for field in fields:
+            want = field.value.resolve(params)
+            if not want:
+                return EffectVerdict(
+                    verdict=Verdict.INDETERMINATE,
+                    kind=EffectKind.FIELD_EQUALS,
+                    substrate=self.substrate,
+                    reason=f"no expected value for field {field.name!r}",
+                )
+            one = self.read_back(want, region=tuple(field.region))
+            expected_all.append(f"{field.name}={want}")
+            observed.append(f"{field.name}={one.observed_value or ''}")
+            if one.verdict is Verdict.INDETERMINATE:
+                return one.model_copy(
+                    update={"reason": f"field {field.name!r}: {one.reason}"}
+                )
+            if one.verdict is Verdict.REFUTED:
+                refuted.append(field.name)
+        if refuted:
+            return EffectVerdict(
+                verdict=Verdict.REFUTED,
+                kind=EffectKind.FIELD_EQUALS,
+                substrate=self.substrate,
+                reason=(
+                    "readable fields that do not show the expected value: "
+                    + ", ".join(refuted)
+                ),
+                observed_value="; ".join(observed),
+                expected_value="; ".join(expected_all),
+            )
+        return EffectVerdict(
+            verdict=Verdict.CONFIRMED,
+            kind=EffectKind.FIELD_EQUALS,
+            substrate=self.substrate,
+            reason=f"all {len(fields)} marked fields read back on-screen",
+            observed_value="; ".join(observed),
+            expected_value="; ".join(expected_all),
         )
 
     def verify_current_state(

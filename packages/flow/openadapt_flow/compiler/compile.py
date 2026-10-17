@@ -2813,6 +2813,21 @@ def compile_recording(
         for applied in result.applied:
             logger.info("annotation applied %s: %s", applied.step_id, applied.detail)
 
+    # A check the person demonstrated at the end of the recording ("Show how
+    # to check the save", check.json): its navigation becomes the save's
+    # read-back and leaves the task, and the marked fields are read back. A
+    # check that can't be compiled fails the compile rather than being dropped.
+    from openadapt_flow.compiler.readback_authoring import CHECK_FILE, apply_check
+
+    if (recording / CHECK_FILE).is_file():
+        workflow, _check = apply_check(workflow, recording)
+        logger.info(
+            "compiled the demonstrated check: %d field(s) on %s (%s)",
+            len(_check.fields),
+            _check.save_step,
+            _check.tier,
+        )
+
     # Bind each consequential click on an unlabeled control to the form whose
     # fields the demonstration filled, or record why it cannot be bound (the
     # replayer refuses that click). Runs after every risk decision, model

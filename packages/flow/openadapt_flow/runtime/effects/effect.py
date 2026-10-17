@@ -50,6 +50,7 @@ from pydantic import (
     Field,
     PrivateAttr,
     field_validator,
+    model_serializer,
     model_validator,
 )
 
@@ -209,6 +210,38 @@ class ReadbackNav(BaseModel):
     text: Optional[str] = None
     #: Key name to press, e.g. ``"Enter"`` (``key`` only).
     key: Optional[str] = None
+    #: ``type`` only: type this run parameter's value instead of :attr:`text`
+    #: (for example, search for this run's patient). Set by a check the person
+    #: demonstrated (:mod:`openadapt_flow.compiler.readback_authoring`).
+    param: Optional[str] = None
+
+    @model_serializer(mode="wrap")
+    def _drop_unset_param(self, handler: Any) -> dict[str, Any]:
+        """Keep the bytes of navigations that predate ``param``."""
+
+        data: dict[str, Any] = handler(self)
+        if self.param is None:
+            data.pop("param", None)
+        return data
+
+
+class ReadbackField(BaseModel):
+    """One field a person marked on the saved record's screen.
+
+    The verifier reads :attr:`region` and requires :attr:`value` there.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Record field name, for reports (usually the parameter's name).
+    name: str
+    #: ``(x, y, w, h)`` region of the frame that shows the field.
+    region: tuple[int, int, int, int]
+    #: The value the field must show: normally a run parameter.
+    value: ValueExpr
+    #: The DOM selector or accessibility path of the marked element, when the
+    #: surface exposed one. Recorded for review; this verifier reads the region.
+    locator: Optional[str] = None
 
 
 class ReadbackSpec(BaseModel):
@@ -242,6 +275,47 @@ class ReadbackSpec(BaseModel):
     #: The re-navigation to perform BEFORE reading (different-path only). Empty
     #: for a same-surface read-back.
     renavigation: list[ReadbackNav] = Field(default_factory=list)
+    #: Several fields to read after one re-navigation. When set, every field
+    #: must read back; :attr:`region` is the first field's region.
+    fields: list[ReadbackField] = Field(default_factory=list)
+
+    @model_serializer(mode="wrap")
+    def _drop_empty_fields(self, handler: Any) -> dict[str, Any]:
+        """Keep the bytes of read-back contracts that predate ``fields``."""
+
+        data: dict[str, Any] = handler(self)
+        if not self.fields:
+            data.pop("fields", None)
+        return data
+
+
+def _resolve_readback(
+    spec: Optional[ReadbackSpec], params: Mapping[str, object]
+) -> Optional[ReadbackSpec]:
+    """Bind a demonstrated check's field values and typed searches to ``params``.
+
+    A read-back without marked fields or parameterized typing is returned
+    unchanged, so older contracts behave as before. A navigation whose
+    parameter is missing keeps its ``param`` and the verifier refuses it.
+    """
+    if spec is None or (
+        not spec.fields and not any(nav.param for nav in spec.renavigation)
+    ):
+        return spec
+    renavigation = []
+    for nav in spec.renavigation:
+        if nav.param and params.get(nav.param) is not None:
+            nav = nav.model_copy(update={"text": str(params[nav.param]), "param": None})
+        renavigation.append(nav)
+    fields = [
+        field.model_copy(update={"value": field.value.resolved(params)})
+        if field.value.resolve(params) is not None
+        else field
+        for field in spec.fields
+    ]
+    return spec.model_copy(
+        deep=True, update={"renavigation": renavigation, "fields": fields}
+    )
 
 
 # A different-path re-navigation must be genuinely independent of the write
@@ -514,6 +588,7 @@ class Effect(BaseModel):
                     if self.idempotency_key is None
                     else self.idempotency_key.resolved(params)
                 ),
+                "readback": _resolve_readback(self.readback, params),
             },
         )
         resolved._contract_hash_override = self.resolved_contract_hash(

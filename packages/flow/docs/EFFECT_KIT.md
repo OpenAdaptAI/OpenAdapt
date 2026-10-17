@@ -230,6 +230,46 @@ Frappe Lending reference matrix (`benchmark/frappe_lending/fixture.py`, PR
 every other audited table by exactly 0. This is a harness-level companion to
 the verifier (it brackets a whole run, not one step).
 
+## A read-back the person shows ("Show how to check the save")
+
+For an application with no API, database or export, the person can show how
+they would check the save at the end of the recording. In an authoring
+session, `begin_check()` returns the prompt "Show how to check the save".
+The person then navigates to the saved record (recorded like any other step)
+and marks each field that shows a value they typed, with `mark_field(param=...,
+node_id=...)`. The marks are stored beside the recording as `check.json`, and
+`compile_recording` turns them into an `onscreen` read-back on the save step
+(`openadapt_flow/compiler/readback_authoring.py`):
+
+- the navigation leaves the task and becomes the read-back's re-navigation. A
+  value typed into a search box (for example the patient's name) is replayed
+  with this run's value;
+- each marked field is a screen region, compared with the run parameter typed
+  into the form. Every field must read back. One unreadable field makes the
+  check `INDETERMINATE`, and a readable field with another value makes it
+  `REFUTED`. Either one halts the run;
+- compiling checks the marks against the demonstration. Each marked region must
+  show the value typed for its parameter, or compiling fails. A check that
+  types a secret, marks an input that wasn't typed, or comes before any save is
+  refused.
+
+It reads fields with OCR of the marked regions. A DOM selector or
+accessibility path for a marked element is recorded (`locator`) but not read
+yet.
+
+How strong it is, compared with a read outside the application:
+
+| The check | Tier | What it can catch | What it can't |
+|---|---|---|---|
+| re-opens the record (at least two navigation actions) | 3, `reacquired-state` | a save only the form showed; a wrong value in a marked field | a page served from a cache the write filled; a duplicate submit; a lost update by another writer; fields nobody marked |
+| fields marked on the screen the save left | 4, `screen-consistency` | a value the save's own screen shows wrong | anything the screen paints but the record never got |
+| `ui_readback` (separate signed-in browser session) | 2, `independent-session` | the above, without sharing the acting session | it is still the same application, not its record store |
+| REST, SQL, FHIR and other system-of-record reads | 1, `independent-system` | what the record store holds | |
+
+A check the person shows is never a system-of-record read. Under
+`problems_only` approval, a save checked this way still goes to a person
+(`onscreen_readback`). At runtime it makes no model calls.
+
 ## Separate-session UI read-back (`ui_readback`)
 
 Use it when the workflow has no API, database, or export that Flow can read,
