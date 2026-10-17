@@ -7,8 +7,13 @@
 OpenAdapt Desktop automates repeated data entry in the apps your team already
 uses: web apps, electronic medical records (EMRs), insurance portals, desktop
 apps, and apps reached over RDP or Citrix. You, or an AI agent, do the task
-while OpenAdapt records it. An agent can't drive the recording in native
-Windows apps or over RDP or Citrix; a person does it there. It compiles the recording into a program that runs on your computer
+while OpenAdapt records it. An agent running on your computer can drive the
+recording ([openadapt-agent](https://github.com/OpenAdaptAI/openadapt-agent) `serve --authoring`) in native Windows apps, through the same Windows input layer replay
+uses, and over RDP or Citrix, from the client window's pixels alone. The
+recording marks each step as done by the agent or by a person, and a person
+accepts it before it's used. A ChatGPT or Claude.ai session that connects
+through Desktop guides a person in those apps instead of driving them.
+OpenAdapt compiles one or more recordings into a program that runs on your computer
 and repeats the task for each item on a list. Before it types, it checks that
 the screen shows the right record. After it saves, it reads the record back to
 confirm the save, once you've told it how. When something doesn't match, it
