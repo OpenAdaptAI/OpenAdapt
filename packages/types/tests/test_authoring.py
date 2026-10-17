@@ -198,39 +198,51 @@ def test_observe_refuses_six_digit_and_at_sign_labels() -> None:
             AuthoringObserveV1.model_validate({**payload, "tree": [node]})
 
 
-def test_citrix_observe_is_coach_only_with_empty_tree() -> None:
+def test_citrix_observe_is_screen_only_with_empty_tree() -> None:
+    window = {
+        "process_name": "Citrix Workspace",
+        "role": "window",
+        "bounds": {"x": 0, "y": 0, "w": 1, "h": 1},
+    }
     observe = AuthoringObserveV1.model_validate(
-        {
-            "backend": "citrix",
-            "provider": "none",
-            "agent_drive": False,
-            "coach_only": True,
-            "recording": False,
-            "tree": [],
-            "truncated": False,
-            "node_count": 0,
-        }
-    )
-    assert observe.agent_drive is False
-    assert observe.tree == ()
-    with pytest.raises(ValidationError, match="coach_only"):
-        AuthoringObserveV1.model_validate(
-            {
-                "backend": "windows",
-                "provider": "windows_uia",
-                "agent_drive": True,
-                "coach_only": False,
-                "recording": False,
-                "window": {
-                    "process_name": "App",
-                    "role": "window",
-                    "bounds": {"x": 0, "y": 0, "w": 1, "h": 1},
-                },
-                "tree": [],
-                "truncated": False,
-                "node_count": 0,
-            }
+        _observe_payload(
+            backend="citrix",
+            provider="none",
+            window=window,
+            tree=[],
+            node_count=0,
+            truncated=False,
+            reason="empty_projection",
         )
+    )
+    assert observe.agent_drive is True
+    assert observe.tree == ()
+    with pytest.raises(ValidationError, match="screen-only"):
+        AuthoringObserveV1.model_validate(_observe_payload(backend="rdp", provider="none"))
+
+
+def test_windows_observe_can_advertise_agent_drive() -> None:
+    observe = AuthoringObserveV1.model_validate(
+        _observe_payload(backend="windows", provider="windows_uia")
+    )
+    assert observe.agent_drive is True
+    assert observe.coach_only is False
+    assert len(observe.tree) == 1
+
+
+def test_coach_only_observe_still_validates() -> None:
+    observe = AuthoringObserveV1.model_validate(
+        _observe_payload(
+            backend="windows",
+            provider="none",
+            agent_drive=False,
+            coach_only=True,
+            tree=[],
+            node_count=0,
+            reason="empty_projection",
+        )
+    )
+    assert observe.coach_only is True
 
 
 def test_normalized_bounds_are_not_pixels() -> None:

@@ -88,7 +88,8 @@ _EMAIL_RE = re.compile(r"[^@\s]+@[^@\s]+\.[A-Za-z]{2,}")
 _SHA256_HEX_PATTERN = r"^[a-f0-9]{64}$"
 _TIMESTAMP_PATTERN = r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(Z|[+-]\d{2}:\d{2})$"
 _RUNNER_FIELDS = frozenset({"pack", "bind", "origin"})
-_COACH_ONLY_BACKENDS = frozenset({"windows", "rdp", "citrix"})
+#: Remote sessions: pixels and keys only, so observe carries no tree.
+_SCREEN_ONLY_BACKENDS = frozenset({"rdp", "citrix"})
 _DEEP_LINK_PATTERN = r"^openadapt://runner\?[A-Za-z0-9._~=&%:/+-]{1,2000}$"
 
 
@@ -414,8 +415,8 @@ class AuthoringObserveV1(_StrictContract):
             raise ValueError("empty_projection cannot carry a tree")
         if self.coach_only and self.agent_drive:
             raise ValueError("coach_only observations cannot advertise agent_drive")
-        if self.backend.value in _COACH_ONLY_BACKENDS and not self.coach_only:
-            raise ValueError("this backend is coach_only on the authoring wire")
+        if self.backend.value in _SCREEN_ONLY_BACKENDS and self.tree:
+            raise ValueError("rdp and citrix observations are screen-only and carry no tree")
         if self.agent_drive and self.window is None:
             raise ValueError("agent_drive observations require a window")
         return self

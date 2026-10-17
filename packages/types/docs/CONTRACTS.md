@@ -205,7 +205,10 @@ in Capture. These models refuse those keys.
 Observe is a PHI-safe projected tree: roles, automation ids, normalized
 bounds, and `node_id`. It does not carry `value`, `title`, `screenshot`,
 `text`, window titles, URLs, backend pixels, or extra keys. Cap is 200
-nodes and 32 KiB. Windows native, RDP, and Citrix are `coach_only`.
+nodes and 32 KiB. Any backend can advertise `agent_drive`, including
+native Windows. RDP and Citrix are screen-only: their observations carry no
+tree, and the agent works from the client window's pixels. A producer can
+still mark an observation `coach_only` when it won't let an agent drive.
 
 The mailbox envelope is `openadapt.authoring.command/v1`. Hosted `click`
 is `{ node_id }` only. Pause results name a param and never a value.
