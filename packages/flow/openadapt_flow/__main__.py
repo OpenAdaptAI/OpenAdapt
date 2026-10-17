@@ -1980,7 +1980,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     # NO actuation has begun on either the desktop or the web path below.
     _maybe_attest_pre_state(run_dir, args)
     approval_gate = _approval_gate_for_run(
-        args, run_dir, policy_name=args.policy or cfg.policy.policy
+        args, run_dir, policy_name=getattr(args, "policy", None) or cfg.policy.policy
     )
     fault_driver = getattr(args, "_qualification_fault_driver", None)
     if _normalize_kind(backend_cfg.kind) != "web":
