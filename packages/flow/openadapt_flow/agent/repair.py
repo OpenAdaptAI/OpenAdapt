@@ -758,7 +758,11 @@ class RepairDesk:
         """
         path = self._demos_path(record)
         demos = (_read_json(path) or {}).get("demos", [])
-        demos = [d for d in demos if isinstance(d, dict) and d.get("run_dir") != record["run_dir"]]
+        demos = [
+            d
+            for d in demos
+            if isinstance(d, dict) and d.get("run_dir") != record["run_dir"]
+        ]
         demos.append({"run_dir": record["run_dir"], "recording": str(recording)})
         _write_json(path, {"demos": demos})
         usable = [
