@@ -367,19 +367,22 @@ payer names.
 
 ## Fleet drift patches
 
-A repair a person approved can be exported as a signed structural patch for
-other tenants on the same application version
+A repair a person approved can be contributed to the fleet hub, which
+re-signs it as a structural patch for other tenants on the same application
+version. Export and import are off until an admin allows the application
+family
 ([FLEET_DRIFT_PATCHES.md](FLEET_DRIFT_PATCHES.md)). On the receiving tenant
 the patch becomes an ordinary candidate with source `fleet_patch`:
 
-- `import_patch` verifies the signature chain and the application
-  fingerprint, applies the anchor map to a copy of that tenant's bundle, and
+- `import_patch` verifies the hub's signature chain, the fleet revocation
+  list and the application fingerprint, applies the anchor map to a copy of that tenant's bundle, and
   registers it with `build_candidate`, so binding digests and identity flags
   come from the same code as every other candidate.
 - `process_imported_patch` runs the replay and fault campaigns on the
   tenant's own qualification cases, then follows the tenant's
-  `FleetPromotionPolicy`. A failed campaign blocks the candidate. A patch that
-  changes identity evidence, a policy that is off or does not cover the
-  application, or too few cases leaves the candidate for a person.
+  signed `FleetPromotionPolicy`. A failed campaign or a kill switch blocks the
+  candidate. A patch that changes identity evidence, a policy that is off,
+  unsigned or does not cover the application, too few cases, or fleet status
+  that is stale or revokes the chain leaves the candidate for a person.
   Otherwise the store approves it under the policy, stages it, and starts the
   live canary window described above.
