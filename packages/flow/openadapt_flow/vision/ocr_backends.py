@@ -25,8 +25,9 @@ from typing import Any, Optional, Protocol
 OCR_ENV = "OPENADAPT_FLOW_OCR"
 
 #: Whether ``auto`` picks the native backend when it is available. It stays
-#: False until the native backend matches RapidOCR on the identity and OCR
-#: safety evidence (no new false accepts); until then ``native`` is opt-in.
+#: False while the native backend halts correct runs more often than RapidOCR
+#: in the identity and OCR safety evidence (no false accepts on either engine,
+#: but more false aborts with Apple Vision); until then ``native`` is opt-in.
 AUTO_PREFERS_NATIVE = False
 
 RawLine = tuple[int, int, int, int, str, float]

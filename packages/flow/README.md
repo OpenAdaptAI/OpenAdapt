@@ -80,10 +80,10 @@ OPENADAPT_FLOW_OCR=native uvx --python 3.12 \
 
 `OPENADAPT_FLOW_OCR` takes `auto` (the default), `native`, or `rapidocr`.
 `auto` uses RapidOCR on every platform, and Linux always uses RapidOCR. The
-native engine is for trying the demo quickly, not for identity checks you rely
-on. In the repository's OCR identity tests, Apple Vision once missed the
-patient name in a row. Without the name, the check accepted a record with a
-look-alike number (`110234` against `ll0234`) that RapidOCR rejects.
+native engine is for trying the demo quickly. In the repository's OCR identity
+tests, neither engine accepts a wrong patient, but Apple Vision stops correct
+runs more often: on a dense table of look-alike patients it halted 442 of 480
+correct-patient runs, against 376 for RapidOCR.
 Program-predicate proofs record which OCR engine made them, so a proof made
 under one engine isn't reused under the other.
 
