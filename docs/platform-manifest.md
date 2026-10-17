@@ -115,7 +115,7 @@ an issue; regenerating and committing the manifest remains a human step.
 
 ### Why the schedule is daily and why false failures are not tolerated
 
-This manifest went stale once, and both causes are worth stating because they
+This manifest has gone stale before, and both causes are worth stating because they
 are properties of the check rather than of the manifest:
 
 1. **The staleness originates in another repository.** `openadapt-flow`
