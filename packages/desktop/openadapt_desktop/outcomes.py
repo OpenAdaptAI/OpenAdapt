@@ -14,6 +14,8 @@ cannot drift apart silently.
 
 from __future__ import annotations
 
+import ast
+import re
 from typing import Any
 
 #: Transaction outcomes Flow may stamp on a report (openadapt_flow.transaction).
@@ -184,6 +186,83 @@ def plain_result_for_transaction(transaction_outcome: Any) -> dict[str, Any]:
     if execution is None:
         return plain_result("unknown")
     return plain_result(execution, transaction_outcome)
+
+
+#: At most this many fields, each value cut to this many characters.
+MAX_FIELD_DIFFS = 8
+MAX_FIELD_VALUE = 120
+
+# Flow's record check writes a refuted field as one verdict line:
+#   field 'dob' is '1960-01-01', expected '1949-12-11' (...)
+# Values are Python reprs, so either quote style can appear.
+_REPR = r"(?:'(?:[^'\\]|\\.)*'|\"(?:[^\"\\]|\\.)*\")"
+_FIELD_LINE = re.compile(
+    rf"field '(?P<field>[^']{{1,128}})' is (?P<observed>{_REPR}), "
+    rf"expected (?P<expected>{_REPR})"
+)
+
+
+def _unrepr(text: str) -> str | None:
+    try:
+        value = ast.literal_eval(text)
+    except (ValueError, SyntaxError):
+        return None
+    return value if isinstance(value, str) else None
+
+
+def field_diffs(report: dict) -> list[dict[str, str]]:
+    """The fields a record check found different from what was typed.
+
+    Each entry is ``{"field", "typed", "on_file"}``. Read from Flow's
+    structured ``effect_field_checks`` when a result carries them, otherwise
+    from the record check's verdict lines in ``effect_results``. These values
+    can identify a patient: they are for the local screen only.
+    """
+
+    results = report.get("results")
+    if not isinstance(results, list):
+        return []
+    diffs: list[dict[str, str]] = []
+    seen: set[str] = set()
+
+    def add(field: object, typed: object, on_file: object) -> None:
+        if not isinstance(field, str) or not field or field in seen:
+            return
+        if not isinstance(typed, str) or not isinstance(on_file, str):
+            return
+        if typed == on_file or len(diffs) >= MAX_FIELD_DIFFS:
+            return
+        seen.add(field)
+        diffs.append(
+            {
+                "field": field[:MAX_FIELD_VALUE],
+                "typed": typed[:MAX_FIELD_VALUE],
+                "on_file": on_file[:MAX_FIELD_VALUE],
+            }
+        )
+
+    for result in results:
+        if not isinstance(result, dict):
+            continue
+        checks = result.get("effect_field_checks")
+        if isinstance(checks, list) and checks:
+            for check in checks:
+                if isinstance(check, dict) and check.get("matched") is False:
+                    add(check.get("field"), check.get("expected"), check.get("observed"))
+            continue
+        lines = result.get("effect_results")
+        if not isinstance(lines, list):
+            continue
+        for line in lines:
+            if not isinstance(line, str):
+                continue
+            for match in _FIELD_LINE.finditer(line):
+                add(
+                    match.group("field"),
+                    _unrepr(match.group("expected")),
+                    _unrepr(match.group("observed")),
+                )
+    return diffs
 
 
 def halt_kind(report: dict) -> str | None:

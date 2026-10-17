@@ -8,7 +8,7 @@ vi.mock("../lib/engine", async (importOriginal) => {
 
 import { CMD, engineInvoke, engineTry } from "../lib/engine";
 import type { AttentionItem } from "../lib/types";
-import { NeedsYou } from "./NeedsYou";
+import { NeedsYou, fieldLabel } from "./NeedsYou";
 
 afterEach(() => {
   cleanup();
@@ -265,4 +265,33 @@ it("says which check held an item for a person, in words, and offers no re-run",
   expect(sentence.textContent).not.toMatch(/record_key_not_recent/);
   expect(screen.queryByRole("button", { name: /Check and continue/ })).toBeNull();
   expect(screen.getByText("It stopped before saving. Nothing was written.")).toBeTruthy();
+});
+
+it("shows what was typed and what the record has on a Check the record stop", async () => {
+  engine([
+    {
+      ...UNCERTAIN,
+      field_diffs: [{ field: "dob", typed: "1949-12-11", on_file: "1960-01-01" }],
+    },
+  ]);
+  render(<NeedsYou onTeach={() => {}} onChanged={() => {}} />);
+
+  const box = await screen.findByLabelText("What the record check found");
+  expect(box.textContent).toContain("DOB.");
+  expect(box.textContent).toContain("Typed: 1949-12-11.");
+  expect(box.textContent).toContain("Record on file: 1960-01-01");
+  expect(box.textContent).toContain("Shown on this computer only.");
+});
+
+it("shows no field diff when the record check recorded none", async () => {
+  engine([UNCERTAIN]);
+  render(<NeedsYou onTeach={() => {}} onChanged={() => {}} />);
+  await screen.findAllByText(/Check the record/);
+  expect(screen.queryByLabelText("What the record check found")).toBeNull();
+});
+
+it("labels fields in plain words", () => {
+  expect(fieldLabel("dob")).toBe("DOB");
+  expect(fieldLabel("first_name")).toBe("First name");
+  expect(fieldLabel("patient_mrn")).toBe("Patient MRN");
 });

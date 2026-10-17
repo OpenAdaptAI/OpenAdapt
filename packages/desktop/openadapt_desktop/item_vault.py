@@ -44,7 +44,7 @@ _DIGEST_LABEL = b"openadapt.desktop/work-item-digest/v1"
 _NONCE_BYTES = 12
 
 #: Columns of ``work_items`` that can identify a patient.
-SEALED_COLUMNS = ("label", "inputs_json", "expected", "observed")
+SEALED_COLUMNS = ("label", "inputs_json", "expected", "observed", "field_diffs_json")
 
 UNAVAILABLE = (
     "This computer's protected credential store isn't available, so "

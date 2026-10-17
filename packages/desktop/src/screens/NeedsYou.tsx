@@ -40,6 +40,21 @@ interface Notice {
   text: string;
 }
 
+const FIELD_ACRONYMS = new Set(["dob", "dos", "mrn", "ssn", "npi", "id", "icd", "cpt", "zip"]);
+
+/** "dob" reads "DOB", "first_name" reads "First name". */
+export function fieldLabel(field: string): string {
+  const words = field.replace(/[_-]+/g, " ").trim();
+  if (!words) return field;
+  return words
+    .split(/\s+/)
+    .map((word, index) => {
+      if (FIELD_ACRONYMS.has(word.toLowerCase())) return word.toUpperCase();
+      return index === 0 ? word.charAt(0).toUpperCase() + word.slice(1) : word;
+    })
+    .join(" ");
+}
+
 function ItemRow({
   item,
   selected,
@@ -136,6 +151,26 @@ function AttentionCard({
             <span>The screen showed</span>
             <strong className="mono">{item.observed || "Not recorded"}</strong>
           </div>
+        </div>
+      )}
+
+      {item.halt_kind === "save_not_confirmed" && (item.field_diffs?.length ?? 0) > 0 && (
+        <div className="field-diffs" aria-label="What the record check found">
+          <p className="field-diffs-head">What the record check found</p>
+          <ul>
+            {item.field_diffs!.map((diff) => (
+              <li key={diff.field}>
+                <strong>{fieldLabel(diff.field)}.</strong>{" "}
+                <span>
+                  Typed: <span className="mono">{diff.typed || "(blank)"}</span>.
+                </span>{" "}
+                <span className="field-diff-on-file">
+                  Record on file: <span className="mono">{diff.on_file || "(blank)"}</span>
+                </span>
+              </li>
+            ))}
+          </ul>
+          <p className="field-diffs-note">Shown on this computer only.</p>
         </div>
       )}
 

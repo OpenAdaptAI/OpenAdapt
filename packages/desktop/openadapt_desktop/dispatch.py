@@ -2090,7 +2090,11 @@ class EngineDispatcher:
                     "compensation_actions": envelope.get("compensation_actions"),
                 }
 
-        from openadapt_desktop.outcomes import consistent_transaction_outcome, halt_kind
+        from openadapt_desktop.outcomes import (
+            consistent_transaction_outcome,
+            field_diffs,
+            halt_kind,
+        )
 
         # Flow's transaction outcome states what is known about the business
         # effect. Desktop forwards it only when it agrees with the validated
@@ -2109,6 +2113,12 @@ class EngineDispatcher:
                 # in the local cockpit and never leave this computer.
                 halt_block["expected"] = mismatch[0]
                 halt_block["observed"] = mismatch[1]
+            if kind == "save_not_confirmed":
+                # Local only, like the values above: what was typed and what the
+                # record check read, field by field.
+                diffs = field_diffs(report)
+                if diffs:
+                    halt_block["field_diffs"] = diffs
 
         mapped = {
             "ok": outcome in {"VERIFIED", "success"},
@@ -4184,6 +4194,11 @@ class EngineDispatcher:
                 halt_reason=str((halt or {}).get("reason") or report.get("error") or "")[:500],
                 expected=str((halt or {}).get("expected") or ""),
                 observed=str((halt or {}).get("observed") or ""),
+                field_diffs_json=(
+                    json.dumps((halt or {}).get("field_diffs"), sort_keys=True)
+                    if (halt or {}).get("field_diffs")
+                    else ""
+                ),
                 duration_s=(report.get("metrics") or {}).get("duration_s"),
                 status=status_after_run(result["key"], approval, consistent_tx),
                 finished_at=finished,
@@ -4239,6 +4254,7 @@ class EngineDispatcher:
                     "halt_reason": halt.get("reason") or "",
                     "expected": "",
                     "observed": "",
+                    "field_diffs": [],
                     "created_at": halt.get("created_at"),
                     "actions": ["handled"],
                 }

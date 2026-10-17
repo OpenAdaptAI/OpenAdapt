@@ -58,7 +58,7 @@ _HALT_COLUMNS = frozenset({
 _WORK_ITEM_COLUMNS = frozenset({
     "run_id", "execution_outcome", "transaction_outcome", "halt_kind",
     "halt_step", "halt_reason", "expected", "observed", "status",
-    "duration_s", "finished_at", "resolved_at", "approval_json",
+    "duration_s", "finished_at", "resolved_at", "approval_json", "field_diffs_json",
 })
 
 _SCHEMA = """\
@@ -166,7 +166,9 @@ CREATE TABLE IF NOT EXISTS work_items (
     finished_at TEXT,
     resolved_at TEXT,
     -- Flow's PHI-free approval-mode block for the item (closed codes only).
-    approval_json TEXT
+    approval_json TEXT,
+    -- What was typed and what the record check read, per field (sealed).
+    field_diffs_json TEXT DEFAULT ''
 );
 
 -- The keychain key that seals work-item values (openadapt_desktop/item_vault.py). Only
@@ -247,6 +249,10 @@ class IndexDB:
         }
         if "approval_json" not in work_item_columns:
             self._conn.execute("ALTER TABLE work_items ADD COLUMN approval_json TEXT")
+        if "field_diffs_json" not in work_item_columns:
+            self._conn.execute(
+                "ALTER TABLE work_items ADD COLUMN field_diffs_json TEXT DEFAULT ''"
+            )
         self._conn.commit()
 
     # --- Work-item values at rest (openadapt_desktop/item_vault.py) ---

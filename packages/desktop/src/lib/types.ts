@@ -154,6 +154,11 @@ export interface WorkItem {
   halt_reason?: string;
   expected?: string;
   observed?: string;
+  /**
+   * Fields the record check read differently from what was typed, for a
+   * "Check the record" stop. Can identify a patient: local screen only.
+   */
+  field_diffs?: FieldDiff[];
   duration_s?: number | null;
   created_at?: string | null;
   finished_at?: string | null;
@@ -167,6 +172,13 @@ export interface WorkItem {
    * post-run checks passed. Never true for an item a person approved or closed.
    */
   saved_without_person?: boolean;
+}
+
+/** One field the record check read differently from what was typed. */
+export interface FieldDiff {
+  field: string;
+  typed: string;
+  on_file: string;
 }
 
 /** Flow's per-item approval block, projected by openadapt_desktop/approval_mode.py. */

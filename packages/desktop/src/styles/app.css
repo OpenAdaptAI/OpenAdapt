@@ -3056,3 +3056,33 @@ select.input:focus {
   color: var(--text-strong);
   margin-bottom: var(--space-2);
 }
+
+/* "Check the record": what was typed and what the record check read. */
+.field-diffs {
+  margin-top: var(--space-4);
+  padding: var(--space-3);
+  border: 1px solid color-mix(in srgb, var(--attention) 45%, var(--border));
+  border-radius: var(--radius-1);
+  background: var(--panel-sunk);
+}
+.field-diffs-head {
+  margin: 0 0 var(--space-2);
+  color: var(--text-strong);
+  font-weight: 600;
+}
+.field-diffs ul {
+  margin: 0;
+  padding-left: var(--space-4);
+}
+.field-diffs li {
+  margin: var(--space-1) 0;
+  font-size: var(--fs-sm);
+}
+.field-diff-on-file .mono {
+  font-weight: 600;
+}
+.field-diffs-note {
+  margin: var(--space-2) 0 0;
+  color: var(--text-muted);
+  font-size: var(--fs-caption);
+}

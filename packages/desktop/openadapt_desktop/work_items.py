@@ -161,6 +161,25 @@ def new_id(prefix: str) -> str:
     return f"{prefix}-{uuid.uuid4().hex[:12]}"
 
 
+def _field_diffs(stored: object) -> list[dict[str, str]]:
+    """The stored per-field differences, or none when absent or unreadable."""
+
+    if not isinstance(stored, str) or not stored:
+        return []
+    try:
+        value = json.loads(stored)
+    except ValueError:
+        return []
+    if not isinstance(value, list):
+        return []
+    keys = ("field", "typed", "on_file")
+    return [
+        {key: entry[key] for key in keys}
+        for entry in value
+        if isinstance(entry, dict) and all(isinstance(entry.get(k), str) for k in keys)
+    ]
+
+
 def result_for_run(report: dict) -> dict[str, Any]:
     """The plain result for one dispatcher run report."""
 
@@ -289,6 +308,7 @@ def public_item(row: dict, *, include_values: bool = False) -> dict[str, Any]:
         "halt_reason": row.get("halt_reason") or "",
         "expected": row.get("expected") or "",
         "observed": row.get("observed") or "",
+        "field_diffs": _field_diffs(row.get("field_diffs_json")),
         "duration_s": row.get("duration_s"),
         "created_at": row.get("created_at"),
         "finished_at": row.get("finished_at"),
