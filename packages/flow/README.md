@@ -380,6 +380,10 @@ The full list, capability by capability: [docs/LIMITS.md](docs/LIMITS.md).
 
 ## More documentation
 
+- [Qualify a workflow](docs/QUALIFY_A_WORKFLOW.md): `openadapt-flow qualify`
+  runs a bundle against the normal case and deliberate faults, reads the write
+  back from the system of record, and certifies it under a policy. Terms are
+  defined in [docs/QUALIFICATION_TERMS.md](docs/QUALIFICATION_TERMS.md).
 - [Production setup](docs/PRODUCTION.md): qualifying a bundle from its
   recording, policies, multi-step processes, signed results, and release
   status.
