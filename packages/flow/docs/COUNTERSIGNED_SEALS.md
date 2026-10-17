@@ -19,7 +19,9 @@ a countersignature is a Countersigned Seal.
 
 Neither kind is a notarial act or an eIDAS qualified electronic seal, and
 the timestamp is not an eIDAS qualified electronic timestamp unless
-`--tsa-url` names a qualified TSA.
+`--tsa-url` names a qualified TSA. This page describes what the checks
+show technically. It makes no claim about legal effect or about the weight
+anyone gives the result.
 
 Nothing here runs during replay, and nothing here calls a model. Only digests
 leave the machine: the TSA receives one 32-byte hash.
@@ -110,9 +112,18 @@ copy is in place.
 
 Timestamps come from Sigstore's public timestamp service
 (`https://timestamp.sigstore.dev/api/v1/timestamp`) unless you pass
-`--tsa-url` for another RFC 3161 service, such as a paid eIDAS-qualified one.
-It is free, its tokens state 1-second accuracy, and it receives only the
+`--tsa-url` for another RFC 3161 service. A token from an eIDAS-qualified
+TSA is a qualified timestamp only by that TSA's own status; this verifier
+does not check the EU trusted lists. The Sigstore service is free, its tokens state 1-second accuracy, and it receives only the
 32-byte digest and a nonce. `--no-timestamp` skips the timestamp.
+
+`countersign add` and `timestamp-baseline` check each new token before they
+write anything: the token must verify against `--tsa-cert` (default: the
+bundled Sigstore root, plus the local TSA's certificate under `--tsa-local`).
+A TSA that can't be reached, refuses, or returns a token that does not verify
+leaves no output file and no vault entry, so a document never carries a
+timestamp its creator could not check. With another `--tsa-url`, pin that
+TSA with `--tsa-cert`.
 
 `--tsa-local DIR` uses an offline TSA that keeps its key in `DIR`. Its time
 is this machine's clock, so its tokens prove nothing about time to anyone
@@ -131,7 +142,7 @@ SIGNATURE GENUINE, NOT A FLOW REPLAY (AGENT). Pass --accept-non-flow to accept a
   Seal signature      VERIFIED against a pinned key (seal-ed25519-…, issued 2026-10-17T05:00:00Z)
   Evidence manifest   bound: digest and labels match the receipt
   Statement           matches the receipt
-  Receipt timestamp   VERIFIED 2026-10-17T05:20:40Z by CN=DigiCert SHA256 RSA4096 Timestamp Responder 2026 1,… (chains to pinned CN=DigiCert Trusted Root G4,…)
+  Receipt timestamp   VERIFIED 2026-10-17T05:20:40Z (the TSA states no accuracy) by CN=DigiCert SHA256 RSA4096 Timestamp Responder 2026 1,… (chains to pinned CN=DigiCert Trusted Root G4,…)
   Baseline timestamp  absent
   Countersignature    absent
   Field commitments   2 committed; bound by timestamp
@@ -170,9 +181,14 @@ Verification reads only what the holder pinned:
   `2A:CA:8F:EA:...:D6:33`, valid until 2035-04-06). A token from another TSA
   then fails until you pin that TSA's certificate.
   A certificate inside the token or the document is used to build the path,
-  never as an anchor. Each link must be valid at the token's `genTime`, and
-  the TSA certificate must carry the critical `timeStamping` extended key
-  usage.
+  never as an anchor. Each link must be valid at the token's `genTime`.
+  The TSA certificate must carry a critical extended key usage of
+  `timeStamping` alone (RFC 3161 section 2.3). Each issuer must be a CA whose
+  key usage allows certificate signing, whose path length allows the chain
+  below it, and whose extended key usage, if any, includes `timeStamping`.
+  The ESS signing-certificate attribute must name the signer certificate by
+  hash and, when present, by issuer and serial number. A TSTInfo with a
+  critical extension is refused.
 
 The countersignature is a `openadapt.seal-signature/v1` over an
 `openadapt.countersign-attestation/v1` object. It reuses the Seal key registry,
@@ -227,7 +243,9 @@ each disclosed commitment. RFC 3161 tokens need `openssl ts -verify` or
 `openadapt-flow countersign verify dossier.html`; the page prints the command.
 
 By default the dossier has no PHI. Disclosed values appear only when you pass
-a disclosure bundle. Screenshots appear only with `--screenshot` and only
+a disclosure bundle, and only when every bundle matches commitments that a
+verified timestamp or countersignature binds; otherwise `dossier` refuses.
+Only the label, name, value, and salt of each disclosed field are copied in. Screenshots appear only with `--screenshot` and only
 after automatic redaction by openadapt-privacy. Without the `privacy` extra
 they are left out, and the page says so. Automatic redaction can miss text,
 and screenshots are not bound to the receipt, so review a dossier before you
@@ -235,8 +253,9 @@ send it.
 
 ## What a timestamp proves, and what it does not
 
-A verified RFC 3161 token proves that the TSA saw this exact statement hash
-no later than `genTime`, within the TSA's stated accuracy. So the receipt,
+A verified RFC 3161 token shows that the TSA signed this exact statement
+hash with a time of `genTime`, within the TSA's stated accuracy. If the TSA's
+key and clock were sound, the hash existed no later than that time. So the receipt,
 its evidence digest, and its commitments existed by then and have not
 changed since.
 
@@ -261,12 +280,18 @@ A token from `--tsa-local` proves only what this machine's clock said.
 
 ## Tests
 
-`tests/test_countersign.py` runs offline. It covers brute-force resistance over a
-small MRN domain, wrong disclosed values, a real Sigstore token
+`tests/test_countersign.py` runs offline. It covers the enumeration an
+unsalted hash allows over a small MRN domain, wrong disclosed values, a real Sigstore token
 (`tests/fixtures/countersign/sigstore-token.der`) checked against the bundled
 root, a real DigiCert token
 (`tests/fixtures/countersign/digicert-token.der`, captured on 2026-10-17 with
 `openssl ts -query`) checked against DigiCert Trusted Root G4, `openssl ts
 -verify` on local tokens, tampering after countersigning, baseline nonce
 binding, exit codes for REFUTED and INDETERMINATE Seals, and a dossier with
-no PHI by default.
+no PHI by default. It also checks that a TSA certificate needs a critical
+`timeStamping`-only EKU; that issuers without certificate signing, with
+another EKU, or beyond their path length break the chain; that a token which
+does not verify, or an unreachable TSA, leaves no output and no vault
+entry; that the countersigning issuer receives only digests; and that a
+dossier refuses unbound or non-matching disclosures and copies only their
+defined keys.

@@ -444,7 +444,7 @@ def test_agent_receipt_never_reads_like_a_flow_replay(issuer, tsa):
     )
     assert accepted.exit_code == 0
     assert render_report(accepted).startswith(
-        "SEAL VERIFIED FOR A AGENT RUN (not a Flow replay)"
+        "SEAL VERIFIED: AGENT RUN (not a Flow replay)"
     )
 
 
@@ -669,7 +669,8 @@ def test_dossier_embeds_no_phi_by_default_and_reverifies(issuer, tsa, tmp_path):
     for leak in ("004217", "Ada Lovelace", "patient_name", "RAW-PHI-SCREENSHOT"):
         assert leak not in page
     assert "left out: no redaction provider" in page
-    assert "SEAL VERIFIED FOR A AGENT RUN" in page
+    assert "SEAL VERIFIED: AGENT RUN" in page
+    assert "not a notarial act" in page
     again = extract_dossier_data(page)
     re_report = verify_countersigned(
         again["document"],
@@ -915,3 +916,272 @@ def test_default_authority_is_sigstore_and_no_timestamp_opts_out():
     assert isinstance(tsa, HttpTsa) and tsa.url == SIGSTORE_TSA_URL and pem is None
     assert _authority(argparse.Namespace(no_timestamp=True)) == (None, None)
     assert _tsa_pem([]) == sigstore_tsa_root_pem()
+
+
+# -- review hardening ----------------------------------------------------------
+
+
+def _cert(
+    subject: str,
+    key,
+    *,
+    issuer_name: str | None = None,
+    issuer_key=None,
+    ca: bool = False,
+    path_length: int | None = None,
+    cert_sign: bool | None = None,
+    eku: list | None = None,
+    eku_critical: bool = True,
+):
+    from cryptography.hazmat.primitives import hashes
+    from cryptography.x509.oid import NameOID
+
+    name = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, subject)])
+    issuer = x509.Name(
+        [x509.NameAttribute(NameOID.COMMON_NAME, issuer_name or subject)]
+    )
+    builder = (
+        x509.CertificateBuilder()
+        .subject_name(name)
+        .issuer_name(issuer)
+        .public_key(key.public_key())
+        .serial_number(x509.random_serial_number())
+        .not_valid_before(T0 - timedelta(days=1))
+        .not_valid_after(T0 + timedelta(days=365))
+        .add_extension(x509.BasicConstraints(ca=ca, path_length=path_length), True)
+    )
+    if cert_sign is not None:
+        builder = builder.add_extension(
+            x509.KeyUsage(
+                digital_signature=not ca,
+                content_commitment=False,
+                key_encipherment=False,
+                data_encipherment=False,
+                key_agreement=False,
+                key_cert_sign=cert_sign,
+                crl_sign=cert_sign,
+                encipher_only=False,
+                decipher_only=False,
+            ),
+            True,
+        )
+    if eku is not None:
+        builder = builder.add_extension(x509.ExtendedKeyUsage(eku), eku_critical)
+    return builder.sign(issuer_key or key, hashes.SHA256())
+
+
+def _ec():
+    from cryptography.hazmat.primitives.asymmetric import ec
+
+    return ec.generate_private_key(ec.SECP256R1())
+
+
+def test_tsa_certificate_needs_a_critical_eku_of_timestamping_alone():
+    from cryptography.x509.oid import ExtendedKeyUsageOID as EKU
+
+    digest = hashlib.sha256(b"eku").digest()
+    for eku, critical in (
+        ([EKU.TIME_STAMPING, EKU.SERVER_AUTH], True),  # an extra purpose
+        ([EKU.TIME_STAMPING], False),  # not critical
+        ([EKU.SERVER_AUTH], True),  # not a TSA at all
+    ):
+        key = _ec()
+        cert = _cert("tsa", key, eku=eku, eku_critical=critical)
+        tsa = LocalTsa(key, cert, clock=_clock(T0))
+        result = verify_timestamp_token(tsa.timestamp(digest), digest, [cert])
+        assert result.reason == "not_a_tsa_certificate", (eku, critical)
+    key = _ec()
+    cert = _cert("tsa", key, eku=[EKU.TIME_STAMPING])
+    good = LocalTsa(key, cert, clock=_clock(T0)).timestamp(digest)
+    assert verify_timestamp_token(good, digest, [cert]).ok
+
+
+def test_chain_to_pinned_root_checks_each_issuer():
+    from cryptography.x509.oid import ExtendedKeyUsageOID as EKU
+
+    digest = hashlib.sha256(b"chain").digest()
+
+    def token_via(**intermediate_kwargs):
+        root_key, mid_key, leaf_key = _ec(), _ec(), _ec()
+        root = _cert("root", root_key, ca=True, cert_sign=True)
+        mid = _cert(
+            "mid",
+            mid_key,
+            issuer_name="root",
+            issuer_key=root_key,
+            ca=True,
+            **intermediate_kwargs,
+        )
+        leaf = _cert(
+            "leaf",
+            leaf_key,
+            issuer_name="mid",
+            issuer_key=mid_key,
+            eku=[EKU.TIME_STAMPING],
+        )
+        tsa = LocalTsa(leaf_key, leaf, clock=_clock(T0), extra_certificates=[mid])
+        return tsa.timestamp(digest), root
+
+    token, root = token_via(cert_sign=True, path_length=0, eku=[EKU.TIME_STAMPING])
+    result = verify_timestamp_token(token, digest, [root])
+    assert result.ok and result.trust_anchor_subject == "CN=root"
+    # Each of these intermediates must not be able to vouch for a TSA.
+    for bad in (
+        {"cert_sign": False},  # key usage forbids certificate signing
+        {"cert_sign": True, "eku": [EKU.SERVER_AUTH], "eku_critical": False},
+    ):
+        token, root = token_via(**bad)
+        assert verify_timestamp_token(token, digest, [root]).reason == "untrusted_tsa"
+    # Without the pinned root, the shipped intermediate is never an anchor.
+    token, root = token_via(cert_sign=True)
+    stranger = _cert("root", _ec(), ca=True, cert_sign=True)
+    assert verify_timestamp_token(token, digest, [stranger]).reason == "untrusted_tsa"
+
+
+def test_path_length_constraint_is_enforced():
+    from cryptography.x509.oid import ExtendedKeyUsageOID as EKU
+
+    digest = hashlib.sha256(b"pathlen").digest()
+    root_key, a_key, b_key, leaf_key = _ec(), _ec(), _ec(), _ec()
+    root = _cert("root", root_key, ca=True, cert_sign=True, path_length=0)
+    a = _cert("a", a_key, issuer_name="root", issuer_key=root_key, ca=True)
+    b = _cert("b", b_key, issuer_name="a", issuer_key=a_key, ca=True)
+    leaf = _cert(
+        "leaf", leaf_key, issuer_name="b", issuer_key=b_key, eku=[EKU.TIME_STAMPING]
+    )
+    tsa = LocalTsa(leaf_key, leaf, clock=_clock(T0), extra_certificates=[b, a])
+    # root allows no CA below it, but "a" is one: two CAs sit under root.
+    assert (
+        verify_timestamp_token(tsa.timestamp(digest), digest, [root]).reason
+        == "untrusted_tsa"
+    )
+    assert verify_timestamp_token(tsa.timestamp(digest), digest, [a]).ok
+
+
+def test_a_timestamp_that_cannot_be_checked_is_never_kept(issuer, tsa):
+    doc = _effect_doc(issuer)
+    with pytest.raises(CountersignError) as err:
+        countersign_document(
+            doc, tsa=tsa, tsa_certificates=[LocalTsa.generate().certificate]
+        )
+    assert err.value.code == "timestamp_unverified"
+    out = countersign_document(doc, tsa=tsa, tsa_certificates=[tsa.certificate])
+    assert EXTENSION_KEY in out["extensions"]
+    # A baseline token for another run is refused before it is countersigned.
+    rb = doc["evidence"]["readback"]
+    other_run = timestamp_baseline(
+        tsa,
+        baseline_sha256=rb["baseline_sha256"],
+        baseline_read_at=rb["baseline_read_at"],
+        nonce="nonce-another-run0",
+    )
+    with pytest.raises(CountersignError):
+        countersign_document(
+            doc,
+            tsa=tsa,
+            baseline_timestamp=other_run,
+            issuer=issuer,
+            tsa_certificates=[tsa.certificate],
+        )
+
+
+def test_cli_tsa_failure_writes_nothing_and_a_retry_works(issuer, tmp_path, capsys):
+    from openadapt_flow.__main__ import main
+
+    doc = tmp_path / "receipt.json"
+    doc.write_text(json.dumps(_effect_doc(issuer)))
+    fields = tmp_path / "fields.json"
+    fields.write_text(json.dumps({"mrn": "004217"}))
+    out = tmp_path / "out.json"
+    vault = tmp_path / "vault"
+    base = ["countersign", "add", str(doc), "-o", str(out)]
+    base += ["--fields-file", str(fields), "--vault", str(vault)]
+    # The default Sigstore TSA is unreachable here (the network is refused).
+    assert main(base) == 2
+    assert "tsa_unreachable" in capsys.readouterr().err
+    assert not out.exists()
+    assert not list(vault.rglob("field-secrets.json"))
+    assert main(base + ["--tsa-local", str(tmp_path / "tsa")]) == 0
+    assert len(list(vault.rglob("field-secrets.json"))) == 1
+
+
+def test_countersigning_issuer_sees_only_digests(issuer, tsa):
+    seen: list[dict] = []
+
+    class Recording:
+        def countersign(self, attestation):
+            seen.append(json.loads(json.dumps(attestation)))
+            return issuer.countersign(attestation)
+
+    doc = _effect_doc(issuer)
+    block, kept = C.commit_fields({"mrn": "004217", "patient_name": "Ada Lovelace"})
+    countersign_document(doc, tsa=tsa, commitments=block, issuer=Recording())
+    (att,) = seen
+    assert set(att) == {
+        "schema_version",
+        "execution_id",
+        "statement_sha256",
+        "receipt_timestamp_token_sha256",
+        "baseline_timestamp_token_sha256",
+    }
+    text = json.dumps(att)
+    for secret in kept:
+        for leak in (secret.value, secret.salt, secret.name, secret.label):
+            assert leak not in text
+
+
+def test_dossier_refuses_unverified_disclosures_and_strips_extra_keys(
+    issuer, tsa, tmp_path
+):
+    # No countersignature, so only a pinned timestamp binds the commitments.
+    out, block, kept = _countersigned(
+        issuer, tsa, fields={"mrn": "004217", "dob": "1961-03-04"}, countersign=False
+    )
+    rsha = receipt_sha256(out["receipt"])
+    reg = [issuer.registry_entry()]
+    pem = tsa.certificate_pem()
+    # Someone passes the vault's secrets file as if it were a disclosure.
+    vault_file = {
+        "schema": "openadapt.countersign-vault-secrets/v1",
+        "fields": [s.as_dict() for s in kept],
+    }
+    mrn = next(s.label for s in kept if s.name == "mrn")
+    good = C.build_disclosure(block, kept, [mrn], receipt_sha256=rsha)
+    padded = json.loads(json.dumps(good))
+    padded["fields"][0]["dob"] = "1961-03-04"
+    padded["vault"] = vault_file
+    for bad, kwargs in (
+        (vault_file, {"tsa_certificates_pem": pem}),
+        (good, {}),  # unbound: no TSA pinned and no countersignature
+    ):
+        with pytest.raises(CountersignError) as err:
+            build_dossier(
+                out, registry=reg, disclosures=[bad], accept_non_flow=True, **kwargs
+            )
+        assert err.value.code == "disclosure_rejected"
+    data, report = build_dossier(
+        out,
+        registry=reg,
+        tsa_certificates_pem=pem,
+        disclosures=[padded],
+        accept_non_flow=True,
+    )
+    page = write_dossier(data, report, tmp_path / "d.html").read_text()
+    assert "004217" in page and "1961-03-04" not in page
+
+
+def test_verify_output_states_tsa_accuracy(issuer, tsa):
+    out, _, _ = _countersigned(issuer, tsa)
+    report = verify_countersigned(
+        out,
+        registry=[issuer.registry_entry()],
+        tsa_certificates=[tsa.certificate],
+        accept_non_flow=True,
+    )
+    assert "(accuracy 1 s)" in render_report(report)
+    token = (FIXTURES / "digicert-token.der").read_bytes()
+    digest = bytes.fromhex((FIXTURES / "digicert-digest.hex").read_text().strip())
+    root = x509.load_pem_x509_certificates(
+        (FIXTURES / "digicert-trusted-root-g4.pem").read_bytes()
+    )
+    assert verify_timestamp_token(token, digest, root).accuracy_seconds is None

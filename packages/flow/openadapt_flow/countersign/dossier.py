@@ -33,6 +33,7 @@ from typing import Any, Mapping, Optional, Sequence
 
 from openadapt_flow.countersign.document import (
     EXTENSION_KEY,
+    CountersignError,
     CountersignReport,
     locate,
     verify_countersigned,
@@ -103,6 +104,17 @@ def build_dossier(
         accept_non_flow=accept_non_flow,
     )
     located = locate(document)
+    if disclosures and (
+        report.commitments.get("status") != "bound"
+        or any(d.get("status") != "matches" for d in report.disclosures)
+    ):
+        # Disclosed values are PHI. Publish them only when they verify against
+        # commitments a timestamp or countersignature binds.
+        raise CountersignError(
+            "disclosure_rejected",
+            "every disclosure must match commitments that a verified timestamp "
+            "or countersignature binds",
+        )
     shots, notes = _redacted_screenshots(list(screenshots))
     data = {
         "schema": DOSSIER_SCHEMA,
@@ -116,12 +128,25 @@ def build_dossier(
         "pinned_tsa_certificates_pem": tsa_certificates_pem.decode("ascii")
         if tsa_certificates_pem
         else None,
-        "disclosures": [dict(d) for d in disclosures],
+        "disclosures": [_disclosure_copy(d) for d in disclosures],
         "screenshots": shots,
         "notes": notes,
         "report_at_export": report.as_dict(),
     }
     return data, report
+
+
+def _disclosure_copy(disclosure: Mapping[str, Any]) -> dict[str, Any]:
+    """Only the keys a disclosure defines, so nothing else rides into the page."""
+    return {
+        "schema": disclosure.get("schema"),
+        "receipt_sha256": disclosure.get("receipt_sha256"),
+        "commitments_sha256": disclosure.get("commitments_sha256"),
+        "fields": [
+            {k: f.get(k) for k in ("label", "name", "value", "salt")}
+            for f in disclosure.get("fields") or []
+        ],
+    }
 
 
 def _document_from_data(data: Mapping[str, Any]) -> dict[str, Any]:
@@ -222,6 +247,8 @@ def render_html(data: Mapping[str, Any], report: CountersignReport) -> str:
         "A signature proves who made the statement. A trusted timestamp proves the "
         "statement existed by a given time. Neither proves the record in the system "
         "of record is correct.</p>"
+        "<p>This file is not a notarial act, and it is not an eIDAS qualified "
+        "electronic seal or timestamp. It makes no claim about legal effect.</p>"
     )
     sections.append(
         "<h2>Verification at export</h2><pre>" + esc(render_report(report)) + "</pre>"

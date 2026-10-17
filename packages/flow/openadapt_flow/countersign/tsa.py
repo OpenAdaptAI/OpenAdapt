@@ -241,11 +241,14 @@ class LocalTsa:
         *,
         clock: Callable[[], datetime] = _utc_now,
         policy: str = LOCAL_TSA_POLICY,
+        extra_certificates: Sequence[Any] = (),
     ) -> None:
         self._key = private_key
         self.certificate = certificate
         self._clock = clock
         self._policy = policy
+        #: Issuer certificates shipped in each token to build the path.
+        self._extra = list(extra_certificates)
 
     @property
     def name(self) -> str:
@@ -395,7 +398,11 @@ class LocalTsa:
                 "version": "v3",
                 "digest_algorithms": [{"algorithm": "sha256"}],
                 "encap_content_info": {"content_type": "tst_info", "content": tst},
-                "certificates": [cert],
+                "certificates": [cert]
+                + [
+                    x509.Certificate.load(c.public_bytes(serialization.Encoding.DER))
+                    for c in self._extra
+                ],
                 "signer_infos": [signer],
             }
         )
@@ -456,15 +463,66 @@ def _valid_at(cert: Any, when: datetime) -> bool:
     return bool(cert.not_valid_before_utc <= when <= cert.not_valid_after_utc)
 
 
+def _unknown_critical_extension(cert: Any) -> bool:
+    from cryptography import x509
+
+    return any(
+        ext.critical and isinstance(ext.value, x509.UnrecognizedExtension)
+        for ext in cert.extensions
+    )
+
+
+def _can_issue(candidate: Any, below: int, when: datetime) -> bool:
+    """Whether ``candidate`` may sign the next certificate down a TSA path.
+
+    ``below`` counts the CA certificates already between it and the TSA
+    certificate, for ``pathLenConstraint``.
+    """
+    from cryptography import x509
+    from cryptography.x509.oid import ExtendedKeyUsageOID
+
+    try:
+        constraints = candidate.extensions.get_extension_for_class(
+            x509.BasicConstraints
+        ).value
+    except x509.ExtensionNotFound:
+        return False
+    if not constraints.ca or not _valid_at(candidate, when):
+        return False
+    if constraints.path_length is not None and below > constraints.path_length:
+        return False
+    if _unknown_critical_extension(candidate):
+        return False
+    try:
+        usage = candidate.extensions.get_extension_for_class(x509.KeyUsage).value
+        if not usage.key_cert_sign:
+            return False
+    except x509.ExtensionNotFound:
+        pass
+    try:
+        eku = candidate.extensions.get_extension_for_class(x509.ExtendedKeyUsage).value
+        # A CA restricted to other purposes cannot vouch for a TSA.
+        if (
+            ExtendedKeyUsageOID.TIME_STAMPING not in eku
+            and ExtendedKeyUsageOID.ANY_EXTENDED_KEY_USAGE not in eku
+        ):
+            return False
+    except x509.ExtensionNotFound:
+        pass
+    return True
+
+
 def _chain_to_pin(
     leaf: Any, pool: Sequence[Any], pinned: Sequence[Any], when: datetime
 ) -> Optional[Any]:
-    """The pinned anchor that ``leaf`` chains to, checked at ``when``, or None."""
-    from cryptography import x509
+    """The pinned anchor that ``leaf`` chains to, checked at ``when``, or None.
 
+    Each issuer must be a CA valid at ``when`` whose key usage, path length,
+    and extended key usage allow it to certify a TSA.
+    """
     current = leaf
     seen: set[bytes] = set()
-    for _ in range(6):
+    for depth in range(6):
         anchor = _is_pinned(current, pinned)
         if anchor is not None:
             return anchor
@@ -476,13 +534,7 @@ def _chain_to_pin(
         for candidate in list(pool) + list(pinned):
             if candidate.subject != current.issuer or candidate is current:
                 continue
-            try:
-                constraints = candidate.extensions.get_extension_for_class(
-                    x509.BasicConstraints
-                ).value
-            except x509.ExtensionNotFound:
-                continue
-            if not constraints.ca or not _valid_at(candidate, when):
+            if not _can_issue(candidate, depth, when):
                 continue
             try:
                 current.verify_directly_issued_by(candidate)
@@ -553,6 +605,19 @@ def _verify_signature(cert: Any, signer: Any, data: bytes, digest_name: str) -> 
     raise TimestampError("unsupported_algorithm", str(sig_algo))
 
 
+def _issuer_serial_matches(issuer_serial: Any, cert: Any, a: Any) -> bool:
+    """ESS ``issuerSerial`` is optional; when present it must name ``cert``."""
+    if issuer_serial.native is None:
+        return True
+    if issuer_serial["serial_number"].native != cert.serial_number:
+        return False
+    issuer = a.x509.Name.load(cert.issuer.public_bytes())
+    return any(
+        general.name == "directory_name" and general.chosen == issuer
+        for general in issuer_serial["issuer"]
+    )
+
+
 def _attr(signed_attrs: Any, name: str) -> Any:
     values = [a["values"] for a in signed_attrs if a["type"].native == name]
     if len(values) != 1 or len(values[0]) != 1:
@@ -570,9 +635,10 @@ def verify_timestamp_token(
     imprint is SHA-256 of exactly ``digest``; one signer, found by its
     identifier; signed attributes bind the TSTInfo (content type and message
     digest) and the signer certificate (ESS signing-certificate v1 or v2);
-    the signature verifies; the signer certificate has the critical
-    ``timeStamping`` extended key usage and was valid at ``genTime``; and it
-    chains to a pinned certificate, every link valid at ``genTime``.
+    the signature verifies; the signer certificate has a critical extended key
+    usage of ``timeStamping`` alone and was valid at ``genTime``; and it chains
+    to a pinned certificate, every issuer a CA allowed to certify a TSA and
+    valid at ``genTime``. A TSTInfo with a critical extension is refused.
 
     Not checked: revocation (CRL/OCSP need the network) and whether the TSA's
     clock was right.
@@ -598,6 +664,7 @@ def verify_timestamp_token(
         serial = tst["serial_number"].native
         policy = tst["policy"].native
         accuracy = tst["accuracy"]
+        tst_extensions = tst["extensions"].native or []
         accuracy_seconds: Optional[float] = None
         if accuracy.native is not None:
             acc = accuracy.native
@@ -624,6 +691,8 @@ def verify_timestamp_token(
     }
     if algorithm != "sha256" or hashed != bytes(digest):
         return TimestampVerification(False, "imprint_mismatch", **base)
+    if any(ext.get("critical") for ext in tst_extensions):
+        return TimestampVerification(False, "unsupported_critical_extension", **base)
     if len(signers) != 1:
         return TimestampVerification(False, "malformed", **base)
     signer = signers[0]
@@ -671,16 +740,18 @@ def verify_timestamp_token(
         return TimestampVerification(False, "content_mismatch", **base)
     ess_v2 = _attr(signed_attrs, "signing_certificate_v2")
     ess_v1 = _attr(signed_attrs, "signing_certificate")
-    if ess_v2 is not None:
-        first = ess_v2["certs"][0]
-        ess_hash = first["hash_algorithm"]["algorithm"].native
+    ess = ess_v2 if ess_v2 is not None else ess_v1
+    if ess is not None:
+        first = ess["certs"][0]
+        if ess_v2 is not None:
+            ess_hash = first["hash_algorithm"]["algorithm"].native
+        else:
+            ess_hash = "sha1"  # ESS v1 (RFC 2634) fixes SHA-1
         if (
-            ess_hash not in _HASHES
+            ess_hash not in (*_HASHES, "sha1")
             or first["cert_hash"].native != hashlib.new(ess_hash, cert_der).digest()
+            or not _issuer_serial_matches(first["issuer_serial"], signer_cert, a)
         ):
-            return TimestampVerification(False, "signer_certificate_mismatch", **base)
-    elif ess_v1 is not None:
-        if ess_v1["certs"][0]["cert_hash"].native != hashlib.sha1(cert_der).digest():
             return TimestampVerification(False, "signer_certificate_mismatch", **base)
     else:
         return TimestampVerification(False, "malformed", **base)
@@ -695,7 +766,11 @@ def verify_timestamp_token(
         eku = signer_cert.extensions.get_extension_for_class(x509.ExtendedKeyUsage)
     except x509.ExtensionNotFound:
         return TimestampVerification(False, "not_a_tsa_certificate", **base)
-    if not eku.critical or ExtendedKeyUsageOID.TIME_STAMPING not in eku.value:
+    # RFC 3161 section 2.3: a critical extended key usage holding only
+    # id-kp-timeStamping.
+    if not eku.critical or list(eku.value) != [ExtendedKeyUsageOID.TIME_STAMPING]:
+        return TimestampVerification(False, "not_a_tsa_certificate", **base)
+    if _unknown_critical_extension(signer_cert):
         return TimestampVerification(False, "not_a_tsa_certificate", **base)
     if not _valid_at(signer_cert, gen_time):
         return TimestampVerification(False, "certificate_not_valid_at_gen_time", **base)

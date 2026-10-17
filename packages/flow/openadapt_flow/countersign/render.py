@@ -44,6 +44,7 @@ _TS_TEXT = {
     "after_receipt": "FAILED: the baseline was stamped after the receipt",
     "malformed": "MALFORMED",
     "unsupported_algorithm": "FAILED: unsupported signature algorithm",
+    "unsupported_critical_extension": "FAILED: the token has a critical extension this verifier does not know",
     "verifier_unavailable": "NOT CHECKED: install openadapt-flow[countersign]",
 }
 
@@ -100,7 +101,7 @@ def headline(report: CountersignReport) -> str:
                 f"SIGNATURE GENUINE, NOT A FLOW REPLAY ({kind}). "
                 "Pass --accept-non-flow to accept a receipt from another executor"
             )
-        return f"SEAL VERIFIED FOR A {kind} RUN (not a Flow replay)"
+        return f"SEAL VERIFIED: {kind} RUN (not a Flow replay)"
     return "SEAL VERIFIED (Flow replay)"
 
 
@@ -108,7 +109,13 @@ def _ts(entry: dict[str, Any]) -> str:
     status = str(entry.get("status"))
     text = _TS_TEXT.get(status, status)
     if status == "verified":
-        text += f" {entry.get('gen_time')} by {entry.get('tsa_subject')}"
+        accuracy = entry.get("accuracy_seconds")
+        text += f" {entry.get('gen_time')}" + (
+            f" (accuracy {accuracy:g} s)"
+            if isinstance(accuracy, (int, float))
+            else " (the TSA states no accuracy)"
+        )
+        text += f" by {entry.get('tsa_subject')}"
         if entry.get("trust_anchor_subject") != entry.get("tsa_subject"):
             text += f" (chains to pinned {entry.get('trust_anchor_subject')})"
     return text

@@ -336,6 +336,40 @@ def _attestation(
     }
 
 
+def _require_verified_tokens(
+    statement: Mapping[str, Any],
+    receipt_ts: Optional[Mapping[str, Any]],
+    baseline_ts: Optional[Mapping[str, Any]],
+    receipt: Mapping[str, Any],
+    tsa_certificates: Sequence[Any],
+) -> None:
+    if receipt_ts is not None:
+        status = _check_token(
+            receipt_ts, hashlib.sha256(_canonical(statement)).digest(), tsa_certificates
+        )["status"]
+        if status != "verified":
+            raise CountersignError("timestamp_unverified", "receipt token: " + status)
+    if baseline_ts is not None:
+        binding = baseline_ts.get("binding")
+        if (
+            not isinstance(binding, Mapping)
+            or binding.get("schema_version") != BASELINE_BINDING_SCHEMA
+            or binding.get("nonce") != receipt.get("nonce")
+            or binding.get("baseline_sha256") != statement.get("baseline_sha256")
+            or binding.get("baseline_read_at") != statement.get("baseline_read_at")
+        ):
+            raise CountersignError(
+                "timestamp_unverified", "baseline token: binding_mismatch"
+            )
+        status = _check_token(
+            baseline_ts,
+            hashlib.sha256(_canonical(dict(binding))).digest(),
+            tsa_certificates,
+        )["status"]
+        if status != "verified":
+            raise CountersignError("timestamp_unverified", "baseline token: " + status)
+
+
 def countersign_document(
     document: Mapping[str, Any],
     *,
@@ -344,8 +378,15 @@ def countersign_document(
     commitments: Optional[Mapping[str, Any]] = None,
     baseline_timestamp: Optional[Mapping[str, Any]] = None,
     issuer: Optional[CountersignIssuer] = None,
+    tsa_certificates: Optional[Sequence[Any]] = None,
 ) -> dict[str, Any]:
-    """Return a copy of ``document`` with a countersign block. The receipt is untouched."""
+    """Return a copy of ``document`` with a countersign block. The receipt is untouched.
+
+    With ``tsa_certificates``, every token in the block (the new receipt token
+    and a supplied baseline token) must verify against them before anything is
+    returned or countersigned, so a document never carries a timestamp its
+    creator could not check. A failure raises ``timestamp_unverified``.
+    """
     located = locate(document)
     if located.block is not None:
         raise CountersignError("already_countersigned")
@@ -363,6 +404,10 @@ def countersign_document(
         block["receipt_timestamp"] = receipt_ts
     if baseline_timestamp is not None:
         block["baseline_timestamp"] = dict(baseline_timestamp)
+    if tsa_certificates is not None:
+        _require_verified_tokens(
+            statement, receipt_ts, baseline_timestamp, located.receipt, tsa_certificates
+        )
     if issuer is not None:
         attestation = _attestation(statement, receipt_ts, baseline_timestamp)
         block["countersignature"] = {

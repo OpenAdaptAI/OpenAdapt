@@ -8,6 +8,7 @@ verification tier, timestamp, and disclosures shown.
 from __future__ import annotations
 
 import argparse
+import base64
 import hashlib
 import json
 import os
@@ -92,6 +93,19 @@ def _authority(args: argparse.Namespace) -> tuple[Any, Optional[bytes]]:
     return HttpTsa(getattr(args, "tsa_url", None) or SIGSTORE_TSA_URL), None
 
 
+def _creation_pins(args: argparse.Namespace, local_pem: Optional[bytes]) -> list[Any]:
+    """TSA certificates a new token must verify against before it is kept.
+
+    ``--tsa-cert`` files, else the bundled Sigstore root, plus the local TSA's
+    own certificate under ``--tsa-local``. A token from any other TSA is
+    refused until that TSA is pinned with ``--tsa-cert``.
+    """
+    from openadapt_flow.countersign.tsa import load_pem_certificates
+
+    pem = _tsa_pem(getattr(args, "tsa_cert", None) or []) or b""
+    return load_pem_certificates(pem + (local_pem or b""))
+
+
 def _write_out(path: str, value: Any) -> None:
     from openadapt_flow.countersign.vault import write_private_bytes
 
@@ -128,7 +142,6 @@ def cmd_add(args: argparse.Namespace) -> int:
             commitments, kept = commit_fields(
                 {str(k): str(v) for k, v in fields.items()}
             )
-            vault.put_secrets(rsha, kept)
         tsa, tsa_pem = _authority(args)
         baseline = (
             _read_json(args.baseline_timestamp) if args.baseline_timestamp else None
@@ -148,11 +161,16 @@ def cmd_add(args: argparse.Namespace) -> int:
             commitments=commitments,
             baseline_timestamp=baseline,
             issuer=issuer,
+            tsa_certificates=_creation_pins(args, tsa_pem),
         )
+        # Secrets go to the vault only once the block exists: a TSA failure
+        # above must not leave salts behind that no document commits to.
+        if commitments:
+            vault.put_secrets(rsha, kept)
         vault.put_json(rsha, "document.json", countersigned, overwrite=True)
         _write_out(args.out, countersigned)
     except (CountersignError, TimestampError) as exc:
-        print(f"add REFUSED: {exc.code}", file=sys.stderr)
+        print(f"add REFUSED: {exc}", file=sys.stderr)
         return 2
     except (OSError, ValueError, VaultError) as exc:
         print(f"add REFUSED: {exc}", file=sys.stderr)
@@ -170,7 +188,7 @@ def cmd_add(args: argparse.Namespace) -> int:
 
 def cmd_timestamp_baseline(args: argparse.Namespace) -> int:
     from openadapt_flow.countersign.document import timestamp_baseline
-    from openadapt_flow.countersign.tsa import TimestampError
+    from openadapt_flow.countersign.tsa import TimestampError, verify_timestamp_token
 
     tsa, tsa_pem = _authority(args)
     if tsa is None:
@@ -194,8 +212,15 @@ def cmd_timestamp_baseline(args: argparse.Namespace) -> int:
             nonce=args.nonce,
             tsa_pem=tsa_pem,
         )
+        check = verify_timestamp_token(
+            base64.b64decode(entry["token"]),
+            bytes.fromhex(entry["imprint_sha256"]),
+            _creation_pins(args, tsa_pem),
+        )
+        if not check.ok:
+            raise TimestampError("timestamp_unverified", check.reason)
     except TimestampError as exc:
-        print(f"timestamp-baseline REFUSED: {exc.code}", file=sys.stderr)
+        print(f"timestamp-baseline REFUSED: {exc}", file=sys.stderr)
         return 2
     _write_out(args.out, entry)
     print(f"Baseline {digest} timestamped for nonce {args.nonce}: {args.out}")
@@ -317,6 +342,15 @@ def _add_tsa(p: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_creation_pin(p: argparse.ArgumentParser) -> None:
+    p.add_argument(
+        "--tsa-cert",
+        action="append",
+        metavar="PEM",
+        help="Pinned TSA certificate or CA the new token must verify against before it is kept (repeatable; default: the bundled Sigstore TSA root)",
+    )
+
+
 def _add_trust(p: argparse.ArgumentParser) -> None:
     p.add_argument(
         "--keys", help="Pinned Seal key file (default: same as openadapt-agent seal)"
@@ -362,6 +396,7 @@ def add_countersign_parser(sub: Any) -> None:
         help="JSON object of sensitive fields to commit; values go to the vault only",
     )
     _add_tsa(n)
+    _add_creation_pin(n)
     n.add_argument(
         "--baseline-timestamp",
         help="Output of 'countersign timestamp-baseline' for this run",
@@ -387,6 +422,7 @@ def add_countersign_parser(sub: Any) -> None:
     )
     b.add_argument("-o", "--out", required=True)
     _add_tsa(b)
+    _add_creation_pin(b)
     b.set_defaults(func=cmd_timestamp_baseline)
 
     d = nsub.add_parser(
