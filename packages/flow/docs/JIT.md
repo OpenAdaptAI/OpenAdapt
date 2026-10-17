@@ -28,9 +28,10 @@ jit = compile_agent(
 )
 
 first = jit.run(note="Follow up in two weeks")   # status: needs_human_admit (DRAFT)
-steps = [s["id"] for s in jit.status()["steps"]]
-jit.review(principal_id="dana@clinic.example", reviewed_steps=steps,
-           accept_params=["note"], confirm="ok")
+confirmed = jit.confirm_params(principal_id="dana@clinic.example",
+                               accept_params=["note"], confirm="ok")
+jit.review(principal_id="dana@clinic.example", reviewed_steps=confirmed["steps"],
+           confirm="ok")
 jit.canary(principal_id="dana@clinic.example", note="Canary test note")
 jit.admit(principal_id="dana@clinic.example", confirm="ok")
 later = jit.run(note="Recheck knee in ten days")  # status: VERIFIED, model_calls: 0
@@ -50,10 +51,11 @@ python examples/jit/run_mockmed.py
 
 | State of the task | `run(**params)` does | `status` |
 | --- | --- | --- |
-| Nothing cached | Shows the recording warning, runs the agent once, records it, compiles a DRAFT | `needs_human_admit` |
+| Nothing cached | Prints the recording warning, runs the agent once, records it, compiles a DRAFT | `needs_human_admit` |
 | A DRAFT is waiting | Nothing. The agent is not run again, and the draft does not run | `needs_human_admit` |
 | A program is admitted | Checks the signed admission, runs the program under the standard profile, and reads the save back | `VERIFIED`, or `HALTED` and others |
 | The admitted bundle or its manifest changed | Nothing | `refused` |
+| The policy, the app's origin, or the verifier differs from what was admitted | Nothing | `refused` |
 | The replay called a model | Sends the run to the inbox | `needs_review` |
 
 A run that does not end `VERIFIED` is written to the exception inbox
@@ -172,24 +174,28 @@ parameters in the bundle's `param_proposals.json`, next to the compiler's own
 field-label proposals. An input typed in two steps, typed inside longer text,
 or not typed at all is listed as not lifted.
 
-Nothing is applied until admission. `admit(accept_params=[...])` runs the
-existing confirm pass
+Nothing is applied until a person confirms it.
+`confirm_params(accept_params=[...])` runs the existing confirm pass
 ([`compiler/param_confirm.py`](../openadapt_flow/compiler/param_confirm.py)),
 which recompiles the recording with the confirmed parameters. The recompile
 binds the mined read-back to the parameter, so a run with a new value checks
 for the new value. `accept_params` must name exactly the task's parameters.
+The recompile can renumber the steps, so it comes before the review and
+returns the step ids the review asks for. It refuses once a review exists.
 
 ## Admission
 
-A draft is admitted in three calls, each by a named person, and only in this
-order: `review`, `canary`, `admit`. `run` never calls any of them, and a
-draft never runs unattended. [JIT_ADMISSION.md](JIT_ADMISSION.md) lists what
-each step checks. The admission manifest (`admission.json` in the bundle) is
-signed with a local Ed25519 key and pins the bundle's content digest. A run
-checks the signature and the digest, and the run gate pins the digest, so a
+A draft is admitted by a named person in this order: `confirm_params` (when
+the task has parameters), `review`, `canary`, `admit`. `run` never calls any
+of them. [JIT_ADMISSION.md](JIT_ADMISSION.md) lists what each step checks.
+The admission manifest (`admission.json` in the bundle) is signed with a
+local Ed25519 key and pins the bundle's content digest. A run checks the
+signature and the digest, and the run gate pins the admitted digest, so a
 bundle or manifest edited after admission is refused.
 
-`review`, `admit`, `reject` and `status` are also on the command line:
+`review` (which confirms the parameters first), `admit`, `reject` and
+`status` are also on the command line. Every command except `status` needs
+an interactive terminal and a typed `ok`:
 
 ```bash
 openadapt-flow jit status jit-cache/<task key>
@@ -209,10 +215,12 @@ The canary needs the app and the verifier, so it runs from Python only.
       recording/            the agent's run as recorded
       recording-distilled/  what was compiled
       bundle/               the program; admission.json after admission
+      bundle/jit_draft.json marks the bundle as a draft for replay and run
       candidate.json        what the reviewer sees; state DRAFT
+      params.json           who confirmed the parameters, for which digest
       review.json           who reviewed which steps, for which digest
       canary.json           the attended canary and its read-back coverage
-      lifecycle.jsonl       one line per review, canary, admission, rejection
+      lifecycle.jsonl       one line per step of the lifecycle
       capture.json          each native action and the steps it became
     runs/                   one directory per run
     refused-*/, rejected-*/ captures that produced no program
@@ -230,9 +238,9 @@ explores again.
   refuses it, and no run can reach `VERIFIED`.
 - Secret inputs are not lifted. A secret is typed by a person at a pause
   (see `AuthoringSession.pause_for_input`), not by the agent.
-- The review recompiles the recording to apply the confirmed parameters, so
-  the step ids can change. If `review` refuses with "every step", read the
-  steps again with `status` and review those.
+- `openadapt-flow replay` and `run` refuse a draft. Other ways to load a
+  bundle (`emit-skill`, `emit-mcp`, `serve-execute`, your own code calling
+  `Workflow.load`) don't check the draft marker yet.
 - OpenAI `pending_safety_checks` are your loop's to acknowledge;
   `computer.execute` does not read them.
 - One admitted program per task signature. A task that needs branches still
