@@ -1261,6 +1261,28 @@ def test_policy_must_be_signed_by_an_approver_who_is_not_an_author(fleet_with_pa
         )
 
 
+def test_role_registry_and_policy_refuse_malformed_entries():
+    good = SoftwareKeyCustody.generate().public_key_b64()
+    for bad in ("not-base64!", "AAAA"):
+        with pytest.raises(ValueError, match="public key"):
+            RoleRegistry(policy_approvers={"pat": bad})
+    with pytest.raises(ValueError, match="person id"):
+        RoleRegistry(policy_approvers={"Pat Lee": good})
+    assert RoleRegistry(policy_approvers={"pat": good}).policy_approvers
+    policy = sim._policy_for(
+        "t",
+        auto_promote=True,
+        app_families=(sim.APP_FAMILY,),
+        healthy_cases=1,
+        fault_cases=1,
+        now=datetime.now(timezone.utc),
+    )
+    with pytest.raises(ValueError, match="app family"):
+        type(policy).model_validate(
+            {**policy.model_dump(), "app_families": ["Not A Family"]}
+        )
+
+
 def test_auto_promotion_only_under_policy(fleet_with_patch):
     fleet, patch = fleet_with_patch
 

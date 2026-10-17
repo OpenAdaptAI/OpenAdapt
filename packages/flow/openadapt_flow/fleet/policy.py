@@ -41,19 +41,22 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import tempfile
+from base64 import b64decode
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Final, Literal, Optional, Sequence
 
-from pydantic import BaseModel, ConfigDict, Field, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from openadapt_flow.fleet.canary import (
     QualificationCase,
     TenantCanaryRunner,
     canary_patch,
 )
+from openadapt_flow.fleet.fingerprint import APP_FAMILY_PATTERN
 from openadapt_flow.fleet.signing import (
     FleetTrust,
     KeyCustody,
@@ -129,6 +132,14 @@ class FleetPromotionPolicy(BaseModel):
     #: Oldest revocation list this tenant accepts.
     max_status_age_hours: int = Field(default=24, ge=1, le=24)
 
+    @field_validator("app_families")
+    @classmethod
+    def _families(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        bad = [f for f in value if not re.match(APP_FAMILY_PATTERN, f)]
+        if bad:
+            raise ValueError(f"invalid app family {bad[0]!r}")
+        return value
+
     @model_validator(mode="after")
     def _separate(self) -> "FleetPromotionPolicy":
         if self.security_official.official_name.strip().lower() == (
@@ -193,6 +204,17 @@ class RoleRegistry(BaseModel):
 
     @model_validator(mode="after")
     def _separate(self) -> "RoleRegistry":
+        people = list(self.workflow_authors) + list(self.policy_approvers)
+        bad = [p for p in people if not re.match(_PERSON_ID, p)]
+        if bad:
+            raise ValueError(f"invalid person id {bad[0]!r}")
+        for person, public in self.policy_approvers.items():
+            try:
+                raw = b64decode(public, validate=True)
+            except ValueError as exc:
+                raise ValueError(f"{person}'s public key is not base64") from exc
+            if len(raw) != 32:
+                raise ValueError(f"{person}'s public key is not an Ed25519 key")
         both = set(self.workflow_authors) & set(self.policy_approvers)
         if both:
             raise ValueError(
