@@ -2,12 +2,21 @@
 
 <!-- version list -->
 
-## v1.3.0 (2026-09-03)
+## v1.3.0 (2026-10-17)
 
 _This release uses the MIT License._
 
 ### Features
 
+- **shadow**: Add shadow mode, an opt-in, local detector of repeated work. It
+  turns on only after the person acknowledges the notice, keeps value-free
+  symbols in a 24-hour AES-GCM buffer under a key that is destroyed with it,
+  refuses synced folders, supports pause, and clears the buffer on exit. It
+  offers "You did this N times today." and runs nothing on its own. The
+  recorder gains an opt-in live event tap that feeds it. Install the
+  `shadow` extra to use it
+  ([#156](https://github.com/OpenAdaptAI/openadapt-capture/pull/156),
+  [`3dcfdf8`](https://github.com/OpenAdaptAI/openadapt-capture/commit/3dcfdf810747bda5a4a9838642d7073a2e3a2e49)).
 - Capture an exact macOS window through a desktop-independent
   ScreenCaptureKit filter. Exact-window Quartz and system-utility providers
   remain as compatibility paths
@@ -53,6 +62,18 @@ _This release uses the MIT License._
 
 ### Bug Fixes
 
+- Record native input through the authentication gate
+  ([#146](https://github.com/OpenAdaptAI/openadapt-capture/pull/146),
+  [`5f87b8c`](https://github.com/OpenAdaptAI/openadapt-capture/commit/5f87b8c5a7a666db9919d0b57078558fc80e5480)).
+- Stop extension input after recording ends
+  ([#140](https://github.com/OpenAdaptAI/openadapt-capture/pull/140),
+  [`5d54530`](https://github.com/OpenAdaptAI/openadapt-capture/commit/5d54530af362f0afc716a6c5e52b15ccdb794777)).
+- Fix Linux X RECORD startup and CLI setup errors
+  ([#144](https://github.com/OpenAdaptAI/openadapt-capture/pull/144),
+  [`534db54`](https://github.com/OpenAdaptAI/openadapt-capture/commit/534db5498c904f1b84dbe352e0232712ee7edcad)).
+- **deps**: Patch Dependabot security alerts
+  ([#147](https://github.com/OpenAdaptAI/openadapt-capture/pull/147),
+  [`ae73be1`](https://github.com/OpenAdaptAI/openadapt-capture/commit/ae73be1de2541820acb57ed02548cc814ff0b85a)).
 - Allow the first Windows UI Automation initialization to complete within a
   bounded cold-start window. Make performance plotting opt-in so the first
   recorder shutdown does not build a Matplotlib font cache.
@@ -110,6 +131,8 @@ _This release uses the MIT License._
 
 ### Documentation
 
+- Lead the README with a quick start, a status line, and a platform table
+  ([#144](https://github.com/OpenAdaptAI/openadapt-capture/pull/144), [#148](https://github.com/OpenAdaptAI/openadapt-capture/pull/148)).
 - Align entry commands and substrate maturity across repo READMEs
   ([#66](https://github.com/OpenAdaptAI/openadapt-capture/pull/66),
   [`431fd37`](https://github.com/OpenAdaptAI/openadapt-capture/commit/431fd376f1d4968fbee0bfa1b044c32f71f71e8d))
@@ -124,6 +147,10 @@ _This release uses the MIT License._
 
 ### Testing
 
+- **input-observer**: Stop charging a deliberate setup wait to the 0.2s
+  readiness deadline
+  ([#157](https://github.com/OpenAdaptAI/openadapt-capture/pull/157),
+  [`57cd72b`](https://github.com/OpenAdaptAI/openadapt-capture/commit/57cd72b1e2133ddbec40c3f689e386677899e063)).
 - Make the Capture test suite portable across clean operating-system runners
   ([#130](https://github.com/OpenAdaptAI/openadapt-capture/pull/130),
   [`e514cee`](https://github.com/OpenAdaptAI/openadapt-capture/commit/e514cee9de3c150f44115d7ba5fc5797b5e3221f)).
@@ -142,6 +169,9 @@ _This release uses the MIT License._
 
 ### Continuous Integration
 
+- Name the failed release step in the release-health issue
+  ([#145](https://github.com/OpenAdaptAI/openadapt-capture/pull/145),
+  [`3dcadcb`](https://github.com/OpenAdaptAI/openadapt-capture/commit/3dcadcb8b90fc1c9e8c728a4e7aa9a047ecdc7e6)).
 - Start missing exact-commit release qualification, require the archive job,
   and recheck protected `main` immediately before the release tag. Clean-wheel
   qualification now installs and probes the pinned FFmpeg runtime on all three
@@ -173,6 +203,12 @@ _This release uses the MIT License._
 
 ### Chores
 
+- **deps**: Raise the floors for SQLAlchemy 2.0.54, Alembic 1.20.0, and
+  Matplotlib 3.10.9, and for pytest 9.1.1 and pytest-timeout 2.4.0 in `dev`
+  ([#150](https://github.com/OpenAdaptAI/openadapt-capture/pull/150), [#151](https://github.com/OpenAdaptAI/openadapt-capture/pull/151), [#152](https://github.com/OpenAdaptAI/openadapt-capture/pull/152), [#153](https://github.com/OpenAdaptAI/openadapt-capture/pull/153), [#154](https://github.com/OpenAdaptAI/openadapt-capture/pull/154)).
+- **ci**: Update CodeQL, upload-artifact, download-artifact, and the
+  semantic-release publish action, and keep Dependabot off PyGObject 3.51+
+  ([#136](https://github.com/OpenAdaptAI/openadapt-capture/pull/136), [#138](https://github.com/OpenAdaptAI/openadapt-capture/pull/138), [#139](https://github.com/OpenAdaptAI/openadapt-capture/pull/139), [#141](https://github.com/OpenAdaptAI/openadapt-capture/pull/141), [#142](https://github.com/OpenAdaptAI/openadapt-capture/pull/142), [#149](https://github.com/OpenAdaptAI/openadapt-capture/pull/149)).
 - **ci**: Update CodeQL to 4.37.9
   ([#128](https://github.com/OpenAdaptAI/openadapt-capture/pull/128),
   [#129](https://github.com/OpenAdaptAI/openadapt-capture/pull/129)).
