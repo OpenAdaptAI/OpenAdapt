@@ -12,12 +12,6 @@ contact_links:
   - name: openadapt-viewer issues
     url: https://github.com/OpenAdaptAI/openadapt-viewer/issues
     about: For issues related to HTML visualization
-  - name: openadapt-grounding issues
-    url: https://github.com/OpenAdaptAI/openadapt-grounding/issues
-    about: For issues related to UI element localization
-  - name: openadapt-retrieval issues
-    url: https://github.com/OpenAdaptAI/openadapt-retrieval/issues
-    about: For issues related to multimodal demo retrieval
   - name: openadapt-privacy issues
     url: https://github.com/OpenAdaptAI/openadapt-privacy/issues
     about: For issues related to PII/PHI scrubbing

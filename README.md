@@ -520,13 +520,9 @@ A separate research line asks whether human demonstrations can improve the
 accuracy of general computer-use models. That's a different question from
 compiling one demonstration into a deterministic script, and it lives in
 [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) (training and
-inference for multimodal GUI-action models),
+inference for multimodal GUI-action models) and
 [openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) (benchmark
-evaluation for GUI agents),
-[openadapt-retrieval](https://github.com/OpenAdaptAI/openadapt-retrieval)
-(multimodal demonstration retrieval), and
-[openadapt-grounding](https://github.com/OpenAdaptAI/openadapt-grounding) (UI
-element localization). Install with `pip install "openadapt[ml,evals]"`; the
+evaluation for GUI agents). Install with `pip install "openadapt[ml,evals]"`; the
 [research thesis](https://github.com/OpenAdaptAI/openadapt-ml/blob/main/docs/research_thesis.md)
 has the methodology, results, and limits.
 
