@@ -898,6 +898,13 @@ class QualificationProject(BaseModel):
     created_at: str = Field(default_factory=_now)
     updated_at: str = Field(default_factory=_now)
     environment: EnvironmentBoundary
+    #: Multi-surface workflows only (docs/MULTI_SURFACE.md): the qualified
+    #: environment of each NON-primary surface, keyed by surface id. The
+    #: primary surface is ``environment``. A qualification case run of a
+    #: multi-surface workflow observes every surface it switches to against
+    #: its boundary here and refuses a surface that has none. Empty (and
+    #: omitted from the contract bytes) for every single-surface project.
+    surface_environments: dict[str, EnvironmentBoundary] = Field(default_factory=dict)
     minimum_effect_tier: VerificationTier = (
         VerificationTier.PERSISTED_STATE_REACQUISITION
     )
@@ -967,6 +974,11 @@ class QualificationProject(BaseModel):
                     raise ValueError(
                         f"trusted {key_kind} public key must be 32-byte Ed25519"
                     )
+        from openadapt_flow.ir import SURFACE_ID_PATTERN
+
+        for surface_id in self.surface_environments:
+            if not re.fullmatch(SURFACE_ID_PATTERN, surface_id):
+                raise ValueError("surface environment key is not a surface id")
         case_ids = [case.id for case in self.cases]
         if len(case_ids) != len(set(case_ids)):
             raise ValueError("qualification case ids must be unique")
@@ -998,6 +1010,8 @@ class QualificationProject(BaseModel):
         """Omit the additive trust store until a fault driver is bound."""
 
         data: dict[str, Any] = handler(self)
+        if not self.surface_environments:
+            data.pop("surface_environments", None)
         if not self.trusted_fault_driver_keys:
             data.pop("trusted_fault_driver_keys", None)
         if not self.judgment_fact_schemas:
@@ -2491,6 +2505,72 @@ def _one_evidence(
     return matches[0], None
 
 
+def _surface_environment_evidence_refusal(
+    report: Any, workflow: "Workflow", project: "QualificationProject"
+) -> Optional[str]:
+    """Check a multi-surface case's per-surface environment observations.
+
+    Every non-primary surface a step ran on must carry an observation that
+    matches that surface's qualified boundary exactly (the same fields the
+    primary check compares), and no observation may name a surface the run
+    never used. Single-surface reports carry none and pass unchanged.
+    """
+
+    from openadapt_flow.qualification_environment import (
+        qualification_environment_binding_sha256,
+    )
+
+    observed = dict(getattr(report, "observed_surface_environments", {}) or {})
+    if not workflow.surfaces:
+        return (
+            "case report carries surface environments for a single-surface workflow"
+            if observed
+            else None
+        )
+    primary = workflow.surfaces[0].id
+    used = {
+        result.surface
+        for result in report.results
+        if result.surface is not None and result.surface != primary
+    }
+    if set(observed) != used:
+        return "case report surface environments do not match the surfaces it ran on"
+    for surface_id in sorted(used):
+        boundary = project.surface_environments.get(surface_id)
+        item = observed[surface_id]
+        expected_identity = (
+            None if boundary is None else boundary.expected_application_identity
+        )
+        if boundary is None or expected_identity is None:
+            return f"surface '{surface_id}' has no qualified environment boundary"
+        binding = qualification_environment_binding_sha256(
+            target_kind=item.target_kind,
+            observer_id=item.observer_id,
+            observer_contract_sha256=item.observer_contract_sha256,
+            application_identity_sha256=item.application_sha256,
+            application_version_sha256=item.application_version_sha256,
+            environment_digest=item.environment_digest,
+            session_identity_sha256=item.session_sha256,
+        )
+        if (
+            item.target_kind != boundary.target_kind
+            or item.application_sha256
+            != hashlib.sha256(expected_identity.encode("utf-8")).hexdigest()
+            or item.application_version_sha256
+            != hashlib.sha256(boundary.application_version.encode("utf-8")).hexdigest()
+            or item.environment_digest != boundary.environment_digest
+            or item.observer_id != boundary.environment_observer_id
+            or item.observer_contract_sha256
+            != boundary.environment_observer_contract_sha256
+            or item.binding_sha256 != binding
+        ):
+            return (
+                f"case report environment for surface '{surface_id}' does not "
+                "match the project"
+            )
+    return None
+
+
 def _case_run_report_integrity_error(
     *,
     workflow: "Workflow",
@@ -3860,6 +3940,9 @@ def _case_run_report_integrity_error(
             QualificationRefusalCode.CASE_ENVIRONMENT_CHANGED,
             "case report environment binding does not match the project",
         )
+    surface_refusal = _surface_environment_evidence_refusal(report, workflow, project)
+    if surface_refusal is not None:
+        return (QualificationRefusalCode.CASE_ENVIRONMENT_CHANGED, surface_refusal)
 
     if (
         not report.qualification_evidence_only

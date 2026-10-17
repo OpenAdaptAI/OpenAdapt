@@ -100,6 +100,7 @@ from openadapt_flow.ir import (
     InterstitialActionResult,
     LoopIterationBinding,
     LoopSpec,
+    ObservedSurfaceEnvironment,
     PixelIdentityEvidence,
     Point,
     Postcondition,
@@ -722,6 +723,9 @@ class Replayer:
         # the ACTIVE surface's backend, so every gate acts on that surface.
         self.surface_backends: dict[str, Backend] = dict(surface_backends or {})
         self._surface_router: Optional[SurfaceRouter] = None
+        self._surface_environment_observations: dict[
+            str, ObservedSurfaceEnvironment
+        ] = {}
         # Defaulted to the ``openadapt_flow.vision`` module above when None, so it
         # is always populated by the time replay runs; typed Any (a namespace-like
         # facade exposing find_template/ocr/wait_settled/...).
@@ -2222,6 +2226,10 @@ class Replayer:
         """Persist exact evidence first, then project its terminal outcome."""
 
         self._end_surfaces()
+        if self._surface_environment_observations:
+            report.observed_surface_environments = dict(
+                self._surface_environment_observations
+            )
         report.qualification_fault_mutations = list(self._qualification_fault_mutations)
         self._stamp_execution_outcome(report, workflow, run_dir)
         self._stamp_approval(report)
@@ -5673,6 +5681,11 @@ class Replayer:
             effect_verifier=effect_verifier,
             effects=effects,
             capture_frame=capture_frame,
+            surface_id=(
+                self._surface_router.active_id
+                if self._surface_router is not None
+                else None
+            ),
         )
 
     def _require_current_fault_driver_binding(self) -> QualificationFaultDriver:
@@ -5843,22 +5856,19 @@ class Replayer:
                     "no surfaces; refusing to run"
                 )
             return None
+        # Governed, qualified, and durable runs are admitted: the governed
+        # authorization binds the sealed bundle, whose workflow.json carries
+        # the declared surface map; every step result records the surface it
+        # ran on; the outcome classifier requires that record to match the
+        # contract; and a qualification case observes each surface against
+        # its own qualified boundary. Two paths stay refused: a resume (a
+        # checkpoint cannot carry live page handles across processes) and a
+        # managed Cloud dispatch (its runner has not been exercised with
+        # surfaces).
         blockers = [
             name
             for name, present in (
-                ("a governed authorization", self.governed_authorization is not None),
-                ("a qualification fault driver", self.qualification_fault_driver),
-                (
-                    "a qualification environment observer",
-                    self.qualification_environment_observer,
-                ),
-                (
-                    "a production qualification guard",
-                    self.production_qualification_guard,
-                ),
-                ("a qualification campaign guard", self.qualification_campaign_guard),
                 ("a managed dispatch binding", self._managed_dispatch_snapshot),
-                ("durable checkpoints", self.durable),
                 ("a resume", resume),
             )
             if present
@@ -5867,8 +5877,43 @@ class Replayer:
             return (
                 "multi-surface workflows are not yet admitted with "
                 + ", ".join(blockers)
-                + " (that evidence binds one surface); refusing to run"
+                + "; refusing to run"
             )
+        authorization = self.governed_authorization
+        if (
+            authorization is not None
+            and authorization.qualification_case_id is not None
+        ):
+            project = workflow.qualification
+            if project is None:
+                return (
+                    "a multi-surface qualification case needs the bundle's "
+                    "qualification project; refusing to run"
+                )
+            for spec in workflow.surfaces[1:]:
+                boundary = project.surface_environments.get(spec.id)
+                if boundary is None:
+                    return (
+                        f"the qualification project has no environment boundary "
+                        f"for surface '{spec.id}'; every surface of a "
+                        "multi-surface workflow must be qualified; refusing to run"
+                    )
+                if boundary.target_kind != spec.kind:
+                    return (
+                        f"the qualification boundary for surface '{spec.id}' is "
+                        f"{boundary.target_kind}, but the surface is declared "
+                        f"{spec.kind}; refusing to run"
+                    )
+            extra = sorted(
+                set(project.surface_environments)
+                - {spec.id for spec in workflow.surfaces[1:]}
+            )
+            if extra:
+                return (
+                    "the qualification project bounds surfaces the workflow "
+                    "does not declare: " + ", ".join(extra) + "; refusing to run"
+                )
+        self._surface_environment_observations = {}
         try:
             self._surface_router = SurfaceRouter(
                 workflow,
@@ -5889,6 +5934,17 @@ class Replayer:
         self._surface_router = None
         if self.backend is not router.primary_backend:
             self._activate_surface_backend(router.primary_backend)
+        # Drop the qualification input-edge guard from every other surface
+        # backend; the primary's guard follows the single-surface lifecycle.
+        for backend in router.backends.values():
+            if backend is router.primary_backend:
+                continue
+            clear_guard = getattr(backend, "set_qualification_input_guard", None)
+            if callable(clear_guard):
+                try:
+                    clear_guard(None)
+                except Exception:
+                    pass
 
     def _activate_surface_backend(self, backend: Backend) -> None:
         """Make ``backend`` current and drop every cache bound to the old one.
@@ -5909,6 +5965,58 @@ class Replayer:
         self._last_click_point = None
         self._last_click_region = None
         self._control_overlay_last_observation_png = None
+
+    def _bind_surface_qualification_environment(
+        self, workflow: Workflow, surface_id: str
+    ) -> Optional[str]:
+        """Observe the newly active surface against its qualified boundary.
+
+        Only a qualification case run observes environments. The primary
+        surface is checked against the project's ``environment`` (as at run
+        start); every other surface against ``surface_environments[id]``
+        (``_begin_surfaces`` already refused a case whose project lacks one).
+        On a match the input-edge guard moves to the new surface's backend,
+        so every later input on that surface rechecks that environment.
+        """
+
+        authorization = self.governed_authorization
+        if authorization is None or authorization.qualification_case_id is None:
+            return None
+        router = self._surface_router
+        project = workflow.qualification
+        if router is None or project is None:
+            return "qualification environment evidence is unavailable"
+        self._qualification_environment_call = None
+        self._qualification_environment_bound = None
+        if surface_id == router.primary_id:
+            boundary = project.environment
+        else:
+            boundary = project.surface_environments.get(surface_id)
+            if boundary is None:
+                return "the qualification project does not bound this surface"
+        refusal, observed, ids = self._bind_qualification_boundary(
+            boundary, surface_scoped=surface_id != router.primary_id
+        )
+        if surface_id != router.primary_id and observed is not None and ids is not None:
+            self._surface_environment_observations[surface_id] = (
+                ObservedSurfaceEnvironment(
+                    target_kind=observed.target_kind,
+                    application_sha256=hashlib.sha256(
+                        observed.application_identity.encode("utf-8")
+                    ).hexdigest(),
+                    application_version_sha256=hashlib.sha256(
+                        observed.application_version.encode("utf-8")
+                    ).hexdigest(),
+                    session_sha256=observed.session_identity_sha256,
+                    environment_digest=observed.environment_digest,
+                    observer_id=ids[0],
+                    observer_contract_sha256=ids[1],
+                    binding_sha256=observed.binding_sha256(
+                        observer_id=ids[0], observer_contract_sha256=ids[1]
+                    ),
+                )
+            )
+        return refusal
 
     def _active_surface_binding(
         self, workflow: Workflow
@@ -5989,11 +6097,17 @@ class Replayer:
             )
         refusal = router.entry_refusal(step)
         if refusal is not None:
-            return self._surface_refusal_result(step, refusal)
+            refused = self._surface_refusal_result(step, refusal)
+            refused.surface = router.active_id
+            return refused
         if step.action is ActionKind.SWITCH_SURFACE:
-            return self._run_switch_surface_step(
-                step, bundle_dir=bundle_dir, run_dir=run_dir
+            switched = self._run_switch_surface_step(
+                step, workflow=workflow, bundle_dir=bundle_dir, run_dir=run_dir
             )
+            # The surface the run is on after the switch: the target on
+            # success, the unchanged surface on a refusal.
+            switched.surface = router.active_id
+            return switched
         result = self._run_step_on_active_surface(
             step,
             workflow=workflow,
@@ -6004,6 +6118,10 @@ class Replayer:
             new_crops=new_crops,
             graph_ctx=graph_ctx,
         )
+        # Receipt: the surface this step ran on. The entry check above proved
+        # it is the step's declared surface; the outcome classifier re-checks
+        # the record against the contract.
+        result.surface = router.active_id
         if not result.ok:
             return result
         # A guard-skipped step delivered nothing, so it cannot have opened its
@@ -6018,7 +6136,7 @@ class Replayer:
         return result
 
     def _run_switch_surface_step(
-        self, step: Step, *, bundle_dir: Path, run_dir: Path
+        self, step: Step, *, workflow: Workflow, bundle_dir: Path, run_dir: Path
     ) -> StepResult:
         """Switch to ``step.surface`` after its identity check; never raises.
 
@@ -6056,6 +6174,18 @@ class Replayer:
             result.elapsed_ms = (time.monotonic() - t0) * 1000.0
             return result
         self._activate_surface_backend(backend)
+        env_refusal = self._bind_surface_qualification_environment(
+            workflow, router.active_id
+        )
+        if env_refusal is not None:
+            result.safety_halt = True
+            result.failure_category = "governed_refusal"
+            result.error = (
+                f"Step '{step.id}' ({step.intent}): {env_refusal} on surface "
+                f"'{router.active_id}'; run halted"
+            )
+            result.elapsed_ms = (time.monotonic() - t0) * 1000.0
+            return result
         failed: list[str] = []
         try:
             start_state = self._structural_state()
@@ -11567,56 +11697,120 @@ class Replayer:
             return "qualification run identity does not match its authorization"
         if execution_target_kind != project.environment.target_kind:
             return "qualification target kind does not match the project"
+        refusal, observed, observer_ids = self._bind_qualification_boundary(
+            project.environment
+        )
+        if observed is not None and observer_ids is not None:
+            report.observed_application_sha256 = hashlib.sha256(
+                observed.application_identity.encode("utf-8")
+            ).hexdigest()
+            report.observed_application_version_sha256 = hashlib.sha256(
+                observed.application_version.encode("utf-8")
+            ).hexdigest()
+            report.observed_session_sha256 = observed.session_identity_sha256
+            report.observed_environment_digest = observed.environment_digest
+            report.qualification_environment_observer_id = observer_ids[0]
+            report.qualification_environment_observer_contract_sha256 = observer_ids[1]
+            report.observed_environment_binding_sha256 = observed.binding_sha256(
+                observer_id=observer_ids[0],
+                observer_contract_sha256=observer_ids[1],
+            )
+        return refusal
+
+    def _bind_qualification_boundary(
+        self, boundary: Any, *, surface_scoped: bool = False
+    ) -> tuple[
+        Optional[str],
+        Optional[QualificationEnvironmentObservation],
+        Optional[tuple[str, str]],
+    ]:
+        """Observe ``self.backend`` against one qualified environment boundary.
+
+        Returns ``(refusal, observation, (observer_id, observer_contract))``.
+        The observation is returned whenever one was taken, even when it does
+        not match, so the caller can retain it. On a match the input-edge
+        environment guard is bound to ``self.backend``. A multi-surface
+        qualification case calls this once for the primary surface (the
+        project's ``environment``) and again on every surface switch, with that
+        surface's boundary (``QualificationProject.surface_environments``).
+        """
 
         configured_observer = self.qualification_environment_observer
+        if (
+            surface_scoped
+            and configured_observer is not None
+            and boundary.environment_observer_id is not None
+        ):
+            try:
+                configured_id = configured_observer.observer_id
+            except Exception:
+                configured_id = None
+            if configured_id != boundary.environment_observer_id:
+                # A run has one configured observer. A surface whose boundary
+                # names another observer uses that observer's own route below.
+                configured_observer = None
         if configured_observer is None:
             from openadapt_flow.qualification_web_session import (
                 SIGNED_IN_WEB_SESSION_OBSERVER_ID,
                 SignedInWebSessionObserver,
             )
 
-            if (
-                project.environment.environment_observer_id
-                == SIGNED_IN_WEB_SESSION_OBSERVER_ID
-            ):
+            if boundary.environment_observer_id == SIGNED_IN_WEB_SESSION_OBSERVER_ID:
                 # Real web apps carry no OpenAdapt markers: identify them by
                 # origin and signed-in session, with the version the operator
                 # confirmed in Check it. The contract and environment digests
                 # below still have to match the project exactly.
                 try:
                     configured_observer = SignedInWebSessionObserver(
-                        project.environment.application_version
+                        boundary.application_version
                     )
                 except ValueError:
-                    return "qualification confirmed application version is invalid"
+                    return (
+                        "qualification confirmed application version is invalid",
+                        None,
+                        None,
+                    )
         if configured_observer is None:
             if not callable(
                 getattr(self.backend, "qualification_environment_identity", None)
             ):
                 return (
-                    "qualification backend cannot observe the complete environment; "
-                    "configure the project's environment observer"
+                    "qualification backend cannot observe the complete "
+                    "environment; configure the project's environment observer",
+                    None,
+                    None,
                 )
             configured_observer = BackendQualificationEnvironmentObserver(self.backend)
+        observer = configured_observer
         expected_observer = (
-            project.environment.environment_observer_id,
-            project.environment.environment_observer_contract_sha256,
+            boundary.environment_observer_id,
+            boundary.environment_observer_contract_sha256,
         )
         try:
             observed_observer = (
-                configured_observer.observer_id,
-                configured_observer.contract_sha256,
+                observer.observer_id,
+                observer.contract_sha256,
             )
         except Exception:
-            return "qualification environment observer identity is unavailable"
+            return (
+                "qualification environment observer identity is unavailable",
+                None,
+                None,
+            )
         if expected_observer != observed_observer:
-            return "qualification environment observer does not match the project"
+            return (
+                "qualification environment observer does not match the project",
+                None,
+                None,
+            )
+        backend = self.backend
+        target_kind = boundary.target_kind
 
         def environment_call() -> QualificationEnvironmentObservation:
             try:
                 before_observer = (
-                    configured_observer.observer_id,
-                    configured_observer.contract_sha256,
+                    observer.observer_id,
+                    observer.contract_sha256,
                 )
             except Exception as exc:
                 raise StructuralResolutionRefused(
@@ -11626,14 +11820,11 @@ class Replayer:
                 raise StructuralResolutionRefused(
                     "qualification environment observer binding changed before input"
                 )
-            current = configured_observer.observe(
-                self.backend,
-                project.environment.target_kind,
-            )
+            current = observer.observe(backend, target_kind)
             try:
                 after_observer = (
-                    configured_observer.observer_id,
-                    configured_observer.contract_sha256,
+                    observer.observer_id,
+                    observer.contract_sha256,
                 )
             except Exception as exc:
                 raise StructuralResolutionRefused(
@@ -11648,40 +11839,38 @@ class Replayer:
         try:
             observed = environment_call()
         except Exception:
-            return "qualification environment observation failed"
-        application = observed.application_identity
-        application_version = observed.application_version
-        if observed.target_kind != project.environment.target_kind:
-            return "qualification environment observer returned the wrong surface"
-        session = observed.session_identity_sha256
-        report.observed_application_sha256 = hashlib.sha256(
-            application.encode("utf-8")
-        ).hexdigest()
-        report.observed_application_version_sha256 = hashlib.sha256(
-            application_version.encode("utf-8")
-        ).hexdigest()
-        report.observed_session_sha256 = session
-        report.observed_environment_digest = observed.environment_digest
-        report.qualification_environment_observer_id = observed_observer[0]
-        report.qualification_environment_observer_contract_sha256 = observed_observer[1]
-        report.observed_environment_binding_sha256 = observed.binding_sha256(
-            observer_id=observed_observer[0],
-            observer_contract_sha256=observed_observer[1],
-        )
-        if project.environment.expected_application_identity is None:
+            return "qualification environment observation failed", None, None
+        if observed.target_kind != boundary.target_kind:
+            return (
+                "qualification environment observer returned the wrong surface",
+                None,
+                None,
+            )
+        ids = (observed_observer[0], observed_observer[1])
+        if boundary.expected_application_identity is None:
             return (
                 "qualification project has no executable application identity; "
-                "set application_identity separately from the display name"
+                "set application_identity separately from the display name",
+                observed,
+                ids,
             )
-        if application != project.environment.expected_application_identity:
-            return "observed qualification application does not match the project"
-        if application_version != project.environment.application_version:
+        if observed.application_identity != boundary.expected_application_identity:
             return (
-                "observed qualification application version does not match the project"
+                "observed qualification application does not match the project",
+                observed,
+                ids,
             )
-        if observed.environment_digest != project.environment.environment_digest:
+        if observed.application_version != boundary.application_version:
             return (
-                "observed qualification environment digest does not match the project"
+                "observed qualification application version does not match the project",
+                observed,
+                ids,
+            )
+        if observed.environment_digest != boundary.environment_digest:
+            return (
+                "observed qualification environment digest does not match the project",
+                observed,
+                ids,
             )
         self._qualification_environment_call = environment_call
         # The observer owns ``observed`` and can legally reuse or mutate that
@@ -11693,9 +11882,13 @@ class Replayer:
         if not callable(set_guard):
             self._qualification_environment_call = None
             self._qualification_environment_bound = None
-            return "qualification backend cannot bind an input-edge environment guard"
+            return (
+                "qualification backend cannot bind an input-edge environment guard",
+                observed,
+                ids,
+            )
         set_guard(self._require_qualification_environment_current)
-        return None
+        return None, observed, ids
 
     def _require_qualification_environment_current(self) -> None:
         """Recheck the bound environment immediately before an input edge."""

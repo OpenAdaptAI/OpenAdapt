@@ -163,16 +163,20 @@ def _run(replayer: Replayer, workflow: Workflow, tmp_path, **kw):
     return replayer.run(workflow, bundle_dir=bundle_dir, run_dir=tmp_path / "run", **kw)
 
 
-def test_durable_run_of_a_multi_surface_bundle_is_refused(tmp_path) -> None:
+def test_resume_of_a_multi_surface_bundle_is_refused(tmp_path) -> None:
+    # Durable runs are admitted; a resume is not (live page handles cannot
+    # cross a process boundary). Simulate the resume flag directly.
     windows = _WindowsFake()
-    replayer = Replayer(
-        FakeBackend(), durable=True, surface_backends={"windows_1": windows}
-    )
-    report = _run(replayer, _multi(), tmp_path)
-    assert not report.success
-    assert report.results[-1].step_id == "<surfaces>"
-    assert "durable checkpoints" in (report.results[-1].error or "")
+    replayer = Replayer(FakeBackend(), surface_backends={"windows_1": windows})
+    assert "a resume" in (replayer._begin_surfaces(_multi(), resume=True) or "")
     assert windows.actions == []
+
+
+def test_managed_dispatch_of_a_multi_surface_bundle_is_refused() -> None:
+    replayer = Replayer(FakeBackend(), surface_backends={"windows_1": _WindowsFake()})
+    replayer._managed_dispatch_snapshot = object()
+    refusal = replayer._begin_surfaces(_multi(), resume=False)
+    assert "managed dispatch" in (refusal or "")
 
 
 def test_surface_backends_for_a_single_surface_bundle_is_refused(tmp_path) -> None:

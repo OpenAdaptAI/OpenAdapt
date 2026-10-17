@@ -3517,6 +3517,42 @@ class StepResult(BaseModel):
     before_png: Optional[str] = None  # run-dir-relative paths
     after_png: Optional[str] = None
     elapsed_ms: float = 0.0
+    #: Multi-surface runs only (docs/MULTI_SURFACE.md): the id of the surface
+    #: this step ran on (for a SWITCH_SURFACE step, the surface it made
+    #: active; for a refused switch, the surface the run stayed on). None on
+    #: every single-surface run, and then omitted from the serialized result.
+    surface: Optional[str] = None
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Keep single-surface results byte-identical to older releases."""
+
+        data: dict[str, Any] = handler(self)
+        if self.surface is None:
+            data.pop("surface", None)
+        return data
+
+
+class ObservedSurfaceEnvironment(BaseModel):
+    """PHI-free environment observation of one non-primary surface.
+
+    A multi-surface qualification case observes every surface it switches to
+    against that surface's qualified boundary
+    (``QualificationProject.surface_environments``). The same digests a
+    single-surface report keeps in its ``observed_*`` fields are kept here,
+    one entry per surface id.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    target_kind: str
+    application_sha256: str = Field(pattern="^[a-f0-9]{64}$")
+    application_version_sha256: str = Field(pattern="^[a-f0-9]{64}$")
+    session_sha256: str = Field(pattern="^[a-f0-9]{64}$")
+    environment_digest: str = Field(pattern="^[a-f0-9]{64}$")
+    observer_id: str
+    observer_contract_sha256: str = Field(pattern="^[a-f0-9]{64}$")
+    binding_sha256: str = Field(pattern="^[a-f0-9]{64}$")
 
     @model_serializer(mode="wrap")
     def _omit_empty_field_checks(self, handler: Any) -> Any:
@@ -4331,6 +4367,13 @@ class RunReport(BaseModel):
     qualification_environment_observer_contract_sha256: Optional[str] = Field(
         default=None, pattern="^[a-f0-9]{64}$"
     )
+    #: Multi-surface qualification cases only: the environment observed on
+    #: each non-primary surface the run switched to, keyed by surface id. The
+    #: primary surface stays in the ``observed_*`` fields above. Empty (and
+    #: omitted from the serialized report) otherwise.
+    observed_surface_environments: dict[str, ObservedSurfaceEnvironment] = Field(
+        default_factory=dict
+    )
     governed_authorized_effect_contracts: dict[str, list[str]] = Field(
         default_factory=dict
     )
@@ -4417,6 +4460,15 @@ class RunReport(BaseModel):
             "outcome words are unchanged by it."
         ),
     )
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Omit additive multi-surface evidence from single-surface reports."""
+
+        data: dict[str, Any] = handler(self)
+        if not self.observed_surface_environments:
+            data.pop("observed_surface_environments", None)
+        return data
 
     @model_validator(mode="after")
     def _validate_outcome_envelope_binding(self) -> "RunReport":

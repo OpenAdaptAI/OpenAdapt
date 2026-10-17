@@ -1664,6 +1664,17 @@ def classify_execution_outcome(
         if fault_prefix_review:
             paired_results = paired_results[:-1]
             identity_results = action_results[:-1]
+    if workflow.surfaces:
+        # Multi-surface (docs/MULTI_SURFACE.md): every executed step must
+        # carry the surface it ran on, and it must be the surface the sealed
+        # contract names (for a switch, its target). A result without that
+        # record, or on another surface, is not evidence for this contract.
+        primary_surface = workflow.surfaces[0].id
+        for result, step in paired_results:
+            if result.surface != (step.surface or primary_surface):
+                return ExecutionOutcome.COMPLETED_UNVERIFIED
+    elif any(result.surface is not None for result in report.results):
+        return ExecutionOutcome.COMPLETED_UNVERIFIED
     required_identity_ids = set(report.required_identity_step_ids)
     allowed_required_identity_sets = [expected_required_identity_ids]
     if fault_prefix_review:

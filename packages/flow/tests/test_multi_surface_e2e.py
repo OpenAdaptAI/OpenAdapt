@@ -240,9 +240,9 @@ def test_replays_across_popup_and_tab_with_zero_model_calls(
     try:
         assert report.success, _summary(report)
         assert report.model_calls == 0
-        # The demo profile never claims VERIFIED (that needs a governed run,
-        # which multi-surface bundles are not yet admitted to); every step's
-        # own contract held.
+        # The demo profile never claims VERIFIED (that needs a governed run
+        # with independently confirmed effects; see
+        # test_multi_surface_governed.py); every step's own contract held.
         assert report.execution_outcome == "COMPLETED_UNVERIFIED"
         assert all(r.postconditions_ok is not False for r in report.results)
         # The popup's click wrote back into the opener, the report tab got its
@@ -257,6 +257,8 @@ def test_replays_across_popup_and_tab_with_zero_model_calls(
             r for r in report.results if r.step_id in ("step_001", "step_003")
         ]
         assert all(r.ok and r.postconditions_ok for r in switch_results)
+        # Every result records the surface it ran on.
+        assert [r.surface for r in report.results][:2] == ["main", "popup_1"]
     finally:
         page.context.close()
 
