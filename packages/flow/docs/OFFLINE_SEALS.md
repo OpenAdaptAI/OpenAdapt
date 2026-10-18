@@ -113,9 +113,9 @@ In this mode:
 
 What the hook does not cover: child processes such as FreeRDP or `curl`, and
 native code that opens sockets without Python's `socket` module. For those,
-check the operating system's socket table for the whole process tree, and
-rely on the site firewall, which remains the primary control (see
-[`ON_PREM.md`](ON_PREM.md)).
+use the on-prem service's outbound-traffic audit (`openadapt-flow service
+egress-audit`, see [`ON_PREM.md`](ON_PREM.md)), and rely on the site
+firewall, which remains the primary control.
 
 `tests/test_no_outbound.py` runs each check in a fresh interpreter: public
 connect, UDP send, DNS lookups and an HTTPS client call are refused and

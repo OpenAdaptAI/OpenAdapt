@@ -197,6 +197,95 @@ package and update/rollback runbook, and
 [`deploy/on-prem/COMPLIANCE.md`](../deploy/on-prem/COMPLIANCE.md) for the
 PHIPA/HIPAA-adjacent posture and boundaries.
 
+## Unattended service on macOS
+
+`openadapt-flow service run` is a long-running loop for a service manager to
+keep alive. Each cycle it runs `bin/run-queue.sh once`, writes an offline Seal
+for any finished run that lacks one, folds new Seals into a local batch, and
+writes `service/heartbeat.json`. It sets strict no-outbound mode
+(`OPENADAPT_NO_OUTBOUND=1`, see [`OFFLINE_SEALS.md`](OFFLINE_SEALS.md)) for
+itself, the queue, and every run, and it refuses to start if that variable is
+explicitly off unless you pass `--allow-outbound`.
+
+```bash
+deploy/on-prem/bin/install-macos.sh --root /Users/Shared/openadapt \
+  --openadapt-flow /Users/Shared/openadapt/current/venv/bin/openadapt-flow
+```
+
+This installs two LaunchAgents in `~/Library/LaunchAgents`:
+
+| Agent | What it does |
+|---|---|
+| `ai.openadapt.flow-service` | Starts at login. `KeepAlive` restarts it whenever it exits, at most every 10 s. |
+| `ai.openadapt.flow-health` | Every 60 s runs `service health --restart-on-fail`, which calls `launchctl kickstart -k` when the service is down, stale or stuck. |
+
+A LaunchAgent runs in the user's login session, which a GUI or RDP client
+window needs. To resume after a reboot without a person, turn on automatic
+login for the service account, and use `pmset` to stop the machine sleeping
+during run windows. `install-macos.sh --uninstall` removes both agents.
+
+### Health
+
+```bash
+openadapt-flow service health --root /Users/Shared/openadapt
+```
+
+It prints every check as JSON and exits 1 if any check fails:
+
+| Check | Fails when |
+|---|---|
+| `heartbeat`, `running`, `fresh` | No heartbeat, the service process is gone or stopped, or the last heartbeat is older than 3 poll intervals (at least 60 s) |
+| `stuck_jobs` | A job has sat in `jobs/processing/` longer than `--stuck-after` (1 h) |
+| `seal_key` | The Seal key is readable by group or others |
+
+It warns, without failing, on `failed_jobs`, `unsealed_runs`, a last cycle
+with errors, a service running with `--allow-outbound`, and
+`blocked_outbound` (connection attempts the no-outbound hook refused).
+
+### Outbound-traffic audit
+
+```bash
+openadapt-flow service egress-audit --root /Users/Shared/openadapt --samples 30 --interval 2
+```
+
+The audit finds the service's process and all its descendants (`ps`), then
+samples their open sockets (`lsof -nP -i`) the requested number of times. Its
+verdict is `clean` only if no sampled socket had a peer off this machine or
+outside `OPENADAPT_NO_OUTBOUND_ALLOW`. It also reports listeners bound to all
+interfaces and counts the refusals in `audit/outbound-blocked.jsonl`. The
+report is written to `audit/egress-audit-<time>.json` and sealed with the
+local key. The command exits 0 only for `clean`.
+
+What the evidence covers: the in-process hook refuses outbound connections
+from the service's Python processes before any packet is sent; the audit
+covers every process in the tree, including FreeRDP and other child
+processes, at each sample. A connection that opens and closes between samples
+in a non-Python child is not seen by the audit. The site firewall remains the
+primary control. On macOS, an application firewall rule or a `pf` anchor that
+denies outbound traffic for the service account closes that gap.
+
+### Windows notes
+
+The same commands run on Windows; only the service manager differs.
+
+- **Service.** Wrap `openadapt-flow service run --root C:\OpenAdapt` with a
+  service wrapper such as NSSM, or a Task Scheduler task set to run at logon
+  and restart on failure. Use a logon session if the run drives a GUI or RDP
+  client window. Set `OPENADAPT_NO_OUTBOUND=1` and `OPENADAPT_FLOW_SCRUB=on`
+  in the service environment.
+- **Restart.** `service restart` runs `Restart-Service -Name <label>`; name
+  the service `ai.openadapt.flow-service` or pass `--label`. Configure service
+  recovery to restart on the first, second and later failures.
+- **Health.** Schedule `service health --root C:\OpenAdapt --restart-on-fail`
+  every minute.
+- **Egress audit.** `service egress-audit` needs `ps` and `lsof` and reports
+  `unavailable` on Windows. Use `Get-NetTCPConnection -OwningProcess <pid>`
+  and `Get-NetUDPEndpoint` for the service's process tree instead, and add a
+  Windows Defender Firewall outbound block rule for the service's
+  `python.exe` and its child programs.
+- **Run queue.** `run-queue.sh` needs bash (Git Bash or WSL). A native
+  PowerShell queue is not part of this change.
+
 ## Related
 
 - `docs/LIMITS.md` — what compiled replay does and does not guarantee (on-prem

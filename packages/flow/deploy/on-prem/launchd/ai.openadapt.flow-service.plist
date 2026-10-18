@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  openadapt-flow on-prem service (macOS LaunchAgent).
+  install-macos.sh fills the @...@ placeholders. launchd starts it at login,
+  restarts it whenever it exits (KeepAlive), and waits ThrottleInterval
+  seconds between restarts.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.openadapt.flow-service</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>@OPENADAPT_FLOW@</string>
+    <string>service</string>
+    <string>run</string>
+    <string>--root</string>
+    <string>@STORAGE_ROOT@</string>
+    <string>--queue-script</string>
+    <string>@HERE@/bin/run-queue.sh</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>@STORAGE_ROOT@</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>OPENADAPT_NO_OUTBOUND</key>
+    <string>1</string>
+    <key>OPENADAPT_NO_OUTBOUND_LOG</key>
+    <string>@STORAGE_ROOT@/audit/outbound-blocked.jsonl</string>
+    <key>OPENADAPT_FLOW_SCRUB</key>
+    <string>on</string>
+    <key>OPENADAPT_FLOW_SCRUB_IMAGES</key>
+    <string>1</string>
+    <key>OPENADAPT_ONPREM_CONFIG</key>
+    <string>@STORAGE_ROOT@/deployment.yaml</string>
+    <key>OPENADAPT_ONPREM_AUDIT_LOG</key>
+    <string>@STORAGE_ROOT@/audit/audit.log</string>
+    <key>PATH</key>
+    <string>@VENV_BIN@:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>Umask</key>
+  <integer>63</integer>
+  <key>StandardOutPath</key>
+  <string>@STORAGE_ROOT@/service/service.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>@STORAGE_ROOT@/service/service.err.log</string>
+</dict>
+</plist>

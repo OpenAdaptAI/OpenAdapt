@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Health check for ai.openadapt.flow-service. Runs every StartInterval
+  seconds; when the service is down, stale or stuck it asks launchd to
+  restart it (launchctl kickstart -k).
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>ai.openadapt.flow-health</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>@OPENADAPT_FLOW@</string>
+    <string>service</string>
+    <string>health</string>
+    <string>--root</string>
+    <string>@STORAGE_ROOT@</string>
+    <string>--restart-on-fail</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>OPENADAPT_NO_OUTBOUND</key>
+    <string>1</string>
+    <key>PATH</key>
+    <string>@VENV_BIN@:/usr/bin:/bin:/usr/sbin:/sbin</string>
+  </dict>
+  <key>StartInterval</key>
+  <integer>60</integer>
+  <key>RunAtLoad</key>
+  <false/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>@STORAGE_ROOT@/service/health.out.log</string>
+  <key>StandardErrorPath</key>
+  <string>@STORAGE_ROOT@/service/health.err.log</string>
+</dict>
+</plist>
