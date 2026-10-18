@@ -36,8 +36,16 @@ INVOICE = RecordSchema(
 )
 
 
-def _read(channel: str, value: str, session: str = "acting") -> ChannelRead:
-    return ChannelRead(channel=channel, raw=value, normalized=value, session=session)
+def _read(
+    channel: str, value: str, session: str = "acting", export_source=None
+) -> ChannelRead:
+    return ChannelRead(
+        channel=channel,
+        raw=value,
+        normalized=value,
+        session=session,
+        export_source=export_source,
+    )
 
 
 def test_grades_order_weakest_first() -> None:
@@ -56,7 +64,7 @@ def test_grades_order_weakest_first() -> None:
 def test_grade_for_each_rung() -> None:
     clip, ocr = _read("clipboard", "INV-1"), _read("ocr", "INV-1")
     reopened = _read("clipboard", "INV-1", "reopened")
-    export = _read("export", "INV-1", "independent")
+    export = _read("export", "INV-1", "independent", "committed_data")
     assert grade_for([clip], "single") == "unconfirmed"
     assert grade_for([clip, ocr], "disagree") == "unconfirmed"
     assert grade_for([clip, ocr], "ambiguous") == "unconfirmed"
@@ -236,3 +244,80 @@ def test_grade_gate_halts_below_floor() -> None:
         GradeGate(min_grade="unconfirmed", fields=("vendor",)).check(
             _record("verified")
         )
+
+
+def test_export_source_decides_the_grade() -> None:
+    clip = _read("clipboard", "INV-1")
+    live = _read("export", "INV-1", "acting", "live_session")
+    saved = _read("export", "INV-1", "independent", "committed_data")
+    reopened = _read("clipboard", "INV-1", "reopened")
+    assert not live.independent
+    assert saved.independent
+    assert grade_for([clip, live], "agree") == "screen_readback"
+    assert grade_for([clip, live, reopened], "agree") == "committed_record_readback"
+    assert grade_for([clip, saved], "agree") == "verified"
+    # Two reads from the same live session never verify, however many.
+    assert grade_for([live, _read("ocr", "INV-1")], "agree") == "screen_readback"
+
+
+def test_export_source_is_required_and_consistent() -> None:
+    with pytest.raises(ValidationError, match="needs export_source"):
+        ChannelRead(channel="export", raw="x", session="independent")
+    with pytest.raises(ValidationError, match="acting session"):
+        ChannelRead(
+            channel="export",
+            raw="x",
+            session="independent",
+            export_source="live_session",
+        )
+    with pytest.raises(ValidationError, match="independent"):
+        ChannelRead(channel="export", raw="x", export_source="committed_data")
+    with pytest.raises(ValidationError, match="export reads only"):
+        ChannelRead(channel="ocr", raw="x", export_source="live_session")
+
+
+def test_live_export_cannot_claim_verified() -> None:
+    reads = (
+        _read("clipboard", "1"),
+        _read("export", "1", "acting", "live_session"),
+    )
+    with pytest.raises(ValidationError, match="stronger than the reads support"):
+        FieldRead(
+            field="invoice_number",
+            value="1",
+            reads=reads,
+            agreement="agree",
+            confidence=1.0,
+            grade="verified",
+        )
+
+
+def test_write_gate_accepts_either_export_kind_per_floor() -> None:
+    def record_with(export: ChannelRead) -> RecordRead:
+        reads = (_read("clipboard", "1"), export)
+        field = FieldRead(
+            field="invoice_number",
+            value="1",
+            reads=reads,
+            agreement="agree",
+            confidence=1.0,
+            grade=grade_for(reads, "agree"),
+        )
+        return RecordRead(
+            schema_name="vendor_invoice",
+            schema_version=1,
+            record_key="1",
+            run_id="r",
+            read_at="2026-10-17T21:00:00-04:00",
+            fields=(field,),
+        )
+
+    live = record_with(_read("export", "1", "acting", "live_session"))
+    saved = record_with(_read("export", "1", "independent", "committed_data"))
+    lenient = GradeGate(min_grade="screen_readback")
+    lenient.check(live)
+    lenient.check(saved)
+    strict = GradeGate(min_grade="verified")
+    strict.check(saved)
+    with pytest.raises(GradeTooLow, match="screen_readback"):
+        strict.check(live)

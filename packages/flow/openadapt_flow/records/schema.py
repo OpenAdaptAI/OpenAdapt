@@ -24,9 +24,15 @@ Read grades, weakest first. A grade only ever reflects what was proven:
   the clipboard text and OCR of the same region).
 - ``committed_record_readback``: the record was closed, reopened by its
   identity fields and read again, and the second read agreed with the first.
-- ``verified``: a channel that does not go through the application's screens
-  (an export file, a read-only database or an API) agreed. Only an
-  independent channel can give this grade; :func:`grade_for` enforces it.
+- ``verified``: a channel independent of the acting session agreed: a
+  read-only database, an API, or an export of committed data (a separate
+  process or a scheduled export). Only an independent channel can give this
+  grade; :func:`grade_for` enforces it.
+
+An export read records its source in ``ChannelRead.export_source``, so its
+grade is derived, not asserted. An export from the same live UI session
+(``live_session``) can carry that session's unsaved state; it counts like a
+screen read and gives at most ``screen_readback``.
 
 A step that writes a value into a system of record can declare a minimum
 grade with :class:`GradeGate`; :meth:`GradeGate.check` raises
@@ -49,6 +55,7 @@ __all__ = [
     "SCHEMA_VERSION",
     "SCREEN_CHANNELS",
     "Agreement",
+    "ExportSource",
     "ChannelRead",
     "FieldKind",
     "FieldRead",
@@ -80,15 +87,28 @@ ReadChannel = Literal[
     "ocr",
     "structure",
     "accessibility",
-    # Not through the screens.
+    # An export from the application; see ExportSource for how it grades.
     "export",
+    # Not through the screens.
     "database",
     "api",
 ]
 SCREEN_CHANNELS: Final[frozenset[str]] = frozenset(
     {"clipboard", "ocr", "structure", "accessibility"}
 )
-INDEPENDENT_CHANNELS: Final[frozenset[str]] = frozenset({"export", "database", "api"})
+#: Channels that are always independent of the acting session. An ``export``
+#: read is independent only when its source is ``committed_data``.
+INDEPENDENT_CHANNELS: Final[frozenset[str]] = frozenset({"database", "api"})
+
+#: Where an ``export`` read came from. Required on every export read.
+#:
+#: - ``live_session``: exported from the same live UI session that typed or
+#:   showed the value. It can reflect that session's unsaved state, so it
+#:   counts as a screen-session read (at best ``screen_readback``).
+#: - ``committed_data``: exported from saved data by a separate process, a
+#:   database read or a scheduled export, not the session's in-memory state.
+#:   It is independent and can give ``verified``.
+ExportSource = Literal["live_session", "committed_data"]
 
 ReadGrade = Literal[
     "unconfirmed", "screen_readback", "committed_record_readback", "verified"
@@ -318,18 +338,37 @@ class ChannelRead(BaseModel):
     )
     engine_confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     session: Literal["acting", "reopened", "independent"] = "acting"
+    export_source: Optional[ExportSource] = Field(
+        default=None,
+        description="Required for an export read; must be unset otherwise.",
+    )
 
     @model_validator(mode="after")
     def _session_matches_channel(self) -> "ChannelRead":
-        if (self.channel in INDEPENDENT_CHANNELS) != (self.session == "independent"):
+        if self.channel == "export":
+            if self.export_source is None:
+                raise ValueError(
+                    "an export read needs export_source: live_session or committed_data"
+                )
+            if self.export_source == "live_session" and self.session != "acting":
+                raise ValueError(
+                    "a live_session export is read in the acting session ('acting')"
+                )
+        elif self.export_source is not None:
+            raise ValueError("export_source applies to export reads only")
+        if self.independent != (self.session == "independent"):
             raise ValueError(
-                "export, database and api reads have session 'independent'; "
-                "screen reads have session 'acting' or 'reopened'"
+                "database, api and committed_data export reads have session "
+                "'independent'; screen reads and live_session exports do not"
             )
         return self
 
     @property
     def independent(self) -> bool:
+        """True when this read does not depend on the acting session's state."""
+
+        if self.channel == "export":
+            return self.export_source == "committed_data"
         return self.channel in INDEPENDENT_CHANNELS
 
 
@@ -420,8 +459,8 @@ def grade_for(
 ) -> ReadGrade:
     """The strongest grade a set of channel reads can support.
 
-    ``verified`` needs an agreeing independent channel (export, database or
-    API). ``committed_record_readback`` needs an agreeing read from a reopened
+    ``verified`` needs an agreeing independent channel (database, API, or an
+    export of committed data). A live-session export counts as a screen read. ``committed_record_readback`` needs an agreeing read from a reopened
     record. ``screen_readback`` needs two agreeing screen channels. Anything
     else, including a single read or any disagreement, is ``unconfirmed``.
     """
