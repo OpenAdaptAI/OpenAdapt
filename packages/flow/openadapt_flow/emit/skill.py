@@ -147,12 +147,17 @@ def emit_skill(bundle_dir: Path | str, out_dir: Path | str) -> Path:
     if bundle_copy.resolve() != bundle:
         shutil.copytree(bundle, bundle_copy, dirs_exist_ok=True)
 
+    from openadapt_flow.jit.lifecycle import draft_label
+
+    draft = draft_label(bundle) is not None
     n_steps = len(workflow.steps)
     description = (
         f"Run the compiled '{workflow.name}' workflow "
         f"({n_steps} deterministic vision-anchored steps) against a live "
         f"app with self-healing on UI drift."
     )
+    if draft:
+        description = "DRAFT, not admitted; it won't run yet. " + description
 
     params = declared_params(workflow)
     secrets = _secret_params(workflow)
@@ -173,6 +178,14 @@ def emit_skill(bundle_dir: Path | str, out_dir: Path | str) -> Path:
     lines.append("")
     lines.append(f"# {workflow.name}")
     lines.append("")
+    if draft:
+        lines.append(
+            "**Status: DRAFT, not admitted.** This bundle was compiled from a "
+            "computer-use agent run. `openadapt-flow run` refuses it until a "
+            "person reviews, canaries and admits it (`openadapt-flow jit "
+            "status`)."
+        )
+        lines.append("")
     lines.append(
         f"Compiled workflow bundle: `{_BUNDLE_SUBDIR}/` (copied into this "
         f"skill folder; schema v{workflow.schema_version}, {n_steps} steps)."
