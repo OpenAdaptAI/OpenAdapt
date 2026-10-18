@@ -1288,12 +1288,31 @@ class DialogResponse(BaseModel):
     (desktop, RDP, Citrix) a dialog is just pixels and is recorded as the
     clicks that answer it, so this field is browser-only
     (docs/MULTI_SURFACE.md, "Dialogs").
+
+    The identity is either the exact ``message`` or ``message_pattern``, a
+    full-match regex. The compiler writes the pattern whenever the recorded
+    message carried a demonstrated parameter value or digits (a record
+    number, a date), so the bundle never seals that value.
     """
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     response: Literal["accept", "dismiss"]
-    message: str = Field(min_length=1, max_length=2000)
+    message: Optional[str] = Field(default=None, min_length=1, max_length=2000)
+    message_pattern: Optional[str] = Field(default=None, min_length=1, max_length=4000)
+
+    @model_validator(mode="after")
+    def _one_identity(self) -> "DialogResponse":
+        if (self.message is None) == (self.message_pattern is None):
+            raise ValueError(
+                "a dialog response carries exactly one of message and message_pattern"
+            )
+        if self.message_pattern is not None:
+            try:
+                re.compile(self.message_pattern)
+            except re.error as exc:
+                raise ValueError(f"message_pattern is not a valid regex: {exc}")
+        return self
 
 
 class Step(BaseModel):

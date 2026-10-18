@@ -57,7 +57,11 @@ def test_the_dialog_answer_is_compiled_onto_the_step_that_raises_it(
     assert workflow.surfaces == []  # a dialog is not a surface
     [step] = workflow.steps
     assert step.action is ActionKind.CLICK
-    assert step.dialog == DialogResponse(response="accept", message="Delete record 42?")
+    # The record number is generalized, never sealed into the bundle.
+    assert step.dialog == DialogResponse(
+        response="accept", message_pattern=r"Delete\ record\ \d+\?"
+    )
+    assert "record 42" not in (_bundle_dir / "workflow.json").read_text()
 
 
 def test_a_matching_dialog_is_answered(dialog_bundle, app_url, browser, tmp_path):
@@ -87,8 +91,10 @@ def test_a_dialog_identity_mismatch_halts_and_is_dismissed(
         assert not report.success
         [result] = report.results
         assert not result.ok
-        assert "a browser dialog showed 'Delete ALL records?'" in str(result.error)
-        assert "not the recorded 'Delete record 42?'" in str(result.error)
+        # A code, never the dialog's text: the error lands in the reports.
+        assert "dialog_mismatch" in str(result.error)
+        assert "ALL records" not in str(result.error)
+        assert "record 42" not in str(result.error)
         # Dismissed, never accepted: nothing was deleted.
         assert page.locator("#record-status").inner_text() == "Record Kept"
     finally:

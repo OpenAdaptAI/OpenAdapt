@@ -1057,7 +1057,9 @@ class PlaywrightBackend:
         # is registered until a step arms one, so a bundle without dialog
         # steps keeps Playwright's default (dismiss) exactly as before.
         self._dialog_listening = False
-        self._dialog_armed: Optional[tuple[str, Optional[str]]] = None
+        self._dialog_armed: Optional[
+            tuple[str, Optional[str], Optional[re.Pattern[str]]]
+        ] = None
         self._dialogs_seen: list[dict[str, Any]] = []
         self._screenshot_scale = screenshot_scale
         self._screenshot_mask_selectors = screenshot_mask_selectors
@@ -2962,11 +2964,17 @@ class PlaywrightBackend:
 
     # -- JavaScript dialogs -------------------------------------------------
 
-    def arm_dialog(self, response: str, message: Optional[str]) -> None:
+    def arm_dialog(
+        self,
+        response: str,
+        message: Optional[str],
+        message_pattern: Optional[str] = None,
+    ) -> None:
         """Answer the next dialog with ``response`` if it shows ``message``.
 
-        ``message=None`` (recording) answers any dialog and reports its text.
-        A dialog whose text differs from ``message`` is DISMISSED, never
+        ``message_pattern`` (a full-match regex) replaces ``message`` when
+        given. With neither (recording) any dialog is answered and its text
+        reported. A dialog whose text does not match is DISMISSED, never
         accepted, and reported as a mismatch. Every dialog this page shows
         while the listener exists is answered and reported, so an unexpected
         one can never be accepted by default.
@@ -2977,7 +2985,12 @@ class PlaywrightBackend:
         if not self._dialog_listening:
             self.page.on("dialog", self._on_dialog)
             self._dialog_listening = True
-        self._dialog_armed = (response, message)
+        pattern = (
+            re.compile(message_pattern, re.DOTALL)
+            if message_pattern is not None
+            else None
+        )
+        self._dialog_armed = (response, message, pattern)
         self._dialogs_seen = []
 
     def take_dialogs(self, timeout_s: float = 0.0) -> list[dict[str, Any]]:
@@ -3010,7 +3023,13 @@ class PlaywrightBackend:
         except Exception:
             kind = ""
         armed, self._dialog_armed = self._dialog_armed, None
-        matched = armed is not None and (armed[1] is None or armed[1] == message)
+        matched = False
+        if armed is not None:
+            _response, expected, pattern = armed
+            if pattern is not None:
+                matched = pattern.fullmatch(message) is not None
+            else:
+                matched = expected is None or expected == message
         response = armed[0] if armed is not None and matched else "dismiss"
         self._dialogs_seen.append(
             {

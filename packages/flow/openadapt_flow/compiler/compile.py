@@ -1556,23 +1556,41 @@ def _surface_url_pattern(url: str, exclude_texts: tuple[str, ...]) -> str:
     """Full-match regex for a recorded page URL.
 
     Scheme, host, and port are exact. Each path segment is exact unless it
-    carries a demonstrated parameter value, which becomes one path segment of
-    any value. The query and fragment are not asserted: they carry tokens
-    (OAuth ``state``) and record identifiers that change on every run.
+    carries a demonstrated parameter value or looks like an identifier (a
+    digit, as in ``/patient/12345``, or a long opaque token); such a segment
+    becomes one path segment of any value, so the bundle never seals a
+    record identifier. The query and fragment are not asserted: they carry
+    tokens (OAuth ``state``) and record identifiers that change on every run.
     """
 
-    from urllib.parse import urlsplit
+    from urllib.parse import unquote, urlsplit
 
     parts = urlsplit(url)
     values = [v for v in exclude_texts if len(v.strip()) >= _SURFACE_PARAM_MIN_CHARS]
     segments = []
     for segment in (parts.path or "/").split("/"):
-        if any(value in segment for value in values):
+        decoded = unquote(segment)
+        if _segment_is_identifier(decoded) or any(
+            value in segment or value in decoded for value in values
+        ):
             segments.append("[^/?#]+")
         else:
             segments.append(re.escape(segment))
     origin = re.escape(f"{parts.scheme}://{parts.netloc}".lower())
     return origin + "/".join(segments) + r"(?:[?#].*)?"
+
+
+#: An API version marker (``v2``) is structure, not an identifier.
+_VERSION_SEGMENT_RE = re.compile(r"[vV]\d{1,2}")
+#: A long opaque token (a session id or hash) even without a digit. A slug
+#: with separators (``order-history``) stays exact.
+_OPAQUE_SEGMENT_RE = re.compile(r"[A-Za-z0-9]{24,}")
+
+
+def _segment_is_identifier(segment: str) -> bool:
+    if not segment or _VERSION_SEGMENT_RE.fullmatch(segment):
+        return False
+    return bool(re.search(r"\d", segment) or _OPAQUE_SEGMENT_RE.fullmatch(segment))
 
 
 def _surface_title_pattern(
@@ -1598,6 +1616,47 @@ def _surface_title_pattern(
     splitter = re.compile("|".join(re.escape(v) for v in values))
     pieces = splitter.split(title)
     return ".+".join(re.escape(piece) for piece in pieces)
+
+
+def _dialog_identity(raw: dict, exclude_texts: tuple[str, ...]) -> DialogResponse:
+    """The sealed identity of a recorded browser dialog.
+
+    A message with no demonstrated parameter value and no digits is kept
+    exactly. Otherwise it becomes a full-match pattern: each parameter value
+    matches any text and each digit run matches any digits, so a record
+    number, a date, or a typed value is never sealed into the bundle. A
+    message the privacy pass still flags after that is refused: the operator
+    must make the value a parameter.
+    """
+
+    response = raw.get("response")
+    message = str(raw.get("message") or "")
+    values = sorted(
+        (v for v in exclude_texts if len(v.strip()) >= _SURFACE_PARAM_MIN_CHARS),
+        key=len,
+        reverse=True,
+    )
+    pieces = (
+        re.compile("|".join(re.escape(v) for v in values)).split(message)
+        if values
+        else [message]
+    )
+    literal = " ".join(re.sub(r"\d+", "0", piece) for piece in pieces)
+    if _text_carries_phi(literal):
+        raise ValueError(
+            "a recorded browser dialog message carries an identifier that is "
+            "not a demonstrated parameter; make that value a parameter and "
+            "compile again"
+        )
+    if len(pieces) == 1 and not re.search(r"\d", message):
+        return DialogResponse.model_validate({"response": response, "message": message})
+    pattern = ".+".join(
+        r"\d+".join(re.escape(part) for part in re.split(r"\d+", piece))
+        for piece in pieces
+    )
+    return DialogResponse.model_validate(
+        {"response": response, "message_pattern": pattern}
+    )
 
 
 def _surfaces_from_meta(
@@ -2619,8 +2678,9 @@ def compile_recording(
         steps.append(step)
         if isinstance(event.get("dialog"), dict):
             # The browser dialog this action raised, answered by the backend
-            # at replay only when it shows the same message.
-            step.dialog = DialogResponse.model_validate(event["dialog"])
+            # at replay only when it shows the same message (values and
+            # digits generalized, never sealed).
+            step.dialog = _dialog_identity(event["dialog"], exclude_texts)
         if event.get("submit_binding") is not None:
             binding_observations[step.id] = event["submit_binding"]
         if step.action is ActionKind.SCROLL:

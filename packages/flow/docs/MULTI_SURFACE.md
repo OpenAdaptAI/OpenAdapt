@@ -49,6 +49,12 @@ This design adds no surface kind.
   while that page stays open and is the only candidate, the next step uses it
   without another check. The cache is never trusted across a process boundary
   or a closed page. It is rebuilt by identity.
+- *A page surface rebinds only to a page this run claimed*, and only when the
+  step's visual evidence (anchor template or recorded screen text) shows on
+  it. Structured attributes alone never rebind a page. The one exception is a
+  resume: before a surface is first bound again, the pages the earlier run
+  opened are candidates too, with the same visual-evidence rule. In attach
+  mode this keeps the person's own tabs out of the run.
 - *Checkpoints store the name and the last-seen observation, never a handle*
   (see "Resume").
 
@@ -56,11 +62,13 @@ This design adds no surface kind.
 
 Inside the browser backend each step goes to the page whose observation passes
 that step's own visual identity check (its anchor template), with structured
-attributes as an additional condition. If no other open page passes, the step
-falls back to the page used most recently. Several passing pages halt, and so
-does a step with no passing page and no live cached page. Steady state costs
-nothing extra: a live cached page that is the only candidate is used as is. A
-step never screenshots every page.
+attributes as an additional condition. Several passing pages halt. So does a
+held page that fails its check while no other candidate passes, and a step
+with no passing page and no live cached page. Steady state costs nothing
+extra: a live cached page that is the only candidate is used as is, and its
+step's own identity ladder checks it. A step never screenshots every page.
+A step never runs on a page that closed under it, whatever the surface kind:
+only an explicit switch moves on.
 
 ### Explicit switches, never automatic returns
 
@@ -77,13 +85,20 @@ postcondition that expected the closed page still to be there fails.
 A JavaScript dialog (`alert`, `confirm`, `prompt`, `beforeunload`) is not a
 surface. It is modal state of the page that raised it, and it blocks that page
 until it is answered. **On the browser backend** the step whose action raises
-it carries `Step.dialog = {response: accept|dismiss, message}`:
+it carries `Step.dialog = {response: accept|dismiss, message | message_pattern}`:
 
 - before the input edge, the backend arms a one-shot answer;
-- the dialog's message is its identity: only that exact message is answered as
-  recorded;
+- the dialog's message is its identity: only a matching message is answered as
+  recorded. The compiler keeps a message exactly only when it has no digits
+  and no demonstrated parameter value. Otherwise it seals a full-match
+  `message_pattern` in which each parameter value matches any text and each
+  digit run matches any digits, so a record number or a typed value never
+  enters the bundle. A message the privacy pass still flags after that is
+  refused at compile time; make that value a parameter;
 - a different message is **dismissed, never accepted**, and the step halts.
-  The step also halts if the dialog never appears;
+  The step also halts if the dialog never appears. The halt names a code
+  (`dialog_mismatch`, `dialog_missing`), never the dialog's text, because the
+  error lands in `report.json` and `REPORT.md`;
 - an unarmed dialog keeps Playwright's default (dismiss), as before.
 
 The answer lives on the triggering step rather than a separate step because
@@ -142,11 +157,17 @@ A page surface records how to identify it at replay:
   `window.opener` pointed at that page (`window_opener`, for `window.open`) or
   not (`none`, for a `target=_blank` link, which implies `noopener`);
 - `origin`: exact `scheme://host[:port]`;
-- `url_pattern`: a full-match regular expression for the URL, with recorded
-  parameter values generalised; `title_pattern` optionally does the same for
-  the title.
+- `url_pattern`: a full-match regular expression for the URL. Recorded
+  parameter values, and path segments that look like identifiers (any digit,
+  as in `/patient/12345`, or a long opaque token), match any one segment. The
+  query and fragment are not asserted;
+- `title_pattern`: an optional full-match regular expression for the title.
+  The recorder no longer writes titles (they carry record names), so new
+  recordings leave it unset.
 
-URLs and titles can echo application content. They live only inside
+The recorder writes each page's URL to `meta.json` without its query or
+fragment (OAuth `code` and `state`, search terms). URLs can echo application
+content. They live only inside
 `workflow.json`, which is sealed with the rest of an encrypted bundle. They are
 never copied into the manifest, a run report, or a refusal message.
 
@@ -168,13 +189,15 @@ binding, guard, or irreversible risk. Its identity check is:
    Several matches halt. Passing means the screen text the step expects is
    visible on it, and, where exposed, its origin equals `surface_origin` (the
    origin the demonstration saw when it switched) and its URL/title patterns
-   and opener link match. Leaving a page that closed itself is allowed;
+   and opener link match. Only a page claimed on this run is a candidate
+   (see "Identity, not handles"). Leaving a page that closed itself is
+   allowed;
 3. a backend target is of the declared kind (a Windows surface needs a Windows
    backend; a backend whose kind cannot be determined is refused);
 4. the step's `expect` postconditions, mined from the first frame of the new
-   surface, hold on the new surface. A switch to a backend surface with no
-   such screen evidence is refused: there would be nothing to show that the
-   right app is in front.
+   surface, hold on the new surface. A switch with neither such screen
+   evidence nor a recorded origin is refused, whatever the target kind: there
+   would be nothing to show that the right page or app is in front.
 
 Because the value is a new enum member, an older Flow that does not know it
 refuses to load the bundle at all. That is deliberate: an older runtime would
@@ -193,8 +216,8 @@ demo drivers, and the Windows conformance tests) now:
 
 - notes the browser context's pages before each action on a browser surface,
   and after it settles, claims every new page in creation order: it waits for
-  the page's first navigation, then records its opener relation, origin, URL
-  pattern, and title pattern, and adds `"opens": [...]` to that event;
+  the page's first navigation, then records its opener relation and its URL
+  without the query or fragment, and adds `"opens": [...]` to that event;
 - records `switch_surface(surface_id, backend=None, kind=None)` as its own
   event. A page surface is switched to by id; a backend surface is passed in
   (`recorder.switch_surface("windows_1", backend=windows_backend)`), and its
@@ -281,7 +304,7 @@ context of every browser surface it holds.
 For every step in a multi-surface workflow:
 
 - **On entry**, the runtime halts if the browser has opened a page that no
-  step declared, if an active non-page backend has closed, or if the step
+  step declared, if the active page or backend has closed, or if the step
   names a surface other than the active one. The step is then routed (see
   "Routing a step to a page"). A page surface is bound by the step's own
   anchor template plus its structured attributes. Zero or several matches
@@ -359,9 +382,9 @@ Each linear checkpoint of a multi-surface run records:
 
 It holds no handle, URL path, title, or screen text. On resume, the
 checkpoint's active surface is re-bound **by identity** before the approval
-is consumed. For a page, the identity is the one open page that passes the
-retained postconditions of the checkpointed step and the recorded
-structured attributes. The retained postconditions are then revalidated on
+is consumed. For a page, the identity is the one open page that shows the
+retained postconditions of the checkpointed step (visual evidence is
+required) and passes the recorded structured attributes. The retained postconditions are then revalidated on
 that surface. Several passing pages (an ambiguous re-bind) or none raise
 `StateDiverged`, and nothing is driven. Every other surface is re-bound
 lazily, at its next switch or step, by the same rule.
@@ -505,6 +528,13 @@ backend surface bound here.
   the re-bind ambiguous and it halts with nothing driven. A tab navigated
   elsewhere fails page routing and halts. Router-level routing binds only the
   page that passes.
+- `tests/test_multi_surface_fail_closed.py`: a step on a closed page surface is
+  refused; a switch or rebind never takes a page this run did not open (the
+  person's tab in attach mode); a resume rebinds only on visual evidence; a
+  held page that fails its check halts; a page switch without identity
+  evidence halts; dialog errors carry a code, not the text; the sealed dialog
+  identity and URL pattern carry no record number or parameter value; the
+  layout-drift check follows the active surface.
 - `tests/test_multi_surface_selfclose.py`: a popup that closes itself. Both the
   scripted and the interactive recorder write an explicit switch back, and the
   bundle replays with zero model calls. Without the switch back the workflow

@@ -82,6 +82,20 @@ def _has_window_opener(page: Any) -> bool:
     return bool(page_has_window_opener(page))
 
 
+def _url_without_query(url: Any) -> str:
+    """``url`` with its query and fragment removed."""
+
+    from urllib.parse import urlsplit, urlunsplit
+
+    if not isinstance(url, str) or not url:
+        return ""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return ""
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
+
+
 def _phash(png: bytes) -> str:
     """Perceptual hash of a PNG frame."""
     with Image.open(io.BytesIO(png)) as img:
@@ -486,13 +500,12 @@ class Recorder:
             self._page_counters[prefix] += 1
             surface_id = f"{prefix}_{self._page_counters[prefix]}"
             try:
-                url = page.url
+                url = _url_without_query(page.url)
             except Exception:
                 url = ""
-            try:
-                title = page.title()
-            except Exception:
-                title = ""
+            # meta.json keeps only what identifies the page at replay: the
+            # URL without its query or fragment (OAuth code/state, search
+            # terms), and no title (titles carry record names).
             self._surface_meta.append(
                 {
                     "id": surface_id,
@@ -502,7 +515,6 @@ class Recorder:
                     "open_order": order,
                     "opener_link": link,
                     "url": url,
-                    "title": title,
                 }
             )
             self._surface_backends[surface_id] = (

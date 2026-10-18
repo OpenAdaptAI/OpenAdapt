@@ -10971,7 +10971,10 @@ class Replayer:
         identity: a different message is dismissed, never accepted, and the
         step halts; so does a dialog that never appears. A backend that cannot
         see browser dialogs refuses the step before any input
-        (docs/MULTI_SURFACE.md, "Dialogs").
+        (docs/MULTI_SURFACE.md, "Dialogs"). Errors name a code
+        (``dialog_missing``, ``dialog_mismatch``), never the dialog's text:
+        the error lands in report.json and REPORT.md, and a live dialog can
+        show application data.
         """
 
         dialog = step.dialog
@@ -10984,7 +10987,7 @@ class Replayer:
                 f"Step '{step.id}' ({step.intent}) answers a browser dialog, but "
                 "the active backend cannot see browser dialogs; run aborted"
             )
-        arm(dialog.response, dialog.message)
+        self._arm_dialog(arm, dialog)
         try:
             error = self._act_without_dialog(step, resolution, params, **kwargs)
         finally:
@@ -10996,23 +10999,30 @@ class Replayer:
         if not seen:
             return (
                 f"Step '{step.id}' ({step.intent}): the recorded browser dialog "
-                f"{dialog.message!r} did not appear; run aborted"
+                "did not appear (dialog_missing); run aborted"
             )
         mismatched = [entry for entry in seen if not entry.get("matched")]
         if mismatched:
             return (
-                f"Step '{step.id}' ({step.intent}): a browser dialog showed "
-                f"{str(mismatched[0].get('message'))!r}, not the recorded "
-                f"{dialog.message!r}; it was dismissed, not answered; run aborted"
+                f"Step '{step.id}' ({step.intent}): a browser dialog did not "
+                "show the recorded message (dialog_mismatch); it was "
+                "dismissed, not answered; run aborted"
             )
         return None
+
+    @staticmethod
+    def _arm_dialog(arm: Callable[..., Any], dialog: Any) -> None:
+        if dialog.message_pattern is not None:
+            arm(dialog.response, None, message_pattern=dialog.message_pattern)
+        else:
+            arm(dialog.response, dialog.message)
 
     def _wait_for_dialog(self, take: Callable[..., Any], dialog: Any) -> list[Any]:
         """Wait briefly for an armed dialog that opens after the input edge."""
 
         arm = getattr(self.backend, "arm_dialog", None)
         if callable(arm):
-            arm(dialog.response, dialog.message)
+            self._arm_dialog(arm, dialog)
         seen = take(_DIALOG_WAIT_S)
         return list(seen) if isinstance(seen, list) else []
 
@@ -15089,6 +15099,7 @@ class Replayer:
     def _layout_drift_on(self, workflow: Workflow) -> bool:
         if self.layout_drift is not None:
             return self.layout_drift
+        kind: Optional[str]
         if self._surface_router is not None:
             # Multi-surface run: follow the surface the step acts on, so an
             # RDP segment of a web-first bundle keeps the check.

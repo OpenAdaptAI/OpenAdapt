@@ -17,13 +17,16 @@ model call:
   declared kind), and show the origin the demonstration saw.
 
 A surface is a name plus an identity check, never a live handle. The router
-caches the page or backend it last bound for each surface, but whenever that
-binding is missing (a resume, a closed page) it binds again by identity: the
-one live target that passes the check. Zero or several matches halt. The check
-is vision-first (the step's anchor template and recorded screen text on the
-candidate's own screenshot), with structured attributes (origin, URL and title
-patterns, opener relation, the last-seen origin) added only where the target
-exposes them.
+caches the page or backend it last bound for each surface. When that binding
+is missing it binds again by identity: the one live target that passes the
+check. Zero or several matches halt. A page surface rebinds only to a page
+claimed on this run; only a resumed run, which claimed nothing yet, may bind a
+page that was already open, and every rebind needs visual evidence. A step
+never runs on a page that closed under it. The check is vision-first (the
+step's anchor template and recorded screen text on the candidate's own
+screenshot), with structured attributes (origin, URL and title patterns,
+opener relation, the last-seen origin) added only where the target exposes
+them.
 
 Every refusal is a halt. The router never picks a window for the run, and its
 messages never quote a URL or a title (they can carry application content).
@@ -195,6 +198,13 @@ class SurfaceRouter:
         self.backends: dict[str, Any] = {self.primary_id: primary_backend}
         # Pages claimed for page surfaces, by surface id.
         self._claimed: dict[str, Any] = {}
+        # Every page claimed or bound on this run, and the surfaces bound so
+        # far. A page surface rebinds only to one of these pages, except on a
+        # resume before that surface is first bound: the pages the earlier
+        # run opened are then only in the starting inventory.
+        self._claimed_on_run: list[Any] = []
+        self._bound_on_run: set[str] = set()
+        self._resuming = resume_active is not None
         # Every page that is accounted for: the starting inventory of each
         # watched browser context, plus every claimed page.
         self._known_pages: list[Any] = []
@@ -341,11 +351,9 @@ class SurfaceRouter:
             # returns anywhere on its own.
             return None
         active_page = _browser_page(self.active_backend)
-        if (
-            active_page is not None
-            and _page_closed(active_page)
-            and not self.specs[self.active_id].is_page
-        ):
+        if active_page is not None and _page_closed(active_page):
+            # Whatever its kind: a page surface is bound to the page this run
+            # claimed, and only an explicit switch_surface step moves on.
             return (
                 f"Step '{step.id}' ({step.intent}): the active surface "
                 f"'{self.active_id}' was closed; refusing to act on another "
@@ -459,10 +467,16 @@ class SurfaceRouter:
                 f"{prefix}, but its window.opener relation differs from the "
                 "recording; run halted"
             )
-        self._claimed[spec.id] = page
-        self._remember(page)
-        self.backends[spec.id] = self._page_backend_factory(page)
+        self._bind(spec.id, page)
         return None
+
+    def _bind(self, sid: str, page: Any) -> None:
+        self._claimed[sid] = page
+        self._bound_on_run.add(sid)
+        if not any(page is known for known in self._claimed_on_run):
+            self._claimed_on_run.append(page)
+        self._remember(page)
+        self.backends[sid] = self._page_backend_factory(page)
 
     # -- binding by identity -------------------------------------------------
 
@@ -472,10 +486,18 @@ class SurfaceRouter:
         return [page for page in bound if page is not None]
 
     def _unbound_pages(self, sid: str) -> list[Any]:
-        """Live pages Flow already knows that no other surface holds."""
+        """Live candidate pages for ``sid`` that no other surface holds.
+
+        Pages claimed on this run only. On a resume, before ``sid`` is first
+        bound, every page Flow knows (the starting inventory) instead.
+        """
 
         held = self._bound_pages(except_id=sid)
         cached = self._claimed.get(sid)
+        if self._resuming and sid not in self._bound_on_run:
+            pool = self._known_pages
+        else:
+            pool = self._claimed_on_run
         found: list[Any] = []
         for context in self._contexts:
             try:
@@ -485,8 +507,10 @@ class SurfaceRouter:
             for page in pages:
                 if _page_closed(page) or page is cached:
                     continue
-                if not any(page is known for known in self._known_pages):
-                    continue  # undeclared: the entry check halts on it
+                if not any(page is known for known in pool):
+                    # Undeclared (the entry check halts on it), or a page
+                    # this run never claimed, such as the person's own tab.
+                    continue
                 if any(page is other for other in held):
                     continue
                 if any(page is seen for seen in found):
@@ -523,23 +547,29 @@ class SurfaceRouter:
                 return False
         return True
 
-    def _page_passes(self, page: Any, spec: SurfaceSpec, step: Step) -> bool:
+    def _page_passes(
+        self, page: Any, spec: SurfaceSpec, step: Step, *, require_visual: bool
+    ) -> bool:
         """Vision-first identity check of one candidate page for ``step``.
 
         The structured attributes are evaluated first only because they are
-        cheap and need no screenshot; a candidate must pass both. When the
-        step carries no visual evidence, the declared structured attributes
-        are the whole check.
+        cheap and need no screenshot; a candidate must pass both. With
+        ``require_visual`` (binding a page other than the one this surface
+        holds) the step must carry visual evidence and the page must show it;
+        otherwise a step without visual evidence relies on the structured
+        attributes alone.
         """
 
         if not self._structured_ok(page, spec):
             return False
         if self._identity_check is None:
-            return True
+            return not require_visual
         try:
             visual = self._identity_check(self._page_backend_factory(page), step)
         except Exception:
             return False
+        if require_visual:
+            return visual is True
         return visual is not False
 
     def _bind_page(
@@ -548,9 +578,11 @@ class SurfaceRouter:
         """Bind page surface ``sid`` to the one live page that passes ``step``.
 
         The page this surface last used is kept while it is open and passes
-        (or when no other known page is a candidate: the step's own identity
-        ladder then checks it, as on any single page). Otherwise exactly one
-        other known page must pass; zero or several halt.
+        (or when no other candidate exists: the step's own identity ladder
+        then checks it, as on any single page). Otherwise exactly one other
+        candidate (:meth:`_unbound_pages`) must show the step's visual
+        evidence; zero or several halt, and so does a held page that fails
+        its check.
         """
 
         spec = self.specs[sid]
@@ -559,14 +591,16 @@ class SurfaceRouter:
         others = self._unbound_pages(sid)
         if cached_live and not others:
             return cached, None
-        if cached_live and self._page_passes(cached, spec, step):
+        if cached_live and self._page_passes(cached, spec, step, require_visual=False):
             return cached, None
-        passing = [page for page in others if self._page_passes(page, spec, step)]
+        passing = [
+            page
+            for page in others
+            if self._page_passes(page, spec, step, require_visual=True)
+        ]
         if len(passing) == 1:
             page = passing[0]
-            self._claimed[sid] = page
-            self._remember(page)
-            self.backends[sid] = self._page_backend_factory(page)
+            self._bind(sid, page)
             return page, None
         if len(passing) > 1:
             return None, (
@@ -575,12 +609,15 @@ class SurfaceRouter:
                 "them, so the run halted"
             )
         if cached_live:
-            # Most recently active page for this surface; its own per-step
-            # identity checks still decide.
-            return cached, None
+            return None, (
+                f"{prefix}: the page surface '{sid}' holds no longer passes its "
+                "identity check, and no other page this run opened does; run "
+                "halted"
+            )
         return None, (
             f"{prefix}: no open browser page passes the identity check of "
-            f"surface '{sid}'; run halted"
+            f"surface '{sid}' (rebinding needs this step's visual evidence on "
+            "a page this run opened); run halted"
         )
 
     def _bind_backend(
@@ -663,6 +700,14 @@ class SurfaceRouter:
             return None, f"{prefix} switches to an undeclared surface; run halted"
         if sid == self.active_id:
             return None, f"{prefix} switches to the surface that is already active"
+        if not step.expect and step.surface_origin is None:
+            # Every target kind: without recorded screen text or an origin,
+            # nothing would show the right page or application is in front.
+            return None, (
+                f"{prefix}: the switch to surface '{sid}' has no identity "
+                "evidence (no recorded screen text or origin), so nothing "
+                "would show the right application is in front; run halted"
+            )
         spec = self.specs[sid]
         backend: Any
         if sid == self.primary_id:
@@ -670,12 +715,6 @@ class SurfaceRouter:
             primary_page = _browser_page(backend)
             if primary_page is not None and _page_closed(primary_page):
                 return None, f"{prefix}: surface '{sid}' was closed; run halted"
-            if not step.expect and step.surface_origin is None:
-                return None, (
-                    f"{prefix}: the switch to surface '{sid}' has no identity "
-                    "evidence (no recorded screen text or origin), so nothing "
-                    "would show the right application is in front; run halted"
-                )
         elif spec.is_page:
             cached = self._claimed.get(sid)
             if cached is None and not self._unbound_pages(sid):
@@ -693,12 +732,6 @@ class SurfaceRouter:
             if error is not None:
                 return None, error
             backend = bound
-            if not step.expect and step.surface_origin is None:
-                return None, (
-                    f"{prefix}: the switch to surface '{sid}' has no identity "
-                    "evidence (no recorded screen text or origin), so nothing "
-                    "would show the right application is in front; run halted"
-                )
             self.backends[sid] = backend
             self._watch(backend)
         page = _browser_page(backend)

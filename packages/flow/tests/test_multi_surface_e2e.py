@@ -224,7 +224,8 @@ def test_compiles_one_bundle_across_popup_and_tab(bundle) -> None:
     assert popup.url_pattern is not None and popup.url_pattern.endswith(
         r"popup\.html(?:[?#].*)?"
     )
-    assert popup.title_pattern == "Approval\\ Window"
+    # Titles are not recorded (they carry record names), so not asserted.
+    assert popup.title_pattern is None
     actions = [(s.action, s.surface) for s in workflow.steps]
     assert actions == [
         (ActionKind.CLICK, "main"),
@@ -337,3 +338,32 @@ def test_popup_on_a_different_url_halts(
         assert "other" not in (report.results[-1].error or "")
     finally:
         page.context.close()
+
+
+def test_recorded_surfaces_keep_no_query_string_or_title(
+    app_url: str, browser: object, tmp_path
+) -> None:
+    import json
+
+    # An OAuth-style popup: the code and state ride in the query string.
+    popup = "/popup.html?code=oauth-secret-code&state=state-token"
+    page = _fresh_page(browser, f"{app_url}/?popup={popup.replace('&', '%26')}")
+    try:
+        recorder = Recorder(
+            PlaywrightBackend(page),
+            tmp_path / "recording",
+            app_url=app_url,
+            settle_interval_s=0.05,
+            settle_timeout_s=2.0,
+        )
+        recorder.click(*_center(page, "#open-popup"))
+        assert recorder.surface_ids == ("main", "popup_1")
+        recording = recorder.finish()
+    finally:
+        page.context.close()
+    meta_text = (recording / "meta.json").read_text()
+    [entry] = [s for s in json.loads(meta_text)["surfaces"] if s["id"] == "popup_1"]
+    assert entry["url"] == f"{app_url}/popup.html"
+    assert "title" not in entry
+    assert "oauth-secret-code" not in meta_text and "state-token" not in meta_text
+    assert "Approval Window" not in meta_text
