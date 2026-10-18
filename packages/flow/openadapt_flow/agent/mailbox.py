@@ -126,6 +126,49 @@ def _sanitize_result(value: Any) -> Any:
     return value
 
 
+# Free-text labels from the accessibility tree. ``_safe_label`` already drops
+# emails, phone numbers and long digit runs, but a patient's name passes a
+# regex. Before a result leaves the machine each label is scrubbed; a label the
+# scrubber changes, or any label when the privacy extra is missing, is dropped.
+_LABEL_KEYS = frozenset(
+    {"name", "automation_id", "class_name", "control_type", "summary", "hint"}
+)
+_OPTED_OUT = object()
+_UNRESOLVED = object()
+
+
+def _outbound_label_scrubber() -> Any:
+    """Return the scrubber, ``_OPTED_OUT`` (recorded), or None (withhold labels)."""
+    from openadapt_flow import privacy
+
+    if privacy.outbound_opt_out("authoring mailbox labels") is not None:
+        return _OPTED_OUT
+    return privacy.get_scrubber()
+
+
+def _scrub_labels(value: Any, scrubber: Any) -> Any:
+    if scrubber is _OPTED_OUT:
+        return value
+    if isinstance(value, list):
+        return [_scrub_labels(item, scrubber) for item in value]
+    if not isinstance(value, dict):
+        return value
+    out: dict[str, Any] = {}
+    for key, child in value.items():
+        if key in _LABEL_KEYS and isinstance(child, str):
+            if scrubber is None:
+                continue
+            try:
+                if scrubber.scrub_text(child) != child:
+                    continue
+            except Exception:  # noqa: BLE001 - a failed scrub withholds the label
+                continue
+            out[key] = child
+        else:
+            out[key] = _scrub_labels(child, scrubber)
+    return out
+
+
 def _client_display(value: object) -> str:
     if value in CLIENT_DISPLAYS:
         return str(value)
@@ -168,6 +211,7 @@ class MailboxTransport:
         self.origin = origin
         self._post_impl = post
         self._opener = opener or _default_opener()
+        self._label_scrubber: Any = _UNRESOLVED
 
     def _path(self, pack_id: str, action: str) -> str:
         if not valid_pack_id(pack_id) or action not in MAILBOX_ACTIONS:
@@ -298,9 +342,11 @@ class MailboxTransport:
         if not valid_lease_secret(lease_secret):
             raise MailboxError("The authoring mailbox credential is malformed.")
         path = self._path(pack_id, "callback")
+        if self._label_scrubber is _UNRESOLVED:
+            self._label_scrubber = _outbound_label_scrubber()
         self._post(
             path,
-            _sanitize_result(payload),
+            _scrub_labels(_sanitize_result(payload), self._label_scrubber),
             headers={
                 "Authorization": f"Bearer {lease_secret}",
                 "Content-Type": "application/json",
