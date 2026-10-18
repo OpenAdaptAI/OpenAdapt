@@ -8041,6 +8041,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     add_countersign_parser(sub)
 
+    from openadapt_flow.cli_known_ids import register as _register_known_ids
+
+    _register_known_ids(sub)
+
     p = sub.add_parser(
         "bind-record-checks",
         help=(
@@ -10204,10 +10208,15 @@ def _qualify_default_form(argv: list[str]) -> list[str]:
     return argv
 
 
+# Flags that print and exit before any work, so loading OCR would only slow
+# the exit down.
+_PREWARM_SKIP_FLAGS = frozenset({"-h", "--help", "--version"})
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point. Returns a process exit code."""
     raw = list(sys.argv[1:] if argv is None else argv)
-    if raw[:1] in (["demo"], ["tutorial"]):
+    if raw[:1] in (["demo"], ["tutorial"]) and not _PREWARM_SKIP_FLAGS & set(raw):
         # Building the parser imports for a second or two on a new install;
         # start loading OCR and checking the browser driver meanwhile.
         from openadapt_flow import _prewarm
@@ -10240,6 +10249,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         # Missing optional browser support is a setup decision, not a crash.
         print(f"Browser setup required:\n{exc}", file=sys.stderr)
         return 2
+    except Exception as exc:
+        from openadapt_flow.runtime.known_ids import KnownIdAdmissionHalt
+
+        if not isinstance(exc, KnownIdAdmissionHalt):
+            raise
+        # The configured known-ID list may not be used: halt before any step
+        # runs, with the named reason.
+        print(
+            f"replay halted before start: {exc.reason}: {exc.detail}", file=sys.stderr
+        )
+        return 3
 
 
 if __name__ == "__main__":
