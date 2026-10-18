@@ -718,6 +718,7 @@ def _configured_replayer(
     checkpoint_key: Optional[str] = None,
     approval_gate=None,
     qualification_fault_driver=None,
+    surface_backends=None,
     deployment_surface: Optional[str] = None,
 ):
     """Wire the grounding, verification, and actuation layers into a Replayer.
@@ -741,7 +742,7 @@ def _configured_replayer(
         ):
             checkpoint_key = crypto.require_key(None)
 
-    return build_replayer(
+    replayer = build_replayer(
         backend,
         allow_egress=allow_egress,
         effect_verifier=effect_verifier,
@@ -761,6 +762,11 @@ def _configured_replayer(
         qualification_fault_driver=qualification_fault_driver,
         deployment_surface=deployment_surface,
     )
+    if surface_backends:
+        # Backend surfaces of a multi-surface bundle (docs/MULTI_SURFACE.md),
+        # bound by --surface / the config's surfaces: map.
+        replayer.surface_backends = dict(surface_backends)
+    return replayer
 
 
 def _build_and_run_replayer(
@@ -794,6 +800,7 @@ def _build_and_run_replayer(
     run_id: Optional[str] = None,
     approval_gate=None,
     qualification_fault_driver=None,
+    surface_backends=None,
     deployment_surface: Optional[str] = None,
 ):
     """Build the shared Replayer configuration and execute one workflow."""
@@ -815,6 +822,7 @@ def _build_and_run_replayer(
         runtime_config=runtime_config,
         approval_gate=approval_gate,
         qualification_fault_driver=qualification_fault_driver,
+        surface_backends=surface_backends,
         deployment_surface=deployment_surface,
     ).run(
         workflow,
@@ -979,6 +987,7 @@ def _replay_desktop(
     run_id: Optional[str] = None,
     approval_gate=None,
     qualification_fault_driver=None,
+    surface_cfgs=None,
 ) -> int:
     """Replay against a non-browser native/remote backend built by the factory.
 
@@ -998,6 +1007,7 @@ def _replay_desktop(
         backend = build_backend(backend_cfg)
     except ValueError as e:
         raise SystemExit(str(e))
+    surface_backends = _build_surface_backends(surface_cfgs or {}, page=None)
 
     try:
         report = _build_and_run_replayer(
@@ -1028,12 +1038,14 @@ def _replay_desktop(
             run_id=run_id,
             approval_gate=approval_gate,
             qualification_fault_driver=qualification_fault_driver,
+            surface_backends=surface_backends,
             deployment_surface=backend_cfg.deployment_surface,
         )
     finally:
-        close = getattr(backend, "close", None)
-        if callable(close):
-            close()  # RDP transports hold a live socket; browsers/agents don't
+        for owned in (backend, *surface_backends.values()):
+            close = getattr(owned, "close", None)
+            if callable(close):
+                close()  # RDP transports hold a live socket; browsers/agents don't
     return _finish_replay(
         run_dir, report, args, backend_kind=_report_backend_kind(backend_cfg.kind)
     )
@@ -2016,6 +2028,81 @@ def _default_run_dir() -> Path:
     return Path("runs") / f"replay-{stamp}"
 
 
+def _resolve_surface_bindings(args: argparse.Namespace, cfg, workflow) -> dict:
+    """Resolve ``--surface`` flags and ``surfaces:`` config for this bundle.
+
+    Refuses (before anything runs) a binding the bundle cannot use. Names
+    every backend surface left unbound; the run halts at the switch to it.
+    """
+
+    from openadapt_flow.surface_bindings import (
+        SurfaceBindingError,
+        resolve_surface_configs,
+        unbound_backend_surfaces,
+    )
+
+    flags = list(getattr(args, "surface", None) or [])
+    configured = dict(getattr(cfg, "surfaces", {}) or {})
+    if not getattr(workflow, "surfaces", None):
+        if flags or configured:
+            raise SystemExit(
+                "REFUSED: --surface / surfaces: were given, but this bundle "
+                "declares no surfaces. Nothing was executed."
+            )
+        return {}
+    try:
+        resolved = resolve_surface_configs(workflow, flags, configured)
+    except SurfaceBindingError as exc:
+        raise SystemExit(f"REFUSED: {exc}. Nothing was executed.")
+    unbound = unbound_backend_surfaces(workflow, resolved)
+    if unbound:
+        print(
+            "NOTE: no backend is bound for surface(s) "
+            + ", ".join(unbound)
+            + "; the run halts at the switch to it. Bind one with "
+            "--surface NAME=KIND[:TARGET] or the config's surfaces: map.",
+            file=sys.stderr,
+        )
+    return resolved
+
+
+def _build_surface_backends(surface_cfgs, *, page) -> dict:
+    """Build bound backend surfaces; a web one opens in the run's browser."""
+
+    from openadapt_flow.surface_bindings import (
+        SurfaceBindingError,
+        build_surface_backends,
+    )
+
+    new_page = None
+    if page is not None:
+
+        def new_page(url: str):
+            # A second app is its own browser page in the run's browser: a new
+            # page in the run's context when the context allows one, else a
+            # page of its own context (Playwright's browser.new_page()).
+            try:
+                opened = page.context.new_page()
+            except Exception:
+                browser = page.context.browser
+                if browser is None:
+                    raise
+                opened = browser.new_page(viewport=page.viewport_size)
+            opened.goto(url)
+            try:
+                opened.wait_for_load_state("load")
+            except Exception:
+                pass
+            # The run starts on the primary page.
+            page.bring_to_front()
+            return opened
+
+    try:
+        return build_surface_backends(surface_cfgs or {}, new_page=new_page)
+    except (SurfaceBindingError, ValueError) as exc:
+        raise SystemExit(f"REFUSED: {exc}. Nothing was executed.")
+
+
 def _cmd_replay(args: argparse.Namespace) -> int:
     from openadapt_flow.backends.factory import _normalize_kind, build_backend
     from openadapt_flow.cli_compose import refuse_replay_composition
@@ -2074,6 +2161,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     refused = _enforce_surface_binding(args, workflow, backend_cfg, operation=operation)
     if refused is not None:
         return refused
+    surface_cfgs = _resolve_surface_bindings(args, cfg, workflow)
     # Opt-in attest pre-state snapshot: the earliest point where the run is
     # ADMITTED (every gate above passed) and the run directory is final, but
     # NO actuation has begun on either the desktop or the web path below.
@@ -2114,6 +2202,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             run_id=getattr(args, "_qualification_run_id", None),
             approval_gate=approval_gate,
             qualification_fault_driver=fault_driver,
+            surface_cfgs=surface_cfgs,
         )
 
     headed = args.headed or cfg.backend.headed
@@ -2136,6 +2225,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         # is exercised instead of the structural rung resolving it.
         backend = build_backend(backend_cfg, page=page)
         held_backend.append(backend)
+        surface_backends = _build_surface_backends(surface_cfgs, page=page)
         return _build_and_run_replayer(
             backend,
             workflow=workflow,
@@ -2172,6 +2262,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             run_id=getattr(args, "_qualification_run_id", None),
             approval_gate=approval_gate,
             qualification_fault_driver=fault_driver,
+            surface_backends=surface_backends,
             deployment_surface=backend_cfg.deployment_surface,
         )
 
@@ -2304,7 +2395,39 @@ def _resolve_run_approval_mode(args: argparse.Namespace, cfg, profile_value):
     requested = getattr(args, "approval_mode", None)
     if requested is None:
         requested = getattr(getattr(cfg, "runtime", None), "approval_mode", None)
+    if requested is None:
+        requested = _admitted_approval_mode(args)
     return resolve_approval_mode(requested)
+
+
+def _admitted_approval_mode(args: argparse.Namespace) -> Optional[str]:
+    """The approval mode the bundle's admission gives it, or ``None``.
+
+    An accepted ``openadapt-flow admit`` sets ``problems_only`` for that exact
+    bundle. A flag or ``runtime.approval_mode`` still wins. A bundle changed
+    since admission, or an agent's admission whose person-signed grant no
+    longer verifies, falls back to the default (a person approves each save)
+    and says why.
+    """
+
+    bundle = getattr(args, "bundle", None)
+    if not bundle:
+        return None
+    from openadapt_flow.admit_pipeline import admitted_approval_mode
+
+    admitted = admitted_approval_mode(Path(bundle))
+    if admitted.refusal is not None:
+        print(
+            f"admission approval mode not used ({admitted.refusal}): a person "
+            "approves each save."
+        )
+        return None
+    if admitted.approval_mode is not None and admitted.admitted_by is not None:
+        print(
+            f"Admitted by {admitted.admitted_by.label()}: this workflow uses "
+            f"{admitted.approval_mode}."
+        )
+    return admitted.approval_mode
 
 
 def _approval_wait_seconds(args: argparse.Namespace) -> float:
@@ -6349,6 +6472,26 @@ def _add_browser_session_flags(p: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_surface_flags(p: argparse.ArgumentParser) -> None:
+    """Add ``--surface NAME=KIND[:TARGET]`` (multi-surface bundles)."""
+
+    p.add_argument(
+        "--surface",
+        action="append",
+        default=None,
+        metavar="NAME=KIND[:TARGET]",
+        help=(
+            "Multi-surface bundles: bind a backend to the backend surface NAME "
+            "(repeatable). KIND defaults to the kind the bundle declares; "
+            "TARGET fills that kind's target (web: URL, windows: agent URL, "
+            "macos: app, linux: app, rdp: host, citrix: client window). "
+            "NAME=TARGET alone is accepted. Other fields go in the config's "
+            "surfaces: map. Browser tabs and popups need no binding. See "
+            "docs/MULTI_SURFACE.md."
+        ),
+    )
+
+
 def _add_backend_flags(p: argparse.ArgumentParser) -> None:
     """Add the backend-selector flags (``--backend`` + targets) to a subparser.
 
@@ -7474,6 +7617,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     _add_backend_flags(p)
+    _add_surface_flags(p)
     _add_browser_session_flags(p)
     _add_deployment_flags(p, worklist=True)
     _add_attest_flags(p)
@@ -7559,6 +7703,7 @@ def build_parser() -> argparse.ArgumentParser:
 
     add_self_repair_flags(p)
     _add_backend_flags(p)
+    _add_surface_flags(p)
     _add_browser_session_flags(p)
     _add_deployment_flags(p, worklist=True)
     _add_attest_flags(p)
@@ -10418,6 +10563,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     argv = list(sys.argv[1:] if argv is None else argv)
     argv = _qualify_default_form(argv)
+    from openadapt_flow.cli_admit import admit_default_form
+
+    argv = admit_default_form(argv)
     # Strict no-outbound mode (OPENADAPT_NO_OUTBOUND=1) is installed before
     # any command runs, so no code path can open a connection off the machine.
     from openadapt_flow import no_outbound

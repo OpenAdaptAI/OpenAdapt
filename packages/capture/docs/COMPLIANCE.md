@@ -34,8 +34,11 @@ See [AUTHENTICATION_HANDOFF.md](AUTHENTICATION_HANDOFF.md).
 
 Capture doesn't upload a session. The sharing command (`capture share`) and the
 profiling transfer (`send_profile`) are the only two uploads, and both run
-only when the operator asks for them. Installing the `privacy` extra doesn't
-scrub anything by itself.
+only when the operator asks for them. `capture share send` scrubs a copy of
+the recording and sends only the copy; it refuses when the `privacy` extra is
+missing. Sending the raw recording needs `--unscrubbed --reason ...`, which is
+recorded in a local ledger and inside the archive. The profiling transfer
+sends numbers and flags only. The local recording itself is not scrubbed.
 
 Structural observations carry control names, window titles, and accessibility
 ancestry, so they stay inside the same local boundary. Accessibility text is
