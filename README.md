@@ -2,7 +2,9 @@
 
 # OpenAdapt
 
-**Compile repetitive GUI work into programs that check every save.**
+**Give your agent a program, not a mouse.**
+
+The open-source harness that compiles computer-use agent runs into verified programs.
 
 [![CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml) [![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml) [![PyPI](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/) [![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE) [![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
@@ -10,15 +12,45 @@
 
 </div>
 
-A person records a task once, or a computer-use agent does it once. OpenAdapt
-compiles that run into a program that repeats it with no model calls. Before
-each save, the program confirms the right record is on screen. After it, the
-program reads the save back from the system of record. When something doesn't
-match, it stops instead of guessing.
+A computer-use agent looks at the screen and chooses every click again, on
+every run. OpenAdapt lets your agent, or a person, do a task once in any app:
+web, Windows, macOS, Linux, RDP or Citrix. It compiles that run into a program,
+and your agent calls the program as one tool. The program runs with no model
+calls and sends no screenshots anywhere. It confirms the right record before
+each save, reads the save back from the system of record after it, and returns
+a plain outcome. When anything doesn't match, it stops and tells your agent
+instead of guessing.
 
-OpenAdapt is open source (MIT) and runs on your own computer or server. It
-works where there's no usable API: web apps, Windows, macOS and Linux apps, and
-RDP and Citrix windows.
+## One harness, three modes
+
+| Mode | What happens | Model calls |
+|---|---|---|
+| **Explore** | Your agent, or a person, does the task once while OpenAdapt records every action. The save is read back before anything compiles. | Your agent's, on your own key |
+| **Run** | The compiled program repeats the task with new inputs. It checks the record before each save and reads it back after. | None |
+| **Repair** | When the app changes, the run stops before saving. An agent shows the fix, the program tries it up to the save without saving, and a person approves it. | Only when something changed, on your own key |
+
+## An agent alone, and an OpenAdapt program
+
+The same referral task on a local OpenEMR 8.0.0.3 test copy with synthetic
+patients, 62 timed runs each (14 and 15 October 2026), judged by the same
+database read-back:
+
+| | Claude computer-use agent | OpenAdapt program |
+|---|---|---|
+| Model calls | On every step of every run | 0 |
+| Screenshots sent to a model | Throughout every run | 0 |
+| Model cost per referral | About $0.08 at list price | $0 |
+| Path through the app | Chosen again each run | The same compiled steps |
+| Median time | 36.5 s | 29.7 s |
+| Referrals saved correctly | 62 of 63 | 62 of 63 |
+
+Both were equally correct here, and the agent matched or beat OpenAdapt in
+three other tests. [Every result](https://openadapt.ai/compare/computer-use-agents)
+is published. The program was only about a fifth faster because it still drives
+every page, as the agent does; direct API steps compiled from the recording's
+network traffic are in review
+([#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269)). OpenAdapt isn't
+affiliated with the OpenEMR project.
 
 ## Why the read-back matters
 
@@ -77,9 +109,49 @@ the current wording:
 
 The [quickstart tutorial](https://docs.openadapt.ai/tutorials/quickstart/) walks through every line.
 
-## Three ways to start
+## Build with it
 
-### From a person's recording
+### Compile your agent's run
+
+Your agent (Claude or OpenAI computer use, or your own loop, on your own model
+key) does the task once while OpenAdapt records it. A person reviews and admits
+the draft program, or a registered agent admits it under a policy a person
+signed. After that, the program runs instead of the agent.
+
+```python
+from openadapt_flow.jit import compile_agent
+
+jit = compile_agent(my_agent, task=task, app=app, verifier=verifier,
+                    policy="clinical-write", cache_dir="jit-cache", model_key=key)
+jit.run(note="Follow up in two weeks")    # the agent does it; a DRAFT is saved
+# a person reviews, runs the canary, and admits the draft
+jit.run(note="Recheck knee in ten days")  # the program runs: 0 model calls, save read back
+```
+
+[Compile a computer-use agent's run](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/JIT.md) has the full
+example. This path runs web apps today. On Windows, RDP and Citrix, an agent can
+already drive a recording through the MCP server's recording tools (on `main`,
+not yet released), and the same compile path for those surfaces is being
+built.
+
+### Call programs from your agent
+
+```bash
+claude mcp add openadapt -- uvx --python 3.12 openadapt-agent serve
+```
+
+Each compiled workflow becomes one tool call. The agent decides what to enter;
+OpenAdapt makes the entry, checks it, and returns an outcome instead of the
+agent driving the screen. With no bundles, the server offers a synthetic
+sandbox workflow that returns every outcome. To serve your own workflows, run
+`openadapt agent serve --mode production --bundles ./bundles`; without
+`--mode production` the agent can list them but not run them.
+`openadapt-agent emit-skill <bundle>` writes an Agent Skill for one workflow,
+and `openadapt flow verify-run` judges a write made by any agent or script
+against the system of record. [Connect an agent](https://docs.openadapt.ai/how-to/connect-an-agent/)
+covers other clients.
+
+### Record a task by hand
 
 ```bash
 python -m pip install --upgrade openadapt
@@ -103,54 +175,31 @@ To record a desktop app, install the recorder and your operating system's
 adapter, for example `python -m pip install "openadapt[capture,windows]"`, or
 use [OpenAdapt Desktop](https://openadapt.ai/download).
 
-### From a computer-use agent's run
+### Judge or train any agent
 
-Your agent (Claude or OpenAI computer use, or your own loop, on your own model
-key) does the task once while OpenAdapt records it. A person reviews and admits
-the draft program, or a registered agent admits it under a policy a person
-signed. After that, the program runs instead of the agent.
+`openadapt flow verify-run` judges a write made by any agent or script against
+the system of record. `openadapt-flow serve-reward` turns the same check into a
+reward for training or evaluating computer-use agents
+([REWARD_WORKER.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/REWARD_WORKER.md)).
 
-```python
-from openadapt_flow.jit import compile_agent
+## Every backend
 
-jit = compile_agent(my_agent, task=task, app=app, verifier=verifier,
-                    policy="clinical-write", cache_dir="jit-cache", model_key=key)
-jit.run(note="Follow up in two weeks")    # the agent does it; a DRAFT is saved
-# a person reviews, runs the canary, and admits the draft
-jit.run(note="Recheck knee in ten days")  # the program runs: 0 model calls, save read back
-```
+The same record, compile, run and repair steps work on every surface. Where
+the app exposes its structure, OpenAdapt uses it; on remote desktops it works
+from pixels.
 
-[Compile a computer-use agent's run](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/JIT.md) has the full
-example.
+| Surface | What OpenAdapt reads | Tested so far |
+|---|---|---|
+| Web apps | The screen, plus the page's DOM | Required CI on every build, plus runs against OpenEMR |
+| Windows apps | The screen, plus UI Automation | 3 of 3 saves in a WinForms test app |
+| macOS apps | The screen, plus Accessibility | 3 of 3 saves in TextEdit |
+| Linux apps (X11) | The screen, plus AT-SPI | A GTK3 app in CI |
+| Remote desktop (RDP) | The screen | 3 of 3 trials into Windows 11 over a real network |
+| Citrix | The screen | A stand-in app only; no run over a real Citrix session yet |
 
-### Underneath an agent you already run
-
-```bash
-claude mcp add openadapt -- uvx --python 3.12 openadapt-agent serve
-```
-
-Each compiled workflow becomes one tool call. The agent decides what to enter;
-OpenAdapt makes the entry, checks it, and returns an outcome instead of the
-agent driving the screen. With no bundles, the server offers a synthetic
-sandbox workflow that returns every outcome. To serve your own workflows, run
-`openadapt agent serve --mode production --bundles ./bundles`; without
-`--mode production` the agent can list them but not run them.
-`openadapt-agent emit-skill <bundle>` writes an Agent Skill for one workflow,
-and `openadapt flow verify-run` judges a write made by any agent or script
-against the system of record. [Connect an agent](https://docs.openadapt.ai/how-to/connect-an-agent/)
-covers other clients.
-
-## How it compares
-
-| | Computer-use agent | Agent with a replay cache | Traditional RPA | OpenAdapt |
-|---|---|---|---|---|
-| How you define the task | A goal in plain language | One agent run | A script or flow built in a designer | A person's recording or an agent's run |
-| What runs each time | A model chooses each step from the screen | The recorded steps; the agent takes over on a miss | The fixed script | A compiled program you can read |
-| Model calls per run | At least one per step | None on a hit; the agent's calls on a miss | None | None with default settings |
-| When the screen changes | The model tries to adapt | The agent improvises live | A selector stops matching, or matches the wrong control | The run stops before saving; a fix is proposed and a person approves it |
-| Right record? | The model judges from the screen | Usually only that the screen looks as recorded | Whatever the developer scripted | Checked before every save |
-| Did the save land? | The model judges from the screen | The screen | Whatever the developer scripted | Read back from the system of record |
-| Strongest for | New or changing tasks | Repeated tasks where a wrong save is cheap | Stable processes with a team to maintain the scripts | The same entry many times, where a wrong save is costly |
+Each application on each surface needs its own qualification.
+[Surfaces](https://docs.openadapt.ai/explanation/surfaces/) and [Limits](https://docs.openadapt.ai/explanation/limits/)
+have the details.
 
 ## How it works
 
@@ -168,6 +217,18 @@ Qualification runs the program against normal and fault cases before an
 admission lets that exact version run. At each save the program checks that
 the right record is on screen, makes the entry, and reads the record back.
 
+## How it compares
+
+| | Computer-use agent | Agent with a replay cache | Traditional RPA | OpenAdapt |
+|---|---|---|---|---|
+| How you define the task | A goal in plain language | One agent run | A script or flow built in a designer | A person's recording or an agent's run |
+| What runs each time | A model chooses each step from the screen | The recorded steps; the agent takes over on a miss | The fixed script | A compiled program you can read |
+| Model calls per run | At least one per step | None on a hit; the agent's calls on a miss | None | None with default settings |
+| When the screen changes | The model tries to adapt | The agent improvises live | A selector stops matching, or matches the wrong control | The run stops before saving; a fix is proposed and a person approves it |
+| Right record? | The model judges from the screen | Usually only that the screen looks as recorded | Whatever the developer scripted | Checked before every save |
+| Did the save land? | The model judges from the screen | The screen | Whatever the developer scripted | Read back from the system of record |
+| Strongest for | New or changing tasks | Repeated tasks where a wrong save is cheap | Stable processes with a team to maintain the scripts | The same entry many times, where a wrong save is costly |
+
 ## What it can do
 
 - **Learns from any successful run**, a person's demonstration or a computer-use agent's verified run, and compiles it into a program that runs with no model calls.
@@ -184,7 +245,7 @@ the right record is on screen, makes the entry, and reads the record back.
 [CAPABILITIES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md) has the status, evidence and code for each,
 including the few still being merged.
 
-## Run outcomes
+## What your agent gets back
 
 | You see | `transaction_outcome` | An agent gets | What happens next |
 |---|---|---|---|
@@ -198,23 +259,6 @@ The console's last line can read `HALTED` for both the second and third rows.
 `transaction_outcome` in `report.json` tells them apart, so base every rerun on
 it. [Run outcomes](https://docs.openadapt.ai/reference/outcomes/) lists every value.
 
-## Measured so far
-
-On a local OpenEMR 8.0.0.3 test copy with synthetic referrals (14 and
-15 October 2026), OpenAdapt and a Claude computer-use agent each entered 63
-new-patient referrals in timed runs. Median time over the correct runs was 29.7 seconds for
-OpenAdapt and 36.5 seconds for the agent. OpenAdapt made no model calls; the agent cost about
-$0.08 a run at list price. Both saved 62 of 63 normal referrals correctly,
-judged by the same database read-back, and the agent matched or beat OpenAdapt
-in three other tests. [Every result](https://openadapt.ai/compare/computer-use-agents)
-is published, and the [run data](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/openemr_referral_timing/README.md)
-is in this repository. OpenAdapt isn't affiliated with the OpenEMR project.
-
-The program was only about a fifth faster because it still drives every page,
-as the agent does. Running the save as a direct request, compiled from the
-recording's network traffic, is in review
-([#1261](https://github.com/OpenAdaptAI/OpenAdapt/pull/1261)).
-
 ## When to use something else
 
 - **The app has an API for the task.** Call the API.
@@ -225,23 +269,6 @@ recording's network traffic, is in review
   signed-in session. Without one, a run can only end as finished but not
   checked.
 
-<details>
-<summary>Where it runs</summary>
-
-| Surface | What OpenAdapt reads | Tested so far |
-|---|---|---|
-| Web apps | The screen, plus the page's DOM | Required CI on every build, plus runs against OpenEMR |
-| Windows apps | The screen, plus UI Automation | 3 of 3 saves in a WinForms test app |
-| macOS apps | The screen, plus Accessibility | 3 of 3 saves in TextEdit |
-| Linux apps (X11) | The screen, plus AT-SPI | A GTK3 app in CI |
-| Remote desktop (RDP) | The screen | 3 of 3 trials into Windows 11 over a real network |
-| Citrix | The screen | A stand-in app only; no run over a real Citrix session yet |
-
-Each application on each surface needs its own qualification.
-[Surfaces](https://docs.openadapt.ai/explanation/surfaces/) and [Limits](https://docs.openadapt.ai/explanation/limits/)
-have the details.
-
-</details>
 
 ## Packages
 
