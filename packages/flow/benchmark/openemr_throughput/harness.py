@@ -242,6 +242,10 @@ def run(a: argparse.Namespace) -> dict[str, Any]:
 
     if a.profile and a.workers != 1:
         raise SystemExit("--profile needs --workers 1")
+    if a.page_quiet_ms is not None:
+        from openadapt_flow.vision import settle as settle_mod
+
+        settle_mod.PAGE_QUIET_WINDOW_S = a.page_quiet_ms / 1000.0
     os.environ.setdefault("OPENADAPT_FLOW_BROWSER", "bundled")
     demo = _demo_module()
     out = Path(a.out) / a.tag
@@ -264,6 +268,7 @@ def run(a: argparse.Namespace) -> dict[str, Any]:
     meta = {
         "tag": a.tag, "workers": a.workers, "items": a.items, "window": a.window,
         "halt_at": a.halt_at, "profile": a.profile, "engine_sha": engine_sha,
+        "page_quiet_ms": a.page_quiet_ms or 100,
         "engine_dirty": bool(os.popen(f"git -C {FLOW} status --porcelain -- openadapt_flow").read().strip()),
         "bundle_digest": getattr(workflow.manifest, "content_digest", None),
         "baseline": digest[:12], "seed_status": seed, "setup_s": round(time.time() - t, 2),
@@ -428,6 +433,8 @@ def main() -> None:
     r.add_argument("--window", type=int, default=0)
     r.add_argument("--halt-at", type=int, default=None)
     r.add_argument("--profile", action="store_true")
+    r.add_argument("--page-quiet-ms", type=int, default=None,
+                   help="page-quiet settle window (runtime.page_quiet_ms); default 100")
     r.add_argument("--keep-pngs", action="store_true")
     r.add_argument("--gate-load", type=float, default=16.0)
     r.add_argument("--gate-max-wait-s", type=float, default=7200.0)

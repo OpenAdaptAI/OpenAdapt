@@ -678,6 +678,12 @@ class RuntimeSection(BaseModel):
     #: for remote-desktop replays (``rdp``/``citrix``) and off elsewhere;
     #: true or false forces it.
     layout_drift_check: Optional[bool] = None
+    #: How long, in ms, a browser page must stay quiet (no DOM change, input
+    #: event, animation or request) before a step counts as settled. None keeps
+    #: the default 100 ms. Lower is faster but gives the app less time to
+    #: start reacting to an action before the next check (docs/THROUGHPUT.md).
+    #: Applies to the whole process.
+    page_quiet_ms: Optional[int] = Field(default=None, ge=30, le=2000)
     #: Operator-selected ("bring your own") model-grounding endpoint (the VLM
     #: fallback rung). Off by default; configuring it never enables egress on its
     #: own (``allow_model_grounding`` still governs whether anything leaves).
@@ -1275,6 +1281,10 @@ def build_replayer(
             backend
         )
     known_ids = None
+    if runtime_config is not None and runtime_config.page_quiet_ms is not None:
+        from openadapt_flow.vision import settle as _settle
+
+        _settle.PAGE_QUIET_WINDOW_S = runtime_config.page_quiet_ms / 1000.0
     if runtime_config is not None and runtime_config.known_ids_path:
         from openadapt_flow.runtime.known_ids import KnownIdAdmission
 

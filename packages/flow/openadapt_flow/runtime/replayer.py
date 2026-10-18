@@ -14708,13 +14708,24 @@ class Replayer:
         """
         if step.anchor is None:
             return False
-        template_png = self._asset_bytes(
-            bundle_dir, step.anchor.template, workflow=workflow
-        )
         structural = (
             self.backend
             if self.use_structural and hasattr(self.backend, "locate_structural")
             else None
+        )
+        offscreen = getattr(structural, "structural_offscreen", None)
+        if (
+            callable(offscreen)
+            and step.anchor.structural is not None
+            and offscreen(step.anchor.structural) is True
+        ):
+            # The page itself shows the unique recorded target exists below
+            # (or above) the viewport: not ready, keep scrolling. Stricter
+            # than letting a visual rung find a look-alike on screen, and it
+            # skips a full-frame OCR search per probe.
+            return False
+        template_png = self._asset_bytes(
+            bundle_dir, step.anchor.template, workflow=workflow
         )
         try:
             resolved = resolve(
