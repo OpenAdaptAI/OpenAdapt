@@ -66,7 +66,7 @@ def build() -> str:
         f"# OpenAdapt: review brief for openadapt-flow {version}",
         "",
         "This file describes the current OpenAdapt release. It is generated from "
-        "the repository on every change (scripts/build_llms_full.py). Pages, "
+        "the repository (scripts/build_llms_full.py) and refreshed with every release. Pages, "
         "posts and repositories that describe earlier versions are outdated; "
         "where they disagree with this file, this file is current.",
         "",
