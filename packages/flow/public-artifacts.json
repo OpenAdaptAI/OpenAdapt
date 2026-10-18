@@ -177,7 +177,7 @@
     },
     {
       "path": "benchmark/code_as_action/results/openemr-distill-check/runs.jsonl",
-      "sha256": "a634dc54db1b10388a497476c6281baa9ef045246e376180670cd7ce4c5f711a"
+      "sha256": "243d8bb5804fba15fb76ada56b6463623bcec334201177d20ed29bc7f53ba14c"
     },
     {
       "path": "benchmark/code_as_action/results/openemr-distill-check/summary.json",
@@ -185,7 +185,7 @@
     },
     {
       "path": "benchmark/code_as_action/results/openemr/runs.jsonl",
-      "sha256": "a937f86c5193a10873c8fd311a046d2b7cb01a185244c735bab9e585790e57b1"
+      "sha256": "b411db6703a221e5682602e37d1b025b71bc8231d4b16d78e9d555e43f22aad4"
     },
     {
       "path": "benchmark/code_as_action/results/openemr/summary.json",
@@ -193,7 +193,7 @@
     },
     {
       "path": "benchmark/code_as_action/results/openemr/superseded.jsonl",
-      "sha256": "99278f1168e6c5c4a33e9f7629df1eeed03274978a5130836e7d270e0eaee240"
+      "sha256": "cebff909b6d4714707bb3e2209b2eb12ae3a200ad15f89580859cdad5362b505"
     },
     {
       "path": "benchmark/code_as_action/results/spend.json",
@@ -424,6 +424,14 @@
       "sha256": "026dab7a2059332f8a62a7e5a24ed22ed94c14dc37a42c73eec7b1a10b4b6a19"
     },
     {
+      "path": "benchmark/openemr_local/out/upstream/7c96c8eefe460d6fadbccbe93d0fa6bf819acd69/docker/production/docker-compose.yml",
+      "sha256": "8ffb1c64ebfc2c1da429fbe6180bd84ad87f8b5b71f5690e32e745cafee239b9"
+    },
+    {
+      "path": "benchmark/openemr_local/out/upstream/compose.7c96c8eefe46.yml",
+      "sha256": "98d4cf916306bf76066a42a3ed212b3d99e6d63d3ec7395f71b8832f3da3b04d"
+    },
+    {
       "path": "benchmark/openemr_local/verify.yaml",
       "sha256": "c8b8cfc97f7ba654d3b016798a5ec442570fb3361b717b53b7363c6e0dd8d6ad"
     },
@@ -638,6 +646,482 @@
     {
       "path": "benchmark/safety_gallery/results.json",
       "sha256": "b831d52f5a387abda6467886e9fd1f06fdb44e8127cc9da4b23b5424e5f2fbef"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/items.csv",
+      "sha256": "eb8c383cb3c70f077117108938c73ac8f7ec67f3d789f74db8d1ed1a6f242d55"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-001.json",
+      "sha256": "d88ec7bddbf4b3f29cefcf7de34e3baa4b2a2a23eeda66104c7de5c4f8828b4a"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-002.json",
+      "sha256": "cd1484df74d24a2de12842f12ebcfc1f803437406071aad37f5e6ec4cd905c69"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-003.json",
+      "sha256": "ac218df32f57f1b3b7cabb8fe4b784111b7dc91b6dc577e2ef12b2e41cbadf4d"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-004.json",
+      "sha256": "c4d229ebcb05dbf9610c90805d2366d8bd787a7fe0275ec96c2ae2567f2b20e1"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-005.json",
+      "sha256": "8e2344953b4b72d0b87716610dda64d0e3b4183ff8b80af08069bd739563dc11"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-006.json",
+      "sha256": "70dd2cf846ca6fb73de94042be978b1c0374ff4638205a07831602d45dc53070"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-007.json",
+      "sha256": "c37514199d42ee52497d5131dbda42015f8c39301949f11e7f0b273420bc9a0c"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-008.json",
+      "sha256": "9aa891579384eb6e3b018802f30a1e45a6744bd74ea464d48c76a16ac9d5c092"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-009.json",
+      "sha256": "bb8b339bb3ea1dd8ce2a5960790ea1856b7669b7572dc45065e9bea4037b39e5"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-010.json",
+      "sha256": "7339478c87a1b8578fa141d099f8af5d2e2b2c6e7ab476e2d7ad8cf5101a7ea6"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-011.json",
+      "sha256": "ef684ad39f41915f638b57aaf9188d7d4935785ae080864775f61da5e71f626e"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-012.json",
+      "sha256": "6ad9c81484e0623261e5bd795b863a7771d520e784433427846a0c209d5d244c"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-013.json",
+      "sha256": "2de079ece6a645642b3428342a2cced8942d53f053b990be9a55e6becdfa7e8a"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-014.json",
+      "sha256": "619def03999551973c9e7cca131445c00cbdd0832f7df770a32598d0d652dc3c"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-015.json",
+      "sha256": "32ba57b679e4a2c02df5959a8fdd93df23a0f1e43617926acdf3e7e1f1b7a39b"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-016.json",
+      "sha256": "4e3189df2c143336aa89498f81d70f160fa4207ae2384ba167dff7bee36de9e5"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-017.json",
+      "sha256": "465629ff8b6228e52aeed1cad080496aa9d687a0d8da17d4dfbc3acbf952662e"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-018.json",
+      "sha256": "42aad5f681dcc2ff37f7667c827eaae46acd73ea3574db57e62cea4ce11eab90"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-019.json",
+      "sha256": "7fa3e55d2a661565dc76b63c251ea7a6741d1c3c19ec7ac18bd8c67fa12b28b5"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-020.json",
+      "sha256": "b672fbde5090f55c2602090075afa5c09700e313521508885fa68841875fc9f9"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-021.json",
+      "sha256": "2d69b2dc569e81e694ec87830670213767a17145559d5bfd8b592cc2a3c3cd05"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-022.json",
+      "sha256": "d72b1fd9af495088af5cbbb2062c1429e50b2615a84f699245027683354c66ac"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-023.json",
+      "sha256": "72f9185ed8e682ff75f9cfb7c485134e35d364489ee455d29a734d8043cdced4"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-024.json",
+      "sha256": "1d064bd06eb1889a5df67a3aea16a4d3eb1b499be3feac3bf32992d33507245d"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-025.json",
+      "sha256": "c4af76556feee78044dac252e803e2eeaddda1c162490493737f112615f98b79"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-026.json",
+      "sha256": "6d548b441bf2954a7a989a0f2d2361776742789b5d1ae71e2a5e89873c443deb"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-027.json",
+      "sha256": "9bb91b552fae1d71c781b08754a6663fe9b68d628e31ba5153b7499740ebb472"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-028.json",
+      "sha256": "dc3081b74ab546622a4c7e686bce5e7aef05ec9e22c4cbf5b5abdee254ec5872"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-029.json",
+      "sha256": "491baf0e31b267c63a466a34a97fd27dff0c02b4b662030d5dac11dc104484db"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-030.json",
+      "sha256": "01458a5d51be752216e0860708c726027589b963b4b7f33f5e052ba85f63d4b6"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-031.json",
+      "sha256": "be4744b077ea930255140c1f3168293e72f659ad347650e74d19a2f9c3aba2e2"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-032.json",
+      "sha256": "f890d634da62de98a0007b85d4982fd6c8b014d595079ca6a324e590ad34c616"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-033.json",
+      "sha256": "81d2256ec0a54f945c82f671ca6845c21e8edfd8b0b62e0fbbed27d4b270293a"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-034.json",
+      "sha256": "be9cbc1930c068166093f47e9f1fb81e37713656e6d3c7815f7f01f077e57a5e"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-035.json",
+      "sha256": "7b038d6dde1d1fecb65634492274d0015e2aa506129e87a5db6545f045aa41c8"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-036.json",
+      "sha256": "c0b8aac1f5b0b4e7f7844443231f032907706bd32288ba7250b51dc03e1aca89"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-037.json",
+      "sha256": "b1fc5d175e584cb52053712d7862d7b23678a13062bf74144dd34438be67ed9c"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-038.json",
+      "sha256": "d71504b6700622513178c05c3681250034f15f34f6591726516fb8f732eda0a1"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-039.json",
+      "sha256": "96bef34b1e62c8b616e5cb4223883ee359cc6266a0f4132a9eb67f6633cde4e3"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-040.json",
+      "sha256": "5b59799f143de0fa483a062a1fadbd27618ada6498ce6a5181d94e89b27a19b9"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-041.json",
+      "sha256": "35549cf9f47ac7f2243e5b1061f17178bf9a80910de7a38a0e1adeabcc60fd59"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-042.json",
+      "sha256": "952690a41a4b2fd38cb18214826e4437539029bc2bd89cb24c9f264749f3c6dc"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-043.json",
+      "sha256": "e3aa75dbb627b67051372a8b1cec2a39ddd4d10231059d06da9804329c0ad2ff"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-044.json",
+      "sha256": "78b6b737737ac09f10d21cfd27f29d1e433851ca941af32649412599cf753a72"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-045.json",
+      "sha256": "de1f4191810fd9d72cdae644f6d62ef8c5b535a4072e1ece695ae8d0aac34c47"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-046.json",
+      "sha256": "ff0a18678a9a3244997c485d3add006f8173abac803c63663aec3e488e3812c0"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-047.json",
+      "sha256": "4b8e8e75cb0ce4ae9c7122484af61d3a92dfddc51d09698973da7a41841317d3"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-048.json",
+      "sha256": "6c0e95eb04322e5f36b331885534e3183e3f22258f785dc332dbe953f95b712f"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-049.json",
+      "sha256": "07d2867280e553c48df8481c822beb822d2fa2dbe22cc63ea240e0e12aa67f17"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-050.json",
+      "sha256": "ac071384692da81c098cd75f46205303d8589798d4536aff7491472f4524714f"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-051.json",
+      "sha256": "2b8fd0e2b1fca4a3fe9deb7725ef8c7e09d7f79ff43c49332184608f77abf531"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/ledgers/item-052.json",
+      "sha256": "87b12b013f9ec05a20880ea93873a04308a9cf2ef8feade52745c3d713a5e0df"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/agent/2026-10-18-a/meta.json",
+      "sha256": "d3f9cd7fbc4c6d9247984085085fd33e91935f4a35aad9da31df2e230ea16063"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/code_agent/2026-10-18-a/items.csv",
+      "sha256": "be25c825731ea3967dcc42be5b2c57d6670fea76d414e6232eb12c1bbfe72042"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/code_agent/2026-10-18-a/ledgers/item-001.json",
+      "sha256": "ccbcdcfe5e794d09a5b983dc6f5aecc8aca48e57c9ee46dee8135166e5ae5e1d"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/code_agent/2026-10-18-a/ledgers/item-002.json",
+      "sha256": "666918e316f0e6180453a1b8268018e66a63ede71c4d86d3242b958ae6df9e16"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/code_agent/2026-10-18-a/ledgers/item-003.json",
+      "sha256": "4eca72e719390ecf59f04d21ad5425eb88d8e7c0b981913d80c75b5ce05a0874"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/code_agent/2026-10-18-a/ledgers/item-004.json",
+      "sha256": "57c41ae7028e1bbc1a23e5a09ae4728163d27f95e2f02e24051ca7b399c4be0c"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/code_agent/2026-10-18-a/ledgers/item-005.json",
+      "sha256": "4f959829b9e0656a33eaa761a8d3d31f1b4e40c7cf870f8f42e34f8e17e8257c"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/code_agent/2026-10-18-a/meta.json",
+      "sha256": "60440234b167a22bd5436888474d47a6292ce41e9ac867efffd37f6bf14e9673"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/first_run/2026-10-18-a/first_run.json",
+      "sha256": "5948cd90cd29a502f17c9874cc2000b4192ae006d2f6a9975c98b69bdc0da387"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/first_run/2026-10-18-a/items.csv",
+      "sha256": "fd7557f7a25b124f99f08544543c9118bab65bb432a6b034397cde142d3fd35f"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/first_run/2026-10-18-a/ledger.json",
+      "sha256": "6853058222e95c4cb3aa51460900dd2df908638bba165d461e3644e207bdbb84"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/first_run/2026-10-18-a/meta.json",
+      "sha256": "99c4d5e8f92fcc1ac78a18799aa574278bef5b77a070fd36797a8c7a2dcf4f74"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/program/2026-10-18-a/items.csv",
+      "sha256": "47ae9199de5f7ef238903cce6305b9b91973cb024f77a20018c497446b8b4d57"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/mockmed/program/2026-10-18-a/meta.json",
+      "sha256": "77dcd3f4575e3854aeb4172a453efdbdce5dc5a9889abc3a3d8747d150a578b6"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/agent/study-main-0c642bc0/items.csv",
+      "sha256": "10e47e5abf98172ccd3068c8005a1faeeb1cd317e8bb44a26a885fa0e7575f01"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/agent/study-main-0c642bc0/meta.json",
+      "sha256": "6e61bf57e944f849279519cb3c1c558205faf1e7d93eac05e29b731c94b1084d"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/code_agent/2026-10-18-b/items.csv",
+      "sha256": "517ed36f4db803c5267f30946af77a01d60e4a3716763e29c7ca0aa517683767"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/code_agent/2026-10-18-b/ledgers/item-001.json",
+      "sha256": "a03974d0e6a9a566f16d38087e940d50352833d2670a3d934b83283199f9fc7f"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/code_agent/2026-10-18-b/ledgers/item-002.json",
+      "sha256": "caee7051663a3073bdc262234f12099daa7eaf39036b5bcfcc2f26d75574dd9d"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/code_agent/2026-10-18-b/ledgers/item-003.json",
+      "sha256": "05f4297e8892d66685d352d4d5084d690136ef7b53a5e54195d5c6df0c763e05"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/code_agent/2026-10-18-b/ledgers/item-004.json",
+      "sha256": "83c3c0c6720203b19342f2cef249a59513e0eb0a51dff8a27c02e784ea270fd0"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/code_agent/2026-10-18-b/ledgers/item-005.json",
+      "sha256": "c8e03061dbbb2da0b2806451936417d4ce92fbf206dbe7180f85d8ff38635fa6"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/code_agent/2026-10-18-b/meta.json",
+      "sha256": "dea6dbe200f7f67bfbb33d4cfe27d288c46dd4664c50eeb22690073b446d7c9e"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/first_run/2026-10-18-a/first_run.json",
+      "sha256": "eeaf4465dec9eb1da65ecc2d0c6da7538ab738cd308e7321244efb948b8938e2"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/first_run/2026-10-18-a/items.csv",
+      "sha256": "bd0ea20e8adaad74a73ce5acf6370bb5f4c6a9fe1f021e5272f12d16e0b672fa"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/first_run/2026-10-18-a/ledger.json",
+      "sha256": "b220bf97ee12f1fa9721561b2cb0fdf7db249502215d6a03e5b2bdde38cc9e90"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/first_run/2026-10-18-a/meta.json",
+      "sha256": "f41aa38d13410dfecb3724b1ac15f55b4d9ab09d16423e1400fd1d6d506d28dc"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/program/study-main-0c642bc0/items.csv",
+      "sha256": "fa0a1f7e34ee333e8cc8e9db0b435621c9938f24dbd72a52f4da9722ddc18d0a"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openemr_referral/program/study-main-0c642bc0/meta.json",
+      "sha256": "5a1f6e18b6d1736702dbfea5c3ae9d4562ac23090170d55a8f1eea3681f7352b"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/items.csv",
+      "sha256": "790a2e2022921eb0eaf14dfbb98c4a0ad805b676761467d078da94b42363dd07"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-001.json",
+      "sha256": "7614a22b8ab0b85c67d7984fc974d3758231eeadd6e695a26e61bb4475867aec"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-002.json",
+      "sha256": "ad1430cc1be3d2ee3a2c7ba03410c1f087290893051977ae86023028d8daf552"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-003.json",
+      "sha256": "e42fbd1111b323a89492e5e7f0b24fc802016afefd31df7e81210ad049dd7323"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-004.json",
+      "sha256": "0e7fb31ce722f76478cc86eb8a7192cfe9f72dcfd2be7cae90a720b47f64344d"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-005.json",
+      "sha256": "abda0dc5bc4b18131aa287c2352ed314411a2711510c303ec66b49bbfffd9de7"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-006.json",
+      "sha256": "c57670635766ccb1a921c3bb54649d980c6fc664eb7e3e7af6cb07d191621ef5"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-007.json",
+      "sha256": "f2785e9df1b414e078a434449690823f24014d9f1bcbf201fe3924434685f9c7"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-008.json",
+      "sha256": "7829abbb614f4e2172144ec4fdd2a9bac85ff495c71e3f44081c0e5167b79b33"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-009.json",
+      "sha256": "da487c32a1576f9c6a29d5f7bd66eb1c352f85950f19c97969c5ead31bd049f0"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-010.json",
+      "sha256": "984bd91bc2b60f84edf326f143ac6f0bf7ae2d3d8ccad1427631048e9edc2f95"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-011.json",
+      "sha256": "5d75729c9feb67ea30c22d687bab00c2844d6afd2021e3bf6e76cca939421e34"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-012.json",
+      "sha256": "31dc11e157dfbb1f99fb2e63edd6dcde21eb851a02e95818c96858cbe7693458"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-013.json",
+      "sha256": "03b907931ad7f8e8c4c50ba4192d445637bbbba553a9f4b715bf5845685d82e5"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-014.json",
+      "sha256": "1cbb22ddd65c4e08509549a2087fe80835347383ee4fe7d59c34409ac7474cc4"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-015.json",
+      "sha256": "ba906b6dd0c1c817df719a63bdaba2b8de47adf1a5bd98c812b637028b815c97"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-016.json",
+      "sha256": "e188c9c83127f6755e6c164caea015446c7cede40e73e88a9f0fdeb3ee2c0493"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-017.json",
+      "sha256": "080f3d0a31e6e4a6f5f1fd6580e6e3b9f7457b58f7bc0f71273ea2f55a0911f6"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-018.json",
+      "sha256": "620f4aafb93272078093be1fcf883755667ddaecda953e50e781d7634b660296"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-019.json",
+      "sha256": "a20af9cebeb64976b5cad8e4ace52c2056977c873d32edda33549abee20b225a"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/ledgers/item-020.json",
+      "sha256": "e2ac977cd2f1f9bf72ae9aee412056526e6ce151951d87b4e23208acd766bb7b"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/agent/2026-10-18-a/meta.json",
+      "sha256": "6e4cd24492a12adca5681ccaaf8a8965415958f2f756eee05fee5dbac444aba9"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/first_run/launch-4/items.csv",
+      "sha256": "c20f53b3bd1095ea66a92f7ed7dfe5a1c6e8c0c2a543936b49b2254c1c20b453"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/first_run/launch-4/meta.json",
+      "sha256": "2d1464611c08d74bbdc69ded97a5a367a21072e5b782e363bbd6958bc10920bb"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/program/launch-4-c100/items.csv",
+      "sha256": "6f08b29be6bd2a1ed335c0fc260517f8138915bd3b2910545904b17548597046"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/program/launch-4-c100/meta.json",
+      "sha256": "d07dafee4b516174a76fa196daf4974c213bf0040fd833c44ce93671c49b0cbb"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/program/launch-4/items.csv",
+      "sha256": "f1a78dbbeddefba7db5696885d6b2c023619a60e6f5961c0a3cdbcab365bbdc4"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/openimis/program/launch-4/meta.json",
+      "sha256": "09a60306c3355fb57d58c108c3c5762dd30f3a25dd18885aefc080995c4b1b36"
+    },
+    {
+      "path": "benchmark/scoreboard/raw/spend.json",
+      "sha256": "17f575335137510d0b20554495eb5fb1ff58f0bfa32a737c36997fdb1d49a828"
+    },
+    {
+      "path": "benchmark/scoreboard/scoreboard.json",
+      "sha256": "b828a574da38c434822ae391467bb74fe18c330675546cad4bcad4baeccda544"
+    },
+    {
+      "path": "benchmark/scoreboard/superseded/openemr_referral/code_agent/2026-10-18-a/items.csv",
+      "sha256": "2544ec565a2e656e584c88f6a3afffe3ac27678785f9ec846016bec4bc38ef5a"
+    },
+    {
+      "path": "benchmark/scoreboard/superseded/openemr_referral/code_agent/2026-10-18-a/ledgers/item-001.json",
+      "sha256": "c451d3c7be35d872f6537ef6f729bdebc716e94e39f89895f7c79443db39783f"
+    },
+    {
+      "path": "benchmark/scoreboard/superseded/openemr_referral/code_agent/2026-10-18-a/ledgers/item-002.json",
+      "sha256": "8438a80bb2e06f32538be34c9954080f8951d811474e4a41f00e6aafadbc8a59"
+    },
+    {
+      "path": "benchmark/scoreboard/superseded/openemr_referral/code_agent/2026-10-18-a/ledgers/item-003.json",
+      "sha256": "6a1d4387adbd4784ed33615bec0f36feb4cd5b5af4a4e860084726d583db478c"
+    },
+    {
+      "path": "benchmark/scoreboard/superseded/openemr_referral/code_agent/2026-10-18-a/ledgers/item-004.json",
+      "sha256": "1b4051d87562d5e85ec53d957d0a08ef8cef97a1c52f32321e2aa4d9bcd0813c"
+    },
+    {
+      "path": "benchmark/scoreboard/superseded/openemr_referral/code_agent/2026-10-18-a/ledgers/item-005.json",
+      "sha256": "b29e1e0b3437276f00fd3830c247339fbe7dc8f863563444a595ad5bcf3a6e4b"
+    },
+    {
+      "path": "benchmark/scoreboard/superseded/openemr_referral/code_agent/2026-10-18-a/meta.json",
+      "sha256": "46cfbee57e63f0cc58993793cb64b8242816eacb13472633e105ec88e6ea2444"
     },
     {
       "path": "benchmark/silent_wrong_action/results.json",
