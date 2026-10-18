@@ -19,8 +19,88 @@
       "label": "openemr code r1",
       "usd": 0.047661,
       "at": "2026-10-18T19:41:04Z"
+    },
+    {
+      "label": "mockmed code t1",
+      "usd": 0.010693,
+      "at": "2026-10-18T19:46:26Z"
+    },
+    {
+      "label": "mockmed every_turn t1",
+      "usd": 0.074932,
+      "at": "2026-10-18T19:46:47Z"
+    },
+    {
+      "label": "mockmed selective t1",
+      "usd": 0.014273,
+      "at": "2026-10-18T19:47:29Z"
+    },
+    {
+      "label": "mockmed every_turn t2",
+      "usd": 0.075382,
+      "at": "2026-10-18T19:47:55Z"
+    },
+    {
+      "label": "mockmed selective t2",
+      "usd": 0.014273,
+      "at": "2026-10-18T19:48:19Z"
+    },
+    {
+      "label": "mockmed code t2",
+      "usd": 0.010693,
+      "at": "2026-10-18T19:48:33Z"
+    },
+    {
+      "label": "mockmed selective t3",
+      "usd": 0.014273,
+      "at": "2026-10-18T19:48:44Z"
+    },
+    {
+      "label": "mockmed code t3",
+      "usd": 0.012381,
+      "at": "2026-10-18T19:49:00Z"
+    },
+    {
+      "label": "mockmed every_turn t3",
+      "usd": 0.075072,
+      "at": "2026-10-18T19:49:18Z"
+    },
+    {
+      "label": "mockmed code t4",
+      "usd": 0.012251,
+      "at": "2026-10-18T19:49:40Z"
+    },
+    {
+      "label": "mockmed every_turn t4",
+      "usd": 0.074902,
+      "at": "2026-10-18T19:50:16Z"
+    },
+    {
+      "label": "mockmed selective t4",
+      "usd": 0.014273,
+      "at": "2026-10-18T19:50:39Z"
+    },
+    {
+      "label": "mockmed every_turn t5",
+      "usd": 0.074932,
+      "at": "2026-10-18T19:51:22Z"
+    },
+    {
+      "label": "mockmed selective t5",
+      "usd": 0.014273,
+      "at": "2026-10-18T19:51:46Z"
+    },
+    {
+      "label": "mockmed code t5",
+      "usd": 0.012381,
+      "at": "2026-10-18T19:52:12Z"
+    },
+    {
+      "label": "openemr every_turn r1",
+      "usd": 0.027621,
+      "at": "2026-10-18T19:52:51Z"
     }
   ],
-  "total_usd": 0.081346,
+  "total_usd": 0.613951,
   "cap_usd": 15.0
 }

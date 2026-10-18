@@ -332,17 +332,6 @@ _HIT_JS = (
 }"""
 )
 
-_FOCUS_JS = r"""([sel, scopeSel]) => {
-  const clean = (s) => String(s || '').replace(/\s+/g, ' ').trim();
-  let el = document.activeElement;
-  if (!el || el === document.body) return null;
-  if (el.tagName === 'IFRAME' || el.tagName === 'FRAME') return {frame: true};
-  const scope = el.closest(scopeSel) || document.body;
-  return {name: clean(el.getAttribute('aria-label') || el.getAttribute('name') ||
-                      el.innerText || el.value).slice(0, 120),
-          scope: clean(scope.innerText).slice(0, 4000)};
-}"""
-
 
 def _field_label_js() -> str:
     from openadapt_flow.backends.playwright_backend import _FIELD_LABEL_JS
@@ -476,19 +465,7 @@ class DomSurface:
             return None
 
     def focused(self) -> Optional[dict[str, Any]]:
-        try:
-            got = self.page.evaluate(_FOCUS_JS, [_observe.INTERACTIVE, _observe.SCOPE])
-            if got and got.get("frame"):
-                for _index, frame, _ox, _oy in self._frames()[1:]:
-                    inner = frame.evaluate(
-                        _FOCUS_JS, [_observe.INTERACTIVE, _observe.SCOPE]
-                    )
-                    if inner and not inner.get("frame"):
-                        return inner
-                return None
-            return got
-        except Exception:  # noqa: BLE001
-            return None
+        return _observe.focused_element(self.page)
 
     def screen_text(self) -> str:
         texts: list[str] = []
@@ -933,7 +910,9 @@ class CodeActionTool:
                 text += f' now="{value}"'
             if element.context:
                 text += f"\n  row: {element.context}"
-            self.trace.saw(line, text + " " + element.context)
+            elif element.scope:
+                text += f"\n  in: {element.scope[:300]}"
+            self.trace.saw(line, text)
             return self._out(text), None
         if command in ("click", "fill", "select", "press"):
             return self._act(command, line, positional, named), None

@@ -369,10 +369,28 @@ def element_at(
 
 
 def focused_element(page: Any) -> Optional[dict[str, Any]]:
+    """The focused control, inside a frame when focus is in one."""
+
     try:
-        return page.evaluate(_FOCUSED_JS, [INTERACTIVE, SCOPE])
+        got = page.evaluate(_FOCUSED_JS, [INTERACTIVE, SCOPE])
     except Exception:  # noqa: BLE001
         return None
+    if not got or str(got.get("tag")) not in ("iframe", "frame"):
+        return got
+    # Focus is inside a frame: read the frame whose document holds it.
+    main = getattr(page, "main_frame", None)
+    for frame in getattr(page, "frames", None) or []:
+        if frame is main:
+            continue
+        try:
+            if not frame.evaluate("() => document.hasFocus()"):
+                continue
+            inner = frame.evaluate(_FOCUSED_JS, [INTERACTIVE, SCOPE])
+        except Exception:  # noqa: BLE001 - a detached frame holds no focus
+            continue
+        if inner and str(inner.get("tag")) not in ("iframe", "frame"):
+            return inner
+    return None
 
 
 def page_text(page: Any) -> str:
