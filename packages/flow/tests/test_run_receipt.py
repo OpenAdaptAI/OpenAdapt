@@ -98,6 +98,9 @@ ALLOWED_FIELDS = {
     # Closed: a change class, a policy digest and an opaque candidate id.
     "standard_change",
     "bundle_digest",
+    # Variant-router digests (ReceiptVariant): set and variant digests plus the
+    # variant's admission id. No variant or set name.
+    "variant",
     "receipt_digest",
     "generated_at",
 }

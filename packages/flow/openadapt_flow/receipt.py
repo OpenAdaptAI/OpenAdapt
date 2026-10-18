@@ -148,6 +148,22 @@ class ReceiptStandardChange(BaseModel):
     candidate_id: str = Field(pattern="^[a-f0-9]{16}$")
 
 
+class ReceiptVariant(BaseModel):
+    """Which admitted variant ran, when the variant router chose the bundle.
+
+    Digests and the variant's admission id only. The variant and set names are
+    operator text and stay in the private run report.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    variant_set_digest: str = Field(pattern="^[a-f0-9]{64}$")
+    variant_digest: str = Field(pattern="^[a-f0-9]{64}$")
+    admission_id: str = Field(
+        pattern="^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    )
+
+
 class RunReceipt(BaseModel):
     """The complete, closed set of fields a shareable receipt may contain.
 
@@ -211,6 +227,9 @@ class RunReceipt(BaseModel):
     #: receipt checkable: a third party can run the same public bundle and
     #: compare digests.  Verifiability is the point.
     bundle_digest: str = Field(pattern="^[a-f0-9]{64}$")
+    #: The admitted variant the pre-run router chose, as digests. Present only
+    #: for a routed run; older and unrouted receipts keep their exact bytes.
+    variant: Optional[ReceiptVariant] = None
     #: SHA-256 over the canonical JSON of every OTHER field.  Set by
     #: :func:`build_receipt`; a caller never supplies it.
     receipt_digest: str = Field(pattern="^[a-f0-9]{64}$")
@@ -290,6 +309,8 @@ class RunReceipt(BaseModel):
             data.pop("effect_assurance", None)
         if self.standard_change is None:
             data.pop("standard_change", None)
+        if self.variant is None:
+            data.pop("variant", None)
         return data
 
     def canonical_json(self, *, include_digest: bool = True) -> bytes:
@@ -839,6 +860,18 @@ def _build_receipt(
     substrate = getattr(report, "execution_target_kind", None)
     if substrate not in ReceiptSubstrate.__args__:  # type: ignore[attr-defined]
         raise ReceiptError("VERIFIED receipt requires a recognized execution substrate")
+    variant_route = getattr(report, "variant_route", None)
+    variant: Optional[dict[str, str]] = None
+    if variant_route is not None:
+        if variant_route.bundle_content_digest != bundle_digest:
+            raise ReceiptError(
+                "VERIFIED receipt variant stamp names a different bundle than ran"
+            )
+        variant = {
+            "variant_set_digest": variant_route.variant_set_digest,
+            "variant_digest": variant_route.variant_digest,
+            "admission_id": variant_route.admission_id,
+        }
 
     try:
         payload = dict(
@@ -880,6 +913,8 @@ def _build_receipt(
         standard_change = receipt_fields(report)
         if standard_change is not None:
             payload["standard_change"] = standard_change
+        if variant is not None:
+            payload["variant"] = variant
     except ValueError as exc:
         raise ReceiptError(f"run cannot produce a VERIFIED receipt: {exc}") from exc
     digest = hashlib.sha256(
@@ -969,6 +1004,14 @@ def render_receipt_markdown(receipt: RunReceipt) -> str:
         )
     lines += [
         f"| bundle digest | `{receipt.bundle_digest}` |",
+        *(
+            [
+                f"| variant digest | `{receipt.variant.variant_digest}` |",
+                f"| variant set digest | `{receipt.variant.variant_set_digest}` |",
+            ]
+            if receipt.variant is not None
+            else []
+        ),
         f"| receipt digest | `{receipt.receipt_digest}` |",
         f"| generated | {receipt.generated_at} |",
         "",
@@ -1025,6 +1068,8 @@ def _receipt_rows(receipt: RunReceipt) -> list[tuple[str, str]]:
         ("provenance", receipt.provenance),
         ("receipt builder", receipt.receipt_builder_version),
     ]
+    if receipt.variant is not None:
+        rows.append(("variant", receipt.variant.variant_digest[:16]))
     rows += [
         ("bundle digest", (receipt.bundle_digest or "")[:16] or "unbound"),
         ("receipt digest", (receipt.receipt_digest or "")[:16] or "unbound"),

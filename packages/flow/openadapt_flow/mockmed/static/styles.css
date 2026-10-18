@@ -240,6 +240,8 @@ body.drift-zoom { zoom: 1.25; }
 /* Dark palette (drift mode "theme"): breaks template matching, keeps
    contrast high so OCR still works. */
 body.drift-theme { background: #161a22; color: #e6e9ef; }
+/* Paint the whole viewport, as a real dark theme does, not only the body box. */
+html:has(> body.drift-theme) { background: #161a22; }
 body.drift-theme #topbar { background: #0d1117; color: #e6e9ef; }
 body.drift-theme table { background: #1f2632; }
 body.drift-theme th { background: #2a3342; }
