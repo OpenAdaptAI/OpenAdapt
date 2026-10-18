@@ -1049,11 +1049,32 @@ def _record_until_stop(args: argparse.Namespace):
 def _cmd_record(args: argparse.Namespace) -> int:
     """Record, then (with ``--with-check``) ask for the demonstrated check."""
     with_check = bool(getattr(args, "with_check", False))
+    observation = None
+    verify_path = getattr(args, "verify", None)
+    if verify_path:
+        from openadapt_flow.record_sor import RecordingObservation, RecordSorError
+
+        try:
+            observation = RecordingObservation.start(verify_path)
+        except RecordSorError as exc:
+            print(f"record --verify: {exc}. Nothing was recorded.", file=sys.stderr)
+            return 2
+        print(
+            f"Read {len(observation.before)} record(s) through the "
+            f"{observation.observer.kind} verifier. Flow reads them again when "
+            "the recording ends."
+        )
     if with_check:
         from openadapt_flow.cli_check import RECORD_GUIDANCE
 
         print(RECORD_GUIDANCE)
     code = _cmd_record_capture(args)
+    if observation is not None and code == 0:
+        from openadapt_flow.record_sor import summary_lines
+
+        contract, proposal, diff = observation.finish(Path(args.out))
+        for line in summary_lines(contract, proposal, diff):
+            print(line)
     if code == 0 and with_check:
         from openadapt_flow.cli_check import guided_check
         from openadapt_flow.cli_hints import command
@@ -6958,6 +6979,18 @@ def build_parser() -> argparse.ArgumentParser:
             "After the save, also show how you'd check it saved (reload or "
             "search again, open the record). Flow then asks which fields show "
             "the values you typed and writes check.json"
+        ),
+    )
+    p.add_argument(
+        "--verify",
+        default=None,
+        metavar="VERIFY_YAML",
+        help=(
+            "Read the system of record through the verifier: section of this "
+            "file (rest, sql, fhir, graphql or file) before and after the "
+            "recording, and propose the checks for what changed in "
+            "verify.proposed.yaml. Both reads go to sor_snapshots.json "
+            "(mode 0600)"
         ),
     )
     _add_backend_flags(p)
