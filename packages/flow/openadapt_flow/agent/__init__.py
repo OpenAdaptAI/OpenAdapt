@@ -1,7 +1,7 @@
 """openadapt-agent: your AI agent decides what to enter; OpenAdapt enters it.
 
-This package connects a calling agent to
-`openadapt-flow <https://github.com/OpenAdaptAI/openadapt-flow>`_, which
+This package connects a calling agent to the OpenAdapt engine
+(``openadapt-flow``, in ``packages/flow`` of OpenAdaptAI/OpenAdapt), which
 enters values in an app's own screens and reads the saved record back:
 
 - an **MCP server** (``openadapt-agent serve`` / ``python -m

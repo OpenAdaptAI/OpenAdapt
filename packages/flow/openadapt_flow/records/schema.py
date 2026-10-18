@@ -9,22 +9,24 @@ grade and, when sealing is on, a pointer to the Seal that covers it. A *record
 read* groups the field reads of one record.
 
 Proof is opt-in. By default a field is read through one channel, gets the
-grade ``unconfirmed`` and no Seal. :class:`ReadProof` turns on a double read,
+grade ``unchecked`` and no Seal. :class:`ReadProof` turns on a double read,
 a committed-record read-back and Seals, for the whole schema or per field.
 
 This module only defines data. It makes no screen reads, no model calls and
 no network calls, so every build stream can import it.
 
-Read grades, weakest first. A grade only ever reflects what was proven:
+Read grades, weakest first. They are names from the check-level ladder
+(``openadapt_flow.check_level``), so a read grade and the check level of a
+write mean the same thing. A grade only ever reflects what was proven:
 
-- ``unconfirmed``: nothing was cross-checked. This is the default for a
+- ``unchecked``: nothing was cross-checked. This is the default for a
   single-channel read. It is also the grade when channels disagreed, which
   sends the value to the review queue.
-- ``screen_readback``: two channels in the same session agreed (for example
+- ``same_screen``: two channels in the same session agreed (for example
   the clipboard text and OCR of the same region).
-- ``committed_record_readback``: the record was closed, reopened by its
+- ``reopened``: the record was closed, reopened by its
   identity fields and read again, and the second read agreed with the first.
-- ``verified``: a channel independent of the acting session agreed: a
+- ``system_of_record``: a channel independent of the acting session agreed: a
   read-only database, an API, or an export of committed data (a separate
   process or a scheduled export). Only an independent channel can give this
   grade; :func:`grade_for` enforces it.
@@ -32,7 +34,7 @@ Read grades, weakest first. A grade only ever reflects what was proven:
 An export read records its source in ``ChannelRead.source_kind``, so its
 grade is derived, not asserted. An export from the same live UI session
 (``live_session``) can carry that session's unsaved state; it counts like a
-screen read and gives at most ``screen_readback``.
+screen read and gives at most ``same_screen``.
 
 A step that writes a value into a system of record can declare a minimum
 grade with :class:`GradeGate`; :meth:`GradeGate.check` raises
@@ -104,21 +106,19 @@ INDEPENDENT_CHANNELS: Final[frozenset[str]] = frozenset({"database", "api"})
 #:
 #: - ``live_session``: exported from the same live UI session that typed or
 #:   showed the value. It can reflect that session's unsaved state, so it
-#:   counts as a screen-session read (at best ``screen_readback``).
+#:   counts as a screen-session read (at best ``same_screen``).
 #: - ``committed_store``: exported from saved data by a separate process, a
 #:   database read or a scheduled export, not the session's in-memory state.
-#:   It is independent and can give ``verified``.
+#:   It is independent and can give ``system_of_record``.
 SourceKind = Literal["live_session", "committed_store"]
 
-ReadGrade = Literal[
-    "unconfirmed", "screen_readback", "committed_record_readback", "verified"
-]
+ReadGrade = Literal["unchecked", "same_screen", "reopened", "system_of_record"]
 #: Weakest first.
 READ_GRADES: Final[tuple[ReadGrade, ...]] = (
-    "unconfirmed",
-    "screen_readback",
-    "committed_record_readback",
-    "verified",
+    "unchecked",
+    "same_screen",
+    "reopened",
+    "system_of_record",
 )
 
 Agreement = Literal["agree", "disagree", "ambiguous", "single"]
@@ -459,19 +459,19 @@ def grade_for(
 ) -> ReadGrade:
     """The strongest grade a set of channel reads can support.
 
-    ``verified`` needs an agreeing independent channel (database, API, or an
-    export of committed data). A live-session export counts as a screen read. ``committed_record_readback`` needs an agreeing read from a reopened
-    record. ``screen_readback`` needs two agreeing screen channels. Anything
-    else, including a single read or any disagreement, is ``unconfirmed``.
+    ``system_of_record`` needs an agreeing independent channel (database, API, or an
+    export of committed data). A live-session export counts as a screen read. ``reopened`` needs an agreeing read from a reopened
+    record. ``same_screen`` needs two agreeing screen channels. Anything
+    else, including a single read or any disagreement, is ``unchecked``.
     """
 
     if agreement != "agree" or len(reads) < 2:
-        return "unconfirmed"
+        return "unchecked"
     if any(read.independent for read in reads):
-        return "verified"
+        return "system_of_record"
     if any(read.session == "reopened" for read in reads):
-        return "committed_record_readback"
-    return "screen_readback"
+        return "reopened"
+    return "same_screen"
 
 
 def grade_at_least(grade: ReadGrade, floor: ReadGrade) -> bool:
@@ -481,10 +481,10 @@ def grade_at_least(grade: ReadGrade, floor: ReadGrade) -> bool:
 
 
 def weakest_grade(grades: list[ReadGrade]) -> ReadGrade:
-    """The weakest of ``grades``; ``unconfirmed`` when empty."""
+    """The weakest of ``grades``; ``unchecked`` when empty."""
 
     if not grades:
-        return "unconfirmed"
+        return "unchecked"
     return min(grades, key=READ_GRADES.index)
 
 
@@ -519,7 +519,7 @@ class GradeGate(BaseModel):
         for name in names:
             read = reads.get(name)
             if read is None or read.needs_review:
-                below[name] = "unconfirmed"
+                below[name] = "unchecked"
             elif not grade_at_least(read.grade, self.min_grade):
                 below[name] = read.grade
         if below:

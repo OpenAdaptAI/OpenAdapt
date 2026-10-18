@@ -2305,3 +2305,21 @@ def test_public_attended_action_service_contract_is_stable():
             operator="staff",
         )
     service.close()
+
+
+def test_service_notices_count_in_the_notification_and_list_without_paths(
+    console_env, monkeypatch
+):
+    from openadapt_flow import onprem_reboot
+
+    monkeypatch.delenv("OPENADAPT_ONPREM_ROOT", raising=False)
+    client = _client(console_env)
+    before = client.get("/api/attention/notification").json()["open_count"]
+    assert client.get("/api/service/notices").json() == []
+    root = console_env["runs"].parent
+    onprem_reboot.open_notice(root, onprem_reboot.REBOOT_NOTICE, boot_id="boot-1")
+    after = client.get("/api/attention/notification").json()
+    assert after["open_count"] == before + 1
+    notices = client.get("/api/service/notices").json()
+    assert [n["kind"] for n in notices] == [onprem_reboot.REBOOT_NOTICE]
+    assert str(root) not in json.dumps(notices)
