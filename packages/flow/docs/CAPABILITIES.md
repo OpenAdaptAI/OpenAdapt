@@ -1,5 +1,7 @@
 # From trace to program
 
+> The full, current map of every OpenAdapt capability, with status and evidence, is [CAPABILITIES.md](../../../CAPABILITIES.md) at the repository root. This page goes deeper on a few compiler features.
+
 A single demonstration under-specifies intent, so openadapt-flow does not stop
 at replaying one. These capabilities layer onto the same $0, model-free runtime.
 

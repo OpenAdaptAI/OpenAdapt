@@ -1,6 +1,24 @@
 # OpenAdapt
 
-This is the single llms.txt for the OpenAdapt monorepo. The MCP server comes first; the other packages are listed at the end.
+> A person, or a computer-use agent once, shows a task in an application with no usable API. OpenAdapt compiles it into a program that makes the same entry every time with no model calls, confirms the right record before acting, reads the saved record back from the system of record, and stops instead of improvising or retrying.
+
+This is the llms.txt for the OpenAdapt monorepo (github.com/OpenAdaptAI/OpenAdapt). Start with the capability map: https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md. It lists every capability with its status (released, in review, planned), its evidence (real app, synthetic, untested) and where it lives. Check it before concluding that OpenAdapt lacks something.
+
+## Capabilities in brief (openadapt-flow 2.2.0)
+
+- Compile one or more demonstrations into a program: `record`, `compile`, `induce` (one branching program from several recordings), `disambiguate`, `teach-branch` (a branch learned from several halts), `for-each` (a worklist).
+- Before acting, confirm the right record: page structure first, then template, OCR and geometry; a complete known-ID list lifts look-alike stops (`known-ids`).
+- After saving, read the record back independently: API, database, FHIR (including SMART Backend Services), or a separate session. `verify-run` judges any executor's write the same way. Uncertain saves end in RECONCILIATION_REQUIRED and are never retried.
+- Each save waits for a person by default; answer on a paired phone (OpenAdapt Desktop). Person-signed grants can let named agents answer.
+- Surfaces: web (released), native Windows and macOS (early), RDP (early; Aardwolf or headless FreeRDP), Citrix (exploratory). `compose` and `process` chain programs across surfaces; one program that switches surfaces mid-run is in review.
+- Fastest layer: page structure first; steps can run as direct API calls (`ApiActuator`); compiling captured network traffic into API calls automatically is planned.
+- When the app changes: governed `repair`, agent-demonstrated fixes for a halted run, layout-drift halts, fleet drift patches with no patient data; self-repair (an agent proposes, Flow probes up to the save, a person approves) is in progress.
+- Computer-use agents: `openadapt_flow.jit` compiles an agent's successful run into a program; admission by a person, an admitter key, or an agent under a person-signed policy.
+- Inputs from documents: `intake` fills a workflow's inputs from a referral PDF, fax image or email.
+- Proof and privacy: Seals (signed, countersigned, timestamped, offline by default), strict no-outbound mode, an unattended on-prem service, PHI redaction (openadapt-privacy; opt-in today).
+- Recording: openadapt-capture records input, video and accessibility trees on one clock (Windows, macOS, Linux X11), including a background shadow mode.
+
+The MCP server section follows; the other packages are listed at the end.
 
 ## MCP server: openadapt-agent (`uvx openadapt-agent serve --bundles <dir>`, MCP Registry `io.github.OpenAdaptAI/openadapt-agent`)
 
@@ -30,7 +48,7 @@ Only `done` is a success. Results come from openadapt-flow's `transaction_outcom
 `openadapt-agent serve` with no flags is a sandbox: one workflow, `add_triage_note`, on MockMed, a synthetic clinic app. The `sandbox_case` input picks the outcome: `normal` (done), `duplicate_record` (needs_review), `false_saved_banner` and `timeout_after_save` (not_sure_if_saved), `app_offline` (did_not_run). Install the `tutorial` extra to drive the synthetic app with the real engine; otherwise results are simulated and say so.
 
 - From PyPI: `claude mcp add --scope user openadapt -- uvx --python 3.12 openadapt-agent serve`. This only registers the server; Claude Code starts it at the next `claude` session. Then ask it to run `add_triage_note` with a made-up note and a request id.
-- Requires openadapt-flow 2.1.0 or later, which is on PyPI and installs with openadapt-agent.
+- Requires openadapt-flow 2.2.0 or later, which is on PyPI and installs with openadapt-agent.
 
 ## Modes and older surfaces
 
@@ -70,6 +88,6 @@ Standard and Regulated runs need a workflow admission; Demo and the synthetic sa
 
 ## Other OpenAdapt packages
 
-- [openadapt-flow](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow) (`pip install openadapt-flow`): records a task once, compiles it into a deterministic workflow, replays it and checks the result. The core package; `openadapt-flow[agent]` adds the MCP server code.
+- [openadapt-flow](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow) (`pip install openadapt-flow`): records a task, compiles it into a deterministic workflow, replays it and checks the result. The core package; `openadapt-flow[agent]` adds the MCP server code.
 - [openadapt-types](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/types) (`pip install openadapt-types`): the portable contracts, now `openadapt_flow.contracts`; this name is kept as a compatibility shim.
 - [openadapt](https://github.com/OpenAdaptAI/OpenAdapt) (`pip install openadapt`): the launcher CLI.
