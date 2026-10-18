@@ -47,7 +47,7 @@ from __future__ import annotations
 import time
 from typing import Any, Optional, Protocol
 
-from openadapt_flow.runtime.effects._common import judge_records
+from openadapt_flow.runtime.effects._common import drop_record_fields, judge_records
 from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
 from openadapt_flow.runtime.effects.effect import (
     Effect,
@@ -114,6 +114,8 @@ class FhirEffectVerifier(VerifierAdapterBase):
         timeout_s: Per-request timeout.
         verify_tls: Passed through to the HTTP client's ``verify``.
         poll_interval_s: Gap between polls while waiting for the write.
+        drop_fields: Record fields removed before judging (``["id"]`` judges
+            records by their whole content); see :class:`RestRecordVerifier`.
     """
 
     substrate = "fhir"
@@ -132,8 +134,10 @@ class FhirEffectVerifier(VerifierAdapterBase):
         timeout_s: float = 5.0,
         verify_tls: bool = True,
         poll_interval_s: float = 0.3,
+        drop_fields: tuple[str, ...] = (),
     ) -> None:
         self.base_url = base_url.rstrip("/")
+        self.drop_fields = tuple(drop_fields)
         self.resource_type = resource_type
         self.search_params = dict(search_params or {})
         self.field_paths = dict(field_paths or DEFAULT_OBSERVATION_PATHS)
@@ -249,7 +253,7 @@ class FhirEffectVerifier(VerifierAdapterBase):
             if not isinstance(resource, dict):
                 return None
             out.append(self._flatten(resource))
-        return out
+        return drop_record_fields(out, self.drop_fields)
 
     # -- EffectVerifier protocol --------------------------------------------
 

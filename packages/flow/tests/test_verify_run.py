@@ -22,8 +22,8 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 
 import openadapt_flow.runtime.effects.adapter as adapter_mod
 import openadapt_flow.verify_run as verify_run_mod
-from openadapt_flow.contracts.execute import ExecuteEvidenceReceiptV1
-from openadapt_flow.contracts.seal import (
+from openadapt_types.execute import ExecuteEvidenceReceiptV1
+from openadapt_types.seal import (
     parse_key_registry,
     seal_key_id,
     signing_payload,

@@ -3,7 +3,16 @@
 Two read-first operator helpers live here.
 
 ``flow scaffold-verifier <recording|bundle>``
-    Reads the retained action/effect evidence in a recording directory or a
+    First tries to BUILD a working record check from the reads the app made
+    after the save (the recording's network capture, ``--db`` or
+    ``--verifier``), fault-tests it, and writes ``record_check.proposed.yaml``
+    plus ``record_check.proof.json``
+    (:mod:`openadapt_flow.record_check_synthesis`). A check that misses an
+    injected bad write is written as a draft with the misses listed. Nothing
+    is approved automatically.
+
+    When no read returns the saved record, it falls back to the older path:
+    it reads the retained action/effect evidence in a recording directory or a
     compiled bundle and emits a DRAFT effect-oracle contract
     (``effect_contract.yaml``) pre-filled from the demonstration's write-shaped
     steps: a proposed system-of-record read, expected postcondition fields with
@@ -44,6 +53,14 @@ CONTRACT_FILENAME = "effect_contract.yaml"
 
 class ScaffoldRefused(SystemExit):
     """The input has nothing to scaffold from; refuse with a clear message."""
+
+
+NO_WRITE_REFUSAL = (
+    "scaffold-verifier REFUSED: the demonstration has no consequential "
+    "(write-shaped) step to verify. An effect oracle asserts that a "
+    "WRITE landed in a system of record; this input shows only "
+    "read/navigation actions, so there is nothing to scaffold."
+)
 
 
 # ---------------------------------------------------------------------------
@@ -442,12 +459,7 @@ def write_draft(source: Path, out_dir: Optional[Path] = None) -> tuple[Path, int
         candidates = candidates_from_recording(source)
 
     if not candidates:
-        raise ScaffoldRefused(
-            "scaffold-verifier REFUSED: the demonstration has no consequential "
-            "(write-shaped) step to verify. An effect oracle asserts that a "
-            "WRITE landed in a system of record; this input shows only "
-            "read/navigation actions, so there is nothing to scaffold."
-        )
+        raise ScaffoldRefused(NO_WRITE_REFUSAL)
 
     text = render_draft_yaml(
         source=source,
@@ -459,6 +471,123 @@ def write_draft(source: Path, out_dir: Optional[Path] = None) -> tuple[Path, int
     destination.parent.mkdir(parents=True, exist_ok=True)
     destination.write_text(text, encoding="utf-8")
     return destination, len(candidates)
+
+
+# ---------------------------------------------------------------------------
+# A working record check from the reads the app made
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class RecordCheckResult:
+    """What :func:`build_record_check` wrote and said."""
+
+    working: bool
+    check_path: Path
+    proof_path: Path
+    summary: str
+    identity_path: Optional[Path] = None
+
+
+def build_record_check(
+    source: Path,
+    out_dir: Optional[Path] = None,
+    *,
+    db: Optional[Path] = None,
+    verifier: Optional[Path] = None,
+    prove: Optional[str] = None,
+    recording: Optional[Path] = None,
+    bundle: Optional[Path] = None,
+    complete_read: bool = False,
+) -> Optional[RecordCheckResult]:
+    """Build, fault-test and write a proposed record check.
+
+    ``source`` is a recording or a bundle; the other one may be given with
+    ``recording`` / ``bundle`` (a bundle alone holds no reads, and identity
+    coverage needs both). Returns ``None`` when no read returns the saved
+    record, so the caller can fall back to the TODO draft.
+    """
+
+    import tempfile
+
+    from openadapt_flow import record_check_synthesis as rcs
+
+    kind = classify_target(source)
+    recording_dir = source if kind == "recording" else recording
+    bundle_dir = source if kind == "bundle" else bundle
+    if recording_dir is None:
+        return None
+    writes = (
+        candidates_from_bundle(bundle_dir)
+        if kind == "bundle" and bundle_dir is not None
+        else candidates_from_recording(recording_dir)
+    )
+    if not writes:
+        raise ScaffoldRefused(NO_WRITE_REFUSAL)
+    section = None
+    if verifier is not None:
+        import yaml
+
+        try:
+            loaded = yaml.safe_load(Path(verifier).read_text(encoding="utf-8")) or {}
+        except (OSError, yaml.YAMLError) as exc:
+            raise ScaffoldRefused(f"scaffold-verifier: cannot read {verifier}: {exc}")
+        section = loaded.get("verifier") if isinstance(loaded, dict) else None
+        if not isinstance(section, dict):
+            raise ScaffoldRefused(
+                f"scaffold-verifier: {verifier} has no `verifier:` section"
+            )
+    try:
+        proposal = rcs.synthesize(
+            recording_dir, db_path=db, verifier=section, complete_read=complete_read
+        )
+    except rcs.SynthesisError as exc:
+        if db is None and section is None:
+            return None
+        raise ScaffoldRefused(f"scaffold-verifier: {exc}") from exc
+    if not proposal.effects:
+        if db is not None or section is not None:
+            raise ScaffoldRefused(
+                "scaffold-verifier: no read returns a record holding the "
+                "recorded values: " + "; ".join(proposal.search.notes or ["none"])
+            )
+        return None
+    if prove:
+        from openadapt_flow.record_check_proof import ProofUnavailable, prove_live
+
+        try:
+            with tempfile.TemporaryDirectory(prefix="record-check-proof-") as tmp:
+                proposal.live = prove_live(
+                    prove,
+                    proposal.verifier,
+                    proposal.effects,
+                    proposal.params,
+                    write_requests=proposal.search.write_requests,
+                    work_dir=Path(tmp),
+                )
+        except ProofUnavailable as exc:
+            raise ScaffoldRefused(f"scaffold-verifier --prove: {exc}") from exc
+    destination = out_dir or recording_dir
+    identity_path = None
+    if bundle_dir is not None:
+        from openadapt_flow import record_check_identity
+
+        report, proposals = record_check_identity.identity_coverage(
+            bundle_dir, recording_dir, proposal.params
+        )
+        proposal.identity = report
+        destination.mkdir(parents=True, exist_ok=True)
+        identity_path = record_check_identity.write_identity_proposals(
+            proposals, destination
+        )
+    check, proof = rcs.write(proposal, destination)
+    return RecordCheckResult(
+        working=proposal.working,
+        check_path=check,
+        proof_path=proof,
+        summary=rcs.summary(proposal, check, proof),
+        identity_path=identity_path,
+    )
 
 
 # ---------------------------------------------------------------------------

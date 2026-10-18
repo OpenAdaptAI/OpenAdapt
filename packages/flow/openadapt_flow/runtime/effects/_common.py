@@ -11,7 +11,7 @@ fault-model study uses for ``classify``).
 
 from __future__ import annotations
 
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 
 from openadapt_flow.runtime.effects.effect import (
     Effect,
@@ -22,6 +22,17 @@ from openadapt_flow.runtime.effects.effect import (
     record_matches,
     stable_id,
 )
+
+
+def drop_record_fields(
+    records: Optional[list[dict[str, Any]]], fields: Iterable[str]
+) -> Optional[list[dict[str, Any]]]:
+    """``records`` without ``fields`` (``None`` stays ``None``: unreadable)."""
+
+    names = set(fields)
+    if records is None or not names:
+        return records
+    return [{k: v for k, v in r.items() if k not in names} for r in records]
 
 
 def new_records_only(
