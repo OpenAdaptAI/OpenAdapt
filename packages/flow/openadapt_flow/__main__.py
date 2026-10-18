@@ -1152,19 +1152,34 @@ def _cmd_record(args: argparse.Namespace) -> int:
     return code
 
 
+def _recorded_surface(recording: Path) -> Optional[str]:
+    """The surface stamped into the recording's ``meta.json``, if any."""
+
+    import json
+
+    try:
+        surface = json.loads((recording / "meta.json").read_text()).get("surface")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return str(surface) if surface else None
+
+
 def _propose_lookup_check(args: argparse.Namespace, *, from_lookup: bool) -> None:
     """Find a look-up after the save and propose it as the record check."""
 
     from openadapt_flow.cli_hints import command
     from openadapt_flow.compiler.lookup_detect import (
+        LOOKUP_GUIDANCE,
         READBACK_PROPOSAL_FILE,
         propose_from_recording,
     )
 
     recording = Path(args.out)
-    kind = str(getattr(args, "backend", None) or "web")
+    kind = _recorded_surface(recording) or str(getattr(args, "backend", None) or "")
     proposal, written, lines = propose_from_recording(recording, session_kind=kind)
     for line in lines:
+        if line == LOOKUP_GUIDANCE and getattr(args, "with_check", False):
+            continue  # the guided check asks for the check next
         print(line)
     if proposal is None:
         return
@@ -1179,12 +1194,15 @@ def _propose_lookup_check(args: argparse.Namespace, *, from_lookup: bool) -> Non
             "UNRESOLVED values and review each effect."
         )
         if from_lookup:
-            from openadapt_flow.record_sor import PROPOSED_CONTRACT_NAME
+            from openadapt_flow.record_sor import PROPOSED_CONTRACT_NAME, _write_private
 
             target = recording / PROPOSED_CONTRACT_NAME
-            target.write_text(readback.read_text())
-            target.chmod(0o600)
-            print(f"Proposed contract: {target}")
+            try:
+                _write_private(target, readback.read_text())
+            except OSError as exc:
+                print(f"record --verify: could not write {target.name} ({exc})")
+            else:
+                print(f"Proposed contract: {target}")
     elif from_lookup:
         print(
             "record --verify: a web recording's look-up becomes the same-session "

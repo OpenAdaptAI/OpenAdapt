@@ -284,3 +284,145 @@ def test_check_accept_cli(tmp_path: Path, capsys: Any) -> None:
     assert (recording / CHECK_FILE).is_file()
     assert "check admit" in capsys.readouterr().out
     assert args.func(args) == 2  # never overwrites a check.json
+
+
+# -- review findings, pinned -------------------------------------------------------
+
+
+def test_the_search_box_echo_never_stands_in_for_the_record(tmp_path: Path) -> None:
+    # The box is focused by a click far from where its text shows, and the
+    # record view doesn't show the request ID: the identity must not be read
+    # from the search box.
+    kiosk = KioskLookupTransport(tmp_path / "appointments.sqlite3")
+    rec = _Recorder(tmp_path / "recording", kiosk)
+    rec.click(775, 509)
+    rec.type(PARAMS["request_id"], "request_id")
+
+    def save() -> None:
+        kiosk.pointer(690, 592, "left", False)
+        kiosk.book(PARAMS["request_id"], "MRN A1001", "Ada Lovelace", "x", "y")
+
+    rec.save(save)
+    rec.click(300, 389)  # the right end of the look-up box
+    rec.type(PARAMS["request_id"])
+    rec.click(430, 386)
+    recording = rec.finish()
+    proposal = detect_lookup(recording)
+    assert proposal is not None
+    for seen in proposal.fields:
+        assert not (seen.region[1] < 410 and seen.region[0] < 340), seen
+
+
+def test_a_dialog_that_writes_after_the_save_is_not_a_look_up(tmp_path: Path) -> None:
+    kiosk = KioskLookupTransport(tmp_path / "appointments.sqlite3")
+    rec = _Recorder(tmp_path / "recording", kiosk)
+    rec.click(775, 509)
+    rec.type(PARAMS["request_id"], "request_id")
+    rec.save(lambda: kiosk.pointer(690, 592, "left", False))
+    rec.click(90, 389)
+    rec.type(PARAMS["request_id"])
+    rec.save(lambda: kiosk.pointer(690, 592, "left", False))  # Save again
+    assert detect_lookup(rec.finish()) is None
+
+
+def test_a_search_for_a_literal_is_not_proposed(tmp_path: Path) -> None:
+    kiosk = KioskLookupTransport(tmp_path / "appointments.sqlite3")
+    rec = _Recorder(tmp_path / "recording", kiosk)
+    rec.click(775, 509)
+    rec.type(PARAMS["request_id"], "request_id")
+    rec.save(lambda: kiosk.pointer(690, 592, "left", False))
+    rec.click(90, 389)
+    rec.type("REQ-0000")  # not a value this run typed
+    rec.click(430, 386)
+    assert detect_lookup(rec.finish()) is None
+
+
+def test_proposing_never_fails_the_recording(tmp_path: Path) -> None:
+    from openadapt_flow.compiler.lookup_detect import propose_from_recording
+
+    recording, _kiosk = _record(tmp_path)
+    recording.chmod(0o500)  # read-only: the proposal can't be written
+    try:
+        proposal, written, lines = propose_from_recording(recording, session_kind="rdp")
+    finally:
+        recording.chmod(0o700)
+    assert proposal is None and written == []
+    assert lines and "Could not propose" in lines[0]
+
+
+def test_proposals_are_private_and_the_summary_names_no_values(
+    tmp_path: Path,
+) -> None:
+    from openadapt_flow.compiler.lookup_detect import propose_from_recording
+
+    recording, _kiosk = _record(tmp_path)
+    _proposal, written, lines = propose_from_recording(recording, session_kind="rdp")
+    assert written
+    for path in written:
+        assert path.stat().st_mode & 0o777 == 0o600
+    printed = "\n".join(lines)
+    for value in PARAMS.values():
+        assert value not in printed
+
+
+def test_a_desktop_recording_without_backend_flag_uses_its_stamped_surface(
+    tmp_path: Path,
+) -> None:
+    import argparse
+
+    from openadapt_flow.__main__ import _propose_lookup_check
+
+    recording, _kiosk = _record(tmp_path)
+    meta = json.loads((recording / "meta.json").read_text())
+    meta["surface"] = "rdp"
+    (recording / "meta.json").write_text(json.dumps(meta))
+    _propose_lookup_check(
+        argparse.Namespace(out=str(recording), backend=None), from_lookup=False
+    )
+    assert (recording / READBACK_PROPOSAL_FILE).is_file()
+
+
+def test_the_accepted_check_compiles_onto_the_save(tmp_path: Path) -> None:
+    from openadapt_flow.compiler.readback_authoring import apply_check
+    from openadapt_flow.ir import ActionKind, Anchor, Step, Workflow
+
+    recording, _kiosk = _record(tmp_path)
+    proposal = detect_lookup(recording)
+    assert proposal is not None
+    write_proposals(recording, proposal, session_kind="rdp")
+    accept_check_proposal(recording)
+    steps = []
+    for line in (recording / "events.jsonl").read_text().splitlines():
+        event = json.loads(line)
+        i = event["i"]
+        if event["kind"] == "type":
+            steps.append(
+                Step(
+                    id=f"step_{i:03d}",
+                    intent="type",
+                    action=ActionKind.TYPE,
+                    param=event.get("param"),
+                    text=event["text"],
+                )
+            )
+        else:
+            x, y = event["x"], event["y"]
+            steps.append(
+                Step(
+                    id=f"step_{i:03d}",
+                    intent="click",
+                    action=ActionKind.CLICK,
+                    anchor=Anchor(
+                        template="templates/t.png",
+                        region=(x - 5, y - 5, 10, 10),
+                        click_point=(x, y),
+                    ),
+                    risk="irreversible" if i == proposal.save_event else "reversible",
+                )
+            )
+    workflow = Workflow(name="kiosk", params=dict(PARAMS), steps=steps)
+    compiled, outcome = apply_check(workflow, recording)
+    assert outcome.save_step == f"step_{proposal.save_event:03d}"
+    assert outcome.reset == "new_search"
+    assert set(outcome.fields) == set(PARAMS)
+    assert [s.id for s in compiled.steps][-1] == outcome.save_step

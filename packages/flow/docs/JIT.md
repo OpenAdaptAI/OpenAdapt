@@ -190,11 +190,12 @@ returns the step ids the review asks for. It refuses once a review exists.
 
 When the agent looks the record up after it saves (types the identifier into
 a search box, submits, and leaves the record on screen), Flow proposes that
-look-up as the record check: `check.proposed.json` beside the recording
-(`program/recording/`), with the fields the record view showed, named by the
-task's inputs. It is a proposal only. A person accepts it with `openadapt-flow
-check accept program/recording`, recompiles, and admits the check with `check
-admit`. See [EFFECT_KIT.md](EFFECT_KIT.md#a-check-learned-from-a-look-up).
+look-up as the record check: `check.proposed.json` beside the recording that
+compiled (`program/recording-distilled/`, or `program/recording/` when nothing
+was distilled), with the fields the record view showed, named by the task's
+inputs. It is a proposal only. A person accepts it with `openadapt-flow check
+accept program/recording-distilled`, recompiles, and admits the check with
+`check admit`. See [EFFECT_KIT.md](EFFECT_KIT.md#a-check-learned-from-a-look-up).
 
 ## Admission
 
@@ -231,9 +232,9 @@ The canary needs the app and the verifier, so it runs from Python only.
 <cache_dir>/
   <task_id>-<schema digest>/
     program/
-      recording/            the agent's run as recorded; check.proposed.json
-                            when the agent looked the record up after saving
-      recording-distilled/  what was compiled
+      recording/            the agent's run as recorded
+      recording-distilled/  what was compiled; check.proposed.json when the
+                            agent looked the record up after saving
       bundle/               the program; admission.json after admission
       bundle/jit_draft.json marks the bundle as a draft for replay and run
       candidate.json        what the reviewer sees; state DRAFT

@@ -160,16 +160,14 @@ class LookupProposal:
         return None
 
     def summary(self) -> list[str]:
-        lines = [
-            f"Found a look-up after the save ({self.save_label!r}, event "
-            f"{self.save_event}): search {self.query!r}"
-            + (f" (parameter {self.query_param})" if self.query_param else "")
-            + (", then opened a result" if self.open_event is not None else ""),
+        # Parameter names only: typed values and screen text can be patient
+        # data.
+        return [
+            f"Found a look-up after the save (event {self.save_event}): a search "
+            f"for parameter {self.query_param}"
+            + (", then a result opened" if self.open_event is not None else ""),
+            "  it shows: " + ", ".join(seen.param for seen in self.fields),
         ]
-        for seen in self.fields:
-            where = f"next to {seen.label!r}" if seen.label else "on screen"
-            lines.append(f"  {seen.param}: read {where}")
-        return lines
 
 
 # -- reading the recording ---------------------------------------------------------
@@ -255,6 +253,12 @@ def _is_save_label(label: str) -> bool:
 
 _CLICKS = ("click", "double_click")
 
+#: How many clicks, from the end, are read to find the save.
+_MAX_CLICKS_READ = 50
+
+#: Shorter values ("1", "M") would match unrelated text.
+_MIN_VALUE_CHARS = 3
+
 
 def _is_enter(event: Mapping[str, Any]) -> bool:
     return event.get("kind") in ("key", "hotkey") and str(
@@ -308,6 +312,14 @@ def _same_line(a: Any, b: Any) -> bool:
     )
 
 
+def _same_place(a: Any, b: Any) -> bool:
+    """Two OCR lines overlap on screen (the search box, before and after)."""
+
+    ax, ay, aw, ah = a.region
+    bx, by, bw, bh = b.region
+    return ax < bx + bw and bx < ax + aw and ay < by + bh and by < ay + ah
+
+
 def _covers(line: Any, point: Optional[tuple[int, int]]) -> bool:
     if point is None:
         return False
@@ -323,6 +335,7 @@ def _values_on_frame(
     *,
     before: Optional[bytes] = None,
     search_box: Optional[tuple[int, int]] = None,
+    echo: Optional[list[Any]] = None,
 ) -> tuple[list[SeenValue], tuple[int, int]]:
     """Recorded values the look-up brought onto the screen.
 
@@ -344,9 +357,12 @@ def _values_on_frame(
         for line in lines
         if not any(_same_line(line, old) for old in earlier)
         and not _covers(line, search_box)
+        and not any(_same_place(line, shown) for shown in echo or [])
     ]
     seen: list[SeenValue] = []
     for name, value in params.items():
+        if len(_squash(value)) < _MIN_VALUE_CHARS:
+            continue
         hits = [line for line in fresh if _shows(line.text, value)]
         if len(hits) != 1:
             # Not shown, or shown twice (a typed form still on screen):
@@ -354,11 +370,21 @@ def _values_on_frame(
             continue
         line = hits[0]
         label, at = _label_for(line, lines, value)
+        region = tuple(int(v) for v in line.region)
+        text = " ".join(str(line.text).split())
+        if label and at == "right" and _squash(text).startswith(_squash(label)):
+            # "Slot: 2026-11-02 09:30" is one OCR line: keep the value's part
+            # of it, estimated from where the value starts in the text.
+            cut = text.find(":") + 1 if ":" in text else len(label)
+            share = cut / max(1, len(text))
+            x, y, w, h = region
+            skip = int(w * share)
+            region = (x + skip, y, max(1, w - skip), h)
         seen.append(
             SeenValue(
                 param=name,
                 value=value,
-                region=tuple(int(v) for v in line.region),  # type: ignore[arg-type]
+                region=region,  # type: ignore[arg-type]
                 label=label,
                 at=at,
                 confidence=float(line.confidence),
@@ -391,67 +417,85 @@ def detect_lookup(
     by_value = {_norm(v): k for k, v in params.items()}
 
     # 1. The save: the last click whose label names a commit. Searched from
-    # the end, so only the clicks after the save are read with OCR.
+    # the end, and only over the last clicks, so a long recording isn't read
+    # with OCR click by click.
     save_index: Optional[int] = None
     save_label = ""
+    clicks_read = 0
     for position in range(len(events) - 1, -1, -1):
         event = events[position]
-        if event.get("kind") in _CLICKS:
-            label = _click_label(recording, event, ocr)
-            if _is_save_label(label):
-                save_index, save_label = position, label
-                break
-
+        if event.get("kind") not in _CLICKS:
+            continue
+        clicks_read += 1
+        if clicks_read > _MAX_CLICKS_READ:
+            break
+        label = _click_label(recording, event, ocr)
+        if _is_save_label(label):
+            save_index, save_label = position, label
+            break
     if save_index is None:
         return None
 
-    # 2. The search: typing after the save, then Enter or a click.
+    # 2. Everything after the save must be a look-up: clicks, one typed
+    # search, Enter, Tab, scrolling. Any other key, a second typed text, or a
+    # click whose label could write means it isn't one.
     tail = events[save_index + 1 :]
-    for offset, event in enumerate(tail):
-        if event.get("kind") != "type" or event.get("secret"):
-            continue
-        text = str(event.get("text") or "")
-        if not text.strip():
-            continue
-        after = tail[offset + 1 :]
-        submit = next(
-            (e for e in after[:3] if _is_enter(e) or e.get("kind") in _CLICKS),
-            None,
-        )
-        if submit is None:
-            continue
-        search_pos = save_index + 1 + offset
-        break
-    else:
+    typed = [p for p, e in enumerate(tail) if e.get("kind") == "type"]
+    if len(typed) != 1:
         return None
-
-    search = events[search_pos]
+    for event in tail:
+        kind = event.get("kind")
+        if kind in _CLICKS:
+            if save_like_words(_click_label(recording, event, ocr)):
+                return None
+        elif kind in ("key", "hotkey"):
+            if event.get("modifiers") or str(event.get("key") or "").lower() not in (
+                "enter",
+                "return",
+                "tab",
+            ):
+                return None
+        elif kind not in ("type", "scroll"):
+            return None
+    search_offset = typed[0]
+    search = tail[search_offset]
     query = str(search.get("text") or "")
+    if search.get("secret") or not query.strip():
+        return None
     query_param = search.get("param") or by_value.get(_norm(query))
-    focus = events[search_pos - 1] if search_pos - 1 > save_index else None
+    if not query_param:
+        # The search must be a value the run knows, so each run searches for
+        # its own record.
+        return None
+    submit_offset = next(
+        (
+            p
+            for p in range(search_offset + 1, min(len(tail), search_offset + 4))
+            if _is_enter(tail[p]) or tail[p].get("kind") in _CLICKS
+        ),
+        None,
+    )
+    if submit_offset is None:
+        return None
+    submit = tail[submit_offset]
+    focus = tail[search_offset - 1] if search_offset > 0 else None
     if focus is not None and focus.get("kind") not in _CLICKS:
         focus = None
-    start_pos = search_pos - 1 if focus is not None else search_pos
 
     submit_label: Optional[str] = None
     submit_structural: Optional[dict[str, Any]] = None
     if submit.get("kind") in _CLICKS:
         submit_label = _click_label(recording, submit, ocr) or None
-        if submit_label and _is_save_label(submit_label):
-            return None  # the "search" was more form entry, not a look-up
         submit_structural = submit.get("structural") or None
 
     # 3. A click after the search that opens a result.
-    submit_pos = events.index(submit)
     open_event = next(
-        (e for e in events[submit_pos + 1 :] if e.get("kind") in _CLICKS), None
+        (e for e in tail[submit_offset + 1 :] if e.get("kind") in _CLICKS), None
     )
-    if open_event is not None:
-        label = _click_label(recording, open_event, ocr)
-        if _is_save_label(label):
-            return None
 
-    # 4. The record view: recorded values on the last frame.
+    # 4. The record view: recorded values the look-up brought onto the last
+    # frame. Not what was on screen right after the save (the saved form), and
+    # not the search box echoing the query.
     box_point = None
     if focus is not None and focus.get("x") is not None:
         box_point = (int(focus["x"]), int(focus["y"]))
@@ -459,23 +503,32 @@ def detect_lookup(
     png = _frame(recording, int(last.get("i", len(events) - 1)), "after")
     if png is None:
         return None
+    save_i = int(events[save_index].get("i", save_index))
+    search_i = int(search.get("i", save_index + 1 + search_offset))
+    echo_frame = _frame(recording, search_i, "after")
+    echo = (
+        [line for line in ocr(echo_frame) if _shows(line.text, query)]
+        if echo_frame is not None
+        else []
+    )
     seen, size = _values_on_frame(
         png,
         params,
         ocr,
-        before=_frame(recording, int(events[start_pos].get("i", start_pos)), "before"),
+        before=_frame(recording, save_i, "after"),
         search_box=box_point,
+        echo=echo,
     )
     if not seen:
         return None
     box_structural = (focus or {}).get("structural") or search.get("structural")
     return LookupProposal(
-        save_event=int(events[save_index].get("i", save_index)),
+        save_event=save_i,
         save_label=save_label,
-        start_event=int(events[start_pos].get("i", start_pos)),
-        search_event=int(search.get("i", search_pos)),
+        start_event=int(tail[0].get("i", save_index + 1)),
+        search_event=search_i,
         query=query,
-        query_param=str(query_param) if query_param else None,
+        query_param=str(query_param),
         box_point=box_point,
         box_label=search.get("field_label") or None,
         box_structural=box_structural or None,
@@ -504,7 +557,11 @@ def to_check_marks(proposal: LookupProposal) -> Any:
     for seen in proposal.fields:
         x, y, w, h = seen.region
         fields.append(
-            MarkedField(param=seen.param, region=(x - 4, y - 4, w + 8, h + 8))
+            # OCR reads a tight crop badly; leave room above and below.
+            MarkedField(
+                param=seen.param,
+                region=(max(0, x - 4), max(0, y - 8), w + 8, h + 16),
+            )
         )
     return CheckMarks(
         start_event=proposal.start_event,
@@ -517,7 +574,7 @@ def _ref_for(seen: SeenValue, panel: tuple[int, int, int, int]) -> dict[str, Any
     if seen.label:
         return {"text": seen.label, "at": seen.at, "region": list(panel)}
     x, y, w, h = seen.region
-    return {"region": [x - 4, y - 4, w + 8, h + 8]}
+    return {"region": [max(0, x - 4), max(0, y - 4), w + 8, h + 8]}
 
 
 def _panel(proposal: LookupProposal) -> tuple[int, int, int, int]:
@@ -655,11 +712,14 @@ def write_proposals(
 
     import yaml
 
+    from openadapt_flow.record_sor import _write_private
+
     recording = Path(recording)
     written: list[Path] = []
     marks = to_check_marks(proposal)
     check_path = recording / CHECK_PROPOSAL_FILE
-    check_path.write_text(marks.model_dump_json(indent=2) + "\n")
+    # Both files hold screen text and regions of a patient's record: 0600.
+    _write_private(check_path, marks.model_dump_json(indent=2) + "\n")
     written.append(check_path)
     section = to_desktop_readback(proposal, session_kind or "")
     if section is not None:
@@ -673,7 +733,7 @@ def write_proposals(
             "# Fill in every UNRESOLVED value, check the regions, and remove\n"
             "# needs_operator_confirmation from each effect you accept.\n"
         )
-        path.write_text(header + yaml.safe_dump(document, sort_keys=False))
+        _write_private(path, header + yaml.safe_dump(document, sort_keys=False))
         written.append(path)
     return written
 
@@ -696,13 +756,17 @@ def propose_from_recording(
     recording = Path(recording)
     try:
         proposal = detect_lookup(recording, ocr=ocr, values=values)
+        if proposal is None:
+            if (recording / CHECK_FILE).is_file():
+                return None, [], []
+            return None, [], [LOOKUP_GUIDANCE]
+        written = write_proposals(recording, proposal, session_kind=session_kind)
     except Exception as exc:  # noqa: BLE001 - a proposal is never required
-        return None, [], [f"Could not look for a look-up in the recording ({exc})."]
-    if proposal is None:
-        if (recording / CHECK_FILE).is_file():
-            return None, [], []
-        return None, [], [LOOKUP_GUIDANCE]
-    written = write_proposals(recording, proposal, session_kind=session_kind)
+        return (
+            None,
+            [],
+            [f"Could not propose a check from the recording ({type(exc).__name__})."],
+        )
     lines = proposal.summary()
     for path in written:
         lines.append(f"Proposed: {path}")
