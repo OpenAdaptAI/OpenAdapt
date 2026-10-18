@@ -12,7 +12,12 @@ import urllib.request
 from typing import Any
 
 REPOSITORY = re.compile(r"^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$")
-RELEASE_TAG = re.compile(r"^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$")
+# The launcher tags v<version>. A package from packages/ tags
+# <pypi-project>-v<version>; the project names are an exact list.
+RELEASE_TAG = re.compile(
+    r"^(?:openadapt-(?:agent|flow|types)-)?"
+    r"v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$"
+)
 REQUIRED_TAG_RULES = frozenset({"creation", "update", "deletion"})
 
 
@@ -73,7 +78,9 @@ def verify_release_hosting_documents(
 ) -> None:
     """Validate immutable releases and active creation/update/deletion tag rules."""
     if RELEASE_TAG.fullmatch(tag) is None:
-        raise ValueError("release tag must be an exact stable vX.Y.Z value")
+        raise ValueError(
+            "release tag must be an exact stable vX.Y.Z or <package>-vX.Y.Z value"
+        )
     if immutable.get("enabled") is not True:
         raise ValueError("GitHub immutable releases are not enabled")
 
