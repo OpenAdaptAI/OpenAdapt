@@ -725,12 +725,17 @@ def test_production_profiles_never_verify_screen_only_consequential_result():
             classify_execution_outcome(missing_identity, workflow, profile)
             is ExecutionOutcome.COMPLETED_UNVERIFIED
         )
-    # The Standard *gate* still admits persisted-state reacquisition so a
-    # pixel-only Citrix run can execute with halt-on-doubt. VERIFIED itself
-    # requires an independent system-of-record read (tier 1 or 2) on both
-    # production profiles: an on-screen re-read cannot prove the write.
+    # A reopen after a state reset (tier 3) reaches the default read-back
+    # minimum, R2, so Standard verifies it. Regulated keeps its tier-2 floor,
+    # and a workflow that asks for R3 needs a system-of-record read.
     assert (
         classify_execution_outcome(persisted, workflow, ExecutionProfile.STANDARD)
+        is ExecutionOutcome.VERIFIED
+    )
+    strict = workflow.model_copy(deep=True)
+    strict.minimum_readback = "R3"
+    assert (
+        classify_execution_outcome(persisted, strict, ExecutionProfile.STANDARD)
         is ExecutionOutcome.COMPLETED_UNVERIFIED
     )
     assert (

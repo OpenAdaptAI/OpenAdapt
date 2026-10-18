@@ -47,6 +47,7 @@ runtime plumbing, with ``substrate="onscreen"``.
 from __future__ import annotations
 
 import difflib
+import re
 from typing import Any, Optional
 
 from openadapt_flow.assurance import SCREEN_READBACK, UNCHECKED
@@ -57,7 +58,9 @@ from openadapt_flow.runtime.effects.effect import (
     EffectKind,
     EffectState,
     EffectVerdict,
+    ReadbackGuard,
     ReadbackNav,
+    ReadbackReference,
     Region,
     Verdict,
 )
@@ -91,10 +94,78 @@ def _valid_renavigation_step(nav: ReadbackNav) -> bool:
     if action == "click":
         return nav.point is not None
     if action == "type":
-        return nav.text is not None or bool(nav.param)
+        return nav.text is not None or bool(nav.param) or nav.reference
     if action == "key":
         return bool(nav.key)
     return False
+
+
+#: Words that label a control which writes. The read-back's navigation never
+#: clicks one (:class:`~openadapt_flow.runtime.effects.effect.ReadbackGuard`).
+COMMIT_WORDS: frozenset[str] = frozenset(
+    {
+        "save",
+        "submit",
+        "delete",
+        "remove",
+        "confirm",
+        "sign",
+        "send",
+        "post",
+        "finalize",
+        "finalise",
+        "approve",
+        "discard",
+        "overwrite",
+    }
+)
+
+#: Key chords that save or delete. The read-back's navigation never presses one.
+COMMIT_CHORDS: frozenset[str] = frozenset(
+    {
+        "ctrl+s",
+        "cmd+s",
+        "meta+s",
+        "command+s",
+        "ctrl+enter",
+        "cmd+enter",
+        "meta+enter",
+        "ctrl+return",
+        "cmd+return",
+        "delete",
+        "del",
+        "backspace",
+    }
+)
+
+_WORD = re.compile(r"[a-z]+")
+
+#: Half-size of the box read around a click point to find its label.
+_LABEL_BOX = (120, 24)
+
+
+def _commit_label(text: str, commit_labels: list[str]) -> Optional[str]:
+    """The commit word or recorded save label that ``text`` shows, if any."""
+
+    norm = _normalize(text)
+    for label in commit_labels:
+        want = _normalize(label)
+        if want and want == norm:
+            return label
+    words = set(_WORD.findall(norm))
+    hit = sorted(words & COMMIT_WORDS)
+    return hit[0] if hit else None
+
+
+def _distinct_matches(pattern: str, lines: list[str]) -> list[str]:
+    compiled = re.compile(pattern)
+    seen: list[str] = []
+    for line in lines:
+        for match in compiled.finditer(line):
+            value = match.group(1)
+            if value and value not in seen:
+                seen.append(value)
+    return seen
 
 
 def _is_persisted_reacquisition(spec: Any) -> bool:
@@ -265,27 +336,82 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
 
     # -- re-navigation (DIFFERENT-PATH only) ---------------------------------
 
+    def _label_at(self, x: int, y: int) -> Optional[str]:
+        """The text of the control under ``(x, y)``, read by OCR, or None."""
+
+        half_w, half_h = _LABEL_BOX
+        box = (max(0, x - half_w), max(0, y - half_h), 2 * half_w, 2 * half_h)
+        lines = self._vision.ocr(self._backend.screenshot(), region=box)
+        hits = []
+        for line in lines or []:
+            where = getattr(line, "region", None)
+            if where is None:
+                continue  # a line with no position can't label the click
+            bx, by, bw, bh = where
+            if bx - 4 <= x <= bx + bw + 4 and by - 4 <= y <= by + bh + 4:
+                hits.append(line.text)
+        return " ".join(hits) if hits else None
+
+    def _guard_refusal(
+        self, nav: ReadbackNav, index: int, guard: Optional[ReadbackGuard]
+    ) -> Optional[str]:
+        """Why the guard refuses ``nav``, or None when it may run."""
+
+        action = (nav.action or "").strip().lower()
+        if action == "key" and nav.key:
+            chord = nav.key.lower().replace(" ", "")
+            if chord in COMMIT_CHORDS:
+                return f"re-navigation step {index} presses {nav.key!r}, which writes"
+        if action == "click" and nav.point is not None:
+            labels = list(guard.commit_labels) if guard is not None else []
+            try:
+                text = self._label_at(int(nav.point[0]), int(nav.point[1]))
+            except Exception as exc:  # noqa: BLE001 - unreadable => refuse
+                return (
+                    f"re-navigation step {index}: could not read the control "
+                    f"under the click ({type(exc).__name__})"
+                )
+            hit = _commit_label(text, labels) if text else None
+            if hit is not None:
+                return (
+                    f"re-navigation step {index} would click a control labelled "
+                    f"{hit!r}, which writes"
+                )
+        return None
+
     def _renavigate(
-        self, steps: list[ReadbackNav], params: Optional[dict] = None
+        self,
+        steps: list[ReadbackNav],
+        params: Optional[dict] = None,
+        *,
+        guard: Optional[ReadbackGuard] = None,
+        reference: Optional[str] = None,
     ) -> Optional[str]:
         """Replay the recorded re-navigation to re-open the record.
 
         Returns ``None`` on success, or a short failure reason (the read-back
         then rules INDETERMINATE -> HALT). Fail-safe: an action the backend
-        cannot perform, or an unknown/ill-formed nav step, never proceeds to a
-        CONFIRM — it halts so a human re-navigates.
+        cannot perform, an unknown/ill-formed nav step, or a step the read-only
+        guard refuses never proceeds to a CONFIRM — it halts so a human
+        re-navigates. The guard runs on every surface; see
+        :class:`~openadapt_flow.runtime.effects.effect.ReadbackGuard`.
         """
         backend = self._backend
         for i, nav in enumerate(steps):
             action = (nav.action or "").strip().lower()
             try:
+                refusal = self._guard_refusal(nav, i, guard)
+                if refusal is not None:
+                    return f"read-only guard: {refusal}"
                 if action == "click":
                     if nav.point is None or not hasattr(backend, "click"):
                         return f"re-navigation step {i} (click) not performable"
                     backend.click(int(nav.point[0]), int(nav.point[1]))
                 elif action == "type":
                     text = nav.text
-                    if nav.param:
+                    if nav.reference:
+                        text = reference
+                    elif nav.param:
                         value = (params or {}).get(nav.param)
                         text = None if value is None else str(value)
                     if text is None or not hasattr(backend, "type_text"):
@@ -300,6 +426,34 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
             except Exception as e:  # noqa: BLE001 — any backend error => HALT
                 return f"re-navigation step {i} ({action}) failed: {e}"
         return None
+
+    def _capture_reference(self, ref: ReadbackReference) -> tuple[Optional[str], str]:
+        """Read the reference number off the current screen.
+
+        Exactly one distinct value must match, or there is no reference: two
+        different numbers on screen could open the wrong record.
+        """
+
+        if self._backend is None or not callable(
+            getattr(self._backend, "screenshot", None)
+        ):
+            return None, "no screen to read the reference number from"
+        try:
+            lines = self._vision.ocr(self._backend.screenshot(), region=ref.region)
+        except Exception as exc:  # noqa: BLE001 - unreadable => no reference
+            return None, f"could not read the reference number ({type(exc).__name__})"
+        found = _distinct_matches(
+            ref.pattern,
+            [line.text for line in lines or [] if line.confidence >= READABLE_CONF],
+        )
+        if not found:
+            return None, "the screen shows no reference number after the save"
+        if len(found) > 1:
+            return None, (
+                f"the screen shows {len(found)} different reference numbers "
+                "after the save"
+            )
+        return found[0], ""
 
     # -- direct API ----------------------------------------------------------
 
@@ -453,6 +607,21 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
                 assurance=UNCHECKED,
             )
 
+        # A reference number the save left on screen is read first, before
+        # any navigation moves away from it.
+        reference: Optional[str] = None
+        if spec is not None and spec.reference is not None:
+            reference, why = self._capture_reference(spec.reference)
+            if reference is None:
+                return EffectVerdict(
+                    verdict=Verdict.INDETERMINATE,
+                    kind=expected.kind,
+                    substrate=self.substrate,
+                    reason=f"{why}; cannot certify — HALT",
+                    expected_value=expected_text,
+                    assurance=UNCHECKED,
+                )
+
         # DIFFERENT-PATH: re-open the record by an independent path BEFORE
         # reading. Any failure to re-navigate => INDETERMINATE (HALT), never a
         # CONFIRM off the write's own surface.
@@ -465,7 +634,9 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
                     reason="different-path read-back needs a backend; none bound — HALT",
                     expected_value=expected_text,
                 )
-            nav_error = self._renavigate(spec.renavigation, params)
+            nav_error = self._renavigate(
+                spec.renavigation, params, guard=spec.guard, reference=reference
+            )
             if nav_error is not None:
                 return EffectVerdict(
                     verdict=Verdict.INDETERMINATE,

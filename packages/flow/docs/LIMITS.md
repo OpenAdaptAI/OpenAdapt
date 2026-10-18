@@ -343,19 +343,31 @@ value only in `O`/`0` or `l`/`1` is `INDETERMINATE`: the check halts instead
 of guessing. It confirms nothing until a person admits it. Its assurance
 grade is `screen_readback`, never `independent_readback`.
 
-**Without a read that is independent of the acting session, the run cannot
-be `VERIFIED`.** That read is either a system-of-record read (REST, FHIR, SQL,
-file; tier 1) or the application's record page read in a separate signed-in
-browser session (`ui_readback`; tier 2). The second goes through the same
-application, so it is not a system-of-record read and has its own limits
+**How strong a check makes a run `VERIFIED` is the workflow's
+`minimum_readback`** ([`READBACK_LADDER.md`](READBACK_LADDER.md)). The default,
+`R2`, accepts reopening the record in the acting session and reading it there
+(tier 3), so a pixel-only Citrix or RDP run can be `VERIFIED` without a
+connector. That is still the same application in the same session: it is not a
+system-of-record read, and it shares the blind spots above. `R3` needs a
+system-of-record read (REST, FHIR, SQL, file; tier 1). The Regulated profile
+keeps its own floor: a separate signed-in session (`ui_readback`; tier 2) or a
+system-of-record read
 ([`EFFECT_KIT.md`](EFFECT_KIT.md#separate-session-ui-read-back-ui_readback)).
-A pixel-only Citrix or RDP session with neither is that case. The on-screen
-oracle can still halt when the region is unreadable or wrong. If a
-consequential write may already have been delivered, the production
-`transaction_outcome` is `RECONCILIATION_REQUIRED`, never `VERIFIED`.
+A confirmed check below the minimum is `COMPLETED_UNVERIFIED`, and the agent
+result says `not_sure_if_saved` with `checked_below_minimum`. If a
+consequential write may already have been delivered and the check did not
+confirm it, the outcome is `RECONCILIATION_REQUIRED`, never `VERIFIED`.
 Halt-on-doubt is unchanged. This is not live Citrix Production evidence; a
-live ICA/HDX session is a deployment-specific qualification. Wire the
-independent read before paying a sprint for a `VERIFIED` outcome.
+live ICA/HDX session is a deployment-specific qualification.
+
+The reopen itself has limits. A read-only guard refuses any reopen step whose
+key is a save, submit or delete chord, or whose click lands on a control
+labelled with a commit word (Save, Submit, Delete, Sign, Send, ...); an OCR
+error also refuses. It reads labels by OCR, so an icon-only button with no
+text passes, Enter is allowed (a search needs it), and typed text is not
+checked. A whole-word match can also refuse a harmless control ("Post-op
+notes"); the check then halts. A reference number is read from one screen region and must be the
+only match there; two different numbers, or none, halt the check.
 
 ### 4. Model assistance can convert a halt into a false pass
 

@@ -135,6 +135,7 @@ pause, and a consistency check of the persisted report:
 | any proven-no-effect outcome whose pause a person rejected | `stopped_by_person` | `did_not_run` (no retry) |
 | `RECONCILIATION_REQUIRED` | `save_not_confirmed` | `not_sure_if_saved` |
 | `COMPLETED_UNVERIFIED` | `not_checked` | `not_sure_if_saved` |
+| `COMPLETED_UNVERIFIED` whose saves were checked, but below the workflow's `minimum_readback` | `checked_below_minimum` | `not_sure_if_saved` |
 | `ROLLED_BACK` | `change_reversed` | `not_sure_if_saved` |
 | timeout after start (time a person spends approving doesn't count), inconsistent or missing report, coarse `HALTED` alone | `timed_out`, `result_unreadable` | `not_sure_if_saved` |
 | a server that stopped mid-run | `interrupted` | `not_sure_if_saved` |
@@ -144,6 +145,11 @@ pause, and a consistency check of the persisted report:
 | invalid inputs, unknown workflow, runs disabled | `invalid_input`, `unknown_workflow`, `runs_disabled` | `did_not_run` |
 | a used `request_id` with a different workflow or inputs | `request_id_conflict`, with `record_changed: "unknown"` | `did_not_run` (no retry) |
 | a `request_id` whose five attempts each proved nothing was written | `retry_limit` | `did_not_run` (no retry) |
+
+A `done` or `not_sure_if_saved` result whose report records how its saves
+were checked also carries `checked_how` (`not_checked`, `screen_said_saved`,
+`reopened`, `records`) and `checked_how_label`, the weakest rung any save
+reached ([Flow's read-back ladder](../../flow/docs/READBACK_LADDER.md)).
 
 Only `done` says the change was saved. `record_changed: "no"` and
 `safe_to_retry: true` appear only when the evidence proves nothing was

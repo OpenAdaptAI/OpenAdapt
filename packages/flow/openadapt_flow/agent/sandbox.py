@@ -54,6 +54,7 @@ from openadapt_flow.agent.service import (
     attention_for,
     reason_from_run_dir,
 )
+from openadapt_flow.readback_ladder import checked_how_from_report
 
 __all__ = [
     "CASES",
@@ -500,6 +501,7 @@ class SandboxEngine:
             model_calls=model_calls if isinstance(model_calls, int) else None,
             seconds=time.monotonic() - started,
             sandbox=sandbox,
+            checked_how=checked_how_from_report(report),
         )
 
     @staticmethod

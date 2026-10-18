@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import re
 from collections.abc import Mapping
 from datetime import datetime, timezone
 from enum import Enum
@@ -214,6 +215,10 @@ class ReadbackNav(BaseModel):
     #: (for example, search for this run's patient). Set by a check the person
     #: demonstrated (:mod:`openadapt_flow.compiler.readback_authoring`).
     param: Optional[str] = None
+    #: ``type`` only: type the reference number captured from the screen
+    #: right after the save (:attr:`ReadbackSpec.reference`) instead of
+    #: :attr:`text`, to find the record again by it.
+    reference: bool = False
 
     @model_serializer(mode="wrap")
     def _drop_unset_param(self, handler: Any) -> dict[str, Any]:
@@ -222,6 +227,8 @@ class ReadbackNav(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.param is None:
             data.pop("param", None)
+        if not self.reference:
+            data.pop("reference", None)
         return data
 
 
@@ -288,6 +295,54 @@ class ReadbackReset(BaseModel):
     #: which step it is and the compiler could not check it from the
     #: recording; the person who admits the check sees which.
     evidence: Literal["detected", "declared"] = "detected"
+
+
+class ReadbackGuard(BaseModel):
+    """What a read-back's replayed navigation must never do.
+
+    The navigation runs in the acting session, on any surface (a browser, a
+    desktop app, an RDP or Citrix window), where no network guard can stop a
+    stray write. Before each click the verifier reads the text under the
+    pointer and refuses a control whose label is a commit word or one of the
+    save's own control labels; it refuses save and delete key chords. A
+    refusal makes the check INDETERMINATE (HALT), never a guessed CONFIRM.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Labels of the controls the write flow committed with (for example the
+    #: save button's text), recorded at compile time.
+    commit_labels: list[str] = Field(default_factory=list)
+
+
+class ReadbackReference(BaseModel):
+    """A reference number the application shows right after the save.
+
+    Learned from the demonstration: text that appeared on the screen the save
+    left, was not typed, and looks like an identifier (a claim, order or
+    encounter number). Read at run time from :attr:`region` with
+    :attr:`pattern` (one capture group), it is evidence that the application
+    issued a record (R1, "the screen said it saved") and, when a navigation
+    step types it (:attr:`ReadbackNav.reference`), the way to find the record
+    again. The captured value itself is never stored in a report.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    region: tuple[int, int, int, int]
+    pattern: str = Field(min_length=1, max_length=512)
+
+    @model_validator(mode="after")
+    def _one_group(self) -> "ReadbackReference":
+        try:
+            compiled = re.compile(self.pattern)
+        except re.error as exc:
+            raise ValueError(f"readback.reference.pattern is invalid: {exc}") from exc
+        if compiled.groups != 1:
+            raise ValueError("readback.reference.pattern needs exactly one group")
+        if self.region[2] <= 0 or self.region[3] <= 0:
+            raise ValueError("readback.reference.region must have a size")
+        return self
 
 
 #: Names that are not a person: an admission by one of them admits nothing.
@@ -400,6 +455,10 @@ class ReadbackSpec(BaseModel):
     reset: Optional[ReadbackReset] = None
     #: A person's acceptance of this exact check.
     admission: Optional[ReadbackAdmission] = None
+    #: What the replayed navigation must never click or press.
+    guard: Optional[ReadbackGuard] = None
+    #: A reference number to capture from the screen right after the save.
+    reference: Optional[ReadbackReference] = None
 
     @model_serializer(mode="wrap")
     def _drop_empty_fields(self, handler: Any) -> dict[str, Any]:
@@ -416,6 +475,10 @@ class ReadbackSpec(BaseModel):
             data.pop("reset", None)
         if self.admission is None:
             data.pop("admission", None)
+        if self.guard is None:
+            data.pop("guard", None)
+        if self.reference is None:
+            data.pop("reference", None)
         return data
 
     def admission_digest(self) -> str:

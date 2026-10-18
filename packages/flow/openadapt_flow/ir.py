@@ -2042,6 +2042,12 @@ class Workflow(BaseModel):
     # None for every pre-qualification bundle and omitted from its serialized
     # bytes by ``_serialize_compatible`` below.
     qualification: Optional["QualificationProject"] = None
+    #: The rung of the read-back ladder every save must reach for the run to
+    #: be VERIFIED (:mod:`openadapt_flow.readback_ladder`): ``R1`` the screen
+    #: said it saved, ``R2`` reopened and checked on screen, ``R3`` checked in
+    #: the system of record. None means the default, ``R2``; omitted from the
+    #: serialized bytes when unset.
+    minimum_readback: Optional[Literal["R1", "R2", "R3"]] = None
     # -- schema v2 integrity + provenance manifest --------------------------
     # Sealed on ``save`` (per-asset hashes, a whole-bundle content digest, the
     # compiler version, and -- for a certified bundle -- the certifying policy +
@@ -2073,6 +2079,8 @@ class Workflow(BaseModel):
             data.pop("execution_mode", None)
         if self.qualification is None:
             data.pop("qualification", None)
+        if self.minimum_readback is None:
+            data.pop("minimum_readback", None)
         return data
 
     # -- bundle I/O ---------------------------------------------------------
@@ -3746,6 +3754,33 @@ class LoopIterationBinding(BaseModel):
     params: dict[str, Union[str, bool, int, float]] = Field(default_factory=dict)
 
 
+class ReadbackSave(BaseModel):
+    """How far one save was read back (:mod:`openadapt_flow.readback_ladder`)."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    step_id: str
+    rung: Literal["R0", "R1", "R2", "R3"]
+    #: The weakest Flow tier among the save's confirmed checks; None when any
+    #: of its checks did not confirm.
+    flow_tier: Optional[int] = Field(default=None, ge=1, le=4)
+
+
+class ReadbackLadder(BaseModel):
+    """The run's place on the read-back ladder, written to ``report.json``."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    minimum: Literal["R1", "R2", "R3"]
+    #: The weakest rung among the run's saves.
+    reached: Literal["R0", "R1", "R2", "R3"]
+    checked_how: Literal["not_checked", "screen_said_saved", "reopened", "records"]
+    label: str
+    #: True when every save was confirmed but one is below :attr:`minimum`.
+    below_minimum: bool = False
+    saves: list[ReadbackSave] = Field(default_factory=list)
+
+
 class RunReport(BaseModel):
     workflow_name: str
     started_at: str
@@ -3790,6 +3825,14 @@ class RunReport(BaseModel):
         description=(
             "Versioned PHI-free outcome, contract coverage, evidence classes, "
             "model calls, and external-network-call observability."
+        ),
+    )
+    readback: Optional[ReadbackLadder] = Field(
+        default=None,
+        description=(
+            "How far each save was read back (R0 not checked, R1 the screen "
+            "said it saved, R2 reopened, R3 the system of record) against the "
+            "workflow's minimum_readback. None for a run that made no save."
         ),
     )
     # -- Section 3: explicit transaction / reconciliation semantics ------------

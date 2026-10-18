@@ -76,9 +76,7 @@ class VerificationTier(IntEnum):
 
         Tier 1 reads the system of record. Tier 2 reads the application's
         record page in a separate signed-in session. Tiers 3 and 4 re-read
-        through the acting session (different-path or same-surface). A
-        pixel-only Citrix run with neither tier 1 nor tier 2 evidence cannot
-        be ``VERIFIED``.
+        through the acting session (different-path or same-surface).
         """
 
         return int(self) <= int(VerificationTier.INDEPENDENT_SESSION)
@@ -89,8 +87,8 @@ class VerificationTier(IntEnum):
         Until the separate-session read-back existed this returned True for
         tier 2 as well, which labeled a second application session as a
         system-of-record read. It now returns True for tier 1 only. Nothing in
-        Flow's runtime calls it; outcome gating uses
-        :data:`VERIFIED_EFFECT_TIER`, which is unchanged.
+        Flow's runtime calls it; outcome gating uses the workflow's read-back
+        ladder minimum (:mod:`openadapt_flow.readback_ladder`).
         """
 
         return self.reads_system_of_record()
@@ -115,14 +113,13 @@ def oracle_tier_from_verification_tier(
     return 0
 
 
-#: Production ``VERIFIED`` requires this floor or stronger (lower int).
-#: The Standard *gate* still admits persisted-state read-back so a
-#: pixel-only run can execute with halt-on-doubt; the outcome classifier
-#: refuses ``VERIFIED`` unless a read independent of the acting session
-#: (tier 1 system of record, or tier 2 separate-session read-back) confirmed
-#: every consequential effect. Policies that need a system-of-record read
-#: (the ``regulated`` policy pack) set their own tier-1 floor.
-VERIFIED_EFFECT_TIER = VerificationTier.INDEPENDENT_SESSION
+#: The tier floor for production ``VERIFIED`` under the default read-back
+#: ladder minimum, ``R2`` (:mod:`openadapt_flow.readback_ladder`): a reopen of
+#: the record after a state reset (tier 3) or stronger. A workflow's
+#: ``minimum_readback`` moves the floor (``R1``: tier 4, ``R3``: tier 1); the
+#: Regulated profile never goes below tier 2. Kept for callers that import it;
+#: the outcome classifier reads the workflow's minimum.
+VERIFIED_EFFECT_TIER = VerificationTier.PERSISTED_STATE_REACQUISITION
 
 
 def declared_effect_is_independent_read(effect: Any) -> bool:

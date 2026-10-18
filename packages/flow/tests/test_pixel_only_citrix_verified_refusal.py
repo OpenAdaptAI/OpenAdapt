@@ -1,10 +1,13 @@
-"""Pixel-only Citrix cannot be VERIFIED without a system-of-record read.
+"""What a pixel-only Citrix/RDP run can be, by read-back rung.
 
 Browser + independent API is the easy case. A Citrix/RDP window with only
-pixels, a green banner, or an on-screen read-back is the weak case. The
-Standard gate still admits persisted-state so the run can execute with
-halt-on-doubt. The outcome classifier refuses VERIFIED. If a write may
-already have been delivered, the transaction is RECONCILIATION_REQUIRED.
+pixels, a green banner, or an on-screen read-back is the weak case. Under the
+default read-back minimum (R2) a reopen of the record after a state reset
+(tier 3) is enough for Standard; the screen the save left (tier 4) is not.
+Regulated keeps its tier-2 floor. A workflow that sets ``minimum_readback:
+R3`` needs a system-of-record read. When a write may already have been
+delivered and the check was too weak, the transaction is
+RECONCILIATION_REQUIRED.
 
 This is not live Citrix Production evidence.
 """
@@ -26,6 +29,10 @@ from tests.test_execution_profiles import (
     _workflow,
 )
 
+V = (ExecutionOutcome.VERIFIED, TransactionOutcome.VERIFIED)
+U = (ExecutionOutcome.COMPLETED_UNVERIFIED, TransactionOutcome.RECONCILIATION_REQUIRED)
+S, R = ExecutionProfile.STANDARD, ExecutionProfile.REGULATED
+
 
 def _with_tier(report, tier: VerificationTier, *, substrate: str):
     copy = report.model_copy(deep=True)
@@ -35,48 +42,33 @@ def _with_tier(report, tier: VerificationTier, *, substrate: str):
 
 
 @pytest.mark.parametrize(
-    "tier, substrate, expected_execution, expected_transaction",
+    "profile, minimum, tier, substrate, expected",
     [
-        (
-            VerificationTier.INDEPENDENT_SYSTEM,
-            "rest",
-            ExecutionOutcome.VERIFIED,
-            TransactionOutcome.VERIFIED,
-        ),
-        (
-            VerificationTier.INDEPENDENT_SESSION,
-            "session",
-            ExecutionOutcome.VERIFIED,
-            TransactionOutcome.VERIFIED,
-        ),
-        (
-            VerificationTier.PERSISTED_STATE_REACQUISITION,
-            "onscreen",
-            ExecutionOutcome.COMPLETED_UNVERIFIED,
-            TransactionOutcome.RECONCILIATION_REQUIRED,
-        ),
-        (
-            VerificationTier.IMMEDIATE_SCREEN,
-            "onscreen",
-            ExecutionOutcome.COMPLETED_UNVERIFIED,
-            TransactionOutcome.RECONCILIATION_REQUIRED,
-        ),
+        (S, None, VerificationTier.INDEPENDENT_SYSTEM, "rest", V),
+        (S, None, VerificationTier.INDEPENDENT_SESSION, "session", V),
+        (S, None, VerificationTier.PERSISTED_STATE_REACQUISITION, "onscreen", V),
+        (S, None, VerificationTier.IMMEDIATE_SCREEN, "onscreen", U),
+        (S, "R1", VerificationTier.IMMEDIATE_SCREEN, "onscreen", V),
+        (S, "R3", VerificationTier.INDEPENDENT_SYSTEM, "rest", V),
+        (S, "R3", VerificationTier.INDEPENDENT_SESSION, "session", U),
+        (S, "R3", VerificationTier.PERSISTED_STATE_REACQUISITION, "onscreen", U),
+        (R, None, VerificationTier.INDEPENDENT_SYSTEM, "rest", V),
+        (R, None, VerificationTier.INDEPENDENT_SESSION, "session", V),
+        (R, None, VerificationTier.PERSISTED_STATE_REACQUISITION, "onscreen", U),
+        (R, None, VerificationTier.IMMEDIATE_SCREEN, "onscreen", U),
+        (R, "R1", VerificationTier.IMMEDIATE_SCREEN, "onscreen", U),
+        (R, "R3", VerificationTier.INDEPENDENT_SESSION, "session", U),
     ],
 )
-@pytest.mark.parametrize(
-    "profile", [ExecutionProfile.STANDARD, ExecutionProfile.REGULATED]
-)
-def test_production_verified_requires_independent_sor_read(
-    tier,
-    substrate,
-    expected_execution,
-    expected_transaction,
-    profile,
+def test_production_verified_follows_the_readback_minimum(
+    profile, minimum, tier, substrate, expected
 ) -> None:
     workflow = _workflow()
+    workflow.minimum_readback = minimum
     report = _with_tier(
         _verified_production_report(workflow), tier, substrate=substrate
     )
+    expected_execution, expected_transaction = expected
 
     assert classify_execution_outcome(report, workflow, profile) is expected_execution
 
@@ -89,6 +81,12 @@ def test_production_verified_requires_independent_sor_read(
     )
     assert stamped.transaction_billable is (
         expected_transaction is TransactionOutcome.VERIFIED
+    )
+    assert stamped.readback is not None
+    assert stamped.readback.minimum == (minimum or "R2")
+    assert stamped.readback.below_minimum is (
+        expected_execution is not ExecutionOutcome.VERIFIED
+        and stamped.readback.reached < stamped.readback.minimum
     )
 
 
@@ -127,8 +125,8 @@ def test_halt_before_delivery_is_not_verified() -> None:
     assert report.production_eligible is False
 
 
-def test_verified_effect_tier_is_independent_session() -> None:
-    assert VERIFIED_EFFECT_TIER is VerificationTier.INDEPENDENT_SESSION
+def test_verified_effect_tier_is_the_default_r2_floor() -> None:
+    assert VERIFIED_EFFECT_TIER is VerificationTier.PERSISTED_STATE_REACQUISITION
     assert VerificationTier.INDEPENDENT_SYSTEM.is_independent_of_actuation()
     assert VerificationTier.INDEPENDENT_SESSION.is_independent_of_actuation()
     assert not (

@@ -64,18 +64,21 @@ from __future__ import annotations
 
 import getpass
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from openadapt_flow.compiler.effect_mining import _commit_labels
 from openadapt_flow.ir import ActionKind, Step, Workflow
 from openadapt_flow.runtime.effects.effect import (
     Effect,
     EffectKind,
     ReadbackAdmission,
     ReadbackField,
+    ReadbackGuard,
     ReadbackNav,
     ReadbackReset,
     ReadbackResetKind,
@@ -373,6 +376,23 @@ def apply_check(
     save = saves[-1]
 
     renavigation = [_as_nav(step, workflow) for step in check]
+    # A search typed with the reference number the save showed replays with
+    # the number this run's save shows, never the demonstrated one.
+    mined_reference = next(
+        (
+            e.readback.reference
+            for e in save.effects
+            if e.readback is not None and e.readback.reference is not None
+        ),
+        None,
+    )
+    if mined_reference is not None:
+        for index, nav in enumerate(renavigation):
+            typed = (nav.text or "").strip() if nav.action == "type" else ""
+            found = re.search(mined_reference.pattern, typed) if typed else None
+            if found is not None and found.group(1) == typed:
+                renavigation[index] = ReadbackNav(action="type", reference=True)
+    uses_reference = any(nav.reference for nav in renavigation)
     reset = _reset(check, marks)
     # The reset re-fetches the record, so the read takes a different path
     # from the save even when the reset is the check's only step.
@@ -440,6 +460,8 @@ def apply_check(
             demonstrated=True,
             demonstrated_by=_demonstrated_by(recording),
             reset=reset,
+            guard=ReadbackGuard(commit_labels=_commit_labels(task)),
+            reference=mined_reference if uses_reference else None,
         ),
         probe=(
             f"UI read-back shown by demonstration: {len(renavigation)} recorded "

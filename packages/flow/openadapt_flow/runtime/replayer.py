@@ -6198,7 +6198,7 @@ class Replayer:
                 if (
                     error is None
                     and active_verifier is None
-                    and self._all_default_readback(step.effects)
+                    and self._all_default_readback(step.effects, workflow)
                     and not missing_verifier_fault_applied
                 ):
                     # AUTO-DEFAULT (no connector): every declared effect is an
@@ -7932,15 +7932,30 @@ class Replayer:
             "qualified effect tier — refusing to actuate; run aborted"
         )
 
-    def _all_default_readback(self, effects: list["Effect"]) -> bool:
+    def _all_default_readback(
+        self, effects: list["Effect"], workflow: Optional["Workflow"] = None
+    ) -> bool:
         """Whether EVERY declared effect is an auto-derived DIFFERENT-PATH
         on-screen read-back that may be verified out of the box with no
         connector (measured false-CONFIRM ~0). A same-surface read-back or any
         structured system-of-record effect makes this False — those still
-        require a configured verifier (fail-safe)."""
+        require a configured verifier (fail-safe). The one exception is a
+        workflow that sets ``minimum_readback: R1`` explicitly: there a
+        same-surface read-back (the screen said it saved) is what the workflow
+        asked for, so it is wired too."""
         from openadapt_flow.runtime.effects.onscreen import is_default_readback_effect
 
-        return bool(effects) and all(is_default_readback_effect(e) for e in effects)
+        if not effects:
+            return False
+        if all(is_default_readback_effect(e) for e in effects):
+            return True
+        if getattr(workflow, "minimum_readback", None) != "R1":
+            return False
+        return all(
+            e.readback is not None
+            and (e.readback.region is not None or e.readback.fields)
+            for e in effects
+        )
 
     def _auto_readback_verifier(self) -> Any:
         """The backend-bound on-screen read-back verifier for the no-connector

@@ -32,7 +32,7 @@ from openadapt_flow.runtime.authorization import (
     runtime_param_text,
     runtime_params_for_gui,
 )
-from openadapt_flow.verification import VERIFIED_EFFECT_TIER, VerificationTier
+from openadapt_flow.verification import VerificationTier
 
 if TYPE_CHECKING:
     from openadapt_flow.ir import ExecutionOutcomeEnvelope, RunReport, Workflow
@@ -193,6 +193,14 @@ def requires_signed_qualification_admission(
     return execution_profile_contract(value).production
 
 
+def readback_tier_floor(workflow: Any) -> VerificationTier:
+    """The weakest tier that reaches the workflow's ``minimum_readback``."""
+
+    from openadapt_flow.readback_ladder import tier_floor, workflow_minimum
+
+    return tier_floor(workflow_minimum(workflow))
+
+
 def required_effect_tier(
     workflow: Workflow,
     profile: ExecutionProfile | str,
@@ -203,6 +211,15 @@ def required_effect_tier(
     required = contract.minimum_effect_tier
     if not contract.production:
         return required
+    # The workflow's read-back ladder minimum (default R2, tier 3). Standard
+    # takes it as its floor, so an explicit R1 admits a tier-4 check and R3
+    # demands a system-of-record read. Regulated never goes below its own
+    # tier-2 floor.
+    ladder = readback_tier_floor(workflow)
+    if contract.profile is ExecutionProfile.STANDARD or required is None:
+        required = ladder
+    elif int(ladder) < int(required):
+        required = ladder
     project_minimum = getattr(workflow.qualification, "minimum_effect_tier", None)
     if project_minimum is not None:
         candidate = VerificationTier(project_minimum)
@@ -1372,12 +1389,12 @@ def classify_execution_outcome(
     Demo success is always visibly non-production.  Standard and Regulated
     success becomes ``VERIFIED`` only when every executed consequential action
     has a confirmed effect at or above both the workflow's required evidence
-    tier and :data:`~openadapt_flow.verification.VERIFIED_EFFECT_TIER`.
-    Therefore an approved-unverified, immediate-screen, or persisted-state
-    (on-screen different-path) result can never be reported as ``VERIFIED``
-    under either production profile. A pixel-only Citrix run with neither a
-    system-of-record read nor a separate-session read-back cannot be
-    ``VERIFIED``.
+    tier and its read-back ladder minimum (``Workflow.minimum_readback``,
+    default ``R2``; :mod:`openadapt_flow.readback_ladder`). An
+    approved-unverified result is never ``VERIFIED``. Under the default, a
+    re-read of the screen the save left (tier 4) is not ``VERIFIED`` either;
+    a reopen after a state reset (tier 3) is, under Standard. Regulated keeps
+    its tier-2 floor.
     """
 
     resolved = resolve_execution_profile(profile)
@@ -1996,12 +2013,11 @@ def classify_execution_outcome(
                 if requirement is not None
                 else minimum
             )
-            # The Standard gate still admits persisted-state so a pixel-only
-            # Citrix run can execute with halt-on-doubt. VERIFIED itself
-            # requires a read independent of the acting session: tier 1
-            # (system of record) or tier 2 (separate-session read-back).
+            # VERIFIED requires every save to reach the workflow's read-back
+            # ladder minimum (default R2: a reopen, tier 3 or stronger), and
+            # never less than the profile or qualified requirement.
             required_tier = VerificationTier(
-                min(int(required_tier), int(VERIFIED_EFFECT_TIER))
+                min(int(required_tier), int(readback_tier_floor(workflow)))
             )
             try:
                 effect_hash = effect.resolved_contract_hash(
@@ -2029,6 +2045,32 @@ def classify_execution_outcome(
             ):
                 return ExecutionOutcome.COMPLETED_UNVERIFIED
     return ExecutionOutcome.VERIFIED
+
+
+def _readback_ladder(
+    report: RunReport,
+    workflow: Workflow,
+    profile: ExecutionProfile,
+    outcome: ExecutionOutcome,
+) -> Any:
+    """The run's ``readback`` block: rung per save and for the run.
+
+    ``below_minimum`` is kept only where it explains the outcome: a production
+    run that was not ``VERIFIED`` although every save was confirmed.
+    """
+
+    from openadapt_flow.ir import ReadbackLadder
+    from openadapt_flow.readback_ladder import summarize_report
+
+    summary = summarize_report(report, workflow)
+    if summary is None:
+        return None
+    summary["below_minimum"] = bool(
+        summary["below_minimum"]
+        and execution_profile_contract(profile).production
+        and outcome is ExecutionOutcome.COMPLETED_UNVERIFIED
+    )
+    return ReadbackLadder.model_validate(summary)
 
 
 def stamp_execution_outcome(
@@ -2059,6 +2101,7 @@ def stamp_execution_outcome(
     )
     report.execution_profile = resolved.value
     report.execution_outcome = outcome.value
+    report.readback = _readback_ladder(report, workflow, resolved, outcome)
     report.production_eligible = bool(
         execution_profile_contract(resolved).production
         and outcome is ExecutionOutcome.VERIFIED
