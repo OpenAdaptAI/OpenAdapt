@@ -1711,6 +1711,17 @@ def classify_execution_outcome(
         if fault_prefix_review:
             paired_results = paired_results[:-1]
             identity_results = action_results[:-1]
+    if workflow.surfaces:
+        # Multi-surface (docs/MULTI_SURFACE.md): every executed step must
+        # carry the surface it ran on, and it must be the surface the sealed
+        # contract names (for a switch, its target). A result without that
+        # record, or on another surface, is not evidence for this contract.
+        primary_surface = workflow.surfaces[0].id
+        for result, step in paired_results:
+            if result.surface != (step.surface or primary_surface):
+                return ExecutionOutcome.COMPLETED_UNVERIFIED
+    elif any(result.surface is not None for result in report.results):
+        return ExecutionOutcome.COMPLETED_UNVERIFIED
     required_identity_ids = set(report.required_identity_step_ids)
     allowed_required_identity_sets = [expected_required_identity_ids]
     if fault_prefix_review:
@@ -1879,7 +1890,10 @@ def classify_execution_outcome(
                 is not None
             ):
                 return ExecutionOutcome.COMPLETED_UNVERIFIED
-        if step.action is ActionKind.WAIT:
+        # WAIT and SWITCH_SURFACE deliver no input: no actuation path, no
+        # delivery boundary. A switch is verified by its own identity check
+        # and postconditions (docs/MULTI_SURFACE.md).
+        if step.action in (ActionKind.WAIT, ActionKind.SWITCH_SURFACE):
             if result.actuation is not None:
                 return ExecutionOutcome.COMPLETED_UNVERIFIED
         elif result.actuation is None:
@@ -1902,7 +1916,8 @@ def classify_execution_outcome(
 
         effects = effects_for_actuation(step, result.actuation)
         automated_gui = result.actuation in AUTOMATED_GUI_ACTUATIONS or (
-            result.actuation is None and step.action is not ActionKind.WAIT
+            result.actuation is None
+            and step.action not in (ActionKind.WAIT, ActionKind.SWITCH_SURFACE)
         )
         if api_actuation:
             # The API tier bypasses the GUI resolve/settle/act/postcondition
