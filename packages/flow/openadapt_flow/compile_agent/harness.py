@@ -224,11 +224,24 @@ class Harness:
                 point = (op.x, op.y) if op.x is not None else self.computer.pointer
                 if point is None or point[0] is None:
                     continue
-                at = _observe.element_at(self.page, point[0], point[1])
+                at = _observe.element_at(
+                    self.page,
+                    point[0],
+                    point[1],
+                    backend=getattr(
+                        getattr(self.computer, "session", None), "backend", None
+                    ),
+                )
                 if at is None:
                     return ("a click on an element the harness could not read", None)
                 name = str(at.get("name") or "")
-                if at.get("interactive") and _observe.commit_label(name):
+                # A click on a text field only focuses it ("Postal code"
+                # holds the word "post" but commits nothing).
+                if (
+                    at.get("interactive")
+                    and not at.get("editable")
+                    and _observe.commit_label(name)
+                ):
                     return (name, at.get("scope"))
             elif op.kind == "type" and any(ch in (op.text or "") for ch in "\r\n"):
                 focused = _observe.focused_element(self.page) or {}

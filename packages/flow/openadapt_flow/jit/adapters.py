@@ -604,6 +604,12 @@ class CaptureComputer:
 
         return self._session.screenshot()
 
+    @property
+    def session(self) -> Any:
+        """The authoring session the actions are recorded through."""
+
+        return self._session
+
     def execute(self, native: Mapping[str, Any]) -> Observation:
         """Perform one native action and return the new frame.
 
