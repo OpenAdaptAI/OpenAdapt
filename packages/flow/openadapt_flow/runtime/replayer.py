@@ -689,6 +689,9 @@ class Replayer:
         approval_gate: Optional["ApprovalGate"] = None,
         attended_draft_by: Optional[Any] = None,
         draft_key_dir: Optional[Path] = None,
+        layout_drift: Optional[bool] = None,
+        layout_drift_tolerances: Optional[Any] = None,
+        layout_drift_advisor: Optional[Callable[[Any], Optional[str]]] = None,
     ) -> None:
         # A JIT draft (openadapt_flow.jit) runs only once admitted, or attended
         # by a named person (the canary). Checked in run().
@@ -727,6 +730,16 @@ class Replayer:
             )
 
         self.backend = backend
+        # Font/layout drift check (runtime.layout_drift) on the frame each
+        # step acts on, against the fingerprint the compiler stored in the
+        # bundle. None = on for remote-desktop replays (rdp/citrix targets or
+        # the FreeRDP backend), off otherwise; True/False forces it. The
+        # advisor only annotates a halt; it is never called on a match.
+        self.layout_drift = layout_drift
+        self.layout_drift_tolerances = layout_drift_tolerances
+        self.layout_drift_advisor = layout_drift_advisor
+        self._layout_fingerprints: Optional[dict[str, Any]] = None
+        self._layout_target_kind: Optional[str] = None
         # Defaulted to the ``openadapt_flow.vision`` module above when None, so it
         # is always populated by the time replay runs; typed Any (a namespace-like
         # facade exposing find_template/ocr/wait_settled/...).
@@ -1344,6 +1357,10 @@ class Replayer:
         managed_refusal = self._managed_dispatch_refusal()
         if managed_refusal is not None:
             raise ValueError(managed_refusal)
+        # Layout drift: remember the target kind and reload the recorded
+        # fingerprints for this run.
+        self._layout_target_kind = execution_target_kind
+        self._layout_fingerprints = None
         production_refusal = self._production_qualification_refusal(workflow)
         if production_refusal is not None:
             raise ValueError(production_refusal)
@@ -6099,6 +6116,18 @@ class Replayer:
                 run_dir, evidence_step_id, "before", before_png
             )
             last_frame = before_png
+            drift_error = self._layout_drift_error(
+                step, before_png, bundle_dir, workflow
+            )
+            if drift_error is not None:
+                result.error = drift_error
+                result.safety_halt = True
+                result.failure_category = "safety_halt"
+                result.after_png = self._save_step_png(
+                    run_dir, evidence_step_id, "after", last_frame
+                )
+                result.elapsed_ms = (time.monotonic() - t0) * 1000.0
+                return result
             resolution, matched_region, error = self._resolve_step(
                 step, before_png, bundle_dir, workflow
             )
@@ -14159,6 +14188,74 @@ class Replayer:
         if not rel:
             return None
         return self._asset_bytes(bundle_dir, rel)
+
+    def _layout_drift_on(self, workflow: Workflow) -> bool:
+        if self.layout_drift is not None:
+            return self.layout_drift
+        kind = self._layout_target_kind or workflow.surface
+        if kind in ("rdp", "citrix"):
+            return True
+        return type(self.backend).__name__ == "FreeRDPBackend"
+
+    def _layout_drift_error(
+        self,
+        step: Step,
+        frame_png: bytes,
+        bundle_dir: Optional[Path],
+        workflow: Workflow,
+    ) -> Optional[str]:
+        """Halt message when the frame drifted from the recorded fingerprint.
+
+        Steps without a recorded fingerprint (older bundles, non-click steps)
+        are not checked. Model-free: the advisor, when configured, is called
+        only after drift is found and never changes the verdict.
+        """
+        if bundle_dir is None or not self._layout_drift_on(workflow):
+            return None
+        from openadapt_flow.runtime import layout_drift as drift_mod
+
+        if self._layout_fingerprints is None:
+            self._layout_fingerprints = drift_mod.load_bundle_fingerprints(
+                self._asset_bytes(
+                    Path(bundle_dir), drift_mod.FINGERPRINT_ASSET, workflow=workflow
+                )
+            )
+        recorded = self._layout_fingerprints.get(step.id)
+        if recorded is None:
+            return None
+        transport = getattr(self.backend, "transport", None)
+        profile = getattr(transport, "profile", None)
+        live_profile = getattr(profile, "sha256", None)
+        try:
+            import io
+
+            from PIL import Image
+
+            with Image.open(io.BytesIO(frame_png)) as img:
+                viewport = (int(img.width), int(img.height))
+        except Exception:  # noqa: BLE001 - an undecodable frame is drift
+            viewport = (0, 0)
+        live = drift_mod.fingerprint(
+            self.vision.ocr(frame_png),
+            viewport,
+            landmarks=list(recorded.landmarks),
+            profile_sha256=(live_profile if isinstance(live_profile, str) else None),
+        )
+        try:
+            drift_mod.check_layout(
+                recorded,
+                live,
+                tolerances=self.layout_drift_tolerances or drift_mod.Tolerances(),
+                advisor=self.layout_drift_advisor,
+            )
+        except drift_mod.LayoutDriftHalt as halt:
+            advice = f" Advice: {halt.verdict.advice}" if halt.verdict.advice else ""
+            return (
+                f"Layout drift before step '{step.id}' ({step.intent}): "
+                f"{drift_mod.describe(halt.verdict)} — the screen no longer "
+                f"matches the recording; refusing to act.{advice}"
+            )
+        return None
 
     def _asset_bytes(
         self,

@@ -619,6 +619,11 @@ class RuntimeSection(BaseModel):
     known_ids_confirmation_path: Optional[str] = None
     #: Oldest export (by its export time) replay will use.
     known_ids_max_age_hours: float = Field(default=24.0, gt=0)
+    #: Font/layout drift check before each recorded click step
+    #: (:mod:`openadapt_flow.runtime.layout_drift`). None (default) turns it on
+    #: for remote-desktop replays (``rdp``/``citrix``) and off elsewhere;
+    #: true or false forces it.
+    layout_drift_check: Optional[bool] = None
     #: Operator-selected ("bring your own") model-grounding endpoint (the VLM
     #: fallback rung). Off by default; configuring it never enables egress on its
     #: own (``allow_model_grounding`` still governs whether anything leaves).
@@ -1148,6 +1153,9 @@ def build_replayer(
         )
     return Replayer(
         backend,
+        layout_drift=(
+            runtime_config.layout_drift_check if runtime_config is not None else None
+        ),
         grounder=grounder,
         identity_vlm=appliance.identity_vlm if appliance else None,
         known_ids=known_ids,
