@@ -422,7 +422,7 @@ def _step_evidence(step: Step) -> dict:
 
 
 def _build_prompt(workflow: Workflow, captured_state: Optional[dict]) -> str:
-    payload = {
+    payload: Any = {
         "workflow_name": workflow.name,
         "declared_params": {
             name: spec.type.value for name, spec in workflow.param_specs.items()
@@ -430,6 +430,12 @@ def _build_prompt(workflow: Workflow, captured_state: Optional[dict]) -> str:
         "steps": [_step_evidence(s) for s in workflow.steps],
         "captured_state": captured_state or {},
     }
+    # Typed values, OCR labels and the workflow name can hold patient data.
+    # Scrub them before the model request, or refuse when the privacy extra is
+    # missing (privacy.PrivacyNotAvailable).
+    from openadapt_flow import privacy
+
+    payload = privacy.prepare_outbound(payload, "compile annotation request")
     schema_hint = {
         "steps": [
             {

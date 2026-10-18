@@ -179,9 +179,39 @@ is installed, and it deletes the audio after transcription unless you set
 
 A recording can contain anything that was on screen or typed, including
 passwords and personal data. It stays on your computer. Capture uploads
-nothing unless you run `capture share` or set `send_profile=True`. The
-`privacy` extra installs `openadapt-privacy` but doesn't remove anything from
-a recording by itself.
+nothing unless you run `capture share` or set `send_profile=True`, and neither
+sends the raw recording by default.
+
+`capture share send` scrubs a copy of the recording and sends only the copy.
+Scrubbing needs the `privacy` extra:
+
+```bash
+pip install "openadapt-capture[privacy,share]"
+python -m spacy download en_core_web_sm
+capture share send ./my_recording
+```
+
+The copy keeps the recording database with text and accessibility values
+scrubbed and screenshots redacted. It leaves out typed keys (a name typed one
+key at a time can't be recognized), audio, video, and any file type that can't
+be scrubbed, and lists what it left out in `SCRUB_MANIFEST.json`. Scrubbing is
+automatic and can miss data, so review the copy before you share it further.
+Without the `privacy` extra, `capture share send` refuses and sends nothing.
+
+To send the raw recording, for example synthetic demo data, opt out
+explicitly:
+
+```bash
+capture share send ./my_recording --unscrubbed --reason "synthetic demo data"
+```
+
+The opt-out is appended to `share-unscrubbed.jsonl` in Capture's data folder
+(`~/Library/Application Support/ai.openadapt.capture` on macOS, or
+`OPENADAPT_CAPTURE_DATA_DIR`), and the archive carries an
+`UNSCRUBBED_SHARE.json` file so the receiver knows.
+
+`send_profile=True` sends only the numbers and flags from `profiling.json`;
+folder names and window titles are withheld.
 
 Shadow-mode pattern mining, which notices repeated tasks and offers a draft,
 is off by default, needs the person's acknowledgement to turn on, and keeps
@@ -225,7 +255,7 @@ are qualified are covered in [docs/COMPLIANCE.md](https://github.com/OpenAdaptAI
 | --- | --- |
 | `transcribe-fast` | Local transcription with faster-whisper |
 | `transcribe` | Local transcription with openai-whisper |
-| `privacy` | The `openadapt-privacy` library, for your own integration |
+| `privacy` | `openadapt-privacy`, which `capture share send` needs to scrub a recording |
 | `share` | `capture share`, using Magic Wormhole |
 | `linux` | Accessibility observation on Linux (AT-SPI) |
 | `all` | All of the above |

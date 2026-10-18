@@ -219,11 +219,11 @@ def build_agent_request(
 ) -> dict[str, Any]:
     """A request the calling agent can answer, with identifiers scrubbed.
 
-    Each line is passed through ``openadapt_flow.privacy.scrub_text``
-    (openadapt-privacy). The agent sees placeholders, not identifiers, and
-    answers with the line number that carries each field. Set
-    ``OPENADAPT_FLOW_SCRUB=on`` to refuse when openadapt-privacy is not
-    installed instead of sending plaintext.
+    Each line is scrubbed with openadapt-privacy. The agent sees
+    placeholders, not identifiers, and answers with the line number that
+    carries each field. Without openadapt-privacy, or when the scrubber fails
+    on a line, this raises and nothing is printed; it never falls back to
+    plaintext, whatever ``OPENADAPT_FLOW_SCRUB`` says.
     """
     from openadapt_flow import privacy
 
@@ -231,11 +231,16 @@ def build_agent_request(
         raise RuntimeError(
             "agent intake requires scrubbing; OPENADAPT_FLOW_SCRUB is off"
         )
-    if not privacy.text_scrubbing_enabled():
+    try:
+        scrubber = privacy.require_outbound_scrubber("the intake agent request")
+    except privacy.PrivacyNotAvailable as exc:
         raise RuntimeError(
             "agent intake requires openadapt-privacy: pip install 'openadapt-flow[privacy]'"
-        )
-    lines = [f"{i + 1}: {privacy.scrub_text(ln)}" for i, ln in enumerate(doc.lines)]
+        ) from exc
+    lines = [
+        f"{i + 1}: {privacy.scrub_outbound_text(ln, scrubber)}"
+        for i, ln in enumerate(doc.lines)
+    ]
     return {
         "instructions": (
             "For each field, return the 1-based line number whose text carries "
