@@ -6,9 +6,10 @@ right-record check before the save and the record check after it stay the
 same. If anything the API step depends on has changed, the recorded GUI
 steps run instead.
 
-On the local OpenEMR referral, the API step took the median run from
-[MEASURED_BROWSER] to [MEASURED_API], with the same record check
-([benchmark data](../benchmark/openemr_api_tier/README.md)).
+Its speed is measured on the local OpenEMR referral as arm `program_api` of
+the benchmark scoreboard, against the same program on the GUI (`program`),
+with the same record check. The harness and the earlier spike are in
+[benchmark/openemr_api_tier](../benchmark/openemr_api_tier/README.md).
 
 ## How to use it
 
