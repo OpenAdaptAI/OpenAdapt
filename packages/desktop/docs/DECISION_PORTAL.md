@@ -35,28 +35,77 @@ its reviewed operator copy.
 
 ## Current interface
 
-The request and result are visually different. A request shows the typed reason
-for the pause, a retained application frame when the local evidence policy
-permits it, what the runner will recheck, and only the actions permitted by the
-signed task. The result replaces the request after the runner returns its typed
-receipt. It does not repeat the same screenshot as though it were new evidence.
+The phone shows one card per decision. A card asks one question and shows only
+what that answer changes. Paused runs and saves waiting for approval share the
+same card and the same rules:
+
+- **Two visible answers.** Buttons are the main way to answer, sized at least
+  44 px. Swiping the card is a shortcut for the same two buttons: right for the
+  answer that lets the work go on, left to stop or not save. The arrow keys do
+  the same. Every other allowed answer, the full screenshot and the details are
+  one tap away under **⋯**.
+- **Five seconds to undo.** An answer is held on the phone for five seconds
+  before it is sent. Undo sends nothing. If the phone goes offline, the page is
+  closed, or the request expires during that time, the answer is dropped.
+  Nothing is queued to send later.
+- **Can't be undone means match and hold.** When the signed task's
+  `risk_class` is `irreversible`, a swipe or tap only arms the answer. The
+  person taps one fact from the card (a value with a digit in it, such as a
+  date or amount, or the step number) and then holds the button for about a
+  second. There is no undo after the hold.
+- **The filled answer.** The continuing answer is filled only when it is the
+  single continuing answer and the step can be undone. Nothing is filled on an
+  irreversible step.
+- **What will be saved.** A save shows the field values it writes, in large
+  monospace type, with the value each replaces struck through. The exact
+  screenshot is behind a tap. When Flow sends no field list, the card shows the
+  screenshot itself. Save is offered only after that screenshot has loaded as a
+  PNG whose SHA-256 matches the request's `screenshot_sha256`. No picture, no
+  approval; Don't save stays available.
+- **Results.** A result that needs nothing more from the person (approved,
+  not saved, checks passed, run stopped) moves the deck on and stays in the
+  receipts list. A result that does (paused again, result uncertain, unknown
+  outcome) stays on screen until the person acknowledges it. Receipts show
+  the time Flow recorded the answer, not the phone's clock.
+- **Dark first.** The phone follows the system light or dark setting, and
+  respects reduced motion.
 
 <table>
   <tr>
-    <th>Request before an operator action</th>
-    <th>Result after the runner rechecks the live application</th>
+    <th>Approve a save (dark)</th>
+    <th>Approve a save (light)</th>
   </tr>
   <tr>
-    <td><img src="assets/mobile-decision/request.png" width="320" alt="Phone decision request with a retained synthetic OpenEMR frame"></td>
-    <td><img src="assets/mobile-decision/result-checks-passed.png" width="320" alt="Phone decision result after live checks passed"></td>
+    <td><img src="assets/mobile-decision/save-dark.png" width="300" alt="Phone card with synthetic data asking Save this?, the four field values it will write, and Don't save and Save buttons, dark theme"></td>
+    <td><img src="assets/mobile-decision/save-light.png" width="300" alt="The same save card in the light theme"></td>
+  </tr>
+  <tr>
+    <th>A paused run</th>
+    <th>A save that can't be undone, armed</th>
+  </tr>
+  <tr>
+    <td><img src="assets/mobile-decision/run-dark.png" width="300" alt="Phone card for a paused run with the retained screen labelled not live, and Stop run and Continue buttons"></td>
+    <td><img src="assets/mobile-decision/save-irreversible-armed-dark.png" width="300" alt="Irreversible claim submission: the person must tap the matching date, then hold to submit"></td>
   </tr>
 </table>
 
 These images are deterministic renders of the exact Desktop shell at the
 commit recorded in
 [`assets/mobile-decision/provenance.json`](assets/mobile-decision/provenance.json).
-They use synthetic data and a public OpenEMR reference frame. They are not a
-customer run and do not claim that the complete workflow reached `VERIFIED`.
+They use synthetic data, and the form in the screenshot is a synthetic page.
+They are not a customer run.
+
+### What a 404 or 403 means
+
+- `401` or `403` from any portal route: the phone goes back to pairing. Neither
+  records an answer.
+- A `404` carrying one of Flow's closed codes (`request_not_waiting`,
+  `request_unknown`, `already_answered`) means that save is gone. The phone
+  says it is no longer waiting.
+- Any other `404` means the computer isn't answering that route right now (an
+  older console, or nothing attending it). It is never shown as "nothing
+  waiting" or "gone". A save list that returns `404` makes the empty screen say
+  that saves aren't reaching the phone.
 
 ## Add a human decision during qualification
 
@@ -212,7 +261,11 @@ screens build on.
 Flow is called. `presentation` carries `question`, `step_intent`,
 `step_index`, `step_class`, `explanation`, `screenshot_sha256`,
 `decline_reasons` and `expires_at`. Its `screenshot_route` names the Flow
-console path; the phone loads the portal's `.../frame` route above.
+console path; the phone loads the portal's `.../frame` route above. A newer
+Flow also sends `presentation.fields`, a list of `{label, before, after}` for
+the values the save writes, bound into the request digest and served
+`no-store`. The phone shows those values when they are present and the
+screenshot when they are not. A malformed list is dropped as a whole.
 
 The task's `allowed_actions` are `verify_and_resume` (approve this save) and
 `reject` (don't save). The POST body is
@@ -335,41 +388,31 @@ drives the shipped `app.js` in a DOM and pins each of those outcomes.
 
 ## Synthetic phone screenshots
 
-Use the deterministic fixture generator when a document or demo needs current
-phone screens. It contains synthetic labels and closed receipt results only. It
+Use the deterministic fixture generator when a document, review or demo needs
+current phone screens. It drives the real shell with a stubbed transport and
+real taps and drags, and renders every state in dark and light at 390x844. The
+form in the save screenshots is a synthetic page the script renders itself. It
 does not start a runner and does not read customer evidence:
 
 ```bash
 uv run --extra build python scripts/capture_portal_scenarios.py \
-  --out /tmp/openadapt-desktop-phone-fixtures
+  --out /tmp/openadapt-phone-states
 ```
 
-The command writes one pre-action and one result image for each of the six
-operator request types: identity, ambiguity, human step, saved-result check,
-delivery uncertainty, and a declared optional-step halt. The set covers each
-portable action result. The files
-include `/tmp/openadapt-desktop-phone-fixtures/delivery-uncertain.png` and
-`/tmp/openadapt-desktop-phone-fixtures/delivery-uncertain-reconcile-result.png`.
-The generator requires `--out` so generated images do not enter the Desktop
-package or source tree by accident.
+The command writes `<state>-dark.png` and `<state>-light.png` for each state in
+`CAPTURES`: pairing, a save, a queue of three, mid-swipe both ways, the undo
+window, decline reasons, screenshot-only, the full screen, details, no
+picture, an irreversible save (initial, armed, matched, holding), changed,
+gone, not attended, a paused run and its other answers, paused again, result
+uncertain, not accepted, offline, expired, all clear (empty and with a
+receipt), saves not attended, and unreachable. `--only <state> ...` limits the
+run. The generator requires `--out` so generated images do not enter the
+Desktop package or source tree by accident.
 
-To show the retained application context inside the phone, provide a raster
-frame from a public reference run:
-
-```bash
-uv run --extra build python scripts/capture_portal_scenarios.py \
-  --out /tmp/openadapt-desktop-phone-fixtures \
-  --frame /path/to/public-reference-run-frame.png
-```
-
-The retained frame is visible in each request image. Use only a public
-reference frame with synthetic data. The portal labels the frame as historical
-and tells the operator to use the live application before answering.
-
-The repository keeps two reviewed reference captures under
-`docs/assets/mobile-decision/`: one request and one result. Their provenance
-records the exact Desktop commit, generator, source frame, dimensions, and
-SHA-256 values. Regenerate and review them when the shipped phone shell changes.
+The repository keeps reviewed reference captures under
+`docs/assets/mobile-decision/`. Their provenance records the exact Desktop
+commit, generator, dimensions, and SHA-256 values. Regenerate and review them
+when the shipped phone shell changes.
 
 ## Notifications
 

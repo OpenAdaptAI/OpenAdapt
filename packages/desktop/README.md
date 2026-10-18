@@ -154,15 +154,17 @@ doesn't count as done.
 
 ## Answering a stop from your phone
 
-When a run stops and needs a person, you can answer from your phone. The app
-pairs the phone with a one-time QR code and a matching code. The phone shows
-what the run stopped on, as far as your settings allow, and only the choices
-allowed at that point. Your answer goes back to the computer running the task,
-which checks the live app again before it acts. If that check fails, the run
-stays paused.
+When a run stops and needs a person, or a save waits for your approval, you can
+answer from your phone. The app pairs the phone with a one-time QR code and a
+matching code. The phone shows one card per decision: what the run stopped on,
+or the values a save will write, and only the choices allowed at that point.
+Tap or swipe to answer, with five seconds to undo. A step that can't be undone
+needs you to match one fact and hold. Your answer goes back to the computer
+running the task, which checks the live app again before it acts. If that check
+fails, the run stays paused.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/OpenAdaptAI/openadapt-desktop/main/docs/assets/mobile-decision/request.png" width="260" alt="OpenAdapt Desktop phone page with synthetic data: an identity check, the stopped screen, and four allowed actions">
+  <img src="https://raw.githubusercontent.com/OpenAdaptAI/openadapt-desktop/main/docs/assets/mobile-decision/save-dark.png" width="260" alt="OpenAdapt Desktop phone card with synthetic data: Save this?, the field values it will write, and Don't save and Save buttons">
 </p>
 
 [docs/DECISION_PORTAL.md](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/docs/DECISION_PORTAL.md)
