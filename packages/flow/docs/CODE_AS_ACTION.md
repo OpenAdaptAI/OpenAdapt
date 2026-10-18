@@ -198,19 +198,12 @@ Each one wrongly refused, or failed to gate, a step on OpenEMR:
 
 ## Measured
 
-**Scoreboard, arm 7** (the quotable source,
-[benchmark/scoreboard](../benchmark/scoreboard/), protocol 2026-10-18.1,
-[#1307](https://github.com/OpenAdaptAI/OpenAdapt/pull/1307)): first runs of
-the code agent, read back from the system of record.
-
-| | items | correct | cost / item | tokens / item |
-| --- | ---: | ---: | ---: | ---: |
-| MockMed | 5 | 5 | $0.0095 | 9,911 |
-| OpenEMR referral | 5 | 4 (and 1 safe stop on hand review) | $0.041 | 69,806 |
-
-For reference, arm 2 (the screenshot agent's first run under OpenAdapt) has
-one run each: MockMed $0.013 and 40,632 tokens, OpenEMR $0.10 and 158,278
-tokens. All arm 7 rows are untimed (host load above 12).
+**Scoreboard, arm 7** is the quotable source
+([benchmark/scoreboard](../benchmark/scoreboard/), protocol 2026-10-18.1,
+[#1307](https://github.com/OpenAdaptAI/OpenAdapt/pull/1307)). Its rows are run
+by the scoreboard's single runner under the load gate; until they are in
+`scoreboard.json`, there is no arm 7 figure to quote. Trial runs made while
+building the arm are set aside in `benchmark/scoreboard/superseded/`.
 
 **Exploratory measurement** (before the scoreboard; its own runner):
 

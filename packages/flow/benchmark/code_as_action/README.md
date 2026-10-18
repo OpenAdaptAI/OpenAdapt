@@ -2,7 +2,7 @@
 
 > **Quotable figures come from the scoreboard** (`benchmark/scoreboard`, arm 7,
 > [#1307](https://github.com/OpenAdaptAI/OpenAdapt/pull/1307)), built by
-> `python -m scoreboard.build` from committed rows. This folder is the earlier,
+> `python -m scoreboard.build` from rows its single runner commits. This folder is the earlier,
 > exploratory measurement made before the scoreboard existed. It used its own
 > runner and is kept as raw data.
 
