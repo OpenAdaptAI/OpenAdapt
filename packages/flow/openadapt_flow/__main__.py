@@ -9942,6 +9942,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_jit_parser(sub)
 
+    from openadapt_flow.crystallize.cli import add_parser as _add_crystallize_parser
+
+    _add_crystallize_parser(sub)
+
     from openadapt_flow.cli_fleet import register_fleet_parser
 
     register_fleet_parser(sub)
