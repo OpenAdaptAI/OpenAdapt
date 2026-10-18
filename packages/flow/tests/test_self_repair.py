@@ -52,17 +52,32 @@ def mockmed(tmp_path_factory) -> Iterator[tuple[str, Path]]:
     from openadapt_flow.backends._browser_process import shared_browser
     from openadapt_flow.compiler import compile_recording
     from openadapt_flow.mockmed.fault_server import serve
-    from openadapt_flow.tutorial import record_tutorial
+    from openadapt_flow.tutorial import TutorialError, certify_tutorial, record_tutorial
 
     root = tmp_path_factory.mktemp("self-repair")
     base_url, _db, stop = serve()
     try:
         with shared_browser(headless=True):
-            record_tutorial(base_url, root / "recording")
-            compile_recording(
-                root / "recording", root / "bundle", name="triage", mine_effects=True
-            )
-            yield base_url, root / "bundle"
+            # On a loaded machine the recorder now and then catches the URL
+            # change of the first click, and the compiled bundle then fails
+            # the tutorial's certification. Record again, at most three times,
+            # until it certifies, as the tutorial would require.
+            for attempt in range(3):
+                take = root / f"take-{attempt}"
+                record_tutorial(base_url, take / "recording")
+                workflow = compile_recording(
+                    take / "recording",
+                    take / "bundle",
+                    name="triage",
+                    mine_effects=True,
+                )
+                try:
+                    certify_tutorial(workflow)
+                    break
+                except TutorialError:
+                    if attempt == 2:
+                        raise
+            yield base_url, take / "bundle"
     finally:
         stop()
 
