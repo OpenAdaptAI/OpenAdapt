@@ -269,3 +269,38 @@ def test_seal_pointers_come_from_the_run_receipt(tmp_path) -> None:
     # Unsealed reads stay unsealed.
     plain, _ = _run(tmp_path / "plain", [_read_step()], _vision("AC-1042"))
     assert field_reads_from_report(plain)[0].seal is None
+
+
+def test_gate_with_no_fields_halts_when_nothing_was_read(tmp_path) -> None:
+    step = _write_step("unchecked").model_copy(
+        update={"read_gate": GradeGate(min_grade="unchecked")}
+    )
+    report, backend = _run(tmp_path, [step], _vision("x"))
+    assert not report.success
+    assert "no fields" in (report.results[-1].error or "")
+    assert ("press", "Enter") not in backend.actions
+
+
+def test_api_bound_write_checks_the_gate_before_the_api(tmp_path) -> None:
+    from openadapt_flow.ir import ApiBinding
+
+    class _NoCalls:
+        def __getattr__(self, name):
+            raise AssertionError(f"the API was used: {name}")
+
+    write = _write_step("same_screen").model_copy(
+        update={
+            "api_binding": ApiBinding(
+                method="POST", url_template="http://127.0.0.1:9/save", body_template={}
+            )
+        }
+    )
+    backend = FakeBackend()
+    bundle = tmp_path / "bundle"
+    (bundle / "templates").mkdir(parents=True, exist_ok=True)
+    workflow = Workflow(name="read-wf", steps=[_read_step(), write])
+    report = Replayer(backend, vision=_vision("AC-1042"), api_actuator=_NoCalls()).run(
+        workflow, params={}, bundle_dir=bundle, run_dir=tmp_path / "run"
+    )
+    assert not report.success
+    assert "below it: account_number (unchecked)" in (report.results[-1].error or "")

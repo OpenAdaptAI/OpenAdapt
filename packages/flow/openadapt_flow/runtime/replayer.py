@@ -3336,9 +3336,13 @@ class Replayer:
                 report=report,
                 workflow=workflow,
             )
+        # Values read before the loop stay in scope; values a row reads do
+        # not carry over to the next row's read_gate.
+        reads_before_loop = dict(self._field_reads)
         for i, row in enumerate(rows):
             iter_params = {**params, **row}
             _record_loop_iteration(report, state.id, i, row)
+            self._field_reads = dict(reads_before_loop)
             self._walk_graph(
                 body,
                 graph_id=loop.body,
@@ -5512,9 +5516,11 @@ class Replayer:
                 cursor = frames[depth + 1].loop
                 rows = cursor.rows if cursor is not None else []
                 start_i = (cursor.row_index + 1) if cursor is not None else 0
+                reads_before_loop = dict(self._field_reads)
                 for i in range(start_i, len(rows)):
                     iter_params = {**params, **rows[i]}
                     _record_loop_iteration(report, state.id, i, rows[i])
+                    self._field_reads = dict(reads_before_loop)
                     self._walk_graph(
                         body,
                         graph_id=loop.body,
@@ -6004,6 +6010,15 @@ class Replayer:
                 effect_verifier=api_effect_verifier,
                 effects=api_effects,
             )
+        if step.read_gate is not None:
+            # Checked before any actuation path: an API-bound write must not
+            # skip the gate that _act applies to a GUI write.
+            refusal = self._read_gate_refusal(step, result)
+            if refusal is not None:
+                result.ok = False
+                result.error = refusal
+                result.elapsed_ms = (time.monotonic() - t0) * 1000.0
+                return result
         if (
             qualification_path != "gui"
             and self.api_actuator is not None
