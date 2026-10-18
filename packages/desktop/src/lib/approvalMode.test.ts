@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  approverSentence,
   confirmedButNeedsLook,
   notAvailableLine,
   offAutomatically,
@@ -153,5 +154,44 @@ describe("shared switch cases (openadapt_desktop/work_items.py reads the same fi
     expect(
       confirmedButNeedsLook({ result: item.key, approval: item.approval as ItemApproval }),
     ).toBe(item.confirmed_but_needs_look);
+  });
+});
+
+describe("who decided each save", () => {
+  const person = {
+    decision: "approved" as const,
+    route: "desktop_run_it" as const,
+    kind: "person" as const,
+    id: "aaaaaaaa-0000-4000-8000-000000000003",
+    policy_ref: null,
+    signed_in: true,
+    verified: true,
+  };
+
+  it("names a person in Run it or on their phone", () => {
+    expect(approverSentence(person)).toBe("Approved by a signed-in person in Run it");
+    expect(approverSentence({ ...person, route: "cloud_phone" })).toBe(
+      "Approved by a signed-in person on their phone",
+    );
+    expect(approverSentence({ ...person, decision: "declined", signed_in: false })).toBe(
+      "Declined by a person signed out of Cloud in Run it",
+    );
+  });
+
+  it("names a delegate and the grant a person signed", () => {
+    const agent = {
+      ...person,
+      route: "local_cli" as const,
+      kind: "agent" as const,
+      id: "agent:approver-bot",
+      policy_ref: `sha256:${"e".repeat(64)}`,
+      signed_in: false,
+    };
+    expect(approverSentence(agent)).toBe(
+      "Approved by agent agent:approver-bot, under a grant a person signed (eeeeeeeeeeee…)",
+    );
+    expect(approverSentence({ ...agent, policy_ref: null, verified: false })).toMatch(
+      /can't verify, so a person should look/,
+    );
   });
 });

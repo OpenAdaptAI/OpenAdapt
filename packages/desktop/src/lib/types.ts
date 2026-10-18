@@ -221,6 +221,22 @@ export interface ItemApproval {
   failed_check: { code: string; passed: boolean; detail: string } | null;
   post_checks: { verified: boolean; whole_run_clean: boolean };
   saves_without_person: number;
+  /** Who decided each save, oldest first (absent from older engines). */
+  approvers?: ItemApprover[];
+}
+
+/** One answer to a save: a person, or a delegate a person named in a signed grant. */
+export interface ItemApprover {
+  decision: "approved" | "declined";
+  route: "desktop_run_it" | "cloud_phone" | "local_cli" | "webhook" | "mcp" | "unknown";
+  kind: "person" | "agent" | "rule" | "system" | "unknown";
+  /** A Cloud user id for a signed-in person, or the delegate's opaque id. */
+  id: string | null;
+  /** sha256: of the person-signed grant a delegate acted under. */
+  policy_ref: string | null;
+  signed_in: boolean;
+  /** False when the row doesn't hold together (a delegate without a grant, say). */
+  verified: boolean;
 }
 
 /** Why "Only ask a person about problems" turned off (design 7.6). */
