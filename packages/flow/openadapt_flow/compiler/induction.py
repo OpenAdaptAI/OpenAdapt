@@ -311,6 +311,10 @@ class NarratedGuard(BaseModel):
     """
 
     location: str = Field(description="opt_<column> or divergence_<column>")
+    guard_id: str = Field(
+        default="",
+        description="Digest of the guard; accept it as <location>@<guard_id>",
+    )
     sentence: str = Field(description="The scrubbed sentence")
     recording: int = Field(description="Index of the recording that said it")
     step_id: Optional[str] = None
@@ -415,7 +419,8 @@ class InductionResult(BaseModel):
             else:
                 verdict = "proposed, NOT trusted"
             lines.append(
-                f"  [narrated]  {ng.location}: {ng.sentence!r} -> {ng.rule} -- {verdict}"
+                f"  [narrated]  {ng.location}@{ng.guard_id}: {ng.sentence!r} -> "
+                f"{ng.rule} -- {verdict}"
             )
         if self.probe_target is not None:
             lines.append(
@@ -1054,7 +1059,7 @@ def induce_program(
             is the only caller that sets it). ``"incidental"`` drops the step;
             ``"conditional"`` keeps it guarded on its own presence. A point
             not listed here is refused exactly as without probing.
-            ``"narrated"`` certifies the guard narration suggested there.
+            ``"narrated@<guard_id>"`` certifies that narrated guard.
         narration: One :class:`~openadapt_flow.narration.Narration` (or None)
             per trace. Default: read ``narration.json`` from each trace that is
             a recording or bundle directory. A sentence lined up near a branch
@@ -1067,8 +1072,10 @@ def induce_program(
         interpreter: Optional compile-time
             :class:`~.narration_rules.NarrationInterpreter` for sentences the
             parser cannot read. Its answer is checked like any narrated guard.
-        accepted_narration: ``{location: person}`` -- narrated guards a
-            person accepted. A guard a recording contradicts stays refused.
+        accepted_narration: ``{"<location>@<guard_id>": person}`` --
+            narrated guards a person accepted. The guard id pins the exact
+            guard the report showed; a different guard at that location is
+            not accepted. A guard a recording contradicts stays refused.
 
     Returns:
         An :class:`InductionResult` with the induced program (or a refusal) and
@@ -2048,6 +2055,7 @@ def _decide_narrated(
         screen_texts=screen_texts,
     )
     certified_by = accepted_by = None
+    pinned = f"{location}@{cand.guard_id}"
     if agreement.contradict:
         status = "contradicted"
         detail = (
@@ -2058,11 +2066,11 @@ def _decide_narrated(
     elif agreement.all_agree:
         status, certified_by = "certified", "recordings_agree"
         detail = f"all {len(agreement.agree)} recordings agree"
-    elif probe_resolutions.get(location) == "narrated":
+    elif probe_resolutions.get(location) == f"narrated@{cand.guard_id}":
         status, certified_by = "certified", "probe"
         detail = "replaying it on the declared test copy produced every recorded effect"
-    elif accepted.get(location):
-        status, certified_by, accepted_by = "certified", "person", accepted[location]
+    elif accepted.get(pinned):
+        status, certified_by, accepted_by = "certified", "person", accepted[pinned]
         detail = f"accepted by {accepted_by}"
     else:
         status = "proposed"
@@ -2081,6 +2089,7 @@ def _decide_narrated(
         }
     return NarratedGuard(
         location=location,
+        guard_id=cand.guard_id,
         sentence=cand.sentence,
         recording=cand.trace,
         step_id=cand.step_id,
@@ -2124,7 +2133,8 @@ def _flag_on_uncertainty(result, uncertainty_location, ng, proposal) -> None:
         u.record_next = (
             (u.record_next + " ") if u.record_next else ""
         ) + (
-            f"Or accept the narrated rule: induce --accept-narrated {ng.location}."
+            "Or accept the narrated rule: induce --accept-narrated "
+            f"{ng.location}@{ng.guard_id} --accepted-by NAME."
         )
         if u.question is not None and not any(
             o.key == "narrated" for o in u.question.options
@@ -2266,8 +2276,10 @@ def _apply_narration(
         _flag_on_uncertainty(result, sid, ng, proposal)
 
     # -- divergences (recordings took different paths at the same point) ----
+    # Insert from the back so earlier positions stay valid; at equal positions
+    # the later column goes in first, so the earlier one ends up in front.
     for idx, (group_cols, pos) in sorted(
-        divergences.items(), key=lambda kv: -kv[1][1]
+        divergences.items(), key=lambda kv: (-kv[1][1], -kv[0])
     ):
         where = f"column {idx}"
         location = f"divergence_{idx}"
@@ -2282,6 +2294,10 @@ def _apply_narration(
         arm_steps, members = arms
         indices = [i for i, c in enumerate(columns) if any(c is g for g in group_cols)]
         lo, hi = min(indices), max(indices)
+        if indices != list(range(lo, hi + 1)):
+            # Another column sits inside the divergence; one branch node at
+            # its first position would reorder steps. Leave it refused.
+            continue
         descriptors = [
             set().union(*(_step_words(s) for s in steps)) if steps else set()
             for steps in arm_steps

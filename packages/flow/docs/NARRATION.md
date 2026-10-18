@@ -88,7 +88,7 @@ speak after it.
    `text_present("Medicare")`: the value must be on screen.
 4. **Check it.** In each recording, induction evaluates the guard and compares
    it with what the person did. A parameter guard uses the value that
-   recording typed. A screen guard uses OCR of the recording's frame at that
+   recording typed, compared exactly as the runtime compares it. A screen guard uses OCR of the recording's frame at that
    point.
 
 | Result | What happens |
@@ -103,7 +103,8 @@ Two shapes of branch are supported:
   gets the narrated guard and is skipped when it does not hold.
 - **A divergence** where recordings take one of two different paths at the
   same point. The program gets a branch: the path the sentence names when the
-  guard holds, the other path otherwise.
+  guard holds, the other path otherwise. A divergence with another step inside
+  it stays refused.
 
 ## Example
 
@@ -127,12 +128,16 @@ patient, and the guard is refused:
 Certification: NOT CERTIFIED -- resolve the point(s) above.
 ```
 
-When the guard could not be checked, a person can accept it. Their name is
-stored with the guard:
+When the guard could not be checked, a person can accept it. The report
+prints each proposal as `LOCATION@GUARD_ID`; accepting by that id pins the
+exact guard you read, so a different guard proposed later at the same place is
+not accepted. Their name is stored with the guard:
 
 ```bash
-openadapt-flow induce rec-a rec-b --out ./prog --accept-narrated opt_2 --accepted-by "R. Reviewer"
+openadapt-flow induce rec-a rec-b --out ./prog --accept-narrated opt_2@3fa9c1d2e4b5 --accepted-by "R. Reviewer"
 ```
+
+A probe result is pinned the same way.
 
 ## Explaining the program back
 

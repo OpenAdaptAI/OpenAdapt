@@ -439,7 +439,7 @@ def _example_narration(example: BranchExample, extra: Sequence) -> list[str]:
             continue
         try:
             nar = load_narration(where)
-        except NarrationRefused:
+        except (NarrationRefused, ValueError):
             nar = None
         if nar is not None:
             texts.extend(line.text for line in nar.lines)

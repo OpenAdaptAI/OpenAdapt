@@ -159,10 +159,11 @@ def test_a_contradicting_recording_keeps_it_refused():
         visit("Aetna", True),
         visit("Medicare", True),  # did the copay for Medicare after all
     ]
+    first = induce_program(traces, narration=[said(RULE, "step_003"), None, None])
     result = induce_program(
         traces,
         narration=[said(RULE, "step_003"), None, None],
-        accepted_narration={"opt_2": "reviewer"},
+        accepted_narration={f"opt_2@{first.narrated_guards[0].guard_id}": "reviewer"},
     )
     (ng,) = result.narrated_guards
     assert ng.status == "contradicted" and ng.contradict == [2]
@@ -250,8 +251,15 @@ def test_a_person_can_accept_a_guard_nothing_contradicts():
             ],
         ),
     ]
-    result = induce_program(
+    first = induce_program(traces, narration=[said(RULE, "step_003"), None])
+    pinned = f"opt_1@{first.narrated_guards[0].guard_id}"
+    # A bare location does not accept anything: the id pins the exact guard.
+    bare = induce_program(
         traces, narration=[said(RULE, "step_003"), None], accepted_narration={"opt_1": "R. Reviewer"}
+    )
+    assert not bare.certified
+    result = induce_program(
+        traces, narration=[said(RULE, "step_003"), None], accepted_narration={pinned: "R. Reviewer"}
     )
     (ng,) = result.narrated_guards
     assert (ng.status, ng.certified_by, ng.accepted_by) == ("certified", "person", "R. Reviewer")
@@ -553,13 +561,21 @@ def test_cli_induce_accepts_a_narrated_guard_only_with_a_name(tmp_path, capsys):
     out = tmp_path / "out"
 
     assert main(["induce", *dirs, "--out", str(out)]) == 2
-    assert "[narrated]" in capsys.readouterr().out and not out.exists()
+    report = capsys.readouterr().out
+    assert "[narrated]" in report and not out.exists()
+    import re
 
-    assert main(["induce", *dirs, "--out", str(out), "--accept-narrated", "opt_1"]) == 2
+    pinned = re.search(r"--accept-narrated (opt_1@[0-9a-f]+)", report).group(1)
+
+    assert main(["induce", *dirs, "--out", str(out), "--accept-narrated", pinned]) == 2
     assert "--accepted-by" in capsys.readouterr().out
-
     rc = main(
         ["induce", *dirs, "--out", str(out), "--accept-narrated", "opt_1", "--accepted-by", "R. Reviewer"]
+    )
+    assert rc == 2 and "LOCATION@GUARD_ID" in capsys.readouterr().out
+
+    rc = main(
+        ["induce", *dirs, "--out", str(out), "--accept-narrated", pinned, "--accepted-by", "R. Reviewer"]
     )
     assert rc == 0, capsys.readouterr().out
     written = Workflow.load(out)
@@ -659,3 +675,82 @@ def test_a_refused_capture_narration_is_left_out_not_fatal(tmp_path):
 
     _write_capture_narration(SimpleNamespace(narration=refuse), tmp_path, 0.0, [])
     assert load_narration(tmp_path) is None
+
+
+# -- regressions from review ----------------------------------------------------
+
+
+def test_recorded_values_are_compared_exactly_like_the_runtime():
+    """"medicare" and "Medicare" are different run-time values, so a recording
+    that typed one must not vouch for the other."""
+    traces = [visit("Medicare", False), visit("medicare", False), visit("Aetna", True)]
+    result = induce_program(traces, narration=[said(RULE, "step_003"), None, None])
+    (ng,) = result.narrated_guards
+    assert ng.status == "contradicted" and ng.contradict == [1]
+    assert not result.certified
+
+
+def test_a_divergence_with_a_step_inside_it_stays_refused():
+    def trace(steps):
+        return Workflow(name="d", steps=[_type("step_000", "insurance", steps[0])] + steps[1])
+
+    a = _key("step_001", "B", "press B for beta", risk="irreversible")
+    z = _key("step_003", "Z", "press Z for zeta", risk="irreversible")
+    al = _key("step_001", "A", "press A for alpha", risk="irreversible")
+    om = _key("step_003", "O", "press O for omega", risk="irreversible")
+    note = _type("step_002", "note", "n")
+    traces = [
+        trace(("Medicare", [a, z])),
+        trace(("Aetna", [al, om])),
+        trace(("Medicare", [a, note, z])),
+    ]
+    rule = "If the insurance is Medicare, press beta and zeta."
+    result = induce_program(traces, narration=[said(rule, "step_001"), None, None])
+    assert not result.certified
+
+
+@pytest.mark.parametrize(
+    "sentence,runs",
+    [
+        ("Skip the copay if the insurance is Medicare, otherwise enter it.", False),
+        ("If it's not Medicare, skip the copay.", True),
+        ("If it's Medicare, the copay isn't needed.", False),
+    ],
+)
+def test_negations_parse_the_right_way_round(sentence, runs):
+    rule = parse_rule(sentence)
+    assert rule is not None and rule.value == "Medicare"
+    assert rule.runs_when_condition_holds is runs
+
+
+def test_an_unclear_double_negative_is_not_a_rule():
+    assert parse_rule("Don't skip the copay if it's Medicare.") is None
+
+
+def test_model_answers_are_validated():
+    from openadapt_flow.compiler.narration_rules import FieldValues, candidate_from_model
+
+    fields = [FieldValues(param="insurance", label="insurance", values=["Medicare", "Aetna"])]
+    kw = dict(sentence="Medicare ones go straight through", trace=0, step_id=None, fields=fields, source="m")
+    # A string "false" is not a boolean; the answer is dropped.
+    assert candidate_from_model({"field": "insurance", "value": "Medicare", "step_runs_when_true": "false"}, **kw) is None
+    # A field that was not offered, or a value no recording had, is dropped.
+    assert candidate_from_model({"field": "payer", "value": "Medicare", "step_runs_when_true": False}, **kw) is None
+    assert candidate_from_model({"field": "insurance", "value": "Cigna", "step_runs_when_true": False}, **kw) is None
+    # Screen text must be words the person said.
+    assert candidate_from_model({"text": "Prior auth", "value": "x", "step_runs_when_true": True}, **kw) is None
+    ok = candidate_from_model({"field": "insurance", "value": "medicare", "step_runs_when_true": False}, **kw)
+    assert ok is not None and ok.condition.value == "Medicare" and not ok.runs_when_condition_holds
+
+
+def test_a_malformed_narration_file_is_skipped_by_the_cli(tmp_path, capsys):
+    from openadapt_flow.__main__ import main
+
+    dirs = []
+    for i, wf in enumerate([visit("Medicare", False), visit("Aetna", True)]):
+        d = tmp_path / f"b{i}"
+        wf.save(d)
+        dirs.append(str(d))
+    (Path(dirs[0]) / "narration.json").write_text('{"schema": "openadapt.flow.narration/v1", "scrubbed": true, "lines": [{"t_start": "x"}]}')
+    assert main(["induce", *dirs, "--out", str(tmp_path / "out")]) == 2
+    assert "Narration not used" in capsys.readouterr().out

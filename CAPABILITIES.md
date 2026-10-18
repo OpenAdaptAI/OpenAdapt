@@ -145,7 +145,7 @@ improvising or retrying when something is off.
 | Typed business decisions inside a run | Released | Synthetic | `business_decision` states, `openadapt-flow business-decisions` |
 | Watch many real runs in the background and mine candidate branches (shadow mode) | Capture released; drafts in review ([#1212](https://github.com/OpenAdaptAI/OpenAdapt/pull/1212)) | Synthetic | [SHADOW_MINING.md](packages/capture/docs/SHADOW_MINING.md) |
 | Fill a workflow's inputs from a referral PDF, fax image or email | Released | Synthetic | `openadapt-flow intake`, [INTAKE.md](packages/flow/docs/INTAKE.md) |
-| Use spoken narration while recording to learn why a branch was taken | In review | Synthetic (generated speech, local Whisper) | `induce`, `teach-branch`, `narration attach`; [NARRATION.md](packages/flow/docs/NARRATION.md) |
+| Use spoken narration while recording to learn why a branch was taken | In review ([#1291](https://github.com/OpenAdaptAI/OpenAdapt/pull/1291)) | Synthetic (generated speech, local Whisper) | `induce`, `teach-branch`, `narration attach`; [NARRATION.md](packages/flow/docs/NARRATION.md) |
 | Settle a disagreement between recordings by trying both paths on a test copy of the app and reading the record back | In review ([#1276](https://github.com/OpenAdaptAI/OpenAdapt/pull/1276)) | Synthetic (MockMed fault server) | `openadapt-flow induce --probe-on`, [PROBE_INDUCTION.md](packages/flow/docs/PROBE_INDUCTION.md) |
 
 ## Surfaces

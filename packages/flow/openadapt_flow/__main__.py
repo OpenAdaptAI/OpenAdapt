@@ -1851,13 +1851,20 @@ def _induce_narration_args(args: argparse.Namespace) -> Any:
     for d in args.recording:
         try:
             narration.append(load_narration(Path(d)))
-        except NarrationRefused as exc:
+        except (NarrationRefused, ValueError) as exc:
             print(f"Narration not used for {d}: {exc}")
             narration.append(None)
     accepted = {}
     if args.accept_narrated:
         if not (args.accepted_by or "").strip():
             print("--accept-narrated needs --accepted-by NAME (who accepted it)")
+            return 2
+        unpinned = [loc for loc in args.accept_narrated if "@" not in loc]
+        if unpinned:
+            print(
+                "--accept-narrated takes LOCATION@GUARD_ID as the report prints "
+                f"it (got {', '.join(unpinned)}), so it accepts that exact guard"
+            )
             return 2
         accepted = {loc: args.accepted_by.strip() for loc in args.accept_narrated}
     frames = {
@@ -7519,11 +7526,12 @@ def build_parser() -> argparse.ArgumentParser:
         "--accept-narrated",
         action="append",
         default=[],
-        metavar="LOCATION",
+        metavar="LOCATION@GUARD_ID",
         help=(
-            "Accept the guard narration proposed at LOCATION (opt_N or "
-            "divergence_N, as the report names it). A guard any recording "
-            "contradicts stays refused. Repeatable; needs --accepted-by"
+            "Accept the guard narration proposed at LOCATION, pinned by its "
+            "GUARD_ID, exactly as the report prints it (e.g. opt_2@3fa9c1d2e4b5). "
+            "A guard any recording contradicts stays refused. Repeatable; "
+            "needs --accepted-by"
         ),
     )
     p.add_argument(

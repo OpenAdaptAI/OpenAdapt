@@ -105,7 +105,18 @@ def _clean_value(text: str) -> str:
     return text.strip(" .,;:!?")
 
 
-def _split_action(action: str) -> tuple[str, bool]:
+_OTHERWISE = re.compile(r",?\s*\b(?:otherwise|or else|else)\b", re.I)
+_UNCLEAR_NEGATION = re.compile(r"\b(?:not|no|never|n't|isn't|aren't|won't|don't)\b", re.I)
+_NOT_NEEDED = re.compile(
+    r"^(?P<obj>.+?)\s+(?:is not|isn't|are not|aren't)\s+(?:needed|required|necessary)$"
+    r"|^(?P<obj2>.+?)\s+(?:is|are)\s+(?:not needed|not required|unnecessary)$",
+    re.I,
+)
+
+
+def _split_action(action: str) -> tuple[str, Optional[bool]]:
+    """``(object, skip)``; ``skip`` is None when the negation is unclear."""
+    action = _OTHERWISE.split(action, maxsplit=1)[0]
     a = re.sub(r"^(?:then|so|and)\s+", "", action.strip(" ,.;:!?"), flags=re.I)
     a = re.sub(
         r"^(?:i|we|you)\s+(?:can\s+|will\s+|should\s+|just\s+|always\s+|need to\s+)*",
@@ -117,11 +128,21 @@ def _split_action(action: str) -> tuple[str, bool]:
     blank = re.match(r"^leave\s+(?P<obj>.+?)\s+(?:blank|empty|alone)$", a, flags=re.I)
     if blank is not None:
         return blank.group("obj"), True
+    needless = _NOT_NEEDED.match(a)
+    if needless is not None:
+        return needless.group("obj") or needless.group("obj2"), True
     for verb in _SKIP_VERBS:
         if low.startswith(verb + " ") or low == verb:
             rest = a[len(verb) :].strip()
             rest = re.sub(r"^(?:need to|have to|bother|fill in|do)\s+", "", rest, flags=re.I)
+            # "don't skip X": a double negative is too easy to misread.
+            if any(rest.lower().startswith(v + " ") for v in _SKIP_VERBS):
+                return rest, None
+            if _UNCLEAR_NEGATION.search(rest):
+                return rest, None
             return rest, True
+    if _UNCLEAR_NEGATION.search(a):
+        return a, None
     return a, False
 
 
@@ -152,6 +173,8 @@ def parse_rule(sentence: str) -> Optional[ParsedRule]:
             action = after[boundary.end() :]
         else:
             condition, action = after, ""
+        # "..., otherwise enter it": only the first action is the rule.
+        action = _OTHERWISE.split(action, maxsplit=1)[0]
         if not action.strip(" .,;:!?"):
             action = before
         elif before and not tokens(action):
@@ -177,11 +200,17 @@ def parse_rule(sentence: str) -> Optional[ParsedRule]:
             if lowered.startswith(pron):
                 condition = condition[len(pron) :]
                 break
+        flipped = re.match(r"^(?:not|n't)\s+", condition, flags=re.I)
+        if flipped is not None:
+            condition = condition[flipped.end() :]
+            negated = not negated
         value = _clean_value(condition)
+    if re.match(r"^(?:not|no)\b", value, flags=re.I):
+        return None  # a negation the parser did not place
     if subject.lower() in _PRONOUN_SUBJECTS:
         subject = ""
     action, skip = _split_action(action)
-    if not value or not action and not skip:
+    if skip is None or not value or not action and not skip:
         return None
     return ParsedRule(
         sentence=text,
@@ -294,6 +323,14 @@ class Candidate:
     target_arm: Optional[int] = None  # divergence: the arm the sentence is about
 
     @property
+    def guard_id(self) -> str:
+        """Short digest of the guard, so an acceptance or a probe result pins
+        this exact guard and not whatever a later pass proposes."""
+        from openadapt_flow.ir import predicate_contract_sha256
+
+        return predicate_contract_sha256(self.guard)[:12]
+
+    @property
     def guard(self) -> Predicate:
         """The predicate under which the step (or target arm) runs."""
         if self.runs_when_condition_holds:
@@ -383,9 +420,9 @@ def candidate_from_model(
     """Validate an interpreter's answer. It may only name an offered field and
     a value some recording actually had; anything else is dropped."""
     value = str(data.get("value") or "").strip()
-    if not value:
-        return None
-    runs = bool(data.get("step_runs_when_true", True))
+    runs = data.get("step_runs_when_true")
+    if not value or not isinstance(runs, bool):
+        return None  # only a real JSON boolean says which way the guard goes
     name = data.get("field")
     if name:
         f = next((x for x in fields if x.param == name), None)
@@ -405,6 +442,9 @@ def candidate_from_model(
         )
     else:
         text = str(data.get("text") or value).strip()
+        # The screen text must be words the person actually said.
+        if not text or _norm_value(text) not in _norm_value(sentence):
+            return None
         condition = Predicate(
             kind=PredicateKind.TEXT_PRESENT, text=text, intent=f"{text} on screen"
         )
@@ -460,7 +500,10 @@ def _holds(
         f = next((x for x in fields if x.param == pred.param), None)
         if f is None or trace >= len(f.values) or f.values[trace] is None:
             return None
-        return _norm_value(f.values[trace] or "") == _norm_value(pred.value or "")
+        # The run-time check is an exact string compare
+        # (runtime.program_predicates); check the recordings the same way, so
+        # "medicare" and "Medicare" are different values here too.
+        return f.values[trace] == pred.value
     if kind is PredicateKind.TEXT_PRESENT:
         if screen is None:
             return None

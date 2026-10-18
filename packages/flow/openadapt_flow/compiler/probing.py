@@ -568,7 +568,12 @@ def probe_and_induce(
                 narrated=narrated.get(point.location),
             )
             verdicts.append(verdict)
-            if verdict.certified:
+            if verdict.certified == NARRATED:
+                # Pin the exact guard that was probed; a later pass that
+                # proposes a different one is not certified by this probe.
+                ng = narrated[point.location]
+                resolutions[point.location] = f"{NARRATED}@{ng.guard_id}"
+            elif verdict.certified:
                 resolutions[point.location] = verdict.certified
         try:
             target.reset()  # leave the copy at its baseline
