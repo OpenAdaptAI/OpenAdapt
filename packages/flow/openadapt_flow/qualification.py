@@ -60,6 +60,7 @@ from openadapt_flow.judgment_cases import (
     JudgmentFactSchemaBindingV1,
     evaluate_judgment_cases,
 )
+from openadapt_flow.lookup_capabilities import QualifiedLookup
 from openadapt_flow.qualified_business_decisions import (
     QualifiedBusinessDecisionDelivery,
     qualified_business_decision_delivery_errors,
@@ -801,6 +802,19 @@ class QualificationCertification(BaseModel):
     )
     execution_profile: Literal["standard", "regulated"] = "standard"
     certified_at: str = Field(default_factory=_now)
+    #: Digest of the project's qualified-lookup record (the lookup
+    #: capabilities and surface the qualification ran with). None for a
+    #: certification made before that record existed.
+    lookup_sha256: Optional[str] = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Keep certifications made before the lookup record byte-stable."""
+
+        data: dict[str, Any] = handler(self)
+        if self.lookup_sha256 is None:
+            data.pop("lookup_sha256", None)
+        return data
 
 
 def _default_fault_cases() -> list[QualificationCase]:
@@ -898,6 +912,13 @@ class QualificationProject(BaseModel):
     created_at: str = Field(default_factory=_now)
     updated_at: str = Field(default_factory=_now)
     environment: EnvironmentBoundary
+    #: Multi-surface workflows only (docs/MULTI_SURFACE.md): the qualified
+    #: environment of each NON-primary surface, keyed by surface id. The
+    #: primary surface is ``environment``. A qualification case run of a
+    #: multi-surface workflow observes every surface it switches to against
+    #: its boundary here and refuses a surface that has none. Empty (and
+    #: omitted from the contract bytes) for every single-surface project.
+    surface_environments: dict[str, EnvironmentBoundary] = Field(default_factory=dict)
     minimum_effect_tier: VerificationTier = (
         VerificationTier.PERSISTED_STATE_REACQUISITION
     )
@@ -928,6 +949,12 @@ class QualificationProject(BaseModel):
     )
     trusted_runner_keys: dict[str, str] = Field(default_factory=dict)
     trusted_fault_driver_keys: dict[str, str] = Field(default_factory=dict)
+    #: The lookup capabilities (structure, pixels) the signed cases actually
+    #: used, the deployment surface they ran for, and the pixels-only pass.
+    #: Written by ``openadapt-flow qualify`` after the cases run, so it is an
+    #: outcome rather than part of the contract digest; the certification
+    #: binds its digest. None on bundles qualified before it existed.
+    lookup: Optional[QualifiedLookup] = None
     last_certification: Optional[QualificationCertification] = None
 
     @model_validator(mode="after")
@@ -967,6 +994,11 @@ class QualificationProject(BaseModel):
                     raise ValueError(
                         f"trusted {key_kind} public key must be 32-byte Ed25519"
                     )
+        from openadapt_flow.ir import SURFACE_ID_PATTERN
+
+        for surface_id in self.surface_environments:
+            if not re.fullmatch(SURFACE_ID_PATTERN, surface_id):
+                raise ValueError("surface environment key is not a surface id")
         case_ids = [case.id for case in self.cases]
         if len(case_ids) != len(set(case_ids)):
             raise ValueError("qualification case ids must be unique")
@@ -998,6 +1030,8 @@ class QualificationProject(BaseModel):
         """Omit the additive trust store until a fault driver is bound."""
 
         data: dict[str, Any] = handler(self)
+        if not self.surface_environments:
+            data.pop("surface_environments", None)
         if not self.trusted_fault_driver_keys:
             data.pop("trusted_fault_driver_keys", None)
         if not self.judgment_fact_schemas:
@@ -1006,6 +1040,8 @@ class QualificationProject(BaseModel):
             data.pop("judgment_cases", None)
         if not self.business_decision_deliveries:
             data.pop("business_decision_deliveries", None)
+        if self.lookup is None:
+            data.pop("lookup", None)
         return data
 
     def revision_digest(self) -> str:
@@ -1021,6 +1057,7 @@ class QualificationProject(BaseModel):
                 "created_at",
                 "updated_at",
                 "last_certification",
+                "lookup",
             },
         )
         for case in payload["cases"]:
@@ -1198,7 +1235,11 @@ def _inferred_action_classification(step: "Step") -> ActionRiskClassification:
     elif effects:
         classification = ActionRiskClass.STATE_CHANGING
         explanation = "step declares a business-effect contract"
-    elif step.action in {ActionKind.WAIT, ActionKind.SCROLL}:
+    elif step.action in {
+        ActionKind.WAIT,
+        ActionKind.SCROLL,
+        ActionKind.SWITCH_SURFACE,
+    }:
         classification = ActionRiskClass.READ_ONLY
         explanation = f"{step.action.value} does not actuate business state"
     else:
@@ -1586,6 +1627,7 @@ def _touch(project: QualificationProject, previous_digest: str) -> None:
     project.revision += 1
     project.updated_at = _now()
     project.last_certification = None
+    project.lookup = None
 
 
 def init_project(
@@ -2485,6 +2527,72 @@ def _one_evidence(
     if len(matches) != 1:
         return None, f"qualification case requires exactly one {kind} evidence artifact"
     return matches[0], None
+
+
+def _surface_environment_evidence_refusal(
+    report: Any, workflow: "Workflow", project: "QualificationProject"
+) -> Optional[str]:
+    """Check a multi-surface case's per-surface environment observations.
+
+    Every non-primary surface a step ran on must carry an observation that
+    matches that surface's qualified boundary exactly (the same fields the
+    primary check compares), and no observation may name a surface the run
+    never used. Single-surface reports carry none and pass unchanged.
+    """
+
+    from openadapt_flow.qualification_environment import (
+        qualification_environment_binding_sha256,
+    )
+
+    observed = dict(getattr(report, "observed_surface_environments", {}) or {})
+    if not workflow.surfaces:
+        return (
+            "case report carries surface environments for a single-surface workflow"
+            if observed
+            else None
+        )
+    primary = workflow.surfaces[0].id
+    used = {
+        result.surface
+        for result in report.results
+        if result.surface is not None and result.surface != primary
+    }
+    if set(observed) != used:
+        return "case report surface environments do not match the surfaces it ran on"
+    for surface_id in sorted(used):
+        boundary = project.surface_environments.get(surface_id)
+        item = observed[surface_id]
+        expected_identity = (
+            None if boundary is None else boundary.expected_application_identity
+        )
+        if boundary is None or expected_identity is None:
+            return f"surface '{surface_id}' has no qualified environment boundary"
+        binding = qualification_environment_binding_sha256(
+            target_kind=item.target_kind,
+            observer_id=item.observer_id,
+            observer_contract_sha256=item.observer_contract_sha256,
+            application_identity_sha256=item.application_sha256,
+            application_version_sha256=item.application_version_sha256,
+            environment_digest=item.environment_digest,
+            session_identity_sha256=item.session_sha256,
+        )
+        if (
+            item.target_kind != boundary.target_kind
+            or item.application_sha256
+            != hashlib.sha256(expected_identity.encode("utf-8")).hexdigest()
+            or item.application_version_sha256
+            != hashlib.sha256(boundary.application_version.encode("utf-8")).hexdigest()
+            or item.environment_digest != boundary.environment_digest
+            or item.observer_id != boundary.environment_observer_id
+            or item.observer_contract_sha256
+            != boundary.environment_observer_contract_sha256
+            or item.binding_sha256 != binding
+        ):
+            return (
+                f"case report environment for surface '{surface_id}' does not "
+                "match the project"
+            )
+    return None
 
 
 def _case_run_report_integrity_error(
@@ -3856,6 +3964,9 @@ def _case_run_report_integrity_error(
             QualificationRefusalCode.CASE_ENVIRONMENT_CHANGED,
             "case report environment binding does not match the project",
         )
+    surface_refusal = _surface_environment_evidence_refusal(report, workflow, project)
+    if surface_refusal is not None:
+        return (QualificationRefusalCode.CASE_ENVIRONMENT_CHANGED, surface_refusal)
 
     if (
         not report.qualification_evidence_only
@@ -4451,6 +4562,27 @@ def record_case_results(
     for result in pending:
         case = cases[result.case_id]
         case.results.append(result)
+    project.updated_at = _now()
+    # New case evidence makes an earlier lookup record stale; the campaign
+    # that produced these results writes a fresh one.
+    project.lookup = None
+    _invalidate_certification(workflow)
+    return project
+
+
+def set_qualified_lookup(
+    workflow: "Workflow", lookup: QualifiedLookup
+) -> QualificationProject:
+    """Record which lookups the recorded cases used and on which surface.
+
+    Call after the case results are recorded and before certifying, so the
+    certification binds this record's digest.
+    """
+
+    project = workflow.qualification
+    if project is None:
+        raise QualificationError("initialize qualification before recording lookups")
+    project.lookup = lookup.model_copy(deep=True)
     project.updated_at = _now()
     _invalidate_certification(workflow)
     return project
@@ -5270,6 +5402,9 @@ def certify_project(
             report_sha256=report.report_sha256(),
             case_evidence_contract_sha256=_case_evidence_contract_sha256(project),
             execution_profile=execution_profile,
+            lookup_sha256=(
+                project.lookup.contract_sha256() if project.lookup is not None else None
+            ),
         )
     # A failed campaign must remove any template from an earlier accepted
     # campaign.  Manifest provenance is outside the bundle content digest, so
@@ -5489,6 +5624,8 @@ def current_certification_matches(
         and certification.environment_contract_sha256
         == project.environment.contract_sha256()
         and certification.report_sha256 == report.report_sha256()
+        and certification.lookup_sha256
+        == (project.lookup.contract_sha256() if project.lookup is not None else None)
     )
 
 

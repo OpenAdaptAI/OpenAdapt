@@ -36,6 +36,7 @@ from openadapt_flow import __version__
 from openadapt_flow.console import actions as actions_mod
 from openadapt_flow.console import attention as attention_mod
 from openadapt_flow.console import data, human_decisions, json_artifacts
+from openadapt_flow.console import save_approvals as save_approvals_mod
 from openadapt_flow.runtime.durable.approval import ResumeRefused
 from openadapt_flow.runtime.durable.attended import (
     AttendedActionRefused,
@@ -570,8 +571,75 @@ def create_app(
     def attention_notification() -> dict[str, Any]:
         """PHI-free payload for a future desktop/tray OS notification."""
         return attention_mod.notification(
-            attention_mod.list_attention(runs)
+            attention_mod.list_attention(runs), _service_notice_count()
         ).model_dump()
+
+    # -- save approvals (decision portal) -----------------------------------
+
+    @app.get("/api/save-approvals")
+    def save_approval_list() -> list[dict[str, Any]]:
+        return [
+            item.model_dump() for item in save_approvals_mod.list_save_approvals(runs)
+        ]
+
+    @app.get("/api/save-approvals/{request_id}")
+    def save_approval_detail(request_id: str) -> JSONResponse:
+        try:
+            detail = save_approvals_mod.save_approval_detail(runs, request_id)
+        except save_approvals_mod.SaveApprovalRefused as exc:
+            raise HTTPException(status_code=404, detail=exc.code) from exc
+        # The presentation can carry the values a save writes: never cached,
+        # whatever the middleware does.
+        return JSONResponse(content=detail, headers={"Cache-Control": "no-store"})
+
+    @app.get("/api/save-approvals/{request_id}/frame")
+    def save_approval_frame(request_id: str) -> Response:
+        try:
+            frame = save_approvals_mod.save_approval_frame(runs, request_id)
+        except save_approvals_mod.SaveApprovalRefused as exc:
+            raise HTTPException(status_code=404, detail=exc.code) from exc
+        return Response(
+            content=frame,
+            media_type="image/png",
+            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+        )
+
+    @app.post("/api/save-approvals/{request_id}/actions/{action_id}")
+    def decide_save_approval(
+        request_id: str,
+        action_id: str,
+        payload: save_approvals_mod.SaveApprovalActionRequest,
+    ) -> JSONResponse:
+        # Answering is an authority action: only the attended console (the
+        # one the decision portal relays to) takes it.
+        if not attend:
+            raise HTTPException(status_code=404, detail="no such action")
+        if action_id != payload.action:
+            raise HTTPException(
+                status_code=400,
+                detail="action path and request do not match",
+            )
+        try:
+            receipt = save_approvals_mod.decide_save_approval(runs, request_id, payload)
+        except save_approvals_mod.SaveApprovalRefused as exc:
+            raise HTTPException(status_code=409, detail=exc.code) from exc
+        return JSONResponse(content=receipt.model_dump(mode="json"))
+
+    def _service_notice_count() -> int:
+        from openadapt_flow import onprem_reboot
+
+        root = onprem_reboot.service_root_for(runs)
+        return onprem_reboot.open_notice_count(root) if root else 0
+
+    @app.get("/api/service/notices")
+    def service_notices() -> list[dict[str, Any]]:
+        """Open on-prem service notices (restart awaiting sign-in, ...)."""
+        from openadapt_flow import onprem_reboot
+
+        root = onprem_reboot.service_root_for(runs)
+        if root is None:
+            return []
+        return onprem_reboot.summarize(onprem_reboot.list_notices(root))
 
     @app.get("/api/attention/{run_id:path}")
     def attention_detail(run_id: str) -> dict[str, Any]:

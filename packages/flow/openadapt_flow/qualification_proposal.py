@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
@@ -123,10 +124,21 @@ def proposer_from_name(name: str | None) -> Optional[Proposer]:
     if not name or name == "off":
         return None
     if name == "llm":
+        from openadapt_flow import privacy
         from openadapt_flow.compiler.qualification_proposer import (
             LazyLLMQualificationProposer,
         )
 
+        # Refuse up front, with a plain message, when the request could not be
+        # scrubbed. The proposer checks again before each request.
+        if (
+            not privacy.scrubbing_available()
+            and not (os.environ.get(privacy.OUTBOUND_OPT_OUT_ENV) or "").strip()
+        ):
+            try:
+                privacy.require_outbound_scrubber("qualification proposer request")
+            except privacy.PrivacyNotAvailable as exc:
+                raise QualificationProposalError(str(exc)) from exc
         return LazyLLMQualificationProposer()
     raise QualificationProposalError(
         f"unknown qualification proposer {name!r}; known: off, llm"

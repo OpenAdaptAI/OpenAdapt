@@ -1,0 +1,23 @@
+title = "OpenAdapt Capture Gitleaks configuration"
+
+[extend]
+useDefault = true
+
+# The Chrome extension manifest "key" field is the published half of an RSA
+# key pair. Chrome uses it to pin a stable extension ID, so it ships inside
+# every copy of the extension and is public by construction. This value
+# decodes to a 294-byte SubjectPublicKeyInfo structure beginning
+# "MIIBIjANBgkqhkiG", which is an RSA public key and carries no private
+# material. The default generic-api-key rule matches it on the field name
+# "key" alone.
+#
+# The entry pins one exact literal. It does not widen the rule and it does
+# not exempt a path, so any other value in the same field is still reported.
+# tests/test_gitleaks_allowlist.sh reads this value back out of the file and
+# proves that a single changed character is still detected.
+[[allowlists]]
+description = "The Chrome extension manifest key is a published RSA public key, not a secret"
+regexTarget = "secret"
+regexes = [
+  '''^MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAkrP6lByBYDKJkPOjq2omusDFyy0Bqnw8FuPvK8HTBrhJ85eVtOW\/O65cBtWDJHyNkQpFDTdnQSN2LWFKtCuEuYIwr1cRAzNKoHoQy47u0A8LY486ApMTgox5SUFQ3sWIYgyfM1PncAT5DipA\+L6G\+kxQ4eRLC24wjXESTWuhTq3LkEXQZQAL5NabklUpldKn7OYQRxFfuBEQo0PRbX8IXs8ZBOwKgPcla6iEuX4y6D\+HrfjO4UXRpQJH5sgjBfId\+fgzKQIrXs4eR\+0HgoauNouPAMT6x\+8WZt04yIG5p\/0jsTKauzlEuDW01Hc6iocLQbfoniPgNRcjGTt\/uADa0wIDAQAB$''',
+]

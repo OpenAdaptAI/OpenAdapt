@@ -7,7 +7,7 @@ practice-management fixture served through its real transactional backend.
 ```bash
 openadapt-flow demo                                      # both runs, one proof page
 openadapt-flow tutorial                                  # the whole loop, VERIFIED
-openadapt-flow tutorial --break-it                       # then watch it catch a lie
+openadapt-flow tutorial --break-it                       # then watch it catch a failed save
 openadapt-flow tutorial --guided                         # perform the demo yourself
 ```
 
@@ -74,11 +74,11 @@ shown.
 
 ## What `--break-it` does
 
-`--break-it` reruns the **same certified bundle** against a backend that lies:
-the server rejects the write *after* the application has painted its success
-banner, so every on-screen check passes while nothing lands. The independent
-read of the system of record refutes the mined `record_written` contract and the
-engine **HALTS** at the consequential step instead of believing the screen. The
+`--break-it` reruns the **same certified bundle** with the save set to fail:
+the server rejects the write, so nothing lands, yet every on-screen check
+still passes. The independent read of the system of record refutes the mined
+`record_written` contract and the engine **HALTS** at the consequential step
+instead of reporting done. The
 caught fault's evidence is a clearly-labeled local `run-broken/REPORT.md`; no
 shareable receipt is emitted for it, because only `VERIFIED` runs may use the
 success rail.

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-flow"
-version = "2.1.0"
+version = "2.2.0"
 description = "Compile demonstrated GUI workflows into deterministic local replay with governed repair and refusal"
 readme = "README.md"
 license = { text = "MIT" }
@@ -171,7 +171,7 @@ linux = [
     "PyGObject>=3.46; sys_platform == 'linux'",
 ]
 # FreeRDPBackend: pure-Python async RDP client for the pixel-only RDP path
-# (L1/Retinology EMR over RDP). Lazily imported by AardwolfTransport — never
+# (legacy EMR over RDP). Lazily imported by AardwolfTransport — never
 # needed for the mock-tested adapter, only for the real/live transport.
 rdp = ["aardwolf==0.2.14"]
 # PHI/PII scrubbing on persist/log paths (Presidio-backed). Optional: the

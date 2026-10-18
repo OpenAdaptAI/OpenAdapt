@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-types"
-version = "0.22.0"
+version = "0.23.0"
 description = "Pydantic models for computer-use agents: screen state (ComputerState, UINode), actions (Action), and results (ActionResult)"
 readme = "README.md"
 license = "MIT"
@@ -25,11 +25,10 @@ classifiers = [
     "Typing :: Typed",
 ]
 # Compatibility shim: the contracts live in openadapt-flow as
-# openadapt_flow.contracts. The release workflow pins this to the exact
-# openadapt-flow version it ships with. Python 3.13+ resolves to 0.21.x, the
-# last standalone release.
+# openadapt_flow.contracts, first shipped in openadapt-flow 2.2.0, so that is
+# the floor. Python 3.13+ resolves to 0.21.x, the last standalone release.
 dependencies = [
-    "openadapt-flow>=2.1.0,<3",
+    "openadapt-flow>=2.2.0,<3",
 ]
 
 [project.scripts]

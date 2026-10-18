@@ -7,7 +7,7 @@ and the human-readable run report. This page is the honest map of **where PHI
 lives, what is scrubbed, and what is a documented boundary** (in-flight PHI whose
 control is a boundary policy, not scrubbing).
 
-Scrubbing is provided by [openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy)
+Scrubbing is provided by the `openadapt-privacy` package
 (Presidio-backed NER), wired in through the single choke point
 `openadapt_flow/privacy.py`.
 
@@ -22,8 +22,39 @@ pip install 'openadapt-flow[privacy]'
 python -m spacy download en_core_web_sm
 ```
 
-Two environment variables control the posture. The default is **predictable,
-not maximally private**: `auto` writes plaintext when the extra is absent (so
+## Anything that leaves the machine is scrubbed by default
+
+The settings in the next section decide what is written to **this** machine.
+Anything sent elsewhere follows a stricter rule that ignores them:
+
+1. It is scrubbed with openadapt-privacy before it is sent.
+2. If the `privacy` extra is missing, or the scrubber fails, it is **not
+   sent**. `OPENADAPT_FLOW_SCRUB=auto` or `off` does not relax this.
+3. The only way to send unscrubbed data is an explicit opt-out with a reason:
+   `OPENADAPT_FLOW_SEND_UNSCRUBBED="<reason>"`. Every use appends a line
+   (time, purpose, reason) to `~/.openadapt/unscrubbed-sends.jsonl` (under
+   `OPENADAPT_HOME` when set) before anything is sent.
+
+| Outbound path | What it would carry | Default |
+|---|---|---|
+| `openadapt-flow push` (Cloud upload) | Recording or bundle | A sanitized, rescanned and locally approved derivative only. Refuses without the extra. No opt-out; `--attest-non-phi` is refused. |
+| `report-break`, `report-run` | Run outcome | Ids, digests, enums and counts only, validated before the request. No free text, so no scrubber is needed. |
+| Compile annotation (`compile_recording(annotate=True)`) | Workflow name, intents, OCR labels, typed values | Every string scrubbed. Refuses without the extra. Opt-out recorded. |
+| LLM qualification proposer (`--proposer llm`) | Bundle name, recording metadata | Every string scrubbed. Refuses without the extra. Opt-out recorded. |
+| Model grounding (`AnthropicGrounder`, `OpenAICompatibleGrounder`) | Full screenshot, intent, label | Needs `--allow-model-grounding` first. Screenshot redacted and text scrubbed; the grounder refuses to start without the extra. A loopback endpoint (a model on this machine) is not scrubbed. Opt-out recorded once per grounder. |
+| `intake --agent-request` | Document lines | Every line scrubbed. Refuses without the extra or when the scrubber fails. No opt-out (the agent needs line numbers, not values). |
+| `openadapt-agent authoring connect` (mailbox callbacks) | Accessibility labels | Labels the scrubber changes are dropped; without the extra every label is dropped. Opt-out recorded. |
+| `openadapt-agent repair` screens | Current screen | Off by default; `scrubbed_only` redacts or shares nothing; `allow_unscrubbed` needs confirmation at a terminal. |
+| `capture share send` | Whole recording | Scrubbed copy only; refuses without the extra. `--unscrubbed --reason` opt-out is recorded. See the capture README. |
+| Seals and receipts (`cloud_seal`, timestamp authority, approval webhook) | Hashes and ids | No values leave the machine. |
+
+Paths this rule does not cover yet are listed under
+[What remains a documented gap](#what-remains-a-documented-gap).
+
+## Local posture
+
+Two environment variables control what is written locally. The default is
+**predictable, not maximally private**: `auto` writes plaintext when the extra is absent (so
 the local demo works with no NER model), but it is not silent about it — see
 the plaintext warning below. Pin `on` for a regulated deployment.
 
@@ -83,6 +114,7 @@ what protects it.
 
 | # | Where | PHI in flight | Control |
 |---|---|---|---|
+| 9a | `runtime/grounder.py` `AnthropicGrounder`, `OpenAICompatibleGrounder` | full `screenshot`, `intent`, `ocr_text` | **Scrubbed** before each request (image redaction plus text scrubbing), unless the endpoint is loopback or the operator opted out (recorded). Refuses to start without the extra. Needs `--allow-model-grounding`. |
 | 9 | `runtime/remote_vlm.py` clients | `identifier_crop` bytes, full `screenshot` bytes, `target_description`/`intent`, `ocr_text`, `expected_state` (embeds postcondition literal) | **Boundary policy, NOT scrubbing** — see [ON_PREM_VLM.md](deployment/ON_PREM_VLM.md#phi-data-flow-boundary). The identity crop *must* contain the identifier to verify the patient; scrubbing it would defeat the check. Control = on-prem-only destination + no-retention. Client side writes nothing to disk or logs. |
 | 10 | `services/vlm_service/app.py` | receives crops/screenshots | In-memory inference only; **no logging or persistence** of image bytes. |
 | 11 | `services/vlm_service/backends.py` MLXBackend | crop bytes transit disk (mlx-vlm needs file paths) | **No-retention fix** — private per-instance scratch dir (mode `0700`), files `chmod 0600` and deleted in a `finally` (cleaned up even if inference raises). Production `VLLMBackend` sends base64 inline — no disk. |
@@ -106,6 +138,21 @@ through. The control is therefore a **data-flow boundary**, stated in full in
 3. it is PHI **in flight** inside the trust boundary, and it is treated as such.
 
 ## What remains a documented gap
+
+- **On-prem VLM appliance requests are not scrubbed.** The identity crop *is*
+  the identifier, so the appliance path (`OPENADAPT_FLOW_VLM_URL`) stays a
+  data-flow boundary: explicit `--allow-model-grounding`, on-prem destination,
+  no retention, and the PHI-mode endpoint allowlist. See the section below.
+- **Cloud Execute sends run parameters as entered.** `openadapt-flow run` with
+  `OPENADAPT_EXECUTE_URL` sends the inputs the hosted runtime needs to fill
+  the form. Scrubbing them would defeat the run; the control is the
+  destination, not scrubbing.
+- **Customer-run agent loops.** The JIT `CaptureComputer` adapter and the local
+  MCP `observe` tool return screenshots or labels to the caller's own agent,
+  which may forward them to its model. Flow makes no network call there, so
+  it cannot scrub what the caller sends.
+- **Intended effects** (FHIR, REST, eligibility checks to a clearinghouse)
+  send patient data to the customer's own systems by design.
 
 - **Bundle / recording / `report.json` text is not scrubbed.** By design: the
   recorded identity evidence and the audit trail require the literal

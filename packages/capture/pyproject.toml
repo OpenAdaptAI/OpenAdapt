@@ -1,0 +1,195 @@
+[project]
+name = "openadapt-capture"
+version = "1.3.0"
+description = "Record desktop mouse, keyboard, and screen activity, then load it from Python"
+readme = "README.md"
+requires-python = ">=3.10"
+license = "MIT"
+authors = [
+    {name = "MLDSAI Inc.", email = "richard@openadapt.ai"}
+]
+keywords = ["gui", "automation", "capture", "events", "rpa"]
+classifiers = [
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+dependencies = [
+    "pydantic>=2.0.0",
+    "Pillow>=10.1.0",
+    "fire>=0.7.1",
+    "mss>=6.0.0",
+    "sounddevice>=0.5.3",
+    "soundfile>=0.13.1",
+    # Note: openai-whisper moved to optional [transcribe] extra due to Python version conflicts
+    "pydantic-settings>=2.12.0",
+    # Recording-pipeline dependencies (carried forward from OpenAdapt record.py)
+    "sqlalchemy>=2.0.54",
+    "alembic>=1.20.0",
+    "loguru>=0.7.0",
+    "psutil>=5.0.0",
+    "pympler>=1.0.0",
+    "tqdm>=4.0.0",
+    "numpy>=1.26.0",
+    # Recorder generates a performance plot by default, and the package-level
+    # API imports the plotting module while exposing Recorder.
+    "matplotlib>=3.10.9",
+    # Native macOS window/accessibility observation via permissive PyObjC.
+    "pyobjc-framework-ApplicationServices>=12.2.1; sys_platform == 'darwin'",
+    # Desktop-independent, exact-window pixels on macOS 14 and later.
+    "pyobjc-framework-ScreenCaptureKit>=12.2.1; sys_platform == 'darwin'",
+    # Native Windows structural observation. Platform-gated so non-Windows
+    # installs and imports do not load the Windows UIA stack.
+    "pywinauto>=0.6.9; sys_platform == 'win32'",
+    # Checked X11 metadata and XComposite named-window pixels on Linux.
+    "xcffib>=1.8.0; sys_platform == 'linux'",
+]
+
+[project.optional-dependencies]
+# Whisper transcription - faster-whisper (recommended, 4x faster)
+transcribe-fast = [
+    "faster-whisper>=1.1.0",
+]
+
+# Legacy openai-whisper support
+transcribe = [
+    "openai-whisper>=20230314",
+]
+
+# Privacy scrubbing: `capture share send` needs it and refuses without it.
+# After install: python -m spacy download en_core_web_sm
+privacy = [
+    "openadapt-privacy[presidio]>=1.1.3",
+    # spaCy imports Click from its CLI package without declaring it.
+    "click>=8.0,<9",
+]
+
+# Shadow-mode pattern mining: AES-GCM for the on-disk buffer and the OS
+# credential store for its key. Shadow mining itself is off by default.
+shadow = [
+    "cryptography>=42.0.0",
+    "keyring>=24.0.0",
+]
+
+# Sharing via Magic Wormhole
+share = [
+    "magic-wormhole>=0.17.0",
+]
+
+# Native Linux AT-SPI observation. The host must also provide the AT-SPI
+# typelib/runtime (for example gir1.2-atspi-2.0 on Debian/Ubuntu).
+# PyGObject 3.50.x retains GLib >=2.64 and gobject-introspection >=1.64;
+# 3.52+ requires GLib/girepository-2.0 >=2.80, which older LTS hosts lack.
+linux = [
+    "PyGObject>=3.46,<3.51; sys_platform == 'linux'",
+]
+
+# Everything
+all = [
+    "openadapt-capture[transcribe-fast,transcribe,privacy,share,linux]",
+]
+
+dev = [
+    "pytest>=9.1.1",
+    "pytest-asyncio>=0.23.0",
+    "pytest-cov>=4.0.0",
+    "pytest-timeout>=2.4.0",
+    "ruff>=0.1.0",
+    "numpy>=1.21.0",
+    # Shadow-mining tests exercise the encrypted buffer.
+    "cryptography>=42.0.0",
+    "keyring>=24.0.0",
+]
+
+[project.scripts]
+capture = "openadapt_capture.cli:main"
+
+[project.urls]
+Homepage = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/capture"
+Repository = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/capture"
+Issues = "https://github.com/OpenAdaptAI/OpenAdapt/issues"
+
+
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["openadapt_capture"]
+
+[tool.hatch.build.targets.sdist]
+ignore-vcs = true
+only-include = [
+    "openadapt_capture",
+    "CHANGELOG.md",
+    "SECURITY.md",
+    "docs",
+]
+exclude = [
+    "/docs/images/demo.gif",
+    "/docs/whisper-integration-plan.md",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+ignore = ["E501"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+asyncio_mode = "auto"
+markers = [
+    "slow: marks tests as slow / integration (deselect with '-m \"not slow\"')",
+]
+
+[tool.semantic_release]
+version_toml = ["pyproject.toml:project.version"]
+commit_message = "chore: release {version}"
+
+[tool.semantic_release.changelog]
+mode = "update"
+insertion_flag = "<!-- version list -->"
+
+[tool.semantic_release.changelog.default_templates]
+changelog_file = "CHANGELOG.md"
+output_format = "md"
+
+[tool.semantic_release.branches.main]
+match = "main"
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "style", "test"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
+
+
+
+[dependency-groups]
+dev = [
+    "numpy>=2.2.6",
+    "psutil>=7.2.2",
+    # Test-only synthetic input driver; excluded from package metadata/runtime.
+    "pynput>=1.7.6",
+    "pytest>=9.0.2",
+    # Repository-only Chrome-extension prototype tests. The bridge and this
+    # dependency are not part of wheel or source-distribution runtime.
+    "websockets>=12.0",
+]
+
+[tool.uv]
+# Lockfile-only floor for a transitive dependency of the `share` extra
+# (magic-wormhole -> autobahn). autobahn 26.7.1 fixes GHSA-hxp9-w8x3-p566 but
+# requires Python 3.11+, so Python 3.10 keeps the last compatible release.
+constraint-dependencies = [
+    "autobahn>=26.7.1; python_full_version >= '3.11'",
+]

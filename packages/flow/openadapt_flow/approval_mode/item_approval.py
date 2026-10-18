@@ -12,8 +12,9 @@ Run it) need no other channel:
 - ``item-approval/answer-<id>.json`` (:class:`ItemApprovalAnswer`), written
   once by ``openadapt-flow item-approval approve|decline``. It names the
   request digest the person saw, who decided (``decided_by`` must be
-  ``human``), the route (only Desktop Run it) and the approver (a Cloud user
-  id, or ``unauthenticated`` when Desktop was signed out).
+  ``human`` for a person), the route (Desktop Run it, or the decision
+  portal on a paired phone) and the approver (a Cloud user id, or
+  ``unauthenticated`` when nobody was signed in).
 - ``item-approval/consumed-<id>``, created once by the run when it uses an
   approval for exactly one save. An approval is never used twice.
 
@@ -26,11 +27,13 @@ Nothing here is sent anywhere. The run report keeps only the PHI-free
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import stat
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
@@ -54,6 +57,7 @@ from openadapt_flow.approval_mode.approver import (
     WebhookRefused,
 )
 from openadapt_flow.approval_mode.model import (
+    DECISION_PORTAL_ROUTE,
     ITEM_APPROVAL_ROUTE,
     OPAQUE_ID_PATTERN,
     PREFIXED_SHA256_PATTERN,
@@ -61,6 +65,13 @@ from openadapt_flow.approval_mode.model import (
     ApproverAuthMethod,
     DeclineReason,
     ItemApprovalRef,
+)
+from openadapt_flow.approval_mode.signed_policy import (
+    GrantRefused,
+    SignedApproverGrant,
+    VerifiedGrant,
+    allows_non_person,
+    verify_grant,
 )
 from openadapt_flow.approval_mode.switch import canonical_json
 
@@ -75,12 +86,23 @@ APPROVAL_DIRNAME = "item-approval"
 #: How often a waiting run asks a delegated approver again (seconds).
 DELEGATE_POLL_S = 5.0
 POLICY_FILENAME = "approver-policy.json"
+#: The person-signed grant behind a policy that lets a delegate answer.
+GRANT_FILENAME = "approver-grant.json"
+#: Who started the run, written once by the run. A delegate never answers a
+#: run it started.
+INITIATOR_FILENAME = "run-initiator.json"
+#: The initiator an agent-started run records when the agent has no id.
+UNIDENTIFIED_AGENT = "agent:unidentified"
+#: Routes a person answers by: Desktop's Run it, or their phone through the
+#: runner's decision portal.
+PERSON_ROUTES = frozenset({ITEM_APPROVAL_ROUTE, DECISION_PORTAL_ROUTE})
 #: How long a run waits for an answer before it stops before the save.
 DEFAULT_APPROVAL_WAIT_S = 900.0
 MAX_APPROVAL_WAIT_S = 4 * 3600.0
 #: How long an answer to a request stays usable, including by a later resume.
 REQUEST_TTL_S = 4 * 3600.0
 _MAX_FILE_BYTES = 64 * 1024
+_MAX_FRAME_BYTES = 8 * 1024 * 1024
 _REQUEST_ID_PATTERN = r"^[0-9a-f]{32}$"
 _HEX_SHA256 = r"^[0-9a-f]{64}$"
 
@@ -111,6 +133,29 @@ def _parse_time(value: str) -> datetime:
 def _digest(model: BaseModel) -> str:
     payload = canonical_json(model.model_dump(mode="json"))
     return "sha256:" + hashlib.sha256(payload).hexdigest()
+
+
+#: The most field rows one request may carry. Each row is short, so the
+#: request file stays well under its 64 KiB read limit.
+MAX_SAVE_FIELDS = 24
+_MAX_FIELD_VALUE = 512
+
+
+class SaveField(BaseModel):
+    """One value a save writes, as the person sees it on the phone.
+
+    Local only, like the screenshot: it is inside the request file and its
+    digest, served to the paired phone no-store, and never copied into the
+    report, a notification, or anything a delegated approver or Cloud sees.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    label: str = Field(min_length=1, max_length=128)
+    #: The value before the run changed it, when known. ``None`` when the
+    #: field was empty or the run can't tell.
+    before: Optional[str] = Field(default=None, max_length=_MAX_FIELD_VALUE)
+    after: Optional[str] = Field(default=None, max_length=_MAX_FIELD_VALUE)
 
 
 class ItemApprovalRequest(BaseModel):
@@ -144,12 +189,20 @@ class ItemApprovalRequest(BaseModel):
     #: What kind of save this is, for the approver policy. Left out of the
     #: file when it is the default, so earlier requests keep their digest.
     step_class: StepClass = StepClass.CONSEQUENTIAL
+    #: The values this save writes, for the phone. Part of the digest, so the
+    #: signed task, the answer and the run all bind exactly these values.
+    #: Left out of the file when absent, so earlier requests keep their digest.
+    fields: Optional[tuple[SaveField, ...]] = Field(
+        default=None, min_length=1, max_length=MAX_SAVE_FIELDS
+    )
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         data: dict[str, Any] = handler(self)
         if self.step_class is StepClass.CONSEQUENTIAL:
             data.pop("step_class", None)
+        if self.fields is None:
+            data.pop("fields", None)
         return data
 
     @model_validator(mode="after")
@@ -235,21 +288,86 @@ class ItemApprovalAnswer(BaseModel):
         )
 
 
+@dataclass(frozen=True)
+class ApproverContext:
+    """Everything an answer is checked against, read from the run's store.
+
+    ``policy`` is person-only unless ``grant`` is a person-signed grant that
+    verified just now. ``initiator`` is who started the run (``None`` for a
+    person or operator); ``initiator_known`` is False when the run never
+    recorded it, and then no delegate may answer.
+    """
+
+    policy: ApproverPolicyV1 = DEFAULT_APPROVER_POLICY
+    grant: Optional[VerifiedGrant] = None
+    grant_refusal: Optional[str] = None
+    initiator: Optional[str] = None
+    initiator_known: bool = False
+
+
+def _as_context(
+    policy: "ApproverPolicyV1 | ApproverContext | None",
+) -> ApproverContext:
+    if isinstance(policy, ApproverContext):
+        return policy
+    # A bare policy carries no signed grant, so it can never admit a delegate.
+    return ApproverContext(policy=policy or DEFAULT_APPROVER_POLICY)
+
+
+def _delegate_refusal(
+    request: ItemApprovalRequest,
+    approver: ApproverIdentityV1,
+    context: ApproverContext,
+) -> Optional[str]:
+    """Why this delegate can't answer this request under the run's grant."""
+
+    grant = context.grant
+    if grant is None and context.grant_refusal is not None:
+        # The run asked for delegates, but the grant didn't verify: say why.
+        return context.grant_refusal
+    refusal = context.policy.refusal(request.step_class, approver)
+    if refusal is not None:
+        return refusal.value
+    if grant is None:
+        return "approver_policy_unsigned"
+    if not grant.names(approver.id):
+        return "delegate_not_in_grant"
+    if not grant.covers(request.workflow_name):
+        return "workflow_not_in_grant"
+    if approver.policy_ref is not None and approver.policy_ref != grant.policy_ref:
+        return "policy_ref_mismatch"
+    if not context.initiator_known:
+        return "run_initiator_unknown"
+    if context.initiator == UNIDENTIFIED_AGENT:
+        # An agent we can't name started the run: any delegate might be it.
+        return "self_approval_unprovable"
+    if context.initiator is not None and (
+        context.initiator.lower() == (approver.id or "").lower()
+        or context.initiator.lower() == (approver.on_behalf_of or "").lower()
+    ):
+        return "self_approval"
+    return None
+
+
 def answer_refusal(
     request: ItemApprovalRequest,
     answer: ItemApprovalAnswer,
     *,
     now: Optional[datetime] = None,
-    policy: Optional[ApproverPolicyV1] = None,
+    policy: "ApproverPolicyV1 | ApproverContext | None" = None,
 ) -> Optional[str]:
     """Return a closed reason this answer can't be used, or ``None``.
 
     The run calls this itself; it never trusts that the CLI checked.
-    ``policy`` is the run's approver policy (person-only when ``None``). A
-    person answers through Desktop's Run it. An agent, rule or system answers
-    only where the policy allows its kind for the request's step class.
+    ``policy`` is the run's :class:`ApproverContext` (``store.context()``); a
+    bare policy or ``None`` means no delegate may answer. A person answers
+    through Desktop's Run it, or on their phone through the runner's
+    decision portal. An agent or system answers only under a verified,
+    person-signed grant that names it, allows its kind for the step class,
+    and wasn't started by it.
     """
 
+    context = _as_context(policy)
     if answer.request_id != request.request_id:
         return "request_mismatch"
     if answer.request_sha256 != request.digest():
@@ -258,7 +376,7 @@ def answer_refusal(
     if approver is None or approver.is_person:
         if answer.decided_by != "human":
             return "not_decided_by_a_person"
-        if answer.route != ITEM_APPROVAL_ROUTE:
+        if answer.route not in PERSON_ROUTES:
             return "route_not_allowed"
         if approver is not None and approver.auth.value != answer.approver_kind:
             return "answer_fields_inconsistent"
@@ -270,11 +388,9 @@ def answer_refusal(
         if answer.approver_kind != "unauthenticated" or answer.approver_id is not None:
             # The older person fields stay empty; ``approver`` names who decided.
             return "answer_fields_inconsistent"
-        refusal = (policy or DEFAULT_APPROVER_POLICY).refusal(
-            request.step_class, approver
-        )
-        if refusal is not None:
-            return refusal.value
+        refusal_code = _delegate_refusal(request, approver, context)
+        if refusal_code is not None:
+            return refusal_code
     try:
         answer.reference(request)
     except ValidationError:
@@ -374,9 +490,20 @@ def _fsync_dir(path: Path) -> None:
 class ItemApprovalStore:
     """The ``item-approval`` folder of one run directory."""
 
-    def __init__(self, run_dir: Path | str) -> None:
+    def __init__(
+        self,
+        run_dir: Path | str,
+        *,
+        key_dir: Optional[Path | str] = None,
+    ) -> None:
         self.run_dir = Path(run_dir)
         self.dir = self.run_dir / APPROVAL_DIRNAME
+        #: Where the signer registry lives (``$OPENADAPT_JIT_KEY_DIR`` or
+        #: ``~/.openadapt/jit`` when ``None``). Keep it away from the agents.
+        self._key_dir = Path(key_dir) if key_dir is not None else None
+        # The policy this store wrote at run start. Once set, it is the only
+        # policy this store applies, whatever the file says later.
+        self._pinned_policy: Optional[ApproverPolicyV1] = None
 
     # -- layout --------------------------------------------------------------
     def _checked_dir(self, *, create: bool) -> Path:
@@ -408,33 +535,142 @@ class ItemApprovalStore:
 
     # -- approver policy -----------------------------------------------------
     def write_policy(self, policy: ApproverPolicyV1) -> None:
-        """Record the run's approver policy once. A second, different policy
-        is refused; the same policy again is a no-op."""
+        """Record the run's approver policy once, and apply only it from now
+        on. A second, different policy is refused; the same policy again is
+        a no-op."""
 
         self._checked_dir(create=True)
         payload = canonical_json(policy.model_dump(mode="json"))
         try:
             _write_exclusive(self.dir / POLICY_FILENAME, payload)
         except FileExistsError:
-            if self.policy() != policy:
+            if self._policy_on_disk() != policy:
                 raise ItemApprovalRefused(
                     "policy_changed", "this run already has a different approver policy"
                 ) from None
+        self._pinned_policy = policy
 
-    def policy(self) -> ApproverPolicyV1:
-        """The run's approver policy. Person-only when none was written.
+    def write_grant(self, signed: SignedApproverGrant) -> None:
+        """Record the person-signed grant once, and the policy it carries."""
 
-        An unreadable policy file is never "no policy": it means person-only.
+        self._checked_dir(create=True)
+        payload = canonical_json(signed.model_dump(mode="json", by_alias=True))
+        try:
+            _write_exclusive(self.dir / GRANT_FILENAME, payload)
+        except FileExistsError:
+            existing = self._read_grant()
+            if existing != signed:
+                raise ItemApprovalRefused(
+                    "policy_changed", "this run already has a different approver grant"
+                ) from None
+        self.write_policy(signed.grant.approver_policy)
+
+    def _read_grant(self) -> Optional[SignedApproverGrant]:
+        try:
+            raw = _read_regular(self._path(GRANT_FILENAME))
+        except (OSError, ItemApprovalRefused):
+            return None
+        try:
+            return SignedApproverGrant.model_validate_json(raw)
+        except ValueError:
+            return None
+
+    def write_initiator(self, initiator: Optional[str]) -> None:
+        """Record who started the run, once. ``None``: a person or operator.
+
+        The run writes this before it asks anything. A file that is already
+        there with another value (planted before the run) refuses the run.
         """
 
+        self._checked_dir(create=True)
+        payload = canonical_json({"started_by": initiator})
+        try:
+            _write_exclusive(self.dir / INITIATOR_FILENAME, payload)
+        except FileExistsError:
+            known, existing = self._read_initiator()
+            if not known or existing != initiator:
+                raise ItemApprovalRefused(
+                    "initiator_changed", "this run already names another initiator"
+                ) from None
+
+    def _read_initiator(self) -> tuple[bool, Optional[str]]:
+        try:
+            raw = _read_regular(self._path(INITIATOR_FILENAME))
+            data = json.loads(raw)
+        except (OSError, ItemApprovalRefused, ValueError):
+            return False, None
+        if not isinstance(data, dict) or set(data) != {"started_by"}:
+            return False, None
+        value = data["started_by"]
+        if value is not None and not isinstance(value, str):
+            return False, None
+        return True, value
+
+    def _key_directory(self) -> Path:
+        if self._key_dir is not None:
+            return self._key_dir
+        from openadapt_flow.jit.lifecycle import default_key_dir
+
+        return default_key_dir()
+
+    def context(self, *, now: Optional[datetime] = None) -> ApproverContext:
+        """What every answer in this run is checked against, verified now.
+
+        The grant's signature, signer and dates are re-checked on every call,
+        so a grant that expired, or a file swapped mid-run, stops working.
+        """
+
+        known, initiator = self._read_initiator()
+
+        def make(**fields: Any) -> ApproverContext:
+            return ApproverContext(
+                initiator=initiator,
+                initiator_known=known,
+                **fields,
+            )
+
+        recorded = self._recorded_policy()
+        if recorded is None or not allows_non_person(recorded):
+            return make(policy=recorded or DEFAULT_APPROVER_POLICY)
+        signed = self._read_grant()
+        if signed is None:
+            return make(grant_refusal="approver_policy_unsigned")
+        try:
+            verified = verify_grant(signed, self._key_directory(), now=now)
+        except GrantRefused as exc:
+            return make(grant_refusal=exc.code)
+        if verified.policy != recorded:
+            return make(grant_refusal="approver_grant_policy_mismatch")
+        return make(policy=verified.policy, grant=verified)
+
+    def _recorded_policy(self) -> Optional[ApproverPolicyV1]:
+        """The policy this run recorded. ``None`` when none was written.
+
+        After :meth:`write_policy` (the gate calls it at run start), this
+        store applies the policy it wrote: a file replaced later changes
+        nothing. A reader that wrote no policy reads the file.
+        """
+
+        if self._pinned_policy is not None:
+            return self._pinned_policy
+        return self._policy_on_disk()
+
+    def _policy_on_disk(self) -> Optional[ApproverPolicyV1]:
         try:
             raw = _read_regular(self._path(POLICY_FILENAME))
         except (OSError, ItemApprovalRefused):
-            return DEFAULT_APPROVER_POLICY
+            return None
         try:
             return ApproverPolicyV1.model_validate_json(raw)
         except ValueError:
             return DEFAULT_APPROVER_POLICY
+
+    def policy(self) -> ApproverPolicyV1:
+        """The run's effective approver policy. Person-only when none was
+        written, when it is unreadable, or when it would let a delegate answer
+        without a person-signed grant that verifies now."""
+
+        return self.context().policy
 
     # -- requests ------------------------------------------------------------
     def open_request(
@@ -454,8 +690,13 @@ class ItemApprovalStore:
         now: Optional[datetime] = None,
         ttl_s: float = REQUEST_TTL_S,
         step_class: StepClass = StepClass.CONSEQUENTIAL,
+        fields: Optional[Sequence[SaveField]] = None,
     ) -> ItemApprovalRequest:
-        """Write the screenshot and the request. Returns the request."""
+        """Write the screenshot and the request. Returns the request.
+
+        ``fields`` are the values the save writes, shown on the phone. An
+        empty list is stored as none.
+        """
 
         self._checked_dir(create=True)
         request_id = uuid.uuid4().hex
@@ -479,6 +720,7 @@ class ItemApprovalStore:
             expires_at=_iso(created + timedelta(seconds=min(ttl_s, REQUEST_TTL_S))),
             qualification_case_kind=qualification_case_kind,
             step_class=step_class,
+            fields=tuple(fields) if fields else None,
         )
         _write_exclusive(self.dir / f"{request_id}.png", frame_png)
         _write_exclusive(
@@ -499,6 +741,27 @@ class ItemApprovalStore:
         if request.request_id != request_id:
             raise ItemApprovalRefused("request_unknown", "request id mismatch")
         return request
+
+    def read_frame(self, request: ItemApprovalRequest) -> bytes:
+        """The screenshot the person is shown, checked against its digest.
+
+        Raises :class:`ItemApprovalRefused` when it is missing, too large, or
+        isn't the exact image the request was opened with.
+        """
+
+        try:
+            frame = _read_regular(
+                self.run_dir / request.screenshot, limit=_MAX_FRAME_BYTES
+            )
+        except OSError as exc:
+            raise ItemApprovalRefused(
+                "frame_unreadable", "the screenshot is missing or unreadable"
+            ) from exc
+        if hashlib.sha256(frame).hexdigest() != request.screenshot_sha256:
+            raise ItemApprovalRefused(
+                "frame_digest_mismatch", "the screenshot isn't the one requested"
+            )
+        return frame
 
     def requests(self) -> list[ItemApprovalRequest]:
         """Every readable request in this run, oldest first."""
@@ -588,7 +851,7 @@ class ItemApprovalStore:
             return "invalid_answer"
         if answer is None:
             return "expired" if request.expired(now) else "waiting"
-        refusal = answer_refusal(request, answer, now=now, policy=self.policy())
+        refusal = answer_refusal(request, answer, now=now, policy=self.context(now=now))
         if refusal == "request_expired":
             return "expired"
         if refusal is not None:
@@ -644,7 +907,10 @@ class ItemApprovalStore:
             return None
         if answer is None or answer.decision != "approve":
             return None
-        if answer_refusal(request, answer, now=now, policy=self.policy()) is not None:
+        if (
+            answer_refusal(request, answer, now=now, policy=self.context(now=now))
+            is not None
+        ):
             return None
         return request, answer
 
@@ -664,13 +930,18 @@ def wait_for_answer(
     ``code`` is ``approval_wait_timed_out`` when nobody answered in time, or
     the closed reason an answer was refused. A refused answer is final for
     this request: the run stops before the save rather than waiting on.
+
+    The answer can come from Desktop's Run it, from the person's phone
+    through the decision portal (:mod:`openadapt_flow.console.save_approvals`
+    writes it), or from a delegate the run's signed grant allows. Whichever
+    answer is written first wins; the file is created exclusively.
     """
 
     deadline = monotonic() + max(0.0, min(timeout_s, MAX_APPROVAL_WAIT_S))
-    policy = store.policy()
+    context = store.context()
     delegate = approver
-    if delegate is not None and policy.refusal(request.step_class, delegate.identity):
-        # The policy doesn't let this approver decide this step: ask a person.
+    if delegate is not None and _delegate_refusal(request, delegate.identity, context):
+        # The grant doesn't let this approver decide this step: ask a person.
         delegate = None
     next_ask = 0.0
     while True:
@@ -684,7 +955,7 @@ def wait_for_answer(
             if answer is None and getattr(delegate, "_failed", False):
                 delegate = None
         if answer is not None:
-            refusal = answer_refusal(request, answer, policy=policy)
+            refusal = answer_refusal(request, answer, policy=store.context())
             if refusal is not None:
                 return None, refusal
             return answer, None
@@ -739,7 +1010,7 @@ def _ask_delegate(
             auth_method="none",
             decline_reason=decided.decline_reason,
             approver=delegate.identity,
-            policy=store.policy(),
+            policy=store.context(),
         )
         store.write_answer(answer)
     except ItemApprovalRefused:
@@ -759,13 +1030,24 @@ def make_answer(
     decline_reason: Optional[str] = None,
     now: Optional[datetime] = None,
     approver: Optional[ApproverIdentityV1] = None,
-    policy: Optional[ApproverPolicyV1] = None,
+    policy: "ApproverPolicyV1 | ApproverContext | None" = None,
 ) -> ItemApprovalAnswer:
     """Build and check one answer. Raises :class:`ItemApprovalRefused`.
 
-    ``approver`` names an agent, rule or system; it is refused unless
-    ``policy`` (the run's, read from its store) allows that kind here.
+    ``approver`` names an agent or system; it is refused unless ``policy``
+    (``store.context()``) holds a verified, person-signed grant that names it
+    and allows its kind here. The answer records the grant's digest as the
+    approver's ``policy_ref``.
     """
+
+    context = _as_context(policy)
+    if (
+        approver is not None
+        and not approver.is_person
+        and approver.policy_ref is None
+        and context.grant is not None
+    ):
+        approver = approver.model_copy(update={"policy_ref": context.grant.policy_ref})
 
     approver_kind: Literal["cloud_user", "unauthenticated"] = (
         "cloud_user" if approver_id is not None else "unauthenticated"
@@ -788,7 +1070,7 @@ def make_answer(
         raise ItemApprovalRefused(
             "answer_fields_invalid", "the answer's fields are not valid"
         ) from exc
-    refusal = answer_refusal(request, answer, now=now, policy=policy)
+    refusal = answer_refusal(request, answer, now=now, policy=context)
     if refusal is not None:
         raise ItemApprovalRefused(refusal, f"the answer was refused ({refusal})")
     return answer
@@ -817,11 +1099,46 @@ def request_summary(
         "expires_at": request.expires_at,
         "qualification_case_kind": request.qualification_case_kind,
         "step_class": request.step_class.value,
+        "decided_by": decided_by_summary(store, request),
+    }
+
+
+def decided_by_summary(
+    store: ItemApprovalStore, request: ItemApprovalRequest
+) -> Optional[dict[str, Any]]:
+    """Who answered this request, for Desktop and Cloud to show.
+
+    A person: their Cloud user id (or none when Desktop was signed out) and
+    where they answered (``desktop_run_it`` or ``decision_portal``). An agent or
+    system: its id and the digest of the person-signed grant it acted under.
+    ``None`` when nobody answered yet or the answer isn't readable.
+    """
+
+    try:
+        answer = store.read_answer(request.request_id)
+    except ItemApprovalRefused:
+        return None
+    if answer is None:
+        return None
+    identity = answer.approver_identity()
+    return {
+        "decision": answer.decision,
+        "kind": identity.kind.value,
+        "id": identity.id,
+        "auth_method": answer.auth_method,
+        "route": answer.route,
+        "policy_ref": identity.policy_ref,
+        "answered_at": answer.answered_at,
     }
 
 
 __all__ = [
     "ANSWER_SCHEMA",
+    "ApproverContext",
+    "GRANT_FILENAME",
+    "INITIATOR_FILENAME",
+    "PERSON_ROUTES",
+    "UNIDENTIFIED_AGENT",
     "APPROVAL_DIRNAME",
     "DEFAULT_APPROVAL_WAIT_S",
     "MAX_APPROVAL_WAIT_S",

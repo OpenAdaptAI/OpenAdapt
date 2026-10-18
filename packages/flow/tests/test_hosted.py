@@ -1813,6 +1813,43 @@ def test_report_run_payload_carries_no_phi(tmp_path, monkeypatch):
         assert excluded not in posted, excluded
 
 
+def test_value_free_reports_send_without_the_privacy_extra(tmp_path, monkeypatch):
+    """report-break and report-run carry no free text, so they need no scrubber.
+
+    With the privacy extra missing they still send, and nothing from the report
+    body (names, record numbers, intents, errors) is in either payload.
+    """
+    privacy.set_text_scrubber(None)  # the extra is missing
+    try:
+        assert privacy.scrubbing_available() is False
+        halted = tmp_path / "runs" / "halted"
+        _halted_run(halted)
+        succeeded = tmp_path / "runs" / "ok"
+        _successful_run(succeeded)
+        sent: list[str] = []
+        recorder: dict = {}
+        monkeypatch.setattr(
+            httpx, "post", _capture_post(recorder, 202, _break_response())
+        )
+        hosted.report_break(
+            halted, workflow_id=_WORKFLOW_UUID, host="https://h.test", token="tok"
+        )
+        sent.append(json.dumps(recorder["kw"]["json"]))
+        monkeypatch.setattr(
+            httpx, "post", _capture_post(recorder, 202, _run_response())
+        )
+        hosted.report_run(
+            succeeded, workflow_id=_WORKFLOW_UUID, host="https://h.test", token="tok"
+        )
+        sent.append(json.dumps(recorder["kw"]["json"]))
+    finally:
+        privacy.reset_scrubbers()
+    for blob in sent:
+        assert "Jane" not in blob
+        assert "12345" not in blob
+        assert "Save for" not in blob
+
+
 def test_report_run_never_egresses_actual_resolved_effect_contract_hash(
     tmp_path, monkeypatch
 ):
