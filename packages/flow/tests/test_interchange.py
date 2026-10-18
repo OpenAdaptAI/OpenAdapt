@@ -243,3 +243,53 @@ def test_no_action_needs_no_write_evidence() -> None:
         ("invalid/no_action_below_commit_level.json", "IX082"),
     ):
         assert {v.code for v in check_file(FIXTURES / rel)} == {code}, rel
+
+
+def test_no_action_evidence_needs_a_before_and_an_after_read() -> None:
+    codes = {
+        v.code
+        for v in check_file(FIXTURES / "invalid/no_action_without_before_read.json")
+    }
+    assert codes == {"IX085"}
+    doc = _load("valid/referral_no_action.json")
+    doc["no_action"].pop("decided_at")
+    doc["seals"] = []
+    assert {v.code for v in check(interchange.with_checksum(doc))} == {"IX085"}
+
+
+def test_a_nul_in_a_payload_path_is_ix071_not_an_error(tmp_path: Path) -> None:
+    from openadapt_flow.interchange.conformance import resolve_payload
+
+    doc = _load("invalid/payload_nul_path.json")
+    assert [v.code for v in check(doc, base_dir=tmp_path)] == ["IX071"]
+    assert resolve_payload(tmp_path, "a\x00b") is None
+
+
+def test_numbers_compare_by_value() -> None:
+    from openadapt_flow.interchange.conformance import _same
+
+    assert _same(1, 1.0) and _same(1, "1") and _same(1.0, "1.00")
+    assert not _same(1, "2") and not _same(True, 1) and not _same(None, 0)
+    assert not _same("1.0", "1")  # two strings compare as text
+
+
+def test_emit_refuses_a_payload_changed_after_the_check(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from openadapt_flow.interchange import l1
+
+    ex = _exchange_dir_with_payload(
+        tmp_path, FIXTURES / "valid/payloads/invoice-INV-20417.txt"
+    )
+    assert check_file(ex) == []
+    real = l1.check_file
+
+    def check_then_swap(path):
+        out = real(path)
+        (ex.parent / "payloads" / "invoice-INV-20417.txt").write_text("swapped")
+        return out
+
+    monkeypatch.setattr(l1, "check_file", check_then_swap)
+    with pytest.raises(ExchangeNotConforming, match="IX070"):
+        emit_exchange(ex, tmp_path / "extractions")
+    assert not (tmp_path / "extractions" / "manifest.csv").exists()

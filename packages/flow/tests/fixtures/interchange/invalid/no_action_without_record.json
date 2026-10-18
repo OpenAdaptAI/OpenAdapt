@@ -41,19 +41,22 @@
           "channel": "clipboard",
           "value": "1",
           "artifact_id": "chart",
-          "session": "acting"
+          "session": "acting",
+          "observed_at": "2026-10-29T14:11:00+00:00"
         },
         {
           "channel": "clipboard",
           "value": "1",
           "artifact_id": "chart",
-          "session": "reopened"
+          "session": "reopened",
+          "observed_at": "2026-10-29T14:13:00+00:00"
         },
         {
           "channel": "ocr",
           "value": "1",
           "artifact_id": "chart",
-          "session": "reopened"
+          "session": "reopened",
+          "observed_at": "2026-10-29T14:13:00+00:00"
         }
       ]
     }
@@ -85,12 +88,12 @@
       "id": "openadapt-flow@site-runner-1"
     },
     "captured_at": "2026-10-29T14:00:00+00:00",
-    "checksum": "sha256:562722b77c71829df356027be7aba74beaf65954bc72efe5d189b495ab581fda"
+    "checksum": "sha256:9b169bb517317e136c34d5b6fb57fd338ee9a5de770769158cf1b39837d5c272"
   },
   "seals": [
     {
       "kind": "openadapt.seal/offline-ed25519",
-      "covers": "sha256:562722b77c71829df356027be7aba74beaf65954bc72efe5d189b495ab581fda",
+      "covers": "sha256:9b169bb517317e136c34d5b6fb57fd338ee9a5de770769158cf1b39837d5c272",
       "key_id": "site-key-1",
       "uri": "seals/run-0001.seal.json"
     }

@@ -562,18 +562,21 @@ no_action = {
                     "value": "1",
                     "artifact_id": "chart",
                     "session": "acting",
+                    "observed_at": "2026-10-29T14:11:00+00:00",
                 },
                 {
                     "channel": "clipboard",
                     "value": "1",
                     "artifact_id": "chart",
                     "session": "reopened",
+                    "observed_at": "2026-10-29T14:13:00+00:00",
                 },
                 {
                     "channel": "ocr",
                     "value": "1",
                     "artifact_id": "chart",
                     "session": "reopened",
+                    "observed_at": "2026-10-29T14:13:00+00:00",
                 },
             ],
         },
@@ -838,6 +841,22 @@ invalid = {
     "invalid/no_action_write_detected.json": (
         mutate(no_action, _set(["fields", 1, "reads", 1, "value"], "2")),
         ["IX083"],
+    ),
+    "invalid/no_action_without_before_read.json": (
+        mutate(
+            no_action,
+            lambda d: [
+                d["fields"][1]["reads"].pop(0),
+                d["fields"][1].update(grade="same_screen"),
+            ],
+        ),
+        ["IX085"],
+    ),
+    "invalid/payload_nul_path.json": (
+        mutate(
+            invoice, _set(["artifacts", 0, "payload", "path"], "payloads/x\x00.txt")
+        ),
+        ["IX071"],
     ),
     "invalid/no_action_below_commit_level.json": (
         mutate(no_action, _set(["no_action", "required_grade"], "system_of_record")),
