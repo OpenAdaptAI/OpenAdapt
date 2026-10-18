@@ -150,6 +150,8 @@ class PageDriver:
     """The agent's hands and eyes on one Playwright page, through its DOM."""
 
     surface = "dom"
+    #: ``type`` replaces the field's contents (``page.fill``).
+    type_replaces = True
 
     def __init__(self, page: Any, *, settle_ms: int = 3000) -> None:
         self.page = page
@@ -367,7 +369,14 @@ class ModelGuiAgent:
         self.name = f"model:{model.name}"
 
     def run(self, driver: Driver, task_prompt: str, harness: str) -> AgentResult:
-        system = AGENT_PROTOCOL + "\n# Standing instructions\n\n" + harness.strip()
+        system = AGENT_PROTOCOL
+        if not getattr(driver, "type_replaces", True):
+            system += (
+                '\nOn this screen "type" clicks the control and ADDS the text to '
+                "what the field already holds; it does not replace it. A field "
+                "with no text may not be listed: click its label to reach it.\n"
+            )
+        system += "\n# Standing instructions\n\n" + harness.strip()
         steps: list[Step] = []
         cost = 0.0
         calls = 0

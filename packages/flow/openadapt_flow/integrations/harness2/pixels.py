@@ -35,6 +35,9 @@ _FRAME_GAP_S = 0.25
 class PixelDriver:
     """Observe through OCR, act at pixel coordinates, through a Flow backend."""
 
+    #: ``type`` appends to the focused field; the model agent is told so.
+    type_replaces = False
+
     def __init__(
         self,
         backend: Any,

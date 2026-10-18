@@ -135,3 +135,31 @@ def test_rdp_window_rollout_is_scored_by_readback(tmp_path, kiosk):
     )
     assert load_run(run_dir)["surface"] == "rdp"
     assert load_score(run_dir).outcome == "verified"
+
+
+def test_model_agent_is_told_typing_appends_on_pixels():
+    from openadapt_flow.integrations.harness2.agent import ModelGuiAgent, Observation
+    from openadapt_flow.integrations.harness2.llm import Completion
+
+    class Model:
+        name = "fake/model"
+        system = ""
+
+        def complete(self, system, user, *, max_tokens=800):
+            Model.system = system
+            return Completion(
+                '{"action": "done", "status": "stopped", "report": "x"}', 0.0
+            )
+
+    class Driver:
+        type_replaces = False
+
+        def observe(self):
+            return Observation("screen", [])
+
+        def act(self, action):
+            raise AssertionError("no action expected")
+
+    result = ModelGuiAgent(Model()).run(Driver(), "task", "# rules")
+    assert result.status == "stopped"
+    assert "ADDS the text" in Model.system
