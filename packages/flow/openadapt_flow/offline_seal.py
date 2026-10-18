@@ -43,7 +43,7 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Literal, Mapping, Optional, Sequence
+from typing import Any, Final, Literal, Mapping, Optional, Sequence
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr
 
@@ -54,8 +54,8 @@ from openadapt_flow.contracts.seal import (
     seal_key_id,
 )
 
-LOCAL_SEAL_SCHEMA = "openadapt.local-seal/v1"
-LOCAL_SEAL_ISSUER = "local"
+LOCAL_SEAL_SCHEMA: Final = "openadapt.local-seal/v1"
+LOCAL_SEAL_ISSUER: Final = "local"
 SEAL_FILE = "seal.json"
 ENV_HOME = "OPENADAPT_SEAL_HOME"
 ENV_MODE = "OPENADAPT_LOCAL_SEAL"
