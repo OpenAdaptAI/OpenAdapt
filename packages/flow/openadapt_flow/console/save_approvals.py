@@ -47,6 +47,7 @@ from typing import Any, Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 from openadapt_flow.approval_mode.approver import StepClass
+from openadapt_flow.approval_mode.durable_carry import carry_answer_to_durable_pause
 from openadapt_flow.approval_mode.item_approval import (
     APPROVAL_DIRNAME,
     ItemApprovalRefused,
@@ -337,6 +338,12 @@ def decide_save_approval(
         store.write_answer(answer)
     except ItemApprovalRefused as exc:
         raise SaveApprovalRefused(exc.code, str(exc)) from exc
+    # A run that stopped waiting left a durable pause; the answer has to reach
+    # it, or an approval waits for a resume that never sees it and a decline
+    # leaves the pause open.
+    carry_answer_to_durable_pause(
+        run_dir, request, answer, approver=f"{DECISION_PORTAL_ROUTE}:person"
+    )
     request_digest = (
         "sha256:"
         + hashlib.sha256(payload.model_dump_json().encode("utf-8")).hexdigest()

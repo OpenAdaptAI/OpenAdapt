@@ -3706,63 +3706,14 @@ def _cmd_approver_grant(args: argparse.Namespace) -> int:
 def _answer_durable_item_pause(run_dir: Path, request, answer) -> bool:
     """Carry an answer to a durable pause the run left after waiting.
 
-    A run that stopped waiting (no answer in time) left a durable
-    ``item_approval`` pause. An approval then authorizes exactly one resume of
-    that pause; a decline ends it. Returns True when ``resume`` must follow.
+    See :func:`openadapt_flow.approval_mode.durable_carry.carry_answer_to_durable_pause`.
+    Returns True when ``resume`` must follow.
     """
-    from openadapt_flow import crypto
-    from openadapt_flow.runtime.durable.approval import (
-        ResumeRefused,
-        issue_resume_approval,
+    from openadapt_flow.approval_mode.durable_carry import (
+        carry_answer_to_durable_pause,
     )
-    from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
-    from openadapt_flow.runtime.durable.program_checkpoint import bundle_version
 
-    try:
-        store = CheckpointStore(run_dir, key=crypto.resolve_key(None))
-        pending = store.read_pending()
-        manifest = store.read_manifest()
-    except Exception:  # noqa: BLE001 - no durable pause to carry the answer to
-        return False
-    if (
-        pending is None
-        or manifest is None
-        or pending.category != "item_approval"
-        or pending.status != "pending"
-        or pending.step_id != request.step_id
-        or pending.step_index != request.step_index
-        or manifest.run_id != request.run_id
-    ):
-        return False
-    if answer.decision == "decline":
-        store.cas_pending(
-            store.model_digest(pending),
-            pending.model_copy(update={"status": "rejected"}),
-        )
-        return False
-    approver = (
-        f"desktop:{answer.approver_id}"
-        if answer.approver_id is not None
-        else "desktop:unauthenticated"
-    )
-    try:
-        approval = issue_resume_approval(
-            pending,
-            approver=approver,
-            resolution="approve_item",
-            bundle_version=bundle_version(manifest.bundle_dir),
-            workflow_name=pending.workflow_name,
-            run_id=manifest.run_id,
-            run_dir=run_dir,
-        )
-        store.commit_approval_transition(
-            expected_pending=pending,
-            approval=approval,
-            target_status="approved",
-        )
-    except (ResumeRefused, OSError):
-        return False
-    return True
+    return carry_answer_to_durable_pause(run_dir, request, answer)
 
 
 def _cmd_bench(args: argparse.Namespace) -> int:
