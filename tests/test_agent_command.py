@@ -51,7 +51,7 @@ def test_top_level_help_prints_the_launcher_agent_command():
     result = CliRunner().invoke(cli_main, ["--help"])
 
     assert result.exit_code == 0, result.output
-    assert "openadapt agent serve --bundles DIR --allow-run" in result.output
+    assert "openadapt agent serve --bundles DIR --mode production" in result.output
     assert not _ENGINE_AGENT_COMMAND.search(result.output), result.output
 
 

@@ -21,13 +21,13 @@
       "type": "code",
       "value": "REC-100045",
       "confidence": 0.99,
-      "grade": "committed_record_readback",
+      "grade": "reopened",
       "reads": [
         {
           "channel": "clipboard",
           "value": "REC-100045",
           "artifact_id": "chart",
-          "session": "reopened"
+          "session": "acting"
         },
         {
           "channel": "ocr",
@@ -42,8 +42,14 @@
       "type": "enum",
       "value": "urgent",
       "confidence": 0.99,
-      "grade": "committed_record_readback",
+      "grade": "reopened",
       "reads": [
+        {
+          "channel": "clipboard",
+          "value": "urgent",
+          "artifact_id": "chart",
+          "session": "acting"
+        },
         {
           "channel": "clipboard",
           "value": "urgent",
@@ -74,12 +80,12 @@
       "id": "openadapt-flow@site-runner-1"
     },
     "captured_at": "2026-10-29T14:00:00+00:00",
-    "checksum": "sha256:d392f0b37013d26a6d81cbe3010e967789fc2aadc7fb401108dcaa4fbc280703"
+    "checksum": "sha256:d21ca7982f2748a1f7adeee5502c1b3a65abc230cd60e08d963d6b083111dc6a"
   },
   "seals": [
     {
       "kind": "openadapt.seal/offline-ed25519",
-      "covers": "sha256:d392f0b37013d26a6d81cbe3010e967789fc2aadc7fb401108dcaa4fbc280703",
+      "covers": "sha256:d21ca7982f2748a1f7adeee5502c1b3a65abc230cd60e08d963d6b083111dc6a",
       "key_id": "site-key-1",
       "uri": "seals/run-0001.seal.json"
     }

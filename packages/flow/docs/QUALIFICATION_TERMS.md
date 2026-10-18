@@ -32,6 +32,16 @@ Each case runs several times (three by default). After each trial an
 independent oracle reads the system of record and checks that the normal case
 wrote exactly one correct record and that no fault case wrote anything.
 
+Every qualification also runs a pixels-only pass: the same cases with the
+structure lookups (DOM, accessibility) turned off. When the workflow will run
+on a remote display viewed from outside the session (`app.surface:
+remote_display` in `verify.yaml`), the cases run only that way and their
+result decides the qualification. Otherwise the pixels-only pass rate is
+reported for information. The qualification records which lookups the cases
+used (structure, pixels, or both) and the surface they ran for, and a run on
+a surface that offers fewer lookups halts before any write. See
+[Lookup capabilities](SURFACES.md#lookup-capabilities-structure-or-pixels).
+
 **When you need it:** before a workflow makes consequential or irreversible
 writes (creating a patient, submitting a claim, sending a payment) without a
 person watching. It is optional for read-only tasks.
@@ -42,9 +52,10 @@ results. With certification (below), the runner admits that bundle for
 unattended runs.
 
 **What it does not prove:** anything beyond the environment it was qualified
-in. The report records the application version, browser, viewport and
-runtime. A different application version, a changed screen, or a different
-system of record needs a new qualification. A pass also does not show the
+in. The report records the application version, browser, viewport, runtime,
+and the lookups the cases used. A different application version, a changed
+screen, a different surface, or a different system of record needs a new
+qualification. A pass also does not show the
 workflow handles inputs or screens that the cases did not exercise.
 
 ## Certify

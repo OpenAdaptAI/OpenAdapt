@@ -1,9 +1,12 @@
 """Checks an exchange beyond its JSON Schema, and runs the fixture harness.
 
 The JSON Schema says what a well-formed exchange looks like. These checks say
-what a *safe* one looks like: references resolve, a ``verified`` grade has an
-independent read behind it, decisions come from authorized people and never
-from a model, nobody approves their own work, and domain data stays in
+what a *safe* one looks like: references resolve, a read-back grade has the
+reads behind it (``system_of_record`` an independent read, ``reopened`` an
+acting read and a read of the reopened record) and those reads agree with the
+value, a committed result carries evidence, decisions come from authorized
+people and never from a model, nobody approves or confirms their own work,
+payload files stay inside the exchange directory, and domain data stays in
 namespaced extensions. Every violation has a stable code so a producer on the
 other side of the boundary can test against the same list.
 """
@@ -24,6 +27,7 @@ from pydantic import ValidationError
 from openadapt_flow.interchange.model import (
     EXTENSION_KEY,
     INDEPENDENT_CHANNELS,
+    READ_GRADES,
     SCREEN_CHANNELS,
     Exchange,
 )
@@ -32,29 +36,45 @@ CODES: dict[str, str] = {
     "IX001": "does not match the schema",
     "IX010": "checksum does not match the content",
     "IX011": "a Seal covers a different checksum than the exchange has",
-    "IX012": "a Seal is present but the exchange has no checksum",
     "IX020": "a read names an artifact that is not in the exchange",
     "IX021": "an id or field name is used twice",
     "IX022": "an identity names a field that is not in the exchange",
     "IX023": "a decision choice is not one of its options",
     "IX024": "a decision output field is not in the exchange",
     "IX025": "a value does not match its declared type",
-    "IX030": "verified grade without a read through an independent channel",
-    "IX031": "read-back grade without any read of the target application",
-    "IX033": "committed-record grade without a read of the reopened record",
+    "IX026": "an identity's record reference is not the value of any of its fields",
+    "IX030": "system_of_record grade without a read through an independent channel",
+    "IX031": "read-back grade without two reads of the target application "
+    "from different channels or sessions",
+    "IX032": "confirmed or corrected value without a person who confirmed it",
+    "IX033": "reopened grade without a read in the acting session and a screen "
+    "read of the reopened record",
     "IX034": "a value that needs review has no reason",
     "IX035": "an export read does not say where the export came from",
-    "IX032": "confirmed or corrected value without a person who confirmed it",
+    "IX036": "a read of the target application differs from the value it grades",
     "IX040": "a decision was made by something other than a person",
     "IX041": "the producer approved its own work",
     "IX042": "the decider's role is not authorized for the decision",
+    "IX043": "a decision has a choice but no person who decided it",
+    "IX044": "a decision choice differs from the value of its output field",
+    "IX045": "the producer confirmed its own value",
     "IX050": "extension key is not namespaced (use reverse-DNS, e.g. org.example.x)",
     "IX060": "an exchange sent to an executor has an ambiguous identity",
     "IX061": "an existing identity match has no record reference",
     "IX062": "a halted exchange has no halt reason",
     "IX063": "a committed exchange has an identity that was not resolved",
+    "IX064": "a committed exchange has no read of the target application",
+    "IX065": "an exchange from an executor does not say which exchange it answers",
+    "IX066": "an exchange sent to an executor claims a committed outcome",
     "IX070": "a payload file is missing or its sha256 does not match",
     "IX071": "a payload path is absolute or leaves the exchange directory",
+}
+
+#: Codes used by earlier drafts of v0 and no longer emitted. They are not
+#: reused within v0.
+RETIRED_CODES: dict[str, str] = {
+    "IX012": "a Seal is present but the exchange has no checksum (the checksum "
+    "is now required by the schema, so a missing one is IX001)",
 }
 
 
@@ -111,6 +131,78 @@ def _independent(read: Any) -> bool:
     return read.channel in INDEPENDENT_CHANNELS
 
 
+#: Channels that read the target application (its screens, an export, a
+#: database or an API). ``document_parse`` and ``human`` are the document side.
+APPLICATION_CHANNELS: frozenset[str] = SCREEN_CHANNELS | INDEPENDENT_CHANNELS
+
+
+def _same(a: object, b: object) -> bool:
+    """Whether a read saw the field's value. Values of different JSON types
+    compare by their text, so ``"5"`` read off a screen matches the integer 5."""
+    if type(a) is type(b):
+        return a == b
+    if a is None or b is None or isinstance(a, bool) or isinstance(b, bool):
+        return False
+    return str(a).strip() == str(b).strip()
+
+
+def supported_grade(reads: Iterable[Any]) -> str:
+    """The strongest grade a set of agreeing reads supports.
+
+    This is the reading step's rule (``openadapt_flow.records.schema.
+    grade_for``) applied to interchange reads. Only application reads with a
+    value count, and they must come from at least two different (channel,
+    session) pairs. ``system_of_record`` needs an independent read
+    (``database``, ``api``, or an ``export`` of committed data);
+    ``reopened`` needs a read in the ``acting`` session and a screen read in
+    the ``reopened`` session; ``same_screen`` needs two different channels.
+    Agreement with the field value is checked separately (IX036).
+    """
+    parsed = [
+        r for r in reads if r.channel in APPLICATION_CHANNELS and r.value is not None
+    ]
+    if len({(r.channel, r.session) for r in parsed}) < 2:
+        return "unchecked"
+    if any(_independent(r) for r in parsed):
+        return "system_of_record"
+    acting = any(r.session == "acting" for r in parsed)
+    reopened = any(
+        r.session == "reopened" and r.channel in SCREEN_CHANNELS for r in parsed
+    )
+    if acting and reopened:
+        return "reopened"
+    if len({r.channel for r in parsed}) >= 2:
+        return "same_screen"
+    return "unchecked"
+
+
+def _rank(grade: str) -> int:
+    return READ_GRADES.index(grade)
+
+
+_DRIVE = re.compile(r"^[A-Za-z]:")
+
+
+def _payload_path_ok(raw: str) -> bool:
+    """A payload path is relative, POSIX, and stays inside its directory."""
+    if "\\" in raw or _DRIVE.match(raw):
+        return False
+    rel = PurePosixPath(raw)
+    return not rel.is_absolute() and ".." not in rel.parts
+
+
+def resolve_payload(base_dir: Path | str, raw: str) -> Optional[Path]:
+    """The payload file ``raw`` under ``base_dir``, with symlinks followed, or
+    None when the path is not allowed or resolves outside ``base_dir``."""
+    if not _payload_path_ok(raw):
+        return None
+    base = Path(base_dir).resolve()
+    path = (base / raw).resolve()
+    if path != base and base not in path.parents:
+        return None
+    return path
+
+
 _DECIMAL = re.compile(r"^-?\d+(\.\d+)?$")
 _DATE = re.compile(r"^\d{4}-\d{2}-\d{2}$")
 
@@ -155,12 +247,10 @@ def check(doc: dict[str, Any], *, base_dir: Optional[Path] = None) -> list[Viola
 
     # Checksum and Seals.
     checksum = ex.provenance.checksum
-    if checksum is not None and checksum != compute_checksum(doc):
+    if checksum != compute_checksum(doc):
         add("IX010", "provenance.checksum")
     for i, seal in enumerate(ex.seals):
-        if checksum is None:
-            add("IX012", f"seals[{i}]")
-        elif seal.covers != checksum:
+        if seal.covers != checksum:
             add("IX011", f"seals[{i}].covers")
 
     # Uniqueness and references.
@@ -175,6 +265,8 @@ def check(doc: dict[str, Any], *, base_dir: Optional[Path] = None) -> list[Viola
         for dup in sorted(_dupes(values)):
             add("IX021", label, f"{dup!r} is used twice")
 
+    producer = ex.provenance.producer
+    values = {f.name: f.value for f in ex.fields}
     for f in ex.fields:
         where = f"fields[{f.name}]"
         for j, r in enumerate(f.reads):
@@ -189,29 +281,41 @@ def check(doc: dict[str, Any], *, base_dir: Optional[Path] = None) -> list[Viola
         for j, r in enumerate(f.reads):
             if r.channel == "export" and r.source_kind is None:
                 add("IX035", f"{where}.reads[{j}]")
-        independent = {r.channel for r in f.reads if _independent(r)}
-        app_reads = independent | {
-            r.channel
-            for r in f.reads
-            if r.channel in SCREEN_CHANNELS or r.channel == "export"
-        }
-        if f.grade == "verified" and not independent:
-            add("IX030", where)
-        if (
-            f.grade in ("screen_readback", "committed_record_readback")
-            and not app_reads
-        ):
-            add("IX031", where)
-        elif f.grade == "committed_record_readback" and not any(
-            r.session == "reopened" for r in f.reads
-        ):
-            add("IX033", where)
+        app_reads = [
+            (j, r)
+            for j, r in enumerate(f.reads)
+            if r.channel in APPLICATION_CHANNELS and r.value is not None
+        ]
+        differs = [j for j, r in app_reads if not _same(r.value, f.value)]
+        if f.grade != "unchecked" and differs:
+            for j in differs:
+                add(
+                    "IX036",
+                    f"{where}.reads[{j}]",
+                    f"read {f.reads[j].value!r} but the {f.grade} value is {f.value!r}",
+                )
+        elif _rank(f.grade) > _rank(supported_grade(f.reads)):
+            if f.grade == "system_of_record":
+                code = (
+                    "IX031" if any(_independent(r) for _, r in app_reads) else "IX030"
+                )
+            elif f.grade == "reopened":
+                code = "IX033" if app_reads else "IX031"
+            else:
+                code = "IX031"
+            add(code, where)
         if f.needs_review and not (f.review_reason or "").strip():
             add("IX034", where)
         if f.status in ("confirmed", "corrected") and (
             f.confirmed_by is None or f.confirmed_by.kind != "human"
         ):
             add("IX032", where)
+        if f.confirmed_by is not None and f.confirmed_by.id == producer.id:
+            add(
+                "IX045",
+                where,
+                f"{producer.id!r} produced the exchange and confirmed the value",
+            )
 
     for ident in ex.identities:
         where = f"identities[{ident.identity_id}]"
@@ -220,6 +324,12 @@ def check(doc: dict[str, Any], *, base_dir: Optional[Path] = None) -> list[Viola
                 add("IX022", where, f"unknown field {name!r}")
         if ident.match.status == "existing" and not ident.match.record_ref:
             add("IX061", where)
+        ref = ident.match.record_ref
+        known = [name for name in ident.fields if name in values]
+        if ref and known and not any(_same(values[name], ref) for name in known):
+            add(
+                "IX026", where, f"record_ref {ref!r} is not the value of {ident.fields}"
+            )
         if ex.direction == "to_executor" and ident.match.status == "ambiguous":
             add("IX060", where)
         if ex.outcome == "committed" and ident.match.status in (
@@ -228,14 +338,26 @@ def check(doc: dict[str, Any], *, base_dir: Optional[Path] = None) -> list[Viola
         ):
             add("IX063", where)
 
-    producer = ex.provenance.producer
     for d in ex.decisions:
         where = f"decisions[{d.decision_id}]"
         if d.choice is not None and d.choice not in d.options:
             add("IX023", where, f"{d.choice!r} is not an option")
         if d.output_field is not None and d.output_field not in field_names:
             add("IX024", where, f"unknown field {d.output_field!r}")
+        if (
+            d.choice is not None
+            and d.output_field in values
+            and not _same(values[d.output_field], d.choice)
+        ):
+            add(
+                "IX044",
+                where,
+                f"chose {d.choice!r} but {d.output_field} is "
+                f"{values[d.output_field]!r}",
+            )
         if d.decided_by is None:
+            if d.choice is not None:
+                add("IX043", where)
             continue
         if d.decided_by.kind != "human":
             add("IX040", where, f"decided by a {d.decided_by.kind}")
@@ -246,6 +368,16 @@ def check(doc: dict[str, Any], *, base_dir: Optional[Path] = None) -> list[Viola
 
     if ex.outcome == "halted" and not (ex.halt_reason or "").strip():
         add("IX062", "halt_reason")
+    if ex.outcome == "committed" and all(
+        f.grade == "unchecked"
+        and not any(r.channel in APPLICATION_CHANNELS for r in f.reads)
+        for f in ex.fields
+    ):
+        add("IX064", "outcome")
+    if ex.direction == "from_executor" and not (ex.in_reply_to or "").strip():
+        add("IX065", "in_reply_to")
+    if ex.direction == "to_executor" and ex.outcome == "committed":
+        add("IX066", "outcome")
 
     for key in ex.extensions:
         if not EXTENSION_KEY.match(key):
@@ -255,12 +387,14 @@ def check(doc: dict[str, Any], *, base_dir: Optional[Path] = None) -> list[Viola
         if a.payload is None:
             continue
         where = f"artifacts[{a.artifact_id}].payload"
-        rel = PurePosixPath(a.payload.path)
-        if rel.is_absolute() or ".." in rel.parts:
+        if not _payload_path_ok(a.payload.path):
             add("IX071", where)
             continue
         if base_dir is not None:
-            path = Path(base_dir) / rel
+            path = resolve_payload(base_dir, a.payload.path)
+            if path is None:
+                add("IX071", where, "the path resolves outside the exchange directory")
+                continue
             if (
                 not path.is_file()
                 or hashlib.sha256(path.read_bytes()).hexdigest() != a.payload.sha256

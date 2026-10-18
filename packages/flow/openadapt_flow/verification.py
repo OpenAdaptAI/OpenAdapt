@@ -5,6 +5,8 @@ from __future__ import annotations
 from enum import IntEnum
 from typing import Any, Optional
 
+from openadapt_flow.check_level import CheckLevel, from_verification_tier
+
 
 class EffectContractMutationError(RuntimeError):
     """An external verifier changed the effect contract it received."""
@@ -46,22 +48,33 @@ def verify_effect_without_mutation(
 class VerificationTier(IntEnum):
     """Strength of evidence for a declared business effect.
 
-    Lower values are stronger. Verifiers advertise strength explicitly; callers
-    never infer it from class names, substrate labels, or prose.
+    Lower values are stronger. These numbers are a persisted wire value; use
+    :attr:`check_level` (``openadapt_flow.check_level``, higher is stronger)
+    to compare with Seal tiers or show the strength to a person. Verifiers
+    advertise strength explicitly; callers never infer it from class names,
+    substrate labels, or prose.
     """
 
     #: A read through the system of record's own API, database, or store
-    #: (REST, GraphQL, FHIR, SQL, file, email, document). Seal oracle tier 2.
+    #: (REST, GraphQL, FHIR, SQL, file, email, document). Check level
+    #: ``system_of_record``.
     INDEPENDENT_SYSTEM = 1
     #: The same application read through its own record page in a separate,
     #: separately signed-in, read-only session (``ui_readback``). Independent
-    #: of the session that acted; NOT a system-of-record read. Seal oracle
-    #: tier 1.
+    #: of the session that acted; NOT a system-of-record read. Check level
+    #: ``separate_session``.
     INDEPENDENT_SESSION = 2
-    #: The acting session re-navigates to the record and re-reads it.
+    #: The acting session re-navigates to the record and re-reads it. Check
+    #: level ``reopened``.
     PERSISTED_STATE_REACQUISITION = 3
-    #: The acting screen still shows the value.
+    #: The acting screen still shows the value. Check level ``same_screen``.
     IMMEDIATE_SCREEN = 4
+
+    @property
+    def check_level(self) -> CheckLevel:
+        """This tier on the check-level ladder (higher is stronger)."""
+
+        return from_verification_tier(int(self))
 
     def satisfies(self, minimum: "VerificationTier") -> bool:
         return int(self) <= int(minimum)

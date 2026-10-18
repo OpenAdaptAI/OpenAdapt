@@ -93,9 +93,9 @@ under one engine isn't reused under the other.
 wrote on 2026-10-09 against the bundled fake clinic app; regenerate it with
 [`scripts/make_demo_proof_image.py`](scripts/make_demo_proof_image.py).*
 
-| | Run 1: honest app | Run 2: app drops the note |
+| | Run 1: normal save | Run 2: save set to fail |
 |---|---|---|
-| The screen said | Encounter saved | Encounter saved |
+| On screen | Encounter saved | Encounter saved |
 | The record check found | 1 note | 0 notes |
 | openadapt-flow | Done and checked | Stopped and asked a person to check the record, with no retry |
 
@@ -129,13 +129,15 @@ behavior: we haven't timed a codegen script on the same task or run one
 through our UI-change fixtures.
 
 A newer test on a local OpenEMR copy (14 and 15 Oct 2026, synthetic
-referrals) compared compiled replay with a Claude Sonnet agent over 62 timed
-warm runs each. Replay took 29.7 s median from sign-in to saved record, the
+referrals) compared compiled replay with a Claude Sonnet agent over 63
+new-patient referrals each, in timed warm runs; each saved 62 correctly. Over those correct runs, replay took
+29.7 s median from sign-in to saved record, the
 agent 36.5 s, so replay was about 19% faster, with no model calls against the
 agent's median of about $0.08 per run. A separate database read-back matched
 12 of 12 fields on each correct save; engine certification was off, so the
 engine labeled these runs finished, not checked. Method:
-[openadapt.ai/compare/computer-use-agents](https://openadapt.ai/compare/computer-use-agents).
+[openadapt.ai/compare/computer-use-agents](https://openadapt.ai/compare/computer-use-agents);
+run data: [benchmark/openemr_referral_timing](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/openemr_referral_timing/README.md).
 A side-by-side comparison with UiPath, Power
 Automate, and browser agents is at
 [openadapt.ai/compare](https://openadapt.ai/compare).
@@ -289,9 +291,12 @@ Install the extras for the surface that records and replays the workflow:
 each surface, and [docs/PRODUCT_STATUS.md](docs/PRODUCT_STATUS.md) lists the
 evidence for each one. A bundle is bound to the surface it was recorded on.
 
-One bundle drives one surface: one browser tab, one desktop app, or one
-remote desktop session. For a task that crosses surfaces, record one bundle
-per surface and chain them with `openadapt-flow compose`. Each child starts
+A bundle drives one surface by default: one browser tab, one desktop app, or
+one remote desktop session. A bundle can also declare more than one surface:
+popups and new tabs it opens, or another backend it switches to with an
+explicit, identity-checked step. See [docs/MULTI_SURFACE.md](docs/MULTI_SURFACE.md)
+for this and its limits. Otherwise, record one bundle per surface and chain
+them with `openadapt-flow compose`. Each child starts
 only after the one before it ends with a checked save, unless you allow a
 specific stop with `--allow-halt`.
 
@@ -384,7 +389,7 @@ browser workflows. Desktop and Citrix runs are self-hosted
   second read path. For a task you'll run a few times, doing it by hand or
   pointing an agent at it costs less.
 - A record check sees only what its read path covers. In a fault test with
-  injected bad writes, a check that trusted the success message passed 54 of
+  injected bad writes, a screen-only check passed 54 of
   the 72 runs that left the record wrong. One API read let 9 of the 72
   through, all writes to a table it didn't read
   ([`EFFECT_E2E.md`](benchmark/effect_e2e/EFFECT_E2E.md)).
@@ -422,6 +427,9 @@ The full list, capability by capability: [docs/LIMITS.md](docs/LIMITS.md).
   session, the Windows agent server, and the token.
 - [docs/BENCHMARKS.md](docs/BENCHMARKS.md): every benchmark, with method and
   caveats.
+- [Fleet drift patches](docs/FLEET_DRIFT_PATCHES.md): opted-in installs that
+  automate the same application share signed repairs for the same UI change.
+  Each tenant tests a patch on its own cases before it is used.
 - [docs/REWARD_WORKER.md](docs/REWARD_WORKER.md): `serve-reward` scores a
   model's training episode by reading the record after it ends.
 - [docs.openadapt.ai](https://docs.openadapt.ai): the full documentation set.

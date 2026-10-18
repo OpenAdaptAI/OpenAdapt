@@ -99,7 +99,7 @@
     {
       "name": "approval",
       "type": "enum",
-      "value": "approve",
+      "value": "pay_twice",
       "confidence": 1.0,
       "reads": [
         {
@@ -154,6 +154,6 @@
       "id": "document-side@site"
     },
     "captured_at": "2026-10-29T14:00:00+00:00",
-    "checksum": "sha256:fa591095bb01f9a8c1181f7a5c17081b9784b3bf4f692d0a0e17e2d458dffb8d"
+    "checksum": "sha256:a387d55d5dcecebf5a686ac89cf64d7b09df5417c46f0b9f17c3f5b6e60de47a"
   }
 }

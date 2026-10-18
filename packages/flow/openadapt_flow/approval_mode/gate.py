@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Optional, Protocol
 
 from openadapt_flow.approval_mode.approver import (
+    DEFAULT_APPROVER_POLICY,
     Approver,
     ApproverPolicyV1,
     step_class_for,
@@ -52,6 +53,7 @@ from openadapt_flow.approval_mode.item_approval import (
     ItemApprovalRefused,
     ItemApprovalRequest,
     ItemApprovalStore,
+    SaveField,
     wait_for_answer,
 )
 from openadapt_flow.approval_mode.model import (
@@ -166,6 +168,15 @@ def _no_form_state(_frame: Optional[bytes]) -> Optional[tuple[str, str]]:
     return None
 
 
+#: Returns the values the save writes, for the phone, or ``None`` when the
+#: run can't name them. The phone then shows the screenshot alone.
+SaveFieldsReader = Callable[[], Optional[Sequence[SaveField]]]
+
+
+def _no_save_fields() -> Optional[Sequence[SaveField]]:
+    return None
+
+
 @dataclass(frozen=True)
 class StepContext:
     """What the replayer knows when a save step starts, before it resolves."""
@@ -185,6 +196,9 @@ class StepContext:
     drill_fault_step: bool = False
     qualification_case_kind: Optional[str] = None
     runtime_inputs_digest: Optional[str] = None
+    #: The values the save writes, shown on the phone (see
+    #: :data:`SaveFieldsReader`). Bound into the request digest.
+    save_fields: SaveFieldsReader = _no_save_fields
 
 
 @dataclass(frozen=True)
@@ -267,13 +281,19 @@ class ApprovalGate:
             self.approval_store = approval_store
         else:
             self.approval_store = ItemApprovalStore(approval_store)
-        # Who may answer a save. Person-only unless the deployment widened it;
-        # the run's store records the policy so every reader applies the same.
+        # Who may answer a save. Person-only unless the deployment widened it.
+        # The run's store records the policy at run start, always, so every
+        # reader applies the same one, and this gate applies only that one: a
+        # policy file that appears or changes later is refused or ignored.
         self.approver_policy = approver_policy
         self.approver = approver
         self._policy_name = policy_name
-        if approver_policy is not None and self.approval_store is not None:
-            self.approval_store.write_policy(approver_policy)
+        if self.approval_store is not None:
+            self.approval_store.write_policy(
+                approver_policy
+                if approver_policy is not None
+                else DEFAULT_APPROVER_POLICY
+            )
         self._approval_wait_s = float(approval_wait_s)
         self._approval_poll_s = float(approval_poll_s)
         self._sleep = sleep
@@ -610,6 +630,7 @@ class ApprovalGate:
                     form_state=form,
                     qualification_case_kind=ctx.qualification_case_kind,
                     step_class=step_class_for(ctx.step, policy_name=self._policy_name),
+                    fields=ctx.save_fields(),
                 )
             except (OSError, ValueError, ItemApprovalRefused):
                 return wait_refusal("approval_request_unwritable")

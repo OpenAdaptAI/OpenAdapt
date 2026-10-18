@@ -31,8 +31,10 @@ Only outcome done means the change was saved and checked. needs_review means it 
 The sandbox serves one synthetic workflow, `add_triage_note`. Its `sandbox_case` input shows each outcome: `normal`, `duplicate_record`, `false_saved_banner`, `timeout_after_save`, and `app_offline`.
 
 ```bash
-claude mcp add openadapt -- uvx --python 3.12 openadapt-agent serve
+claude mcp add --scope user openadapt -- uvx --python 3.12 openadapt-agent serve
 ```
+
+This only registers the server. Claude Code starts it the next time you run `claude`. Then call `list_workflows`, and `run_workflow` with a made-up note and a new `request_id`.
 
 This installs openadapt-agent from PyPI. It requires openadapt-flow 2.1.0 or later, which is on PyPI and installs with it.
 

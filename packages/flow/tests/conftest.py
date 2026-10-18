@@ -41,3 +41,6 @@ def _isolate_durable_authority(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) 
         "OPENADAPT_DURABLE_AUTHORITY_DB",
         str(tmp_path / ".durable-authority.sqlite3"),
     )
+    # Offline Seals are on by default; keep each test's Seal key and batch
+    # queue out of the real home directory.
+    monkeypatch.setenv("OPENADAPT_SEAL_HOME", str(tmp_path / ".seal-home"))

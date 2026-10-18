@@ -41,13 +41,13 @@
       "expect": []
     },
     {
-      "file": "invalid/verified_without_independent_read.json",
+      "file": "invalid/system_of_record_without_independent_read.json",
       "expect": [
         "IX030"
       ]
     },
     {
-      "file": "invalid/verified_from_live_session_export.json",
+      "file": "invalid/system_of_record_from_live_session_export.json",
       "expect": [
         "IX030"
       ]
@@ -66,9 +66,69 @@
       ]
     },
     {
-      "file": "invalid/committed_without_reopen.json",
+      "file": "invalid/reopened_without_reopened_read.json",
       "expect": [
         "IX033"
+      ]
+    },
+    {
+      "file": "invalid/reopened_without_acting_read.json",
+      "expect": [
+        "IX033"
+      ]
+    },
+    {
+      "file": "invalid/reopened_read_not_on_screen.json",
+      "expect": [
+        "IX033"
+      ]
+    },
+    {
+      "file": "invalid/reopened_read_differs.json",
+      "expect": [
+        "IX036"
+      ]
+    },
+    {
+      "file": "invalid/committed_without_evidence.json",
+      "expect": [
+        "IX064"
+      ]
+    },
+    {
+      "file": "invalid/result_without_in_reply_to.json",
+      "expect": [
+        "IX065"
+      ]
+    },
+    {
+      "file": "invalid/committed_to_executor.json",
+      "expect": [
+        "IX066"
+      ]
+    },
+    {
+      "file": "invalid/record_ref_mismatch.json",
+      "expect": [
+        "IX026"
+      ]
+    },
+    {
+      "file": "invalid/choice_without_decider.json",
+      "expect": [
+        "IX043"
+      ]
+    },
+    {
+      "file": "invalid/choice_differs_from_output_field.json",
+      "expect": [
+        "IX044"
+      ]
+    },
+    {
+      "file": "invalid/self_confirmation.json",
+      "expect": [
+        "IX045"
       ]
     },
     {
@@ -193,6 +253,18 @@
     },
     {
       "file": "invalid/payload_escapes_dir.json",
+      "expect": [
+        "IX071"
+      ]
+    },
+    {
+      "file": "invalid/payload_backslash_path.json",
+      "expect": [
+        "IX071"
+      ]
+    },
+    {
+      "file": "invalid/payload_drive_letter_path.json",
       "expect": [
         "IX071"
       ]

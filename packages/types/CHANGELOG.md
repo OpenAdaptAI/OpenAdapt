@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.23.0 (2026-10-18)
+
+First release from the [OpenAdapt monorepo](https://github.com/OpenAdaptAI/OpenAdapt) (`packages/types`). The models now live in `openadapt_flow.contracts`; this package re-exports them, so `import openadapt_types` keeps working. It requires `openadapt-flow>=2.2.0,<3`.
+
+### Features
+
+- **approval**: Approver identity, approver policy, and an approval record ([#1187](https://github.com/OpenAdaptAI/OpenAdapt/pull/1187), from [openadapt-types#49](https://github.com/OpenAdaptAI/openadapt-types/pull/49)).
+
+
 ## v0.22.0 (2026-10-17)
 
 ### Documentation

@@ -40,16 +40,18 @@ def prov(producer: dict) -> dict:
 
 
 def sessions(doc: dict) -> None:
-    """Mark which session each application read came from."""
+    """Mark which session each application read came from, unless the case
+    already says (a ``reopened`` field names its reopened read explicitly)."""
     for f in doc["fields"]:
         for r in f.get("reads", []):
+            if "session" in r:
+                continue
             if r["channel"] == "export" and r.get("source_kind") == "live_session":
                 r["session"] = "acting"
             elif r["channel"] in ("export", "database", "api"):
                 r["session"] = "independent"
             elif r["channel"] in ("clipboard", "ocr", "structure", "accessibility"):
-                reopened = f.get("grade") == "committed_record_readback"
-                r["session"] = "reopened" if reopened else "acting"
+                r["session"] = "acting"
 
 
 def seal(doc: dict) -> dict:
@@ -209,13 +211,19 @@ invoice_result = {
             "type": "code",
             "value": "B-000318",
             "confidence": 0.99,
-            "grade": "committed_record_readback",
+            "grade": "reopened",
             "reads": [
-                {"channel": "clipboard", "value": "B-000318", "artifact_id": "r1"},
+                {
+                    "channel": "clipboard",
+                    "value": "B-000318",
+                    "artifact_id": "r1",
+                    "session": "acting",
+                },
                 {
                     "channel": "ocr",
                     "value": "B-000318",
                     "artifact_id": "r1",
+                    "session": "reopened",
                     "locator": {
                         "screen": "Bill detail",
                         "region": {
@@ -233,7 +241,7 @@ invoice_result = {
             "unit": "CAD",
             "value": "1249.50",
             "confidence": 0.99,
-            "grade": "verified",
+            "grade": "system_of_record",
             "reads": [
                 {"channel": "ocr", "value": "1249.50", "artifact_id": "r1"},
                 {
@@ -245,12 +253,12 @@ invoice_result = {
         },
         {
             # An export started from the same live session grades like a
-            # screen read, not as verified.
+            # screen read, not as system_of_record.
             "name": "due_date",
             "type": "date",
             "value": "2026-11-15",
             "confidence": 0.98,
-            "grade": "screen_readback",
+            "grade": "same_screen",
             "reads": [
                 {"channel": "ocr", "value": "2026-11-15", "artifact_id": "r1"},
                 {
@@ -260,12 +268,19 @@ invoice_result = {
                 },
             ],
         },
+        {
+            "name": "vendor_id",
+            "type": "code",
+            "value": "V-0042",
+            "confidence": 0.99,
+            "reads": [{"channel": "ocr", "value": "V-0042", "artifact_id": "r1"}],
+        },
     ],
     "identities": [
         {
             "identity_id": "vendor",
             "role": "counterparty",
-            "fields": ["bill_id"],
+            "fields": ["vendor_id"],
             "match": {
                 "status": "existing",
                 "record_ref": "V-0042",
@@ -419,13 +434,19 @@ referral_result = {
             "type": "code",
             "value": "REC-100045",
             "confidence": 0.99,
-            "grade": "committed_record_readback",
+            "grade": "reopened",
             "reads": [
-                {"channel": "clipboard", "value": "REC-100045", "artifact_id": "chart"},
+                {
+                    "channel": "clipboard",
+                    "value": "REC-100045",
+                    "artifact_id": "chart",
+                    "session": "acting",
+                },
                 {
                     "channel": "ocr",
                     "value": "REC-100045",
                     "artifact_id": "chart",
+                    "session": "reopened",
                 },
             ],
         },
@@ -434,9 +455,20 @@ referral_result = {
             "type": "enum",
             "value": "urgent",
             "confidence": 0.99,
-            "grade": "committed_record_readback",
+            "grade": "reopened",
             "reads": [
-                {"channel": "clipboard", "value": "urgent", "artifact_id": "chart"}
+                {
+                    "channel": "clipboard",
+                    "value": "urgent",
+                    "artifact_id": "chart",
+                    "session": "acting",
+                },
+                {
+                    "channel": "clipboard",
+                    "value": "urgent",
+                    "artifact_id": "chart",
+                    "session": "reopened",
+                },
             ],
         },
     ],
@@ -513,11 +545,11 @@ def _set(path, value):
 
 
 invalid = {
-    "invalid/verified_without_independent_read.json": (
+    "invalid/system_of_record_without_independent_read.json": (
         mutate(invoice_result, lambda d: d["fields"][1]["reads"].pop()),
         ["IX030"],
     ),
-    "invalid/verified_from_live_session_export.json": (
+    "invalid/system_of_record_from_live_session_export.json": (
         mutate(
             invoice_result,
             _set(["fields", 1, "reads", 1, "source_kind"], "live_session"),
@@ -532,12 +564,75 @@ invalid = {
         mutate(referral_result, _set(["fields", 1, "reads"], [])),
         ["IX031"],
     ),
-    "invalid/committed_without_reopen.json": (
+    "invalid/reopened_without_reopened_read.json": (
         mutate(
             referral_result,
             lambda d: [r.update(session="acting") for r in d["fields"][0]["reads"]],
         ),
         ["IX033"],
+    ),
+    "invalid/reopened_without_acting_read.json": (
+        mutate(
+            referral_result,
+            lambda d: [r.update(session="reopened") for r in d["fields"][0]["reads"]],
+        ),
+        ["IX033"],
+    ),
+    "invalid/reopened_read_not_on_screen.json": (
+        mutate(
+            referral_result,
+            _set(
+                ["fields", 0, "reads", 1],
+                {
+                    "channel": "export",
+                    "value": "REC-100045",
+                    "source_kind": "live_session",
+                    "session": "reopened",
+                },
+            ),
+        ),
+        ["IX033"],
+    ),
+    "invalid/reopened_read_differs.json": (
+        mutate(referral_result, _set(["fields", 1, "reads", 1, "value"], "routine")),
+        ["IX036"],
+    ),
+    "invalid/committed_without_evidence.json": (
+        mutate(
+            referral_result,
+            lambda d: [f.update(grade="unchecked", reads=[]) for f in d["fields"]],
+        ),
+        ["IX064"],
+    ),
+    "invalid/result_without_in_reply_to.json": (
+        mutate(referral_result, lambda d: d.pop("in_reply_to")),
+        ["IX065"],
+    ),
+    "invalid/committed_to_executor.json": (
+        mutate(referral_result, _set(["direction"], "to_executor")),
+        ["IX066"],
+    ),
+    "invalid/record_ref_mismatch.json": (
+        mutate(invoice, _set(["identities", 0, "match", "record_ref"], "V-0099")),
+        ["IX026"],
+    ),
+    "invalid/choice_without_decider.json": (
+        mutate(invoice, lambda d: d["decisions"][0].pop("decided_by")),
+        ["IX043"],
+    ),
+    "invalid/choice_differs_from_output_field.json": (
+        mutate(invoice, _set(["fields", 4, "value"], "hold")),
+        ["IX044"],
+    ),
+    "invalid/self_confirmation.json": (
+        mutate(
+            referral,
+            _set(
+                ["fields", 2, "confirmed_by"],
+                {"kind": "human", "id": DOC_SIDE["id"], "role": "intake_staff"},
+            ),
+        ),
+        ["IX045"],
     ),
     "invalid/review_without_reason.json": (
         mutate(referral_result, _set(["fields", 1, "needs_review"], True)),
@@ -568,7 +663,13 @@ invalid = {
         ["IX042"],
     ),
     "invalid/choice_not_option.json": (
-        mutate(invoice, _set(["decisions", 0, "choice"], "pay_twice")),
+        mutate(
+            invoice,
+            lambda d: [
+                _set(["decisions", 0, "choice"], "pay_twice")(d),
+                _set(["fields", 4, "value"], "pay_twice")(d),
+            ],
+        ),
         ["IX023"],
     ),
     "invalid/duplicate_field.json": (
@@ -642,6 +743,14 @@ invalid = {
     ),
     "invalid/payload_escapes_dir.json": (
         mutate(invoice, _set(["artifacts", 0, "payload", "path"], "../../etc/hosts")),
+        ["IX071"],
+    ),
+    "invalid/payload_backslash_path.json": (
+        mutate(invoice, _set(["artifacts", 0, "payload", "path"], "..\\..\\x")),
+        ["IX071"],
+    ),
+    "invalid/payload_drive_letter_path.json": (
+        mutate(invoice, _set(["artifacts", 0, "payload", "path"], "C:/x")),
         ["IX071"],
     ),
 }

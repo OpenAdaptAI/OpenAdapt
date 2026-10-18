@@ -31,6 +31,7 @@ from openadapt_flow.ir import (
     BackendHints,
     BundleManifest,
     BundleProvenance,
+    DialogResponse,
     ExecutionMode,
     ExecutionTargetKind,
     Landmark,
@@ -42,6 +43,7 @@ from openadapt_flow.ir import (
     Region,
     Step,
     StructuralLocator,
+    SurfaceSpec,
     Workflow,
     structural_locator_is_locatable,
 )
@@ -1543,6 +1545,173 @@ def _surface_binding_from_meta(
     return surface, execution_mode_for_surface(surface)
 
 
+# -- multi-surface recordings (docs/MULTI_SURFACE.md) --------------------------
+
+#: Parameter values shorter than this are not generalized out of a URL/title
+#: (a two-letter value would match half the alphabet).
+_SURFACE_PARAM_MIN_CHARS = 3
+
+
+def _surface_url_pattern(url: str, exclude_texts: tuple[str, ...]) -> str:
+    """Full-match regex for a recorded page URL.
+
+    Scheme, host, and port are exact. Each path segment is exact unless it
+    carries a demonstrated parameter value or looks like an identifier (a
+    digit, as in ``/patient/12345``, or a long opaque token); such a segment
+    becomes one path segment of any value, so the bundle never seals a
+    record identifier. The query and fragment are not asserted: they carry
+    tokens (OAuth ``state``) and record identifiers that change on every run.
+    """
+
+    from urllib.parse import unquote, urlsplit
+
+    parts = urlsplit(url)
+    values = [v for v in exclude_texts if len(v.strip()) >= _SURFACE_PARAM_MIN_CHARS]
+    segments = []
+    for segment in (parts.path or "/").split("/"):
+        decoded = unquote(segment)
+        if _segment_is_identifier(decoded) or any(
+            value in segment or value in decoded for value in values
+        ):
+            segments.append("[^/?#]+")
+        else:
+            segments.append(re.escape(segment))
+    origin = re.escape(f"{parts.scheme}://{parts.netloc}".lower())
+    return origin + "/".join(segments) + r"(?:[?#].*)?"
+
+
+#: An API version marker (``v2``) is structure, not an identifier.
+_VERSION_SEGMENT_RE = re.compile(r"[vV]\d{1,2}")
+#: A long opaque token (a session id or hash) even without a digit. A slug
+#: with separators (``order-history``) stays exact.
+_OPAQUE_SEGMENT_RE = re.compile(r"[A-Za-z0-9]{24,}")
+
+
+def _segment_is_identifier(segment: str) -> bool:
+    if not segment or _VERSION_SEGMENT_RE.fullmatch(segment):
+        return False
+    return bool(re.search(r"\d", segment) or _OPAQUE_SEGMENT_RE.fullmatch(segment))
+
+
+def _surface_title_pattern(
+    title: object, exclude_texts: tuple[str, ...]
+) -> Optional[str]:
+    """Full-match regex for a recorded page title, or None to not assert it.
+
+    A demonstrated parameter value becomes "any text". A title the privacy
+    pass flags as carrying an identifier is not asserted at all.
+    """
+
+    if not isinstance(title, str) or not title.strip():
+        return None
+    if _text_carries_phi(title):
+        return None
+    values = sorted(
+        (v for v in exclude_texts if len(v.strip()) >= _SURFACE_PARAM_MIN_CHARS),
+        key=len,
+        reverse=True,
+    )
+    if not values:
+        return re.escape(title)
+    splitter = re.compile("|".join(re.escape(v) for v in values))
+    pieces = splitter.split(title)
+    return ".+".join(re.escape(piece) for piece in pieces)
+
+
+def _dialog_identity(raw: dict, exclude_texts: tuple[str, ...]) -> DialogResponse:
+    """The sealed identity of a recorded browser dialog.
+
+    A message with no demonstrated parameter value and no digits is kept
+    exactly. Otherwise it becomes a full-match pattern: each parameter value
+    matches any text and each digit run matches any digits, so a record
+    number, a date, or a typed value is never sealed into the bundle. A
+    message the privacy pass still flags after that is refused: the operator
+    must make the value a parameter.
+    """
+
+    response = raw.get("response")
+    message = str(raw.get("message") or "")
+    values = sorted(
+        (v for v in exclude_texts if len(v.strip()) >= _SURFACE_PARAM_MIN_CHARS),
+        key=len,
+        reverse=True,
+    )
+    pieces = (
+        re.compile("|".join(re.escape(v) for v in values)).split(message)
+        if values
+        else [message]
+    )
+    literal = " ".join(re.sub(r"\d+", "0", piece) for piece in pieces)
+    if _text_carries_phi(literal):
+        raise ValueError(
+            "a recorded browser dialog message carries an identifier that is "
+            "not a demonstrated parameter; make that value a parameter and "
+            "compile again"
+        )
+    if len(pieces) == 1 and not re.search(r"\d", message):
+        return DialogResponse.model_validate({"response": response, "message": message})
+    pattern = ".+".join(
+        r"\d+".join(re.escape(part) for part in re.split(r"\d+", piece))
+        for piece in pieces
+    )
+    return DialogResponse.model_validate(
+        {"response": response, "message_pattern": pattern}
+    )
+
+
+def _surfaces_from_meta(
+    meta: dict,
+    exclude_texts: tuple[str, ...],
+    step_id_for_event: dict[int, str],
+) -> list[SurfaceSpec]:
+    """``meta.json`` ``surfaces`` -> ``Workflow.surfaces`` (patterns derived)."""
+
+    from openadapt_flow.runtime.surfaces import url_origin
+
+    raw = meta.get("surfaces")
+    if raw is None:
+        return []
+    if not isinstance(raw, list) or not raw:
+        raise ValueError("meta.json surfaces must be a non-empty list")
+    specs: list[SurfaceSpec] = []
+    for entry in raw:
+        if not isinstance(entry, dict):
+            raise ValueError("meta.json surfaces entries must be objects")
+        sid = entry.get("id")
+        kind = entry.get("kind")
+        if "opened_by_event" not in entry:
+            specs.append(SurfaceSpec.model_validate({"id": sid, "kind": kind}))
+            continue
+        event_index = int(entry["opened_by_event"])
+        if event_index not in step_id_for_event:
+            raise ValueError(f"surface {sid!r} is opened by an unknown event")
+        url = str(entry.get("url") or "")
+        origin = url_origin(url)
+        if origin is None:
+            raise ValueError(
+                f"surface {sid!r} was recorded without an http(s) URL; Flow "
+                "cannot identify that page at replay"
+            )
+        specs.append(
+            SurfaceSpec.model_validate(
+                {
+                    "id": sid,
+                    "kind": kind,
+                    "opened_by_step": step_id_for_event[event_index],
+                    "opener": entry.get("opener"),
+                    "open_order": int(entry.get("open_order", 0)),
+                    "opener_link": entry.get("opener_link"),
+                    "origin": origin,
+                    "url_pattern": _surface_url_pattern(url, exclude_texts),
+                    "title_pattern": _surface_title_pattern(
+                        entry.get("title"), exclude_texts
+                    ),
+                }
+            )
+        )
+    return specs
+
+
 # Parameter names must be usable as ValueExpr(param=...) / ApiBinding threads
 # and environment-variable stems -- the same shape ir.ApiBinding enforces.
 _PARAM_NAME_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,127}$")
@@ -1645,6 +1814,7 @@ def compile_recording(
     target_surface: Optional[ExecutionTargetKind] = None,
     pixel_verify_enabled: bool = False,
     bind_effect_params: bool = False,
+    drop_redundant_keys: bool = False,
 ) -> Workflow:
     """Compile a recording directory into a workflow bundle.
 
@@ -1772,6 +1942,11 @@ def compile_recording(
             a pixel identifier crop as a step's only identity evidence only
             when that runtime can verify it (see
             :func:`openadapt_flow.runtime.identity.verifiable_identity_evidence`).
+        drop_redundant_keys: Let the fix-up passes drop a demonstrated Enter
+            after a ``<select>`` type and a Ctrl+A on a field that was empty
+            in the demonstration. Off by default: the TYPE read-back at replay
+            doesn't catch a wrong drop (see
+            :mod:`openadapt_flow.compiler.fixup_passes`).
 
     Returns:
         The compiled :class:`Workflow` (also saved to the bundle).
@@ -1859,6 +2034,9 @@ def compile_recording(
 
     # Each recording frame is OCRed at most once across both passes.
     ocr_cache: dict[tuple[int, str], list[OcrLine]] = {}
+    from openadapt_flow.runtime import layout_drift as _layout
+
+    layout_fingerprints: dict[str, "_layout.LayoutFingerprint"] = {}
 
     def cached_lines(i: int, suffix: str, png: bytes) -> list[OcrLine]:
         key = (i, suffix)
@@ -1896,7 +2074,8 @@ def compile_recording(
             event_index=i,
         )
         if (
-            before_viewport is not None
+            kind != "switch_surface"
+            and before_viewport is not None
             and after_viewport is not None
             and before_viewport != after_viewport
         ):
@@ -1927,6 +2106,11 @@ def compile_recording(
             )
             crop_region = _discriminative_crop_region(frame, click)
             frame_lines = cached_lines(i, "before", before_png)
+            # Font/layout fingerprint of the frame the step acts on: frame
+            # size and font metrics, no text (runtime.layout_drift).
+            layout_fingerprints[step_id] = _layout.fingerprint(
+                frame_lines, (int(frame.shape[1]), int(frame.shape[0]))
+            )
             crop_region = _clip_away_param_lines(
                 crop_region, click, frame_lines, exclude_texts
             )
@@ -2305,8 +2489,34 @@ def compile_recording(
                     event,
                 )
             )
+        elif kind == "switch_surface":
+            target = str(event.get("surface") or "")
+            from openadapt_flow.runtime.surfaces import url_origin
+
+            pending.append(
+                (
+                    Step(
+                        id=step_id,
+                        intent=f"switch to surface '{target}'",
+                        action=ActionKind.SWITCH_SURFACE,
+                        surface=target,
+                        # Identity of a browser target: the origin the
+                        # demonstration saw on arriving there.
+                        surface_origin=url_origin(event.get("url_after")),
+                    ),
+                    before_png,
+                    after_png,
+                    event,
+                )
+            )
         else:
             raise ValueError(f"unknown event kind {kind!r} (event {i})")
+        if kind != "switch_surface":
+            stamped = pending[-1][0]
+            if event.get("surface") is not None:
+                stamped.surface = str(event["surface"])
+            if event.get("opens"):
+                stamped.opens = [str(sid) for sid in event["opens"]]
 
     # Collapse a demonstrated native/pixel option selection into one explicit
     # SELECT_OPTION contract. This is deliberately evidence-gated and remote-only:
@@ -2466,10 +2676,44 @@ def compile_recording(
     binding_observations: dict[str, object] = {}
     for j, (step, step_before, step_after, event) in enumerate(pending):
         steps.append(step)
+        if isinstance(event.get("dialog"), dict):
+            # The browser dialog this action raised, answered by the backend
+            # at replay only when it shows the same message (values and
+            # digits generalized, never sealed).
+            step.dialog = _dialog_identity(event["dialog"], exclude_texts)
         if event.get("submit_binding") is not None:
             binding_observations[step.id] = event["submit_binding"]
         if step.action is ActionKind.SCROLL:
             continue  # see the scroll branch in pass 1
+        if step.action is ActionKind.SWITCH_SURFACE:
+            # The switch's screen identity: one stable text line from the
+            # FIRST frame of the new surface (every line there is "new"), with
+            # the same volatility, persistence, parameter, and PHI filters as
+            # any other step. Its before frame is another surface, so a diff
+            # would mean nothing.
+            if step_after is not None:
+                switch_next: Optional[list[OcrLine]] = None
+                switch_next_before = pending[j + 1][1] if j + 1 < len(pending) else None
+                if switch_next_before is not None:
+                    switch_next = cached_lines(
+                        int(pending[j + 1][3]["i"]), "before", switch_next_before
+                    )
+                text_pc = _new_text_postcondition(
+                    [],
+                    cached_lines(int(event["i"]), "after", step_after),
+                    exclude_texts=exclude_texts,
+                    avoid_labels=anchor_labels,
+                    next_lines=switch_next,
+                    reference_date=reference_date,
+                )
+                step.expect = [text_pc] if text_pc is not None else []
+            step.identity_armed = bool(step.expect) or step.surface_origin is not None
+            step.identity_unarmed_reason = (
+                None
+                if step.identity_armed
+                else "no stable text on the new surface and no browser origin"
+            )
+            continue
         step_region_drops: list[tuple[Region, str]] = []
         next_before: Optional[bytes] = None
         next_lines: Optional[list[OcrLine]] = None
@@ -2524,6 +2768,11 @@ def compile_recording(
     # passes risk_overrides. Conservative: an unsure write-shaped step leans
     # irreversible (the safe direction). Explicit risk_overrides below win.
     for step in steps:
+        if step.action is ActionKind.SWITCH_SURFACE:
+            step.risk = "reversible"
+            step.risk_explanation = "a surface switch delivers no input"
+            step.risk_review_required = False
+            continue
         inference = infer_step_risk(step)
         step.risk = inference.risk
         step.risk_explanation = inference.explanation
@@ -2686,10 +2935,17 @@ def compile_recording(
         phash_png=phash_png,
         surface=surface,
         pixel_verify_enabled=pixel_verify_enabled,
+        drop_redundant_keys=drop_redundant_keys,
     )
     for note in compile_notes:
         logger.info("compile-pass %s: %s", note["step"], note["change"])
 
+    for step in steps:
+        if step.action is ActionKind.SWITCH_SURFACE and step.risk != "reversible":
+            raise ValueError(
+                f"step {step.id!r} is a surface switch; it delivers no input "
+                "and cannot be marked irreversible"
+            )
     workflow = Workflow(
         name=name,
         recording_id=meta.get("id"),
@@ -2710,6 +2966,16 @@ def compile_recording(
         },
         secret_params=secret_params,
         steps=steps,
+        surfaces=_surfaces_from_meta(
+            meta,
+            exclude_texts,
+            {
+                int(event["i"]): absorbed_step_aliases.get(
+                    f"step_{int(event['i']):03d}", f"step_{int(event['i']):03d}"
+                )
+                for event in events
+            },
+        ),
     )
 
     source_recording_sha256: Optional[str] = None
@@ -2942,6 +3208,13 @@ def compile_recording(
         for s in workflow.steps
     )
     workflow.encrypted = False
+
+    kept = {s.id for s in workflow.steps}
+    layout_fingerprints = {k: v for k, v in layout_fingerprints.items() if k in kept}
+    if layout_fingerprints:
+        fp_path = bundle / _layout.FINGERPRINT_ASSET
+        fp_path.parent.mkdir(parents=True, exist_ok=True)
+        fp_path.write_bytes(_layout.dump_bundle_fingerprints(layout_fingerprints))
 
     write_compile_notes(bundle, compile_notes)
     workflow.save(bundle)

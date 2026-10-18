@@ -47,8 +47,11 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   program` emits a program when the traces agree, and a `record-next:`
   worklist of missing demonstrations when a consequential branch or loop stays
   underdetermined. The healthy replay path still makes no model call.
-- **Effect verification against the system of record.** The screen can lie: an
-  optimistic UI, a duplicate submit, a partial save all read as success. A step
+  [`LEARN_FROM_MANY_RUNS.md`](LEARN_FROM_MANY_RUNS.md) covers `induce`,
+  `teach-branch` and shadow mining together, with each one's status.
+- **Effect verification against the system of record.** The read-back checks
+  our own work: a wrong field, a wrong record, a duplicate submit, or a partial
+  save can all look like success on screen. A step
   may declare typed `effects`, and when a run is given an `EffectVerifier` the
   replayer checks the *real* record out of band, before and after the action,
   halting on a refuted or unverifiable write, still with zero model calls. The

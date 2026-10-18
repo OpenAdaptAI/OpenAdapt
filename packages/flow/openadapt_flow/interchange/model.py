@@ -38,16 +38,18 @@ SCHEMA_VERSION: Literal["openadapt.records-interchange/v0"] = (
 # reading step) value for value. They are spelled out here until that module
 # is on main; then they are imported from it.
 
-#: Read grades, weakest first. ``verified`` needs a read through a channel
-#: independent of the application's screens (see INDEPENDENT_CHANNELS).
-ReadGrade = Literal[
-    "unconfirmed", "screen_readback", "committed_record_readback", "verified"
-]
+#: Read grades, weakest first. They are names from the check-level ladder
+#: (``openadapt_flow.check_level``), so a read grade and the check level of a
+#: write mean the same thing. ``system_of_record`` needs a read through a
+#: channel independent of the application's screens (see
+#: INDEPENDENT_CHANNELS); ``reopened`` needs a read in the acting session and
+#: a screen read of the reopened record; ``same_screen`` needs two channels.
+ReadGrade = Literal["unchecked", "same_screen", "reopened", "system_of_record"]
 READ_GRADES: tuple[str, ...] = (
-    "unconfirmed",
-    "screen_readback",
-    "committed_record_readback",
-    "verified",
+    "unchecked",
+    "same_screen",
+    "reopened",
+    "system_of_record",
 )
 
 #: How a value was obtained. The first group reads the target application
@@ -66,8 +68,8 @@ Channel = Literal[
 SCREEN_CHANNELS: frozenset[str] = frozenset(
     {"clipboard", "ocr", "structure", "accessibility"}
 )
-#: Channels that do not go through the application's screens. A ``verified``
-#: grade requires at least one read through one of them. An ``export`` read
+#: Channels that do not go through the application's screens. A
+#: ``system_of_record`` grade requires at least one read through one of them. An ``export`` read
 #: counts only when its ``source_kind`` is ``committed_store``.
 INDEPENDENT_CHANNELS: frozenset[str] = frozenset({"export", "database", "api"})
 
@@ -156,7 +158,7 @@ class FieldValue(_Strict):
     confidence: float = Field(ge=0.0, le=1.0)
     status: Literal["proposed", "confirmed", "corrected", "rejected"] = "proposed"
     confirmed_by: Optional[Principal] = None
-    grade: ReadGrade = "unconfirmed"
+    grade: ReadGrade = "unchecked"
     reads: list[Read] = Field(default_factory=list)
     needs_review: bool = False
     review_reason: Optional[str] = Field(default=None, max_length=2000)
@@ -246,16 +248,17 @@ class Artifact(_Strict):
 
 
 class Provenance(_Strict):
-    """Who produced the exchange, and a checksum over its content."""
+    """Who produced the exchange, and a checksum over its content. The
+    checksum is required, so every exchange can be checked for tampering and
+    a Seal always has something to sign."""
 
     tool_name: str = Field(min_length=1, max_length=100)
     tool_version: str = Field(min_length=1, max_length=100)
     producer: Principal
     captured_at: str
-    checksum: Optional[str] = Field(
-        default=None,
+    checksum: str = Field(
         pattern=r"^sha256:[0-9a-f]{64}$",
-        description="sha256 of the canonical JSON without checksum and seals",
+        description="Required. sha256 of the canonical JSON without checksum and seals",
     )
 
 
