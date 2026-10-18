@@ -55,6 +55,9 @@ class GuiTask:
     flags: dict[str, str] = field(default_factory=dict)
     #: Outcomes that count as doing the task right. Never shown to an agent.
     expected: tuple[str, ...] = (VERIFIED,)
+    #: The ``params`` the saved record must hold (the reward contract checks
+    #: each one). The subject comes from ``identity``.
+    record_fields: tuple[str, ...] = ("type", "note")
 
     def prompt(self) -> str:
         """The task as the agent receives it. Carries no expected outcome."""
