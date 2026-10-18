@@ -1881,7 +1881,7 @@
     },
     {
       "path": "openadapt_flow/contracts/schemas/approval-record-v1.json",
-      "sha256": "abe5c142b2792ce618fbf73b0b3c7327a0fe4d7bb8bf0d96030147292de341da"
+      "sha256": "0eeacfb80916b6833f577a2f6eb92f7fd4dc54c1144b7d3661dd01acf9258fc2"
     },
     {
       "path": "openadapt_flow/contracts/schemas/approver-identity-v1.json",
