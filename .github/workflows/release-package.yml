@@ -355,15 +355,27 @@ jobs:
             exit 1
           fi
 
-          release_url="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG"
+          # GET /releases/tags/{tag} never returns a draft, so find the release
+          # in the full list, which includes drafts for this token.
           fetch_release() {
-            curl --silent --show-error \
-              --output /tmp/github-release.json \
-              --write-out '%{http_code}' \
-              --header "Accept: application/vnd.github+json" \
-              --header "Authorization: Bearer $GH_TOKEN" \
-              --header "X-GitHub-Api-Version: 2026-03-10" \
-              "$release_url"
+            "$GH_CLI" api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              > /tmp/github-releases.json || { echo 500; return; }
+            python - "$RELEASE_TAG" <<'PY'
+          import json
+          import sys
+
+          tag = sys.argv[1]
+          pages = json.load(open("/tmp/github-releases.json", encoding="utf-8"))
+          found = [r for page in pages for r in page if r.get("tag_name") == tag]
+          if len(found) > 1:
+              print(409)
+          elif found:
+              json.dump(found[0], open("/tmp/github-release.json", "w", encoding="utf-8"))
+              print(200)
+          else:
+              print(404)
+          PY
           }
           verify() {
             python scripts/verify_github_release.py \

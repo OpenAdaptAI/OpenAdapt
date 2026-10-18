@@ -508,20 +508,43 @@ def _recorder(program: Path, key_dir: Optional[Path]) -> dict[str, Any]:
     return block
 
 
-def _self_check(name: str, recorder: Mapping[str, Any], *, agent: bool) -> None:
+def _is_recording_agent(name: str, recorder: Mapping[str, Any]) -> bool:
+    """``name`` is the agent principal the signed recorder block names."""
+
+    recording_agent = recorder.get("agent_principal_id")
+    return bool(recording_agent) and (
+        name.strip().lower() == str(recording_agent).strip().lower()
+    )
+
+
+def _self_check(
+    name: str,
+    recorder: Mapping[str, Any],
+    *,
+    agent: bool,
+    allow_self: bool = False,
+) -> None:
     """``name`` is not the identity that made the recording.
 
     ``agent``: ``name`` is a registered agent. An agent acts only when the
     recording names the agent that made it; otherwise Flow can't show they
     differ.
+
+    ``allow_self``: the agent's signed admission policy lets it act on its
+    own recording (``allow_self_admission``). Then the recording agent passes,
+    but only as the agent principal the signed recorder block names; a match
+    on any other recorded field is still refused.
     """
 
     recorded = {
         str(recorder[f]).strip().lower() for f in RECORDER_FIELDS if recorder.get(f)
     }
-    if name.strip().lower() in recorded:
+    if name.strip().lower() in recorded and not (
+        agent and allow_self and _is_recording_agent(name, recorder)
+    ):
         raise AdmissionError(
-            f"{name!r} made the recording; a run can't approve its own contract"
+            f"{name!r} made the recording; a run can't approve its own contract "
+            "unless its signed admission policy allows self-admission"
         )
     if agent and not recorder.get("agent_principal_id"):
         raise AdmissionError(
@@ -529,6 +552,17 @@ def _self_check(name: str, recorder: Mapping[str, Any], *, agent: bool) -> None:
             f"principal), so {name!r} can't be shown not to be it. A person or "
             "an admitter key acts on this draft"
         )
+
+
+def _policy_allows_self(actor: Any) -> bool:
+    """A registered agent whose (re-verified) policy allows self-admission."""
+
+    signed = getattr(actor, "policy", None)
+    return bool(
+        getattr(actor, "kind", None) == "agent"
+        and signed is not None
+        and signed.policy.allow_self_admission
+    )
 
 
 def _actor(
@@ -546,7 +580,12 @@ def _actor(
             authority.recheck(actor, keys)
         except authority.AuthorityError as exc:
             raise AdmissionError(str(exc)) from None
-        _self_check(actor.principal_id, recorder(), agent=actor.kind == "agent")
+        _self_check(
+            actor.principal_id,
+            recorder(),
+            agent=actor.kind == "agent",
+            allow_self=_policy_allows_self(actor),
+        )
         return actor.principal_id, actor
     name = _person_name(actor)
     _self_check(name, recorder(), agent=False)
@@ -1152,6 +1191,10 @@ def _write_manifest(
         "signing_key": fingerprint_of(private.public_key()),
         **(extra or {}),
     }
+    if mode == "agent_policy" and _is_recording_agent(name, recorder):
+        # Only written when true, so manifests from before self-admission
+        # existed verify unchanged.
+        body["self_admitted"] = True
     if principal is not None:
         # The admitting key signs the body too, so the manifest names a key
         # the registry holds, not just a name.
@@ -1375,7 +1418,10 @@ def _verify_mode(body: Mapping[str, Any], keys: Path) -> None:
     if mode not in ADMISSION_MODES:
         raise AdmissionError(f"unknown admission mode {mode!r}")
     name = str(body.get("admitted_by_principal_id") or "")
-    _self_check(name, body, agent=mode == "agent_policy")
+    if mode != "agent_policy":
+        _self_check(name, body, agent=False)
+        if body.get("self_admitted"):
+            raise AdmissionError("only an agent under a policy can be self-admitted")
     if mode == "person":
         if is_not_a_person_name(name):
             raise AdmissionError(f"{name!r} is not a person; a model never authorizes")
@@ -1406,6 +1452,14 @@ def _verify_mode(body: Mapping[str, Any], keys: Path) -> None:
         policy.agent_principals
     ):
         raise AdmissionError("the admission does not match the policy it names")
+    # Checked only now: whether the recording agent may admit its own draft
+    # comes from the signed policy, which has just verified.
+    _self_check(name, body, agent=True, allow_self=policy.allow_self_admission)
+    if bool(body.get("self_admitted", False)) != _is_recording_agent(name, body):
+        raise AdmissionError(
+            "the manifest's self_admitted does not match who recorded the draft "
+            "and who admitted it"
+        )
 
 
 def reject(

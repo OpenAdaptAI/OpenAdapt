@@ -315,6 +315,7 @@ def _deployment_executor(
                 governed_authorization=manifest.governed_authorization,
                 runtime_config=deployment.runtime,
                 checkpoint_key=resolved_key,
+                deployment_surface=deployment.backend.deployment_surface,
             )
 
         return BoundAttendedExecutor(replayer_for_manifest, key=resolved_key)
