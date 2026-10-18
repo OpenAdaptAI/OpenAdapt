@@ -1,14 +1,15 @@
 # Code Signing Runbook (founder activation)
 
-This guide adds the required platform trust to OpenAdapt Desktop release
-candidates. It lists what to buy, which secrets to add, and what each public
-surface can then truthfully say. Code signing does not create a Production
-admission.
+This guide adds platform trust to OpenAdapt Desktop release candidates. It
+lists which secrets to add and what each public surface can then truthfully
+say. Code signing does not create a Production admission.
 
-The regular build workflow can still produce explicit ad-hoc or unsigned CI
-artifacts. The native release workflow is stricter. It fails closed unless
-macOS has the complete Developer ID and notarization set and Windows has one
-complete Authenticode method. It also fails closed on a partial set.
+Native releases ship without paid signing today: macOS DMGs are ad-hoc signed
+and Windows installers are unsigned, and every file name, the release notes,
+the website manifest, and the release channel say so. Windows signing comes
+from SignPath, which signs open source projects free of charge through the
+SignPath Foundation. Every credential set is complete-or-absent; a partial set
+fails the build.
 
 ## How signing is wired (read once)
 
@@ -16,8 +17,8 @@ complete Authenticode method. It also fails closed on a partial set.
   the `native-release` environment secrets and emits two values to the workflow:
   - `mode` — the honest signing label (`adhoc`/`unsigned` for local and CI
     builds, or `developer-id-notarized`/`authenticode` for native releases).
-  - `method` — *how* a signed Windows artifact is produced (`pfx` vs
-    `trusted-signing`); `pfx`/`adhoc`/`unsigned` otherwise.
+  - `method` — *how* a signed artifact is produced (`signpath` on Windows,
+    `developer-id` on macOS); `adhoc`/`unsigned` otherwise.
 - The `mode` is baked into every artifact **filename**:
   `OpenAdapt-Desktop-Candidate-v<version>-<os>-<arch>-<signing>.<ext>`.
   This is the honesty mechanism — a download page or trust center can read the
@@ -28,8 +29,9 @@ complete Authenticode method. It also fails closed on a partial set.
 - The launch-smoke test (`scripts/smoke_test_native_installer.py`) already
   installs, launches, and **verifies the signature** for the active mode:
   `codesign`/`spctl`/`stapler` on macOS, `Get-AuthenticodeSignature` on Windows.
-  The native release refuses ad-hoc or unsigned results. The regular build lane
-  can still test explicitly labeled ad-hoc and unsigned packages.
+  With SignPath, the release verifies the signed installers only
+  (`--installer-only-signature`): SignPath signs the finished MSI and NSIS
+  files, not the program files inside them.
 - The macOS engine is a PyInstaller one-file sidecar. Developer ID jobs pass
   `APPLE_SIGNING_IDENTITY` into both PyInstaller and Tauri so the embedded
   Python libraries and final launcher share one Team ID under hardened runtime.
@@ -42,7 +44,7 @@ environment (Settings → Environments → `native-release` → *Environment sec
 or via the CLI:
 
 ```bash
-gh secret set APPLE_TEAM_ID --env native-release --repo OpenAdaptAI/openadapt-desktop
+gh secret set SIGNPATH_API_TOKEN --env native-release --repo OpenAdaptAI/OpenAdapt
 ```
 
 ---
@@ -85,80 +87,47 @@ stapled ticket. Assets ship as `-macos-arm64-developer-id-notarized-*.dmg`.
 
 ---
 
-## 2. Windows — Authenticode
+## 2. Windows — Authenticode through SignPath (free for open source)
 
-Since June 2023 the CA/Browser Forum requires the private key of every publicly
-trusted OV/EV code-signing certificate to live on FIPS-140 hardware, so a
-classic "download a `.pfx` and sign in CI" flow is no longer available for
-public trust. There are two supported paths; **option A is recommended for a
-startup** because it is the cheapest legitimate option and needs no hardware
-token or CI HSM plumbing.
+Apply to the [SignPath Foundation](https://signpath.org/) for an open source
+code signing certificate. Every component OpenAdapt Desktop ships must be under
+an OSI-approved license; the managed FFmpeg runtime is an LGPL-2.1-or-later
+build (`--disable-gpl --disable-nonfree`), downloaded on first use rather than
+bundled.
 
-### Option A — Azure Trusted Signing (recommended, ~US$9.99/mo)
+In SignPath:
 
-**Buy:** an Azure subscription + a **Trusted Signing** (a.k.a. *Azure Artifact
-Signing*, formerly *Azure Code Signing*) account. **Basic plan ≈ US$9.99 /
-month** for up to 5,000 signatures (then $0.005 each). Microsoft operates the
-publicly trusted CA and mints a fresh, short-lived, timestamped certificate per
-signature — instant SmartScreen reputation with no USB token.
+1. Create the project `openadapt-desktop` and link the predefined GitHub.com
+   trusted build system to it. Install the SignPath GitHub App on
+   OpenAdaptAI/OpenAdapt so SignPath can read the build's audit data.
+2. Add an artifact configuration whose root is `<zip-file>` (GitHub uploads the
+   artifact as a ZIP) containing one `<msi-file>` and one `<pe-file>` for the
+   NSIS `*-setup.exe`, both signed with Authenticode.
+3. Create the signing policy `release-signing`. Its pipeline policy is
+   `.signpath/policies/openadapt-desktop/release-signing.yml` at the monorepo
+   root: GitHub-hosted runners only, no re-runs. The workflow itself runs only
+   from `main`, and the `native-release` environment deploys only from `main`.
+4. Create an API token for a user with submitter rights on that policy.
 
-**Eligibility note (important for a young startup):** organization onboarding
-historically required the legal entity to be **3+ years old**. If the company is
-younger, sign up under the **individual developer** tier (identity-validated via
-Microsoft Entra Verified ID) until the org-onboarding path is available to newer
-entities. Confirm current eligibility on the
-[Trusted Signing docs](https://learn.microsoft.com/azure/trusted-signing/)
-before purchasing.
-
-**Set up:**
-1. Create a Trusted Signing account and a **certificate profile** (choose
-   *Public Trust*). Note the account **endpoint** region URI (e.g.
-   `https://eus.codesigning.azure.net/`), the **account name**, and the
-   **certificate profile name**.
-2. Create an Entra **service principal** (app registration + client secret) and
-   grant it the **Trusted Signing Certificate Profile Signer** role on the
-   account. Record its tenant ID, client ID, and client secret.
-
-**Add these six secrets** to `native-release`:
+Then add these four secrets to the `native-release` environment of
+OpenAdaptAI/OpenAdapt (all four, or none):
 
 | Secret | Value |
 | --- | --- |
-| `AZURE_TENANT_ID` | service principal tenant ID |
-| `AZURE_CLIENT_ID` | service principal application (client) ID |
-| `AZURE_CLIENT_SECRET` | service principal client secret |
-| `TRUSTED_SIGNING_ENDPOINT` | account region URI, e.g. `https://eus.codesigning.azure.net/` |
-| `TRUSTED_SIGNING_ACCOUNT` | Trusted Signing account name |
-| `TRUSTED_SIGNING_CERTIFICATE_PROFILE` | certificate profile name |
+| `SIGNPATH_API_TOKEN` | the submitter's API token |
+| `SIGNPATH_ORGANIZATION_ID` | the SignPath organization ID |
+| `SIGNPATH_PROJECT_SLUG` | `openadapt-desktop` |
+| `SIGNPATH_SIGNING_POLICY_SLUG` | `release-signing` |
 
-The workflow then installs `trusted-signing-cli`, points Tauri's Windows
-`signCommand` at it, and produces a publicly trusted, timestamped Authenticode
-MSI/NSIS. The smoke test asserts the signature status is **Valid** (it does not
-pin a thumbprint, because Trusted Signing rotates certificates per signature).
-Assets ship as `-windows-x86_64-authenticode-*`.
+The Windows job then builds the installers, uploads them, submits a signing
+request with `signpath/github-action-submit-signing-request` (pinned by commit),
+waits for it, checks that each returned file carries a valid Authenticode
+signature, and smoke-tests and publishes the signed files as `authenticode`.
+Without the secrets it publishes the same installers as `unsigned`.
 
-### Option B — importable PFX / EV certificate (only if you already have one)
-
-Use this **only** for an enterprise-internal certificate whose `.pfx` you
-control, or a legacy exportable certificate. For public trust, EV certificates
-run **~US$249–US$700 / year** (Sectigo EV ≈ $279/yr via resellers; DigiCert EV
-≈ $560–$700/yr) and require FIPS hardware — a USB token (breaks unattended CI)
-or a cloud HSM such as **DigiCert KeyLocker** (adds cost, and the key is *not*
-exportable to a `.pfx`, so it is **not** compatible with the `pfx` path below and
-would need a KeyLocker `signtool` integration instead). Given the price and the
-hardware constraint, prefer Option A.
-
-If you do have an importable `.pfx`:
-
-| Secret | Value |
-| --- | --- |
-| `WINDOWS_CERTIFICATE` | base64 of the code-signing `.pfx` |
-| `WINDOWS_CERTIFICATE_PASSWORD` | the `.pfx` password |
-| `WINDOWS_CERTIFICATE_THUMBPRINT` | 40-hex SHA-1 thumbprint of the signing cert |
-
-> Configure **either** the Azure set **or** the PFX set, never both — the
-> preflight rejects an ambiguous mix.
-
----
+Not yet signed: the installed `openadapt-desktop.exe`, the engine sidecar, and
+the NSIS uninstaller. Signing those needs a SignPath request before Tauri
+bundles the installers, which is a follow-up.
 
 ## 3. Linux — exact-byte GitHub attestation
 
@@ -193,8 +162,8 @@ release has actually built. The artifact filename token is the source of truth.
 
 | Surface | With no secrets | After macOS Developer ID | After Windows Authenticode | Linux OIDC attestation |
 | --- | --- | --- | --- | --- |
-| /download page | No new native release; the release gate stops. | "**Signed and notarized by Apple** on macOS — opens without a Gatekeeper override." | "**Signed with a trusted Authenticode certificate** on Windows." | "Linux DEB and AppImage downloads have **GitHub OIDC attestations over the exact bytes**." |
-| Trust center | Existing historical candidate artifacts keep their encoded signing state. | Add: "macOS DMGs pass Apple notarization (`spctl` accepted, ticket stapled)." | Add: "Windows installers carry a valid, timestamped Authenticode signature." | Add: "Linux packages pass `gh attestation verify` against this repository." |
+| /download page | "Unsigned: macOS asks you to confirm on first open; Windows SmartScreen warns before install." | "**Signed and notarized by Apple** on macOS — opens without a Gatekeeper override." | "The Windows **installer is signed** with a trusted Authenticode certificate (SignPath)." | "Linux DEB and AppImage downloads have **GitHub OIDC attestations over the exact bytes**." |
+| Trust center | Every artifact's file name and the release channel state its signing mode. | Add: "macOS DMGs pass Apple notarization (`spctl` accepted, ticket stapled)." | Add: "Windows installers carry a valid, timestamped Authenticode signature." | Add: "Linux packages pass `gh attestation verify` against this repository." |
 | README Limits and COMPLIANCE.md release state | Describe only the latest published artifact set. | Update the note after the first trusted release. | Update the note after the first trusted release. | Update the note after the first trusted release. |
 
 The README Limits, `docs/COMPLIANCE.md`, and
@@ -209,8 +178,8 @@ name — only the human-readable claim wording changes.
 ```bash
 # First authenticate the checksum manifest and its reviewed-main workflow.
 gh attestation verify SHA256SUMS \
-  --repo OpenAdaptAI/openadapt-desktop \
-  --cert-identity "https://github.com/OpenAdaptAI/openadapt-desktop/.github/workflows/native-release.yml@refs/heads/main" \
+  --repo OpenAdaptAI/OpenAdapt \
+  --cert-identity "https://github.com/OpenAdaptAI/OpenAdapt/.github/workflows/desktop-native-release.yml@refs/heads/main" \
   --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
   --deny-self-hosted-runners
 

@@ -36,13 +36,13 @@ except ModuleNotFoundError:  # Direct execution adds scripts/, not the repositor
 
 ROOT = Path(__file__).resolve().parents[1]
 CANONICAL_REPOSITORY = "OpenAdaptAI/.github"
-DESKTOP_REPOSITORY = "OpenAdaptAI/openadapt-desktop"
+DESKTOP_REPOSITORY = "OpenAdaptAI/OpenAdapt"
 DESKTOP_TARGET = "desktop"
 STATE_SCHEMA = "openadapt.desktop-production-admission-state/v1"
 CHANNEL_SCHEMA = "openadapt.desktop-production-channel-cache/v1"
 CHANNEL_TAG = "desktop-production-channel"
 CHANNEL_PREFIX = "openadapt-desktop-production-channel-"
-PROMOTION_WORKFLOW = ".github/workflows/production-channel.yml"
+PROMOTION_WORKFLOW = ".github/workflows/desktop-production-channel.yml"
 COMMIT = re.compile(r"^[0-9a-f]{40}$")
 DIGEST = re.compile(r"^sha256:[0-9a-f]{64}$")
 VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+$")

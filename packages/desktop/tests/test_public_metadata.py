@@ -269,13 +269,15 @@ def test_candidate_release_notes_describe_the_bundled_flow_runtime() -> None:
     notes = (ROOT / "docs/RELEASE_CANDIDATE_INSTALLERS.md").read_text(encoding="utf-8")
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
-    native_release = (ROOT / ".github/workflows/native-release.yml").read_text(encoding="utf-8")
+    native_release = (MONOREPO_WORKFLOWS / "desktop-native-release.yml").read_text(encoding="utf-8")
     build_dependencies = pyproject["project"]["optional-dependencies"]["build"]
     dependencies = pyproject["project"]["dependencies"]
     classifiers = pyproject["project"]["classifiers"]
 
     assert not (ROOT / "docs/EXPERIMENTAL_NATIVE_INSTALLERS.md").exists()
-    assert native_release.count("--notes-file docs/RELEASE_CANDIDATE_INSTALLERS.md") == 1
+    # The release notes state each platform's signing, then this document.
+    assert native_release.count('Path("docs/RELEASE_CANDIDATE_INSTALLERS.md").read_text()') == 1
+    assert native_release.count("--notes-file release-notes.md") == 1
     assert "EXPERIMENTAL_NATIVE_INSTALLERS" not in native_release
     flow_dependencies = [
         dependency for dependency in build_dependencies if dependency.startswith("openadapt-flow")

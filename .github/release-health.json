@@ -44,6 +44,18 @@
       "tag_without_release_grace_hours": 1,
       "pypi_lag_grace_minutes": 30,
       "remediation": "# Retry the automatic release of the merged Desktop version:\ngh workflow run desktop-release.yml --repo OpenAdaptAI/OpenAdapt --ref main\n# Or release it directly:\ngh workflow run release-package.yml --repo OpenAdaptAI/OpenAdapt --ref main -f package=desktop -f version=<version>"
+    },
+    {
+      "id": "desktop-native",
+      "name": "OpenAdapt Desktop native installers",
+      "tag_pattern": "^desktop-v(\\d+\\.\\d+\\.\\d+)$",
+      "release_workflows": [
+        "desktop-native-release.yml"
+      ],
+      "tracks_main": false,
+      "tag_without_release_grace_hours": 6,
+      "acknowledged_tags": {},
+      "remediation": "# Native releases are dispatched by hand after the engine release, from main:\ngh workflow run desktop-native-release.yml --repo OpenAdaptAI/OpenAdapt --ref main -f version=X.Y.Z\n# Approve the native-release environment when the build and publish jobs request it."
     }
   ]
 }

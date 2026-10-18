@@ -1,5 +1,19 @@
 #!/usr/bin/env python3
-"""Prepare and verify unadmitted native release-candidate assets."""
+"""Prepare and verify unadmitted native release-candidate assets.
+
+In the OpenAdapt monorepo, ``.github/workflows/desktop-native-release.yml``
+publishes one immutable ``desktop-vX.Y.Z`` prerelease per version. Every asset,
+including its own attested ``openadapt-desktop-channel.json`` (schema v3), is
+attached to a draft before the release is published once, because OpenAdapt's
+releases are immutable. Consumers pick the newest valid ``desktop-v*`` release;
+each channel names its predecessor's channel by hash.
+
+The engine (Python) release it pairs with is ``openadapt-desktop-vX.Y.Z``,
+published by ``release-package.yml``. The v2 channel, verified-index, engine
+receipt, and engine-release mirroring functions below belong to the
+openadapt-desktop repository's earlier lanes and to the Production channel,
+which has not moved yet.
+"""
 
 from __future__ import annotations
 
@@ -56,10 +70,16 @@ EXPECTED_PLATFORMS = {
 }
 WEBSITE_RELEASE_MANIFEST = "openadapt-desktop-release-manifest.json"
 NATIVE_RELEASE_PROVENANCE = "openadapt-desktop-native-release-provenance.json"
-NATIVE_RELEASE_PROVENANCE_SCHEMA = "openadapt.native-release-provenance/v2"
-NATIVE_RELEASE_WORKFLOW = ".github/workflows/native-release.yml"
-NATIVE_RELEASE_WORKFLOW_NAME = "Native Installer Release"
-ENGINE_RELEASE_WORKFLOW = ".github/workflows/release.yml"
+NATIVE_RELEASE_PROVENANCE_SCHEMA = "openadapt.native-release-provenance/v3"
+# The workflows live at the root of the OpenAdapt monorepo, so attested workflow
+# paths name the root files.
+NATIVE_RELEASE_WORKFLOW = ".github/workflows/desktop-native-release.yml"
+NATIVE_RELEASE_WORKFLOW_NAME = "Desktop native installer release"
+ENGINE_RELEASE_WORKFLOW = ".github/workflows/release-package.yml"
+# The engine (PyPI) release tag. In the monorepo ``v*`` belongs to the launcher.
+ENGINE_TAG_PREFIX = "openadapt-desktop-v"
+ENGINE_TAG_PATTERN = re.compile(r"openadapt-desktop-v[0-9]+\.[0-9]+\.[0-9]+")
+DEFAULT_REPOSITORY = "OpenAdaptAI/OpenAdapt"
 ENGINE_RELEASE_PROVENANCE = "openadapt-desktop-engine-release-provenance.json"
 ENGINE_RELEASE_PROVENANCE_SCHEMA = "openadapt.engine-release-provenance/v1"
 VERIFIED_RELEASE_INDEX = "openadapt-desktop-verified-release.json"
@@ -68,20 +88,53 @@ VERIFIED_RELEASE_CHANNEL = "openadapt-desktop-channel.json"
 VERIFIED_RELEASE_CHANNEL_SCHEMA = "openadapt.desktop-release-channel/v2"
 LEGACY_VERIFIED_RELEASE_CHANNEL_SCHEMA = "openadapt.desktop-release-channel/v1"
 VERIFIED_RELEASE_CHANNEL_TAG = "desktop-channel"
-NATIVE_PROMOTION_WORKFLOW = ".github/workflows/native-release.yml"
+NATIVE_PROMOTION_WORKFLOW = ".github/workflows/desktop-native-release.yml"
+NATIVE_RELEASE_CHANNEL_SCHEMA = "openadapt.desktop-release-channel/v3"
 NATIVE_RELEASE_VERIFIER = "verify-openadapt-native-release.py"
 GITHUB_WORKFLOW_BUILD_TYPE = "https://actions.github.io/buildtypes/workflow/v1"
 GITHUB_REPOSITORY_PATTERN = re.compile(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+")
 GIT_COMMIT_PATTERN = re.compile(r"[0-9a-f]{40}")
 INSTALLER_RELEASE_MARKER = "<!-- installer-release -->"
-WEBSITE_RELEASE_VERIFICATION = {
-    "sha256_manifest": "SHA256SUMS",
-    "github_artifact_attestation": "required",
-    "macos_native_trust": "Developer ID, notarization, and stapled ticket required",
-    "windows_native_trust": "valid timestamped Authenticode required",
-    "linux_byte_trust": "GitHub OIDC attestation over exact DEB and AppImage bytes required",
-    "installer_smoke": "install, launch, and uninstall",
+# What each permitted signing mode means for the person downloading. The
+# website manifest states the modes this exact release used; it never claims a
+# trust mode the bytes do not carry.
+NATIVE_TRUST_STATEMENTS = {
+    ("macos", "developer-id-notarized"): "Developer ID, notarization, and stapled ticket",
+    ("macos", "adhoc"): "ad-hoc signature only; macOS asks for confirmation on first open",
+    ("windows", "authenticode"): (
+        "MSI and NSIS installers carry a valid timestamped Authenticode signature "
+        "(SignPath); the installed program files are not yet signed"
+    ),
+    ("windows", "unsigned"): "unsigned; Windows SmartScreen warns before install",
+    ("linux", "github-attested"): "GitHub OIDC attestation over exact DEB and AppImage bytes",
 }
+
+
+def website_release_verification(signing: dict[str, str]) -> dict[str, str]:
+    """Return the manifest's verification contract for these signing modes."""
+
+    if set(signing) != {platform for platform, _ in EXPECTED_PLATFORMS}:
+        raise ValueError(f"signing modes must name every platform: {signing}")
+    contract = {
+        "sha256_manifest": "SHA256SUMS",
+        "github_artifact_attestation": "required",
+        "installer_smoke": "install, launch, and uninstall",
+    }
+    for platform, key in (
+        ("macos", "macos_native_trust"),
+        ("windows", "windows_native_trust"),
+        ("linux", "linux_byte_trust"),
+    ):
+        statement = NATIVE_TRUST_STATEMENTS.get((platform, signing[platform]))
+        if statement is None:
+            raise ValueError(f"{platform} signing mode {signing[platform]!r} is not releasable")
+        contract[key] = statement
+    return contract
+
+
+# The production-grade contract. Production admission (production_release.py)
+# still requires it; candidate releases state their actual modes instead.
+WEBSITE_RELEASE_VERIFICATION = website_release_verification(PRODUCTION_TRUST_MODES)
 WEBSITE_RELEASE_SBOM_FORMAT = "CycloneDX"
 
 
@@ -96,11 +149,19 @@ def expected_engine_asset_names(version: str) -> set[str]:
     }
 
 
-def expected_release_asset_names(version: str) -> set[str]:
-    """Return the complete checksummed asset contract for one native version."""
+def expected_release_asset_names(version: str, signing: dict[str, str] | None = None) -> set[str]:
+    """Return the complete checksummed asset contract for one native version.
+
+    ``signing`` maps each platform to the mode the release used; it defaults to
+    the production trust modes.
+    """
 
     if not VERSION_PATTERN.fullmatch(version):
         raise ValueError(f"invalid native release version: {version!r}")
+    modes = PRODUCTION_TRUST_MODES if signing is None else signing
+    for platform, mode in modes.items():
+        if mode not in SIGNING_MODES.get(platform, set()):
+            raise ValueError(f"invalid {platform} signing mode: {mode!r}")
     names = {
         WEBSITE_RELEASE_MANIFEST,
         NATIVE_RELEASE_PROVENANCE,
@@ -108,8 +169,8 @@ def expected_release_asset_names(version: str) -> set[str]:
         f"OpenAdapt-Desktop-desktop-v{version}.cyclonedx.json",
     }
     for platform, architecture in EXPECTED_PLATFORMS:
-        signing = PRODUCTION_TRUST_MODES[platform]
-        prefix = f"OpenAdapt-Desktop-Candidate-v{version}-{platform}-{architecture}-{signing}"
+        signing_mode = modes[platform]
+        prefix = f"OpenAdapt-Desktop-Candidate-v{version}-{platform}-{architecture}-{signing_mode}"
         names.add(f"{prefix}-metadata.json")
         names.update(f"{prefix}{suffix}" for _kind, _pattern, suffix in ARTIFACT_RULES[platform])
     return names
@@ -766,7 +827,7 @@ def write_release_provenance(
     _validate_commit(source_commit)
     _validate_commit(workflow_commit)
     _validate_commit(engine_commit)
-    expected_engine_tag = f"v{tag.removeprefix(NATIVE_TAG_PREFIX)}"
+    expected_engine_tag = f"{ENGINE_TAG_PREFIX}{tag.removeprefix(NATIVE_TAG_PREFIX)}"
     if engine_tag != expected_engine_tag:
         raise ValueError(f"engine tag must be exactly {expected_engine_tag!r}, got {engine_tag!r}")
     if not isinstance(engine_release_id, int) or engine_release_id <= 0:
@@ -854,9 +915,10 @@ def validate_release_provenance(
         "workflow_commit": source_commit,
         "event": "workflow_dispatch",
         "runner_environment": "github-hosted",
-        "engine_tag": f"v{tag.removeprefix(NATIVE_TAG_PREFIX)}",
+        "engine_tag": f"{ENGINE_TAG_PREFIX}{tag.removeprefix(NATIVE_TAG_PREFIX)}",
         "engine_release_url": (
-            f"https://github.com/{repository}/releases/tag/v{tag.removeprefix(NATIVE_TAG_PREFIX)}"
+            f"https://github.com/{repository}/releases/tag/"
+            f"{ENGINE_TAG_PREFIX}{tag.removeprefix(NATIVE_TAG_PREFIX)}"
         ),
         "engine_release_workflow": ENGINE_RELEASE_WORKFLOW,
     }
@@ -884,7 +946,7 @@ def validate_engine_release(
     """Require one exact, public engine release and immutable tag binding."""
 
     _validate_repository(repository)
-    if not re.fullmatch(r"v[0-9]+\.[0-9]+\.[0-9]+", engine_tag):
+    if not ENGINE_TAG_PATTERN.fullmatch(engine_tag):
         raise ValueError(f"invalid engine release tag: {engine_tag!r}")
     _validate_commit(engine_commit)
     release = json.loads(release_path.read_text(encoding="utf-8"))
@@ -962,7 +1024,7 @@ def write_engine_release_provenance(
         raise ValueError("engine release run attempt must be a positive integer")
     if runner_environment != "github-hosted":
         raise ValueError("engine release provenance requires a GitHub-hosted runner")
-    version = engine_tag.removeprefix("v")
+    version = engine_tag.removeprefix(ENGINE_TAG_PREFIX)
     expected_names = expected_engine_asset_names(version)
     members = {
         path.name: hashlib.sha256(path.read_bytes()).hexdigest()
@@ -1071,7 +1133,7 @@ def validate_engine_release_provenance(
             raise ValueError("engine release provenance contains an invalid asset")
         entries[asset["name"]] = asset["sha256"]
     if list(entries) != sorted(entries) or set(entries) != expected_engine_asset_names(
-        engine_tag.removeprefix("v")
+        engine_tag.removeprefix(ENGINE_TAG_PREFIX)
     ):
         raise ValueError("engine release provenance does not bind the exact asset set")
     if directory is not None:
@@ -1189,7 +1251,7 @@ def validate_verified_release_index(path: Path) -> dict:
     _validate_commit(str(data.get("engine_commit") or ""))
     if data.get("native_version") != str(data["native_tag"]).removeprefix(NATIVE_TAG_PREFIX):
         raise ValueError("verified release index version differs from its native tag")
-    if data.get("engine_tag") != f"v{data['native_version']}":
+    if data.get("engine_tag") != f"{ENGINE_TAG_PREFIX}{data['native_version']}":
         raise ValueError("verified release index engine tag differs")
     if data.get("engine_release_url") != (
         f"https://github.com/{repository}/releases/tag/{data['engine_tag']}"
@@ -1361,7 +1423,7 @@ def validate_verified_release_channel(path: Path) -> dict:
         raise ValueError("release channel version differs from its native tag")
     _validate_commit(str(data.get("native_source_commit") or ""))
     _validate_commit(str(data.get("engine_commit") or ""))
-    if data.get("engine_tag") != f"v{version}":
+    if data.get("engine_tag") != f"{ENGINE_TAG_PREFIX}{version}":
         raise ValueError("release channel engine tag differs")
     expected_urls = {
         "native_release_url": (
@@ -1423,6 +1485,241 @@ def validate_verified_release_channel(path: Path) -> dict:
     for field in ("run_id", "run_attempt"):
         if not isinstance(promotion.get(field), int) or promotion[field] <= 0:
             raise ValueError(f"release channel promotion {field} is invalid")
+    return data
+
+
+NATIVE_RELEASE_CHANNEL_KEYS = frozenset(
+    {
+        "schema",
+        "repository",
+        "channel",
+        "native_tag",
+        "native_version",
+        "native_source_commit",
+        "native_release_url",
+        "engine_tag",
+        "engine_commit",
+        "engine_release_id",
+        "engine_release_url",
+        "signing",
+        "checksums",
+        "provenance",
+        "previous",
+        "promotion",
+    }
+)
+
+
+def _release_download_url(repository: str, tag: str, name: str) -> str:
+    return f"https://github.com/{repository}/releases/download/{tag}/{name}"
+
+
+def write_native_release_channel(
+    output: Path,
+    *,
+    directory: Path,
+    repository: str,
+    tag: str,
+    source_commit: str,
+    workflow_ref: str,
+    workflow_commit: str,
+    run_id: int,
+    run_attempt: int,
+    previous: Path | None = None,
+) -> Path:
+    """Write the v3 channel descriptor that ships inside one native release.
+
+    It binds this release's ``SHA256SUMS`` and provenance by hash, states each
+    platform's signing mode, and names the newest earlier release's channel by
+    hash, so consumers can walk an append-only chain without a mutable index.
+    """
+
+    repository = _validate_repository(repository)
+    native_tag_tuple(tag)
+    _validate_commit(source_commit)
+    _validate_commit(workflow_commit)
+    expected_ref = f"{repository}/{NATIVE_RELEASE_WORKFLOW}@refs/heads/main"
+    if workflow_ref != expected_ref:
+        raise ValueError(f"release channel workflow ref must be exactly {expected_ref!r}")
+    if workflow_commit != source_commit:
+        raise ValueError("release channel workflow commit must equal the native source commit")
+    if not isinstance(run_id, int) or run_id <= 0:
+        raise ValueError("release channel run id must be a positive integer")
+    if not isinstance(run_attempt, int) or run_attempt <= 0:
+        raise ValueError("release channel run attempt must be a positive integer")
+    if output.exists() or output.name != VERIFIED_RELEASE_CHANNEL:
+        raise ValueError(f"release channel must be a new {VERIFIED_RELEASE_CHANNEL}")
+    if output.parent.resolve() != directory.resolve():
+        raise ValueError("release channel must be written inside the release directory")
+    checksums = directory / "SHA256SUMS"
+    verify_checksums(directory, checksums)
+    if VERIFIED_RELEASE_CHANNEL in read_checksums(checksums):
+        raise ValueError("the release channel binds SHA256SUMS, so SHA256SUMS cannot list it")
+    provenance = validate_release_provenance(
+        directory / NATIVE_RELEASE_PROVENANCE,
+        repository=repository,
+        tag=tag,
+        source_commit=source_commit,
+    )
+    validate_release_set(directory)
+    prior = None
+    if previous is not None:
+        _require_existing_file(previous, label="previous release channel")
+        prior_data = validate_native_release_channel(previous)
+        if prior_data["repository"] != repository:
+            raise ValueError("previous release channel belongs to a different repository")
+        if native_tag_tuple(prior_data["native_tag"]) >= native_tag_tuple(tag):
+            raise ValueError(
+                f"release channel must advance from {prior_data['native_tag']} to {tag}"
+            )
+        prior = {
+            "native_tag": prior_data["native_tag"],
+            "sha256": hashlib.sha256(previous.read_bytes()).hexdigest(),
+            "url": _release_download_url(
+                repository, prior_data["native_tag"], VERIFIED_RELEASE_CHANNEL
+            ),
+        }
+    payload = {
+        "schema": NATIVE_RELEASE_CHANNEL_SCHEMA,
+        "repository": repository,
+        "channel": "candidate-native",
+        "native_tag": tag,
+        "native_version": tag.removeprefix(NATIVE_TAG_PREFIX),
+        "native_source_commit": source_commit,
+        "native_release_url": f"https://github.com/{repository}/releases/tag/{tag}",
+        "engine_tag": provenance["engine_tag"],
+        "engine_commit": provenance["engine_commit"],
+        "engine_release_id": provenance["engine_release_id"],
+        "engine_release_url": provenance["engine_release_url"],
+        "signing": release_signing(directory),
+        "checksums": {
+            "name": "SHA256SUMS",
+            "sha256": hashlib.sha256(checksums.read_bytes()).hexdigest(),
+            "url": _release_download_url(repository, tag, "SHA256SUMS"),
+        },
+        "provenance": {
+            "name": NATIVE_RELEASE_PROVENANCE,
+            "sha256": hashlib.sha256(
+                (directory / NATIVE_RELEASE_PROVENANCE).read_bytes()
+            ).hexdigest(),
+            "url": _release_download_url(repository, tag, NATIVE_RELEASE_PROVENANCE),
+        },
+        "previous": prior,
+        "promotion": {
+            "workflow_path": NATIVE_RELEASE_WORKFLOW,
+            "workflow_ref": workflow_ref,
+            "workflow_commit": workflow_commit,
+            "event": "workflow_dispatch",
+            "run_id": run_id,
+            "run_attempt": run_attempt,
+            "runner_environment": "github-hosted",
+        },
+    }
+    output.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return output
+
+
+def validate_native_release_channel(
+    path: Path, *, directory: Path | None = None, previous: Path | None = None
+) -> dict:
+    """Validate a closed v3 channel; with ``directory``, also bind its bytes.
+
+    ``previous`` is the channel file of the release this one names as its
+    predecessor; when given, its hash must match.
+    """
+
+    if path.name != VERIFIED_RELEASE_CHANNEL or not path.is_file() or path.is_symlink():
+        raise ValueError(f"release channel must be a regular {VERIFIED_RELEASE_CHANNEL}")
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, dict) or set(data) != NATIVE_RELEASE_CHANNEL_KEYS:
+        raise ValueError("release channel does not use the closed v3 schema")
+    if data.get("schema") != NATIVE_RELEASE_CHANNEL_SCHEMA:
+        raise ValueError("release channel has the wrong schema")
+    if data.get("channel") != "candidate-native":
+        raise ValueError("release channel has the wrong channel name")
+    repository = _validate_repository(str(data.get("repository") or ""))
+    tag = str(data.get("native_tag") or "")
+    native_tag_tuple(tag)
+    version = tag.removeprefix(NATIVE_TAG_PREFIX)
+    if data.get("native_version") != version:
+        raise ValueError("release channel version differs from its native tag")
+    _validate_commit(str(data.get("native_source_commit") or ""))
+    _validate_commit(str(data.get("engine_commit") or ""))
+    engine_tag = f"{ENGINE_TAG_PREFIX}{version}"
+    expected = {
+        "native_release_url": f"https://github.com/{repository}/releases/tag/{tag}",
+        "engine_tag": engine_tag,
+        "engine_release_url": f"https://github.com/{repository}/releases/tag/{engine_tag}",
+    }
+    for field, value in expected.items():
+        if data.get(field) != value:
+            raise ValueError(f"release channel {field} differs")
+    if not isinstance(data.get("engine_release_id"), int) or data["engine_release_id"] <= 0:
+        raise ValueError("release channel engine release id is invalid")
+    signing = data.get("signing")
+    if not isinstance(signing, dict):
+        raise ValueError("release channel signing modes are invalid")
+    website_release_verification(signing)
+    for field, name in (("checksums", "SHA256SUMS"), ("provenance", NATIVE_RELEASE_PROVENANCE)):
+        value = data.get(field)
+        if (
+            not isinstance(value, dict)
+            or set(value) != {"name", "sha256", "url"}
+            or value.get("name") != name
+            or not re.fullmatch(r"[0-9a-f]{64}", str(value.get("sha256") or ""))
+            or value.get("url") != _release_download_url(repository, tag, name)
+        ):
+            raise ValueError(f"release channel {field} binding is invalid")
+    prior = data.get("previous")
+    if prior is not None:
+        if (
+            not isinstance(prior, dict)
+            or set(prior) != {"native_tag", "sha256", "url"}
+            or not re.fullmatch(r"[0-9a-f]{64}", str(prior.get("sha256") or ""))
+        ):
+            raise ValueError("release channel prior binding is invalid")
+        native_tag_tuple(str(prior.get("native_tag") or ""))
+        if native_tag_tuple(prior["native_tag"]) >= native_tag_tuple(tag):
+            raise ValueError("release channel prior binding does not precede it")
+        if prior.get("url") != _release_download_url(
+            repository, prior["native_tag"], VERIFIED_RELEASE_CHANNEL
+        ):
+            raise ValueError("release channel prior URL differs")
+    if previous is not None:
+        if prior is None:
+            raise ValueError("release channel names no predecessor")
+        if hashlib.sha256(previous.read_bytes()).hexdigest() != prior["sha256"]:
+            raise ValueError("previous release channel bytes differ from the bound hash")
+    promotion = data.get("promotion")
+    expected_promotion = {
+        "workflow_path": NATIVE_RELEASE_WORKFLOW,
+        "workflow_ref": f"{repository}/{NATIVE_RELEASE_WORKFLOW}@refs/heads/main",
+        "workflow_commit": data["native_source_commit"],
+        "event": "workflow_dispatch",
+        "runner_environment": "github-hosted",
+    }
+    if not isinstance(promotion, dict) or set(promotion) != {
+        *expected_promotion,
+        "run_id",
+        "run_attempt",
+    }:
+        raise ValueError("release channel promotion binding is invalid")
+    for field, value in expected_promotion.items():
+        if promotion.get(field) != value:
+            raise ValueError(f"release channel promotion {field} differs")
+    for field in ("run_id", "run_attempt"):
+        if not isinstance(promotion.get(field), int) or promotion[field] <= 0:
+            raise ValueError(f"release channel promotion {field} is invalid")
+    if directory is not None:
+        for field in ("checksums", "provenance"):
+            binding = data[field]
+            target = directory / binding["name"]
+            if not target.is_file():
+                raise ValueError(f"release channel {field} target is missing: {target}")
+            if hashlib.sha256(target.read_bytes()).hexdigest() != binding["sha256"]:
+                raise ValueError(f"release channel {field} hash differs from the release bytes")
+        if release_signing(directory) != signing:
+            raise ValueError("release channel signing modes differ from the release metadata")
     return data
 
 
@@ -1620,7 +1917,7 @@ def validate_release_workflow_run(path: Path, *, provenance: dict) -> int:
         "Windows x86_64",
         "Linux x86_64 (GitHub-attested bytes)",
         "Checksum and attest exact release bytes",
-        "Publish the verified candidate prerelease",
+        "Publish the immutable candidate prerelease",
     }
     failed = {
         name: conclusions.get(name) for name in required if conclusions.get(name) != "success"
@@ -1630,7 +1927,32 @@ def validate_release_workflow_run(path: Path, *, provenance: dict) -> int:
     return len(required)
 
 
-def validate_release_set(directory: Path) -> int:
+def release_signing(directory: Path) -> dict[str, str]:
+    """Return the one signing mode each platform's builds used in this set."""
+
+    modes: dict[str, str] = {}
+    for metadata_path in sorted(directory.glob("*-metadata.json")):
+        metadata = json.loads(metadata_path.read_text(encoding="utf-8"))
+        platform = metadata.get("platform")
+        signing = metadata.get("signing")
+        if signing not in SIGNING_MODES.get(platform, set()):
+            raise ValueError(f"invalid signing metadata: {metadata_path}")
+        if modes.setdefault(platform, signing) != signing:
+            raise ValueError(f"{platform} builds disagree on their signing mode")
+    if set(modes) != {platform for platform, _ in EXPECTED_PLATFORMS}:
+        raise ValueError(f"release set does not cover every platform: {sorted(modes)}")
+    return modes
+
+
+def validate_release_set(directory: Path, *, require_production: bool = False) -> int:
+    """Validate the exact staged installer set.
+
+    A candidate release may use any permitted signing mode per platform, as
+    long as every build of a platform agrees and the file names say which.
+    ``require_production`` additionally demands the production trust modes.
+    """
+
+    signing_by_platform: dict[str, str] = {}
     files = sorted(path for path in directory.iterdir() if path.is_file())
     metadata_paths = [path for path in files if path.name.endswith("-metadata.json")]
     if len(metadata_paths) != len(EXPECTED_PLATFORMS):
@@ -1654,11 +1976,12 @@ def validate_release_set(directory: Path) -> int:
             raise ValueError(f"invalid signing metadata: {metadata_path}")
         version = native_version()
         signing = metadata["signing"]
-        expected_trust = PRODUCTION_TRUST_MODES.get(platform)
-        if signing != expected_trust:
+        if signing != signing_by_platform.setdefault(platform, signing):
+            raise ValueError(f"{platform} builds disagree on their signing mode")
+        if require_production and signing != PRODUCTION_TRUST_MODES.get(platform):
             raise ValueError(
                 f"production release requires {platform} trust mode "
-                f"{expected_trust!r}, got {signing!r}"
+                f"{PRODUCTION_TRUST_MODES.get(platform)!r}, got {signing!r}"
             )
         if metadata.get("native_version") != version:
             raise ValueError(f"wrong native version in {metadata_path}")
@@ -1776,7 +2099,7 @@ def write_website_release_manifest(
         "native_tag": tag,
         "native_version": native_version(root),
         "source_commit": os.environ.get("GITHUB_SHA", "local"),
-        "verification": WEBSITE_RELEASE_VERIFICATION,
+        "verification": website_release_verification(release_signing(directory)),
         "sbom": {
             "name": sbom.name,
             "sha256": hashlib.sha256(sbom.read_bytes()).hexdigest(),
@@ -1797,9 +2120,9 @@ def validate_website_release_manifest(path: Path, *, checksums: Path, root: Path
     validate_tag(str(data.get("native_tag", "")), root)
     if data.get("native_version") != native_version(root):
         raise ValueError(f"wrong native version in website release manifest: {path}")
-    if data.get("verification") != WEBSITE_RELEASE_VERIFICATION:
-        raise ValueError("website release manifest has an invalid verification contract")
     directory = path.parent
+    if data.get("verification") != website_release_verification(release_signing(directory)):
+        raise ValueError("website release manifest has an invalid verification contract")
     if path.name != WEBSITE_RELEASE_MANIFEST or checksums.parent.resolve() != directory.resolve():
         raise ValueError("website manifest and SHA256SUMS must be in the release directory")
     validate_release_set(directory)
@@ -1933,13 +2256,13 @@ def _parser() -> argparse.ArgumentParser:
     supersede_parser.add_argument("--candidate-tag", required=True)
     supersede_parser.add_argument("--notes-file", type=Path, required=True)
     supersede_parser.add_argument("--output", type=Path, required=True)
-    supersede_parser.add_argument("--repo", default="OpenAdaptAI/openadapt-desktop")
+    supersede_parser.add_argument("--repo", default=DEFAULT_REPOSITORY)
 
     pointer_parser = subparsers.add_parser("installer-pointer-notes")
     pointer_parser.add_argument("--native-tag", required=True)
     pointer_parser.add_argument("--notes-file", type=Path, required=True)
     pointer_parser.add_argument("--output", type=Path, required=True)
-    pointer_parser.add_argument("--repo", default="OpenAdaptAI/openadapt-desktop")
+    pointer_parser.add_argument("--repo", default=DEFAULT_REPOSITORY)
 
     stage_parser = subparsers.add_parser("stage")
     stage_parser.add_argument("--bundle-root", type=Path, required=True)
@@ -2056,6 +2379,24 @@ def _parser() -> argparse.ArgumentParser:
     index_parser.add_argument("--existing", type=Path)
     validate_index_parser = subparsers.add_parser("validate-verified-index")
     validate_index_parser.add_argument("--file", type=Path, required=True)
+    native_channel_parser = subparsers.add_parser("write-channel")
+    native_channel_parser.add_argument("--output", type=Path, required=True)
+    native_channel_parser.add_argument("--directory", type=Path, required=True)
+    native_channel_parser.add_argument("--repository", required=True)
+    native_channel_parser.add_argument("--tag", required=True)
+    native_channel_parser.add_argument("--source-commit", required=True)
+    native_channel_parser.add_argument("--workflow-ref", required=True)
+    native_channel_parser.add_argument("--workflow-commit", required=True)
+    native_channel_parser.add_argument("--run-id", type=int, required=True)
+    native_channel_parser.add_argument("--run-attempt", type=int, required=True)
+    native_channel_parser.add_argument("--previous", type=Path)
+    validate_native_channel_parser = subparsers.add_parser("validate-channel")
+    validate_native_channel_parser.add_argument("--file", type=Path, required=True)
+    validate_native_channel_parser.add_argument("--directory", type=Path)
+    validate_native_channel_parser.add_argument("--previous", type=Path)
+    signing_parser = subparsers.add_parser("release-signing")
+    signing_parser.add_argument("--directory", type=Path, required=True)
+
     channel_parser = subparsers.add_parser("write-release-channel")
     channel_parser.add_argument("--output", type=Path, required=True)
     channel_parser.add_argument("--index", type=Path, required=True)
@@ -2303,6 +2644,28 @@ def main() -> int:
         elif args.command == "validate-verified-index":
             index = validate_verified_release_index(args.file)
             print(f"Validated verified release index for {index['native_tag']}")
+        elif args.command == "write-channel":
+            print(
+                write_native_release_channel(
+                    args.output,
+                    directory=args.directory,
+                    repository=args.repository,
+                    tag=args.tag,
+                    source_commit=args.source_commit,
+                    workflow_ref=args.workflow_ref,
+                    workflow_commit=args.workflow_commit,
+                    run_id=args.run_id,
+                    run_attempt=args.run_attempt,
+                    previous=args.previous,
+                )
+            )
+        elif args.command == "validate-channel":
+            data = validate_native_release_channel(
+                args.file, directory=args.directory, previous=args.previous
+            )
+            print(f"{data['native_tag']} channel is valid")
+        elif args.command == "release-signing":
+            print(json.dumps(release_signing(args.directory), sort_keys=True))
         elif args.command == "write-release-channel":
             print(
                 write_verified_release_channel(

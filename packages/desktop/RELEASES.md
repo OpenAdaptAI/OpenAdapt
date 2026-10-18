@@ -20,12 +20,32 @@ engine (PyPI) lane releases from there:
    `openadapt-desktop-vX.Y.Z` tag and GitHub Release. No bot commit lands on
    main, and `v*` tags stay the launcher's.
 
-Engine tags through `v0.20.0` and every `desktop-v*` native release live in the
-OpenAdaptAI/openadapt-desktop repository. The native installer,
-candidate channel and Production channel lanes below have not moved yet: they
-update published releases in place, and OpenAdapt's releases are immutable.
-Their workflows are kept, inert, under `.github/` here. The rest of this
-document describes those lanes as they ran in openadapt-desktop.
+Native installers release from the monorepo too:
+
+4. After the engine release, a maintainer dispatches
+   `.github/workflows/desktop-native-release.yml` from `main` with the same
+   version. It requires `packages/desktop` to be unchanged since
+   `openadapt-desktop-vX.Y.Z`, builds and smoke-tests every installer, attests
+   the exact bytes, and publishes one immutable `desktop-vX.Y.Z` prerelease.
+   OpenAdapt's releases are immutable, so everything (installers, SBOM,
+   provenance, `SHA256SUMS`, and this release's own attested
+   `openadapt-desktop-channel.json`) is attached to a draft that is published
+   once. The channel names the previous release's channel by hash, so the
+   newest valid `desktop-v*` release is the candidate channel; there is no
+   standing `desktop-channel` release, and installers are not mirrored onto the
+   engine release.
+5. Signing is stated, never implied. macOS DMGs are ad-hoc signed until
+   Developer ID credentials exist. Windows installers are signed through
+   SignPath when the four `SIGNPATH_*` secrets are set in the `native-release`
+   environment, and are unsigned otherwise. File names, the website manifest,
+   the channel, and the release notes all carry the mode.
+
+Engine tags through `v0.20.0`, every earlier `desktop-v*` release, and the
+`desktop-channel` index live in OpenAdaptAI/openadapt-desktop. The Production
+channel and the managed FFmpeg runtime lanes have not moved: they rewrite
+published releases, which OpenAdapt's immutable releases refuse. Their
+workflows are kept, inert, under `.github/` here. The rest of this document
+describes the lanes as they ran in openadapt-desktop.
 
 ## Two lanes in openadapt-desktop
 

@@ -1,0 +1,14 @@
+# SignPath pipeline policy for the openadapt-desktop project's release-signing
+# policy. SignPath reads it from .signpath/policies/<project>/<signing-policy>.yml,
+# so SIGNPATH_PROJECT_SLUG must be "openadapt-desktop" and
+# SIGNPATH_SIGNING_POLICY_SLUG must be "release-signing".
+#
+# Only GitHub-hosted runners may produce what SignPath signs, and a re-run
+# cannot re-sign an old build. The branch restriction lives in the workflow and
+# its environment: .github/workflows/desktop-native-release.yml runs only from
+# refs/heads/main, and the native-release environment deploys only from main.
+github-build-policies:
+  version: '1.0'
+  disallow_reruns: true
+  runners:
+    require_github_hosted: true

@@ -108,7 +108,7 @@ jobs:
           agent="$(hit "^packages/(agent|flow)/|$wf")"
           capture="$(hit "^packages/capture/|$wf")"
           privacy="$(hit "^packages/privacy/|$wf")"
-          desktop="$(hit "^packages/desktop/|^\.github/workflows/desktop-(test|build)\.yml$|$wf")"
+          desktop="$(hit "^packages/desktop/|^\.github/workflows/desktop-[a-z-]+\.yml$|$wf")"
           {
             echo "flow=$flow"
             echo "types=$types"
