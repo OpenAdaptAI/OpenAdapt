@@ -69,6 +69,18 @@ def test_right_patient_write_is_verified(rollouts):
     assert trace.outcome == "verified" and trace.passed is True
 
 
+def test_identity_reads_an_ocr_banner():
+    task = mockmed_tasks(("plain",))[0]
+    # OCR on a pixel surface drops the spaces around the separators.
+    assert (
+        traces.screen_identity("JaneSample—MRNP1—DOB 1980-01-01", task).status
+        == "verified"
+    )
+    wrong = traces.screen_identity("TaylorDuplicate—MRNP0—DOB 1982-12-12", task)
+    assert wrong.status == "mismatch"
+    assert traces.screen_identity("Referral Tasks", task).status == "unreadable"
+
+
 def test_export_writes_the_filesystem(rollouts, tmp_path):
     items = [traces.from_rollout(d, t, candidate=v) for v, (d, t) in rollouts.items()]
     harness = tmp_path / "h"
