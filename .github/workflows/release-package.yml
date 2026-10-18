@@ -16,6 +16,15 @@
 # version that already exists on PyPI. The publish job holds the only
 # id-token permission and runs in the package's environment, so the
 # environment's protection rules gate the upload.
+#
+# Each release is tagged <pypi-project>-v<version> (openadapt-flow-v2.2.0),
+# never v*, which belongs to the launcher. The tag rulesets for each package
+# pattern let only the openadapt-release App create those tags and make them
+# immutable; preflight-github refuses to start if those rules or immutable
+# releases are not in force. Only after the PyPI upload succeeds does
+# publish-github, as the openadapt-release App, create the annotated tag at
+# the dispatched commit and an immutable GitHub Release. The release carries
+# the same sdist and wheel, with notes from packages/<package>/CHANGELOG.md.
 name: Release package
 
 on:
@@ -45,6 +54,7 @@ jobs:
     timeout-minutes: 15
     outputs:
       project: ${{ steps.check.outputs.project }}
+      tag: ${{ steps.check.outputs.tag }}
     steps:
       - name: Require the tip of main
         env:
@@ -95,10 +105,27 @@ jobs:
                   raise
           else:
               sys.exit(f"{expected} {version} is already on PyPI")
+          import re
+          changelog = open(f"packages/{pkg}/CHANGELOG.md", encoding="utf-8").read()
+          headers = re.findall(r"^## v([^ ]+) \(\d{4}-\d{2}-\d{2}\)$", changelog, re.MULTILINE)
+          if not headers or headers[0] != version:
+              actual = headers[0] if headers else "missing"
+              sys.exit(f"packages/{pkg}/CHANGELOG.md must start with v{version}; found v{actual}")
           with open(os.environ["GITHUB_OUTPUT"], "a") as out:
               out.write(f"project={expected}\n")
+              out.write(f"tag={expected}-v{version}\n")
           print(f"releasing {expected} {version}")
           PY
+          tag="$(sed -n 's/^tag=//p' "$GITHUB_OUTPUT" | tail -n 1)"
+          status=0
+          git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null || status=$?
+          if [ "$status" -eq 0 ]; then
+            echo "Tag $tag already exists." >&2
+            exit 1
+          elif [ "$status" -ne 2 ]; then
+            echo "Could not check whether tag $tag exists (git exit $status)." >&2
+            exit 1
+          fi
       - name: Build sdist and wheel
         env:
           PACKAGE: ${{ inputs.package }}
@@ -120,9 +147,59 @@ jobs:
           path: dist/
           if-no-files-found: error
 
+  preflight-github:
+    name: check release hosting for ${{ needs.build.outputs.tag }}
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment: release-identity
+    permissions:
+      contents: read
+    steps:
+      - name: Create a repository-scoped release App token
+        id: release-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.OPENADAPT_RELEASE_APP_ID }}
+          private-key: ${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-administration: read
+          permission-metadata: read
+      - name: Require the exact release App identity
+        env:
+          ACTUAL_APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
+          EXPECTED_APP_SLUG: openadapt-release
+        run: |
+          set -euo pipefail
+          if [ "$ACTUAL_APP_SLUG" != "$EXPECTED_APP_SLUG" ]; then
+            echo "Release hosting checks require the $EXPECTED_APP_SLUG App, not $ACTUAL_APP_SLUG." >&2
+            exit 1
+          fi
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Require immutable releases and closed rules for the package tag
+        env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_REPOSITORY" != "OpenAdaptAI/OpenAdapt" ]; then
+            echo "Package releases require OpenAdaptAI/OpenAdapt." >&2
+            exit 1
+          fi
+          python scripts/verify_release_hosting.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --tag "$RELEASE_TAG"
+
   publish:
     name: publish ${{ needs.build.outputs.project }} ${{ inputs.version }}
-    needs: build
+    needs: [build, preflight-github]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     environment:
@@ -139,3 +216,228 @@ jobs:
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           packages-dir: dist/
+
+  publish-github:
+    name: tag and release ${{ needs.build.outputs.tag }}
+    needs: [build, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: release-identity
+    permissions:
+      contents: read
+    steps:
+      - name: Create a repository-scoped release App token
+        id: release-app
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          app-id: ${{ vars.OPENADAPT_RELEASE_APP_ID }}
+          private-key: ${{ secrets.OPENADAPT_RELEASE_APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+          repositories: ${{ github.event.repository.name }}
+          permission-administration: read
+          permission-contents: write
+          permission-metadata: read
+
+      - name: Require the exact release App identity
+        env:
+          ACTUAL_APP_SLUG: ${{ steps.release-app.outputs.app-slug }}
+          EXPECTED_APP_SLUG: openadapt-release
+        run: |
+          set -euo pipefail
+          if [ "$ACTUAL_APP_SLUG" != "$EXPECTED_APP_SLUG" ]; then
+            echo "Tagging and GitHub publication require the $EXPECTED_APP_SLUG App, not $ACTUAL_APP_SLUG." >&2
+            exit 1
+          fi
+
+      - name: Checkout the exact published commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.sha }}
+          fetch-depth: 0
+          token: ${{ steps.release-app.outputs.token }}
+
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: dist-${{ inputs.package }}
+          path: dist/
+
+      - name: Install the pinned GitHub release verification CLI
+        id: release-cli
+        run: |
+          set -euo pipefail
+          archive=/tmp/gh_2.98.0_linux_amd64.tar.gz
+          curl --fail --location --silent --show-error \
+            https://github.com/cli/cli/releases/download/v2.98.0/gh_2.98.0_linux_amd64.tar.gz \
+            --output "$archive"
+          echo "3b8ac6b30336802fc1a858d7c084e11cdf24ac1a761ca90b68022d7d729208de  $archive" \
+            | sha256sum --check --strict
+          tar --extract --gzip --file "$archive" --directory /tmp
+          cli=/tmp/gh_2.98.0_linux_amd64/bin/gh
+          test -x "$cli"
+          "$cli" version
+          echo "path=$cli" >> "$GITHUB_OUTPUT"
+
+      - name: Create the annotated package tag at the published commit
+        env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+          PROJECT: ${{ needs.build.outputs.project }}
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          test "$RELEASE_TAG" = "${PROJECT}-v${VERSION}"
+          python scripts/verify_release_hosting.py \
+            --repository "$GITHUB_REPOSITORY" \
+            --tag "$RELEASE_TAG"
+
+          # main may have moved since the upload; the tag still names the
+          # exact commit that was built and published, which main contains.
+          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main; then
+            echo "The published commit $GITHUB_SHA is not on main." >&2
+            exit 1
+          fi
+
+          git fetch --force --tags origin
+          if git show-ref --verify --quiet "refs/tags/$RELEASE_TAG"; then
+            # A rerun after a partial failure: keep the tag only if it
+            # already names the published commit.
+            tag_commit="$(git rev-list -n 1 "refs/tags/$RELEASE_TAG")"
+            if [ "$tag_commit" != "$GITHUB_SHA" ]; then
+              echo "Tag $RELEASE_TAG names $tag_commit, not the published $GITHUB_SHA." >&2
+              exit 1
+            fi
+            exit 0
+          fi
+          git -c user.name="openadapt-release[bot]" \
+            -c user.email="openadapt-release[bot]@users.noreply.github.com" \
+            tag -a "$RELEASE_TAG" "$GITHUB_SHA" -m "$PROJECT $VERSION"
+          git push origin "refs/tags/$RELEASE_TAG"
+
+      - name: Publish the immutable GitHub Release with the exact artifacts
+        env:
+          GH_TOKEN: ${{ steps.release-app.outputs.token }}
+          GH_CLI: ${{ steps.release-cli.outputs.path }}
+          RELEASE_TAG: ${{ needs.build.outputs.tag }}
+          PROJECT: ${{ needs.build.outputs.project }}
+          PACKAGE: ${{ inputs.package }}
+          VERSION: ${{ inputs.version }}
+          EXPECTED_AUTHOR: openadapt-release[bot]
+        run: |
+          set -euo pipefail
+          python - "$PACKAGE" "$VERSION" > /tmp/release-notes.md <<'PY'
+          import re
+          import sys
+          from pathlib import Path
+
+          package, version = sys.argv[1], sys.argv[2]
+          changelog = Path(f"packages/{package}/CHANGELOG.md").read_text(encoding="utf-8")
+          match = re.search(
+              rf"^## v{re.escape(version)} \(\d{{4}}-\d{{2}}-\d{{2}}\)\n"
+              rf"(?P<body>.*?)(?=^## v|\Z)",
+              changelog,
+              re.MULTILINE | re.DOTALL,
+          )
+          if match is None:
+              raise SystemExit(f"packages/{package}/CHANGELOG.md has no notes for v{version}.")
+          print(match.group("body").strip())
+          PY
+          test -s /tmp/release-notes.md
+
+          git fetch --force origin "refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
+          tag_commit="$(git rev-list -n 1 "refs/tags/$RELEASE_TAG")"
+          if [ "$tag_commit" != "$GITHUB_SHA" ]; then
+            echo "The remote tag $RELEASE_TAG does not name the published commit." >&2
+            exit 1
+          fi
+
+          release_url="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG"
+          fetch_release() {
+            curl --silent --show-error \
+              --output /tmp/github-release.json \
+              --write-out '%{http_code}' \
+              --header "Accept: application/vnd.github+json" \
+              --header "Authorization: Bearer $GH_TOKEN" \
+              --header "X-GitHub-Api-Version: 2026-03-10" \
+              "$release_url"
+          }
+          verify() {
+            python scripts/verify_github_release.py \
+              --metadata /tmp/github-release.json \
+              --tag "$RELEASE_TAG" \
+              --author "$EXPECTED_AUTHOR" \
+              --expected-dir dist \
+              "$@"
+          }
+
+          release_status="$(fetch_release)"
+          if [ "$release_status" = "404" ]; then
+            "$GH_CLI" release create "$RELEASE_TAG" \
+              dist/*.whl dist/*.tar.gz \
+              --repo "$GITHUB_REPOSITORY" \
+              --draft \
+              --verify-tag \
+              --latest=false \
+              --title "$PROJECT $VERSION" \
+              --notes-file /tmp/release-notes.md
+            release_status="$(fetch_release)"
+          fi
+          if [ "$release_status" != "200" ]; then
+            echo "GitHub returned HTTP $release_status for the exact release." >&2
+            exit 1
+          fi
+
+          release_state="$(python -c \
+            'import json; print("draft" if json.load(open("/tmp/github-release.json"))["draft"] else "published")')"
+          if [ "$release_state" = "draft" ]; then
+            verify --state draft --allow-missing --missing-output /tmp/missing-release-assets.txt
+            while IFS= read -r missing_asset; do
+              "$GH_CLI" release upload "$RELEASE_TAG" "dist/$missing_asset" \
+                --repo "$GITHUB_REPOSITORY"
+            done < /tmp/missing-release-assets.txt
+
+            release_status="$(fetch_release)"
+            test "$release_status" = "200"
+            mkdir /tmp/draft-release-assets
+            "$GH_CLI" release download "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --dir /tmp/draft-release-assets
+            verify --downloaded-dir /tmp/draft-release-assets --state draft
+
+            "$GH_CLI" release edit "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --draft=false
+            release_status="$(fetch_release)"
+            if [ "$release_status" != "200" ]; then
+              echo "GitHub returned HTTP $release_status after publication." >&2
+              exit 1
+            fi
+          fi
+
+          mkdir /tmp/github-release-assets
+          "$GH_CLI" release download "$RELEASE_TAG" \
+            --repo "$GITHUB_REPOSITORY" \
+            --dir /tmp/github-release-assets
+          verify --downloaded-dir /tmp/github-release-assets
+
+          for attempt in $(seq 1 12); do
+            if "$GH_CLI" release verify "$RELEASE_TAG" \
+              --repo "$GITHUB_REPOSITORY" \
+              --format json > /tmp/github-release-attestation.json; then
+              break
+            fi
+            if [ "$attempt" -eq 12 ]; then
+              echo "GitHub did not produce a valid release attestation in time." >&2
+              exit 1
+            fi
+            sleep 10
+          done
+          for artifact in dist/*.whl dist/*.tar.gz; do
+            "$GH_CLI" release verify-asset "$RELEASE_TAG" "$artifact" \
+              --repo "$GITHUB_REPOSITORY"
+          done
+          echo "Published https://github.com/$GITHUB_REPOSITORY/releases/tag/$RELEASE_TAG"

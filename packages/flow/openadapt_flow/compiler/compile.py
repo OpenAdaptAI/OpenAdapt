@@ -1644,6 +1644,7 @@ def compile_recording(
     annotator: Optional["StepAnnotator"] = None,
     target_surface: Optional[ExecutionTargetKind] = None,
     pixel_verify_enabled: bool = False,
+    bind_effect_params: bool = False,
 ) -> Workflow:
     """Compile a recording directory into a workflow bundle.
 
@@ -1724,6 +1725,11 @@ def compile_recording(
             or nothing (with an honest "no verifiable effect derivable" log).
             Default False keeps the bundle byte-identical to before; even when
             True a bundle is unchanged wherever mining derives nothing.
+        bind_effect_params: With ``mine_effects``, a mined ``field_equals``
+            whose value is a parameter's demonstrated value reads back that
+            parameter at run time instead of the demonstrated literal, so a
+            run with a new value can verify. A value shared by two parameters
+            stays literal. Default False keeps the mined contract as before.
         admit_api_bindings: Opt-in compile-time REST ``ApiBinding``
             certification (``compiler.binding_admission``). For each
             consequential write whose Effect was mined from an observed
@@ -1853,6 +1859,9 @@ def compile_recording(
 
     # Each recording frame is OCRed at most once across both passes.
     ocr_cache: dict[tuple[int, str], list[OcrLine]] = {}
+    from openadapt_flow.runtime import layout_drift as _layout
+
+    layout_fingerprints: dict[str, "_layout.LayoutFingerprint"] = {}
 
     def cached_lines(i: int, suffix: str, png: bytes) -> list[OcrLine]:
         key = (i, suffix)
@@ -1921,6 +1930,11 @@ def compile_recording(
             )
             crop_region = _discriminative_crop_region(frame, click)
             frame_lines = cached_lines(i, "before", before_png)
+            # Font/layout fingerprint of the frame the step acts on: frame
+            # size and font metrics, no text (runtime.layout_drift).
+            layout_fingerprints[step_id] = _layout.fingerprint(
+                frame_lines, (int(frame.shape[1]), int(frame.shape[0]))
+            )
             crop_region = _clip_away_param_lines(
                 crop_region, click, frame_lines, exclude_texts
             )
@@ -2594,8 +2608,20 @@ def compile_recording(
             mine_step_effects,
         )
 
+        bindings: dict[str, str] = {}
+        if bind_effect_params:
+            by_value: dict[str, list[str]] = {}
+            for pname, pvalue in params.items():
+                if pvalue:
+                    by_value.setdefault(pvalue, []).append(pname)
+            bindings = {v: names[0] for v, names in by_value.items() if len(names) == 1}
         for step, _sb, _sa, event in pending:
-            mined = mine_step_effects(event, step, exclude_texts=exclude_texts)
+            mined = mine_step_effects(
+                event,
+                step,
+                exclude_texts=exclude_texts,
+                param_bindings=bindings or None,
+            )
             if mined.effects:
                 step.effects = mined.effects
             log = logger.info if mined.disposition != "none" else logger.debug
@@ -2717,6 +2743,9 @@ def compile_recording(
         "secret_param_steps": sorted(secret_param_steps or ()),
         "target_surface": target_surface,
     }
+    if bind_effect_params:
+        # Recorded only when set, so every existing compile keeps its digest.
+        compiler_config["bind_effect_params"] = True
     compiler_config_sha256 = hashlib.sha256(
         json.dumps(
             compiler_config,
@@ -2921,6 +2950,13 @@ def compile_recording(
         for s in workflow.steps
     )
     workflow.encrypted = False
+
+    kept = {s.id for s in workflow.steps}
+    layout_fingerprints = {k: v for k, v in layout_fingerprints.items() if k in kept}
+    if layout_fingerprints:
+        fp_path = bundle / _layout.FINGERPRINT_ASSET
+        fp_path.parent.mkdir(parents=True, exist_ok=True)
+        fp_path.write_bytes(_layout.dump_bundle_fingerprints(layout_fingerprints))
 
     write_compile_notes(bundle, compile_notes)
     workflow.save(bundle)

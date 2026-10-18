@@ -196,6 +196,10 @@ jobs:
           cache: pip
       - name: Install
         run: pip install -e '.[dev]'
+      - name: Release consistency and public artifact inventory
+        # Flow's own gate: version sync across project, module and lock, and
+        # every public data/config asset listed in public-artifacts.json.
+        run: python scripts/check_release_consistency.py
       - name: Ruff lint
         run: ruff check openadapt_flow
       - name: Ruff format check

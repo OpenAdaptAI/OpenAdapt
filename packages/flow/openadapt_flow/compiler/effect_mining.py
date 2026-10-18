@@ -50,7 +50,7 @@ simply never populate them, and the miner falls back to the honest placeholder
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any, Mapping, Optional
 
 from openadapt_flow.ir import ActionKind, PostconditionKind, Region, Step
 from openadapt_flow.runtime.effects.effect import (
@@ -207,6 +207,7 @@ def _mine_from_sor_delta(
     before: list[dict],
     after: list[dict],
     exclude_texts: tuple[str, ...],
+    param_bindings: Optional[Mapping[str, str]] = None,
 ) -> Optional[StepEffectMining]:
     """Mine real effects from an OBSERVED before/after system-of-record delta.
 
@@ -255,16 +256,22 @@ def _mine_from_sor_delta(
     # partial-save catch). Value is the DEMONSTRATED example (as the
     # hand-authored effects already bake ``value=NOTE``); per-run parameter
     # substitution of effect values is a separate runtime item.
+    bindings = dict(param_bindings or {})
     for fname, fval in payload.items():
+        bound = bindings.get(fval)
         effects.append(
             Effect(
                 kind=EffectKind.FIELD_EQUALS,
                 match=_vemap(selector),
                 field=fname,
-                value=_ve(fval),
+                value=ValueExpr(param=bound) if bound else _ve(fval),
                 risk=step.risk,
                 probe=(
-                    f"field {fname!r} of the written record equals the "
+                    f"field {fname!r} of the written record equals the run's "
+                    f"{bound!r} parameter (mined; the demonstration typed that "
+                    "parameter's value into this field)"
+                    if bound
+                    else f"field {fname!r} of the written record equals the "
                     "demonstrated value (mined; the value is the recorded "
                     "example — substitute the run's parameter if this field "
                     "is parameterized)"
@@ -599,6 +606,7 @@ def mine_step_effects(
     step: Step,
     *,
     exclude_texts: tuple[str, ...] = (),
+    param_bindings: Optional[Mapping[str, str]] = None,
 ) -> StepEffectMining:
     """Derive candidate system-of-record effects for one compiled step.
 
@@ -627,6 +635,11 @@ def mine_step_effects(
         exclude_texts: Demonstrated parameter values (the typed payload), used
             to split a record's payload fields (→ ``field_equals``) from its
             identity fields (→ ``match``).
+        param_bindings: Optional demonstrated value -> parameter name. A
+            ``field_equals`` whose value is one of these reads back the run's
+            parameter (``ValueExpr(param=...)``) instead of the demonstrated
+            literal. Only system-of-record deltas use it. ``None`` keeps the
+            literal, as before.
 
     Returns:
         A :class:`StepEffectMining` describing the decision. ``effects`` is
@@ -635,7 +648,7 @@ def mine_step_effects(
     before = _as_records(event.get(SOR_BEFORE_KEY))
     after = _as_records(event.get(SOR_AFTER_KEY))
     if before is not None and after is not None:
-        mined = _mine_from_sor_delta(step, before, after, exclude_texts)
+        mined = _mine_from_sor_delta(step, before, after, exclude_texts, param_bindings)
         if mined is not None:
             return mined
         # A snapshot existed but showed no single-record write. If the step is
