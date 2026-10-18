@@ -50,7 +50,7 @@ def quantile(xs: list[float], q: float) -> float:
     return xs[lo] + (xs[hi] - xs[lo]) * (pos - lo)
 
 
-def r(x: float, n: int = 2) -> float:
+def r(x: float, n: int = 3) -> float:
     return round(x, n)
 
 
