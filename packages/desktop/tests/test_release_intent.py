@@ -189,3 +189,17 @@ def test_intent_judges_the_merge_not_a_stale_branch_head(repo: Path) -> None:
     merge = _git(repo, "rev-parse", "HEAD")
     assert start != base
     assert check_release_intent.check(repo, base, merge) == []
+
+
+def test_a_fix_confined_to_tests_docs_or_ci_needs_no_release(repo: Path) -> None:
+    base = _git(repo, "rev-parse", "HEAD")
+    _commit(repo, "fix(ci): tighten a release check", touch="tests/test_release.py")
+    _commit(repo, "fix(docs): correct the runbook", touch="docs/RUNBOOK.md")
+    head = _commit(repo, "feat: describe the portal", touch="README.md")
+    assert check_release_intent.check(repo, base, head) == []
+    # Anything outside those paths ships, including an unlisted one.
+    head = _commit(repo, "fix: patch a build script", touch="scripts/build_frozen_engine.py")
+    problems = check_release_intent.check(repo, base, head)
+    assert len(problems) == 1
+    assert "fix: patch a build script" in problems[0]
+    assert "fix(ci): tighten a release check" not in problems[0]

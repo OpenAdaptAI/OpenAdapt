@@ -37,6 +37,11 @@ VERSION = re.compile(r"^(\d+)\.(\d+)\.(\d+)$")
 SUBJECT = re.compile(r"^(?P<type>[a-z]+)(?:\((?P<scope>[^)]*)\))?(?P<bang>!)?: (?P<text>.+)$")
 LEVELS = ("patch", "minor", "major")
 SECTIONS = (("feat", "Features"), ("fix", "Bug Fixes"), ("perf", "Performance Improvements"))
+# Paths (relative to packages/desktop) that never reach the wheel, the sdist, or
+# an installer. A feat, fix, or perf commit confined to them needs no release.
+# Every other path counts as shipped, so an unlisted one fails closed.
+NOT_SHIPPED_PREFIXES = ("tests/", "docs/", ".github/")
+NOT_SHIPPED_SUFFIXES = (".md",)
 
 
 @dataclass(frozen=True)
@@ -44,6 +49,16 @@ class Commit:
     sha: str
     subject: str
     body: str
+    paths: tuple[str, ...] = ()
+
+    @property
+    def ships(self) -> bool:
+        """Whether the commit changes anything that reaches a release."""
+
+        return not self.paths or any(
+            not path.startswith(NOT_SHIPPED_PREFIXES) and not path.endswith(NOT_SHIPPED_SUFFIXES)
+            for path in self.paths
+        )
 
     @property
     def parsed(self) -> re.Match[str] | None:
@@ -86,18 +101,20 @@ def commits_between(root: Path, base: str, head: str = "HEAD") -> list[Commit]:
         root,
         "log",
         "--no-merges",
-        "--format=%H%x00%s%x00%b%x1e",
+        "--relative",
+        "--name-only",
+        "--format=%x1e%H%x00%s%x00%b%x00",
         f"{base}..{head}",
         "--",
         ".",
     )
     commits = []
     for record in raw.split("\x1e"):
-        record = record.strip("\n")
-        if not record:
+        if not record.strip():
             continue
-        sha, subject, body = (record.split("\x00") + ["", ""])[:3]
-        commits.append(Commit(sha=sha, subject=subject.strip(), body=body))
+        sha, subject, body, names = (record.split("\x00") + ["", "", ""])[:4]
+        paths = tuple(line for line in names.splitlines() if line.strip())
+        commits.append(Commit(sha=sha.strip(), subject=subject.strip(), body=body, paths=paths))
     return commits
 
 
@@ -106,6 +123,8 @@ def required_level(commits: list[Commit], version: str) -> str | None:
 
     level = None
     for commit in commits:
+        if not commit.ships:
+            continue
         match = commit.parsed
         kind = match.group("type") if match else None
         if commit.breaking:
