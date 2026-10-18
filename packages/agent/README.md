@@ -107,13 +107,13 @@ openadapt-agent installs from PyPI and requires openadapt-flow 2.1.0 or later, w
 
 ### See every outcome
 
-Ask for each case by adding `sandbox_case` to the inputs, with a new `request_id` each time. For example: "Now try the false_saved_banner case with request id demo-0002."
+Ask for each case by adding `sandbox_case` to the inputs, with a new `request_id` each time. For example: "Now try the duplicate_record case with request id demo-0002."
 
 | `sandbox_case` | `outcome` | What MockMed does |
 | --- | --- | --- |
 | `normal` (default) | `done` | Saves the note, and the record check finds it. |
 | `duplicate_record` | `needs_review` | Lists the same referral twice, so OpenAdapt can't tell which record to open. It stops before saving. |
-| `false_saved_banner` | `not_sure_if_saved` | Shows a saved message, but the note wasn't stored. |
+| `false_saved_banner` | `not_sure_if_saved` | Rejects the note on save, so it isn't stored. |
 | `timeout_after_save` | `not_sure_if_saved` | Saves the note, then times out with an error. |
 | `app_offline` | `did_not_run` | Doesn't answer, so nothing starts. |
 

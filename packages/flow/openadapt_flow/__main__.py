@@ -1508,7 +1508,7 @@ def _cmd_tutorial(args: argparse.Namespace) -> int:
         _print_break_it_narrative(result.break_it)
     elif result.execution_outcome == "VERIFIED":
         print(
-            "\nNext: rerun this same bundle against a backend that lies -- and "
+            "\nNext: rerun this same bundle with the save set to fail -- and "
             f"watch the engine halt:\n  {command('tutorial --break-it')}\n"
             "Or see both runs side by side on one page:\n"
             f"  {command('demo')}"
@@ -1530,16 +1530,15 @@ def _print_break_it_narrative(broken: "BreakItResult") -> None:
     fault server's ground-truth store by ``run_tutorial``; nothing is scripted.
     """
     claim = (
-        "every on-screen check passed -- the app painted its success banner"
+        "every on-screen check passed, including the saved message"
         if broken.screen_claimed_success
-        else "the app's success banner did not appear"
+        else "the saved message did not appear"
     )
     if broken.screen_claim_text:
         claim += f'\n                       (observed on screen: "{broken.screen_claim_text}")'
-    print("\n--- break-it: the same certified bundle, against a backend that lies ---")
+    print("\n--- break-it: the same certified bundle, with the save set to fail ---")
     print(f"\n  Injected fault:      {broken.fault!r} -- the server rejects the write")
-    print("                       AFTER the app reports success")
-    print(f"  The screen claimed:  {claim}")
+    print(f"  On screen:           {claim}")
     print(
         "  The verifier found:  "
         f"{broken.effects_refuted}/{broken.effects_required} declared effect(s) "
@@ -1558,8 +1557,8 @@ def _print_break_it_narrative(broken: "BreakItResult") -> None:
     plain = plain_result(broken.transaction_outcome, broken.execution_outcome)
     print(f"  Result:              {plain.label}. {plain.meaning}")
     print(
-        "\n  The screen said success. The system of record said otherwise. "
-        "The engine\n  believed the system of record."
+        "\n  The screen looked the same as a good save. The record check found "
+        "no new note,\n  so the engine stopped instead of reporting done."
     )
     print(f"\n  Engine's own words:  {broken.halt_reason}")
     print(
@@ -1597,7 +1596,7 @@ def _demo_progress() -> Optional[Callable[[str], None]]:
         if match:
             text = f"Run 1, step {match.group(1)} of 5: {match.group(2)}"
         elif message.startswith("[break-it]"):
-            text = "Run 2: the same task against an app that lies"
+            text = "Run 2: the same task, with the save set to fail"
         else:
             return
         sys.stdout.write("\r\033[K" + text[:100])
@@ -1613,7 +1612,7 @@ def _clear_progress_line() -> None:
 
 
 def _cmd_demo(args: argparse.Namespace) -> int:
-    """Run the checked run and the lying-app run, then write one proof page.
+    """Run the checked run and the failed-save run, then write one proof page.
 
     Composes the unchanged tutorial path (``run_tutorial(..., break_it=True)``):
     the same record, compile, certify, and Standard-profile run, then the same
@@ -6790,13 +6789,13 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "demo",
         help=(
-            "See the proof in one command: a checked run and a run where the "
-            "app lies, side by side on one page (fake clinic data, no AI calls)"
+            "See the proof in one command: a checked run and a run whose save "
+            "fails, side by side on one page (fake clinic data, no AI calls)"
         ),
         description=(
-            "Run the bundled tutorial twice on a fake clinic app: once against "
-            "an honest app, and once against an app that shows its success "
-            "message and then drops the save. Writes one self-contained HTML "
+            "Run the bundled tutorial twice on a fake clinic app: once with a "
+            "normal save, and once with the save set to fail on the server. "
+            "Writes one self-contained HTML "
             "page with both final screens, the record check for each run, and "
             "what a person sees when a run stops, and opens it when a display "
             "is available. Exit 0 when the first run is Done and checked and "

@@ -194,9 +194,9 @@ class TestProofPage:
 
         page = demo_proof.render_demo_page(evidence)
         visible = _visible_text(page)
-        assert "The screen said “saved” both times." in visible
+        assert "Both runs ended on the same saved screen." in visible
         assert "Done and checked" in visible
-        assert "Stopped: the screen said saved, the record says no" in visible
+        assert "Stopped: the note never reached the record" in visible
         assert "Check the record" in visible
         assert "identical, pixel for pixel" in visible
         # Both final frames are embedded, and each links to the full frame.
@@ -316,7 +316,7 @@ class TestSummaryAndHelpers:
         assert len(lines) <= 7
         text = "\n".join(lines)
         assert "Run 1  Done and checked." in text
-        assert "Run 2  Stopped: the screen said saved, the record says no." in text
+        assert "Run 2  Stopped: the note never reached the record." in text
         assert "Check the record before anyone runs this again." in text
         assert "(open it in a browser)" in text
         assert lines[-1].startswith("Next: openadapt-flow record ")
