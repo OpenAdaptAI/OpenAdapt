@@ -201,8 +201,9 @@ handles into the `Replayer`.
   outage keeps the failure. Every call and rescue is recorded in the run result.
   The replayer does not ask at all on an irreversible or effect-bearing step
   (the same steps the run gate treats as consequential, plus steps waiting for
-  risk review). There a failed check stops the run, and because the action was
-  already sent, the transaction outcome is `RECONCILIATION_REQUIRED`.
+  risk review). There a failed check stays failed. Unless the workflow has its
+  own handler for that step the run stops, and because the action was already
+  sent, the transaction outcome is `RECONCILIATION_REQUIRED`.
 
 ## PHI data-flow boundary
 

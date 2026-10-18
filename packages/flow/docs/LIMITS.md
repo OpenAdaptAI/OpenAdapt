@@ -368,9 +368,11 @@ The state verifier never re-evaluates a step that can change a record: a step
 marked irreversible, a step that reads as a write (Save, Submit), a step that
 declares a system-of-record effect, or a step still waiting for risk review.
 On those steps the screen check is the only on-screen confirmation of the
-write, so a failed check stops the run. The action was already sent, so the
-transaction outcome is `RECONCILIATION_REQUIRED`: a person checks the record
-before anything is retried. Navigation and read-only steps can still be
+write, so a failed check stays failed, exactly as it would with no state
+verifier, and the run stops unless the workflow has its own handler for that
+step. The action was already sent, so a stopped run's transaction outcome is
+`RECONCILIATION_REQUIRED`: a person checks the record before anything is
+retried. Navigation and read-only steps can still be
 rescued. A wrong answer there lets the run go on to the next step, which still
 runs its own identity, risk, and screen checks before it acts.
 

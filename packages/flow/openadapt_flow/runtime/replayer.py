@@ -6781,13 +6781,7 @@ class Replayer:
                                 f"({step.intent}): expected screen state not reached "
                                 f"(semantic drift) — failed: {detail} — run aborted"
                             )
-                        if (
-                            self.governed_authorization is not None
-                            or self._postcondition_confirms_a_write(step, workflow)
-                        ):
-                            # A write the screen did not confirm is never an
-                            # ordinary failure a program exception edge may
-                            # route past.
+                        if self.governed_authorization is not None:
                             result.safety_halt = True
                 except Exception as exc:
                     if not delivery_uncertain:
@@ -13916,16 +13910,14 @@ class Replayer:
         system-of-record effect), plus an unresolved risk review, which the
         transaction outcome also treats as consequential.
 
-        On such a step a failed postcondition is final:
-
-        * The drift oracle is never asked. A model "yes" is not evidence that
-          a write did what was intended.
-        * The failure is a safety halt, so a program exception edge cannot
-          route past it.
-
-        The action was already delivered and nothing has proven the write
-        absent, so :func:`transaction.classify_transaction_outcome` reports
-        ``RECONCILIATION_REQUIRED``.
+        On such a step the drift oracle is never asked, so a failed
+        postcondition stays failed. A model "yes" is not evidence that a write
+        did what was intended. The step fails exactly as it would with no
+        verifier configured: the run halts unless the program declares its
+        own exception handler for that state. The action was already
+        delivered and nothing has proven the write absent, so
+        :func:`transaction.classify_transaction_outcome` reports
+        ``RECONCILIATION_REQUIRED`` for the halted run.
 
         Read-only and navigation steps keep the drift-oracle rescue. A wrong
         "yes" there lets the run reach the next step, which still runs its own

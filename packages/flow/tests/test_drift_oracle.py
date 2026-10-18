@@ -7,8 +7,8 @@ Veto-safe by construction — these tests pin that:
 * every call and rescue is recorded on the StepResult for the report,
 * with no verifier configured (the default) behaviour is unchanged,
 * an irreversible or effect-bearing step is never rescued: its failed
-  postcondition halts the run and the transaction outcome is
-  RECONCILIATION_REQUIRED, while a navigation step keeps the rescue.
+  postcondition stays failed (a run with no handler halts with transaction
+  outcome RECONCILIATION_REQUIRED), while a navigation step keeps the rescue.
 """
 
 from __future__ import annotations
@@ -375,7 +375,10 @@ def _program_with_handler(step: Step) -> Workflow:
     return Workflow(name="wf", program=program)
 
 
-def test_exception_edge_cannot_route_past_an_unconfirmed_write(tmp_path):
+def test_write_step_failure_reaches_its_handler_unrescued(tmp_path):
+    # The oracle would say yes, but it is never asked: the write's check stays
+    # failed, and the program's own handler sees the failure exactly as it
+    # would with no verifier configured.
     verifier = _Verifier("yes")
     submit = _step(
         _text_present_pc("Claim submitted"),
@@ -388,14 +391,14 @@ def test_exception_edge_cannot_route_past_an_unconfirmed_write(tmp_path):
         tmp_path, [], verifier, workflow=_program_with_handler(submit)
     )
 
-    assert report.success is False
     result = next(r for r in report.results if r.step_id == "submit")
     assert result.ok is False
-    assert result.safety_halt is True
-    assert result.exception_handled is False
+    assert result.postconditions_ok is False
+    assert result.drift_oracle_calls == 0
+    assert result.postcondition_drift_rescues == []
     assert verifier.calls == 0
-    assert ("press", "Escape") not in backend.actions  # handler never ran
-    assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
+    assert result.exception_handled is True
+    assert ("press", "Escape") in backend.actions
 
 
 def test_exception_edge_still_handles_a_failed_navigation_step(tmp_path):
