@@ -63,7 +63,7 @@ A `to_executor` exchange cannot claim `committed` (IX066) or `no_action` (IX084)
 | `required_grade` | The check level a commit of the same workflow needs: the weakest grade its committed read-back carries, or its write step's minimum grade. It cannot be `unchecked`. |
 | `evidence` | Names of fields whose reads show the state did not change, such as a record's entry count read before the decision and again after reopening. At least one is required, and each must be graded at least `required_grade` (IX082). |
 
-The value of an evidence field is the state before the decision. A read of an evidence field that differs from that value means a record was created or changed, which is IX083.
+The value of an evidence field is the state the executor first read, such as an entry count. A later read of it that differs means a record was created or changed while the item was handled, which is IX083.
 
 A `no_action` exchange is never a save and never billable. A counter of saves or billable items counts `committed` only. It does not go to a review queue unless the site's policy says decisions need review.
 
