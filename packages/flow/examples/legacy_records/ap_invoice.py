@@ -7,18 +7,21 @@ an accounts-payable app, to show nothing in the core is clinical:
       -> one controller approval -> find supplier (must exist) -> enter bill
       -> close, reopen by bill id, read back -> ledger export read -> Seal
 
-The export is read outside the app's screens, so values that match it are
-graded ``verified``. A supplier that is not in the ledger stops the run;
+Two exports are read. Ctrl+E in the app is an export from the live session,
+so it counts like a screen read. The scheduled export is a separate process
+that reads saved data, so values that match it are graded ``verified``. A supplier that is not in the ledger stops the run;
 creating suppliers is not part of this workflow.
 
     python ap_invoice.py --inbox invoice_inbox --run-dir out/invoices \\
-        --l1-dir out/extractions --export-dir exports [--answers answers.json]
+        --l1-dir out/extractions --export-dir exports --ledger-db ledger.sqlite \\
+        [--app-python python3] [--answers answers.json]
 """
 
 from __future__ import annotations
 
 import argparse
 import csv
+import subprocess
 import time
 from datetime import date
 from pathlib import Path
@@ -52,6 +55,24 @@ def read_export(path: Path, bill_id: str, since: float) -> dict[str, str]:
     return {}
 
 
+def scheduled_export(app_python: str, ledger_db: Path, export_dir: Path) -> None:
+    """Run the ledger's scheduled export: a separate process, no UI."""
+    app = Path(__file__).parent / "apps" / "mock_ledger.py"
+    subprocess.run(
+        [
+            app_python,
+            str(app),
+            "--db",
+            str(ledger_db),
+            "--export-only",
+            "--export-dir",
+            str(export_dir),
+        ],
+        check=True,
+        timeout=30,
+    )
+
+
 def post_one(
     app: X11App,
     inv: Path,
@@ -59,6 +80,8 @@ def post_one(
     run_dir: Path,
     l1_dir: Path,
     export_dir: Path,
+    ledger_db: Path,
+    app_python: str,
     log,
 ) -> str:
     log(f"\n== {inv.name}")
@@ -179,8 +202,13 @@ def post_one(
     (run_dir / "frames" / f"{inv.stem}-readback.png").write_bytes(frame.png)
     started = time.time() - 1
     app.key("ctrl+e")
-    exported = read_export(export_dir / "bills.csv", bill, started)
-    log(f"  export row for {bill}: {'found' if exported else 'missing'}")
+    live = read_export(export_dir / "bills.csv", bill, started)
+    scheduled_export(app_python, ledger_db, export_dir)
+    exported = read_export(export_dir / "scheduled" / "bills.csv", bill, started)
+    log(
+        f"  export row for {bill}: live session {'found' if live else 'missing'}, "
+        f"scheduled {'found' if exported else 'missing'}"
+    )
     expected = {
         "bill_id": ("Bill", "code", bill, "bill_id"),
         "invoice_no": ("Invoice no", "code", inv_no, "invoice_no"),
@@ -199,7 +227,10 @@ def post_one(
                 session="reopened",
                 artifact_id="bill",
                 screen=f"Bill {bill}",
-                export=exported.get(col),
+                exports=[
+                    (live.get(col), "live_session"),
+                    (exported.get(col), "committed_store"),
+                ],
             )
         )
     res["artifacts"][0]["file_number"] = bill
@@ -228,6 +259,8 @@ def main() -> None:
     p.add_argument("--run-dir", type=Path, required=True)
     p.add_argument("--l1-dir", type=Path, required=True)
     p.add_argument("--export-dir", type=Path, required=True)
+    p.add_argument("--ledger-db", type=Path, required=True)
+    p.add_argument("--app-python", default="python3")
     p.add_argument("--answers", type=Path)
     a = p.parse_args()
     a.run_dir.mkdir(parents=True, exist_ok=True)
@@ -245,7 +278,15 @@ def main() -> None:
     for inv in sorted(a.inbox.glob("*.pdf")):
         try:
             outcomes[inv.name] = post_one(
-                app, inv, people, a.run_dir, a.l1_dir, a.export_dir, log
+                app,
+                inv,
+                people,
+                a.run_dir,
+                a.l1_dir,
+                a.export_dir,
+                a.ledger_db,
+                a.app_python,
+                log,
             )
         except DriverHalt as err:
             outcomes[inv.name] = "halted"

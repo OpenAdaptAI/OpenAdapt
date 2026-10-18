@@ -2,9 +2,12 @@
 
 PROTOTYPE glue shared by the two workflows. Two parts are stand-ins:
 
-- Grades follow ``openadapt_flow.records.schema.grade_for`` (the reading
-  step's rule). When that module is installed it is used; otherwise the same
-  rule is applied here.
+- Grades follow the reading step's rule (``openadapt_flow.records.schema``):
+  two agreeing reads give ``screen_readback``, a reopened record gives
+  ``committed_record_readback``, an independent read gives ``verified``. An
+  export counts as independent only when it came from saved data
+  (``source_kind`` ``committed_store``); an export from the live session
+  counts as a screen read. The grade is derived from the reads, never passed in.
 - The Seal is an Ed25519 signature over the exchange checksum with a key that
   exists only in memory for this run. The offline Seal service replaces it;
   the exchange keeps the same ``seals`` entry shape.
@@ -24,11 +27,6 @@ from x11 import Frame, OcrLine, norm
 from openadapt_flow import __version__
 from openadapt_flow.interchange import check, with_checksum
 
-try:  # the reading step's record schema, once merged
-    from openadapt_flow.records.schema import grade_for as _records_grade_for
-except ImportError:  # pragma: no cover - until the records schema is on main
-    _records_grade_for = None
-
 V = "openadapt.records-interchange/v0"
 EXECUTOR = {"kind": "executor", "id": "openadapt-flow@demo-runner"}
 DOC_SIDE = {"kind": "system", "id": "intake@demo-site"}
@@ -39,21 +37,7 @@ def now() -> str:
 
 
 def grade(reads: list[dict[str, Any]], agreement: str) -> str:
-    if _records_grade_for is not None:
-        from openadapt_flow.records.schema import ChannelRead
-
-        channel = {"ocr": "ocr", "clipboard": "clipboard", "export": "export"}
-        return _records_grade_for(
-            [
-                ChannelRead(
-                    channel=channel[r["channel"]],
-                    raw=str(r["value"]),
-                    session=r["session"],
-                )
-                for r in reads
-            ],
-            agreement,
-        )
+    """Derive the grade from the reads."""
     if agreement != "agree" or len(reads) < 2:
         return "unconfirmed"
     if any(r["session"] == "independent" for r in reads):
@@ -74,7 +58,7 @@ def read_field(
     session: str,
     artifact_id: str,
     screen: str,
-    export: Optional[str] = None,
+    exports: Optional[list[tuple[Optional[str], str]]] = None,
 ) -> dict[str, Any]:
     """One field read through two (or three) channels, with its evidence."""
     reads: list[dict[str, Any]] = [
@@ -101,12 +85,14 @@ def read_field(
             "crop_sha256": frame.crop_sha256(ocr_line.bbox),
         }
     reads.append(r_ocr)
-    if export is not None:
+    for value, source_kind in exports or []:
+        committed = source_kind == "committed_store"
         reads.append(
             {
                 "channel": "export",
-                "value": export,
-                "session": "independent",
+                "value": value,
+                "source_kind": source_kind,
+                "session": "independent" if committed else session,
                 "observed_at": now(),
             }
         )

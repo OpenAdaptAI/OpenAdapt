@@ -11,8 +11,8 @@ This example shows OpenAdapt reading records out of desktop apps that have no AP
 | Exception confirmed by | Intake staff | Accounts-payable clerk |
 | Single approval by | Physician (priority) | Controller (approve, hold, reject) |
 | Identity branch | New chart, or one existing match; more than one match halts | Supplier must exist; a missing supplier halts |
-| Read-back | Close, reopen by record id, read clipboard and OCR | Same, plus the ledger's CSV export |
-| Best grade | `committed_record_readback` | `verified` (the export is read outside the screens) |
+| Read-back | Close, reopen by record id, read clipboard and OCR | Same, plus the live-session export (Ctrl+E) and the scheduled export (a separate process) |
+| Best grade | `committed_record_readback` | `verified`, from the scheduled export of saved data |
 
 ## Run the demo
 
@@ -43,7 +43,7 @@ Requirements: `Xvfb`, `xdotool`, `xclip`, ImageMagick `import`, a Python with `t
 | Read the document | `openadapt_flow.intake` (`read_document`, `extract_fields`), local, no model |
 | Exceptions and the approval | `pipeline.py`: a pattern or confidence check, then named people from the terminal or `answers*.json`. The person who confirms cannot be the person who approves. |
 | Write and read back | `x11.py`: keys only; observes the window title, the screen (RapidOCR) and the clipboard after Ctrl+A, Ctrl+C |
-| Grade | `evidence.py`: the reading step's `grade_for` rule |
+| Grade | `evidence.py`: derived from the reads. An export's `source_kind` decides whether it counts as independent (`committed_store`) or as a screen read (`live_session`). |
 | Exchange, checksum, L1 | `openadapt_flow.interchange` (`check`, `with_checksum`, `emit_exchange`) |
 | Seal | `evidence.py`: Ed25519 over the checksum with a key that exists only in memory |
 
@@ -54,5 +54,6 @@ The runs make no model calls.
 - **The driver.** `x11.py` is a scripted driver. In a deployment the app steps are a recorded and compiled Flow workflow run by the governed runtime over RDP, with its identity gate, postconditions and repair.
 - **The approval.** It is recorded as an interchange decision, not yet as a Flow `BusinessDecisionSpec` with a signed request and receipt.
 - **The Seal.** It is a prototype signature. It will be replaced by offline Seals with a local site key.
-- **Grades.** The rule matches `openadapt_flow.records.schema.grade_for` and uses that module when it is installed.
+- **Grades.** The rule mirrors `openadapt_flow.records.schema` and moves there once that schema records the export source.
+- **The run path.** For the Oct 29/30 demo, the plan is a compiled Flow workflow over RDP if the RDP runner is ready. If it is not, the demo uses this scripted driver, labelled as a prototype.
 - **OCR look-alikes.** The demo shows OCR reading `TEST-R1` as `TEST-Rl`. The value goes to the review queue rather than counting as confirmed. Look-alike-aware comparison is separate work.

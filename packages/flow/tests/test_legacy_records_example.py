@@ -119,11 +119,35 @@ def test_grades_follow_the_reading_rule() -> None:
         == "committed_record_readback"
     )
     assert (
-        evidence.read_field("r", "code", **kw, session="reopened", export="REC-1")[
-            "grade"
-        ]
+        evidence.read_field(
+            "r",
+            "code",
+            **kw,
+            session="reopened",
+            exports=[("REC-1", "committed_store")],
+        )["grade"]
         == "verified"
     )
+
+
+def test_an_export_from_the_live_session_is_not_verified() -> None:
+    line = OcrLine("REC-1", (1, 1, 5, 5), 0.97)
+    frame = _frame()
+    frame.crop_sha256 = lambda bbox: "0" * 64  # type: ignore[method-assign]
+    f = evidence.read_field(
+        "r",
+        "code",
+        expected="REC-1",
+        clipboard="REC-1",
+        ocr_line=line,
+        frame=frame,
+        artifact_id="a",
+        screen="s",
+        session="acting",
+        exports=[("REC-1", "live_session")],
+    )
+    assert f["grade"] == "screen_readback"
+    assert f["reads"][-1]["source_kind"] == "live_session"
 
 
 def test_a_lost_write_is_reported_as_lost_not_as_disagreement() -> None:

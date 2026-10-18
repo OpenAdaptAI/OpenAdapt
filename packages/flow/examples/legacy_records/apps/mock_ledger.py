@@ -5,6 +5,11 @@ SYNTHETIC DATA ONLY. Suppliers and bills are made up.
     python mock_ledger.py --db ledger.sqlite --seed
     python mock_ledger.py --db ledger.sqlite --export-dir exports
     python mock_ledger.py --db ledger.sqlite --drop-save
+    python mock_ledger.py --db ledger.sqlite --export-only --export-dir exports
+
+``--export-only`` is the scheduled export: a separate process that writes
+the saved bills to CSV without the UI. Ctrl+E in the app is an export from
+the live session.
 
 Keys: Ctrl+F find supplier by id, Ctrl+B new bill for the open supplier,
 Ctrl+S save, Ctrl+O open bill by id, Ctrl+E export all bills to CSV, Esc back,
@@ -37,6 +42,20 @@ def connect(db: Path) -> sqlite3.Connection:
         """
     )
     return con
+
+
+def export_bills(con: sqlite3.Connection, out: Path) -> int:
+    out.parent.mkdir(parents=True, exist_ok=True)
+    rows = con.execute("SELECT * FROM bill ORDER BY bill_id").fetchall()
+    tmp = out.with_suffix(".tmp")
+    with tmp.open("w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(
+            ["bill_id", "supplier_id", "invoice_no", "amount", "due_date", "status"]
+        )
+        w.writerows(rows)
+    tmp.replace(out)
+    return len(rows)
 
 
 class MockLedger:
@@ -154,7 +173,11 @@ def main() -> None:
     p.add_argument("--export-dir", type=Path, default=Path("exports"))
     p.add_argument("--seed", action="store_true")
     p.add_argument("--drop-save", action="store_true")
+    p.add_argument("--export-only", action="store_true")
     a = p.parse_args()
+    if a.export_only:
+        export_bills(connect(a.db), a.export_dir / "scheduled" / "bills.csv")
+        return
     if a.seed:
         con = connect(a.db)
         con.executemany("INSERT OR REPLACE INTO supplier VALUES (?,?,?)", SEED)

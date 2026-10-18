@@ -69,7 +69,8 @@ kill "$APP_PID"; sleep 0.5
 echo "== 3. Supplier invoices into Mock Ledger"
 run_app apps/mock_ledger.py --db "$OUT/ledger.sqlite" --export-dir "$OUT/exports"
 "$FLOW_PYTHON" ap_invoice.py --inbox "$OUT/invoice_inbox" --run-dir "$OUT/out/invoices" \
-  --l1-dir "$OUT/out/extractions" --export-dir "$OUT/exports" --answers answers.ledger.demo.json
+  --l1-dir "$OUT/out/extractions" --export-dir "$OUT/exports" \
+  --ledger-db "$OUT/ledger.sqlite" --app-python "$APP_PYTHON" --answers answers.ledger.demo.json
 sleep 2
 kill "$APP_PID"
 
