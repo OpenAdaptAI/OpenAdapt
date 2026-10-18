@@ -560,16 +560,20 @@ person does to check a save:
 1. opens its own session, described in `session` with the same fields as
    `backend:`. A network RDP session logs on with the read-back account in
    `credentials`. A Windows session is a second in-guest agent in a separate
-   Windows session. A Citrix, macOS or Linux session is a separate window. The
-   deployment loader refuses a session that is the one that types: the same
-   agent URL, the same RDP host and user, or the same window;
+   Windows session. A Citrix, macOS or Linux session is a separate window. Flow
+   refuses a session that is, or may be, the one that types: the same agent
+   (`localhost` and `127.0.0.1` count as the same), the same RDP host and
+   user, or a window that the typing window's selector could also match. It
+   checks when the config loads and again after `--backend`, `--agent-url`,
+   `--rdp-host` and the bundle's recorded target pick the typing backend;
 2. signs in through the application's own form, if `sign_in` is declared;
 3. types the search query into the search box and presses the search button
    (or Enter);
 4. if a results list appears, opens the one result that shows the record's
    identifier. Two matching results stop the check. No match counts as "not
    found" only when the application shows its `not_found` marker;
-5. checks that the record view shows the identifier (`identity`);
+5. checks that the record view shows the identifier (`identity`) on its own:
+   `REQ-4815` matches `Request ID: REQ-4815` but not `REQ-4815-01`;
 6. reads each declared field: through UI Automation (the control's value or
    name) on Windows, or with OCR (the text right of or below a label) on any
    screen; and
@@ -579,8 +583,9 @@ The look-up can't save anything. Every input goes through one guard. It may
 type only into the search box (and the sign-in fields while signing in),
 press Enter only in the search box, select the search box's own text before
 it retypes, and click only the search button, the sign-in button, and one
-result. Before each click it reads the control's label. A label with a
-save-like word (Save, Submit, Sign, Post, Delete, Approve, Send, and others)
+result. Before each click, and before typing, it reads the text under the
+point, the control's label, and its UI Automation name and id. Any of them with
+a save-like word (Save, Submit, Sign, Post, Delete, Approve, Send, and others)
 stops the check. Words are matched whole, so a "Submitted" status in a result
 row is data, not a button. On the pixel path Flow can't prove where keyboard
 focus is. It clicks the search box, types, and checks that the box then shows
@@ -615,14 +620,25 @@ On Windows, name controls by UI Automation instead:
 `{ automation_id: searchBox }` or `{ role: button, name: Search }`. A list or
 grid of results is `open: { results: { automation_id: patientGrid } }`.
 `shows` makes a marker count only when its text contains a phrase, for
-example `ready: { automation_id: patientHeader, shows: "Patient:" }`.
+example `ready: { automation_id: patientHeader, shows: "Patient:" }`. Markers
+(`ready`, `not_found`, `signed_in`) and the identity need text or a control,
+never only a region: an empty area is "there" whether or not anything is in
+it.
+
+Each look-up opens its own session, so it never reads a screen an earlier
+look-up left behind. A look-up that runs past its time limit gets no more
+input, and no new session opens while it is still running. When `sign_in` is
+declared and the session is already signed in, the check stops: it must sign
+in with its own account to be a separate session.
 
 | The look-up shows | Verdict |
 |---|---|
 | the saved values | CONFIRMED |
 | a different value read through UI Automation | REFUTED. The run ends `RECONCILIATION_REQUIRED` |
 | a different value read with OCR | INDETERMINATE (halt). OCR can misread, so a mismatch is never taken as proof the save is wrong |
-| the application's not-found marker | REFUTED with no count: a record the search doesn't find is never proof that nothing was saved, so the run ends in reconciliation |
+| the application's not-found marker | never CONFIRMED. A REFUTED verdict carries no count: a record the search doesn't find is never proof that nothing was saved, so the run ends in reconciliation |
+| a count check (`record_written`, `exact_new_set`, `count_new_only`, an idempotency key) without `open.results` | INDETERMINATE (halt): one record view can't show a duplicate. With `open.results`, the results must show exactly one match |
+| an effect on a field the look-up doesn't declare | INDETERMINATE (halt) |
 | two matching results, another record's identifier, a missing control, a value below the OCR confidence floor, a shortened or unparseable value, a refused input, or a failed sign-in | INDETERMINATE (halt) |
 
 **How strong it is.** With its own sign-in (an RDP logon with the read-back

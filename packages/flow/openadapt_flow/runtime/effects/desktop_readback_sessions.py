@@ -125,7 +125,8 @@ class PixelReadSurface:
     def _anchors(self, ref: ControlRef, lines: list[Any]) -> list[tuple[Any, str]]:
         """Lines showing ``ref.text``, with any text after it on the same line."""
 
-        want = _collapse(ref.text or "").casefold()
+        label = _collapse(ref.text or "")
+        want = label.casefold()
         found: list[tuple[Any, str]] = []
         for line in lines:
             if not _inside(ref.region, line):
@@ -138,15 +139,17 @@ class PixelReadSurface:
             ):
                 found.append((line, ""))
                 continue
-            if ref.at != "self" and len(folded) > len(want):
-                head = folded[: len(want)]
-                boundary = not folded[len(want)].isalnum()
+            # Slice the shown text by the label's own length, so casefolding
+            # that changes length (``ß`` -> ``ss``) can't shift the value.
+            if ref.at != "self" and len(shown) > len(label):
+                head = shown[: len(label)].casefold()
+                boundary = not shown[len(label)].isalnum()
                 if boundary and (
                     head == want
                     or difflib.SequenceMatcher(None, head, want, autojunk=False).ratio()
                     >= ref.min_ratio
                 ):
-                    found.append((line, shown[len(want) :].lstrip(" :-–·")))
+                    found.append((line, shown[len(label) :].lstrip(" :-–·")))
         return found
 
     def _value_lines(self, ref: ControlRef, anchor: Any, lines: list[Any]) -> list[Any]:
@@ -165,7 +168,16 @@ class PixelReadSurface:
                     and _inside(ref.region, line)
                 ):
                     picked.append(line)
-            return sorted(picked, key=lambda item: item.region[0])
+            # Keep only the run of text that starts next to the label: a
+            # wide gap is the next column, not more of this value.
+            run: list[Any] = []
+            edge = ax + aw
+            for line in sorted(picked, key=lambda item: item.region[0]):
+                if line.region[0] - edge > max(3 * ah, 40):
+                    break
+                run.append(line)
+                edge = line.region[0] + line.region[2]
+            return run
         below = []
         for line in lines:
             if line is anchor:
@@ -275,7 +287,12 @@ class PixelReadSurface:
         values = self._value_lines(ref, anchor, lines)
         if not values:
             x, y, w, h = anchor.region
-            return Located("ok", Seen(text="", point=(x + w, y + h // 2), ocr=True))
+            # The label is there and nothing is next to it. That may be an
+            # empty field or a value OCR missed, so it is never certain.
+            return Located(
+                "ok",
+                Seen(text="", point=(x + w, y + h // 2), confidence=0.0, ocr=True),
+            )
         return Located("ok", _seen_from(values))
 
     def rows(self, ref: ControlRef) -> Optional[list[Seen]]:
@@ -295,6 +312,16 @@ class PixelReadSurface:
             ]
         inside = [line for line in lines if _inside(ref.region, line)]
         return [_seen_from(row) for row in _group_rows(inside)]
+
+    def text_at(self, point: tuple[int, int]) -> Optional[str]:
+        x, y = point
+        hits = [
+            line
+            for line in self._lines()
+            if line.region[0] - 4 <= x <= line.region[0] + line.region[2] + 4
+            and line.region[1] - 4 <= y <= line.region[1] + line.region[3] + 4
+        ]
+        return " ".join(_collapse(line.text) for line in hits) or None
 
     def type_into(self, target: Seen, text: str) -> None:
         self._backend.click(*target.point)
@@ -339,7 +366,7 @@ class UiaReadSurface(PixelReadSurface):
         return self._backend.read_structural(locator, rows=rows)
 
     @staticmethod
-    def _located(payload: Optional[dict]) -> Located:
+    def _located(payload: Optional[dict], *, need_text: bool) -> Located:
         if payload is None:
             return Located("unavailable")
         match = payload.get("match")
@@ -347,24 +374,26 @@ class UiaReadSurface(PixelReadSurface):
             return Located("missing")
         if match != "unique":
             return Located("ambiguous")
+        text = payload.get("text")
+        if text is None and need_text:
+            # The control is there but exposes no value or name: unreadable,
+            # never an empty value.
+            return Located("unavailable")
         point = payload.get("point") or [0, 0]
         return Located(
             "ok",
-            Seen(
-                text=_collapse(payload.get("text") or ""),
-                point=(int(point[0]), int(point[1])),
-            ),
+            Seen(text=_collapse(text or ""), point=(int(point[0]), int(point[1]))),
         )
 
     def locate(self, ref: ControlRef) -> Located:
         if not ref.structured:
             return super().locate(ref)
-        return self._located(self._read_structural(ref))
+        return self._located(self._read_structural(ref), need_text=False)
 
     def read(self, ref: ControlRef) -> Located:
         if not ref.structured:
             return super().read(ref)
-        return self._located(self._read_structural(ref))
+        return self._located(self._read_structural(ref), need_text=True)
 
     def rows(self, ref: ControlRef) -> Optional[list[Seen]]:
         if not ref.structured:

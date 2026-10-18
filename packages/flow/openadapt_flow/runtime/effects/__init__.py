@@ -89,6 +89,10 @@ from openadapt_flow.runtime.effects.compensation import (  # noqa: F401
     reconcile_or_escalate,
     record_digest,
 )
+from openadapt_flow.runtime.effects.desktop_readback import (  # noqa: F401
+    DesktopReadbackSpec,
+    DesktopReadbackVerifier,
+)
 from openadapt_flow.runtime.effects.document_arrival import (  # noqa: F401
     DocumentArrivalVerifier,
 )
@@ -134,10 +138,6 @@ from openadapt_flow.runtime.effects.sql import (  # noqa: F401
     assert_read_only_sql,
     audit_table_deltas,
     capture_table_counts,
-)
-from openadapt_flow.runtime.effects.desktop_readback import (  # noqa: F401
-    DesktopReadbackSpec,
-    DesktopReadbackVerifier,
 )
 from openadapt_flow.runtime.effects.ui_readback import (  # noqa: F401
     SeparateSessionReadbackVerifier,

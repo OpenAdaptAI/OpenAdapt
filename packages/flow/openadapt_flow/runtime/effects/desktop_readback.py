@@ -71,6 +71,7 @@ from openadapt_flow.runtime.effects._common import judge_records
 from openadapt_flow.runtime.effects.adapter import ConnectionProbe, VerifierAdapterBase
 from openadapt_flow.runtime.effects.effect import (
     Effect,
+    EffectKind,
     EffectState,
     EffectVerdict,
     ValueExpr,
@@ -345,6 +346,22 @@ class DesktopReadbackSpec(BaseModel):
                 "desktop_readback.session.kind must be windows, rdp, citrix, macos "
                 "or linux (a web record page uses effects.kind: ui_readback)"
             )
+        markers = [("ready", self.ready), ("not_found", self.not_found)]
+        if self.sign_in is not None:
+            markers.append(("sign_in.signed_in", self.sign_in.signed_in))
+        for name, marker in markers:
+            # An area alone is "there" whether or not anything is in it.
+            if marker is not None and not (
+                marker.structured or marker.text or marker.shows
+            ):
+                raise ValueError(
+                    f"desktop_readback.{name} needs text or shows, not only a region"
+                )
+        if not (self.identity.reader.structured or self.identity.reader.text):
+            raise ValueError(
+                "desktop_readback.identity.reader must name a control or a label, "
+                "not only a region"
+            )
         return self
 
     def refs(self) -> list[ControlRef]:
@@ -479,6 +496,10 @@ class DesktopReadSurface(Protocol):
         """Focus ``target`` and select its text (so typing replaces it)."""
         ...
 
+    def text_at(self, point: tuple[int, int]) -> Optional[str]:
+        """The text a person sees at ``point`` (for the save-word check)."""
+        ...
+
     def click(self, target: Seen, *, double: bool = False) -> None: ...
 
     def press_enter(self) -> None: ...
@@ -507,20 +528,35 @@ class ReadOnlyViolation(RuntimeError):
 # -- the guard ------------------------------------------------------------------
 
 
+class LookupCancelled(RuntimeError):
+    """The verifier gave up on the session; stop sending input."""
+
+
 class ReadOnlyLookupGuard:
     """Every input the look-up sends passes here first.
 
     It allows typing only into the search box (and the sign-in fields while
     signing in), Enter only in the search box, and clicks only on the search
-    button, the sign-in button, and a result row, never on a control whose
-    label has a save-like word.
+    button, the sign-in button, and a result row. Before any click or typing
+    it reads what is under the point; a save-like word there, in the
+    control's label, or in its name or id refuses the input.
     """
 
-    def __init__(self, spec: DesktopReadbackSpec) -> None:
+    def __init__(
+        self,
+        spec: DesktopReadbackSpec,
+        *,
+        cancel: Optional[threading.Event] = None,
+    ) -> None:
         self._spec = spec
+        self._cancel = cancel
         self.phase: Literal["sign_in", "look_up"] = "look_up"
         #: Inputs sent, for the evidence (control descriptions, no values).
         self.inputs: list[str] = []
+
+    def check_cancelled(self) -> None:
+        if self._cancel is not None and self._cancel.is_set():
+            raise LookupCancelled("the read-back session ran out of time")
 
     def _typing_allowed(self, ref: ControlRef) -> bool:
         if self.phase == "sign_in" and self._spec.sign_in is not None:
@@ -529,9 +565,37 @@ class ReadOnlyLookupGuard:
             )
         return self.phase == "look_up" and ref is self._spec.search.box
 
+    @staticmethod
+    def _labels(
+        surface: DesktopReadSurface, ref: ControlRef, target: Seen
+    ) -> list[str]:
+        under = surface.text_at(target.point) or ""
+        return [
+            label
+            for label in (target.text, under, ref.name or "", ref.automation_id or "")
+            if label
+        ]
+
+    def _refuse_save_like(
+        self,
+        surface: DesktopReadSurface,
+        ref: ControlRef,
+        target: Seen,
+        *,
+        sign_in: bool = False,
+    ) -> None:
+        for label in self._labels(surface, ref, target):
+            words = save_like_words(label, sign_in=sign_in)
+            if words:
+                raise ReadOnlyViolation(
+                    f"refused to touch {ref.describe()}: its label has save-like "
+                    f"word(s) {', '.join(repr(w) for w in words)}"
+                )
+
     def type_into(
         self, surface: DesktopReadSurface, ref: ControlRef, target: Seen, text: str
     ) -> None:
+        self.check_cancelled()
         if not self._typing_allowed(ref):
             raise ReadOnlyViolation(
                 f"refused to type into {ref.describe()}: the read-back may type only "
@@ -539,20 +603,24 @@ class ReadOnlyLookupGuard:
             )
         if any(ord(c) < 32 for c in text):
             raise ReadOnlyViolation("refused to type a control character")
+        self._refuse_save_like(surface, ref, target)
         surface.type_into(target, text)
         self.inputs.append(f"type:{ref.describe()}")
 
     def select_all_in(
         self, surface: DesktopReadSurface, ref: ControlRef, target: Seen
     ) -> None:
+        self.check_cancelled()
         if not (self.phase == "look_up" and ref is self._spec.search.box):
             raise ReadOnlyViolation(
                 f"refused to select text in {ref.describe()}: only the search box"
             )
+        self._refuse_save_like(surface, ref, target)
         surface.select_all_in(target)
         self.inputs.append(f"select_all:{ref.describe()}")
 
     def press_enter(self, surface: DesktopReadSurface, ref: ControlRef) -> None:
+        self.check_cancelled()
         if not (
             self.phase == "look_up"
             and ref is self._spec.search.box
@@ -573,6 +641,7 @@ class ReadOnlyLookupGuard:
         *,
         double: bool = False,
     ) -> None:
+        self.check_cancelled()
         spec = self._spec
         sign_in_click = (
             self.phase == "sign_in"
@@ -591,12 +660,11 @@ class ReadOnlyLookupGuard:
                 f"refused to click {ref.describe()}: the read-back clicks only the "
                 "search button, the sign-in button, and one result"
             )
-        words = save_like_words(target.text, sign_in=sign_in_click)
-        if words:
+        if not self._labels(surface, ref, target):
             raise ReadOnlyViolation(
-                f"refused to click {ref.describe()}: its label has save-like "
-                f"word(s) {', '.join(repr(w) for w in words)}"
+                f"refused to click {ref.describe()}: it shows no label to check"
             )
+        self._refuse_save_like(surface, ref, target, sign_in=sign_in_click)
         surface.click(target, double=double)
         self.inputs.append(f"click:{ref.describe()}")
 
@@ -614,37 +682,50 @@ class RawRecordView:
     identity: Optional[Seen] = None
     values: dict[str, Seen] = field(default_factory=dict)
     inputs: list[str] = field(default_factory=list)
+    #: The guard refused an input (or the session ran out of time): stop,
+    #: don't retry.
+    refused: bool = False
 
 
 def _norm(text: str) -> str:
     return " ".join(text.casefold().split())
 
 
+#: What may sit right before or after an identifier that is shown on its own.
+#: ``-``, ``.`` and ``/`` are not here: ``123`` must not match ``123-01``.
+_BEFORE = r"(?:^|(?<=[\s(\[:,;\"']))"
+_AFTER = r"(?=$|[\s)\]:,;\"'])"
+
+
 def _shows_identity(text: str, identity: str) -> bool:
-    """Whether ``text`` shows ``identity`` as a whole token sequence."""
+    """Whether ``text`` shows ``identity`` on its own: separated by spaces,
+    brackets, or a colon, never as part of a longer identifier."""
 
     want = _norm(identity)
     if not want:
         return False
-    return re.search(rf"(?<![\w]){re.escape(want)}(?![\w])", _norm(text)) is not None
+    return re.search(_BEFORE + re.escape(want) + _AFTER, _norm(text)) is not None
 
 
 def _present(surface: DesktopReadSurface, ref: ControlRef) -> bool:
-    """Whether a marker control is on screen (and shows ``ref.shows``)."""
+    """Whether a marker is on screen, shows some text, and (when set) shows
+    ``ref.shows``."""
 
     seen = surface.read(ref)
-    if seen.status != "ok" or seen.item is None:
+    if seen.status != "ok" or seen.item is None or not seen.item.text.strip():
         return False
     return ref.shows is None or _norm(ref.shows) in _norm(seen.item.text)
 
 
 def _wait_for(
     surface: DesktopReadSurface,
+    guard: "ReadOnlyLookupGuard",
     check: Callable[[], Optional[Any]],
     timeout_s: float,
 ) -> Optional[Any]:
     deadline = time.monotonic() + timeout_s
     while True:
+        guard.check_cancelled()
         result = check()
         if result is not None or time.monotonic() >= deadline:
             return result
@@ -670,29 +751,36 @@ def look_up(
     # -- sign in (the application's own form) --------------------------------
     if spec.sign_in is not None:
         sign_in = spec.sign_in
-        if not _present(surface, sign_in.signed_in):
-            guard.phase = "sign_in"
-            for ref, secret in (
-                (sign_in.username, username),
-                (sign_in.password, password),
-            ):
-                found = surface.locate(ref)
-                if found.status != "ok" or found.item is None:
-                    return fail(f"the sign-in form has no unique {ref.describe()}")
-                guard.type_into(surface, ref, found.item, secret)
-            button = surface.locate(sign_in.submit)
-            if button.status != "ok" or button.item is None:
-                return fail("the sign-in form has no unique sign-in button")
-            guard.click(surface, sign_in.submit, button.item)
-            surface.settle()
-            signed = _wait_for(
-                surface,
-                lambda: True if _present(surface, sign_in.signed_in) else None,
-                timeout,
+        if _present(surface, sign_in.signed_in):
+            # Someone is already signed in here. The check must sign in with
+            # its own account, or it is not a separately signed-in session.
+            return fail(
+                "the read-back session was already signed in; it must sign in "
+                "with its own account"
             )
-            guard.phase = "look_up"
-            if not signed:
-                return fail("the sign-in did not complete")
+        guard.phase = "sign_in"
+        for ref, secret in (
+            (sign_in.username, username),
+            (sign_in.password, password),
+        ):
+            found = surface.locate(ref)
+            if found.status != "ok" or found.item is None:
+                return fail(f"the sign-in form has no unique {ref.describe()}")
+            guard.type_into(surface, ref, found.item, secret)
+        button = surface.locate(sign_in.submit)
+        if button.status != "ok" or button.item is None:
+            return fail("the sign-in form has no unique sign-in button")
+        guard.click(surface, sign_in.submit, button.item)
+        surface.settle()
+        signed = _wait_for(
+            surface,
+            guard,
+            lambda: True if _present(surface, sign_in.signed_in) else None,
+            timeout,
+        )
+        guard.phase = "look_up"
+        if not signed:
+            return fail("the sign-in did not complete")
 
     # -- search ----------------------------------------------------------------
     box_ref = spec.search.box
@@ -743,7 +831,7 @@ def look_up(
             ]
             return matching or None
 
-        outcome = _wait_for(surface, results_or_absent, timeout)
+        outcome = _wait_for(surface, guard, results_or_absent, timeout)
         if outcome == "not_found":
             return RawRecordView(ok=True, not_found=True, inputs=list(guard.inputs))
         if outcome is None:
@@ -767,7 +855,7 @@ def look_up(
             return "not_found"
         return None
 
-    state = _wait_for(surface, ready_or_absent, timeout)
+    state = _wait_for(surface, guard, ready_or_absent, timeout)
     if state == "not_found":
         return RawRecordView(ok=True, not_found=True, inputs=list(guard.inputs))
     if state is None:
@@ -834,6 +922,7 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
         self.poll_interval_s = poll_interval_s
         self._session_timeout_s = session_timeout_s
         self._environ = environ if environ is not None else os.environ
+        self._worker: Optional[threading.Thread] = None
         spec = target.spec
         self._own_sign_in = spec.own_sign_in()
         #: Tier 2 needs the session's own sign-in; a separate window as the
@@ -869,11 +958,25 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
 
     def _in_session(
         self,
-        work: Callable[[DesktopReadSurface, str, str], Any],
+        work: Callable[[DesktopReadSurface, str, str, threading.Event], Any],
         *,
         budget_s: float,
     ) -> tuple[Optional[Any], str, Optional[DesktopSessionFacts]]:
+        """Run ``work`` in a new session on a worker thread.
+
+        A session that runs past ``budget_s`` is told to stop (no more input)
+        and is abandoned; no new session opens while it is still running.
+        """
+
+        previous = self._worker
+        if previous is not None and previous.is_alive():
+            return (
+                None,
+                "an earlier read-back session is still running; not opening another",
+                None,
+            )
         outcome: dict[str, Any] = {}
+        cancel = threading.Event()
 
         def run() -> None:
             username, password = self._credentials()
@@ -890,38 +993,50 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
                     if (
                         self._own_sign_in
                         and self._target.spec.sign_in is None
-                        and not (facts.signed_in)
+                        and not facts.signed_in
                     ):
                         outcome["error"] = (
                             "the read-back session did not sign in with its own "
                             "credentials"
                         )
                         return
-                    outcome["result"] = work(surface, username, password)
+                    outcome["result"] = work(surface, username, password, cancel)
             except DesktopReadbackSessionError as exc:
                 outcome["error"] = str(exc)
             except Exception as exc:  # noqa: BLE001 - never raise out of a verdict
                 outcome["error"] = f"read-back session failed ({type(exc).__name__})"
 
         worker = threading.Thread(target=run, name="desktop-readback", daemon=True)
+        self._worker = worker
         worker.start()
         worker.join(timeout=budget_s)
         if worker.is_alive():
+            cancel.set()
             return None, "the read-back session did not finish in time", None
         if "error" in outcome:
             return None, str(outcome["error"]), outcome.get("facts")
         return outcome.get("result"), "", outcome.get("facts")
 
     def _look_up_once(
-        self, surface: DesktopReadSurface, username: str, password: str
+        self,
+        surface: DesktopReadSurface,
+        username: str,
+        password: str,
+        cancel: Optional[threading.Event] = None,
     ) -> RawRecordView:
-        guard = ReadOnlyLookupGuard(self._target.spec)
+        guard = ReadOnlyLookupGuard(self._target.spec, cancel=cancel)
         try:
             return look_up(
                 surface, self._target, guard, username=username, password=password
             )
         except ReadOnlyViolation as exc:
-            return RawRecordView(ok=False, reason=str(exc), inputs=list(guard.inputs))
+            return RawRecordView(
+                ok=False, reason=str(exc), inputs=list(guard.inputs), refused=True
+            )
+        except LookupCancelled as exc:
+            return RawRecordView(
+                ok=False, reason=str(exc), inputs=list(guard.inputs), refused=True
+            )
 
     # -- normalization ------------------------------------------------------------------
     def _normalize(self, raw: RawRecordView) -> _ReadRecord:
@@ -984,7 +1099,42 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
                 reason=f"{read.reason}; cannot certify the save; HALT",
                 unavailable=True,
             )
-        normalized = normalized_effect(effect, self._target.spec.fields)  # type: ignore[arg-type]
+        spec = self._target.spec
+        readable_fields = set(spec.fields)
+        if spec.identity.field is not None:
+            readable_fields.add(spec.identity.field)
+        unknown = sorted(set(effect.match) - readable_fields)
+        if effect.kind is EffectKind.FIELD_EQUALS and effect.field:
+            unknown += [] if effect.field in readable_fields else [effect.field]
+        if unknown:
+            return EffectVerdict(
+                verdict=Verdict.INDETERMINATE,
+                kind=effect.kind,
+                substrate=self.substrate,
+                reason=(
+                    "the effect names field(s) the look-up does not read ("
+                    + ", ".join(repr(n) for n in unknown)
+                    + "); declare them under desktop_readback.fields; HALT"
+                ),
+            )
+        counts = (
+            effect.kind in (EffectKind.RECORD_WRITTEN, EffectKind.EXACT_NEW_SET)
+            or effect.count_new_only
+            or effect.idempotency_key is not None
+        )
+        if counts and spec.open is None:
+            return EffectVerdict(
+                verdict=Verdict.INDETERMINATE,
+                kind=effect.kind,
+                substrate=self.substrate,
+                reason=(
+                    "the effect counts records, but the look-up opens one record "
+                    "view and can't see a duplicate. Declare open.results so the "
+                    "search results show exactly one match, or check a field "
+                    "(field_equals); HALT"
+                ),
+            )
+        normalized = normalized_effect(effect, spec.fields)
         blocking = blocking_uncertain_fields(normalized, read.records, read.uncertain)
         if blocking:
             return EffectVerdict(
@@ -1000,6 +1150,18 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
         verdict = judge_records(
             normalized, before, read.records, substrate=self.substrate
         )
+        if verdict.confirmed and not read.records:
+            # A search that finds nothing never proves anything, so it never
+            # confirms (for example an effect that expects no record).
+            return EffectVerdict(
+                verdict=Verdict.INDETERMINATE,
+                kind=effect.kind,
+                substrate=self.substrate,
+                reason=(
+                    "the look-up found no record; a search that finds nothing is "
+                    "not proof of what was saved; HALT"
+                ),
+            )
         if verdict.verdict is Verdict.REFUTED and read.ocr_fields and read.records:
             return EffectVerdict(
                 verdict=Verdict.INDETERMINATE,
@@ -1082,35 +1244,26 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
     def verify(
         self, expected: Effect, before: EffectState, context: Any = None
     ) -> EffectVerdict:
-        """Look the record up in a separate session until the effect is
-        CONFIRMED or ``expected.timeout_s`` passes."""
+        """Look the record up until the effect is CONFIRMED or
+        ``expected.timeout_s`` passes. Each look-up opens its own session, so
+        no look-up reads a screen an earlier one left behind."""
 
-        timeout_s = max(0.0, expected.timeout_s)
-
-        def work(
-            surface: DesktopReadSurface, username: str, password: str
-        ) -> EffectVerdict:
-            deadline = time.monotonic() + timeout_s
-            while True:
-                raw = self._look_up_once(surface, username, password)
-                verdict = self._judge(expected, before, self._normalize(raw))
-                if verdict.confirmed or time.monotonic() >= deadline:
-                    return verdict
-                time.sleep(self.poll_interval_s)
-
-        verdict, failure, _facts = self._in_session(
-            work, budget_s=self._session_budget(timeout_s)
-        )
-        if verdict is None:
-            return EffectVerdict(
-                verdict=Verdict.INDETERMINATE,
-                kind=expected.kind,
-                substrate=self.substrate,
-                reason=f"{failure}; cannot certify the save; HALT",
-                unavailable=True,
-                assurance=UNCHECKED,
-            )
-        assert isinstance(verdict, EffectVerdict)
+        deadline = time.monotonic() + max(0.0, expected.timeout_s)
+        while True:
+            raw, failure, _facts = self._read_once()
+            if raw is None:
+                return EffectVerdict(
+                    verdict=Verdict.INDETERMINATE,
+                    kind=expected.kind,
+                    substrate=self.substrate,
+                    reason=f"{failure}; cannot certify the save; HALT",
+                    unavailable=True,
+                    assurance=UNCHECKED,
+                )
+            verdict = self._judge(expected, before, self._normalize(raw))
+            if verdict.confirmed or raw.refused or time.monotonic() >= deadline:
+                break
+            time.sleep(self.poll_interval_s)
         return verdict.model_copy(
             update={"assurance": SCREEN_READBACK if verdict.confirmed else UNCHECKED}
         )
@@ -1128,6 +1281,7 @@ __all__ = [
     "DesktopSessionFacts",
     "DesktopSignIn",
     "Located",
+    "LookupCancelled",
     "OpenStep",
     "RawRecordView",
     "ReadOnlyLookupGuard",

@@ -690,6 +690,34 @@ def _refuse_missing_citrix_readiness(backend_cfg: object, *, operation: str) -> 
     return True
 
 
+def _refuse_shared_readback_session(
+    cfg: object, backend_cfg: object, *, operation: str
+) -> bool:
+    """Refuse a desktop read-back session that is the session that types.
+
+    The deployment loader checks this too, but ``--backend``, ``--agent-url``,
+    ``--rdp-host`` and the bundle's recorded target can change the typing
+    backend after loading. This checks the backend the run will really use.
+    """
+    from openadapt_flow.deployment import desktop_readback_session_overlap
+
+    effects = getattr(cfg, "effects", None)
+    if effects is None:
+        return False
+    for section in [effects, *getattr(effects, "candidates", [])]:
+        spec = getattr(section, "desktop_readback", None)
+        if spec is None:
+            continue
+        problem = desktop_readback_session_overlap(spec, [backend_cfg])
+        if problem is not None:
+            print(
+                f"{operation} REFUSED: effects.desktop_readback.session {problem}. "
+                "Nothing was executed."
+            )
+            return True
+    return False
+
+
 _SAFE_BUNDLE_LOAD_GUIDANCE = (
     "Verify the bundle path and integrity; for a sealed bundle, set "
     "OPENADAPT_BUNDLE_KEY."
@@ -2161,6 +2189,8 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     refused = _enforce_surface_binding(args, workflow, backend_cfg, operation=operation)
     if refused is not None:
         return refused
+    if _refuse_shared_readback_session(cfg, backend_cfg, operation=operation):
+        return 2
     surface_cfgs = _resolve_surface_bindings(args, cfg, workflow)
     # Opt-in attest pre-state snapshot: the earliest point where the run is
     # ADMITTED (every gate above passed) and the run directory is final, but
@@ -2841,6 +2871,8 @@ def _cmd_run(args: argparse.Namespace) -> int:
     refused = _enforce_surface_binding(args, workflow, backend_cfg, operation="run")
     if refused is not None:
         return refused
+    if _refuse_shared_readback_session(cfg, backend_cfg, operation="run"):
+        return 2
     if _refuse_missing_citrix_readiness(backend_cfg, operation="run"):
         return 2
     will_actuate = not bool(getattr(args, "dry_run", False))
@@ -3430,6 +3462,8 @@ def _cmd_resume(args: argparse.Namespace) -> int:
     # (web / no flag) reproduces the historical Playwright path below exactly.
     backend_cfg = _resolve_backend_config(args, cfg, workflow)
     if _refuse_missing_citrix_readiness(backend_cfg, operation="Resume"):
+        return 2
+    if _refuse_shared_readback_session(cfg, backend_cfg, operation="Resume"):
         return 2
 
     where = (

@@ -854,6 +854,38 @@ class DeploymentConfig(BaseModel):
         return data
 
 
+def _endpoint(url: Optional[str]) -> Optional[tuple[str, str, Optional[int], str]]:
+    """``(scheme, host, port, path)`` with loopback names folded together."""
+
+    if not url:
+        return None
+    from urllib.parse import urlsplit
+
+    parts = urlsplit(url.strip())
+    host = (parts.hostname or "").casefold().rstrip(".")
+    if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+        host = "loopback"
+    try:
+        port = parts.port
+    except ValueError:
+        port = None
+    return (parts.scheme.casefold(), host, port, parts.path.rstrip("/"))
+
+
+def _host(name: Optional[str]) -> str:
+    host = (name or "").strip().casefold().rstrip(".")
+    return "loopback" if host in ("localhost", "127.0.0.1", "::1", "0.0.0.0") else host
+
+
+def _same_name(left: Optional[str], right: Optional[str]) -> bool:
+    """Two window selectors pick the same window: equal ignoring case, or
+    either one unset (it then matches whatever window is there)."""
+
+    a = (left or "").strip().casefold()
+    b = (right or "").strip().casefold()
+    return not a or not b or a == b
+
+
 def desktop_readback_session_overlap(
     spec: DesktopReadbackSpec,
     backends: list[BackendConfig],
@@ -861,9 +893,11 @@ def desktop_readback_session_overlap(
 ) -> Optional[str]:
     """Why ``spec.session`` is (or may be) a session the run types into.
 
-    The read-back must open its own session. The same agent URL is the same
+    The read-back must open its own session. The same agent is the same
     Windows session; the same RDP host and user would take over the run's
-    RDP session; the same local window is the window that typed.
+    RDP session; the same local window is the window that typed. Addresses
+    are compared after folding case and loopback names, and an unset window
+    title counts as matching any title.
     """
 
     try:
@@ -875,13 +909,16 @@ def desktop_readback_session_overlap(
     for backend in backends:
         other = (backend.kind or "web").strip().lower()
         if kind == "windows" and other == "windows":
-            if session.agent_url and session.agent_url == backend.agent_url:
+            mine, theirs = _endpoint(session.agent_url), _endpoint(backend.agent_url)
+            if mine is not None and theirs is not None and mine[1:3] == theirs[1:3]:
                 return (
-                    "uses the same agent_url as the backend that types; run a "
-                    "second agent in a separate Windows session for read-back"
+                    "uses the same agent as the backend that types; run a second "
+                    "agent in a separate Windows session for read-back"
                 )
         if kind == "rdp" and session.rdp_host and other in ("rdp", "citrix"):
-            if session.rdp_host == backend.rdp_host:
+            if _host(session.rdp_host) == _host(backend.rdp_host) and (
+                session.rdp_port == backend.rdp_port
+            ):
                 user = (
                     env.get(spec.credentials.username_env, "")
                     if spec.credentials is not None
@@ -892,32 +929,38 @@ def desktop_readback_session_overlap(
                     or user.casefold() == (backend.rdp_username or "").casefold()
                 ):
                     return (
-                        "connects to the same RDP host as the user that types; "
-                        "the read-back needs its own user (credentials) so it "
-                        "never takes over the run's session"
+                        "connects to the same RDP host as the user that types; the "
+                        "read-back needs its own user (credentials) so it never "
+                        "takes over the run's session"
                     )
-        if session.rdp_window or kind in ("citrix", "macos", "linux"):
-            same_window = (
-                (session.rdp_window or "") == (backend.rdp_window or "")
-                and (session.rdp_window_title or "") == (backend.rdp_window_title or "")
-                and (session.macos_app or "") == (backend.macos_app or "")
-                and (session.macos_window_title or "")
-                == (backend.macos_window_title or "")
-                and (session.linux_app or "") == (backend.linux_app or "")
-                and (session.linux_window_title or "")
-                == (backend.linux_window_title or "")
+        window_kinds = {"rdp", "citrix"}
+        if (
+            (kind in window_kinds and not session.rdp_host)
+            and other in window_kinds
+            and not backend.rdp_host
+            and _same_name(session.rdp_window, backend.rdp_window)
+            and _same_name(session.rdp_window_title, backend.rdp_window_title)
+        ):
+            return (
+                "may name the same window as the backend that types; give both "
+                "the typing window and the read-back window their own titles"
             )
-            if same_window and _same_kind_family(kind, other):
-                return (
-                    "names the same window as the backend that types; give the "
-                    "read-back session its own window title"
-                )
+        if (
+            kind == "macos"
+            and other == "macos"
+            and _same_name(session.macos_app, backend.macos_app)
+            and _same_name(session.macos_window_title, backend.macos_window_title)
+        ) or (
+            kind == "linux"
+            and other == "linux"
+            and _same_name(session.linux_app, backend.linux_app)
+            and _same_name(session.linux_window_title, backend.linux_window_title)
+        ):
+            return (
+                "may name the same window as the backend that types; give both "
+                "windows their own titles"
+            )
     return None
-
-
-def _same_kind_family(left: str, right: str) -> bool:
-    family = {"citrix": "rdp"}
-    return family.get(left, left) == family.get(right, right)
 
 
 def incomplete_deployment_reasons(cfg: DeploymentConfig) -> list[str]:

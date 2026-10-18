@@ -123,9 +123,13 @@ class _ScriptedSurface:
 
     facts = DesktopSessionFacts(True, True, True, "uia")
 
-    def __init__(self, labels: dict[str, str]) -> None:
+    def __init__(self, labels: dict[str, str], under: str = "") -> None:
         self.labels = labels
+        self.under = under
         self.actions: list[str] = []
+
+    def text_at(self, point: tuple[int, int]) -> Optional[str]:
+        return self.under or None
 
     def _seen(self, ref: ControlRef) -> Located:
         key = ref.automation_id or ref.text or ""
@@ -389,14 +393,12 @@ def _kiosk_verifier(kiosk: KioskLookupTransport, request_id: str) -> Any:
     )
 
 
-def _booked(**fields: str) -> Effect:
+def _booked(field: str = "visit_type", value: str = "follow-up") -> Effect:
     return Effect(
-        kind=EffectKind.RECORD_WRITTEN,
-        match={
-            "request_id": ValueExpr(literal="REQ-4815"),
-            **{k: ValueExpr(literal=v) for k, v in fields.items()},
-        },
-        expected_count=1,
+        kind=EffectKind.FIELD_EQUALS,
+        match={"request_id": ValueExpr(literal="REQ-4815")},
+        field=field,
+        value=ValueExpr(literal=value),
         timeout_s=0.0,
     )
 
@@ -413,10 +415,9 @@ def test_kiosk_booking_is_confirmed_from_its_own_rdp_session(
     assert before.records == []  # the kiosk says "No appointment found"
 
     kiosk.book("REQ-4815", "MRN A1001", "Ada Lovelace", "2026-11-02 09:30", "Follow-up")
-    verdict = verifier.verify(
-        _booked(patient_mrn="MRN A1001", visit_type="follow-up"), before
-    )
+    verdict = verifier.verify(_booked(), before)
     assert verdict.verdict is Verdict.CONFIRMED, verdict.reason
+    assert verifier.verify(_booked("patient_mrn", "MRN A1001"), before).confirmed
     assert verdict.assurance == "screen_readback"
     # Only the look-up box and Find were touched.
     assert kiosk.save_clicks == 0
@@ -427,9 +428,30 @@ def test_kiosk_ocr_mismatch_is_never_refuted(kiosk: KioskLookupTransport) -> Non
     verifier = _kiosk_verifier(kiosk, "REQ-4815")
     before = verifier.capture_pre_state()
     kiosk.book("REQ-4815", "MRN A1001", "Ada Lovelace", "2026-11-02 09:30", "Intake")
-    verdict = verifier.verify(_booked(visit_type="follow-up"), before)
+    verdict = verifier.verify(_booked(), before)
     assert verdict.verdict is Verdict.INDETERMINATE
     assert "OCR can misread" in verdict.reason
+
+
+def test_kiosk_count_check_without_a_results_list_halts(
+    kiosk: KioskLookupTransport,
+) -> None:
+    # One record view can't show a duplicate, so a count check never
+    # confirms from it.
+    verifier = _kiosk_verifier(kiosk, "REQ-4815")
+    before = verifier.capture_pre_state()
+    kiosk.book("REQ-4815", "MRN A1001", "Ada Lovelace", "2026-11-02 09:30", "Follow-up")
+    verdict = verifier.verify(
+        Effect(
+            kind=EffectKind.RECORD_WRITTEN,
+            match={"request_id": ValueExpr(literal="REQ-4815")},
+            expected_count=1,
+            timeout_s=0.0,
+        ),
+        before,
+    )
+    assert verdict.verdict is Verdict.INDETERMINATE
+    assert "duplicate" in verdict.reason
 
 
 def test_kiosk_record_not_found_is_not_proof_of_no_save(
@@ -484,7 +506,7 @@ def test_deployment_refuses_a_read_back_session_that_is_the_typing_session(
     windows = _winforms_spec(
         session={"kind": "windows", "agent_url": "http://vm:5001"}
     ).model_dump(mode="json")
-    with pytest.raises(ValueError, match="same agent_url"):
+    with pytest.raises(ValueError, match="same agent"):
         DeploymentConfig(
             backend=BackendConfig(kind="windows", agent_url="http://vm:5001"),
             effects=EffectsConfig(kind="desktop_readback", desktop_readback=windows),
@@ -494,3 +516,178 @@ def test_deployment_refuses_a_read_back_session_that_is_the_typing_session(
 @contextlib.contextmanager
 def _unused() -> Iterator[None]:  # pragma: no cover - keeps imports honest
     yield
+
+
+# -- review findings, pinned ----------------------------------------------------------
+
+
+def test_identity_must_stand_on_its_own() -> None:
+    from openadapt_flow.runtime.effects.desktop_readback import _shows_identity
+
+    assert _shows_identity("Patient: Neil Sorenson (1984-03-12)", "Neil Sorenson")
+    assert _shows_identity("REQ-4815", "REQ-4815")
+    assert not _shows_identity("REQ-4815-01", "REQ-4815")
+    assert not _shows_identity("A.123", "123")
+    assert not _shows_identity("123/2", "123")
+
+
+def test_markers_and_identity_need_text_not_only_a_region() -> None:
+    with pytest.raises(ValueError, match="ready needs text"):
+        _kiosk_spec(ready={"region": LOOKUP})
+    with pytest.raises(ValueError, match="identity.reader"):
+        _kiosk_spec(
+            identity={"reader": {"region": LOOKUP}, "value": {"param": "request_id"}}
+        )
+
+
+def test_guard_reads_what_is_under_the_point() -> None:
+    spec = _winforms_spec()
+    guard = ReadOnlyLookupGuard(spec)
+    surface = _ScriptedSurface({}, under="Save Note")
+    with pytest.raises(ReadOnlyViolation, match="save-like"):
+        guard.type_into(surface, spec.search.box, Seen("", (1, 1)), "Sorenson")
+    with pytest.raises(ReadOnlyViolation, match="save-like"):
+        guard.click(surface, spec.search.submit, Seen("Search", (1, 1)))
+    assert surface.actions == []
+
+
+def test_guard_checks_the_automation_id_too() -> None:
+    spec = _winforms_spec(
+        search={
+            "box": {"automation_id": "searchBox"},
+            "query": {"param": "patient_last"},
+            "submit": {"automation_id": "btnSaveAndClose"},
+        }
+    )
+    with pytest.raises(ReadOnlyViolation, match="save-like"):
+        ReadOnlyLookupGuard(spec).click(
+            _ScriptedSurface({}), spec.search.submit, Seen("", (1, 1))
+        )
+
+
+def test_an_already_signed_in_session_is_not_a_separate_sign_in() -> None:
+    spec = _winforms_spec(
+        credentials={"username_env": "RB_USER", "password_env": "RB_PASS"},
+        sign_in={
+            "username": {"automation_id": "user"},
+            "password": {"automation_id": "pass"},
+            "submit": {"automation_id": "signIn"},
+            "signed_in": {"automation_id": "home"},
+        },
+    )
+    target = resolve_desktop_spec(spec, {"patient_last": "Sorenson", "patient": "x"})
+    surface = _ScriptedSurface({"home": "Signed in as clerk"})
+    raw = look_up(surface, target, ReadOnlyLookupGuard(spec))
+    assert not raw.ok and "already signed in" in raw.reason
+    assert surface.actions == []
+
+
+def test_a_search_that_finds_nothing_never_confirms() -> None:
+    from openadapt_flow.runtime.effects.desktop_readback import _ReadRecord
+
+    spec = _winforms_spec(not_found={"automation_id": "statusLabel", "shows": "0"})
+    verifier = DesktopReadbackVerifier(
+        resolve_desktop_spec(spec, NEIL),
+        driver=BackendSessionDriver(lambda u, p: (None, None)),
+    )
+    from openadapt_flow.runtime.effects import EffectState
+
+    nothing = Effect(
+        kind=EffectKind.RECORD_WRITTEN,
+        match={"patient": ValueExpr(literal="Neil Sorenson")},
+        expected_count=0,
+        timeout_s=0.0,
+    )
+    verdict = verifier._judge(
+        nothing,
+        EffectState(substrate="desktop-readback", reachable=True, records=[]),
+        _ReadRecord(True, "", [], set(), True),
+    )
+    assert verdict.verdict is Verdict.INDETERMINATE
+
+
+def test_an_effect_on_a_field_the_look_up_does_not_read_halts(winforms: Any) -> None:
+    verifier = _winforms_verifier(winforms, NEIL)
+    verdict = verifier.verify(
+        Effect(
+            kind=EffectKind.FIELD_EQUALS,
+            match={"mrn": ValueExpr(literal="A1")},
+            field="note",
+            value=ValueExpr(literal="x"),
+            timeout_s=0.0,
+        ),
+        verifier.capture_pre_state(),
+    )
+    assert verdict.verdict is Verdict.INDETERMINATE
+    assert "does not read" in verdict.reason
+
+
+def test_a_session_past_its_time_is_abandoned_and_not_reopened() -> None:
+    release = threading.Event()
+
+    class SlowDriver:
+        def open(self, target: Any, username: str, password: str) -> Any:
+            @contextlib.contextmanager
+            def ctx() -> Iterator[Any]:
+                release.wait(5)
+                raise RuntimeError("released")
+                yield  # pragma: no cover
+
+            return ctx()
+
+    verifier = DesktopReadbackVerifier(
+        resolve_desktop_spec(_winforms_spec(), NEIL),
+        driver=SlowDriver(),
+        session_timeout_s=0.2,
+    )
+    first = verifier.verify(_note_equals("x"), verifier_state())
+    assert "did not finish in time" in first.reason
+    second = verifier.verify(_note_equals("x"), verifier_state())
+    assert "still running" in second.reason
+    release.set()
+
+
+def verifier_state() -> Any:
+    from openadapt_flow.runtime.effects import EffectState
+
+    return EffectState(substrate="desktop-readback", reachable=True, records=[])
+
+
+def test_session_overlap_folds_loopback_names_and_window_titles() -> None:
+    from openadapt_flow.deployment import desktop_readback_session_overlap
+
+    windows = _winforms_spec(
+        session={"kind": "windows", "agent_url": "http://localhost:5001/"}
+    )
+    assert desktop_readback_session_overlap(
+        windows, [BackendConfig(kind="windows", agent_url="http://127.0.0.1:5001")]
+    )
+    assert not desktop_readback_session_overlap(
+        windows, [BackendConfig(kind="windows", agent_url="http://127.0.0.1:5002")]
+    )
+    citrix = _kiosk_spec(session={"kind": "citrix", "rdp_window": "Citrix Viewer"})
+    # No title on the read-back side matches whatever window is there.
+    assert desktop_readback_session_overlap(
+        citrix,
+        [
+            BackendConfig(
+                kind="citrix", rdp_window="citrix viewer", rdp_window_title="EMR"
+            )
+        ],
+    )
+
+
+def test_run_refuses_a_cli_override_onto_the_read_back_session() -> None:
+    from openadapt_flow.__main__ import _refuse_shared_readback_session
+
+    spec = _winforms_spec(session={"kind": "windows", "agent_url": "http://seat:5001"})
+    cfg = DeploymentConfig(
+        backend=BackendConfig(kind="windows", agent_url="http://vm:5001"),
+        effects=EffectsConfig(
+            kind="desktop_readback", desktop_readback=spec.model_dump(mode="json")
+        ),
+    )
+    # --agent-url pointed the typing backend at the read-back seat.
+    overridden = cfg.backend.model_copy(update={"agent_url": "http://seat:5001"})
+    assert _refuse_shared_readback_session(cfg, overridden, operation="run")
+    assert not _refuse_shared_readback_session(cfg, cfg.backend, operation="run")
