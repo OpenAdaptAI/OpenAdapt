@@ -684,6 +684,11 @@ class RuntimeSection(BaseModel):
     #: start reacting to an action before the next check (docs/THROUGHPUT.md).
     #: Applies to the whole process.
     page_quiet_ms: Optional[int] = Field(default=None, ge=30, le=2000)
+    #: Named speed profile (``runtime/speed.py``): ``standard`` (default) or
+    #: ``fast`` (native fill for ordinary text fields, 50 ms page-quiet
+    #: window, 2 OCR threads). Every check runs in both. ``page_quiet_ms``
+    #: overrides the profile's window. Applies to the whole process.
+    speed: Optional[Literal["standard", "fast"]] = None
     #: Operator-selected ("bring your own") model-grounding endpoint (the VLM
     #: fallback rung). Off by default; configuring it never enables egress on its
     #: own (``allow_model_grounding`` still governs whether anything leaves).
@@ -1281,6 +1286,10 @@ def build_replayer(
             backend
         )
     known_ids = None
+    if runtime_config is not None and runtime_config.speed is not None:
+        from openadapt_flow.runtime.speed import apply_speed_profile
+
+        apply_speed_profile(runtime_config.speed)
     if runtime_config is not None and runtime_config.page_quiet_ms is not None:
         from openadapt_flow.vision import settle as _settle
 

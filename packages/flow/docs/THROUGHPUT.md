@@ -6,8 +6,9 @@ sessions at once, each signed in as its own user, with every check still on.
 An optional read-back window lets each worker start its next item while the
 previous save is still being read back.
 
-Measured entries per hour on a local OpenEMR test copy are under
-[Measured results](#measured-results).
+Speed figures are published in one place, the
+[scoreboard](../benchmark/scoreboard/): arm 4 (`program_fast`) is the `fast`
+speed profile below, and arm 6 (`parallel`) is `--workers N`.
 
 ## What changes and what doesn't
 
@@ -100,17 +101,31 @@ starts.
 
 ## One entry, faster
 
-Every check still runs on every step. These changes only remove waiting
-and repeated work around them:
+Every check still runs on every step. These engine changes only remove
+repeated work around them, and are always on:
 
-| Change | What it saves | Tradeoff |
-| --- | --- | --- |
-| Scroll readiness asks the page first. While the DOM shows the next target exists but is still off-screen, the scroll keeps going without a full-frame OCR search. | About 1 s per scroll step on the referral (two OCR searches per scroll) | None found: "not ready" is the stricter answer; the target step still runs the full resolver. |
-| Text postconditions are confirmed from the page when the recorded text matches its letters and digits (OCR-recorded texts lose spaces and misread punctuation), and rendered text counts when hidden option lists interleave `textContent`. | One full-frame OCR per such check | A DOM miss still falls back to OCR. The DOM match is exact, so it remains stricter than the OCR check (80% contiguous match). |
-| Ordinary text fields get the text in one call (native fill: the field's `input` event fires, and `change` on blur) instead of one key event per character. Comboboxes, autocomplete and datalist fields, and any typing through the guarded keyboard path, still get every key. | About 50-150 ms per typed field | Apps that react to individual key presses in an ordinary text field won't see them. The input read-back after typing and the system-of-record read-back still check the value. Set `OPENADAPT_FLOW_NATIVE_FILL=0` to type every key. |
-| A structural lookup checks the element's box and frame chain once, after binding it, instead of before and after. | Two browser round trips per lookup | None: the remaining check is the same test, later. |
-| `runtime.page_quiet_ms` sets how long a page must be quiet before a step counts as settled (default 100 ms). | Up to 50 ms per step; see [Measured results](#measured-results) for the 50 ms arm | Less time for the app to start reacting before the next check. Reactions that start later are still caught by postconditions, identity checks and the read-back, but as a halt rather than a wait. Applies to the whole process. |
-| `OPENADAPT_FLOW_OCR_THREADS` caps the OCR engine's threads. | CPU oversubscription when several workers run OCR at once | None for one worker; leave it unset there. |
+- **Scroll readiness asks the page first.** While the DOM shows the next
+  target exists but is still off-screen, the scroll keeps going without a
+  full-frame OCR search. "Not ready" is the stricter answer, and the target
+  step still runs the full resolver.
+- **Text postconditions are confirmed from the page** when the recorded text
+  matches its letters and digits (OCR-recorded texts lose spaces and misread
+  punctuation), and rendered text counts when hidden option lists interleave
+  `textContent`. A DOM miss still falls back to OCR, and the exact DOM match
+  is stricter than the OCR check's 80% contiguous match.
+- **A structural lookup checks the element's box and frame chain once,**
+  after binding it, instead of before and after: the same test, later.
+
+The settings that trade margin for time are grouped as named speed profiles
+(`openadapt_flow.runtime.speed`, or `runtime.speed` in the deployment file):
+
+| Setting | `standard` (default) | `fast` | Tradeoff |
+| --- | --- | --- | --- |
+| Typing into ordinary text fields | One key event per character | One insert per field (native fill): the field's `input` event fires, and `change` on blur | Apps that react to individual key presses in a plain text field won't see them. Comboboxes, autocomplete and datalist fields, and typing through the guarded keyboard path, always get every key. The input read-back and the system-of-record read-back still check the value. |
+| Page-quiet window before a step counts as settled | 100 ms | 50 ms | The app gets less time to start reacting to an action before the next check. A reaction that starts later is caught by postconditions, identity checks or the read-back, as a halt rather than a wait. `runtime.page_quiet_ms` overrides it. |
+| OCR engine threads | onnxruntime default (all cores) | 2 | With several workers, all-core OCR calls compete for the CPU; with one worker, 2 threads can be slower. |
+
+The profiles are process-wide. Apply one before the run starts.
 
 What was left alone: the guarded click (it re-checks the bound element,
 frame chain and context around Playwright's actionability trial), the
@@ -159,12 +174,7 @@ RDP host has been measured.
 
 ## Where the time goes in one entry
 
-On the OpenEMR referral (41 steps), one entry spends its time like this, from
-the exclusive-time profile in
-[`benchmark/openemr_throughput/`](../benchmark/openemr_throughput/README.md):
-
-PROFILE_TABLE
-
-## Measured results
-
-RESULTS_TABLE
+Every step in `report.json` records `timings`, so any run shows where its
+time went. For a finer split by function, `benchmark/openemr_throughput/`
+has an exclusive-time profiler. The scoreboard publishes the breakdown for
+its arms.

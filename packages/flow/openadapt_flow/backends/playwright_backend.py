@@ -1033,7 +1033,7 @@ class PlaywrightBackend:
     keyboard_admits_form_fields: bool = False
 
     #: See ``__init__``; class default for instances built without it.
-    native_fill = True
+    native_fill = False
 
     def __init__(
         self,
@@ -1052,9 +1052,10 @@ class PlaywrightBackend:
         Args:
             page: A Playwright page.
             native_fill: Insert typed text in one call when the focused
-                element is an ordinary text field (default on; set
-                ``OPENADAPT_FLOW_NATIVE_FILL=0`` or pass False to type every
-                key). Custom widgets always get key-by-key typing.
+                element is an ordinary text field. Off by default; the
+                ``fast`` speed profile (``runtime/speed.py``) turns it on
+                through ``OPENADAPT_FLOW_NATIVE_FILL=1``. Custom widgets always
+                get key-by-key typing.
             screenshot_scale: Pixel scale for retained screenshots. The
                 ordinary launched-browser path uses Playwright's ``device``
                 default. A browser attached through CDP uses ``css`` so DOM
@@ -1090,7 +1091,7 @@ class PlaywrightBackend:
                 the opener's after-frame must still be a live, current frame.
         """
         if native_fill is None:
-            native_fill = os.environ.get("OPENADAPT_FLOW_NATIVE_FILL", "1") != "0"
+            native_fill = os.environ.get("OPENADAPT_FLOW_NATIVE_FILL", "0") != "0"
         self.native_fill = bool(native_fill)
         self.page = page
         self._closed_page_frame = closed_page_frame

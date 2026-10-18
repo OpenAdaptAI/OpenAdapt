@@ -38,7 +38,7 @@ def form(browser):
     page = ctx.new_page()
     page.set_content(_FORM)
     try:
-        yield PlaywrightBackend(page), page
+        yield PlaywrightBackend(page, native_fill=True), page
     finally:
         ctx.close()
 
@@ -141,3 +141,31 @@ def test_visible_text_ignores_hidden_option_lists(browser) -> None:
         assert backend.visible_text_present("JanuaryFebruary") is None  # hidden
     finally:
         ctx.close()
+
+
+def test_native_fill_is_off_unless_the_fast_profile_is_on(browser, monkeypatch) -> None:
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+    from openadapt_flow.runtime.speed import apply_speed_profile, current_speed_settings
+    from openadapt_flow.vision import settle
+
+    monkeypatch.delenv("OPENADAPT_FLOW_NATIVE_FILL", raising=False)
+    monkeypatch.setattr(settle, "PAGE_QUIET_WINDOW_S", None)
+    ctx = browser.new_context()
+    page = ctx.new_page()
+    try:
+        assert PlaywrightBackend(page).native_fill is False
+        monkeypatch.setenv("OPENADAPT_FLOW_SPEED", "standard")
+        assert apply_speed_profile("fast")["page_quiet_ms"] == 50
+        assert PlaywrightBackend(page).native_fill is True
+        assert current_speed_settings()["ocr_threads"] == 2
+        apply_speed_profile("standard")
+        assert PlaywrightBackend(page).native_fill is False
+        assert current_speed_settings() == {
+            "speed_profile": "standard",
+            "native_fill": False,
+            "page_quiet_ms": 100,
+            "ocr_threads": None,
+        }
+    finally:
+        ctx.close()
+        monkeypatch.delenv("OPENADAPT_FLOW_OCR_THREADS", raising=False)

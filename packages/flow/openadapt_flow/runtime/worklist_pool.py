@@ -759,6 +759,49 @@ def cookie_fingerprint(cookies: Iterable[Mapping[str, Any]]) -> Optional[str]:
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()
 
 
+class FunctionWorker:
+    """A :class:`PoolWorker` made from plain functions, for benchmark runners.
+
+    ``run(idx, row, item_dir)`` returns an :class:`ItemRun`, or a Replayer
+    ``RunReport`` (its state is read from the report). ``open`` and ``close``
+    run on the worker's thread, before its first and after its last item.
+    """
+
+    def __init__(
+        self,
+        name: str,
+        run: Callable[[int, dict[str, Any], Path], Any],
+        *,
+        open: Optional[Callable[[], None]] = None,
+        close: Optional[Callable[[], None]] = None,
+        fingerprint: Optional[Callable[[], Optional[str]]] = None,
+    ) -> None:
+        self.name = name
+        self._run = run
+        self._open = open
+        self._close = close
+        self._fingerprint = fingerprint
+
+    def open(self) -> None:
+        if self._open is not None:
+            self._open()
+
+    def session_fingerprint(self) -> Optional[str]:
+        return self._fingerprint() if self._fingerprint is not None else None
+
+    def run_item(self, idx: int, row: dict[str, Any], item_dir: Path) -> ItemRun:
+        out = self._run(idx, row, item_dir)
+        if isinstance(out, ItemRun):
+            return out
+        return ItemRun(
+            state=item_state_from_report(out), detail=item_detail_from_report(out)
+        )
+
+    def close(self) -> None:
+        if self._close is not None:
+            self._close()
+
+
 # -- process-isolated workers ------------------------------------------------
 #
 # Workers in one Python process share one interpreter lock. Browser automation

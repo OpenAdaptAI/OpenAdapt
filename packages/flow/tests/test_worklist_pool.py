@@ -429,3 +429,30 @@ def test_process_worker_halt_and_pipelined_failure(tmp_path: Path) -> None:
     )
     assert report.stop is not None and report.stop["idx"] == 3
     assert report.written_after_failed_readback["3"] == [4]
+
+
+def test_function_worker_reads_reports(tmp_path: Path) -> None:
+    from openadapt_flow.runtime.worklist_pool import FunctionWorker
+
+    class Report:
+        def __init__(self, ok: bool) -> None:
+            self.success = ok
+            self.execution_outcome = "COMPLETED_UNVERIFIED" if ok else "HALTED"
+            self.transaction_outcome = None
+            self.halt = None
+            self.total_ms = 1.0
+
+    opened: list[str] = []
+    workers = [
+        FunctionWorker(
+            f"f{i}",
+            lambda idx, row, d: Report(idx != 5),
+            open=lambda i=i: opened.append(f"f{i}"),
+        )
+        for i in range(2)
+    ]
+    report = run_worklist_pool(_rows(20), workers, run_dir=tmp_path, policy=_policy(2))
+    assert sorted(opened) == ["f0", "f1"]
+    states = {i["idx"]: i["state"] for i in report.items}
+    assert states[5] == HALTED and report.stop["idx"] == 5
+    assert all(states[i] == COMPLETED for i in range(5))

@@ -240,7 +240,10 @@ def build_worker(user: str, opts: dict[str, Any]) -> Any:
     from openadapt_flow.ir import Workflow
     from openadapt_flow.runtime import Replayer
 
+    from openadapt_flow.runtime.speed import apply_speed_profile
+
     os.environ.setdefault("OPENADAPT_FLOW_BROWSER", "bundled")
+    apply_speed_profile(opts.get("speed", "standard"))
     os.environ["THROUGHPUT_UI_PORT"] = opts["ui_port"]
     os.environ["THROUGHPUT_API_PORT"] = opts["api_port"]
     if opts.get("ocr_threads") is not None:
@@ -340,6 +343,9 @@ def run(a: argparse.Namespace) -> dict[str, Any]:
 
     if a.profile and a.workers != 1:
         raise SystemExit("--profile needs --workers 1")
+    from openadapt_flow.runtime.speed import apply_speed_profile, current_speed_settings
+
+    apply_speed_profile(a.speed)
     if a.ocr_threads is not None:
         os.environ["OPENADAPT_FLOW_OCR_THREADS"] = str(a.ocr_threads)
     if a.page_quiet_ms is not None:
@@ -368,8 +374,7 @@ def run(a: argparse.Namespace) -> dict[str, Any]:
     meta = {
         "tag": a.tag, "workers": a.workers, "items": a.items, "window": a.window,
         "halt_at": a.halt_at, "profile": a.profile, "engine_sha": engine_sha,
-        "page_quiet_ms": a.page_quiet_ms or 100,
-        "ocr_threads": a.ocr_threads,
+        **current_speed_settings(),
         "engine_dirty": bool(os.popen(f"git -C {FLOW} status --porcelain -- openadapt_flow").read().strip()),
         "bundle_digest": getattr(workflow.manifest, "content_digest", None),
         "baseline": digest[:12], "seed_status": seed, "setup_s": round(time.time() - t, 2),
@@ -382,6 +387,7 @@ def run(a: argparse.Namespace) -> dict[str, Any]:
         "api_port": os.environ.get("THROUGHPUT_API_PORT", "9910"),
         "window": a.window, "profile": a.profile, "keep_pngs": a.keep_pngs,
         "page_quiet_ms": a.page_quiet_ms, "ocr_threads": a.ocr_threads,
+        "speed": a.speed,
     }
     if a.processes:
         from openadapt_flow.runtime.worklist_pool import ProcessWorker
@@ -479,6 +485,8 @@ def main() -> None:
     r.add_argument("--window", type=int, default=0)
     r.add_argument("--halt-at", type=int, default=None)
     r.add_argument("--profile", action="store_true")
+    r.add_argument("--speed", choices=["standard", "fast"], default="standard",
+                   help="named speed profile (openadapt_flow.runtime.speed)")
     r.add_argument("--ocr-threads", type=int, default=None,
                    help="OCR engine threads (OPENADAPT_FLOW_OCR_THREADS); default all cores")
     r.add_argument("--page-quiet-ms", type=int, default=None,
@@ -486,9 +494,10 @@ def main() -> None:
     r.add_argument("--keep-pngs", action="store_true")
     r.add_argument("--processes", action="store_true",
                    help="run each worker in its own process (ProcessWorker)")
-    r.add_argument("--gate-load", type=float, default=16.0)
+    r.add_argument("--gate-load", type=float, default=12.0)
     r.add_argument("--gate-max-wait-s", type=float, default=7200.0)
-    r.add_argument("--results", default=str(HERE / "results" / "runs.jsonl"))
+    r.add_argument("--results", required=True,
+                   help="JSONL file to append the run summary to (evidence, not committed)")
     a = ap.parse_args()
     summary = run(a)
     Path(a.results).parent.mkdir(parents=True, exist_ok=True)
