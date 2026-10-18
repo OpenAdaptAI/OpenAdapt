@@ -8037,6 +8037,10 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.set_defaults(func=_cmd_seal)
 
+    from openadapt_flow.countersign.cli import add_countersign_parser
+
+    add_countersign_parser(sub)
+
     p = sub.add_parser(
         "bind-record-checks",
         help=(
