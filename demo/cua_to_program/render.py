@@ -87,6 +87,7 @@ class Attempt:
     ui_changed: bool
     video: str
     model_calls: int
+    load: Optional[float] = None
 
 
 @dataclass
@@ -131,6 +132,9 @@ def load(run_id: str) -> Data:
                         ui_changed=r["ui_changed"] == "True",
                         video=r["video"],
                         model_calls=int(r["model_calls"]),
+                        load=(
+                            float(r["host_load_1m"]) if r.get("host_load_1m") else None
+                        ),
                     )
                 )
     videos = sorted((run / "video" / "agent").glob("*.webm"))
@@ -327,6 +331,18 @@ def agent_state(data: Data, t: float) -> dict:
     }
 
 
+def load_note(data: Data) -> str:
+    """How loaded the host was during the timed claims, if over its cores."""
+
+    loads = [a.load for a in data.attempts if a.load is not None and a.success]
+    if not loads or max(loads) <= 12:
+        return ""
+    return (
+        f"timed on a shared host under load {min(loads):.0f}-{max(loads):.0f} "
+        "(12 cores)"
+    )
+
+
 def batch_state(data: Data, upto: int) -> dict:
     """Counters over records 1..``upto`` (final attempt of each)."""
 
@@ -502,6 +518,14 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
             "Time per saved claim (median) · cost",
             (f"{bs['median']:.1f} s · $0.00" if bs["median"] else "— · $0.00"),
         )
+        if load_note(data) and bs["median"]:
+            text(
+                d,
+                (COL_X[2] + 24, VID_Y + VID_H + 30 + 2 * 74 + 74),
+                load_note(data),
+                16,
+                MUTED,
+            )
         counter(
             d,
             2,
@@ -731,6 +755,16 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
             False,
             "ma",
         )
+        if load_note(data):
+            text(
+                d,
+                (W // 2, 780),
+                "Program times " + load_note(data) + ".",
+                22,
+                MUTED,
+                False,
+                "ma",
+            )
         text(
             d,
             (W // 2, 740),
