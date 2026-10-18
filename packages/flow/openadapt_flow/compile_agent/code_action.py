@@ -125,6 +125,22 @@ class LeftTheApp(RuntimeError):
     may act on the target app only."""
 
 
+def _shown_url(url: Any) -> str:
+    """A page URL without its query string, which can hold session tokens
+    (OpenEMR's ``token_main``). The path and fragment stay: they say where the
+    agent is."""
+
+    parts = urlsplit(str(url or ""))
+    if not parts.scheme:
+        return str(url or "")
+    shown = f"{parts.scheme}://{parts.netloc}{parts.path}"
+    if parts.query:
+        shown += "?..."
+    if parts.fragment:
+        shown += f"#{parts.fragment}"
+    return shown
+
+
 def _norm(text: Any) -> str:
     return " ".join(str(text or "").split()).lower()
 
@@ -382,7 +398,9 @@ class DomSurface:
             except Exception:  # noqa: BLE001 - a frame that navigates away is skipped
                 continue
             if index == 0:
-                header = f"page: {raw.get('title') or ''} ({raw.get('url') or ''})"
+                header = (
+                    f"page: {raw.get('title') or ''} ({_shown_url(raw.get('url'))})"
+                )
             elif raw.get("items"):
                 items.append(
                     {
@@ -1378,7 +1396,8 @@ class CodeActionTool:
             text += " (save gate passed)"
         header = ""
         if self.surface.kind == "dom":
-            header = f"\npage: {self.harness.page.title()} ({self.harness.page.url})"
+            page = self.harness.page
+            header = f"\npage: {page.title()} ({_shown_url(page.url)})"
         return self._out(text + header)
 
     _gates_before: int = 0

@@ -102,6 +102,11 @@ the spread: 26 model calls, 8 failed lines, 8 screenshots and $0.148, against
 blocks stopped to fix save-gate bugs that refused the screenshot agent (see
 `SUPERSEDED.md`). They are not in the tables.
 
+**Redacted.** During these runs the page URL the tool printed still had its
+query string, so OpenEMR's per-session `token_main` (a local test fixture,
+since stopped) reached the model and the rows. The committed rows replace it
+with `REDACTED`, and the tool now prints URLs without query strings.
+
 ## Spend
 
 `results/spend.json` lists every paid run, including four debugging runs

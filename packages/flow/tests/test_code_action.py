@@ -390,6 +390,15 @@ def test_reads_are_evidence_and_shell_output_is_kept_on_disk(tmp_path: Path) -> 
     assert "identity:MRN P1" in tool.trace.reads[-1]["shows"]
 
 
+def test_page_urls_drop_their_query_string() -> None:
+    from openadapt_flow.compile_agent.code_action import _shown_url
+
+    assert _shown_url("http://h/main.php?token_main=abc#tab") == (
+        "http://h/main.php?...#tab"
+    )
+    assert _shown_url("http://h/?fault=ok#patient/p1") == "http://h/?...#patient/p1"
+
+
 def test_screenshots_only_when_asked(tmp_path: Path) -> None:
     tool, _, harness = _tool(tmp_path)
     assert tool.run("tree").images == []
