@@ -72,3 +72,18 @@ def test_star_import_unknown_names_and_version() -> None:
     except AttributeError:
         return
     raise AssertionError("expected AttributeError")
+
+
+def test_submodules_are_reachable_as_attributes() -> None:
+    """``openadapt_types.seal`` works without importing the submodule first."""
+    code = (
+        "import openadapt_types\n"
+        "assert openadapt_types.seal.verify_sealed_receipt\n"
+        "assert openadapt_types.execute.__name__ == 'openadapt_types.execute'\n"
+        "assert openadapt_types.vocabulary.__name__ == 'openadapt_types.vocabulary'\n"
+        "assert openadapt_types.check_level.CheckLevel\n"
+        "print('SUBMODULES_OK')\n"
+    )
+    result = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True)
+    assert result.returncode == 0, result.stderr
+    assert "SUBMODULES_OK" in result.stdout

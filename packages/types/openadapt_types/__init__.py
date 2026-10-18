@@ -32,6 +32,7 @@ Quick start::
 from __future__ import annotations
 
 import importlib
+import importlib.util
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -855,6 +856,10 @@ def __getattr__(name: str) -> Any:
             version = "unknown"
         globals()["__version__"] = version
         return version
+    if not name.startswith("_") and importlib.util.find_spec(f"{__name__}.{name}") is not None:
+        # ``openadapt_types.seal`` and friends worked as attributes when the
+        # root imported every submodule; keep that, still lazily.
+        return importlib.import_module(f"{__name__}.{name}")
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
