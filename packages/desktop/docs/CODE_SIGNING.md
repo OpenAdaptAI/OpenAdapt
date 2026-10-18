@@ -29,9 +29,9 @@ fails the build.
 - The launch-smoke test (`scripts/smoke_test_native_installer.py`) already
   installs, launches, and **verifies the signature** for the active mode:
   `codesign`/`spctl`/`stapler` on macOS, `Get-AuthenticodeSignature` on Windows.
-  With SignPath, the release verifies the signed installers only
-  (`--installer-only-signature`): SignPath signs the finished MSI and NSIS
-  files, not the program files inside them.
+  With SignPath, the MSI is checked in full (installer and installed program);
+  the NSIS setup is checked as an installer only
+  (`--installer-only-signature`), because SignPath cannot sign inside it.
 - The macOS engine is a PyInstaller one-file sidecar. Developer ID jobs pass
   `APPLE_SIGNING_IDENTITY` into both PyInstaller and Tauri so the embedded
   Python libraries and final launcher share one Team ID under hardened runtime.
@@ -100,9 +100,11 @@ In SignPath:
 1. Create the project `openadapt-desktop` and link the predefined GitHub.com
    trusted build system to it. Install the SignPath GitHub App on
    OpenAdaptAI/OpenAdapt so SignPath can read the build's audit data.
-2. Add an artifact configuration whose root is `<zip-file>` (GitHub uploads the
-   artifact as a ZIP) containing one `<msi-file>` and one `<pe-file>` for the
-   NSIS `*-setup.exe`, both signed with Authenticode.
+2. Add the artifact configuration in
+   `.signpath/artifact-configurations/openadapt-desktop-installers.xml` (at the
+   monorepo root) and make it the project's default. GitHub uploads the
+   installers as one ZIP, so one request signs a release: it deep-signs the MSI
+   (every PE file inside it, then the MSI) and signs the NSIS `*-setup.exe`.
 3. Create the signing policy `release-signing`. Its pipeline policy is
    `.signpath/policies/openadapt-desktop/release-signing.yml` at the monorepo
    root: GitHub-hosted runners only, no re-runs. The workflow itself runs only
@@ -119,15 +121,18 @@ OpenAdaptAI/OpenAdapt (all four, or none):
 | `SIGNPATH_PROJECT_SLUG` | `openadapt-desktop` |
 | `SIGNPATH_SIGNING_POLICY_SLUG` | `release-signing` |
 
-The Windows job then builds the installers, uploads them, submits a signing
+The Windows job then builds the installers, uploads them, submits one signing
 request with `signpath/github-action-submit-signing-request` (pinned by commit),
-waits for it, checks that each returned file carries a valid Authenticode
-signature, and smoke-tests and publishes the signed files as `authenticode`.
-Without the secrets it publishes the same installers as `unsigned`.
+waits for it, checks that each returned installer carries a valid Authenticode
+signature, and smoke-tests the signed files: the MSI install must yield a
+signed `openadapt-desktop.exe`, and the NSIS setup must be signed itself. It
+publishes them as `authenticode`. Without the secrets it publishes the same
+installers as `unsigned`.
 
-Not yet signed: the installed `openadapt-desktop.exe`, the engine sidecar, and
-the NSIS uninstaller. Signing those needs a SignPath request before Tauri
-bundles the installers, which is a follow-up.
+SignPath cannot open an NSIS archive, so the program files the NSIS setup
+installs and its uninstaller are not signed. The MSI is the fully signed
+Windows download. Signing the NSIS payload would need a second request before
+Tauri bundles, with a second approval per release.
 
 ## 3. Linux — exact-byte GitHub attestation
 
@@ -162,7 +167,7 @@ release has actually built. The artifact filename token is the source of truth.
 
 | Surface | With no secrets | After macOS Developer ID | After Windows Authenticode | Linux OIDC attestation |
 | --- | --- | --- | --- | --- |
-| /download page | "Unsigned: macOS asks you to confirm on first open; Windows SmartScreen warns before install." | "**Signed and notarized by Apple** on macOS — opens without a Gatekeeper override." | "The Windows **installer is signed** with a trusted Authenticode certificate (SignPath)." | "Linux DEB and AppImage downloads have **GitHub OIDC attestations over the exact bytes**." |
+| /download page | "Unsigned: macOS asks you to confirm on first open; Windows SmartScreen warns before install." | "**Signed and notarized by Apple** on macOS — opens without a Gatekeeper override." | "The Windows **MSI and the program it installs are signed** with a trusted Authenticode certificate (SignPath)." | "Linux DEB and AppImage downloads have **GitHub OIDC attestations over the exact bytes**." |
 | Trust center | Every artifact's file name and the release channel state its signing mode. | Add: "macOS DMGs pass Apple notarization (`spctl` accepted, ticket stapled)." | Add: "Windows installers carry a valid, timestamped Authenticode signature." | Add: "Linux packages pass `gh attestation verify` against this repository." |
 | README Limits and COMPLIANCE.md release state | Describe only the latest published artifact set. | Update the note after the first trusted release. | Update the note after the first trusted release. | Update the note after the first trusted release. |
 

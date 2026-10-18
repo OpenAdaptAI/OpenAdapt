@@ -105,3 +105,37 @@ def test_native_release_workflow_signs_windows_through_signpath_only() -> None:
     assert "--cert-identity" in workflow
     assert '--cert-oidc-issuer "https://token.actions.githubusercontent.com"' in workflow
     assert "--deny-self-hosted-runners" in workflow
+
+
+SIGNPATH_DIR = Path(__file__).resolve().parents[3] / ".signpath"
+
+
+def test_one_signpath_request_deep_signs_the_msi_and_signs_the_nsis_setup() -> None:
+    import xml.etree.ElementTree as ElementTree
+
+    config = SIGNPATH_DIR / "artifact-configurations" / "openadapt-desktop-installers.xml"
+    policy = SIGNPATH_DIR / "policies" / "openadapt-desktop" / "release-signing.yml"
+    if not NATIVE_WORKFLOW.is_file():
+        pytest.skip("not running from the OpenAdapt monorepo checkout")
+    namespace = {"sp": "http://signpath.io/artifact-configuration/v1"}
+    root = ElementTree.parse(config).getroot()
+    msi = root.find("sp:zip-file/sp:msi-file", namespace)
+    assert msi is not None and msi.get("path") == "*.msi"
+    nested = msi.find("sp:pe-file-set/sp:for-each/sp:authenticode-sign", namespace)
+    assert nested is not None, "the MSI's program files must be signed too"
+    assert msi.find("sp:authenticode-sign", namespace) is not None
+    nsis = root.find("sp:zip-file/sp:pe-file", namespace)
+    assert nsis is not None and nsis.get("path") == "*-setup.exe"
+    assert nsis.find("sp:authenticode-sign", namespace) is not None
+
+    policy_text = policy.read_text(encoding="utf-8")
+    assert "require_github_hosted: true" in policy_text
+    assert "disallow_reruns: true" in policy_text
+
+    workflow = NATIVE_WORKFLOW.read_text(encoding="utf-8")
+    smoke = workflow.split("Smoke-test MSI and NSIS install", 1)[1].split("- name:", 1)[0]
+    # The MSI is checked in full; only the NSIS setup is checked as an installer.
+    assert smoke.count("--installer-only-signature") == 1
+    assert "@Signature" in smoke.split("$Nsis[0].FullName", 1)[0]
+    assert "@NsisSignature" in smoke.split("$Nsis[0].FullName", 1)[1]
+    assert workflow.count("signpath/github-action-submit-signing-request@") == 1

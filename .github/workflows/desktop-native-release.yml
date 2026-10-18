@@ -308,8 +308,10 @@ jobs:
     needs: validate
     runs-on: windows-2022
     # The protected environment holds the SignPath credentials. With all four,
-    # SignPath signs the MSI and NSIS installers; with none, they ship unsigned
-    # and say so; with some, the build fails.
+    # one SignPath request deep-signs the MSI (the installer and the program
+    # files in it) and signs the NSIS setup; with none, both ship unsigned and
+    # say so; with some, the build fails. The artifact configuration is
+    # .signpath/artifact-configurations/openadapt-desktop-installers.xml.
     environment: native-release
     permissions:
       actions: read
@@ -429,9 +431,12 @@ jobs:
           $Nsis = @(Get-ChildItem "src-tauri/target/x86_64-pc-windows-msvc/release/bundle/nsis/*-setup.exe")
           if ($Msi.Count -ne 1 -or $Nsis.Count -ne 1) { throw "Expected one MSI and one NSIS installer" }
           $Signature = @("--signing-mode", "${{ steps.signing.outputs.mode }}")
+          # SignPath deep-signs the MSI, so the program it installs must carry
+          # a valid signature too. It cannot open an NSIS archive, so for the
+          # NSIS setup only the installer itself is signed.
+          $NsisSignature = $Signature
           if ("${{ steps.signing.outputs.mode }}" -eq "authenticode") {
-            # SignPath signs the finished installers, not the files inside them.
-            $Signature += @("--installer-only-signature")
+            $NsisSignature += @("--installer-only-signature")
           }
           python scripts/smoke_test_native_installer.py `
             --artifact $Msi[0].FullName `
@@ -445,7 +450,7 @@ jobs:
             --uninstaller-path "$env:LOCALAPPDATA/OpenAdapt Desktop/uninstall.exe" `
             --expected-architecture x86_64 `
             --allow-system-install `
-            --launch-seconds 20 @Signature
+            --launch-seconds 20 @NsisSignature
 
       - name: Stage exact native Windows installers
         run: >-
@@ -928,8 +933,9 @@ jobs:
                   "More info > Run anyway."
               ),
               ("windows", "authenticode"): (
-                  "- **Windows**: the MSI and NSIS installers are Authenticode-signed "
-                  "through SignPath. The installed program files are not signed yet."
+                  "- **Windows**: signed through SignPath. The MSI and the program it "
+                  "installs are Authenticode-signed; the NSIS setup is signed, but the "
+                  "files it installs and its uninstaller are not. Prefer the MSI."
               ),
               ("linux", "github-attested"): (
                   "- **Linux**: no package signature; the GitHub attestation covers the "

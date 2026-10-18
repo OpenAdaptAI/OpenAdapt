@@ -102,8 +102,9 @@ NATIVE_TRUST_STATEMENTS = {
     ("macos", "developer-id-notarized"): "Developer ID, notarization, and stapled ticket",
     ("macos", "adhoc"): "ad-hoc signature only; macOS asks for confirmation on first open",
     ("windows", "authenticode"): (
-        "MSI and NSIS installers carry a valid timestamped Authenticode signature "
-        "(SignPath); the installed program files are not yet signed"
+        "timestamped Authenticode signatures (SignPath) on the MSI and every program "
+        "file in it, and on the NSIS setup; the files the NSIS setup installs are not "
+        "signed"
     ),
     ("windows", "unsigned"): "unsigned; Windows SmartScreen warns before install",
     ("linux", "github-attested"): "GitHub OIDC attestation over exact DEB and AppImage bytes",

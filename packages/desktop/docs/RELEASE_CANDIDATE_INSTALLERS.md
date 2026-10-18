@@ -67,8 +67,8 @@ carry:
 | Linux | `x86_64` | DEB and AppImage | `github-attested` exact bytes |
 
 The "Signing in this release" section above states which labels this release
-uses. With Authenticode, SignPath signs the finished MSI and NSIS installers;
-the program files they install are not signed yet. The build workflow installs
+uses. With Authenticode, SignPath signs the MSI and every program file in it,
+and the NSIS setup itself; the files the NSIS setup installs are not signed. The build workflow installs
 and uninstalls every package on clean hosted runners and verifies the
 executable architecture and the declared signing policy: the exact Developer ID
 authority and Team ID on macOS when used, and a valid signer and timestamp on
