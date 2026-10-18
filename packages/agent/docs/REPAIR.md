@@ -48,7 +48,7 @@ without a person's name, counts as `off`.
 | `--screens` | What the agent may do |
 | --- | --- |
 | `off` (default) | Nothing. `get_repair_screen` and `teach_repair` aren't listed. A person handles the halt. |
-| `scrubbed_only` | See the screen after [openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy) removes names, dates of birth, record numbers, and other personal data, then teach one click. |
+| `scrubbed_only` | See the screen after the `openadapt-privacy` package removes names, dates of birth, record numbers, and other personal data, then teach one click. |
 | `ask_each_time` | Same, but first a person runs `openadapt-agent repair approve-screen TOKEN_ID` for that one repair. The command saves the exact scrubbed image the agent would get and asks the person to type the token id. The agent then gets that image and no other. |
 | `allow_unscrubbed` | See the screen without scrubbing. The CLI asks the person to type `share unscrubbed` at a terminal before it saves this setting. |
 

@@ -12,8 +12,8 @@ launcher, and `packages/` holds the engine (`packages/flow`), the MCP server
 (`packages/agent`) and the shared contracts (`packages/types`). New engine,
 replay, repair, policy, and backend work belongs in `packages/flow`.
 
-The standalone `openadapt-flow`, `openadapt-agent` and `openadapt-types`
-repositories are frozen. Open new issues and pull requests here.
+The recorder (capture), privacy scrubbing, and OpenAdapt Desktop are moving
+into `packages/` as well. Open new issues and pull requests here.
 
 The [signed Production record](https://docs.openadapt.ai/production-lifecycle.json)
 provides the current admission state. Do not infer a lifecycle state from
