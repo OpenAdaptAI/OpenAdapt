@@ -256,30 +256,42 @@ def save_approval_task(
 def save_approval_detail(root: Path, request_id: str) -> dict[str, Any]:
     """The portal's view of one waiting save: signed task + local presentation.
 
-    ``presentation`` stays on this runner. It holds the step's own wording and
-    the route of the exact screenshot the request was opened with.
+    ``presentation`` stays on this runner. It holds the step's own wording,
+    the route of the exact screenshot the request was opened with, and, when
+    the run recorded them, the ``fields`` the save writes (label, before,
+    after). Those are inside the request digest, so the signed task binds
+    them. They never reach a notification, the run report, a delegated
+    approver, or Cloud.
     """
 
     run_dir, request = find_waiting(root, request_id)
     task = save_approval_task(run_dir, request)
+    presentation: dict[str, Any] = {
+        "question": "Save this?",
+        "step_intent": request.step_intent,
+        "step_index": request.step_index,
+        "step_class": request.step_class.value,
+        "explanation": (
+            "This is exactly what OpenAdapt will save. Before it saves, "
+            "it reads the form again; if anything changed, it stops and "
+            "asks again."
+        ),
+        "screenshot_route": f"/api/save-approvals/{request.request_id}/frame",
+        "screenshot_sha256": request.screenshot_sha256,
+        "decline_reasons": ["wrong_values", "wrong_record", "screen_problem"],
+        "expires_at": request.expires_at,
+    }
+    # The values the save writes, when the run recorded them. They are inside
+    # the request digest, so the task's capability_digest (and its signature)
+    # already binds them; the phone shows them instead of the screenshot.
+    if request.fields:
+        presentation["fields"] = [
+            field.model_dump(mode="json") for field in request.fields
+        ]
     return {
         "task": task.model_dump(mode="json"),
         "task_digest": task.digest,
-        "presentation": {
-            "question": "Save this?",
-            "step_intent": request.step_intent,
-            "step_index": request.step_index,
-            "step_class": request.step_class.value,
-            "explanation": (
-                "This is exactly what OpenAdapt will save. Before it saves, "
-                "it reads the form again; if anything changed, it stops and "
-                "asks again."
-            ),
-            "screenshot_route": f"/api/save-approvals/{request.request_id}/frame",
-            "screenshot_sha256": request.screenshot_sha256,
-            "decline_reasons": ["wrong_values", "wrong_record", "screen_problem"],
-            "expires_at": request.expires_at,
-        },
+        "presentation": presentation,
     }
 
 
