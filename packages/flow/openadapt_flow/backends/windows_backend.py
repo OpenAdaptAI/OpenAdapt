@@ -1058,6 +1058,17 @@ class WindowsBackend:
                     isinstance(v, int) and not isinstance(v, bool)
                     for v in item["point"]
                 )
+                and all(
+                    isinstance(cell, dict)
+                    and isinstance(cell.get("text"), str)
+                    and isinstance(cell.get("point"), list)
+                    and len(cell["point"]) == 2
+                    and all(
+                        isinstance(v, int) and not isinstance(v, bool)
+                        for v in cell["point"]
+                    )
+                    for cell in item.get("cells") or []
+                )
                 for item in items
             ):
                 return None

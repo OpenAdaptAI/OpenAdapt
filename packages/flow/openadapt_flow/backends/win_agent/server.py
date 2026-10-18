@@ -807,6 +807,20 @@ def _read_rows(container: object) -> tuple[list[dict[str, Any]], bool]:
             bounds = _bounds(control)
             text = _row_text(control)
             if bounds is not None and text:
+                cells = []
+                for cell in _children(control)[:_MAX_READ_ROWS]:
+                    cell_bounds = _bounds(cell)
+                    cell_text = _value_text(cell)
+                    if cell_bounds is not None and cell_text:
+                        cells.append(
+                            {
+                                "text": " ".join(cell_text.split()),
+                                "point": [
+                                    int((cell_bounds[0] + cell_bounds[2]) / 2),
+                                    int((cell_bounds[1] + cell_bounds[3]) / 2),
+                                ],
+                            }
+                        )
                 rows.append(
                     {
                         "text": text,
@@ -814,6 +828,7 @@ def _read_rows(container: object) -> tuple[list[dict[str, Any]], bool]:
                             int((bounds[0] + bounds[2]) / 2),
                             int((bounds[1] + bounds[3]) / 2),
                         ],
+                        "cells": cells,
                     }
                 )
                 if len(rows) >= _MAX_READ_ROWS:

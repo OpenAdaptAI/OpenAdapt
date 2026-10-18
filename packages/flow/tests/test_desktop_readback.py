@@ -741,17 +741,30 @@ def test_app_sign_in_needs_a_network_rdp_session() -> None:
 def test_a_ui_automation_marker_without_text_counts_when_present() -> None:
     from openadapt_flow.runtime.effects.desktop_readback import _present
 
-    surface = _ScriptedSurface({"recordPanel": ""})
+    class Panel(_ScriptedSurface):
+        def read(self, ref: ControlRef) -> Located:
+            if ref.automation_id == "recordPanel":
+                return Located("unavailable")  # exposes no text at all
+            return super().read(ref)
+
+    surface = Panel({"recordPanel": "", "statusLabel": ""})
     assert _present(surface, ControlRef(automation_id="recordPanel"))
     assert not _present(surface, ControlRef(automation_id="otherPanel"))
+    # A control that reads as empty (a label still filling in) is absent.
+    assert not _present(surface, ControlRef(automation_id="statusLabel"))
 
 
 def test_result_rows_are_data_and_sign_in_ok_is_allowed() -> None:
     spec = _winforms_spec()
     guard = ReadOnlyLookupGuard(spec)
-    surface = _ScriptedSurface({}, under="Neil Post Complete")
+    # The click lands on the identifier; the rest of the row is data.
+    surface = _ScriptedSurface({}, under="Neil")
     guard.click(surface, spec.open.results, Seen("Neil Post Complete", (1, 1)))
     assert surface.actions == ["click Neil Post Complete"]
+    # But a button under the click point is refused.
+    surface = _ScriptedSurface({}, under="Delete")
+    with pytest.raises(ReadOnlyViolation, match="save-like"):
+        guard.click(surface, spec.open.results, Seen("Neil Post Complete", (1, 1)))
     assert save_like_words("OK", sign_in=True) == []
     assert save_like_words("Submit", sign_in=True) == []
     assert save_like_words("Save", sign_in=True) == ["save"]
@@ -841,3 +854,39 @@ def test_ocr_reads_keep_a_minus_sign_and_an_empty_area_is_uncertain() -> None:
     empty = surface.read(ControlRef(region=(400, 400, 50, 50)))
     assert empty.item is not None and empty.item.text == ""
     assert empty.item.confidence == 0.0
+
+
+def test_the_row_click_aims_at_the_identifier() -> None:
+    from openadapt_flow.runtime.effects.desktop_readback import _identity_piece
+
+    row = Seen(
+        "12345 Smith Sign Delete",
+        (300, 50),
+        parts=(("12345", (40, 50)), ("Smith", (120, 50)), ("Sign Delete", (500, 50))),
+    )
+    assert _identity_piece(row, "12345").point == (40, 50)
+    cells = Seen(
+        "Neil Sorenson 1984-03-12",
+        (400, 200),
+        parts=(
+            ("Neil", (200, 200)),
+            ("Sorenson", (390, 200)),
+            ("1984-03-12", (590, 200)),
+        ),
+    )
+    assert _identity_piece(cells, "Neil Sorenson").point == (200, 200)
+
+
+def test_a_later_unreadable_look_up_never_replaces_a_readable_verdict(
+    winforms: Any,
+) -> None:
+    # Persistent seat: poll 1 reads a wrong note (REFUTED); poll 2 sees the
+    # same view and can't read it as fresh. The REFUTED stands.
+    verifier = _winforms_verifier(winforms, NEIL)
+    before = verifier.capture_pre_state()
+    winforms.save_note(1, "Follow up in three weeks")
+    effect = _note_equals("Follow up in two weeks").model_copy(
+        update={"timeout_s": 2.0}
+    )
+    verdict = verifier.verify(effect, before)
+    assert verdict.verdict is Verdict.REFUTED

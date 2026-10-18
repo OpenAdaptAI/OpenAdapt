@@ -95,6 +95,16 @@ def _seen_from(lines: list[Any]) -> Seen:
         point=(int((x0 + x1) / 2), int((y0 + y1) / 2)),
         confidence=min(float(line.confidence) for line in lines),
         ocr=True,
+        parts=tuple(
+            (
+                _collapse(line.text),
+                (
+                    int(line.region[0] + line.region[2] / 2),
+                    int(line.region[1] + line.region[3] / 2),
+                ),
+            )
+            for line in lines
+        ),
     )
 
 
@@ -412,7 +422,12 @@ class UiaReadSurface(PixelReadSurface):
             return None
         return [
             Seen(
-                text=_collapse(item["text"]), point=(item["point"][0], item["point"][1])
+                text=_collapse(item["text"]),
+                point=(item["point"][0], item["point"][1]),
+                parts=tuple(
+                    (_collapse(cell["text"]), (cell["point"][0], cell["point"][1]))
+                    for cell in item.get("cells") or []
+                ),
             )
             for item in payload.get("rows") or []
         ]

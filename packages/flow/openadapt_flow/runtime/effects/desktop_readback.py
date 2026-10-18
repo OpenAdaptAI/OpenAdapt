@@ -464,6 +464,10 @@ class Seen:
     #: Read from screen pixels by OCR (a misread is possible) rather than
     #: from UI Automation.
     ocr: bool = False
+    #: For a result row: its pieces (OCR lines or grid cells) as
+    #: ``(text, point)``, so the look-up can click the piece that shows the
+    #: identifier instead of the middle of the row.
+    parts: tuple[tuple[str, tuple[int, int]], ...] = ()
 
 
 @dataclass(frozen=True)
@@ -609,11 +613,15 @@ class ReadOnlyLookupGuard:
         # A result row shows record data ("Complete", "Post-op", a surname
         # like Post), not a command, so only its declared name and id are
         # checked.
-        labels = (
-            [label for label in (ref.name or "", ref.automation_id or "") if label]
-            if data_row
-            else self._labels(surface, ref, target)
-        )
+        if data_row:
+            under = surface.text_at(target.point) or ""
+            labels = [
+                label
+                for label in (ref.name or "", ref.automation_id or "", under)
+                if label
+            ]
+        else:
+            labels = self._labels(surface, ref, target)
         for label in labels:
             words = save_like_words(label, sign_in=sign_in)
             if words:
@@ -743,14 +751,33 @@ def _shows_identity(text: str, identity: str) -> bool:
     return re.search(_BEFORE + re.escape(want) + _AFTER, _norm(text)) is not None
 
 
+def _identity_piece(row: Seen, identity: str) -> Seen:
+    """The row, aimed at the piece that shows the identifier (or a word of
+    it), so the click lands on data the look-up checked, not on a button
+    that shares the row."""
+
+    words = set(_norm(identity).split())
+    for wanted in (
+        lambda text: _shows_identity(text, identity),
+        lambda text: bool(_norm(text)) and set(_norm(text).split()) <= words,
+    ):
+        for text, point in row.parts:
+            if wanted(text):
+                return Seen(
+                    text=row.text, point=point, confidence=row.confidence, ocr=row.ocr
+                )
+    return row
+
+
 def _present(surface: DesktopReadSurface, ref: ControlRef) -> bool:
     """Whether a marker is on screen, shows some text, and (when set) shows
     ``ref.shows``."""
 
-    if ref.structured and ref.shows is None:
-        # A UI Automation control (a panel, say) may have no text at all.
-        return surface.locate(ref).status == "ok"
     seen = surface.read(ref)
+    if ref.structured and ref.shows is None and seen.status == "unavailable":
+        # A UI Automation control that exposes no text at all (a panel):
+        # present when it is there. A control that reads as empty is absent.
+        return surface.locate(ref).status == "ok"
     if seen.status != "ok" or seen.item is None or not seen.item.text.strip():
         return False
     return ref.shows is None or _norm(ref.shows) in _norm(seen.item.text)
@@ -859,7 +886,10 @@ def look_up(
     # search counts only once it changes or goes away and comes back.
     stale_view = _view(surface, spec) if _present(surface, spec.ready) else None
     stale_not_found = spec.not_found is not None and _present(surface, spec.not_found)
+    # A marker counts as gone only after two polls in a row without it, so
+    # one OCR miss or a brief overlay can't pass a stale screen.
     seen_gone = {"view": stale_view is None, "not_found": not stale_not_found}
+    absent = {"view": 0, "not_found": 0}
     if spec.search.submit is None:
         guard.press_enter(surface, box_ref)
     else:
@@ -869,15 +899,20 @@ def look_up(
         guard.click(surface, spec.search.submit, button.item)
     surface.settle()
 
+    def gone(name: str, shown: bool) -> None:
+        absent[name] = 0 if shown else absent[name] + 1
+        if absent[name] >= 2:
+            seen_gone[name] = True
+
     def not_found_shown() -> bool:
         shown = spec.not_found is not None and _present(surface, spec.not_found)
-        if not shown:
-            seen_gone["not_found"] = True
+        gone("not_found", shown)
         return shown and seen_gone["not_found"]
 
     def fresh_view() -> bool:
-        if not _present(surface, spec.ready):
-            seen_gone["view"] = True
+        shown = _present(surface, spec.ready)
+        gone("view", shown)
+        if not shown:
             return False
         return seen_gone["view"] or _view(surface, spec) != stale_view
 
@@ -909,7 +944,8 @@ def look_up(
                 f"{len(outcome)} search results show the record identifier; the "
                 "read-back does not pick one"
             )
-        guard.click(surface, results_ref, outcome[0], double=spec.open.double_click)
+        row = _identity_piece(outcome[0], target.identity_value)
+        guard.click(surface, results_ref, row, double=spec.open.double_click)
         surface.settle()
 
     # -- the record view -----------------------------------------------------------
@@ -1373,19 +1409,32 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
         if problem is not None:
             return problem.model_copy(update={"assurance": UNCHECKED})
         deadline = time.monotonic() + max(0.0, expected.timeout_s)
+        readable: Optional[EffectVerdict] = None
         while True:
             raw, failure, _facts = self._read_once()
             if raw is None:
-                return EffectVerdict(
+                verdict = EffectVerdict(
                     verdict=Verdict.INDETERMINATE,
                     kind=expected.kind,
                     substrate=self.substrate,
                     reason=f"{failure}; cannot certify the save; HALT",
                     unavailable=True,
-                    assurance=UNCHECKED,
                 )
-            verdict = self._judge(expected, before, self._normalize(raw))
-            if verdict.confirmed or raw.refused or time.monotonic() >= deadline:
+            else:
+                verdict = self._judge(expected, before, self._normalize(raw))
+            if not verdict.unavailable:
+                readable = verdict
+            elif readable is not None:
+                # A later look-up that couldn't read (a screen that didn't
+                # refresh, say) never replaces what an earlier one read.
+                verdict = readable
+                break
+            if (
+                verdict.confirmed
+                or raw is None
+                or raw.refused
+                or time.monotonic() >= deadline
+            ):
                 break
             time.sleep(self.poll_interval_s)
         return verdict.model_copy(
