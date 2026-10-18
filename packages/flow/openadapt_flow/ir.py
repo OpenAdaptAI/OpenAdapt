@@ -3711,8 +3711,9 @@ class EffectJournalEntry(BaseModel):
 class ChangeLedgerEffect(BaseModel):
     """One declared effect of a step in the change ledger (PHI-free).
 
-    Names the effect by its kind, the author's description (``probe``) and its
-    contract hash. Never carries a selector value or a read-back value.
+    Names the effect by its kind and its run-bound contract hash. Never carries
+    the effect's ``probe`` text (a compiler-written probe can quote record
+    values), a selector value or a read-back value.
     """
 
     kind: str

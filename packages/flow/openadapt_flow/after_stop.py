@@ -74,9 +74,13 @@ def _effect_status(final_verdict: str) -> LedgerStatus:
     return "unknown"
 
 
-def _declared_effects(step: Optional[Step]) -> list["Effect"]:
+def _declared_effects(step: Optional[Step], result: StepResult) -> list["Effect"]:
+    """The effect set the step ran against: the API binding's when it was
+    actuated through the API, else the step's own."""
     if step is None:
         return []
+    if result.actuation == "api" and step.api_binding is not None:
+        return list(step.api_binding.effects)
     if step.effects:
         return list(step.effects)
     if step.api_binding is not None:
@@ -84,49 +88,53 @@ def _declared_effects(step: Optional[Step]) -> list["Effect"]:
     return []
 
 
-def _effect_description(effect: "Effect") -> str:
-    kind = effect.kind.value
-    return f"{kind}: {effect.probe}" if effect.probe else kind
-
-
 def _ledger_effects(
     result: StepResult, declared: list["Effect"]
 ) -> list[ChangeLedgerEffect]:
-    """Pair each declared effect with the verifier evidence for it.
+    """One entry per declared effect, matched to evidence by contract hash.
 
-    The runtime verifies a step's effects in declaration order and records one
-    evidence item per verified effect, so the n-th evidence item belongs to
-    the n-th declared effect. An effect with no evidence (no verifier, or the
-    run stopped before checking it) is ``unknown``.
+    ``result.effect_contract_hashes`` holds the run-bound hash of each
+    declared effect, in declaration order; evidence is matched to it by hash,
+    never by position, and each evidence item settles one contract at most.
+    An effect with no matching evidence (no verifier, or the run stopped
+    before checking it) is ``unknown``. The description is the effect kind
+    only: a compiler-written ``probe`` can quote record values.
     """
-    evidence = list(result.effect_evidence)
+    hashes = list(result.effect_contract_hashes)
+    unclaimed = list(result.effect_evidence)
     out: list[ChangeLedgerEffect] = []
-    for index in range(max(len(declared), len(evidence))):
-        effect = declared[index] if index < len(declared) else None
-        item = evidence[index] if index < len(evidence) else None
-        kind = effect.kind.value if effect is not None else "effect"
-        description = (
-            _effect_description(effect)
-            if effect is not None
-            else f"{item.substrate} effect"
-            if item is not None
-            else kind
+    for index in range(max(len(declared), len(hashes))):
+        kind = declared[index].kind.value if index < len(declared) else "effect"
+        contract_hash = hashes[index] if index < len(hashes) else ""
+        item = next(
+            (
+                e
+                for e in unclaimed
+                if contract_hash and e.effect_contract_hash == contract_hash
+            ),
+            None,
         )
+        if item is not None:
+            unclaimed.remove(item)
         out.append(
             ChangeLedgerEffect(
                 kind=kind,
-                description=description,
-                contract_hash=(
-                    item.effect_contract_hash
-                    if item is not None
-                    else (
-                        result.effect_contract_hashes[index]
-                        if index < len(result.effect_contract_hashes)
-                        else ""
-                    )
-                ),
+                description=kind,
+                contract_hash=contract_hash,
                 status=_effect_status(item.final_verdict) if item else "unknown",
                 observed_effect=item.observed_effect if item else "unknown",
+            )
+        )
+    # Evidence for a contract the step didn't declare is still a reading of
+    # the system of record; keep it visible rather than drop it.
+    for item in unclaimed:
+        out.append(
+            ChangeLedgerEffect(
+                kind="effect",
+                description=f"{item.substrate} effect",
+                contract_hash=item.effect_contract_hash,
+                status=_effect_status(item.final_verdict),
+                observed_effect=item.observed_effect,
             )
         )
     return out
@@ -148,10 +156,15 @@ def build_change_ledger(
     A step is listed when it is consequential (or declares an effect) and the
     run did not positively record that it stopped before delivering the
     action. ``may_need_undo`` is False only when the system of record proved
-    that nothing the step declared landed (every effect read ``absent``).
+    that nothing the step declared landed: every declared contract read
+    ``absent``, with exact hash coverage (``transaction._effect_absence_proven``).
     """
     from openadapt_flow.run_gate import is_consequential
-    from openadapt_flow.transaction import _attempt_state, _is_consequential_result
+    from openadapt_flow.transaction import (
+        _attempt_state,
+        _effect_absence_proven,
+        _is_consequential_result,
+    )
     from openadapt_flow.traversal import iter_workflow_steps
 
     steps_by_id = {step.id: step for step in iter_workflow_steps(workflow)}
@@ -166,7 +179,7 @@ def build_change_ledger(
             continue
         position += 1
         step = steps_by_id.get(result.step_id)
-        declared = _declared_effects(step)
+        declared = _declared_effects(step, result)
         could_write = (
             bool(declared)
             or _is_consequential_result(result)
@@ -178,9 +191,9 @@ def build_change_ledger(
         if attempt == "not_actuated":
             continue
         effects = _ledger_effects(result, declared)
-        may_need_undo = not effects or any(
-            e.observed_effect != "absent" for e in effects
-        )
+        # The transaction outcome's own absence rule: every declared contract
+        # read ``absent``, with exact hash coverage.
+        may_need_undo = not _effect_absence_proven(result)
         ledger.append(
             ChangeLedgerEntry(
                 position=position,
@@ -519,23 +532,88 @@ def _undo_dir(run_dir: Path, undo_id: str) -> Path:
     return run_dir / UNDO_DIRNAME / undo_id
 
 
+def _has_loop(workflow: Workflow) -> bool:
+    from openadapt_flow.ir import StateKind
+
+    graphs = [workflow.program, *workflow.subflows.values()]
+    return any(
+        state.kind is StateKind.LOOP
+        for graph in graphs
+        if graph is not None
+        for state in graph.states.values()
+    )
+
+
+def _bundle_without_undo_digest(workflow: Workflow) -> Optional[str]:
+    """The content digest the bundle had before any undo was declared.
+
+    Undo declarations and their crops (``templates/undo-*``) are left out, so
+    an undo declared after the stop still matches the bundle the run used.
+    """
+    from openadapt_flow.bundle_validation import compute_content_digest
+
+    if workflow.manifest is None:
+        return None
+    bare = workflow.model_copy(update={"undo_steps": []})
+    files = {
+        rel: digest
+        for rel, digest in workflow.manifest.file_hashes.items()
+        if not rel.startswith("templates/undo-")
+    }
+    return compute_content_digest(bare, files)
+
+
+def bundle_mismatch(report: RunReport, workflow: Workflow) -> Optional[str]:
+    """Why ``workflow`` is not the bundle this run used, or None if it is.
+
+    The run's sealed digest must equal the bundle's digest, with or without
+    its undo declarations. Without a sealed digest on either side, the name
+    and every ledger step (id and intent) must match.
+    """
+    from openadapt_flow.traversal import iter_workflow_steps
+
+    if report.workflow_name != workflow.name:
+        return f"the run used workflow {report.workflow_name!r}, not {workflow.name!r}"
+    run_digest = report.bundle_content_digest
+    if run_digest is not None and workflow.manifest is not None:
+        if run_digest in {
+            workflow.manifest.content_digest,
+            _bundle_without_undo_digest(workflow),
+        }:
+            return None
+        return (
+            "the bundle's content digest differs from the one the run used; "
+            "pass the run's own bundle"
+        )
+    steps = {step.id: step for step in iter_workflow_steps(workflow)}
+    for entry in report.change_ledger:
+        step = steps.get(entry.step_id)
+        if step is None or step.intent != entry.intent:
+            return f"step {entry.step_id!r} differs from the one the run used"
+    return None
+
+
 def offer_undos(run_dir: Path | str, workflow: Workflow) -> list[UndoOffer]:
     """The undos Flow offers a person for this stopped run, latest step first.
 
-    An undo is offered when the run stopped (``success`` is False), its
-    ledger entry may need undoing, the step ran once (not a loop body), and
-    the bundle declares an undo for that step. Undo the latest change first: the offers come in that order.
-    Offering runs nothing.
+    An undo is offered when the run stopped (``success`` is False), the
+    bundle is the one the run used (:func:`bundle_mismatch`), the workflow
+    has no loop, the step's ledger entry may need undoing, and the bundle
+    declares an undo for that step. Undo the latest change first: the offers
+    come in that order. Offering runs nothing.
+
+    Loops are refused because an undo runs with the run's base parameters,
+    while a loop iteration wrote with its row's values.
     """
     run_dir = Path(run_dir)
     report, report_sha = _load_report(run_dir)
-    if report.success:
+    if report.success or report.loop_iterations or _has_loop(workflow):
+        return []
+    if bundle_mismatch(report, workflow) is not None:
         return []
     bundle_digest = (
         workflow.manifest.content_digest if workflow.manifest is not None else None
     )
-    # A step that ran more than once (a loop body) is not offered: the undo
-    # runs with the run's parameters and can't be bound to one iteration.
     runs_per_step: dict[str, int] = {}
     for entry in report.change_ledger:
         runs_per_step[entry.step_id] = runs_per_step.get(entry.step_id, 0) + 1
@@ -575,10 +653,17 @@ def _find_offer(run_dir: Path, workflow: Workflow, undo_id: str) -> UndoOffer:
     for offer in offer_undos(run_dir, workflow):
         if offer.undo_id == undo_id:
             return offer
+    report, _ = _load_report(run_dir)
+    why = bundle_mismatch(report, workflow)
     raise UndoNotOffered(
-        f"undo {undo_id!r} is not offered for {run_dir}: the run finished, the "
-        "system of record proved the step's change absent, or the bundle "
-        "declares no such undo"
+        f"undo {undo_id!r} is not offered for {run_dir}: "
+        + (
+            why
+            if why
+            else "the run finished, the workflow has a loop, the system of "
+            "record proved the step's change absent, or the bundle declares no "
+            "such undo"
+        )
     )
 
 
@@ -599,12 +684,17 @@ def approve_undo(
 ) -> UndoApproval:
     """Record a person's approval to run one offered undo.
 
-    Binds to the exact offer (report, bundle, undo, ledger entry). Written
-    once: a second approval for the same undo is refused. The CLI calls this
-    only from an interactive terminal after the person types the undo id.
+    Binds to the exact offer (report, bundle, undo, ledger entry). A second
+    approval for the same offer is refused, and so is any approval once the
+    undo was claimed to run. An unused approval for an offer that has since
+    changed (a stale approval) is replaced. The CLI calls this only from an
+    interactive terminal after the person types the undo id.
     """
     run_dir = Path(run_dir)
     offer = _find_offer(run_dir, workflow, undo_id)
+    undo_dir = _undo_dir(run_dir, undo_id)
+    if (undo_dir / CLAIM_FILENAME).exists():
+        raise UndoAlreadyRun(f"undo {undo_id!r} was already run; it runs once")
     approval = UndoApproval(
         undo_id=undo_id,
         offer_digest=offer.offer_digest,
@@ -612,14 +702,31 @@ def approve_undo(
         approved_at=_now(),
         note=note,
     )
-    try:
-        _write_once(
-            _undo_dir(run_dir, undo_id) / APPROVAL_FILENAME,
-            approval.model_dump_json(indent=2),
-        )
-    except FileExistsError as exc:
-        raise UndoRefused(f"undo {undo_id!r} already has an approval") from exc
+    path = undo_dir / APPROVAL_FILENAME
+    existing = read_undo_approval(run_dir, undo_id)
+    if existing is not None and existing.offer_digest == offer.offer_digest:
+        raise UndoRefused(f"undo {undo_id!r} is already approved for this offer")
+    if existing is None and not path.exists():
+        try:
+            _write_once(path, approval.model_dump_json(indent=2))
+        except FileExistsError as exc:
+            raise UndoRefused(f"undo {undo_id!r} already has an approval") from exc
+        return approval
+    # A stale or unreadable approval that was never used: replace it whole.
+    staging = undo_dir / f".{APPROVAL_FILENAME}.{os.getpid()}"
+    _write_once(staging, approval.model_dump_json(indent=2))
+    os.replace(staging, path)
     return approval
+
+
+def read_undo_approval(run_dir: Path | str, undo_id: str) -> Optional[UndoApproval]:
+    path = _undo_dir(Path(run_dir), undo_id) / APPROVAL_FILENAME
+    if not path.is_file():
+        return None
+    try:
+        return UndoApproval.model_validate_json(path.read_text(encoding="utf-8"))
+    except ValueError:
+        return None
 
 
 def read_undo_result(run_dir: Path | str, undo_id: str) -> Optional[UndoResult]:
@@ -713,6 +820,8 @@ def prepare_undo_run(
 def _judge_undo(
     prepared: PreparedUndo, report: Optional[RunReport]
 ) -> tuple[bool, str]:
+    from openadapt_flow.transaction import _effect_evidence_has_exact_coverage
+
     if report is None:
         return False, "the undo run left no report"
     by_id = {result.step_id: result for result in report.results}
@@ -722,11 +831,30 @@ def _judge_undo(
             return False, f"undo step {step.id!r} did not run"
         if not result.ok:
             return False, f"undo step {step.id!r} failed: {result.error or 'halted'}"
-        if step.effects and result.effect_verified is not True:
+        if not step.effects:
+            continue
+        if (
+            result.effect_verified is not True
+            or not _effect_evidence_has_exact_coverage(result)
+        ):
             return False, (
                 f"undo step {step.id!r} was not confirmed in the system of record"
             )
-    return True, "every undo step ran and its declared effects were confirmed"
+        weak = [
+            e.assurance
+            for e in result.effect_evidence
+            if e.final_verdict != "confirmed" or e.assurance != "independent_readback"
+        ]
+        if weak:
+            return False, (
+                f"undo step {step.id!r} was confirmed only by "
+                f"{', '.join(sorted(set(weak)))}, not an independent read of the "
+                "system of record"
+            )
+    return True, (
+        "every undo step ran and an independent read of the system of record "
+        "confirmed its declared effects"
+    )
 
 
 def finish_undo_run(
@@ -801,46 +929,66 @@ def _rewrite_paths(node: Any, mapping: dict[str, str]) -> Any:
     return node
 
 
-def steps_from_demonstration(
-    demo_bundle: Path | str, target_bundle: Path | str, undo_id: str
-) -> list[Step]:
-    """Take the compiled steps of a recorded undo and move their crops over.
+@dataclass(frozen=True)
+class DemonstratedUndo:
+    """Compiled undo steps and the crops they need, not yet copied."""
+
+    steps: list[Step]
+    #: Target bundle-relative path -> source file in the demonstration bundle.
+    assets: dict[str, Path]
+
+
+def steps_from_demonstration(demo_bundle: Path | str, undo_id: str) -> DemonstratedUndo:
+    """Read the compiled steps of a recorded undo and plan their crops.
 
     ``demo_bundle`` is the bundle compiled from a recording of a person doing
-    the undo. Its referenced crops are copied into
-    ``<target_bundle>/templates/undo-<undo_id>/`` and the steps are rewritten
-    to point there. Encrypted demonstration bundles are refused.
+    the undo. Each referenced crop gets a path under
+    ``templates/undo-<undo_id>/`` that keeps its sub-path (an anchor crop and
+    an identifier crop can share a file name), and the steps are rewritten to
+    point there. Nothing is copied until :func:`declare_undo` has validated
+    the undo. Encrypted demonstration bundles are refused.
     """
     from openadapt_flow.bundle_validation import _referenced_asset_paths
 
     demo_bundle = Path(demo_bundle)
-    target_bundle = Path(target_bundle)
     demo = Workflow.load(demo_bundle)
     if demo.encrypted:
         raise ValueError("an encrypted demonstration bundle is not supported here")
     if demo.program is not None:
         raise ValueError("the undo demonstration must compile to straight-line steps")
     mapping: dict[str, str] = {}
+    assets: dict[str, Path] = {}
     for rel in sorted(_referenced_asset_paths(demo)):
         source = demo_bundle / rel
         if not source.is_file():
             raise ValueError(f"the demonstration bundle is missing {rel}")
-        new_rel = f"templates/undo-{undo_id}/{Path(rel).name}"
-        (target_bundle / new_rel).parent.mkdir(parents=True, exist_ok=True)
-        shutil.copyfile(source, target_bundle / new_rel)
+        inner = rel[len("templates/") :] if rel.startswith("templates/") else rel
+        new_rel = f"templates/undo-{undo_id}/{inner}"
         mapping[rel] = new_rel
+        assets[new_rel] = source
     payload = [
         _rewrite_paths(step.model_dump(mode="json"), mapping) for step in demo.steps
     ]
-    return [Step.model_validate(item) for item in payload]
+    return DemonstratedUndo(
+        steps=[Step.model_validate(item) for item in payload], assets=assets
+    )
 
 
-def declare_undo(bundle_dir: Path | str, undo: UndoStep) -> Workflow:
-    """Add ``undo`` to the bundle and re-seal it.
+def declare_undo(
+    bundle_dir: Path | str,
+    undo: UndoStep,
+    *,
+    assets: Optional[dict[str, Path]] = None,
+) -> Workflow:
+    """Validate ``undo``, copy its crops, add it to the bundle and re-seal it.
 
-    Re-sealing changes the bundle digest, so a certified bundle needs
-    re-certifying, and approvals bound to the old digest no longer match.
+    Nothing is written when the undo is refused. Re-sealing changes the
+    bundle digest, so a prior certification is marked expired (the bundle
+    needs certifying again), and approvals bound to the old digest no longer
+    match.
     """
+    from openadapt_flow.bundle_sealing import _invalidate_prior_certification
+
     bundle_dir = Path(bundle_dir)
     workflow = Workflow.load(bundle_dir)
     if any(existing.id == undo.id for existing in workflow.undo_steps):
@@ -853,13 +1001,27 @@ def declare_undo(bundle_dir: Path | str, undo: UndoStep) -> Workflow:
     ]
     if problems:
         raise ValueError(f"undo {undo.id!r} {problems[0]}")
+    for rel in assets or {}:
+        if (bundle_dir / rel).exists():
+            raise ValueError(f"the bundle already has {rel}")
+    for rel, source in (assets or {}).items():
+        (bundle_dir / rel).parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(source, bundle_dir / rel)
     workflow.undo_steps = [*workflow.undo_steps, undo]
+    if workflow.manifest is not None:
+        _invalidate_prior_certification(
+            workflow, reason="an undo step was declared after certification"
+        )
+        # The template is rebuilt from the certification on every load; with
+        # the certification gone it can't be, so it goes too.
+        workflow.manifest.provenance.governed_authorization_template = None
     workflow.save(bundle_dir, encrypt=workflow.encrypted)
-    return workflow
+    return Workflow.load(bundle_dir)
 
 
 __all__ = [
     "ChangeLedgerEntry",
+    "DemonstratedUndo",
     "OrderingFinding",
     "PreparedUndo",
     "UndoAlreadyRun",
@@ -876,6 +1038,8 @@ __all__ = [
     "finish_undo_run",
     "offer_undos",
     "prepare_undo_run",
+    "bundle_mismatch",
+    "read_undo_approval",
     "read_undo_result",
     "run_undo",
     "steps_from_demonstration",

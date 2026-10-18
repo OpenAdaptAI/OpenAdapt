@@ -33,14 +33,15 @@ Each entry has:
 | `position` | The step's place among the run's executed steps. |
 | `step_id`, `intent` | Which step. |
 | `attempt_state` | `delivered`, `actuated_api` or `delivery_uncertain`. |
-| `effects` | Each declared effect: its kind, the author's description, its contract hash, and its `status`. |
+| `effects` | Each declared effect: its kind, its run-bound contract hash, and its `status`. Evidence is matched to each contract by hash. |
 | `status` | `confirmed` (the system of record shows the change), `refuted` (the system of record contradicts it) or `unknown` (not checked, or the record couldn't be read). A step with no declared effect is `unknown`. |
-| `may_need_undo` | False only when the system of record proved that nothing the step declared landed. |
+| `may_need_undo` | False only when the system of record proved that nothing the step declared landed: every declared contract read absent, with exact hash coverage. This is the same rule the transaction outcome uses. |
 | `undo_id` | The bundle's declared undo for the step, if any. |
 
 The ledger is built from evidence the run already has. It holds step ids,
-author text, effect kinds and contract hashes. It never holds selector values
-or read-back values.
+step intents, effect kinds and contract hashes. It never holds selector values,
+read-back values or an effect's `probe` text, because a probe the compiler
+mined from a demonstration can quote record values.
 
 When a run stops, the ledger appears in three places:
 
@@ -54,10 +55,10 @@ server rejects the step 2 save:
 ```text
 Changes before the stop (in order):
   1. step `save_triage` (save Triage encounter): confirmed in the system of record; may need undoing
-       - record_written: one Triage encounter for the patient: confirmed
+       - record_written: confirmed
        declared undo: `undo-triage` (needs a person)
   2. step `save_vitals` (save Vitals encounter): refuted by the system of record; nothing landed
-       - record_written: one Vitals encounter for the patient: refuted
+       - record_written: refuted
 Flow never runs an undo on its own. A person must review and approve each one: openadapt-flow undo list runs/r1 --bundle bundle
 ```
 
@@ -95,8 +96,9 @@ Triage encounter that step `save_triage` saved."
 ### Declare an undo
 
 An undo lives in the bundle's `undo_steps` and is part of the sealed bundle
-content. Adding or editing one changes the bundle digest, so a certified
-bundle needs certifying again.
+content. Adding one changes the bundle digest, so `undo declare` marks any
+prior certification expired, and the bundle needs certifying again. Nothing is
+written when the undo is refused.
 
 Each undo has:
 
@@ -111,7 +113,7 @@ Each undo has:
 
 From a demonstration: record a person doing the undo, compile the recording,
 then attach it. Flow copies the compiled steps and their image crops into the
-bundle. Add the effect the undo must produce with `--effects-file` if the
+bundle, under `templates/undo-<id>/`. Add the effect the undo must produce with `--effects-file` if the
 compiled steps don't declare one.
 
 ```bash
@@ -130,10 +132,16 @@ openadapt-flow undo declare bundle --id undo-triage --undoes save_triage --inten
 
 ### Offer, approve, run, verify
 
-1. **Offer.** After a stop, Flow offers an undo when the step's ledger entry
-   may need undoing and the bundle declares an undo for it. Offers are listed
-   latest step first, because the latest change should be undone first.
-   Offering runs nothing.
+1. **Offer.** After a stop, Flow offers an undo when all of these hold:
+   - The step's ledger entry may need undoing, and the bundle declares an undo
+     for it.
+   - The bundle is the one the run used: its sealed digest, with or without its
+     undo declarations, matches the run's. An undo declared after the stop
+     still matches.
+   - The workflow has no loop, and the run recorded no loop iterations.
+
+   Offers are listed latest step first, because the latest change should be
+   undone first. Offering runs nothing.
 
    ```bash
    openadapt-flow undo list runs/r1 --bundle bundle
@@ -145,7 +153,8 @@ openadapt-flow undo declare bundle --id undo-triage --undoes save_triage --inten
    `<run-dir>/undo/<id>/approval.json` with the person's account name and the
    time. It's bound to a digest of the undo, the ledger entry, the exact
    `report.json` and the bundle digest. If any of them change, the approval no
-   longer matches.
+   longer matches, and a person can approve the new offer. An approval that was
+   already used can't be replaced.
 
    ```bash
    openadapt-flow undo approve runs/r1 --bundle bundle --undo undo-triage
@@ -156,15 +165,18 @@ openadapt-flow undo declare bundle --id undo-triage --undoes save_triage --inten
 
 3. **Run.** The undo runs through the normal replay path, so identity checks,
    the risk gate and effect verification all apply. It takes the same backend
-   and deployment flags as `replay`. An approval is used once: a claim file is
-   created with exclusive create before anything runs.
+   and deployment flags as `replay`, and it refuses to start without a target
+   (`--url`, `--config`, `--browser-cdp-endpoint` or a non-web `--backend`), so
+   it can't act on the bundled demo app by mistake. An approval is used once: a
+   claim file is created with exclusive create before anything runs.
 
    ```bash
    openadapt-flow undo run runs/r1 --bundle bundle --undo undo-triage --url https://emr.example.test --config deployment.yaml
    ```
 
-4. **Verify.** The undo is `verified` only when every undo step ran and every
-   effect declared on the undo's steps was confirmed in the system of record.
+4. **Verify.** The undo is `verified` only when every undo step ran and an
+   independent read of the system of record confirmed every effect declared on
+   the undo's steps. An on-screen read-back doesn't count.
    Anything else is `not_verified`, and the application may still need a
    person's repair. The result is in `<run-dir>/undo/<id>/result.json`, and the
    undo's own run directory is `<run-dir>/undo/<id>/run`.
@@ -192,10 +204,11 @@ path where a person made that decision.
   is no transaction across a GUI workflow.
 - **No network write buffering.** Flow doesn't hold writes back until the
   whole workflow has passed its checks.
-- **No undo inside a loop.** An undo runs with the run's parameters, so it
-  isn't offered for a step that ran more than once in the run (a loop body).
-- **One attempt per approval.** If an undo isn't verified, a person repairs the
-  record by hand. A second attempt needs a new run directory.
+- **No undo in a workflow with a loop.** An undo runs with the run's base
+  parameters, while a loop iteration wrote with its row's values, so no undo is
+  offered for a workflow that has a loop.
+- **One attempt per run.** If an undo isn't verified, a person repairs the
+  record by hand.
 - **The approval is a local record.** Like a durable resume approval, it's as
   strong as the operator's control of the run directory. It isn't signed, and
   it isn't sent to the phone approval portal.

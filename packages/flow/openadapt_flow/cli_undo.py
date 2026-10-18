@@ -24,6 +24,7 @@ from openadapt_flow.after_stop import (
     finish_undo_run,
     offer_undos,
     prepare_undo_run,
+    read_undo_approval,
     read_undo_result,
     steps_from_demonstration,
 )
@@ -132,8 +133,10 @@ def _cmd_undo_declare(args: argparse.Namespace) -> int:
     bundle = Path(args.bundle)
     source: Literal["demonstration", "hand_written"]
     try:
+        assets = None
         if args.from_bundle:
-            steps = steps_from_demonstration(args.from_bundle, bundle, args.undo_id)
+            demonstrated = steps_from_demonstration(args.from_bundle, args.undo_id)
+            steps, assets = demonstrated.steps, demonstrated.assets
             source = "demonstration"
         else:
             steps = [
@@ -156,14 +159,14 @@ def _cmd_undo_declare(args: argparse.Namespace) -> int:
             source=source,
             steps=steps,
         )
-        declare_undo(bundle, undo)
+        declare_undo(bundle, undo, assets=assets)
     except ValueError as exc:
         print(f"undo declare REFUSED: {exc}", file=sys.stderr)
         return 2
     print(
         f"Declared undo {undo.id!r} for step {undo.undoes!r} ({source}, "
-        f"{len(undo.steps)} step(s)). The bundle was re-sealed: re-certify it "
-        "before production use."
+        f"{len(undo.steps)} step(s)). The bundle was re-sealed and any "
+        "certification is now expired: certify it again before production use."
     )
     return 0
 
@@ -194,13 +197,32 @@ def _cmd_undo_list(args: argparse.Namespace) -> int:
     for offer in offers:
         entry = offer.ledger_entry
         result = read_undo_result(run_dir, offer.undo_id)
-        state = f"ran: {result.status}" if result else "not run"
+        approval = read_undo_approval(run_dir, offer.undo_id)
+        approved = approval is not None and approval.offer_digest == offer.offer_digest
+        claimed = (run_dir / "undo" / offer.undo_id / "claim.json").exists()
+        state = (
+            f"ran: {result.status}"
+            if result
+            else "running or interrupted"
+            if claimed
+            else f"approved by {approval.approver}, not run"
+            if approved and approval is not None
+            else "not approved"
+        )
         print(
             f"  {offer.undo_id}: {offer.intent}\n"
             f"    undoes step `{offer.undoes}` (position {entry.position}, "
             f"{entry.status}); source: {offer.source}; {state}"
         )
-        if result is None:
+        if approved and not claimed:
+            print(
+                "    run: "
+                + command(
+                    f"undo run {quoted_run} --bundle {quoted_bundle} "
+                    f"--undo {offer.undo_id} --url <app-url>"
+                )
+            )
+        elif not approved and not claimed and result is None:
             print(
                 "    approve: "
                 + command(
@@ -259,6 +281,22 @@ def _cmd_undo_approve(args: argparse.Namespace) -> int:
 
 def _cmd_undo_run(args: argparse.Namespace) -> int:
     run_dir = Path(args.run_dir)
+    # Without a target, replay would start the bundled MockMed demo app: the
+    # undo would act on the demo, leave the real record alone and use up the
+    # approval. Refuse before claiming it.
+    if not (
+        args.url
+        or getattr(args, "config", None)
+        or getattr(args, "browser_cdp_endpoint", None)
+        or getattr(args, "backend", None) not in (None, "web")
+    ):
+        print(
+            "undo run REFUSED: name the application to undo in (--url, "
+            "--config, --browser-cdp-endpoint, or a non-web --backend). "
+            "Nothing was executed and the approval is unused.",
+            file=sys.stderr,
+        )
+        return 2
     workflow = Workflow.load(args.bundle)
     try:
         prepared = prepare_undo_run(run_dir, workflow, args.undo_id)

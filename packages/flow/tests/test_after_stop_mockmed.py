@@ -226,8 +226,10 @@ def test_halt_after_an_earlier_write_lists_that_write_as_confirmed(tmp_path, moc
     assert [(e.status, e.observed_effect) for e in first.effects] == [
         ("confirmed", "present")
     ]
-    assert first.effects[0].description == (
-        "record_written: one Triage encounter for the patient"
+    # The kind only: a compiler-written probe can quote record values.
+    assert first.effects[0].description == "record_written"
+    assert "Triage encounter for the patient" not in json.dumps(
+        [e.model_dump() for e in ledger]
     )
     # The rejected write is refuted and proven absent: nothing to undo there.
     assert second.status == "refuted"
@@ -396,8 +398,25 @@ def test_cli_refuses_to_approve_or_run_without_a_person(tmp_path, mockmed, capsy
     assert args.func(args) == 2
     assert not (run_dir / "undo" / "undo-triage" / "approval.json").exists()
 
+    # Without a target app, undo run refuses before claiming anything.
     args = parser.parse_args(
         ["undo", "run", str(run_dir), "--bundle", str(bundle), "--undo", "undo-triage"]
+    )
+    assert args.func(args) == 2
+    assert "approval is unused" in capsys.readouterr().err
+
+    args = parser.parse_args(
+        [
+            "undo",
+            "run",
+            str(run_dir),
+            "--bundle",
+            str(bundle),
+            "--undo",
+            "undo-triage",
+            "--url",
+            mockmed,
+        ]
     )
     assert args.func(args) == 3
     assert "Nothing was executed" in capsys.readouterr().err
@@ -555,3 +574,244 @@ def test_lint_flags_an_undo_for_a_missing_step():
     )
     codes = {(f.code, f.severity) for f in lint_workflow(workflow).findings}
     assert ("undo_target_missing", "error") in codes
+
+
+# -- Review regressions ------------------------------------------------------
+
+
+def test_compiler_probe_text_never_reaches_the_ledger(tmp_path, mockmed):
+    """A mined effect's probe quotes record values; the ledger must not."""
+    workflow = _workflow(with_undo=False)
+    workflow.steps[0].effects[0].probe = "a record matching patient_id='p1'"
+    bundle = tmp_path / "bundle"
+    workflow.save(bundle)
+    replayer = Replayer(
+        MockMedBackend(mockmed),
+        vision=_vision(),
+        effect_verifier=RestRecordVerifier(mockmed),
+        poll_interval_s=0.01,
+    )
+    report = replayer.run(
+        Workflow.load(bundle), bundle_dir=bundle, run_dir=tmp_path / "run"
+    )
+    text = json.dumps([e.model_dump() for e in report.change_ledger])
+    text += "\n".join(change_ledger_lines(report))
+    assert "p1" not in text
+
+
+def test_absence_needs_every_contract_of_the_api_path_read_absent():
+    """API-actuated step: evidence for one of two contracts is not absence."""
+    from openadapt_flow.after_stop import build_change_ledger
+    from openadapt_flow.ir import (
+        ApiBinding,
+        EffectVerificationEvidence,
+        StepResult,
+    )
+
+    gui = Effect(kind=EffectKind.RECORD_WRITTEN, match={"k": "gui"})
+    api_b = Effect(kind=EffectKind.RECORD_WRITTEN, match={"k": "b"})
+    api_c = Effect(kind=EffectKind.FIELD_EQUALS, match={"k": "c"}, field="f", value="v")
+    step = Step(
+        id="save",
+        intent="save",
+        action=ActionKind.KEY,
+        key="Enter",
+        risk="irreversible",
+        effects=[gui],
+        api_binding=ApiBinding(
+            method="POST", url_template="http://127.0.0.1/x", effects=[api_b, api_c]
+        ),
+    )
+    hb, hc = api_b.contract_hash(), api_c.contract_hash()
+    result = StepResult(
+        step_id="save",
+        intent="save",
+        ok=False,
+        risk="irreversible",
+        actuation="api",
+        delivery_attempted=True,
+        effect_verified=False,
+        effect_contract_hashes=[hb, hc],
+        effect_evidence=[
+            EffectVerificationEvidence(
+                effect_contract_hash=hb,
+                substrate="rest",
+                initial_verdict="refuted",
+                final_verdict="refuted",
+                observed_effect="absent",
+            )
+        ],
+    )
+    report = RunReport(workflow_name="w", started_at="t", results=[result])
+    (entry,) = build_change_ledger(report, Workflow(name="w", steps=[step]))
+    assert entry.may_need_undo is True
+    assert [(e.kind, e.status) for e in entry.effects] == [
+        ("record_written", "refuted"),
+        ("field_equals", "unknown"),
+    ]
+    assert entry.status == "unknown"
+
+
+def test_no_undo_is_offered_for_a_run_with_loop_iterations(tmp_path, mockmed):
+    from openadapt_flow.ir import LoopIterationBinding
+
+    workflow, _bundle, run_dir, _report, _ = _halted_run(tmp_path, mockmed)
+    report_path = run_dir / "report.json"
+    report = RunReport.model_validate_json(report_path.read_text())
+    report.loop_iterations = [
+        LoopIterationBinding(loop_state_id="each", row_index=0, params={"x": "1"})
+    ]
+    report_path.write_text(report.model_dump_json())
+    assert offer_undos(run_dir, workflow) == []
+
+
+def test_undo_is_not_offered_against_another_bundle(tmp_path, mockmed):
+    from openadapt_flow.after_stop import bundle_mismatch
+
+    workflow, _bundle, run_dir, report, _ = _halted_run(tmp_path, mockmed)
+    assert bundle_mismatch(report, workflow) is None
+
+    other = _workflow().model_copy(update={"name": "another-workflow"})
+    assert offer_undos(run_dir, other) == []
+    with pytest.raises(UndoNotOffered, match="another-workflow"):
+        approve_undo(run_dir, other, "undo-triage", approver="nurse-a")
+
+    # Same name, different content: the sealed digest tells them apart.
+    changed = _workflow()
+    changed.steps[1].intent = "save something else"
+    changed.save(tmp_path / "changed")
+    changed = Workflow.load(tmp_path / "changed")
+    assert "digest differs" in bundle_mismatch(report, changed)
+    assert offer_undos(run_dir, changed) == []
+
+
+def test_undo_declared_after_the_stop_still_matches_the_run(tmp_path, mockmed):
+    from openadapt_flow.after_stop import declare_undo
+
+    workflow, bundle, run_dir, _report, _ = _halted_run(
+        tmp_path, mockmed, with_undo=False
+    )
+    assert offer_undos(run_dir, workflow) == []
+    declared = declare_undo(bundle, UNDO_TRIAGE)
+    assert [o.undo_id for o in offer_undos(run_dir, declared)] == ["undo-triage"]
+
+
+def test_a_stale_unused_approval_can_be_replaced_but_a_used_one_cannot(
+    tmp_path, mockmed
+):
+    from openadapt_flow.after_stop import UndoRefused
+
+    workflow, bundle, run_dir, _report, _ = _halted_run(tmp_path, mockmed)
+    approve_undo(run_dir, workflow, "undo-triage", approver="nurse-a")
+    with pytest.raises(UndoRefused, match="already approved"):
+        approve_undo(run_dir, workflow, "undo-triage", approver="nurse-a")
+
+    # The report changes: the approval is stale and a person may approve again.
+    report_path = run_dir / "report.json"
+    report_path.write_text(report_path.read_text() + "\n")
+    replayer, backend = _undo_replayer(mockmed)
+    with pytest.raises(UndoNotApproved):
+        run_undo(run_dir, workflow, "undo-triage", replayer=replayer, bundle_dir=bundle)
+    approve_undo(run_dir, workflow, "undo-triage", approver="nurse-b")
+    result = run_undo(
+        run_dir, workflow, "undo-triage", replayer=replayer, bundle_dir=bundle
+    )
+    assert result.status == "verified"
+    assert result.approver == "nurse-b"
+    with pytest.raises(UndoAlreadyRun):
+        approve_undo(run_dir, workflow, "undo-triage", approver="nurse-c")
+
+
+def test_a_screen_read_back_does_not_verify_an_undo():
+    from types import SimpleNamespace
+
+    from openadapt_flow.after_stop import _judge_undo
+    from openadapt_flow.ir import EffectVerificationEvidence, StepResult
+
+    step = UNDO_TRIAGE.steps[0]
+    contract = step.effects[0].contract_hash()
+
+    def report_with(tier):
+        return RunReport(
+            workflow_name="w",
+            started_at="t",
+            results=[
+                StepResult(
+                    step_id=step.id,
+                    intent=step.intent,
+                    ok=True,
+                    effect_verified=True,
+                    effect_contract_hashes=[contract],
+                    effect_evidence=[
+                        EffectVerificationEvidence(
+                            effect_contract_hash=contract,
+                            substrate="onscreen",
+                            verification_tier=tier,
+                            initial_verdict="confirmed",
+                            final_verdict="confirmed",
+                            observed_effect="present",
+                        )
+                    ],
+                )
+            ],
+        )
+
+    prepared = SimpleNamespace(undo=UNDO_TRIAGE)
+    verified, reason = _judge_undo(prepared, report_with(3))
+    assert verified is False
+    assert "screen_readback" in reason
+    assert _judge_undo(prepared, report_with(1))[0] is True
+
+
+def test_demonstrated_undo_keeps_crop_sub_paths_and_writes_nothing_on_refusal(
+    tmp_path,
+):
+    from openadapt_flow.after_stop import declare_undo, steps_from_demonstration
+
+    demo_dir = tmp_path / "demo"
+    (demo_dir / "templates" / "identifiers").mkdir(parents=True)
+    (demo_dir / "templates" / "s1.png").write_bytes(b"anchor")
+    (demo_dir / "templates" / "identifiers" / "s1.png").write_bytes(b"identifier")
+    click = _click("s1", "Delete", armed=True)
+    click.anchor.template = "templates/s1.png"
+    click.anchor.identifier_crop = "templates/identifiers/s1.png"
+    Workflow(name="demo", steps=[click]).save(demo_dir)
+
+    demonstrated = steps_from_demonstration(demo_dir, "u1")
+    anchor = demonstrated.steps[0].anchor
+    assert anchor.template == "templates/undo-u1/s1.png"
+    assert anchor.identifier_crop == "templates/undo-u1/identifiers/s1.png"
+
+    bundle = tmp_path / "bundle"
+    _workflow(with_undo=False).save(bundle)
+    effects = UNDO_TRIAGE.steps[0].effects
+    steps = [demonstrated.steps[0].model_copy(update={"effects": effects})]
+    bad = UndoStep(
+        id="u1", undoes="no_such_step", intent="x", source="demonstration", steps=steps
+    )
+    with pytest.raises(ValueError, match="not in this bundle"):
+        declare_undo(bundle, bad, assets=demonstrated.assets)
+    assert not (bundle / "templates" / "undo-u1").exists()
+
+    good = bad.model_copy(update={"undoes": "save_triage"})
+    declare_undo(bundle, good, assets=demonstrated.assets)
+    assert (bundle / "templates/undo-u1/identifiers/s1.png").read_bytes() == (
+        b"identifier"
+    )
+    loaded = Workflow.load(bundle)
+    assert "templates/undo-u1/identifiers/s1.png" in loaded.manifest.file_hashes
+
+
+def test_declaring_an_undo_expires_a_prior_certification(tmp_path):
+    from openadapt_flow.after_stop import declare_undo
+
+    bundle = tmp_path / "bundle"
+    workflow = _workflow(with_undo=False)
+    workflow.stamp_certification("test-policy", True)
+    workflow.save(bundle)
+    assert Workflow.load(bundle).manifest.provenance.certified is True
+
+    declare_undo(bundle, UNDO_TRIAGE)
+    provenance = Workflow.load(bundle).manifest.provenance
+    assert provenance.certified is False
+    assert provenance.certification_invalidation_reason

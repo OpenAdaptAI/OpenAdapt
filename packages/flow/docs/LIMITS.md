@@ -459,9 +459,9 @@ What it does provide ([`AFTER_A_STOP.md`](AFTER_A_STOP.md)):
   precondition that the program could have done first. It suggests an order
   and never reorders the bundle.
 - A bundle can declare an undo step for an effect. After a halt it is offered
-  to a person, runs only after that person approves it, runs at most once per
-  approval, and counts as done only when its own declared effects are
-  confirmed in the system of record.
+  to a person, runs only after that person approves it, runs at most once,
+  and counts as done only when an independent read of the system of record
+  confirms its own declared effects.
 
 The limits of that:
 
@@ -470,6 +470,8 @@ The limits of that:
 - An undo exists only where someone declared it. Flow doesn't infer one.
 - An undo can fail or be refused. Then a person must repair the record by
   hand.
+- No undo is offered for a workflow with a loop: the undo can't be bound to
+  one iteration's record.
 - The write-ordering check covers straight-line bundles only, and it can't
   tell whether a later check depends on an earlier write.
 - Duplicate-write compensation (`effects.compensation`) is the only automatic
