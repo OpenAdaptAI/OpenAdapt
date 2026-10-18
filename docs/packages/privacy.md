@@ -2,7 +2,7 @@
 
 PII/PHI scrubbing for captured demonstrations.
 
-**Repository**: [OpenAdaptAI/openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy)
+**Source**: moving into `packages/` in [OpenAdaptAI/OpenAdapt](https://github.com/OpenAdaptAI/OpenAdapt)
 
 ## Installation
 

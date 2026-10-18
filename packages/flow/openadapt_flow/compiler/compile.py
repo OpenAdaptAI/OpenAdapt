@@ -1859,6 +1859,9 @@ def compile_recording(
 
     # Each recording frame is OCRed at most once across both passes.
     ocr_cache: dict[tuple[int, str], list[OcrLine]] = {}
+    from openadapt_flow.runtime import layout_drift as _layout
+
+    layout_fingerprints: dict[str, "_layout.LayoutFingerprint"] = {}
 
     def cached_lines(i: int, suffix: str, png: bytes) -> list[OcrLine]:
         key = (i, suffix)
@@ -1927,6 +1930,11 @@ def compile_recording(
             )
             crop_region = _discriminative_crop_region(frame, click)
             frame_lines = cached_lines(i, "before", before_png)
+            # Font/layout fingerprint of the frame the step acts on: frame
+            # size and font metrics, no text (runtime.layout_drift).
+            layout_fingerprints[step_id] = _layout.fingerprint(
+                frame_lines, (int(frame.shape[1]), int(frame.shape[0]))
+            )
             crop_region = _clip_away_param_lines(
                 crop_region, click, frame_lines, exclude_texts
             )
@@ -2942,6 +2950,13 @@ def compile_recording(
         for s in workflow.steps
     )
     workflow.encrypted = False
+
+    kept = {s.id for s in workflow.steps}
+    layout_fingerprints = {k: v for k, v in layout_fingerprints.items() if k in kept}
+    if layout_fingerprints:
+        fp_path = bundle / _layout.FINGERPRINT_ASSET
+        fp_path.parent.mkdir(parents=True, exist_ok=True)
+        fp_path.write_bytes(_layout.dump_bundle_fingerprints(layout_fingerprints))
 
     write_compile_notes(bundle, compile_notes)
     workflow.save(bundle)
