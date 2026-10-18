@@ -68,6 +68,9 @@ pub struct SidecarInner {
     running: AtomicBool,
     seq: AtomicU64,
     runtime_paths: Mutex<Option<RuntimePaths>>,
+    /// Set when the engine answers the quit-time `shutdown` command, after
+    /// it has erased the shadow-mode buffer.
+    shutdown_acked: AtomicBool,
 }
 
 /// Managed-state wrapper so Tauri commands can reach the sidecar.
@@ -266,18 +269,43 @@ fn route_line(app: &AppHandle, inner: &Arc<SidecarInner>, line: &str) {
     }
 
     if let Some(id) = resp.id.as_deref() {
+        if id == SHUTDOWN_ID {
+            inner.shutdown_acked.store(true, Ordering::SeqCst);
+            return;
+        }
         if let Some(tx) = inner.pending.lock().unwrap().remove(id) {
             let _ = tx.send(resp);
         }
     }
 }
 
+const SHUTDOWN_ID: &str = "shutdown";
+
+/// How long quitting waits for the engine to erase the shadow-mode buffer.
+const SHUTDOWN_GRACE: Duration = Duration::from_secs(2);
+
 /// Gracefully shut down the Python sidecar (best-effort on app quit).
+///
+/// The engine erases the shadow-mode buffer and its key when it gets
+/// `shutdown`, then answers. Wait for that answer, up to [`SHUTDOWN_GRACE`],
+/// before killing it, so quitting clears the buffer instead of leaving it
+/// for the next start.
 pub fn shutdown(inner: &Arc<SidecarInner>) {
     inner.running.store(false, Ordering::SeqCst);
-    if let Some(mut child) = inner.child.lock().unwrap().take() {
-        // Ask the engine to exit cleanly, then drop the child (kills on drop).
-        let _ = child.write(b"{\"id\":\"shutdown\",\"cmd\":\"shutdown\",\"params\":{}}\n");
+    let child = inner.child.lock().unwrap().take();
+    if let Some(mut child) = child {
+        inner.shutdown_acked.store(false, Ordering::SeqCst);
+        let sent = child
+            .write(b"{\"id\":\"shutdown\",\"cmd\":\"shutdown\",\"params\":{}}\n")
+            .is_ok();
+        if sent {
+            let deadline = std::time::Instant::now() + SHUTDOWN_GRACE;
+            while !inner.shutdown_acked.load(Ordering::SeqCst)
+                && std::time::Instant::now() < deadline
+            {
+                std::thread::sleep(Duration::from_millis(50));
+            }
+        }
         let _ = child.kill();
     }
 }

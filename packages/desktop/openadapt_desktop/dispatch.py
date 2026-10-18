@@ -140,6 +140,9 @@ class EngineServices:
         # engine never binds a socket or spawns a console it was not asked for.
         self.portal = portal
         self.authoring = authoring
+        # Set by the dispatcher: returns a shadow-mode live tap for the next
+        # recording, or None while shadow mode is off (the default).
+        self.live_tap_provider: Callable[[], Any] | None = None
 
     @property
     def db(self) -> Any:
@@ -191,6 +194,9 @@ class EngineServices:
                 flow_bridge=self.flow_bridge,
                 db=self.db,
                 bundles_dir=self.config.data_dir / "bundles",
+                live_tap_provider=lambda: (
+                    self.live_tap_provider() if self.live_tap_provider is not None else None
+                ),
             )
         return self._controller
 
@@ -239,6 +245,11 @@ class EngineDispatcher:
         self._approval_watches: dict[str, dict[str, Any]] = {}
         self._approval_lock = threading.Lock()
         self._coach: dict[str, Any] = {}
+        # Shadow mode: built on first use, never from config or a remote
+        # policy. Its commands are served on the Tauri window wire only.
+        self._shadow: Any = None
+        self._shadow_resumed = False
+        self.services.live_tap_provider = self._shadow_live_tap
         self._handlers: dict[str, Callable[..., dict | None]] = {}
         self._register()
         from openadapt_desktop.coach import empty_coach
@@ -364,7 +375,86 @@ class EngineDispatcher:
             "portal_devices": self.portal_devices,
             "portal_revoke_device": self.portal_revoke_device,
             "portal_notification": self.portal_notification,
+            # Shadow mode (local only, off by default). Turned on only from
+            # the Desktop window after the person acknowledges the notice.
+            "shadow_status": self.shadow_status,
+            "shadow_notice": self.shadow_notice,
+            "shadow_enable": self.shadow_enable,
+            "shadow_turn_off": self.shadow_turn_off,
+            "shadow_pause": self.shadow_pause,
+            "shadow_unpause": self.shadow_unpause,
+            "shadow_purge_and_disable": self.shadow_purge_and_disable,
+            "shadow_set_work_domains": self.shadow_set_work_domains,
+            "shadow_decide": self.shadow_decide,
+            "shadow_scan": self.shadow_scan,
         }
+
+    # ------------------------------------------------------- shadow mode
+
+    @property
+    def shadow(self) -> Any:
+        if self._shadow is None:
+            from openadapt_desktop.shadow_mode import ShadowModeService
+
+            self._shadow = ShadowModeService(
+                self.config.data_dir, emit=lambda event, data: self.emit(event, data)
+            )
+        if not self._shadow_resumed:
+            self._shadow_resumed = True
+            self._shadow.resume()
+        return self._shadow
+
+    def _shadow_live_tap(self) -> Any:
+        if self._shadow is None:
+            return None
+        return self._shadow.live_tap()
+
+    def shadow_status(self, **params: Any) -> dict:
+        """Whether shadow mode is on, its acknowledgement time, and pending prompts."""
+        return self.shadow.status()
+
+    def shadow_notice(self, **params: Any) -> dict:
+        """The notice the person must acknowledge before shadow mode turns on."""
+        return self.shadow.notice()
+
+    def shadow_enable(self, **params: Any) -> dict:
+        """Turn shadow mode on. Needs ``acknowledged=True`` and the notice hash."""
+        return self.shadow.enable(
+            str(params.get("notice_sha256") or ""), params.get("acknowledged") is True
+        )
+
+    def shadow_turn_off(self, **params: Any) -> dict:
+        """Turn shadow mode off, erasing its buffer, key, and drafts."""
+        return self.shadow.turn_off()
+
+    def shadow_pause(self, **params: Any) -> dict:
+        """Stop shadow mode recording until it's resumed."""
+        return self.shadow.pause()
+
+    def shadow_unpause(self, **params: Any) -> dict:
+        """Resume shadow mode recording after a pause."""
+        return self.shadow.unpause()
+
+    def close_shadow(self) -> None:
+        """Clean exit: erase the shadow buffer and its key, if one is open."""
+        if self._shadow is not None:
+            self._shadow.close()
+
+    def shadow_purge_and_disable(self, **params: Any) -> dict:
+        """Delete everything shadow mode kept and turn it off."""
+        return self.shadow.purge_and_disable()
+
+    def shadow_set_work_domains(self, **params: Any) -> dict:
+        """Replace the local work-domain allowlist."""
+        return self.shadow.set_work_domains(list(params.get("domains") or []))
+
+    def shadow_decide(self, **params: Any) -> dict:
+        """Answer a prompt with ``review_draft`` or ``ignore``. Runs nothing."""
+        return self.shadow.decide(str(params.get("motif_id") or ""), str(params.get("action")))
+
+    def shadow_scan(self, **params: Any) -> dict:
+        """Look for repeated tasks now instead of waiting for the next scan."""
+        return {"prompts": self.shadow.scan()}
 
     @property
     def commands(self) -> list[str]:

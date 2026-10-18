@@ -117,9 +117,9 @@ class FlowConsoleClient:
 
     Args:
         port: The loopback port the console bound.
-        access_token: The console's bearer capability.  It stays on this
-            machine: a paired phone receives a portal session token instead and
-            never learns this value.
+        access_token: The console's bearer capability.  The portal never
+            sends it to a paired phone, which receives a portal session token
+            instead and never learns this value.
         csrf_token: The console's CSRF token, required for mutations.
         client: Injected HTTP client (tests supply a transport-backed one).
     """

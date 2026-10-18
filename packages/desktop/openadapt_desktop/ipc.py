@@ -35,6 +35,10 @@ from openadapt_desktop.dispatch import EngineDispatcher, EngineServices
 #: dispatcher's approval watches and Flow's approval files.
 CONCURRENT_COMMANDS = frozenset({"get_item_approval", "answer_item_approval"})
 
+#: Sent by the Tauri shell when the app quits. Handled on the reader thread,
+#: ahead of queued commands, because the shell kills the engine shortly after.
+SHUTDOWN_COMMAND = "shutdown"
+
 
 class IPCHandler:
     """Handles JSON line protocol communication with the Tauri shell.
@@ -114,6 +118,11 @@ class IPCHandler:
                 except json.JSONDecodeError:
                     logger.error("Invalid JSON received: {line}", line=line)
                     continue
+                if isinstance(message, dict) and message.get("cmd") == SHUTDOWN_COMMAND:
+                    # The shell is quitting and kills the engine soon after.
+                    # Erase the shadow buffer first, then answer and stop.
+                    self._shutdown(message.get("id"))
+                    break
                 try:
                     if isinstance(message, dict) and message.get("cmd") in CONCURRENT_COMMANDS:
                         self._dispatch(message)
@@ -124,6 +133,13 @@ class IPCHandler:
         finally:
             pending.put(None)
             worker.join()
+
+    def _shutdown(self, msg_id: str | None) -> None:
+        try:
+            self.dispatcher.close_shadow()
+        except Exception:
+            logger.exception("Shadow mode didn't close cleanly")
+        self.send_response(msg_id, {"stopping": True})
 
     def _dispatch(self, message: dict) -> None:
         """Dispatch a command message to the appropriate handler.

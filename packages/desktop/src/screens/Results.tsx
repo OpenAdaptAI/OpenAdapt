@@ -141,7 +141,7 @@ export function Results({ onNeedsYou }: { onNeedsYou: () => void }) {
     <div className="content simple wide">
       <PageHead
         title="Results"
-        sub="What OpenAdapt finished, what needed a person, and what it prevented. Everything here stays on this computer."
+        sub="What OpenAdapt finished, what needed a person, and what it prevented. OpenAdapt doesn't send these results anywhere. If you turn on the hosted runner, it reports only a PHI-free outcome for each Cloud job it runs."
       />
 
       <div className="stats">

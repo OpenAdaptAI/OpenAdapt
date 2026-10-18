@@ -38,6 +38,9 @@ CAPTURE_CONSUMER_EXTRA = "capture"
 #: and everything before it resolved ``capture transcribe``'s default ``auto``
 #: backend to a hosted recognizer and uploaded the raw microphone waveform.
 CAPTURE_ON_DEVICE_AUDIO_FLOOR = Version("1.2.1")
+#: The first capture release that ships ``openadapt_capture.shadow``, which
+#: Desktop's shadow mode imports.
+CAPTURE_SHADOW_MODE_FLOOR = Version("1.3.0")
 
 
 def _canonical(name: str) -> str:
@@ -170,6 +173,28 @@ def test_resolved_capture_has_no_hosted_transcription_path() -> None:
     )
     with pytest.raises(ValueError):
         audio.resolve_transcription_backend("api")
+
+
+def test_resolved_capture_ships_shadow_mode() -> None:
+    """Shadow mode's tests skip when the package is absent; this one cannot.
+
+    ``tests/test_engine/test_shadow_mode.py`` uses ``importorskip`` so a
+    developer on an older capture still gets a green run. That must not let
+    an installer ship without shadow mode, so the declared floor and the
+    resolved version are both held to 1.3.0 here, and the package must import.
+    """
+
+    assert _desktop_declared_capture_floor() >= CAPTURE_SHADOW_MODE_FLOOR
+    installed = _installed_capture_version()
+    assert installed >= CAPTURE_SHADOW_MODE_FLOOR, (
+        f"openadapt-capture {installed} predates shadow mode, added in "
+        f"{CAPTURE_SHADOW_MODE_FLOOR}"
+    )
+
+    import openadapt_capture.shadow  # noqa: F401
+    import openadapt_capture.shadow.consent  # noqa: F401
+    import openadapt_capture.shadow.keys  # noqa: F401
+    import openadapt_capture.shadow.storage  # noqa: F401
 
 
 def test_demonstrated_modifier_chord_survives_conversion_to_flow() -> None:

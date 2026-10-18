@@ -68,7 +68,9 @@ export function Welcome({
       </div>
 
       <p className="welcome-foot">
-        Everything stays on this computer unless you choose to send it.{" "}
+        OpenAdapt doesn't send your recordings or tasks anywhere unless you
+        choose to share or upload them. Backup, sync, and security software on
+        this computer can still copy its files.{" "}
         <button type="button" className="link-button" onClick={onConnectCloud}>
           Connect to OpenAdapt Cloud
         </button>

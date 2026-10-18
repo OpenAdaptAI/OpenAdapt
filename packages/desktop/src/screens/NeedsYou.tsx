@@ -170,7 +170,7 @@ function AttentionCard({
               </li>
             ))}
           </ul>
-          <p className="field-diffs-note">Shown on this computer only.</p>
+          <p className="field-diffs-note">Shown only in this window. OpenAdapt doesn't send it anywhere.</p>
         </div>
       )}
 
@@ -181,7 +181,7 @@ function AttentionCard({
           height={screen.height ?? 0}
           focus={screen.focus}
           caption="The screen when OpenAdapt stopped"
-          provenance="Saved on this computer only"
+          provenance="Saved on this computer. OpenAdapt doesn't upload it."
         />
       )}
 

@@ -168,6 +168,21 @@ stays paused.
 [docs/DECISION_PORTAL.md](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/docs/DECISION_PORTAL.md)
 covers pairing, what the phone can see, and how a decision is applied.
 
+## Shadow mode
+
+Shadow mode is off unless you turn it on in **Settings**, after reading a
+notice. While it's on, the header and the tray say so. It notices a task you
+repeat in your recordings and offers to make a draft from it ("You did this 6
+times today."). Its record is an encrypted buffer in the app-data folder,
+which isn't synced, cleared with its key at least every 24 hours and whenever
+you turn shadow mode off or quit. **Pause** stops it recording, and **Delete
+everything and turn off** erases everything it kept in one click. OpenAdapt
+never sends shadow mode data off your computer, though backup, sync, and
+security software on the computer can still copy local files.
+A draft never runs; a person still records the task and admits the automation.
+[docs/SHADOW_MODE.md](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/docs/SHADOW_MODE.md)
+has the details.
+
 ## Engine command line
 
 The engine also runs without the app. In a source checkout, put `uv run` in
@@ -196,8 +211,9 @@ setting.
 | `storage`, `health`, `cleanup`, `config` | Inspect and maintain local storage and settings |
 | `upload`, `backends` | Older upload commands. `upload --backend hosted_ingest` runs `push`; upload to your own S3 storage is turned off in this release. |
 
-Recordings stay on your computer unless you choose to send one to OpenAdapt
-Cloud with `push`.
+OpenAdapt doesn't send a recording anywhere unless you choose to send it to
+OpenAdapt Cloud with `push`. Backup, sync, and endpoint security software on
+the computer can still copy local files.
 
 ## Develop
 

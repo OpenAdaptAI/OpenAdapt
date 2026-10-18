@@ -280,7 +280,7 @@ it("shows what was typed and what the record has on a Check the record stop", as
   expect(box.textContent).toContain("DOB.");
   expect(box.textContent).toContain("Typed: 1949-12-11.");
   expect(box.textContent).toContain("Record on file: 1960-01-01");
-  expect(box.textContent).toContain("Shown on this computer only.");
+  expect(box.textContent).toContain("Shown only in this window. OpenAdapt doesn't send it anywhere.");
 });
 
 it("shows no field diff when the record check recorded none", async () => {

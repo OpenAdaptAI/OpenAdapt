@@ -238,6 +238,11 @@ a:hover {
 .desktop-status > span.recording {
   color: var(--attention);
 }
+/* Shadow mode is on: never subtle. */
+.desktop-status > span.shadow-mode-on {
+  color: var(--text);
+  border-color: currentColor;
+}
 .desktop-status strong {
   color: inherit;
   font-size: 10px;
@@ -3085,4 +3090,25 @@ select.input:focus {
   margin: var(--space-2) 0 0;
   color: var(--text-muted);
   font-size: var(--fs-caption);
+}
+
+/* Shadow mode notice and repeated-task offers. */
+.shadow-notice {
+  margin: var(--space-2) 0;
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md, 8px);
+  background: var(--panel-sunk);
+}
+.shadow-notice h4 {
+  margin: var(--space-2) 0 var(--space-1);
+}
+.shadow-notice ul {
+  margin: 0;
+  padding-left: 1.2em;
+}
+.shadow-prompts {
+  display: grid;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
 }

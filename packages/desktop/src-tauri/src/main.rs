@@ -104,6 +104,7 @@ fn main() {
             commands::set_control_overlay_interactive,
             commands::ensure_control_overlay_capture_excluded,
             commands::set_control_overlay_layout,
+            tray::set_shadow_tray_status,
             ffmpeg::ffmpeg_status,
             ffmpeg::retry_ffmpeg_provisioning,
             // typed convenience commands (forward to the sidecar)

@@ -223,8 +223,8 @@ copy and the receipt copy that it derives from the closed result enums. It does
 not call a model to write a question or interpret an answer.
 
 The hosted outbound lane has a narrower remote-safe projection and does not
-carry the local evidence image. A custom entity class stays local unless it is
-in the reviewed remote-safe vocabulary; otherwise the remote task uses the
+carry the local evidence image. The remote task names a custom entity class
+only if it is in the reviewed remote-safe vocabulary; otherwise it uses the
 signed neutral `record` or `item` fallback.
 
 The primary screen is intentionally short: one question, the delivery and risk

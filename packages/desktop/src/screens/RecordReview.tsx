@@ -367,7 +367,8 @@ export function RecordReview({
         <Callout title="Pick a task you can check yourself">
           Do the task on a test record, the way you normally would. A
           good task takes a minute or two and ends with a save you can see.
-          Everything stays on this computer.
+          OpenAdapt doesn't send this recording anywhere unless you choose to
+          share or upload it.
         </Callout>
       )}
 
@@ -406,7 +407,7 @@ export function RecordReview({
           hint={
             firstWorkflow
               ? "For example: Add a claim status note. This name shows on the task's card."
-              : "Optional. Stays on this computer with the recording."
+              : "Optional. Saved with the recording. OpenAdapt doesn't send it anywhere unless you choose to upload the recording."
           }
           htmlFor={`${fieldPrefix}-record-task`}
           hintId={`${fieldPrefix}-record-task-hint`}
@@ -447,8 +448,8 @@ export function RecordReview({
           </div>
         )}
         <p className="page-sub">
-          What you enter here stays on this computer and out of OpenAdapt's
-          logs.
+          OpenAdapt keeps what you enter here out of its logs, and doesn't
+          send it anywhere unless you choose to deploy the task.
         </p>
         {target.backend === "web" && runtime && runtime.state !== "ready" && (
           <Callout
@@ -558,10 +559,12 @@ export function RecordReview({
               </Callout>
             )}
           </div>
-          <Callout tone="info" title="Patient data stays on this computer">
-            Before any upload, OpenAdapt removes sensitive data, and it blocks
-            the upload if it can't. In a self-hosted setup nothing is uploaded
-            at all.
+          <Callout tone="info" title="OpenAdapt uploads only what you choose">
+            OpenAdapt doesn't upload this recording on its own. Before any
+            upload you choose, it removes sensitive data, and it blocks the
+            upload if it can't. In a self-hosted setup nothing goes to
+            OpenAdapt Cloud. Backup, sync, and security software on this
+            computer can still copy its files.
           </Callout>
           <div className="row" style={{ marginTop: "var(--space-4)" }}>
             <Button

@@ -139,3 +139,20 @@ def test_explicit_regulated_scrub_is_never_weakened(monkeypatch) -> None:
     engine_main._normalize_flow_auto_scrub_capability()
 
     assert engine_main.os.environ["OPENADAPT_FLOW_SCRUB"] == "on"
+
+
+def test_engine_logs_never_print_variable_values(capfd):
+    from loguru import logger
+
+    from openadapt_desktop.main import configure_engine_logging
+
+    configure_engine_logging("INFO")
+    try:
+        typed = "hunter2-typed-value"
+        # The variable is on the failing line, so diagnose mode would print it.
+        raise ValueError("boom" + typed[:0])
+    except ValueError:
+        logger.exception("handler failed")
+    logger.remove()
+    err = capfd.readouterr().err
+    assert "handler failed" in err and "hunter2-typed-value" not in err

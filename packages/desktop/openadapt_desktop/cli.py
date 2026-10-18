@@ -1013,7 +1013,7 @@ def main(argv: list[str] | None = None) -> None:
     config = EngineConfig()
 
     logger.remove()
-    logger.add(sys.stderr, level=config.log_level)
+    logger.add(sys.stderr, level=config.log_level, diagnose=False)
 
     engine = _init_engine(config)
 

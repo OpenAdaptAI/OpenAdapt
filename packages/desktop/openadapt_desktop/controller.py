@@ -24,12 +24,13 @@ Storage format (Section 4.6):
 from __future__ import annotations
 
 import enum
+import inspect
 import json
 import sys
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
 
 from loguru import logger
 
@@ -99,6 +100,7 @@ class RecordingController:
         db: IndexDB | None = None,
         bundles_dir: Path | None = None,
         auto_compile: bool = False,
+        live_tap_provider: Callable[[], object | None] | None = None,
     ) -> None:
         self.captures_dir = captures_dir
         self.quality = quality
@@ -114,6 +116,10 @@ class RecordingController:
         self._db = db
         self._bundles_dir = bundles_dir
         self._auto_compile = auto_compile
+        # Shadow mode (off by default) hands a live tap for each recording
+        # while the person has it on; None otherwise.
+        self._live_tap_provider = live_tap_provider
+        self._live_tap: object | None = None
 
     @property
     def is_recording(self) -> bool:
@@ -182,7 +188,8 @@ class RecordingController:
         recorder = None
         try:
             Recorder = _load_capture_recorder()
-            recorder = Recorder(str(capture_dir), task_description=task_description)
+            extra = self._live_tap_kwargs(Recorder)
+            recorder = Recorder(str(capture_dir), task_description=task_description, **extra)
             recorder.__enter__()
             if not recorder.wait_for_ready(timeout=60):
                 raise RuntimeError("OpenAdapt Capture did not become ready within 60 seconds")
@@ -200,6 +207,7 @@ class RecordingController:
             if self._storage_manager:
                 self._storage_manager.register_capture(capture_id, capture_dir)
         except Exception as exc:
+            self._close_live_tap()
             if recorder is not None:
                 try:
                     recorder.stop()
@@ -222,6 +230,37 @@ class RecordingController:
             raise RuntimeError(f"Could not start native recording: {exc}") from exc
 
         return capture_id
+
+    def _live_tap_kwargs(self, recorder_cls: object) -> dict[str, object]:
+        """``{"live_event_tap": tap}`` when shadow mode is on and the installed
+        recorder accepts a tap; ``{}`` otherwise."""
+
+        self._live_tap = None
+        if self._live_tap_provider is None:
+            return {}
+        try:
+            accepts = "live_event_tap" in inspect.signature(recorder_cls).parameters
+        except (TypeError, ValueError):
+            accepts = False
+        if not accepts:
+            return {}
+        try:
+            tap = self._live_tap_provider()
+        except Exception:
+            logger.exception("Shadow mode could not provide a live tap; recording without it")
+            return {}
+        if tap is None:
+            return {}
+        self._live_tap = tap
+        return {"live_event_tap": tap}
+
+    def _close_live_tap(self) -> None:
+        tap, self._live_tap = self._live_tap, None
+        if tap is not None:
+            try:
+                tap.close()  # type: ignore[attr-defined]
+            except Exception:
+                logger.exception("Shadow live tap did not close cleanly")
 
     def stop(self) -> dict:
         """Stop the current recording session.
@@ -246,7 +285,9 @@ class RecordingController:
             recorder.stop()
             recorder.__exit__(None, None, None)
             event_count = getattr(recorder, "event_count", 0) or 0
+            self._close_live_tap()
         except Exception as exc:
+            self._close_live_tap()
             try:
                 recorder.__exit__(type(exc), exc, exc.__traceback__)
             except Exception:

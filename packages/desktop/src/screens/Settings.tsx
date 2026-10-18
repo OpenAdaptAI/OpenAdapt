@@ -24,6 +24,7 @@ import {
   SegControl,
 } from "../ui/primitives";
 import { OsWarning } from "../ui/OsWarning";
+import { ShadowModeCard } from "../ui/ShadowMode";
 import {
   overlayPresentationEnabled,
   saveOverlayPresentation,
@@ -214,9 +215,11 @@ export function Settings({
           />
         </Field>
         {cfg.deployment_lane === "byoc" && (
-          <Callout tone="info" title="Patient data stays here">
-            Recordings, tasks, and fixes stay on this computer. Only a short
-            note about each stopped run, with no PHI, goes to your dashboard.
+          <Callout tone="info" title="Patient data stays in your environment">
+            OpenAdapt doesn't upload recordings, tasks, or fixes. When a stopped
+            run is reported, only a short note about it, with no PHI, goes to
+            your dashboard. Backup, sync, and security software on this
+            computer can still copy its files.
           </Callout>
         )}
       </Card>
@@ -244,6 +247,8 @@ export function Settings({
         signedIn={auth.authenticated}
         onConnectCloud={onConnectCloud}
       />
+
+      <ShadowModeCard />
 
       <Card>
         <CardHead

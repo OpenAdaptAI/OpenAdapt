@@ -101,6 +101,32 @@ deployment HIPAA-compliant.
   `PLAYWRIGHT_BROWSERS_PATH` at a version-matched prebundle. Native, RDP, and
   Citrix workflows never use that path.
 
+## Shadow mode
+
+Shadow mode is off by default and has no remote, admin, policy, or
+configuration-file switch. A person turns it on in the Desktop window after
+accepting a versioned notice; the engine checks the notice hash and writes the
+acceptance time to an owner-only local file. The header and the tray show
+when it's on. Its record is an encrypted buffer in the platform's app-data
+folder (Application Support on macOS, LocalAppData on Windows), and shadow
+mode refuses to start if that folder resolves inside a known sync root such as
+Documents, Desktop, iCloud, OneDrive, or Dropbox. The key is in the OS keychain
+(or in memory) and is destroyed, with the buffer, at least every 24 hours,
+when shadow mode is turned off, and when the app quits; a buffer left by a
+crash is erased at the next start. Shadow mode makes no network connections,
+and its commands aren't accepted on the local socket. OpenAdapt never sends
+shadow mode data off the computer. These controls stop OpenAdapt, an
+employer, and other apps from turning it on or reading it through OpenAdapt;
+they don't stop an OS administrator, software running as the user, or on a
+managed computer IT administrators and endpoint security or backup tools, from
+inspecting or copying local files or memory while shadow mode is on. The
+notice says so, says the record may include personal, confidential, or health
+information, and advises pausing before viewing sensitive material. **Pause**
+is in the header, the tray, and Settings. **Turn off** erases the buffer, the
+key, and drafts; **Delete everything and turn off** also removes the ignore
+list and withdraws the
+acceptance. [SHADOW_MODE.md](SHADOW_MODE.md) has the details.
+
 ## Phone decisions
 
 A paired phone receives a request for a decision. A tap doesn't approve the

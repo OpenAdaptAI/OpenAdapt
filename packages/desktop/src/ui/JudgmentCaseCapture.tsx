@@ -256,7 +256,7 @@ export function JudgmentCaseCapture({
             onChange={(event) => setSourceRefSha256(event.target.value)}
             placeholder="Digest of the local demo, shadow run, or counterfactual source"
           />
-          <span className="page-sub">The source stays local. Flow records only this reference.</span>
+          <span className="page-sub">Flow records only this digest, not the source.</span>
         </div>
         <div className="field">
           <label htmlFor="judgment-option">Qualified branch for a rule candidate</label>

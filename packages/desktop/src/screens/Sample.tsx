@@ -154,10 +154,10 @@ export function Sample({
             </li>
           </ol>
           <p className="simple-sub">
-            It runs on this computer in a hidden browser. No account, no
-            permissions, and nothing leaves this computer. It takes 1 to 3
-            minutes; the first time can take longer while OpenAdapt prepares its
-            browser.
+            It runs on this computer in a hidden browser, with no account and
+            no permissions, and OpenAdapt doesn't send the run anywhere. It
+            takes 1 to 3 minutes; the first time can take longer while
+            OpenAdapt downloads and prepares its browser.
           </p>
           <div className="row">
             <Button variant="primary" disabled={state === "running"} onClick={() => void run()}>

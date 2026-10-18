@@ -1,7 +1,7 @@
 // Local teach-the-fix (spec §2, byoc-required). The halted run + a fix
 // (re-recorded or corrected) go to the engine's `teach_fix`, which runs
-// `openadapt-flow teach` LOCALLY and promotes a new bundle if gated. Nothing
-// leaves the machine — this is the regulated-lane correction surface.
+// `openadapt-flow teach` LOCALLY and promotes a new bundle if gated. Teaching
+// sends nothing to Cloud; this is the regulated-lane correction surface.
 import { useEffect, useState } from "react";
 import { CMD, engineInvoke, engineTry } from "../lib/engine";
 import type { RunPersistenceRetryResponse, RunReport } from "../lib/types";
@@ -167,7 +167,7 @@ export function Teach({
     <div className="content">
       <div className="page-head">
         <div className="titles">
-          <p className="eyebrow">Correct · stays local</p>
+          <p className="eyebrow">Correct · runs on this computer</p>
           <h1>Teach the fix</h1>
         </div>
       </div>
