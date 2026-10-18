@@ -140,6 +140,9 @@ class HumanDecisionTaskKind(str, Enum):
     DELIVERY_UNCERTAIN = "delivery_uncertain"
     HALT = "halt"
     OPERATOR_REVIEW = "operator_review"
+    #: A save waiting for a person under an approval mode. Not a halt: the
+    #: run is healthy and asks before it writes.
+    SAVE_APPROVAL = "save_approval"
 
 
 class HumanDecisionQuestionTemplate(str, Enum):
@@ -149,6 +152,7 @@ class HumanDecisionQuestionTemplate(str, Enum):
     COMPLETE_HUMAN_STEP = "complete_human_step"
     REVIEW_UNCERTAIN_DELIVERY = "review_uncertain_delivery"
     REVIEW_HALT = "review_halt"
+    APPROVE_SAVE = "approve_save"
 
 
 class HumanDecisionAction(str, Enum):

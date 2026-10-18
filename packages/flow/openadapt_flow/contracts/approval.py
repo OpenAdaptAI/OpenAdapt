@@ -523,6 +523,7 @@ def counts_as_clean(tier: ReadBackTier, outcome: ReadBackOutcome) -> bool:
 #: Where a decision was made.
 ApprovalRoute = Literal[
     "desktop_run_it",
+    "decision_portal",
     "review_item",
     "review_batch",
     "local_cli",
