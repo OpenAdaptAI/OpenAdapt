@@ -683,6 +683,7 @@ class Replayer:
         approval_gate: Optional["ApprovalGate"] = None,
         attended_draft_by: Optional[Any] = None,
         draft_key_dir: Optional[Path] = None,
+        deployment_surface: Optional[str] = None,
     ) -> None:
         # A JIT draft (openadapt_flow.jit) runs only once admitted, or attended
         # by a named person (the canary). Checked in run().
@@ -734,6 +735,13 @@ class Replayer:
         # (RDP/Citrix/VDI) on a Playwright surface (see the e2e visual-floor
         # drift/heal suites). Never disables the visual ladder itself.
         self.use_structural = use_structural
+        # Where this runtime runs relative to the application (deployment.yaml
+        # ``backend.deployment_surface``): ``local``, ``remote_in_session``,
+        # ``remote_display`` or ``unknown``. None derives it from the run's
+        # execution target (rdp / citrix => remote_display). A workflow
+        # qualified with structure lookups halts before any action when the
+        # resolved surface offers pixels only (see lookup_capabilities).
+        self.deployment_surface = deployment_surface
         # Arm the pixel-compare identity tier's VERIFY branch (experimental,
         # evidence-gated; OFF by default = today's behavior). When False the
         # pixel tier only HALTs on a localized glyph change or ABSTAINs; it
@@ -1580,6 +1588,22 @@ class Replayer:
             )
             report.success = False
             return self._finalize_report(report, workflow, run_dir)
+        lookup_refusal = self._lookup_capability_refusal(
+            workflow, execution_target_kind
+        )
+        if lookup_refusal is not None:
+            report.results.append(
+                StepResult(
+                    step_id="<lookup-capabilities>",
+                    intent="check this surface offers the qualified lookups",
+                    ok=False,
+                    safety_halt=True,
+                    failure_category="safety_halt",
+                    error=lookup_refusal,
+                )
+            )
+            report.success = False
+            return self._finalize_report(report, workflow, run_dir)
         self._begin_control_overlay(report.execution_profile)
         # At-most-once idempotency (Section 3): a repeat under an already-seen
         # key is SUPPRESSED before any actuation. A durable RESUME carries the
@@ -2060,6 +2084,49 @@ class Replayer:
                     "durable continuation lost its terminal authority guard"
                 )
         return finalized
+
+    def _lookup_capability_refusal(
+        self,
+        workflow: Workflow,
+        execution_target_kind: Optional[ExecutionTargetKind],
+    ) -> Optional[str]:
+        """Refuse a surface that offers fewer lookups than were qualified.
+
+        A workflow qualified with structure lookups (DOM / accessibility)
+        must not run where only pixels exist, such as an RDP or Citrix window
+        viewed from outside the session: it passed qualification on evidence
+        this surface cannot produce. Checked before any action.
+        """
+
+        from openadapt_flow.lookup_capabilities import (
+            DeploymentSurface,
+            declared_surface_problem,
+            lookup_capability_refusal,
+            qualified_lookup_of,
+            resolve_deployment_surface,
+        )
+
+        if qualified_lookup_of(workflow) is None:
+            return None
+        kind = execution_target_kind or workflow.surface
+        surface: DeploymentSurface
+        if declared_surface_problem(self.deployment_surface, kind) is not None:
+            # A declaration that contradicts the backend is read the
+            # conservative way: the remote session is viewed from outside.
+            surface = "remote_display"
+        else:
+            try:
+                surface = resolve_deployment_surface(self.deployment_surface, kind)
+            except ValueError:
+                surface = "remote_display"
+        structure_available = (
+            surface != "remote_display"
+            and self.use_structural
+            and callable(getattr(self.backend, "locate_structural", None))
+        )
+        return lookup_capability_refusal(
+            workflow, surface=surface, structure_available=structure_available
+        )
 
     def _stamp_execution_outcome(
         self, report: RunReport, workflow: Workflow, run_dir: Path
