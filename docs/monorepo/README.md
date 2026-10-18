@@ -11,6 +11,7 @@ reach back past the fold.
 | `packages/agent` | OpenAdaptAI/openadapt-agent | `f5ef1d7d` | #1178 | [openadapt-agent-commit-map.tsv](openadapt-agent-commit-map.tsv) |
 | `packages/capture` | OpenAdaptAI/openadapt-capture | `612412c4` | #1205 | [openadapt-capture-commit-map.tsv](openadapt-capture-commit-map.tsv) |
 | `packages/privacy` | OpenAdaptAI/openadapt-privacy | `4938a8e7` | #1266 | [openadapt-privacy-commit-map.tsv](openadapt-privacy-commit-map.tsv) |
+| `packages/desktop` | OpenAdaptAI/openadapt-desktop | `9447a0a1` | this PR | [openadapt-desktop-commit-map.tsv](openadapt-desktop-commit-map.tsv) |
 
 ## How a fold is done
 

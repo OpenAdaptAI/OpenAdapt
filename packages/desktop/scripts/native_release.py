@@ -367,7 +367,9 @@ def _git_bytes(root: Path, commit: str, relative_path: str) -> bytes:
     if not GIT_COMMIT_PATTERN.fullmatch(commit):
         raise ValueError(f"expected a resolved commit id, got {commit!r}")
     result = subprocess.run(
-        ["git", "show", f"{commit}:{relative_path}"],
+        # "./" resolves the path from cwd=root, so this works whether root is
+        # the repository root or packages/desktop inside the OpenAdapt monorepo.
+        ["git", "show", f"{commit}:./{relative_path}"],
         cwd=root,
         check=False,
         capture_output=True,
@@ -422,7 +424,8 @@ def validate_git_version_transform(
     base_commit = _resolve_commit(root, base_ref)
     candidate_commit = _resolve_commit(root, candidate_ref)
     changed = subprocess.run(
-        ["git", "diff", "--name-only", f"{base_commit}..{candidate_commit}", "--"],
+        # --relative: paths from root, limited to it (packages/desktop in the monorepo).
+        ["git", "diff", "--relative", "--name-only", f"{base_commit}..{candidate_commit}", "--"],
         cwd=root,
         check=False,
         capture_output=True,

@@ -30,6 +30,39 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+  # packages/desktop: its uv.lock, the frontend's package-lock.json and the
+  # Tauri shell's Cargo.lock. Minor and patch bumps are grouped, as they were
+  # in openadapt-desktop.
+  - package-ecosystem: "uv"
+    directory: "/packages/desktop"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      desktop-python-minor:
+        update-types: ["minor", "patch"]
+  - package-ecosystem: "npm"
+    directory: "/packages/desktop"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      desktop-npm-minor:
+        update-types: ["minor", "patch"]
+  - package-ecosystem: "cargo"
+    directory: "/packages/desktop/src-tauri"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    groups:
+      desktop-cargo-minor:
+        update-types: ["minor", "patch"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
