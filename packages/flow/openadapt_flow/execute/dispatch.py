@@ -144,6 +144,17 @@ def live_replay(
             f"admitted bundle could not be loaded: {type(exc).__name__}",
             pre_effect=True,
         ) from exc
+    from openadapt_flow.emit.skill import bundle_surface
+
+    surface = bundle_surface(workflow)
+    if surface != "web":
+        raise DispatchError(
+            "the reference Execute worker drives a browser only, and this "
+            f"bundle was recorded on {surface!r}; run it with `openadapt-flow "
+            "run BUNDLE --config deploy.yaml` or through `openadapt-flow "
+            "connector run`. Nothing was executed.",
+            pre_effect=True,
+        )
     stop: Optional[Callable[[], None]] = None
     try:
         if admission.target_url:

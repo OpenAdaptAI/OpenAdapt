@@ -3429,6 +3429,9 @@ def _cmd_resume(args: argparse.Namespace) -> int:
     # the bundle's real substrate rather than always the browser. The default
     # (web / no flag) reproduces the historical Playwright path below exactly.
     backend_cfg = _resolve_backend_config(args, cfg, workflow)
+    refused = _enforce_surface_binding(args, workflow, backend_cfg, operation="resume")
+    if refused is not None:
+        return refused
     if _refuse_missing_citrix_readiness(backend_cfg, operation="Resume"):
         return 2
 
@@ -3870,9 +3873,23 @@ def _cmd_bench(args: argparse.Namespace) -> int:
     from contextlib import contextmanager
 
     from openadapt_flow.bench import run_bench
+    from openadapt_flow.emit.skill import bundle_surface
+    from openadapt_flow.ir import Workflow
     from openadapt_flow.mockmed.server import serve
     from openadapt_flow.report import render_bench_report
 
+    try:
+        surface = bundle_surface(Workflow.load(Path(args.bundle)))
+    except Exception:  # noqa: BLE001 - run_bench reports load errors itself
+        surface = None
+    if surface not in (None, "web"):
+        print(
+            "BENCH REFUSED: bench replays a bundle against the bundled MockMed "
+            f"web app, and this bundle was recorded on {surface!r}. Measure it "
+            "on its own app with repeated `openadapt-flow run BUNDLE --config "
+            "deploy.yaml`. Nothing was executed."
+        )
+        return 2
     url, stop = serve(port=0)
     target_url = _with_drift(url, args.drift)
 

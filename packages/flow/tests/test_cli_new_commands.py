@@ -179,6 +179,7 @@ def _paused_run(
     verified_first: bool = True,
     backend_hints: BackendHints | None = None,
     managed: bool = False,
+    surface: str | None = None,
 ) -> Path:
     run = tmp_path / "run"
     bundle = tmp_path / "b"
@@ -186,6 +187,7 @@ def _paused_run(
     workflow = Workflow(
         name="w",
         backend_hints=backend_hints,
+        surface=surface,
         steps=[
             Step(id="s0", intent="first", action=ActionKind.KEY, key="A"),
             Step(id="s1", intent="second", action=ActionKind.KEY, key="B"),
@@ -854,3 +856,33 @@ def test_version_flag_prints_version_and_exits_zero(capsys) -> None:
     assert out == f"openadapt-flow {_package_version()}"
     prog, _, ver = out.partition(" ")
     assert ver and ver[0].isdigit()
+
+
+def test_resume_refuses_another_surface_than_the_bundle_was_recorded_on(
+    tmp_path: Path, monkeypatch, capsys
+) -> None:
+    run = _paused_run(tmp_path, surface="macos")
+    main(["approve", str(run)])
+
+    import openadapt_flow.backends.factory as factory
+
+    monkeypatch.setattr(
+        factory,
+        "build_backend",
+        lambda *args, **kwargs: pytest.fail("backend must not be constructed"),
+    )
+    rc = main(
+        [
+            "resume",
+            str(run),
+            "--require-approval",
+            "--backend",
+            "windows",
+            "--agent-url",
+            "http://127.0.0.1:5001",
+        ]
+    )
+    assert rc == 2
+    out = capsys.readouterr().out
+    assert "resume REFUSED" in out and "bound to surface 'macos'" in out
+    assert "Nothing was executed" in out

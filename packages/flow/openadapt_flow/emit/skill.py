@@ -32,6 +32,16 @@ def _slugify(name: str) -> str:
     return slug or "workflow"
 
 
+def bundle_surface(workflow: Workflow) -> str:
+    """The surface a bundle was recorded on: ``web`` unless it names another."""
+
+    surface = getattr(workflow, "surface", None)
+    hints = getattr(workflow, "backend_hints", None)
+    if surface is None and hints is not None:
+        surface = getattr(hints, "backend", None)
+    return str(surface or "web")
+
+
 def declared_params(workflow: Workflow) -> list[str]:
     """Names of the workflow's non-secret parameters, in declaration order."""
     secret = set(workflow.secret_params) | {
@@ -168,7 +178,9 @@ def emit_skill(bundle_dir: Path | str, out_dir: Path | str) -> Path:
     # request, and the governed ``run`` path (not the permissive ``replay``)
     # is the one an agent should call.
     param_flags = " ".join(f"--param {name}=<{name}>" for name in params)
-    invocation = f"openadapt-flow run {_BUNDLE_SUBDIR} --url <APP_URL>"
+    surface = bundle_surface(workflow)
+    target = "--url <APP_URL>" if surface == "web" else "--config <DEPLOYMENT_FILE>"
+    invocation = f"openadapt-flow run {_BUNDLE_SUBDIR} {target}"
     if param_flags:
         invocation += f" {param_flags}"
 
@@ -235,9 +247,17 @@ def emit_skill(bundle_dir: Path | str, out_dir: Path | str) -> Path:
     usage_note = (
         f"Run the command from this skill folder (the `{_BUNDLE_SUBDIR}` "
         f"path is relative to it), or substitute the absolute path of "
-        f"`{_BUNDLE_SUBDIR}/`. Replace `<APP_URL>` with the URL of the "
-        f"running target app. "
+        f"`{_BUNDLE_SUBDIR}/`. "
     )
+    if surface == "web":
+        usage_note += "Replace `<APP_URL>` with the URL of the running target app. "
+    else:
+        usage_note += (
+            f"This workflow was recorded on the `{surface}` surface. Replace "
+            "`<DEPLOYMENT_FILE>` with the deployment file whose `backend:` "
+            f"section names the {surface} app; the operator who set up the "
+            "app provides it. Don't pass `--url`. "
+        )
     if params:
         usage_note += (
             "Every parameter is required. Replace each `<name>` placeholder "
