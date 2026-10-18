@@ -38,7 +38,7 @@ from typing import Any, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from openadapt_flow.records.read import normalize_for
+from openadapt_flow.records.read import canonical_value
 from openadapt_flow.records.schema import (
     FieldRead,
     RecordRead,
@@ -265,9 +265,9 @@ class ReviewQueue:
             if action == "accept_read":
                 if channel not in item.candidates:
                     raise ReviewError(f"no read from channel {channel!r}")
-                settled = normalize_for(spec, item.candidates[channel])
+                settled = canonical_value(spec, item.candidates[channel])
             else:
-                settled = normalize_for(spec, value)
+                settled = canonical_value(spec, value)
             if settled is None:
                 raise ReviewError(f"not a valid {spec.kind} for {spec.name!r}")
         elif channel is not None or value is not None:
