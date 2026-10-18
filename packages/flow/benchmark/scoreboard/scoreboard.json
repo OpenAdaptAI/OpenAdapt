@@ -1,7 +1,7 @@
 {
   "protocol_version": "2026-10-18.1",
   "timed_load_max": 12.0,
-  "spend_usd": 4.171654,
+  "spend_usd": 3.866907,
   "tasks": {
     "mockmed": {
       "agent": {
@@ -172,50 +172,6 @@
             }
           }
         ]
-      },
-      "code_agent": {
-        "label": "7. Code-as-action authoring agent, first run",
-        "items": 5,
-        "attempts": 5,
-        "runs": [
-          "2026-10-18-a"
-        ],
-        "normal_items": 5,
-        "correct": 5,
-        "correct_rate": 1.0,
-        "silent_wrong": 0,
-        "safe_stops_normal": 0,
-        "fault_items": 0,
-        "fault_items_by_kind": {},
-        "planned_items": 5,
-        "done_correctly_all_items": 5,
-        "flagged_wrong": 0,
-        "paused": 0,
-        "model_calls_per_item": 5.0,
-        "tokens_per_item": 9911,
-        "cost_usd_total": 0.0477,
-        "cost_usd_per_item": 0.0095,
-        "approvals_asked": 5,
-        "timed_correct_items": 0,
-        "item_s_median": null,
-        "item_s_p90": null,
-        "wall_s_median": null,
-        "wall_s_p90": null,
-        "items_per_hour": null,
-        "host_load_1m": {
-          "min": 50.82,
-          "max": 64.75
-        },
-        "sources": [
-          {
-            "run": "2026-10-18-a",
-            "model": "claude-sonnet-5-5",
-            "engine": {
-              "path": "/Users/abrichr/oa/worktrees/scoreboard-arm7/packages/flow/openadapt_flow",
-              "git_head": "e0d56d450e4fc9cae63377838b73d45f69c3083f"
-            }
-          }
-        ]
       }
     },
     "openemr_referral": {
@@ -365,50 +321,6 @@
               "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
             },
             "note": "the study's published set: engine 0c642bc0, warm, blocks 2-10, valid runs; timed per its start gate (1-minute load < 12)"
-          }
-        ]
-      },
-      "code_agent": {
-        "label": "7. Code-as-action authoring agent, first run",
-        "items": 5,
-        "attempts": 5,
-        "runs": [
-          "2026-10-18-b"
-        ],
-        "normal_items": 5,
-        "correct": 4,
-        "correct_rate": 0.8,
-        "silent_wrong": 1,
-        "safe_stops_normal": 0,
-        "fault_items": 0,
-        "fault_items_by_kind": {},
-        "planned_items": 5,
-        "done_correctly_all_items": 4,
-        "flagged_wrong": 0,
-        "paused": 0,
-        "model_calls_per_item": 11.6,
-        "tokens_per_item": 69806,
-        "cost_usd_total": 0.2049,
-        "cost_usd_per_item": 0.041,
-        "approvals_asked": 0,
-        "timed_correct_items": 0,
-        "item_s_median": null,
-        "item_s_p90": null,
-        "wall_s_median": null,
-        "wall_s_p90": null,
-        "items_per_hour": null,
-        "host_load_1m": {
-          "min": 13.52,
-          "max": 73.12
-        },
-        "sources": [
-          {
-            "run": "2026-10-18-b",
-            "model": "claude-sonnet-5-5",
-            "engine": {
-              "path": "/Users/abrichr/oa/worktrees/scoreboard-arm7/packages/flow/openadapt_flow",
-              "git_head": "cc883bbcb74d9455830da5fe2b86e0c5b1e3f976"
-            }
           }
         ]
       }

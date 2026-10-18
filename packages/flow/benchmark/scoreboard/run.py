@@ -607,8 +607,9 @@ CODE_AGENT_ON_SCREEN = {
     "mockmed": ["Jane Sample", "MRN P1"],
     "openemr_referral": ["Create New Patient"],
 }
-#: OpenEMR items for arm 7 start here, clear of arm 2's item 0 and canary 999.
-OPENEMR_CODE_ITEM_BASE = 700
+#: OpenEMR items for arm 7 start here: clear of arm 2 (item 0, canary 999) and
+#: of the charts a trial run made on the fixture (items 701 to 705).
+OPENEMR_CODE_ITEM_BASE = 720
 
 
 def _program_check(jit: Any, trace: Any) -> dict[str, Any]:

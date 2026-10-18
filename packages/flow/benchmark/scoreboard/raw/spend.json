@@ -1,5 +1,5 @@
 {
-  "total_usd": 4.171654,
+  "total_usd": 3.866907,
   "entries": [
     {
       "usd": 0.577,
@@ -374,86 +374,6 @@
       "usd": 0.05573,
       "note": "openimis agent 2026-10-18-a item 19",
       "at": 1792358431.418853
-    },
-    {
-      "usd": 0.010339,
-      "note": "mockmed code_agent smoke-delete item 1",
-      "at": 1792359107.756307
-    },
-    {
-      "usd": 0.006092,
-      "note": "mockmed code_agent 2026-10-18-a item 1",
-      "at": 1792359137.5327659
-    },
-    {
-      "usd": 0.010352,
-      "note": "mockmed code_agent 2026-10-18-a item 2",
-      "at": 1792359152.226209
-    },
-    {
-      "usd": 0.010449,
-      "note": "mockmed code_agent 2026-10-18-a item 3",
-      "at": 1792359166.907215
-    },
-    {
-      "usd": 0.010462,
-      "note": "mockmed code_agent 2026-10-18-a item 4",
-      "at": 1792359182.645686
-    },
-    {
-      "usd": 0.010339,
-      "note": "mockmed code_agent 2026-10-18-a item 5",
-      "at": 1792359201.927978
-    },
-    {
-      "usd": 0.008306,
-      "note": "openemr_referral code_agent 2026-10-18-a item 1",
-      "at": 1792359214.213875
-    },
-    {
-      "usd": 0.008298,
-      "note": "openemr_referral code_agent 2026-10-18-a item 2",
-      "at": 1792359219.3110201
-    },
-    {
-      "usd": 0.008328,
-      "note": "openemr_referral code_agent 2026-10-18-a item 3",
-      "at": 1792359224.770966
-    },
-    {
-      "usd": 0.008423,
-      "note": "openemr_referral code_agent 2026-10-18-a item 4",
-      "at": 1792359229.97929
-    },
-    {
-      "usd": 0.008423,
-      "note": "openemr_referral code_agent 2026-10-18-a item 5",
-      "at": 1792359235.856202
-    },
-    {
-      "usd": 0.045611,
-      "note": "openemr_referral code_agent 2026-10-18-b item 1",
-      "at": 1792359472.6206741
-    },
-    {
-      "usd": 0.030572,
-      "note": "openemr_referral code_agent 2026-10-18-b item 2",
-      "at": 1792359613.251651
-    },
-    {
-      "usd": 0.040868,
-      "note": "openemr_referral code_agent 2026-10-18-b item 3",
-      "at": 1792359758.899384
-    },
-    {
-      "usd": 0.042256,
-      "note": "openemr_referral code_agent 2026-10-18-b item 4",
-      "at": 1792359895.759076
-    },
-    {
-      "usd": 0.04563,
-      "note": "openemr_referral code_agent 2026-10-18-b item 5",
-      "at": 1792360037.685641
     }
   ]
 }
