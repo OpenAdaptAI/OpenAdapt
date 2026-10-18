@@ -3692,6 +3692,16 @@ class StepResult(BaseModel):
     # (recorded for audit; empty unless an appliance is configured).
     postcondition_drift_rescues: list[str] = Field(default_factory=list)
     drift_oracle_calls: int = 0  # VLM state-verifier calls this step
+    # The first identity check on this step mismatched WHILE the screen was
+    # still changing (its identity band differed in a frame taken right
+    # after the read, or the page reported activity), so one more check ran
+    # on a fresh settled frame. The step acted only if that second check
+    # verified. ``identity`` is the second read; the first read's verdict and
+    # frame are kept here. A mismatch on a stable screen is final and never
+    # re-observed.
+    identity_reobserved: bool = False
+    identity_first_read: Optional[IdentityCheck] = None
+    identity_first_frame_png: Optional[str] = None
     heal: Optional[HealEvent] = None
     error: Optional[str] = None
     before_png: Optional[str] = None  # run-dir-relative paths
