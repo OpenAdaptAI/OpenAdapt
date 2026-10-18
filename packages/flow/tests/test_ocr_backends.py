@@ -143,3 +143,46 @@ def test_prewarm_image_is_a_valid_png() -> None:
     with Image.open(io.BytesIO(_prewarm._blank_png())) as image:
         image.load()
         assert image.size == (64, 16)
+
+
+@pytest.mark.parametrize("flag", ["-h", "--help", "--version"])
+@pytest.mark.parametrize("command", ["demo", "tutorial"])
+def test_help_does_not_start_the_prewarm(
+    monkeypatch: pytest.MonkeyPatch, command: str, flag: str
+) -> None:
+    """`tutorial --help` exited while onnxruntime was still loading on the
+    prewarm thread, and the native runtime aborted the process (exit -6)."""
+    from openadapt_flow import __main__ as cli
+    from openadapt_flow import _prewarm
+
+    started: list[bool] = []
+    monkeypatch.setattr(_prewarm, "start", lambda: started.append(True))
+    with pytest.raises(SystemExit):
+        cli.main([command, flag])
+    assert started == []
+
+
+def test_exit_waits_for_an_ocr_load_in_progress(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import threading
+
+    from openadapt_flow import _prewarm
+
+    release = threading.Event()
+    registered: list[Any] = []
+    monkeypatch.setattr(_prewarm, "_started", False)
+    monkeypatch.setattr(_prewarm, "_load", release.wait)
+    monkeypatch.setattr(_prewarm, "_touch_driver", lambda: None)
+    monkeypatch.setattr(
+        _prewarm.atexit, "register", lambda fn, *args: registered.append((fn, args))
+    )
+    _prewarm.start()
+
+    assert len(registered) == 1
+    fn, (thread,) = registered[0]
+    assert fn is _prewarm._wait_for_load and thread.name == "ocr-prewarm"
+    assert thread.is_alive()
+    release.set()
+    fn(thread)
+    assert not thread.is_alive()
