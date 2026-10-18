@@ -1140,6 +1140,11 @@ def _cmd_record_capture(args: argparse.Namespace) -> int:
         or getattr(args, "browser_page_url", None)
     )
     if backend in ("windows", "macos", "linux", "rdp", "citrix"):
+        if getattr(args, "capture_network", False):
+            raise SystemExit(
+                "record: --capture-network applies only to --backend web; a "
+                "desktop, RDP or Citrix session has no page requests to capture"
+            )
         if browser_attach_requested:
             raise SystemExit(
                 "record: --browser-cdp-endpoint and --browser-page-url apply "
@@ -1197,6 +1202,7 @@ def _cmd_record_capture(args: argparse.Namespace) -> int:
             browser_page_url=getattr(args, "browser_page_url", None),
             stop_when=_record_until_stop(args),
             surface="web",
+            capture_network=bool(getattr(args, "capture_network", False)),
         )
     except BrowserAttachError as exc:
         raise SystemExit(f"record: browser attachment refused: {exc}") from exc
@@ -6990,6 +6996,16 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--capture-network",
+        action="store_true",
+        help=(
+            "Web only: also keep the page's requests (network.jsonl; cookies, "
+            "passwords and session tokens withheld). compile then proposes an "
+            "API step for a save it can repeat as one request; a person admits "
+            "it with 'api admit'"
+        ),
+    )
+    p.add_argument(
         "--with-check",
         action="store_true",
         help=(
@@ -9933,10 +9949,12 @@ def build_parser() -> argparse.ArgumentParser:
     pr.set_defaults(func=_cmd_connector)
 
     from openadapt_flow.cli_admit import register_admit_parser
+    from openadapt_flow.cli_api import register_api_parser
     from openadapt_flow.cli_check import register_check_parser
 
     register_admit_parser(sub)
     register_check_parser(sub)
+    register_api_parser(sub)
 
     from openadapt_flow.jit.cli import add_parser as _add_jit_parser
 

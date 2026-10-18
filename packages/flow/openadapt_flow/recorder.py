@@ -92,8 +92,13 @@ class Recorder:
         settle_interval_s: float = 0.1,
         settle_stable_frames: int = 2,
         settle_timeout_s: float = 3.0,
+        network_capture: Optional[Any] = None,
     ) -> None:
         self._backend = backend
+        # Opt-in ``record --capture-network``: a started
+        # :class:`openadapt_flow.network_capture.NetworkCapture`, written beside
+        # the events by :meth:`finish`.
+        self._network_capture = network_capture
         self._dir = Path(out_dir)
         self._frames_dir = self._dir / "frames"
         self._frames_dir.mkdir(parents=True, exist_ok=True)
@@ -222,6 +227,15 @@ class Recorder:
             "params": dict(self._params),
             "secret_params": sorted(self._secret_params),
         }
+        if self._network_capture is not None:
+            from openadapt_flow.network_capture import NETWORK_FILE
+
+            self._network_capture.stop()
+            self._network_capture.write(self._dir, self._t0)
+            meta["network_capture"] = {
+                "file": NETWORK_FILE,
+                "exchanges": self._network_capture.count,
+            }
         (self._dir / "meta.json").write_text(json.dumps(meta, indent=2))
         return self._dir
 

@@ -707,6 +707,8 @@ class Replayer:
         effect_verifier: Optional[EffectVerifier] = None,
         effect_compensator: Optional[Any] = None,
         api_actuator: Optional[Any] = None,
+        web_form_actuator: Optional[Any] = None,
+        api_steps: bool = True,
         durable: bool = False,
         checkpoint_key: Optional[str] = None,
         poll_interval_s: float = 0.05,
@@ -930,6 +932,16 @@ class Replayer:
         # step falls through to the GUI ladder unchanged. Deterministic; makes
         # no model call (the $0 runtime guarantee holds on this path too).
         self.api_actuator = api_actuator
+        # API steps compiled from a recording's network capture (web_form
+        # bindings, docs/API_TIER.md). An admitted one runs in place of the
+        # GUI steps it stands for, through the live browser session; when a
+        # precondition fails before the save is sent, those GUI steps run.
+        # ``api_steps=False`` keeps every run on the GUI. ``web_form_actuator``
+        # replaces the live-session actuator (tests, other transports).
+        self.api_steps = api_steps
+        self.web_form_actuator = web_form_actuator
+        self._web_form_span_active = False
+        self._web_form_fallback_reason: Optional[str] = None
         # Durable tiered runtime (RFC §5, Tier 3), OFF by default. When True,
         # run() writes a RunCheckpoint after each VERIFIED step and, on a halt,
         # a PendingEscalation instead of just dying -- so the run can be
@@ -1993,67 +2005,67 @@ class Replayer:
                 resume_checkpoint=resume_program,
             )
         else:
+            span_skip_to = -1
+            stop_run = False
             for step_index, step in enumerate(workflow.steps):
                 # Resume: never re-execute an already-verified step (no
                 # re-performed confirmed writes); its result was pre-loaded.
                 if resume_from is not None and step_index < resume_from:
                     continue
-                result = self._run_step(
-                    step,
-                    workflow=workflow,
-                    step_index=step_index,
-                    params=params,
-                    bundle_dir=bundle_dir,
-                    run_dir=run_dir,
-                    new_crops=new_crops,
+                if step_index <= span_skip_to:
+                    continue
+                # An admitted API step (docs/API_TIER.md) runs in place of the
+                # GUI steps it stands for. When it can't, the reason lands on
+                # the first of those steps and the GUI steps run as recorded.
+                batch: Optional[list[StepResult]] = None
+                why_not: Optional[str] = None
+                span = self._web_form_span_at(
+                    workflow,
+                    step_index,
+                    durable=durable_run is not None or resume_from is not None,
                 )
-                post_action_refusal = self._workflow_snapshot_refusal(workflow)
-                if post_action_refusal is None:
-                    post_action_refusal = (
-                        self._governed_authorization_snapshot_refusal()
-                    )
-                if post_action_refusal is not None:
-                    prior_error = (
-                        f"; earlier result: {result.error}" if result.error else ""
-                    )
-                    result.ok = False
-                    result.safety_halt = True
-                    result.failure_category = (
-                        "governed_refusal"
-                        if self.governed_authorization is not None
-                        else "safety_halt"
-                    )
-                    result.error = (
-                        f"{post_action_refusal}; the action result was checked, "
-                        f"but the workflow changed during delivery{prior_error}"
-                    )
-                report.results.append(result)
-                self._account_result(report, result)
-                if durable_run is not None:
-                    self._sync_durable_audit(durable_run, report)
-                    # Tier-3: verified step -> checkpoint; halt -> pending
-                    # escalation (resumable from the last checkpoint).
-                    if post_action_refusal is None:
-                        durable_run.record(
+                if span is not None:
+                    end_index, _save_step, why_not = span
+                    if why_not is None:
+                        batch = self._run_web_form_span(
+                            workflow,
                             step_index,
-                            step,
-                            result,
-                            params,
-                            workflow=workflow,
-                            transition_observation=(
-                                self._attended_transition_observation()
-                                if not result.ok
-                                else None
-                            ),
+                            end_index,
+                            params=params,
+                            bundle_dir=bundle_dir,
+                            run_dir=run_dir,
+                            new_crops=new_crops,
                         )
-                        if (
-                            self._durable_continuation_guard is not None
-                            and result.failure_category != "continuation_preempted"
-                        ):
-                            self._durable_continuation_guard.acknowledge_progress(
-                                terminal=not result.ok
-                            )
-                if not result.ok:
+                        if batch is None:
+                            why_not = self._web_form_fallback_reason
+                        else:
+                            span_skip_to = end_index
+                if batch is None:
+                    result = self._run_step(
+                        step,
+                        workflow=workflow,
+                        step_index=step_index,
+                        params=params,
+                        bundle_dir=bundle_dir,
+                        run_dir=run_dir,
+                        new_crops=new_crops,
+                    )
+                    if why_not is not None:
+                        result.api_fallback = why_not
+                    batch = [result]
+                for result in batch:
+                    stop_run = self._record_linear_result(
+                        report,
+                        workflow,
+                        result,
+                        step_index=step_index,
+                        step=step,
+                        params=params,
+                        durable_run=durable_run,
+                    )
+                    if stop_run:
+                        break
+                if stop_run:
                     break
 
             report.success = len(report.results) == len(workflow.steps) and all(
@@ -2160,6 +2172,181 @@ class Replayer:
                     "durable continuation lost its terminal authority guard"
                 )
         return finalized
+
+    def _record_linear_result(
+        self,
+        report: RunReport,
+        workflow: Workflow,
+        result: StepResult,
+        *,
+        step_index: int,
+        step: Step,
+        params: Mapping[str, RuntimeParamScalar],
+        durable_run: Optional[Any],
+    ) -> bool:
+        """Account one linear-loop result; True when the run must stop."""
+
+        post_action_refusal = self._workflow_snapshot_refusal(workflow)
+        if post_action_refusal is None:
+            post_action_refusal = self._governed_authorization_snapshot_refusal()
+        if post_action_refusal is not None:
+            prior_error = f"; earlier result: {result.error}" if result.error else ""
+            result.ok = False
+            result.safety_halt = True
+            result.failure_category = (
+                "governed_refusal"
+                if self.governed_authorization is not None
+                else "safety_halt"
+            )
+            result.error = (
+                f"{post_action_refusal}; the action result was checked, "
+                f"but the workflow changed during delivery{prior_error}"
+            )
+        report.results.append(result)
+        self._account_result(report, result)
+        if durable_run is not None:
+            self._sync_durable_audit(durable_run, report)
+            # Tier-3: verified step -> checkpoint; halt -> pending
+            # escalation (resumable from the last checkpoint).
+            if post_action_refusal is None:
+                durable_run.record(
+                    step_index,
+                    step,
+                    result,
+                    params,
+                    workflow=workflow,
+                    transition_observation=(
+                        self._attended_transition_observation()
+                        if not result.ok
+                        else None
+                    ),
+                )
+                if (
+                    self._durable_continuation_guard is not None
+                    and result.failure_category != "continuation_preempted"
+                ):
+                    self._durable_continuation_guard.acknowledge_progress(
+                        terminal=not result.ok
+                    )
+        return not result.ok
+
+    def _web_form_span_at(
+        self, workflow: Workflow, step_index: int, *, durable: bool
+    ) -> Optional[tuple[int, Step, Optional[str]]]:
+        """The API step whose span starts at ``step_index``, and why it can't run.
+
+        Returns ``(save_index, save_step, reason)``; ``reason`` is None when
+        the API step may run. None when no API step starts here.
+        """
+
+        from openadapt_flow.runtime.actuators.web_form import folded_checks_digest
+
+        first = workflow.steps[step_index].id
+        for end_index in range(step_index, len(workflow.steps)):
+            save = workflow.steps[end_index]
+            binding = save.api_binding
+            if (
+                binding is None
+                or binding.kind != "web_form"
+                or binding.web_form is None
+                or binding.web_form.replaces_steps[0] != first
+            ):
+                continue
+            ids = [s.id for s in workflow.steps[step_index : end_index + 1]]
+            if not self.api_steps:
+                reason = "API steps are off for this run"
+            elif durable:
+                reason = "a durable or resumed run uses the GUI steps"
+            elif (
+                self.approval_gate is not None
+                and str(getattr(getattr(self.approval_gate, "mode", None), "value", ""))
+                != "not_gated"
+            ):
+                # A person approves what the screen shows; an API step would
+                # leave the form empty. Only an ungated run uses API steps.
+                reason = (
+                    "approval mode shows the person the screen before the save, "
+                    "so the GUI steps run"
+                )
+            elif self.governed_authorization is not None:
+                reason = "a governed run uses its qualified GUI path"
+            elif not binding.admitted():
+                reason = "the API step is not admitted (openadapt-flow api admit)"
+            elif list(binding.effects) != list(save.effects):
+                reason = (
+                    "the save step's record check differs from the one admitted "
+                    "with the API step (openadapt-flow api admit)"
+                )
+            elif ids != list(binding.web_form.replaces_steps):
+                reason = "the program's steps no longer match the API step"
+            elif (
+                folded_checks_digest(workflow.steps[step_index:end_index])
+                != binding.web_form.folded_checks_digest
+            ):
+                reason = (
+                    "an on-screen check of the GUI steps changed after the API "
+                    "step was proposed, and the API step would skip it "
+                    "(openadapt-flow api propose)"
+                )
+            elif self._actuator_for(binding) is None:
+                reason = "there is no live browser session for the API step"
+            else:
+                reason = None
+            return end_index, save, reason
+        return None
+
+    def _run_web_form_span(
+        self,
+        workflow: Workflow,
+        start_index: int,
+        end_index: int,
+        *,
+        params: Mapping[str, RuntimeParamScalar],
+        bundle_dir: Path,
+        run_dir: Path,
+        new_crops: dict[str, bytes],
+    ) -> Optional[list[StepResult]]:
+        """Run the API step for steps ``start_index..end_index``.
+
+        Returns the results (the folded GUI steps, then the save) when the API
+        step took responsibility: it saved and the record check ran, or it
+        stopped after sending. Returns None when the save was not sent, with
+        the reason in ``self._web_form_fallback_reason``; the caller then runs
+        the GUI steps.
+        """
+
+        save = workflow.steps[end_index]
+        self._web_form_span_active = True
+        try:
+            result = self._run_step(
+                save,
+                workflow=workflow,
+                step_index=end_index,
+                params=params,
+                bundle_dir=bundle_dir,
+                run_dir=run_dir,
+                new_crops=new_crops,
+            )
+        finally:
+            self._web_form_span_active = False
+        if result.api_fallback is not None:
+            self._web_form_fallback_reason = result.api_fallback
+            return None
+        folded = [
+            StepResult(
+                step_id=s.id,
+                intent=s.intent,
+                ok=True,
+                skipped=True,
+                actuation="api_folded",
+                risk=s.risk,
+                risk_explanation=s.risk_explanation,
+                risk_review_required=s.risk_review_required,
+                delivery_attempted=False,
+            )
+            for s in workflow.steps[start_index:end_index]
+        ]
+        return [*folded, result]
 
     def _lookup_capability_refusal(
         self,
@@ -6038,12 +6225,27 @@ class Replayer:
                 result.error = approval_refusal
                 result.elapsed_ms = (time.monotonic() - t0) * 1000.0
                 return result
+        # A web_form binding (compiled from a recording's network capture)
+        # acts only when the linear loop runs it in place of the GUI steps it
+        # stands for. On the GUI path its save step is an ordinary click.
+        step_api_binding = step.api_binding
+        if (
+            step_api_binding is not None
+            and step_api_binding.kind == "web_form"
+            and not self._web_form_span_active
+        ):
+            step_api_binding = None
+        step_api_actuator = (
+            self._actuator_for(step_api_binding)
+            if step_api_binding is not None
+            else None
+        )
         if (
             qualification_path != "gui"
-            and step.api_binding is not None
-            and self.api_actuator is None
+            and step_api_binding is not None
+            and step_api_actuator is None
             and (
-                qualification_path == "api" or step.api_binding.on_unavailable == "halt"
+                qualification_path == "api" or step_api_binding.on_unavailable == "halt"
             )
         ):
             self._set_api_unavailable_refusal(
@@ -6067,11 +6269,11 @@ class Replayer:
         api_fault_mutation_start = len(self._qualification_fault_mutations)
         if (
             qualification_path != "gui"
-            and self.api_actuator is not None
-            and step.api_binding is not None
-            and step.api_binding.effects
+            and step_api_actuator is not None
+            and step_api_binding is not None
+            and step_api_binding.effects
         ):
-            api_effects = tuple(self._resolve_effects(step.api_binding.effects, params))
+            api_effects = tuple(self._resolve_effects(step_api_binding.effects, params))
             api_effect_verifier = self._apply_effect_fault_mutation(
                 gate="effect_verifier",
                 step=step,
@@ -6088,8 +6290,8 @@ class Replayer:
             )
         if (
             qualification_path != "gui"
-            and self.api_actuator is not None
-            and step.api_binding is not None
+            and step_api_actuator is not None
+            and step_api_binding is not None
         ):
             if self._try_api_tier(
                 step,
@@ -6131,6 +6333,19 @@ class Replayer:
                 )
                 result.elapsed_ms = (time.monotonic() - t0) * 1000.0
                 return result
+
+        if self._web_form_span_active:
+            # The API step did not send the save (a precondition failed or it
+            # is unavailable). Report why and act on nothing: the linear loop
+            # runs the GUI steps from the start of the span instead.
+            reasons = [r for r in result.effect_results if r.startswith("[api]")]
+            result.api_fallback = (
+                reasons[-1][len("[api] ") :]
+                if reasons
+                else "the API step is unavailable"
+            )
+            result.elapsed_ms = (time.monotonic() - t0) * 1000.0
+            return result
 
         # Default behavior settles exactly as before. The opt-in readiness gate
         # owns its own single bounded settle call inside ``_apply_step_gates``;
@@ -7293,6 +7508,28 @@ class Replayer:
         )
         return None
 
+    def _actuator_for(self, binding: Any) -> Optional[Any]:
+        """The actuator that runs ``binding``, or None when none can."""
+
+        if binding is None:
+            return None
+        if binding.kind != "web_form":
+            return self.api_actuator
+        if self.web_form_actuator is not None:
+            return self.web_form_actuator
+        page = getattr(self.backend, "page", None)
+        if page is None:
+            return None
+        from openadapt_flow.runtime.actuators.web_form import (
+            PlaywrightSessionTransport,
+            WebFormActuator,
+        )
+
+        try:
+            return WebFormActuator(PlaywrightSessionTransport(page))
+        except Exception:  # noqa: BLE001 - no live session: the GUI runs
+            return None
+
     def _try_api_tier(
         self,
         step: Step,
@@ -7333,7 +7570,8 @@ class Replayer:
         """
         binding = step.api_binding
         assert binding is not None  # guaranteed by the caller
-        assert self.api_actuator is not None  # guaranteed by the caller (line ~1140)
+        api_actuator = self._actuator_for(binding)
+        assert api_actuator is not None  # guaranteed by the caller
 
         # An API write MUST be confirmable against its own exact effect
         # contract.  ``step.effects`` belongs exclusively to the GUI fallback;
@@ -7502,7 +7740,7 @@ class Replayer:
         result.delivery_attempted = True
         try:
             self._require_qualification_environment_current()
-            outcome = self.api_actuator.actuate(
+            outcome = api_actuator.actuate(
                 binding,
                 runtime_params_for_gui(params),
             )
