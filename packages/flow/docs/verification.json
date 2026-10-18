@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-18T15:02:08-04:00 (git HEAD commit date)",
+  "generated_at": "2026-10-18T17:03:07-04:00 (git HEAD commit date)",
   "green_check_run": false,
   "green_check_job": null,
   "green_check_scope": [],
@@ -486,6 +486,107 @@
       "errors": []
     },
     {
+      "id": "record-check-from-app-reads",
+      "claim": "scaffold-verifier builds a record check from the reads the app made after the save (the recording's network capture, a SQLite database read path, or a reviewed verifier section), binds the recorded values to run parameters, guards every other table when a database path is given (no row added, changed or removed), and tests the check against injected bad writes before anyone reviews it. A check that misses one is written as a draft with the misses listed. Every effect stays unconfirmed until a person removes the flag.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "Proven on synthetic fixtures only (MockMed, the effect_e2e SQLite record service, an OpenEMR-shaped FHIR fake). A check built from API reads alone cannot see writes to tables it does not read, so it stays a draft unless a database path covers them or a person declares the read complete. The fault classes are the effect_e2e taxonomy, not a measured field incident rate.",
+        "Saves that update an existing record are not handled yet: the check expects one new record. The read's credential is the operator's job; the recording's reads used the browser's sign-in."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_record_check_synthesis.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": "test_database_read_path_covers_every_table_and_passes_the_suite",
+          "node_found": true,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "On the benchmark/effect_e2e record service, a check built from a database read path catches every injected bad write end to end through the real replayer (including the stray billing write) and passes the clean save."
+        },
+        {
+          "path": "tests/test_record_check_synthesis.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": "test_one_rest_read_misses_the_billing_write_and_stays_a_draft",
+          "node_found": true,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "A check built from one REST read misses the stray billing write, both in the recorded-state fault test and end to end, and is written as a draft with that miss listed."
+        },
+        {
+          "path": "tests/test_record_check_synthesis.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": "test_mockmed_needs_a_declared_complete_read",
+          "node_found": true,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "On the MockMed --break-it fault server, the check built from the app's /api/db read catches every fault end to end once a person declares the read complete, and stays a draft until then."
+        },
+        {
+          "path": "tests/test_record_check_synthesis.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": "test_openemr_fhir_check_refutes_store_level_faults",
+          "node_found": true,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "On the OpenEMR-shaped FHIR R4 fake, the check found from the Observation search refutes partial, duplicate, phantom, wrong-patient and lost-update faults and confirms the clean save."
+        },
+        {
+          "path": "tests/test_record_check_synthesis.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": "test_guards_catch_a_changed_or_deleted_row_through_the_real_read",
+          "node_found": true,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "The generated SQL reads, run against a real SQLite file, refute a save that also changed or deleted a row in another table."
+        },
+        {
+          "path": "tests/test_record_check_synthesis.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": "test_verify_run_refuses_until_a_person_removes_the_flags",
+          "node_found": true,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "verify-run refuses the proposed check until every needs_operator_confirmation line is removed."
+        },
+        {
+          "path": "docs/EFFECT_KIT.md",
+          "kind": "doc",
+          "exists": true,
+          "strength": "roadmap",
+          "gating": "artifact (doc/benchmark)",
+          "node": null,
+          "node_found": null,
+          "ci_job": null,
+          "junit_status": null,
+          "proves": "The operator guide: inputs, outputs, the fault classes, and what the proof does not cover."
+        }
+      ],
+      "errors": []
+    },
+    {
       "id": "ui-readback-separate-session",
       "claim": "With no API or database access, a save can be checked through the application's own record page: a separate browser with a new, empty context and its own sign-in opens the record by identifier, confirms the page shows that identifier, reads the saved fields from the page structure, and judges them with the shared effect judge. After sign-in the session refuses every request that is not a read. The check declares tier 2 (a separate session) and is never labeled a system-of-record read.",
       "tier": "supported",
@@ -589,7 +690,7 @@
       ],
       "strongest_evidence": "supported",
       "caveats": [
-        "Identity verification covers ONLY armed steps. Real bundles arm a MINORITY of clicks (4 of 12 on a recent live OpenEMR bundle); an UNARMED click proceeds with no identity check whatsoever. Coverage is an auditable per-step metric, but disclosure does not close the gap."
+        "Identity verification covers ONLY armed steps. Real bundles arm a MINORITY of clicks (4 of 12 on a recent live OpenEMR bundle); an UNARMED click proceeds with no identity check whatsoever. Coverage is an auditable per-step metric, but disclosure does not close the gap. `scaffold-verifier --bundle` reports coverage before and after evidence from the recording's DOM / accessibility text at each unarmed click; it proposes only evidence the runtime checks on that surface, and a person applies it."
       ],
       "evidence": [
         {

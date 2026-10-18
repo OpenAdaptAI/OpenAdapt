@@ -364,6 +364,14 @@
       "sha256": "c8b8cfc97f7ba654d3b016798a5ec442570fb3361b717b53b7363c6e0dd8d6ad"
     },
     {
+      "path": "benchmark/openemr_referral_timing/figures.json",
+      "sha256": "8fc9a7ae6a3d8ef84b845a785280688370fa103d1a5ddd2b202c7915290cdaae"
+    },
+    {
+      "path": "benchmark/openemr_referral_timing/runs.csv",
+      "sha256": "b4b24eaa8df86c9a54cc3a435cb6baff1940931e893750a4896fca57bf3eaa87"
+    },
+    {
       "path": "benchmark/openimis_claims/deployment.eligibility.yaml",
       "sha256": "03f46f4762bad3e465b65217f6080f203e8fe0b167288f65a7a76edfe469d538"
     },
@@ -621,7 +629,7 @@
     },
     {
       "path": "claims.yaml",
-      "sha256": "ec1bd4acfa3d487e78809d6a5ecb742a60c6d8e858ab6fa7d50c75ea76083e7e"
+      "sha256": "844c076d6adad8b85006e53db0588436909b07e261cf72535e5f7bf2f6000505"
     },
     {
       "path": "deploy/on-prem/docker-compose.yml",
@@ -1857,7 +1865,7 @@
     },
     {
       "path": "docs/verification.json",
-      "sha256": "a0512978638a854e31a1b6f6f2538f717345168c6e89d42369637499223c6c9f"
+      "sha256": "8452ea77dc8cc3144c7b5af41a873238a1f2b7498f98a48c1530c5511f48c5d9"
     },
     {
       "path": "examples/claude-code-demo/demo.gif",
@@ -1888,194 +1896,6 @@
       "sha256": "388d3b60e1e8efe6542b530a4c8cdd3cdcd7ab925a392074d885a61e8d47ca90"
     },
     {
-      "path": "openadapt_flow/contracts/schemas/approval-record-v1.json",
-      "sha256": "db5d96377a7ec89ccd2f6f69370f3ee70fce74e51eacdd6446188145daa6aa42"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/approver-identity-v1.json",
-      "sha256": "25a810adf15e1dbe55c5f2475f30f93cb5e0ca47b4e7c09586819cc7fd777bff"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/approver-policy-v1.json",
-      "sha256": "8aa18e5ef08a5b214d971a803e4066e1e8c28a241cd4312c35bcbfabd94c4d5e"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/artifact-ref-v1.json",
-      "sha256": "4cfe55484fe5392442175ad87df2adc04c23e5417dd625a112d23a4b7c51876f"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/authentication-capture-policy-v1.json",
-      "sha256": "06d03db467f4d973818e18b8561bfa2069fe97d137ffbf385f69185718e066a7"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/authentication-receipt-v1.json",
-      "sha256": "6d80b66956872c97f2964d2bd93186df3d684c540c7b01ec383df8880824f792"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/authentication-task-v1.json",
-      "sha256": "7b4c254e7b7c0d4de1f50b86bb0f8bf95d951a54de6c5b8cfe1d0d28e27121ce"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/authoring-bind-v1.json",
-      "sha256": "ef19d6c5f4f1578f12083c4b2c13399dd2d0ce697c5c457bb015aa51ccd57396"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/authoring-command-v1.json",
-      "sha256": "eb2211669d8f5b0131208fcfe69fa21398f4ed63526fe5162d33ec594bf47389"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/authoring-observe-v1.json",
-      "sha256": "88940a0db322e4e7c9feff804f8b81aef3d0576e25b0a13a16410e214cf0c29e"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/autonomy-eligibility-v1.json",
-      "sha256": "3650d381134fcb21d07e78379ce98413be8f7010ea39cb25f2cbc27a0ab9a9d2"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/business-decision-answer-receipt-v1.json",
-      "sha256": "c44847d284549896ee90235f98faa642d6c924c51f92a14376810c2c131d2501"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/business-decision-answer-v1.json",
-      "sha256": "e09806dd9b2e2773dc83117fbd2dfca0cbd2cce6430173423fb70330253aedc0"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/business-decision-delivery-policy-v1.json",
-      "sha256": "9674bcb0de1ada12fc99a78eb1f3212aaf262789b7d606ff7e992a4047a31af4"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/business-decision-presentation-v1.json",
-      "sha256": "7100b63cf6790c808b58226e55d27d538894553e175174f8704f8f34bfcc6794"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/business-decision-task-v1.json",
-      "sha256": "a9ece2121f78eb0d2068d83c2ca12d5cac67d2b5017a6c69a763abd521955f89"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/clinic-inbox-v1.json",
-      "sha256": "a16dc052c4a28831d7fd3e8fd3eab46884eba7d509a67898dc0e54c1659781d8"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/clinic-mcp-tools-v1.json",
-      "sha256": "75a3a4787dc9d20bc63a1f21b9de7850c7d79805ee8713c177c64e9823bcaee3"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/clinic-outbox-v1.json",
-      "sha256": "06fc3d469463b6b67b60a26466c1ab855bf0abb5cdce0bc42dfb135a1a7c446d"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/clinic-tool-result-v1.json",
-      "sha256": "22b221c07384ce5e6d30c3d95f68c1738556182be708b4935e41b231689962bc"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/code-capability-admission-v1.json",
-      "sha256": "13077d9107e0b53198307fbcbc2d62b4071a1c1d9f83ad04f619925561197647"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/code-capability-manifest-v1.json",
-      "sha256": "1f55e04614d2d6a2e7875e9b6d0e2c138561af91ac51b4503a8cb577d606302a"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/control-overlay-frame-v1.json",
-      "sha256": "5cb10a6966e3e2e2d41e38619ed037ba01acf0c7d05ba8c516fb41e699c031d8"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/control-overlay-frame-v2.json",
-      "sha256": "f1fc8b694600c28d331dfb0e8a21ea7ece62aa46f9c5130f8289f237ae9f73b6"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/control-overlay-timeline-v1.json",
-      "sha256": "31058a9adaf9827056b11b54ab7991e0594d2bc272a3bd85fc553ff8b9b0828d"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/control-overlay-timeline-v2.json",
-      "sha256": "655f8060b7904d4bc02fced631af1f733f77dd30e7c186eda15b575e346f9748"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/execute-v1-openapi.json",
-      "sha256": "a89f98f766eb56234b7ebb6738d8fef81ace9ea17c2b2bf7f3c69b75a3aba621"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/execution-requirements-v1.json",
-      "sha256": "2a94af7c97d444198dc4cadc4fad7070ad84ded2ce1fe6298c80f18994ab03a6"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/human-decision-receipt-v1.json",
-      "sha256": "532c61856237b4ec703e7abcdaabd65bc9e32023f6496c015835505fe8e7f010"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/human-decision-task-v1.json",
-      "sha256": "b266bc4a77663ac92e24897b19806f360fe026c465f33579b4a27540001d0607"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/human-decision-task-v2.json",
-      "sha256": "85f9093287b6bad853a50e4498690d51ef2f97cc538e4d6fa964b8ac3c5e9e1d"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/plain-outcome-v1.json",
-      "sha256": "dfa9e23dd3cb62bc2390a06b9cedbee1d3409c3ab30045ecd8df0bba89971d17"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/plain-progress-v1.json",
-      "sha256": "7e0ad81fdefa9702abfd6d0a7a7adf61ad4095f5336c98a118b9bc05661fbe54"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/process-evidence-receipt-v1.json",
-      "sha256": "21e1b96c1dd858f4966a38f7988ec67755ee4ccc907530795e6b140cbd121a71"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/production-admission-registry-state-v1.json",
-      "sha256": "5670555e89472f5f99506ea8c378d3deb9b31e35d850165276f68402d1ccdbfb"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/production-lifecycle-admission-binding-v2.json",
-      "sha256": "43ef99eb6201ceff0d62afae5ad161bc41fdac92b32c1cadb882759969122fe1"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/production-lifecycle-target-v2.json",
-      "sha256": "ddf85b92d90c653a42592190521773ce1bdb7d98a2a6276dcd12dbbd85111429"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/qualification-release-reference-v2.json",
-      "sha256": "88be56dc0adc04cf2531e08c4dcf103e7c9d1de83920582844cba6afb3eea445"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/reward-certificate-v1.json",
-      "sha256": "ee4dedb8c844451e5fa2a9593aaf7662416d116101a202243603e4d507cd4b55"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/reward-contract-v1.json",
-      "sha256": "10ae474d35ed33e37e57a9fec09643231383e261604dff688907c23ee0aeeb86"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/reward-evidence-receipt-v1.json",
-      "sha256": "b29aa57a05dd3baa82d7ed524f7684b8e636508175341afa78178cd7f974df42"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/runner-capability-manifest-v1.json",
-      "sha256": "9b0f433a813b72a8bbe7fe09216d7a3f3c1dc3da27597a3e60607291796a857a"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/runner-capability-match-v1.vector.json",
-      "sha256": "ff5177ffa3304428c4ed9952f22723a927e8ef9e1f7373eea978530713691751"
-    },
-    {
-      "path": "openadapt_flow/contracts/schemas/runner-capability-negative-v1.vector.json",
-      "sha256": "2623642ad4c78da6d4b39e44e9c7acdd845729cce9472aca47e61d849e38d7cd"
-    },
-    {
-      "path": "openadapt_flow/contracts/vocabulary/outcome-vectors.json",
-      "sha256": "5432106f37968432088dc502228f978369cd2f93f14c8e56f1207c32039211e9"
-    },
-    {
-      "path": "openadapt_flow/contracts/vocabulary/outcomes.json",
-      "sha256": "51efd49471deda16f73d00b153b3e3cda4c13cd042ea57e33b0feaf6cd3e3bac"
-    },
-    {
-      "path": "openadapt_flow/contracts/vocabulary/vocabulary.json",
-      "sha256": "54e6fdf3e331f8abf41002c886d6fd50a29b02c66069e7b31aaff204a27457a8"
-    },
-    {
       "path": "openadapt_flow/eligibility/payer_routes.yaml",
       "sha256": "52c620badc980013fbf95bd910d2ebca25c9f0fbbaf1dfe86ea6771446343041"
     },
@@ -2101,7 +1921,7 @@
     },
     {
       "path": "openadapt_flow/mockmed/static/styles.css",
-      "sha256": "58b4323a229836ade0c27b9516b2ecafb9755a8e4f67e119ed46e4cbfabd3df0"
+      "sha256": "d84b17e18411f74414d839a0b2ef9f062c5fc470d093dc7925c98a379021d5a5"
     },
     {
       "path": "openadapt_flow/mockmed/static/widgets.html",
