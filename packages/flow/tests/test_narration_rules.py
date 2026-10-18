@@ -647,3 +647,15 @@ def test_visualize_shows_a_narrated_branch_on_its_edge():
     (branch,) = [n for n in spec.nodes if n.kind.value == "branch"]
     assert branch.guard_reason == rule
     assert [e.guard_reason for e in spec.edges if e.guard_reason] == [rule]
+
+
+def test_a_refused_capture_narration_is_left_out_not_fatal(tmp_path):
+    from types import SimpleNamespace
+
+    from openadapt_flow.adapters.capture import _write_capture_narration
+
+    def refuse():
+        raise ValueError("narration.json does not say it was scrubbed")
+
+    _write_capture_narration(SimpleNamespace(narration=refuse), tmp_path, 0.0, [])
+    assert load_narration(tmp_path) is None

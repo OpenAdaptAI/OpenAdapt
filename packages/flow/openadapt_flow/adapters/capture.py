@@ -1314,7 +1314,12 @@ def _write_capture_narration(
     reader = getattr(session, "narration", None)
     if reader is None:
         return
-    utterances = reader()
+    try:
+        utterances = reader()
+    except ValueError:
+        # Capture refuses a narration file that does not say it was scrubbed.
+        # The recording converts without narration rather than carrying it.
+        return
     if not utterances:
         return
     from openadapt_flow.narration import Narration, align, write_narration
