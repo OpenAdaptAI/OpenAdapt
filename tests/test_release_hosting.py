@@ -124,7 +124,7 @@ def test_release_hosting_launcher_rules_do_not_cover_a_package_tag() -> None:
 
 @pytest.mark.parametrize(
     "tag",
-    ["openadapt-v2.2.0", "openadapt-desktop-v1.0.0", "flow-v2.2.0", "openadapt-flow-2.2.0"],
+    ["openadapt-v2.2.0", "openadapt-viewer-v1.0.0", "flow-v2.2.0", "openadapt-flow-2.2.0"],
 )
 def test_release_hosting_refuses_a_tag_outside_the_package_list(tag: str) -> None:
     with pytest.raises(ValueError, match="release tag must be"):
