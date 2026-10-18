@@ -17,6 +17,13 @@
 # golden free-path task (VERIFIED read-back against an independent oracle),
 # the record/compile/replay E2E, and the read-back and zero-model-call unit
 # files by name, failing if any of them is skipped.
+#
+# openadapt-capture (packages/capture) keeps its own uv.lock, so its jobs run
+# `uv sync --locked` against it: Linux on Python 3.10 (with the native AT-SPI
+# smoke on ubuntu-22.04), 3.11 and 3.12; macOS and Windows unit suites, plus
+# the live recorder tests on Windows; lint; and the release contract. Flow's
+# `capture` extra installs the in-tree capture, so a capture change also
+# re-runs Flow.
 name: Packages
 
 on:
@@ -44,6 +51,7 @@ jobs:
       flow: ${{ steps.classify.outputs.flow }}
       types: ${{ steps.classify.outputs.types }}
       agent: ${{ steps.classify.outputs.agent }}
+      capture: ${{ steps.classify.outputs.capture }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -57,7 +65,7 @@ jobs:
         run: |
           set -euo pipefail
           all() {
-            for pkg in flow types agent; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
+            for pkg in flow types agent capture; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
             exit 0
           }
           case "$EVENT_NAME" in
@@ -77,14 +85,17 @@ jobs:
           # fail on SIGPIPE and silently report "not changed".
           hit() { if grep -Eq "$1" <<<"$changed"; then echo true; else echo false; fi; }
           wf='^\.github/workflows/packages\.yml$'
-          flow="$(hit "^packages/flow/|$wf")"
+          # Flow's `capture` extra is tested against the in-tree capture.
+          flow="$(hit "^packages/(flow|capture)/|$wf")"
           # Both shims are tested against the in-tree core, so a core change re-runs them.
           types="$(hit "^packages/(types|flow)/|$wf")"
           agent="$(hit "^packages/(agent|flow)/|$wf")"
+          capture="$(hit "^packages/capture/|$wf")"
           {
             echo "flow=$flow"
             echo "types=$types"
             echo "agent=$agent"
+            echo "capture=$capture"
           } | tee -a "$GITHUB_OUTPUT"
 
   types:
@@ -214,6 +225,7 @@ jobs:
             openadapt_flow/runtime/effects/effect.py \
             openadapt_flow/runtime/effects/adapter.py \
             openadapt_flow/runtime/effects/auth.py \
+            openadapt_flow/runtime/effects/smart_auth.py \
             openadapt_flow/runtime/effects/compensation.py \
             openadapt_flow/runtime/effects/document_arrival.py \
             openadapt_flow/runtime/effects/document_hash.py \
@@ -255,9 +267,15 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install
-        run: pip install -e '.[dev,capture,agent]'
-      - name: Verify openadapt-capture imports headless
-        run: python -c "import openadapt_capture"
+        run: pip install -e ../capture -e '.[dev,capture,agent]'
+      - name: Verify the in-tree openadapt-capture imports headless
+        run: |
+          python - <<'PY'
+          import pathlib, openadapt_capture
+          here = pathlib.Path(openadapt_capture.__file__).resolve().as_posix()
+          assert "packages/capture/openadapt_capture" in here, here
+          print("openadapt_capture from", here)
+          PY
       - name: Resolve Playwright version
         id: pw
         run: |
@@ -363,9 +381,177 @@ jobs:
           sys.exit(1 if bad else 0)
           PY
 
+  capture-linux:
+    name: capture (linux, py${{ matrix.python-version }})
+    needs: scope
+    if: needs.scope.outputs.capture == 'true'
+    # Exercise the oldest Python on pre-2.80 GLib without adding a matrix leg.
+    runs-on: ${{ matrix.python-version == '3.10' && 'ubuntu-22.04' || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    defaults:
+      run:
+        working-directory: packages/capture
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+      - name: Install system dependencies
+        timeout-minutes: 10
+        run: |
+          set -uo pipefail
+          # The runner's azure.archive.ubuntu.com mirror fails intermittently
+          # and once hung this step for over an hour. Prefer the canonical
+          # archive, retry, and keep the step bounded.
+          sudo sed -i \
+            's|http://azure.archive.ubuntu.com/ubuntu|http://archive.ubuntu.com/ubuntu|g' \
+            /etc/apt/apt-mirrors.txt 2>/dev/null || true
+          update_ok=""
+          for attempt in 1 2 3; do
+            if sudo apt-get update; then
+              update_ok=1
+              break
+            fi
+            echo "::warning::apt-get update failed (attempt ${attempt}/3); retrying"
+            sleep $((attempt * 10))
+          done
+          if [ -z "$update_ok" ]; then
+            echo "::error::apt-get update failed three times; the Ubuntu mirror is unreachable"
+            exit 1
+          fi
+          set -e
+          sudo apt-get install -y ffmpeg libportaudio2
+      - name: Install native AT-SPI build and smoke dependencies
+        if: matrix.python-version == '3.10'
+        run: |
+          sudo apt-get install -y libgirepository1.0-dev libcairo2-dev pkg-config \
+            gir1.2-atspi-2.0 gir1.2-gtk-3.0 at-spi2-core dbus-x11 xvfb
+          pkg-config --modversion glib-2.0 gobject-introspection-1.0
+      - name: Install
+        run: uv sync --locked --extra dev ${{ matrix.python-version == '3.10' && '--extra linux' || '' }}
+      - name: Verify native AT-SPI dependency compatibility
+        if: matrix.python-version == '3.10'
+        env:
+          OPENADAPT_TEST_LINUX_ATSPI: "1"
+          NO_AT_BRIDGE: "0"
+        run: dbus-run-session -- xvfb-run -a uv run --no-sync pytest tests/test_linux_atspi_integration.py -v --timeout=60
+      - name: Test
+        timeout-minutes: 15
+        run: uv run --no-sync pytest tests/ -v --timeout=120
+
+  # macOS: the unit suite, including the subprocess control contract. The
+  # 'slow' live-recording tests stay skipped: synthetic input injection needs
+  # Accessibility permission a hosted runner cannot grant.
+  capture-macos:
+    name: capture (macos, py3.12)
+    needs: scope
+    if: needs.scope.outputs.capture == 'true'
+    runs-on: macos-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: packages/capture
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install external video tools
+        run: brew install ffmpeg
+      - name: Install
+        run: uv sync --locked --extra dev
+      - name: Unit tests
+        timeout-minutes: 15
+        run: uv run --no-sync pytest tests/ -v -m "not slow" --timeout=120
+
+  # Windows is the primary live-recording platform: the unit suite, then the
+  # live Recorder integration tests (tests/test_performance.py, marked 'slow')
+  # that run the real multiprocessing pipeline. Hosted runners are
+  # non-interactive, so injected input never reaches native hooks; the
+  # listener-dependent tests skip via OPENADAPT_CI_NO_INPUT_INJECTION.
+  capture-windows:
+    name: capture (windows, py3.12)
+    needs: scope
+    if: needs.scope.outputs.capture == 'true'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: packages/capture
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install external video tools
+        run: |
+          choco install ffmpeg -y --no-progress
+          Get-Command ffmpeg -ErrorAction Stop
+      - name: Install
+        run: uv sync --locked --extra dev
+      - name: Unit tests
+        timeout-minutes: 15
+        run: uv run --no-sync pytest tests/ -v -m "not slow" --timeout=120
+      - name: Live recorder integration tests
+        timeout-minutes: 20
+        env:
+          OPENADAPT_CI_NO_INPUT_INJECTION: "1"
+        run: uv run --no-sync pytest tests/test_performance.py -v -m slow --timeout=300
+
+  capture-contract:
+    name: capture lint and release contract
+    needs: scope
+    if: needs.scope.outputs.capture == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: packages/capture
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install
+        run: uv sync --locked --extra dev
+      - name: Ruff
+        run: uv run --no-sync ruff check openadapt_capture/
+      - name: Verify the maintained changelog
+        # --skip-tags: the monorepo's v* tags are the launcher's. Capture's
+        # release tags through v1.2.2 live in OpenAdaptAI/openadapt-capture.
+        run: uv run --no-sync python scripts/check_changelog.py --skip-tags
+      - name: Build wheel and source distribution
+        run: uv build
+      - name: Verify release archive boundaries
+        run: |
+          uv run --no-sync python scripts/verify_distribution.py dist/*
+          uv run --no-sync python scripts/check_source_boundary.py --require-dist
+
   packages-gate:
     name: packages-gate
-    needs: [scope, types, agent, flow-lint, flow-unit, flow-critical]
+    needs:
+      - scope
+      - types
+      - agent
+      - flow-lint
+      - flow-unit
+      - flow-critical
+      - capture-linux
+      - capture-macos
+      - capture-windows
+      - capture-contract
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5

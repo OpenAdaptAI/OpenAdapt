@@ -15,7 +15,8 @@ in), waits for ``ready_text``, then replays the effect's learned reopen (a
 search by a run input or by the reference number the save showed) and reads
 the saved value with OCR. Every step runs behind the read-only guard.
 
-It declares :attr:`VerificationTier.INDEPENDENT_SESSION` (tier 2, ladder R2).
+It declares :attr:`VerificationTier.INDEPENDENT_SESSION` (tier 2, check level
+``separate_session``), so a run it confirms can be VERIFIED.
 It is not a system-of-record read: both sessions go through the same
 application. Any doubt (no session, a launch the running instance absorbed,
 the same account as the run, ``ready_text`` never shown) is INDETERMINATE.

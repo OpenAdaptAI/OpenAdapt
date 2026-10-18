@@ -53,7 +53,6 @@ from typing import Any, Optional
 from openadapt_flow.assurance import SCREEN_READBACK, UNCHECKED
 from openadapt_flow.runtime.effects.adapter import ConnectionProbe, VerifierAdapterBase
 from openadapt_flow.runtime.effects.effect import (
-    MIN_RENAV_ACTIONS,
     Effect,
     EffectKind,
     EffectState,
@@ -120,23 +119,73 @@ COMMIT_WORDS: frozenset[str] = frozenset(
     }
 )
 
-#: Key chords that save or delete. The read-back's navigation never presses one.
+#: Modifier spellings, folded to one name each before a chord is judged.
+_MODIFIERS: dict[str, str] = {
+    "ctrl": "ctrl",
+    "control": "ctrl",
+    "ctl": "ctrl",
+    "cmd": "cmd",
+    "command": "cmd",
+    "meta": "cmd",
+    "super": "cmd",
+    "win": "cmd",
+    "windows": "cmd",
+    "alt": "alt",
+    "option": "alt",
+    "opt": "alt",
+    "altgr": "alt",
+    "shift": "shift",
+}
+
+#: Keys that write with any modifier held (Ctrl+S, Alt+S, Ctrl+Enter,
+#: Shift+Delete, ...). Enter alone is allowed: a search needs it.
+_COMMIT_KEYS_WITH_MODIFIER: frozenset[str] = frozenset(
+    {"s", "enter", "return", "kp_enter", "delete", "del", "backspace"}
+)
+
+#: Keys that delete with no modifier at all.
+_COMMIT_KEYS_ALONE: frozenset[str] = frozenset({"delete", "del", "backspace"})
+
+#: Examples of chords the guard refuses (see :func:`is_commit_chord`).
 COMMIT_CHORDS: frozenset[str] = frozenset(
     {
         "ctrl+s",
         "cmd+s",
-        "meta+s",
-        "command+s",
+        "alt+s",
         "ctrl+enter",
         "cmd+enter",
-        "meta+enter",
         "ctrl+return",
-        "cmd+return",
+        "shift+delete",
         "delete",
         "del",
         "backspace",
     }
 )
+
+
+def _chord_parts(key: str) -> tuple[frozenset[str], frozenset[str]]:
+    """``(modifiers, keys)`` of a chord, modifier spellings folded
+    (control -> ctrl, command/meta -> cmd, option -> alt), in any order."""
+
+    parts = [p for p in re.split(r"[+\s-]+", key.strip().lower()) if p]
+    modifiers = frozenset(_MODIFIERS[p] for p in parts if p in _MODIFIERS)
+    keys = frozenset(p for p in parts if p not in _MODIFIERS)
+    return modifiers, keys
+
+
+def is_commit_chord(key: str) -> bool:
+    """Whether pressing ``key`` could save, submit or delete.
+
+    Refused: any chord with a modifier held (in any spelling or order) whose
+    key is ``s``, ``enter``, ``return``, ``delete``, ``del`` or
+    ``backspace``, and ``delete``, ``del`` or ``backspace`` alone.
+    """
+
+    modifiers, keys = _chord_parts(key)
+    if modifiers:
+        return bool(keys & _COMMIT_KEYS_WITH_MODIFIER)
+    return bool(keys & _COMMIT_KEYS_ALONE)
+
 
 _WORD = re.compile(r"[a-z]+")
 
@@ -175,20 +224,26 @@ def _is_persisted_reacquisition(spec: Any) -> bool:
         return False
     _, _, width, height = spec.region
     reset = getattr(spec, "reset", None)
-    if getattr(spec, "demonstrated", False) and reset is None:
-        # A demonstrated check must show a state-busting step; the compiler
-        # refuses one without it, and a hand-edited contract earns nothing.
+    if reset is None or not 0 <= reset.at < len(spec.renavigation):
+        # Reopen credit needs a state-busting step (a reload, a new search, a
+        # reopened window) inside the navigation. Without one the read could
+        # come from a form buffer or a page the save left behind, however
+        # many steps the navigation has.
         return False
-    # A reset (a reload, a new search, a reopened window) re-fetches the
-    # record by itself, so one action is enough when it is the reset.
-    enough = len(spec.renavigation) >= MIN_RENAV_ACTIONS or (
-        reset is not None and 0 <= reset.at < len(spec.renavigation)
-    )
     return (
         width > 0
         and height > 0
-        and enough
         and all(_valid_renavigation_step(nav) for nav in spec.renavigation)
+    )
+
+
+def _searches_by_run_input(spec: Any) -> bool:
+    """Whether the reopen finds the record by typing a run input (a search
+    for this run's patient) rather than an identifier only this save has."""
+
+    navs = list(getattr(spec, "renavigation", None) or [])
+    return any(nav.types_run_input for nav in navs) and not any(
+        nav.reference for nav in navs
     )
 
 
@@ -366,8 +421,7 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
 
         action = (nav.action or "").strip().lower()
         if action == "key" and nav.key:
-            chord = nav.key.lower().replace(" ", "")
-            if chord in COMMIT_CHORDS:
+            if is_commit_chord(nav.key):
                 return f"re-navigation step {index} presses {nav.key!r}, which writes"
         if action == "click" and nav.point is not None:
             labels = list(guard.commit_labels) if guard is not None else []
@@ -378,7 +432,14 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
                     f"re-navigation step {index}: could not read the control "
                     f"under the click ({type(exc).__name__})"
                 )
-            hit = _commit_label(text, labels) if text else None
+            if not text:
+                # No readable label: an icon-only button may be Save or
+                # Delete. Refuse rather than click blind.
+                return (
+                    f"re-navigation step {index}: no readable label under the "
+                    "click, so the guard can't tell it doesn't write"
+                )
+            hit = _commit_label(text, labels)
             if hit is not None:
                 return (
                     f"re-navigation step {index} would click a control labelled "
@@ -461,6 +522,41 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
                 "after the save"
             )
         return found[0], ""
+
+    def _untied_to_this_save(
+        self, spec: Any, reference: Optional[str]
+    ) -> Optional[str]:
+        """Why a search by a run input can't tell this save's record from an
+        older one, or None when it can.
+
+        A search for this run's patient finds the patient's latest matching
+        record whether or not this save landed, so an older note with the
+        same text would confirm a save that failed. There is no baseline to
+        compare with (reading the record before the save would leave the
+        form), so the reopened record must show the reference number this
+        save showed, and no other one.
+        """
+
+        if spec.reference is None or reference is None:
+            return (
+                "the check finds the record by a run input and nothing ties "
+                "the record it found to this save (no reference number), so "
+                "an older record with the same value could pass"
+            )
+        try:
+            lines = self._vision.ocr(self._backend.screenshot(), region=None)
+        except Exception as exc:  # noqa: BLE001 - unreadable => untied
+            return f"could not read the reopened record ({type(exc).__name__})"
+        shown = _distinct_matches(
+            spec.reference.pattern,
+            [line.text for line in lines or [] if line.confidence >= READABLE_CONF],
+        )
+        if shown != [reference]:
+            return (
+                "the reopened record does not show this save's reference "
+                "number alone, so it may be an older record"
+            )
+        return None
 
     # -- direct API ----------------------------------------------------------
 
@@ -664,6 +760,17 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
             verdict = self._read_fields(spec.fields, params)
         else:
             verdict = self.read_back(expected_text, region=region)
+        if verdict.verdict is Verdict.CONFIRMED and _searches_by_run_input(spec):
+            untied = self._untied_to_this_save(spec, reference)
+            if untied is not None:
+                return EffectVerdict(
+                    verdict=Verdict.INDETERMINATE,
+                    kind=expected.kind,
+                    substrate=self.substrate,
+                    reason=f"{untied}; cannot certify — HALT",
+                    expected_value=expected_text,
+                    assurance=UNCHECKED,
+                )
         posture = (
             "DIFFERENT-PATH (re-opened by an independent path; same-application, "
             "not independent system of record)"

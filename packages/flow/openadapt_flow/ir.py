@@ -2042,12 +2042,20 @@ class Workflow(BaseModel):
     # None for every pre-qualification bundle and omitted from its serialized
     # bytes by ``_serialize_compatible`` below.
     qualification: Optional["QualificationProject"] = None
-    #: The rung of the read-back ladder every save must reach for the run to
-    #: be VERIFIED (:mod:`openadapt_flow.readback_ladder`): ``R1`` the screen
-    #: said it saved, ``R2`` reopened and checked on screen, ``R3`` checked in
-    #: the system of record. None means the default, ``R2``; omitted from the
-    #: serialized bytes when unset.
-    minimum_readback: Optional[Literal["R1", "R2", "R3"]] = None
+    #: Raises the check level every save must reach for the run to be
+    #: VERIFIED (:mod:`openadapt_flow.readback_ladder`): ``separate_session``
+    #: (the default floor) or ``system_of_record``. It can't lower the floor.
+    #: None means the profile's floor; omitted from the serialized bytes when
+    #: unset.
+    minimum_readback: Optional[Literal["separate_session", "system_of_record"]] = None
+    # Where the program came from, when that limits how it may run.
+    # ``"agent_run"``: compiled from a computer-use agent's run
+    # (:mod:`openadapt_flow.jit`). Such a bundle is a draft and runs only with
+    # a valid JIT admission (``jit.lifecycle.ensure_runnable``). It is part
+    # of the content digest, so removing it makes a different program that no
+    # review, canary or admission pins. None for every other bundle, and
+    # omitted from its serialized bytes.
+    origin: Optional[Literal["agent_run"]] = None
     # -- schema v2 integrity + provenance manifest --------------------------
     # Sealed on ``save`` (per-asset hashes, a whole-bundle content digest, the
     # compiler version, and -- for a certified bundle -- the certifying policy +
@@ -2081,6 +2089,8 @@ class Workflow(BaseModel):
             data.pop("qualification", None)
         if self.minimum_readback is None:
             data.pop("minimum_readback", None)
+        if self.origin is None:
+            data.pop("origin", None)
         return data
 
     # -- bundle I/O ---------------------------------------------------------
@@ -2607,6 +2617,29 @@ class PixelIdentityEvidence(BaseModel):
         return self
 
 
+class KnownIdEvidence(BaseModel):
+    """Why a look-alike identifier abstain was lifted (runtime.known_ids).
+
+    Holds no identifier values: only the digest and size of the complete
+    known-ID list, its named source, and how many reads agreed.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    list_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    list_source: str
+    list_size: int = Field(ge=1)
+    reads: int = Field(ge=1)
+    resolved_ids: int = Field(ge=1)
+    #: Separate screenshots the reads came from (the second read uses a fresh
+    #: capture, not the first frame again).
+    frames: int = Field(default=1, ge=1)
+    #: Admission record: when the operator confirmed the export, and the
+    #: SHA-256 of the export file they confirmed.
+    confirmed_at: Optional[str] = None
+    export_sha256: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
 class IdentityCheck(BaseModel):
     """Outcome of the pre-click target-identity check (runtime.identity).
 
@@ -2663,6 +2696,32 @@ class IdentityCheck(BaseModel):
         description=(
             "Hashes and local inventory references for the exact crops behind "
             "a pixel verdict. Crop pixels never enter the report."
+        ),
+    )
+    abstain_reason: Optional[
+        Literal["glyph_confusable_identifier", "identity_evidence_short"]
+    ] = Field(
+        default=None,
+        description=(
+            "Why an OCR-tier check abstained: the band rests on a look-alike "
+            "identifier, or too little identifying evidence was read."
+        ),
+    )
+    known_id_evidence: Optional[KnownIdEvidence] = Field(
+        default=None,
+        description=(
+            "Set when a look-alike abstain was lifted against a complete "
+            "known-ID list (runtime.known_ids)."
+        ),
+    )
+    known_id_halt: Optional[
+        Literal["known_ids_unconfirmed", "known_ids_changed", "known_ids_stale"]
+    ] = Field(
+        default=None,
+        description=(
+            "Set when the known-ID list was needed but may not be used: no "
+            "admission confirmation, the export changed since it was "
+            "confirmed, or it is older than the configured age. The step halts."
         ),
     )
 
@@ -3754,27 +3813,38 @@ class LoopIterationBinding(BaseModel):
     params: dict[str, Union[str, bool, int, float]] = Field(default_factory=dict)
 
 
+_CheckLevelName = Literal[
+    "unchecked",
+    "same_screen",
+    "reopened",
+    "separate_session",
+    "system_of_record",
+    "counterparty_confirmed",
+]
+
+
 class ReadbackSave(BaseModel):
-    """How far one save was read back (:mod:`openadapt_flow.readback_ladder`)."""
+    """How one save was checked (:mod:`openadapt_flow.readback_ladder`)."""
 
     model_config = ConfigDict(extra="forbid")
 
     step_id: str
-    rung: Literal["R0", "R1", "R2", "R3"]
+    #: The weakest check level among the save's effect checks.
+    checked_how: _CheckLevelName
     #: The weakest Flow tier among the save's confirmed checks; None when any
     #: of its checks did not confirm.
     flow_tier: Optional[int] = Field(default=None, ge=1, le=4)
 
 
 class ReadbackLadder(BaseModel):
-    """The run's place on the read-back ladder, written to ``report.json``."""
+    """How the run's saves were checked, written to ``report.json``."""
 
     model_config = ConfigDict(extra="forbid")
 
-    minimum: Literal["R1", "R2", "R3"]
-    #: The weakest rung among the run's saves.
-    reached: Literal["R0", "R1", "R2", "R3"]
-    checked_how: Literal["not_checked", "screen_said_saved", "reopened", "records"]
+    #: The weakest check level that counts toward VERIFIED for this run.
+    minimum: _CheckLevelName
+    #: The weakest check level among the run's saves.
+    checked_how: _CheckLevelName
     label: str
     #: True when every save was confirmed but one is below :attr:`minimum`.
     below_minimum: bool = False
@@ -3830,9 +3900,9 @@ class RunReport(BaseModel):
     readback: Optional[ReadbackLadder] = Field(
         default=None,
         description=(
-            "How far each save was read back (R0 not checked, R1 the screen "
-            "said it saved, R2 reopened, R3 the system of record) against the "
-            "workflow's minimum_readback. None for a run that made no save."
+            "How each save was checked (unchecked, same_screen, reopened, "
+            "separate_session, system_of_record) against the weakest level "
+            "that counts toward VERIFIED. None for a run that made no save."
         ),
     )
     # -- Section 3: explicit transaction / reconciliation semantics ------------

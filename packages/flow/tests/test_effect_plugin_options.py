@@ -253,13 +253,14 @@ def test_identity_of_configs_without_plugin_fields_is_unchanged():
     cfg = EffectsConfig(kind="rest", base_url="http://127.0.0.1:9")
     verifier = build_effect_verifier(cfg)
     legacy_config = cfg.model_dump(mode="json")
-    # None of the plugin fields, ui_readback or fresh_session existed when
-    # identities were first issued.
+    # None of the plugin fields, ui_readback, smart_backend or fresh_session
+    # existed when identities were first issued.
     for name in (
         "options",
         "option_params",
         "secret_env",
         "ui_readback",
+        "smart_backend",
         "fresh_session",
     ):
         legacy_config.pop(name, None)

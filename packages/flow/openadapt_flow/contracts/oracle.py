@@ -12,7 +12,8 @@ Seal ladder (higher is stronger):
 * 3 counterparty artifact (payer status, legal export).
 
 This numbering is the Seal ladder. It is not
-``EffectVerificationTier``, which counts the other way.
+``EffectVerificationTier``, which counts the other way. Both map onto the
+check-level ladder in ``openadapt_flow.check_level`` (``OracleTier.check_level``).
 """
 
 from __future__ import annotations
@@ -29,6 +30,8 @@ from pydantic import (
     model_validator,
 )
 
+from openadapt_flow.check_level import CheckLevel, from_oracle_tier
+
 PRODUCTION_SEAL_MINIMUM_TIER = 2
 
 
@@ -39,6 +42,12 @@ class OracleTier(IntEnum):
     INDEPENDENT_SESSION = 1
     SYSTEM_OF_RECORD = 2
     COUNTERPARTY = 3
+
+    @property
+    def check_level(self) -> CheckLevel:
+        """This tier on the check-level ladder. ``VISUAL`` is ``same_screen``."""
+
+        return from_oracle_tier(int(self))
 
 
 class OracleChannel(str, Enum):

@@ -19,7 +19,7 @@ report (below) says so for every workflow.
 
 | Command | Mode |
 | --- | --- |
-| `openadapt-flow run` | `--approval-mode`, else `runtime.approval_mode` in the deployment file. Under the Standard and Regulated profiles a missing value means `each_item`. Demo and runs without a profile have no gate unless a mode is named, so Desktop's Run it passes `--approval-mode each_item` itself. |
+| `openadapt-flow run` | `--approval-mode`, else `runtime.approval_mode` in the deployment file. A missing or unknown value means `each_item` under every profile, including Demo and runs with no profile. Only an explicit `not_gated` turns the gate off, and the report records it. |
 | `openadapt-flow qualify run-case` | The same flags. It always runs under Standard, so the default is `each_item`: the practice item waits for a person. A drill never asks (see below). |
 | `openadapt-flow resume` | The mode the run was admitted with. Asking for another mode is refused. |
 | Cloud-dispatched runs (`runner/commands.py`, the connector) | `not_gated`, passed explicitly, so the report records it. |
@@ -49,10 +49,12 @@ openadapt-flow item-approval approve RUN_DIR \
 openadapt-flow item-approval decline RUN_DIR ... --reason wrong_values
 ```
 
-- An answer names the request digest the person saw. Only
-  `--decided-by human` from the `desktop_run_it` route is accepted. A
-  decline carries one closed reason: `wrong_values`, `wrong_record` or
-  `screen_problem`.
+- An answer names the request digest the person saw. A person answers with
+  `--decided-by human` from the `desktop_run_it` route, or from their phone
+  on the runner's decision portal (`decision_portal`; see
+  [`APPROVAL_AND_VERIFICATION.md`](APPROVAL_AND_VERIFICATION.md)), which
+  echoes the signed task for that exact request. A decline carries
+  one closed reason: `wrong_values`, `wrong_record` or `screen_problem`.
 - Answers are created once and never replaced. The run checks every answer
   itself, so an answer file written around the command is held to the same
   rules. An approval is used for exactly one save; a loop that reaches the
@@ -256,10 +258,13 @@ strict expected-failure tests for them.
 
 ## Delegated approvers
 
-By default only a person answers a save. A run can carry an approver policy
-(`--approver-policy`) that lets an agent, rule or system answer some step
-classes, and a signed webhook (`--approver-webhook`) to ask. See
-[`APPROVAL_AND_VERIFICATION.md`](APPROVAL_AND_VERIFICATION.md).
+By default only a person answers a save. A run can carry an approver grant
+a person signed (`--approver-policy SIGNED.json`) that lets named agents or
+systems answer some step classes, and a signed webhook
+(`--approver-webhook`) to ask. An unsigned or tampered grant gives no
+authority, and a delegate never answers a run it started. Desktop and Cloud
+show who approved each save: a person, or the delegate's name and the
+grant's digest. See [`APPROVAL_AND_VERIFICATION.md`](APPROVAL_AND_VERIFICATION.md).
 
 ## Not built yet
 
@@ -268,5 +273,3 @@ classes, and a signed webhook (`--approver-webhook`) to ask. See
 - A Desktop list queue for batch review.
   [`DECISION_TRIAGE.md`](DECISION_TRIAGE.md) describes the engine part that
   orders a list's verified saves for review.
-- Delegated approvers in Desktop and Cloud. Flow records them; neither app
-  shows who or what approved yet.

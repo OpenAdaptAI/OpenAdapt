@@ -18,7 +18,10 @@ Flow of :func:`qualify`::
        effect policies, the six cases, case scope, per-campaign local keys)
     -> for each case x trial: reset, run in the Standard profile, read the
        record back independently, sign the case result
-    -> record results, certify under the policy (optional)
+    -> run the same cases again with structure lookups disabled (the
+       pixels-only pass); a gate when the target surface is pixels only
+    -> record results and the lookups they used, certify under the policy
+       (optional)
     -> optionally run the certified bundle once on new inputs
 
 The keys are per-campaign local test keys (:mod:`openadapt_flow.qualify.keys`).
@@ -37,6 +40,14 @@ from typing import Any, Callable, Mapping, Optional
 
 from openadapt_flow import __version__ as FLOW_VERSION
 from openadapt_flow.ir import RunReport, Workflow
+from openadapt_flow.lookup_capabilities import (
+    DeploymentSurface,
+    PixelsOnlyPass,
+    QualifiedLookup,
+    capabilities_used,
+    resolve_deployment_surface,
+    surface_offers_structure,
+)
 from openadapt_flow.qualify.config import CASE_IDS, QualifyConfigError, VerifyConfig
 from openadapt_flow.qualify.environment import (
     WEB_OBSERVER_CONTRACT_SHA256,
@@ -638,6 +649,8 @@ def _run(
     authorize: Callable[[Any, dict[str, Any]], Any],
     fault_driver: Any,
     marks: dict[str, float],
+    lookup: Optional[Mapping[str, Any]] = None,
+    pixels_only: bool = False,
 ) -> tuple[RunReport, Any]:
     from openadapt_flow.deployment import DeploymentConfig, PolicySection
     from openadapt_flow.execution_profiles import (
@@ -684,6 +697,13 @@ def _run(
         )
         if hooks.replayer_kwargs is not None:
             kwargs.update(hooks.replayer_kwargs(ctx))
+        # The signed lookup settings win over any hook, so a hook can't turn
+        # structure back on during a pass that must not use it.
+        kwargs.update(lookup or {})
+        if pixels_only:
+            # The pixels-only pass: the structural rung never runs, whatever
+            # the hooks asked for.
+            kwargs["use_structural"] = False
         marks["task_start"] = time.time()
         report = Replayer(backend, **kwargs).run(
             workflow.model_copy(deep=True),
@@ -811,6 +831,220 @@ def case_result(
 
 
 # ---------------------------------------------------------------------------
+# lookup capabilities and the pixels-only pass
+# ---------------------------------------------------------------------------
+
+
+def lookup_plan(config: VerifyConfig) -> tuple[DeploymentSurface, bool]:
+    """Return the target surface and whether its lookups may use structure.
+
+    ``app.surface`` in verify.yaml names the deployment surface; an RDP or
+    Citrix target, or ``unknown``, resolves to ``remote_display`` (pixels
+    only).
+    """
+
+    surface = resolve_deployment_surface(config.app.surface, config.app.target)
+    return surface, surface_offers_structure(surface, config.app.target)
+
+
+def pixels_only_trial_failure(
+    report: RunReport,
+    expected: str,
+    oracle: Mapping[str, Any],
+    extra: Mapping[str, Mapping[str, Any]],
+) -> Optional[str]:
+    """Why one pixels-only trial did not behave as required, or None."""
+
+    if report.execution_outcome != expected:
+        reason = f"observed {report.execution_outcome}, expected {expected}"
+        if report.halt is not None:
+            reason += f" ({report.halt.reason})"
+        return reason
+    if report.model_calls != 0:
+        return "called a model"
+    if not oracle.get("passed") or oracle.get("silent_incorrect_success"):
+        return f"read-back {oracle.get('observed')}"
+    bad = [name for name, result in extra.items() if not result.get("passed")]
+    if bad:
+        return f"extra check(s) failed: {bad}"
+    return None
+
+
+def summarize_pixels_only(
+    outcomes: list[tuple[str, int, Optional[str]]],
+    *,
+    role: str,
+) -> PixelsOnlyPass:
+    """Fold ``(case, trial, failure-or-None)`` rows into the pass record."""
+
+    cases: list[str] = []
+    for case_id, _trial, _failure in outcomes:
+        if case_id not in cases:
+            cases.append(case_id)
+    failures = [
+        f"{case_id} trial {trial}: {failure}"[:300]
+        for case_id, trial, failure in outcomes
+        if failure is not None
+    ]
+    return PixelsOnlyPass(
+        role=role,  # type: ignore[arg-type]
+        cases=cases,
+        trials_run=len(outcomes),
+        trials_passed=sum(1 for _c, _t, failure in outcomes if failure is None),
+        failures=failures[:200],
+    )
+
+
+def _pixels_only_pass(
+    *,
+    workflow: Workflow,
+    bundle_dir: Path,
+    config: VerifyConfig,
+    hooks: QualifyHooks,
+    setup: CampaignSetup,
+    out: Path,
+    selected: list[str],
+    n_trials: int,
+    params: Mapping[str, str],
+    save: Any,
+    project_cases: Mapping[str, Any],
+    policy_name: str,
+    campaign_id: str,
+    run_id_prefix: Optional[str],
+    lookup: Mapping[str, Any],
+    log: Callable[[str], None],
+) -> PixelsOnlyPass:
+    """Run every selected case again with structure lookups disabled.
+
+    Informational: these runs are not signed and never fail the campaign.
+    Each trial resets the test system and is judged by the same independent
+    read-back as the signed cases. Evidence goes to ``out/pixels-only``.
+    """
+
+    from openadapt_flow.qualification import QualificationCaseKind
+    from openadapt_flow.run_gate import (
+        build_qualification_case_authorization,
+        evaluate_run_gate,
+    )
+
+    outcomes: list[tuple[str, int, Optional[str]]] = []
+    for case_id, expected, oracle_kind in CASES:
+        if case_id not in selected:
+            continue
+        qcase = project_cases[case_id]
+        for trial in range(1, n_trials + 1):
+            trial_dir = out / "pixels-only" / case_id / f"trial-{trial:02d}"
+            ctx = TrialContext(
+                case_id=case_id,
+                expected=expected,
+                oracle_kind=oracle_kind,
+                trial=trial,
+                trial_dir=trial_dir,
+                run_dir=trial_dir / "run",
+                run_id=(
+                    f"{run_id_prefix or campaign_id}-pixels-only-{case_id}"
+                    f"-trial-{trial:02d}"
+                ),
+                params=dict(params),
+                state={"policy": policy_name, "pixels_only": True},
+            )
+
+            def authorize(
+                _verifier: Any,
+                gate_kwargs: dict[str, Any],
+                _q: Any = qcase,
+                _c: Any = ctx,
+            ) -> Any:
+                gate = evaluate_run_gate(
+                    workflow, qualification_evidence_only=True, **gate_kwargs
+                )
+                if not gate.passed:
+                    raise QualifyError(gate.render())
+                return build_qualification_case_authorization(
+                    workflow,
+                    gate,
+                    case_id=_q.id,
+                    params=dict(params),
+                    worklists=None,
+                    campaign_id=campaign_id,
+                    run_id=_c.run_id,
+                    fault_driver=(
+                        None
+                        if _q.kind is QualificationCaseKind.REPRESENTATIVE
+                        else setup.driver
+                    ),
+                )
+
+            failure: Optional[str]
+            try:
+                trial_dir.mkdir(parents=True)
+                if hooks.reset is not None:
+                    hooks.reset()
+                assert hooks.make_verifier is not None
+                readback = RecordReadback(hooks.make_verifier(params), save, params)
+                readback.snapshot()
+                if hooks.before_trial is not None:
+                    hooks.before_trial(ctx)
+                report, _verifier = _run(
+                    workflow=workflow,
+                    bundle_dir=bundle_dir,
+                    config=config,
+                    hooks=hooks,
+                    ctx=ctx,
+                    setup=setup,
+                    authorize=authorize,
+                    fault_driver=setup.driver,
+                    marks={"start": time.time()},
+                    lookup=lookup,
+                    pixels_only=True,
+                )
+                judged = _judge_trial(
+                    hooks=hooks, ctx=ctx, report=report, readback=readback
+                )
+                failure = pixels_only_trial_failure(
+                    report, expected, judged["oracle"], judged["extra"]
+                )
+            except Exception as exc:  # informational: record, never raise
+                first = (str(exc).splitlines() or [""])[0]
+                failure = f"{type(exc).__name__}: {first}"[:240]
+            outcomes.append((case_id, trial, failure))
+            log(
+                json.dumps(
+                    {
+                        "pixels_only": True,
+                        "case_id": case_id,
+                        "trial": trial,
+                        "passed": failure is None,
+                        "failure": failure,
+                    }
+                )
+            )
+    return summarize_pixels_only(outcomes, role="informational")
+
+
+def qualified_lookup(
+    *,
+    surface: DeploymentSurface,
+    target_kind: str,
+    structure_offered: bool,
+    reports: Mapping[str, list[RunReport]],
+    pixels_only: PixelsOnlyPass,
+) -> QualifiedLookup:
+    """The qualified-lookup record for the signed cases' run reports."""
+
+    return QualifiedLookup(
+        surface=surface,
+        target_kind=target_kind,
+        structure_offered=structure_offered,
+        capabilities_used=capabilities_used(
+            [report for runs in reports.values() for report in runs],
+            structure_offered=structure_offered,
+        ),
+        pixels_only=pixels_only,
+    )
+
+
+# ---------------------------------------------------------------------------
 # the campaign
 # ---------------------------------------------------------------------------
 
@@ -836,6 +1070,14 @@ class QualifyResult:
     result: Optional[dict[str, Any]] = None
     #: Why no admission envelope was written, when certify did not write one.
     admission_note: Optional[str] = None
+    #: The lookups the signed cases used and the surface they ran for.
+    lookup: Optional[QualifiedLookup] = None
+
+    @property
+    def pixels_only(self) -> Optional[PixelsOnlyPass]:
+        """The pass run with structure lookups disabled."""
+
+        return self.lookup.pixels_only if self.lookup is not None else None
 
     @property
     def partial(self) -> bool:
@@ -938,6 +1180,11 @@ def qualify(
         problems = [p for p in problems if not p.startswith("app.reset")]
     if problems:
         raise QualifyConfigError(problems)
+    surface, structure_offered = lookup_plan(config)
+    lookup_kwargs: dict[str, Any] = {
+        "use_structural": structure_offered,
+        "deployment_surface": surface,
+    }
 
     if in_place:
         bundle_dir = bundle_src
@@ -961,7 +1208,7 @@ def qualify(
     if verifier_tier is None:
         raise QualifyConfigError("verifier declares no verification tier")
     verifier_tier = VerificationTier(verifier_tier)
-    from openadapt_flow.readback_ladder import tier_floor, workflow_minimum
+    from openadapt_flow.readback_ladder import workflow_tier_floor
 
     tier = config.minimum_tier()
     wanted = (
@@ -974,8 +1221,8 @@ def qualify(
             f"verifier reads at {verifier_tier.name.lower()}, weaker than {wanted}"
         )
     if workflow.minimum_readback is not None:
-        workflow_floor = tier_floor(workflow_minimum(workflow))
-        if int(verifier_tier) > int(workflow_floor):
+        workflow_floor = workflow_tier_floor(workflow)
+        if workflow_floor is not None and int(verifier_tier) > int(workflow_floor):
             raise QualifyConfigError(
                 f"verifier reads at {verifier_tier.name.lower()}, weaker than the "
                 f"workflow's minimum_readback {workflow.minimum_readback}"
@@ -1102,6 +1349,7 @@ def qualify(
                 authorize=authorize,
                 fault_driver=setup.driver,
                 marks=marks,
+                lookup=lookup_kwargs,
             )
             reports.setdefault(case_id, []).append(report)
             judged = _judge_trial(
@@ -1199,6 +1447,42 @@ def qualify(
                     campaign_id=campaign_id,
                 )
             )
+    if structure_offered:
+        # The signed cases could use structure, so run them again on pixels
+        # alone. Informational on this surface.
+        pixels_only = _pixels_only_pass(
+            workflow=workflow,
+            bundle_dir=bundle_dir,
+            config=config,
+            hooks=hooks,
+            setup=setup,
+            out=out,
+            selected=selected,
+            n_trials=n_trials,
+            params=params,
+            save=save,
+            project_cases=project_cases,
+            policy_name=policy_name,
+            campaign_id=campaign_id,
+            run_id_prefix=run_id_prefix,
+            lookup=lookup_kwargs,
+            log=log,
+        )
+    else:
+        # The signed cases already ran with structure disabled: they are the
+        # pixels-only pass, and every one of them behaved as required (a
+        # failure stops the campaign above). On a pixels-only surface this is
+        # the gate.
+        pixels_only = summarize_pixels_only(
+            [(row["case_id"], row["trial"], None) for row in rows],
+            role="gate" if surface == "remote_display" else "informational",
+        )
+    common = pixels_only.common_failure()
+    log(
+        f"pixels-only pass ({pixels_only.role}): {pixels_only.rate_text()} "
+        "trials behaved as required with structure lookups disabled"
+        + (f"; most common failure: {common}" if common else "")
+    )
     for result in results:
         try:
             record_case_results(workflow, [result], evidence_root=root)
@@ -1206,6 +1490,27 @@ def qualify(
             raise QualifyError(
                 f"case result refused for {result.case_id} ({result.detail_code}): {exc}"
             ) from exc
+    from openadapt_flow.qualification import set_qualified_lookup
+
+    lookup_record = qualified_lookup(
+        surface=surface,
+        target_kind=config.app.target,
+        structure_offered=structure_offered,
+        reports=reports,
+        pixels_only=pixels_only,
+    )
+    set_qualified_lookup(workflow, lookup_record)
+    write_json(
+        out / "qualification" / "lookup.json",
+        {
+            **lookup_record.model_dump(mode="json"),
+            "pixels_only_pass_rate": pixels_only.pass_rate,
+        },
+    )
+    log(
+        f"qualified lookups: {', '.join(lookup_record.capabilities_used)} on a "
+        f"{surface} surface"
+    )
     if certify is not None:
         qreport = certify_project(
             workflow, policy=load_policy(certify), evidence_root=root
@@ -1310,6 +1615,7 @@ def qualify(
         environment_digest=web_environment_digest(environment),
         result=qresult,
         admission_note=admission_note,
+        lookup=lookup_record,
     )
     if run_params is not None:
         if not result.certified:
@@ -1324,6 +1630,7 @@ def qualify(
             setup=setup,
             policy=certify or config.campaign.policy,
             run_id=f"{campaign_id}-certified-run",
+            lookup=lookup_kwargs,
         )
         timing["certified_run"] = result.certified_run["timing"]
     if write_campaign_files:
@@ -1343,6 +1650,7 @@ def certified_run(
     setup: CampaignSetup,
     policy: str,
     run_id: str,
+    lookup: Optional[Mapping[str, Any]] = None,
 ) -> dict[str, Any]:
     """One ordinary Standard-profile run of the certified bundle."""
 
@@ -1389,6 +1697,7 @@ def certified_run(
         authorize=authorize,
         fault_driver=None,
         marks=marks,
+        lookup=lookup,
     )
     judged = _judge_trial(hooks=hooks, ctx=ctx, report=report, readback=readback)
     marks["checked"] = time.time()
@@ -1410,6 +1719,25 @@ def certified_run(
     return summary
 
 
+def _lookup_summary_lines(lookup: Optional[QualifiedLookup]) -> list[str]:
+    if lookup is None:
+        return []
+    pixels = lookup.pixels_only
+    role = (
+        "required on this pixels-only surface"
+        if pixels.role == "gate"
+        else "for information"
+    )
+    common = pixels.common_failure()
+    return [
+        f"- Surface: `{lookup.surface}`; lookups used: "
+        + ", ".join(lookup.capabilities_used),
+        f"- Pixels-only pass ({role}): {pixels.rate_text()} trials behaved as "
+        "required with structure lookups disabled"
+        + (f"; most common failure: {common}" if common else ""),
+    ]
+
+
 def write_summary_markdown(result: QualifyResult) -> Path:
     lines = [
         "# Qualification result",
@@ -1421,6 +1749,7 @@ def write_summary_markdown(result: QualifyResult) -> Path:
         f"- Certified bundle: `{result.bundle_dir.name}/`"
         if result.certified
         else "- Not certified",
+        *_lookup_summary_lines(result.lookup),
         "",
         "| Case | Trial | Expected | Observed | Read-back | Model calls | Engine ms |",
         "|---|---|---|---|---|---|---|",
@@ -1464,10 +1793,14 @@ __all__ = [
     "certified_run",
     "check_ready",
     "configure_project",
+    "lookup_plan",
+    "pixels_only_trial_failure",
+    "qualified_lookup",
     "qualify",
     "record_effects",
     "report_summary",
     "resolve_inputs",
     "resolve_save_step",
+    "summarize_pixels_only",
     "write_json",
 ]

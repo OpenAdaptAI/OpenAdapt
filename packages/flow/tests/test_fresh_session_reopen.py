@@ -51,7 +51,17 @@ class CachingApp(FaultApp):
 
     def save(self) -> None:
         super().save()
-        self.cached = {"id": 0, "patient_id": "p1", "type": "Triage", "note": NOTE}
+        # The app numbers the record itself when the server sends no id, and
+        # shows that number whether or not the save landed.
+        if " E" not in self.banner and self.banner.startswith("Saved"):
+            self.banner = "Saved. Encounter E9001"
+        shown = self.banner.rsplit(" E", 1)[-1] if " E" in self.banner else "0"
+        self.cached = {
+            "id": int(shown) if shown.isdigit() else 0,
+            "patient_id": "p1",
+            "type": "Triage",
+            "note": NOTE,
+        }
 
     def _open(self) -> None:
         super()._open()
@@ -132,7 +142,7 @@ def test_a_client_cache_fools_the_acting_session_but_not_a_fresh_one(server):
     # no_persist: the server answers 200 and stores nothing. The app shows its
     # own cached copy when the record is reopened in the same session.
     app, db = _saved(server, "no_persist", CachingApp)
-    effect = _effect(SEARCH_PATIENT).resolve(PARAMS)
+    effect = _effect(SEARCH_PATIENT, reference=True).resolve(PARAMS)
     same = OnScreenReadbackVerifier(app, vision=vision_for(app))
     assert same.verify(effect, same.capture_pre_state(), PARAMS).verdict is (
         Verdict.CONFIRMED
@@ -151,9 +161,13 @@ def test_fresh_session_search_never_confirms_a_save_that_did_not_land(server, fa
     rows = len(db.snapshot()["records"])
     fresh = _fresh(server, app)
     verdict = fresh.verify(
-        _effect(SEARCH_PATIENT).resolve(PARAMS), fresh.capture_pre_state(), PARAMS
+        _effect(SEARCH_PATIENT, reference=True).resolve(PARAMS),
+        fresh.capture_pre_state(),
+        PARAMS,
     ).verdict
-    assert (verdict is Verdict.CONFIRMED) is FAULTS[fault]
+    # On timeout the row landed but no number was shown: nothing ties a
+    # record to this save, so the check halts (a false halt, the safe error).
+    assert (verdict is Verdict.CONFIRMED) is (FAULTS[fault] and fault != "timeout")
     assert len(db.snapshot()["records"]) == rows
 
 
@@ -194,7 +208,9 @@ def test_ready_text_that_shows_lets_the_reopen_run(server):
     app, _db = _saved(server, "ok")
     fresh = _fresh(server, app, ready_text="Search")
     verdict = fresh.verify(
-        _effect(SEARCH_PATIENT).resolve(PARAMS), fresh.capture_pre_state(), PARAMS
+        _effect(SEARCH_PATIENT, reference=True).resolve(PARAMS),
+        fresh.capture_pre_state(),
+        PARAMS,
     )
     assert verdict.verdict is Verdict.CONFIRMED
 

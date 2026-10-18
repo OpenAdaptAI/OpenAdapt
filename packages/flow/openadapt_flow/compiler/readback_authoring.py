@@ -461,7 +461,13 @@ def apply_check(
             demonstrated_by=_demonstrated_by(recording),
             reset=reset,
             guard=ReadbackGuard(commit_labels=_commit_labels(task)),
-            reference=mined_reference if uses_reference else None,
+            # A search by a run input keeps the number too: the reopened
+            # record must show it, or an older record could pass.
+            reference=(
+                mined_reference
+                if uses_reference or any(nav.param for nav in renavigation)
+                else None
+            ),
         ),
         probe=(
             f"UI read-back shown by demonstration: {len(renavigation)} recorded "

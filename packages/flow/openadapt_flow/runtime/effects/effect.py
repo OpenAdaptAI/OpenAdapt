@@ -219,6 +219,16 @@ class ReadbackNav(BaseModel):
     #: right after the save (:attr:`ReadbackSpec.reference`) instead of
     #: :attr:`text`, to find the record again by it.
     reference: bool = False
+    #: The run parameter :attr:`text` was bound from when the contract was
+    #: resolved (:func:`_resolve_readback` clears :attr:`param`). In memory
+    #: only: the verifier uses it to know the search is by a run input.
+    _bound_param: Optional[str] = PrivateAttr(default=None)
+
+    @property
+    def types_run_input(self) -> bool:
+        """Whether this step types a run input (before or after binding)."""
+
+        return bool(self.param or self._bound_param)
 
     @model_serializer(mode="wrap")
     def _drop_unset_param(self, handler: Any) -> dict[str, Any]:
@@ -322,7 +332,7 @@ class ReadbackReference(BaseModel):
     left, was not typed, and looks like an identifier (a claim, order or
     encounter number). Read at run time from :attr:`region` with
     :attr:`pattern` (one capture group), it is evidence that the application
-    issued a record (R1, "the screen said it saved") and, when a navigation
+    issued a record (check level ``same_screen``) and, when a navigation
     step types it (:attr:`ReadbackNav.reference`), the way to find the record
     again. The captured value itself is never stored in a report.
     """
@@ -523,7 +533,9 @@ def _resolve_readback(
     renavigation = []
     for nav in spec.renavigation:
         if nav.param and params.get(nav.param) is not None:
-            nav = nav.model_copy(update={"text": str(params[nav.param]), "param": None})
+            name = nav.param
+            nav = nav.model_copy(update={"text": str(params[name]), "param": None})
+            nav._bound_param = name
         renavigation.append(nav)
     fields = [
         field.model_copy(update={"value": field.value.resolved(params)})
