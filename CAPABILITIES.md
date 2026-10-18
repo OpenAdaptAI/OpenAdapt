@@ -19,7 +19,8 @@ being merged now.
 1. **Learns from any successful run, a person's or an agent's.** A person
    records a task, or a computer-use agent does it once and OpenAdapt compiles
    the verified run into a program (`openadapt_flow.jit`, released;
-   prompt-to-program `compile-agent`, landing). Agents can drive the recording
+   prompt-to-program `compile-agent`, landing; the agent can act through code
+   instead of screenshots, [#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305)). Agents can drive the recording
    on web, native Windows, RDP and Citrix.
 2. **Compiles to the fastest layer the app allows.** Page structure first (DOM,
    Windows UI Automation, macOS Accessibility), direct API calls where the app's
@@ -80,6 +81,7 @@ being merged now.
 | Runs steps as direct API calls; compiling them from captured network traffic is being merged. | `runtime/actuators/api.py`, [#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269) |
 | Repairs itself when the app changes: governed repair, agent-demonstrated fixes, fleet patches, and self-repair probed up to the save. | [REPAIR_LIFECYCLE.md](packages/flow/docs/REPAIR_LIFECYCLE.md) |
 | Compiles a computer-use agent's verified run, with no human demonstration needed. | [JIT.md](packages/flow/docs/JIT.md) |
+| The agent that does a task once can act through code, not a screenshot-and-click loop: it reads the page or accessibility tree, acts by role and name, keeps notes with a sandboxed read-only shell, and asks for a screenshot only when it needs one. On the local OpenEMR referral it was correct 8 of 8 at $0.055 a run, against 6 of 8 at $0.33 for the screenshot loop. | [CODE_AS_ACTION.md](packages/flow/docs/CODE_AS_ACTION.md), [#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305) |
 | Binds each approval to the exact screenshot and form state, and re-reads the form before saving. | [APPROVAL_MODES.md](packages/flow/docs/APPROVAL_MODES.md) |
 | Fills inputs from a referral PDF, fax image or email, and holds back anything unclear for a person. | `intake`, [INTAKE.md](packages/flow/docs/INTAKE.md) |
 | Ships as one monorepo with separately installable packages (flow, agent, types, capture, and privacy and desktop moving in). | [README](README.md) |
@@ -187,6 +189,7 @@ improvising or retrying when something is off.
 | Capability | Status | Evidence | Where |
 | --- | --- | --- | --- |
 | Compile a computer-use agent's successful run into a program (JIT); later runs make no model calls | Released | Synthetic (a recorded Claude run on MockMed) | `openadapt_flow.jit`, [JIT.md](packages/flow/docs/JIT.md) |
+| Code as action: the run-1 agent acts through one terminal tool (structure first, actions by role and name, a sandboxed read-only shell, screenshots on request); every action is a structured step checked against the compiled program | In review ([#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305)) | Real app (local OpenEMR) and synthetic | `ClaudeAgent(vision="code")`, [CODE_AS_ACTION.md](packages/flow/docs/CODE_AS_ACTION.md) |
 | Admit a draft by a person, an admitter key, or an agent under a person-signed policy, including self-admission when the policy allows it | Released | Unit tests | [JIT_ADMISSION.md](packages/flow/docs/JIT_ADMISSION.md) |
 | MCP server: your agent decides what to enter, OpenAdapt makes the entry and checks it | Released | Synthetic sandbox | `openadapt-agent`, [packages/agent](packages/agent/README.md) |
 | Live agent loop end to end on a real app, plus a launch demo (agent once, OpenAdapt 100 times) | In progress | Untested | none yet |
