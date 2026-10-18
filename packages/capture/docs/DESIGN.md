@@ -247,8 +247,14 @@ installed on-device transcription backend before it opens the microphone. It
 does not use a remote fallback. It discards the waveform after transcription
 unless the operator explicitly enables waveform retention.
 
-Transcript text is unsanitized. A retained waveform is biometric data. Neither
-is safe for automatic egress.
+Capture also requires openadapt-privacy before it opens the microphone, and
+scrubs the transcript before storing it. The scrubbed sentences go to
+`narration.json` (`openadapt_capture.narration`), timed on the recording
+clock so a consumer can line each one up with an action. Per-word text is not
+stored.
+
+Scrubbing can miss data, so the transcript is still sensitive. A retained
+waveform is biometric data. Neither is safe for automatic egress.
 
 ## Browser boundary
 

@@ -145,7 +145,7 @@ improvising or retrying when something is off.
 | Typed business decisions inside a run | Released | Synthetic | `business_decision` states, `openadapt-flow business-decisions` |
 | Watch many real runs in the background and mine candidate branches (shadow mode) | Capture released; drafts in review ([#1212](https://github.com/OpenAdaptAI/OpenAdapt/pull/1212)) | Synthetic | [SHADOW_MINING.md](packages/capture/docs/SHADOW_MINING.md) |
 | Fill a workflow's inputs from a referral PDF, fax image or email | Released | Synthetic | `openadapt-flow intake`, [INTAKE.md](packages/flow/docs/INTAKE.md) |
-| Use spoken narration while recording to learn why a branch was taken | Planned | Untested | Capture records audio (`--audio`, local Whisper). The compiler doesn't use it yet. |
+| Use spoken narration while recording to learn why a branch was taken | In review | Synthetic (generated speech, local Whisper) | `induce`, `teach-branch`, `narration attach`; [NARRATION.md](packages/flow/docs/NARRATION.md) |
 | Settle a disagreement between recordings by trying both paths on a test copy of the app and reading the record back | In review ([#1276](https://github.com/OpenAdaptAI/OpenAdapt/pull/1276)) | Synthetic (MockMed fault server) | `openadapt-flow induce --probe-on`, [PROBE_INDUCTION.md](packages/flow/docs/PROBE_INDUCTION.md) |
 
 ## Surfaces
@@ -206,7 +206,7 @@ improvising or retrying when something is off.
 Each `openadapt-flow` command, grouped by the capability it serves. A test
 fails when a command is added without being listed here.
 
-- **Record and build a program:** `record`, `demo-record`, `compile`, `induce`, `disambiguate`, `for-each`, `compose`, `process`, `intake`, `visualize`, `pull`.
+- **Record and build a program:** `record`, `demo-record`, `compile`, `induce`, `narration`, `disambiguate`, `for-each`, `compose`, `process`, `intake`, `visualize`, `pull`.
 - **Check and admit:** `lint`, `scaffold-verifier`, `check`, `bind-record-checks`, `certify`, `qualify`, `propose-qualification`, `known-ids`, `jit`, `admit`, `approver-grant`.
 - **Run and answer:** `run`, `replay`, `resume`, `approve`, `item-approval`, `triage`, `business-decisions`, `explain`, `console`.
 - **Judge any executor's write:** `verify-run`, `serve-reward` (scores agent training episodes by reading the system of record).
@@ -237,8 +237,8 @@ fails when a command is added without being listed here.
 
 - No commercial EMR, claims system or real Citrix session has been tested.
 - Not built yet: record checks built from the app's own reads, self-repair
-  across several new steps, settling a disagreement between recordings on a
-  test copy, and narration-driven rules. Network capture to API calls and
-  scrub-by-default are in review.
+  across several new steps, and settling a disagreement between recordings on
+  a test copy. Network capture to API calls, scrub-by-default and
+  narration-driven rules are in review.
 - Several capabilities have run only on OpenAdapt's synthetic apps. The
   Evidence column says which.
