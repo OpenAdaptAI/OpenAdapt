@@ -31,7 +31,7 @@ from __future__ import annotations
 import re
 import secrets
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal, Optional
+from typing import TYPE_CHECKING, Any, Literal, Optional
 
 from openadapt_flow.bundle_validation import BundleIntegrityError
 from openadapt_flow.ir import (
@@ -482,6 +482,8 @@ class DurableRun:
         *,
         workflow: Optional[Workflow] = None,
         transition_observation: Optional["TransitionObservation"] = None,
+        active_surface: Optional[str] = None,
+        surface_observations: Optional[dict[str, Any]] = None,
     ) -> None:
         """Persist the durable artifact for one completed step.
 
@@ -563,6 +565,9 @@ class DurableRun:
                     resolution=result.resolution,
                     drift_oracle_calls=result.drift_oracle_calls,
                     heal=result.heal,
+                    surface=result.surface,
+                    active_surface=active_surface,
+                    surface_observations=dict(surface_observations or {}),
                 )
             )
             self._sync_authority()
@@ -850,6 +855,7 @@ def resumed_step_results(
                 resolution=checkpoint.resolution,
                 drift_oracle_calls=checkpoint.drift_oracle_calls,
                 heal=checkpoint.heal,
+                surface=checkpoint.surface,
                 error=None,
             )
         )

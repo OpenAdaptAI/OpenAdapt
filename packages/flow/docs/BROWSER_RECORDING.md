@@ -76,6 +76,12 @@ Flow selects the sole open HTTP or HTTPS tab on the `--url` origin. It does not
 navigate the tab. It also does not close the tab or browser when recording
 finishes.
 
+Attach mode follows a popup or tab that the selected tab (or a page it already
+follows) opened, on the declared origin. These pages are recorded as surfaces,
+as they are in a browser Flow launched (`record --url`); see
+[MULTI_SURFACE.md](MULTI_SURFACE.md). A tab the person opens by hand is
+refused.
+
 If two or more open tabs have that origin, Flow refuses to guess. Supply the
 exact current URL:
 
@@ -133,8 +139,10 @@ silently acting in a new, signed-out one.
 - The selected tab must stay on that origin for the full recording. A
   cross-origin navigation stops the recording and does not produce complete
   metadata.
-- Do not open a popup or a new tab in the selected tab's browser context while
-  recording. Flow currently binds one page. It installs a new-page latch on
+- Do not open a new tab by hand in the selected tab's browser context while
+  recording. A popup or tab that a followed page opens is followed, judged by
+  `window.opener` or the browser target's opener id. Any other new page is
+  refused. Flow installs a new-page latch on
   every candidate context before it reads the accepted page baseline or selects
   the recording tab. Listener registration does not replay pre-existing tabs,
   so those tabs remain allowed. The selected-context latch records every later
@@ -371,7 +379,7 @@ Attach mode supports local Chromium-family browsers that expose a CDP
 endpoint. It requires a browser process started with remote debugging and a
 separate user-data directory. It does not claim Firefox, WebKit, arbitrary
 Chrome extensions, an ordinary browser process that was not started for local
-debugging, cross-origin tab selection, multi-page/popup recording, or direct
+debugging, cross-origin tab selection, cross-origin popups, or direct
 extension replay.
 
 Same-origin iframes are recorded: every emitted coordinate is composed into
@@ -395,8 +403,11 @@ Refused loudly, never recorded silently wrong:
   dropdown UI that produces no recordable action events, so the choice would
   be silently absent from the compiled workflow. The recording stops with an
   explicit error at the moment of selection.
-- A new tab or popup. The recording is bound to one tab and stops when
-  another page appears.
+- In attach mode, a new tab that no followed page opened, or a popup on
+  another origin. Popups and tabs that a followed page opens are recorded as
+  surfaces ([MULTI_SURFACE.md](MULTI_SURFACE.md)). A popup that closes itself
+  is followed by an explicit switch back. A popup whose first action closes
+  it, before any frame of it was captured, stops the recording.
 - An action in a frame whose page-space position cannot be proven (see
   above).
 
