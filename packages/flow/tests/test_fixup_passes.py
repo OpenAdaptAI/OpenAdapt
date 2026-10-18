@@ -1,4 +1,4 @@
-"""The four default compiler fix-up passes, on web and pixel surfaces."""
+"""The compiler fix-up passes, on web and pixel surfaces."""
 
 from __future__ import annotations
 
@@ -71,11 +71,11 @@ def _changes(notes):
 
 def test_select_commit_enter_dropped_on_web_only(tmp_path):
     steps = [_click("s1", "combobox"), _type("s2"), _key("s3", "Enter")]
-    out, notes = _run(steps, {}, tmp_path)
+    out, notes = _run(steps, {}, tmp_path, drop_redundant_keys=True)
     assert [s.id for s in out] == ["s1", "s2"]
     assert ("drop_select_commit_enter", "s3") in _changes(notes)
 
-    out, notes = _run(steps, {}, tmp_path, surface="rdp")
+    out, notes = _run(steps, {}, tmp_path, surface="rdp", drop_redundant_keys=True)
     assert [s.id for s in out] == ["s1", "s2", "s3"]
     assert "drop_select_commit_enter" not in {c for c, _ in _changes(notes)}
 
@@ -83,17 +83,18 @@ def test_select_commit_enter_dropped_on_web_only(tmp_path):
 def test_select_all_on_empty_field_needs_unchanged_pixels(tmp_path):
     steps = [_click("s1", "textbox"), _key("s2", "ctrl+a"), _type("s3")]
     blank = _png()
-    out, notes = _run(steps, {"s2": (blank, blank), "s1": (blank, blank)}, tmp_path)
+    frames = {"s2": (blank, blank), "s1": (blank, blank)}
+    out, notes = _run(steps, frames, tmp_path, drop_redundant_keys=True)
     assert [s.id for s in out] == ["s1", "s3"]
     assert ("drop_select_all_on_empty_field", "s2") in _changes(notes)
 
     # The field had text: Ctrl+A highlighted it, so it is kept.
     selected = _png((12, 12, 85, 28))
-    out, _ = _run(steps, {"s2": (blank, selected)}, tmp_path)
+    out, _ = _run(steps, {"s2": (blank, selected)}, tmp_path, drop_redundant_keys=True)
     assert [s.id for s in out] == ["s1", "s2", "s3"]
 
     # No frames, no evidence: kept.
-    out, _ = _run(steps, {}, tmp_path)
+    out, _ = _run(steps, {}, tmp_path, drop_redundant_keys=True)
     assert [s.id for s in out] == ["s1", "s2", "s3"]
 
 
@@ -188,3 +189,21 @@ def test_compile_notes_written_and_cleared(tmp_path):
     assert data["changes"][0]["change"] == "x"
     write_compile_notes(tmp_path, [])
     assert not (tmp_path / COMPILE_NOTES_FILE).exists()
+
+
+def test_key_drops_are_off_by_default(tmp_path):
+    # The demonstration's field was empty, so Ctrl+A changed no pixel. At
+    # replay the field may hold text: without the Ctrl+A, TYPE appends, and
+    # the TYPE read-back (old value + typed text) still passes. The Enter
+    # after a combobox type is the same: the read-back can't tell an
+    # uncommitted <select> from a committed one on every backend.
+    blank = _png()
+    select_all = [_click("s1", "textbox"), _key("s2", "ctrl+a"), _type("s3")]
+    out, notes = _run(select_all, {"s2": (blank, blank)}, tmp_path)
+    assert [s.id for s in out] == ["s1", "s2", "s3"]
+    enter = [_click("s1", "combobox"), _type("s2"), _key("s3", "Enter")]
+    out, notes = _run(enter, {}, tmp_path)
+    assert [s.id for s in out] == ["s1", "s2", "s3"]
+    assert not {"drop_select_commit_enter", "drop_select_all_on_empty_field"} & {
+        change for change, _ in _changes(notes)
+    }

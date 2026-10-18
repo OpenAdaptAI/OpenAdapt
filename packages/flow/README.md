@@ -93,9 +93,9 @@ under one engine isn't reused under the other.
 wrote on 2026-10-09 against the bundled fake clinic app; regenerate it with
 [`scripts/make_demo_proof_image.py`](scripts/make_demo_proof_image.py).*
 
-| | Run 1: honest app | Run 2: app drops the note |
+| | Run 1: normal save | Run 2: save set to fail |
 |---|---|---|
-| The screen said | Encounter saved | Encounter saved |
+| On screen | Encounter saved | Encounter saved |
 | The record check found | 1 note | 0 notes |
 | openadapt-flow | Done and checked | Stopped and asked a person to check the record, with no retry |
 
@@ -387,7 +387,7 @@ browser workflows. Desktop and Citrix runs are self-hosted
   second read path. For a task you'll run a few times, doing it by hand or
   pointing an agent at it costs less.
 - A record check sees only what its read path covers. In a fault test with
-  injected bad writes, a check that trusted the success message passed 54 of
+  injected bad writes, a screen-only check passed 54 of
   the 72 runs that left the record wrong. One API read let 9 of the 72
   through, all writes to a table it didn't read
   ([`EFFECT_E2E.md`](benchmark/effect_e2e/EFFECT_E2E.md)).
@@ -425,6 +425,9 @@ The full list, capability by capability: [docs/LIMITS.md](docs/LIMITS.md).
   session, the Windows agent server, and the token.
 - [docs/BENCHMARKS.md](docs/BENCHMARKS.md): every benchmark, with method and
   caveats.
+- [Fleet drift patches](docs/FLEET_DRIFT_PATCHES.md): opted-in installs that
+  automate the same application share signed repairs for the same UI change.
+  Each tenant tests a patch on its own cases before it is used.
 - [docs/REWARD_WORKER.md](docs/REWARD_WORKER.md): `serve-reward` scores a
   model's training episode by reading the record after it ends.
 - [docs.openadapt.ai](https://docs.openadapt.ai): the full documentation set.

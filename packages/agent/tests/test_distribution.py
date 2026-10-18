@@ -298,8 +298,17 @@ def test_identity_sentence_is_shared() -> None:
     assert "serve --authoring" in llms
     assert "authoring connect" in readme
     assert "authoring connect" in llms
-    assert "https://openadapt.ai/start" in readme
-    assert "https://openadapt.ai/start" in llms
+    # Hosted chats get the runner link from the job box, not /start.
+    assert "https://openadapt.ai/#job-box" in readme
+    assert "https://openadapt.ai/#job-box" in llms
+    assert "Connect this computer" in readme
+    assert "https://openadapt.ai/start" not in readme
+    # User scope, so the server works in every folder, and a note that the
+    # command only registers it.
+    assert FIRST_COMMAND.startswith("claude mcp add --scope user openadapt -- ")
+    assert PREVIEW_COMMAND.startswith("claude mcp add --scope user openadapt -- ")
+    assert "This only registers the server." in readme
+    assert "This only registers the server." in skill
     assert "openadapt flow tutorial" in readme
     assert "openadapt quickstart --break-it" in readme
     assert "name: computer-use" not in readme.lower()

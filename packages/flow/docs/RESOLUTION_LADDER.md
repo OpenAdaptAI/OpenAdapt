@@ -40,6 +40,12 @@ bundle armed 4-7 of 12), so an **unarmed click has no identity check at all**.
 The per-step coverage is auditable in `workflow.json` and reported in every run;
 see [what it doesn't do yet](LIMITS.md).
 
+Because structure can be missing where a workflow runs in production (an RDP
+or Citrix window viewed from outside the session), qualification records
+which lookups a workflow actually used and always runs a pixels-only pass. A
+workflow qualified with structure halts before any write on a pixels-only
+surface. See [Lookup capabilities](SURFACES.md#lookup-capabilities-structure-or-pixels).
+
 Related: [`SURFACES.md`](SURFACES.md) for which substrate owns a structured
 layer, and [`VISUALIZE.md`](VISUALIZE.md) to see the ladder a bundle will try
 before it runs.

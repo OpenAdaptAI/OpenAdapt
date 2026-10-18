@@ -230,6 +230,38 @@ Frappe Lending reference matrix (`benchmark/frappe_lending/fixture.py`, PR
 every other audited table by exactly 0. This is a harness-level companion to
 the verifier (it brackets a whole run, not one step).
 
+## Record checks proposed while recording (`record --verify`)
+
+`openadapt-flow record --verify verify.yaml ...` reads the records named by the
+file's `verifier:` section once before the demonstration and once after it.
+The read goes through the same read-only adapter `verify-run` and `qualify`
+use, not through the UI, so it works the same for a browser, a desktop app or
+a remote display. Only verifiers that read the system of record (tier 1:
+`rest`, `sql`, `fhir`, `graphql`, `file`, and plugins that declare tier 1) are
+accepted. While recording there are no run parameters, so the read must name
+its records with literals.
+
+From the difference Flow writes `verify.proposed.yaml` beside the recording:
+
+- a new record becomes a `record_written` effect with `count_new_only`. Its
+  `match` holds the record's observed fields; a field equal to a recorded
+  parameter value becomes `{param: NAME}`;
+- a changed field on a record that already existed becomes a `field_equals`
+  effect on that record's `id`. Records without a unique `id` are compared
+  whole, so an update shows as one record removed and one added;
+- a removed record, a cleared field and a nested field are reported, not
+  proposed.
+
+Every proposed effect carries `needs_operator_confirmation: true`, which
+`verify-run` refuses and `qualify` reports as a problem. Review each effect,
+drop match fields that change on every save (timestamps, versions), and
+delete that line. The confirmed file is a normal `verify.yaml`, so
+`verify-run` grades it `independent_readback`.
+
+Both reads are kept in `sor_snapshots.json` (mode 0600, raw records). The
+proposed file is also mode 0600 and copies `verifier:` as written, with
+`${NAME}` references unexpanded. Without `--verify`, `record` is unchanged.
+
 ## A read-back taught by demonstration ("Now show how you'd check it saved")
 
 For an application with no API, database or export (a legacy desktop app,
@@ -552,7 +584,7 @@ Per-kind required fields:
 | `ui_readback` | `ui_readback` section: `record_url`, `sign_in` (env-var names for the read-back account), `ready_selector`, `row_selector`, `fields`, `identity` | `url_params`, `empty_selector`, `not_found_selector`, `read_post_paths`, per-field `attribute` / `date_format` / `casefold`, `truncation_markers`, `navigation_timeout_s` |
 | `rest` | `base_url` | `records_path` (may contain `{placeholder}`s), `records_key`, `path_params`, `auth` |
 | `graphql` | `base_url` + `graphql_query` | `graphql_variables` (`{param: ...}` entity binding), `graphql_records_path`, `graphql_freshness_field` + `graphql_freshness_window_s`, `auth` |
-| `fhir` | `base_url` | `resource_type`, `search_params`, `search_param_exprs`, `field_paths`, `access_token_env`, `verify_tls` |
+| `fhir` | `base_url` | `resource_type`, `search_params`, `search_param_exprs`, `field_paths`, `access_token_env` or `smart_backend`, `verify_tls` |
 | `sql` | `sql_query` + (`sqlite_database` or `sql_driver`) | `sql_query_params`, `sql_connect_args`, `sql_password_env` |
 | `file` | `root` | `file_pattern`, `file_min_size`, `file_mtime_window_s`, `file_content_probe` |
 | `email` | `root` | `mail_pattern`, `file_mtime_window_s` (freshness), `file_content_probe` (body regex) |
@@ -562,6 +594,46 @@ Per-kind required fields:
 Any kind additionally accepts the evidence-minimization fields
 `evidence_redact_fields` / `evidence_keep_fields` (see "Evidence minimization"
 below).
+
+### FHIR with SMART Backend Services (`smart_backend`)
+
+EHR FHIR APIs for backend clients usually issue short-lived tokens through
+[SMART Backend Services](https://hl7.org/fhir/smart-app-launch/backend-services.html).
+A static `access_token_env` token stops working when it expires, and every read
+is then INDETERMINATE. With `smart_backend`, Flow requests a token when it needs
+one: an OAuth 2.0 `client_credentials` grant authenticated by a
+`private_key_jwt` client assertion signed `RS384` (RSA, 2048 bits or more) or
+`ES384` (P-384).
+
+```yaml
+effects:
+  kind: fhir
+  base_url: https://fhir.example.org/r4
+  resource_type: Observation
+  smart_backend:
+    client_id: my-registered-client
+    scope: system/Observation.rs
+    kid: my-key-id                    # required for a PEM key
+    private_key_file: /secure/smart.pem
+    # private_key_env: SMART_KEY_PEM  # or PEM text in an env var
+    # jwks_file: /secure/client.jwks.json  # or a JWKS of private JWKs; kid picks one
+    # private_key_password_env: SMART_KEY_PASSWORD
+    # alg: RS384                      # default: from the key type
+    # jku: https://client.example.org/jwks.json
+    # token_url: https://auth.example.org/token  # default: smart-configuration
+```
+
+- Only read scopes are accepted (`.read`, or v2 `.r`, `.s`, `.rs`).
+- The token URL and the FHIR base must be `https` (plain `http` only on loopback).
+- The key loads when the verifier is built, and a bad key fails then. The first
+  token is requested on the first read.
+- A token is reused until shortly before `expires_in`. A 401 from the FHIR
+  server drops it, so the next read gets a new one.
+- A failed token request makes the read unreadable (INDETERMINATE), never
+  "record absent".
+- The key, the signed assertion and tokens never reach logs, exception
+  messages, `repr`, evidence or the verifier identity. Keep the key file
+  outside the repository with mode 0600.
 
 ### Candidate selection when there is no database connection
 

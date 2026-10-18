@@ -43,7 +43,14 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
-from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 __all__ = [
     "AdmissionPolicy",
@@ -322,6 +329,19 @@ class AdmissionPolicy(BaseModel):
     agent_principals: tuple[str, ...] = Field(min_length=1)
     #: Flow risk policies a draft may name; empty means any.
     flow_policies: tuple[str, ...] = ()
+    #: Let an agent this policy names admit a draft it recorded itself. The
+    #: same checks decide: scope, clean canaries, and a system-of-record
+    #: read-back on every write step. Off unless the person turns it on, and
+    #: left out of the signed payload while off, so policies signed before
+    #: this field existed keep their signatures.
+    allow_self_admission: bool = False
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: Any) -> dict[str, Any]:
+        data = handler(self)
+        if not self.allow_self_admission:
+            data.pop("allow_self_admission", None)
+        return data
 
     @field_validator("allowed_actions")
     @classmethod
