@@ -129,6 +129,41 @@ export still says which write hit the wrong patient.
 In `readback` mode the same identity verdict also appears in the trajectory
 Harness² proposers read, as an observation after each write.
 
+## Repair search on a staging copy
+
+Self-repair ([SELF_REPAIR.md](SELF_REPAIR.md)) probes a proposed fix up to
+the last point before the save and stops there. That shows the fix reaches
+the save on the right record. It cannot show what the save writes, and two
+bridges can look the same up to the save and still write different records.
+
+`openadapt_flow.repair.staging_search` closes that gap without touching
+production. For each candidate bridge, on a resettable staging copy, it:
+
+1. runs self-repair with that one bridge (halt, patch, probe, campaigns) and
+   stops at the approval request, which nobody answers;
+2. runs the patched bundle end to end on a fresh copy, through the save;
+3. reads the copy's system of record with the reward worker and scores it.
+
+`StagingSearchAgent` hands production self-repair one proposal: the best
+candidate the read-back verified, or none. From there the pipeline is
+unchanged. Production probes it before the save and runs the campaigns, and
+one person approves it before anything is saved (candidate, replay_passed,
+fault_passed, approved, staged, canary, active). The search never opens a
+production session.
+
+Candidates come from `ScriptedBridges` (tests) or `ModelBridges`. A model
+reads the halted step, the controls OCR finds on the live screen, and the
+full traces of the halted run and the last verified runs, and answers with
+control labels. The labels are mapped to points on the screen, so the model
+never invents coordinates.
+
+MockMed `?drift=menu2` is the test case. The save moved into a menu with two
+save paths: Actions > Billing > Submit encounter (a Triage encounter, as
+recorded) and Actions > Clinical > Submit as Consult. Both pass self-repair's
+probe. On staging the Consult path writes a Consult record (wrong value,
+-0.5) and the Billing path verifies (1.0), so production sees only the
+Billing bridge.
+
 ## Install
 
 Harness² needs Python 3.12 and is not on PyPI. Install it from its

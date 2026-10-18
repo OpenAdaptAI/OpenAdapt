@@ -413,15 +413,25 @@ function renderEncounter() {
 
   // "menu" drift: the save moved behind a menu, Actions > Billing > Submit
   // encounter. The menu opens in place; nothing is saved until Submit.
-  var saveHtml = DRIFT.has('menu')
+  // "menu2" drift: the same menu with a second save path, Actions > Clinical
+  // > Submit as Consult, which saves the encounter as a Consult. Both paths
+  // look the same up to the save; only the saved record tells them apart.
+  var MENU = DRIFT.has('menu') || DRIFT.has('menu2');
+  var saveHtml = MENU
     ? '<div class="menu">' +
       '<button id="actions-menu">Actions</button>' +
       '<div id="actions-list" class="menu-list" hidden>' +
       '<button id="menu-billing">Billing</button>' +
       '<div id="billing-list" class="menu-list" hidden>' +
-      '<button id="menu-submit">Submit encounter</button></div></div></div>'
+      '<button id="menu-submit">Submit encounter</button></div>' +
+      (DRIFT.has('menu2')
+        ? '<button id="menu-clinical">Clinical</button>' +
+          '<div id="clinical-list" class="menu-list" hidden>' +
+          '<button id="menu-consult">Submit as Consult</button></div>'
+        : '') +
+      '</div></div>'
     : '<button id="' + SAVE_ID + '">' + LABEL_SAVE + '</button>';
-  var saveTarget = DRIFT.has('menu') ? 'menu-submit' : SAVE_ID;
+  var saveTarget = MENU ? 'menu-submit' : SAVE_ID;
 
   var triageBtn = '<button id="type-triage" class="seg-btn">' +
     LABEL_TRIAGE + '</button>';
@@ -475,7 +485,7 @@ function renderEncounter() {
       });
   });
 
-  if (DRIFT.has('menu')) {
+  if (MENU) {
     document.getElementById('actions-menu')
       .addEventListener('click', function () {
         var list = document.getElementById('actions-list');
@@ -485,6 +495,17 @@ function renderEncounter() {
       .addEventListener('click', function () {
         document.getElementById('billing-list').hidden = false;
       });
+    if (DRIFT.has('menu2')) {
+      document.getElementById('menu-clinical')
+        .addEventListener('click', function () {
+          document.getElementById('clinical-list').hidden = false;
+        });
+      document.getElementById('menu-consult')
+        .addEventListener('click', function () {
+          state.encounterType = 'Consult';
+          document.getElementById(saveTarget).click();
+        });
+    }
   }
 
   document.getElementById(saveTarget)
