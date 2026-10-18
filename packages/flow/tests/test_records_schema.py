@@ -332,3 +332,71 @@ def test_read_grades_are_check_levels_in_ladder_order() -> None:
         CheckLevel.REOPENED,
         CheckLevel.SYSTEM_OF_RECORD,
     ]
+
+
+def test_only_parsed_reads_from_two_sources_give_a_grade() -> None:
+    clip = _read("clipboard", "INV-1")
+    unparsed = ChannelRead(channel="database", raw="??", session="independent")
+    assert grade_for([clip, unparsed], "agree") == "unchecked"
+    # Two reads by the same channel in the same session are not a cross-check.
+    assert grade_for([clip, _read("clipboard", "INV-1")], "agree") == "unchecked"
+    # A reopened read needs a read from the acting session to compare with.
+    again = _read("clipboard", "INV-1", "reopened")
+    assert (
+        grade_for([again, _read("ocr", "INV-1", "reopened")], "agree") == "same_screen"
+    )
+    assert grade_for([clip, again], "agree") == "reopened"
+
+
+def _field(reads, agreement, grade="unchecked", value="1", **kw) -> FieldRead:
+    return FieldRead(
+        field="invoice_number",
+        value=value,
+        reads=tuple(reads),
+        agreement=agreement,
+        confidence=0.9,
+        grade=grade,
+        **kw,
+    )
+
+
+def test_agree_must_match_the_reads() -> None:
+    db = _read("database", "B", "independent")
+    with pytest.raises(ValidationError, match="same value"):
+        _field([_read("ocr", "A"), db], "agree", "system_of_record", value="Z")
+    with pytest.raises(ValidationError, match="same value"):
+        _field([_read("ocr", "B")], "agree")
+
+
+def test_disagreement_must_go_to_review() -> None:
+    reads = [_read("clipboard", "A"), _read("ocr", "B")]
+    with pytest.raises(ValidationError, match="must go to review"):
+        _field(reads, "disagree", value=None)
+    _field(reads, "disagree", value=None, needs_review=True, review_reason="x")
+
+
+def test_record_reads_each_field_once_and_gate_needs_a_field() -> None:
+    field = _record("system_of_record").fields[0]
+    with pytest.raises(ValidationError, match="read twice"):
+        RecordRead(
+            schema_name="vendor_invoice",
+            schema_version=1,
+            record_key="1",
+            run_id="r",
+            read_at="2026-10-17T21:00:00-04:00",
+            fields=(field, field),
+        )
+    empty = _record("system_of_record").model_copy(update={"fields": ()})
+    with pytest.raises(GradeTooLow, match="no fields"):
+        GradeGate(min_grade="unchecked").check(empty)
+
+
+def test_seal_receipt_digest_is_validated() -> None:
+    with pytest.raises(ValidationError):
+        SealRef(run_id="r", receipt_sha256="nope")
+    assert SealRef(run_id="r", receipt_sha256="a" * 64).sealed
+
+
+def test_bad_pattern_is_a_validation_error() -> None:
+    with pytest.raises(ValidationError, match="bad pattern"):
+        FieldSpec(name="code", kind="code", pattern="(")
