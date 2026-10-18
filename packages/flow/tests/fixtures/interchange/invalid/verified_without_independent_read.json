@@ -68,6 +68,27 @@
           "session": "acting"
         }
       ]
+    },
+    {
+      "name": "due_date",
+      "type": "date",
+      "value": "2026-11-15",
+      "confidence": 0.98,
+      "grade": "screen_readback",
+      "reads": [
+        {
+          "channel": "ocr",
+          "value": "2026-11-15",
+          "artifact_id": "r1",
+          "session": "acting"
+        },
+        {
+          "channel": "export",
+          "value": "2026-11-15",
+          "source_kind": "live_session",
+          "session": "acting"
+        }
+      ]
     }
   ],
   "identities": [
@@ -97,12 +118,12 @@
       "id": "openadapt-flow@site-runner-1"
     },
     "captured_at": "2026-10-29T14:00:00+00:00",
-    "checksum": "sha256:0052f9f3d49f04c6a093a5e0327970d358e5fe30846b59d0a3678a5456239ad2"
+    "checksum": "sha256:7e002db6df7ae1be55bf2e83361b97763a6eeb705e57ca33cd0a1a4cfe6c61d0"
   },
   "seals": [
     {
       "kind": "openadapt.seal/offline-ed25519",
-      "covers": "sha256:0052f9f3d49f04c6a093a5e0327970d358e5fe30846b59d0a3678a5456239ad2",
+      "covers": "sha256:7e002db6df7ae1be55bf2e83361b97763a6eeb705e57ca33cd0a1a4cfe6c61d0",
       "key_id": "site-key-1",
       "uri": "seals/run-0001.seal.json"
     }

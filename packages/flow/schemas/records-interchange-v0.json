@@ -743,6 +743,23 @@
           "description": "For application reads: the acting session, the record reopened by id, or an independent channel",
           "title": "Session"
         },
+        "source_kind": {
+          "anyOf": [
+            {
+              "enum": [
+                "live_session",
+                "committed_store"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Required on export reads: live_session or committed_store",
+          "title": "Source Kind"
+        },
         "observed_at": {
           "anyOf": [
             {
