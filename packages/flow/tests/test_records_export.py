@@ -75,7 +75,7 @@ def test_rows_are_typed_with_provenance() -> None:
     assert row["account_number"] == "AC1"
     assert row["open_items"] == 3
     assert row["active"] is True
-    assert row["_grade"] == "screen_readback"
+    assert row["_grade"] == "same_screen"
     assert row["_receipt_sha256"] == "b" * 64
     prov = json.loads(row["_provenance"])
     assert prov[0]["channels"] == ["clipboard", "ocr"]
@@ -88,12 +88,12 @@ def test_unsettled_and_weak_records_are_skipped() -> None:
     )
     assert [r["_record_key"] for r in result.rows] == ["ac1"]
     assert result.skipped[0].reason == "needs review: holder"
-    strict = export_rows([_record("ac1")], SCHEMA, min_grade="verified")
+    strict = export_rows([_record("ac1")], SCHEMA, min_grade="system_of_record")
     assert strict.rows == []
-    assert "below verified" in strict.skipped[0].reason
+    assert "below system_of_record" in strict.skipped[0].reason
 
 
-def test_verified_only_with_independent_read() -> None:
+def test_system_of_record_only_with_independent_read() -> None:
     record = _record("ac1")
     upgraded = tuple(
         add_read(
@@ -104,8 +104,8 @@ def test_verified_only_with_independent_read() -> None:
         for f in record.fields
     )
     record = record.model_copy(update={"fields": upgraded})
-    result = export_rows([record], SCHEMA, min_grade="verified")
-    assert result.rows[0]["_grade"] == "verified"
+    result = export_rows([record], SCHEMA, min_grade="system_of_record")
+    assert result.rows[0]["_grade"] == "system_of_record"
 
 
 def test_reviewed_value_exports_with_honest_grade(tmp_path) -> None:
@@ -126,7 +126,7 @@ def test_reviewed_value_exports_with_honest_grade(tmp_path) -> None:
     settled = record.model_copy(update={"fields": fields})
     (row,) = export_rows([settled], SCHEMA).rows
     assert row["holder"] == "Jane Roe"
-    assert row["_grade"] == "unconfirmed"
+    assert row["_grade"] == "unchecked"
 
 
 def test_csv_sink(tmp_path) -> None:
@@ -134,7 +134,7 @@ def test_csv_sink(tmp_path) -> None:
     export([_record("ac1")], SCHEMA, CsvSink(path))
     rows = list(csv.DictReader(path.open()))
     assert rows[0]["account_number"] == "AC1"
-    assert rows[0]["_grade"] == "screen_readback"
+    assert rows[0]["_grade"] == "same_screen"
 
 
 def test_sqlite_sink_upserts(tmp_path) -> None:
@@ -145,7 +145,7 @@ def test_sqlite_sink_upserts(tmp_path) -> None:
     got = conn.execute(
         'SELECT account_number, open_items, "_grade" FROM accounts ORDER BY 1'
     ).fetchall()
-    assert got == [("AC1", 3, "screen_readback"), ("AC3", 3, "screen_readback")]
+    assert got == [("AC1", 3, "same_screen"), ("AC3", 3, "same_screen")]
 
 
 def test_db_sink_rejects_unsafe_identifiers() -> None:
@@ -195,7 +195,7 @@ def test_webhook_posts_to_loopback() -> None:
     assert received[0]["rows"][0]["account_number"] == "AC1"
 
 
-def test_default_single_reads_export_as_unconfirmed() -> None:
+def test_default_single_reads_export_as_unchecked() -> None:
     fields = []
     for name, raw in (
         ("account_number", "AC9"),
@@ -214,7 +214,7 @@ def test_default_single_reads_export_as_unconfirmed() -> None:
         fields=tuple(fields),
     )
     (row,) = export_rows([record], SCHEMA).rows
-    assert row["_grade"] == "unconfirmed"
+    assert row["_grade"] == "unchecked"
     assert row["_receipt_sha256"] is None
     assert row["active"] is False
-    assert export_rows([record], SCHEMA, min_grade="screen_readback").rows == []
+    assert export_rows([record], SCHEMA, min_grade="same_screen").rows == []

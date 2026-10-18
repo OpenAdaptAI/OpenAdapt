@@ -15,7 +15,7 @@ seal=True)` and shows each step:
 4. Review queue: one field is drawn wrong on screen (the clipboard and the
    export are right). It goes to review, and a person settles it with a signed
    decision.
-5. Write gate: a step that needs `committed_record_readback` for `balance`
+5. Write gate: a step that needs `reopened` for `balance`
    halts for the account whose balance a person had to settle.
 6. Export to CSV and SQLite with provenance columns.
 
@@ -26,7 +26,7 @@ python examples/records/demo.py --out /tmp/records-demo
 python examples/records/demo.py --out /tmp/records-demo --simulated-ocr  # fast, no OCR engine
 ```
 
-Agreeing fields reach `verified`. A field a person settled keeps the grade its
-reads support, so its record exports as `unconfirmed`.
+Agreeing fields reach `system_of_record`. A field a person settled keeps the grade its
+reads support, so its record exports as `unchecked`.
 
 `templates/omop/` holds an OMOP CDM template, kept outside the core.

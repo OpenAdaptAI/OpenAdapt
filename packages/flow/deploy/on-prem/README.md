@@ -23,7 +23,7 @@ install story) and **[COMPLIANCE.md](COMPLIANCE.md)** (posture + data-flow).
 | `UPDATE.md` | Offline update + rollback runbook: build a signed release, apply it atomically, revert instantly. | REAL (doc) |
 | `systemd/openadapt-flow-runner.service` + `.path` | Event-driven runner unit with kernel-level egress denial (`IPAddressDeny=any`). | REAL (Linux/systemd) |
 | `docker-compose.yml` + `Dockerfile` | Container alternative on an `internal:true` (egress-blocked) network; optional LAN-only VLM appliance profile. | REAL topology; STUB image build (needs offline `./wheels`) |
-| `COMPLIANCE.md` | PHIPA/HIPAA-adjacent posture, data-flow diagram, what's encrypted, boundaries. | REAL (doc; non-legal) |
+| `COMPLIANCE.md` | Regulatory posture, data-flow diagram, what's encrypted, boundaries. | REAL (doc; non-legal) |
 
 ## 60-second install (systemd host)
 

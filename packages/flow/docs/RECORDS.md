@@ -35,7 +35,7 @@ to the review queue. It is unset by default.
 
 ## Proof is opt-in
 
-By default a field is read through one channel, gets the grade `unconfirmed`
+By default a field is read through one channel, gets the grade `unchecked`
 and has no Seal. Turn proof on for the whole schema, or per field, with
 `ReadProof`:
 
@@ -75,21 +75,22 @@ field grade.
 
 ## Read grades
 
-Weakest first:
-
-The grade only ever reflects what was proven.
+Weakest first. The names are check levels 0, 1, 2 and 4 from the
+[check-level table](APPROVAL_AND_VERIFICATION.md#how-a-save-is-checked), so a
+read grade means the same as the check level of a save. The grade only ever
+reflects what was proven.
 
 | Grade | What it needs |
 |---|---|
-| `unconfirmed` | Nothing cross-checked. The default for a single-channel read. Reads that disagree also get it, and go to review. |
-| `screen_readback` | Two screen channels agree in the same session, such as clipboard and OCR. |
-| `committed_record_readback` | The record was closed, reopened by its identity fields and read again, and the reads agree. |
-| `verified` | A channel independent of the acting session agrees: a read-only database, an API, or an export of committed data. |
+| `unchecked` | Nothing cross-checked. The default for a single-channel read. Reads that disagree also get it, and go to review. |
+| `same_screen` | Two screen channels agree in the same session, such as clipboard and OCR. |
+| `reopened` | The record was closed, reopened by its identity fields and read again, and the reads agree. |
+| `system_of_record` | A channel independent of the acting session agrees: a read-only database, an API, or an export of committed data. |
 
 `grade_for()` computes the strongest grade a set of reads supports, and a
 `FieldRead` that claims more is rejected. Only `database` and `api` reads and
 exports of committed data count as independent, so screen reads alone can
-never be `verified`.
+never be `system_of_record`.
 
 ### Exports from the application
 
@@ -98,8 +99,8 @@ is derived from it:
 
 | `source_kind` | Taken from | Counts as | Best grade |
 |---|---|---|---|
-| `live_session` | The same live UI session that typed or showed the value. It can include that session's unsaved state. | A screen read | `screen_readback` |
-| `committed_store` | Saved data, through a separate process, a database read or a scheduled export. | An independent read | `verified` |
+| `live_session` | The same live UI session that typed or showed the value. It can include that session's unsaved state. | A screen read | `same_screen` |
+| `committed_store` | Saved data, through a separate process, a database read or a scheduled export. | An independent read | `system_of_record` |
 
 ```python
 ChannelRead(channel="export", raw="AC-1042", source_kind="live_session")
@@ -107,14 +108,14 @@ ChannelRead(channel="export", raw="AC-1042", session="independent",
             source_kind="committed_store")
 ```
 
-A workflow can use either kind. A write step that needs `verified` values
+A workflow can use either kind. A write step that needs `system_of_record` values
 (see below) halts on values backed only by a live-session export.
 
 ## The reading step
 
 `openadapt_flow.records.read.read_field()` reads one field on a live backend.
 By default it uses one channel: the clipboard when you pass one, otherwise
-OCR of the field's region. The value comes back `unconfirmed` with no Seal.
+OCR of the field's region. The value comes back `unchecked` with no Seal.
 
 ```python
 from openadapt_flow.records.read import SystemClipboard, read_field
@@ -150,10 +151,10 @@ A field goes to review when its reads disagree or are ambiguous, when a value
 is not valid for its kind, when `double_read` is on and only one channel read
 a value, or when it sets `min_confidence` and falls below it.
 
-For `committed_record_readback`, close the record, reopen it by its identity
+For `reopened`, close the record, reopen it by its identity
 fields, read the field again with `session="reopened"`, and pass the new read
-to `add_read()`. For `verified`, pass a database or API read, or an export of committed data
-(`channel_read(spec, "export", value, source_kind="committed_store")`). A live-session export gives at most `screen_readback`. A later read that disagrees sends
+to `add_read()`. For `system_of_record`, pass a database or API read, or an export of committed data
+(`channel_read(spec, "export", value, source_kind="committed_store")`). A live-session export gives at most `same_screen`. A later read that disagrees sends
 the field to review.
 
 ## Read steps in a workflow
@@ -238,7 +239,7 @@ minimum grade it accepts. Below it, the run halts instead of writing:
 ```python
 from openadapt_flow.records.schema import GradeGate
 
-GradeGate(min_grade="committed_record_readback", fields=("amount_due",)).check(record)
+GradeGate(min_grade="reopened", fields=("amount_due",)).check(record)
 # raises GradeTooLow if amount_due is weaker, missing or still needs review
 ```
 
@@ -288,7 +289,7 @@ The queue enforces these rules:
   decision and the hash of the item. `queue.check()` verifies both.
 - A corrected value must be valid for the field's kind.
 - A decision settles the value but keeps its grade. A person's choice is not a
-  read, so it never makes a value `verified`.
+  read, so it never raises the grade.
 
 ## Export
 
@@ -318,8 +319,8 @@ provenance columns:
 | `_provenance` | JSON: per field, the grade, channels, confidence, screenshot hash, region, crop hash and review decision. |
 
 A record is exported only when no field still needs review and each field is
-at least `min_grade` (default `unconfirmed`, so every settled record) or was settled by a signed
-review decision. Pass `min_grade="verified"` to export only values confirmed
+at least `min_grade` (default `unchecked`, so every settled record) or was settled by a signed
+review decision. Pass `min_grade="system_of_record"` to export only values confirmed
 by an independent channel. Skipped records are returned with the reason.
 
 `DbApiSink` takes any DB-API 2.0 connection. For Postgres, pass a `psycopg`

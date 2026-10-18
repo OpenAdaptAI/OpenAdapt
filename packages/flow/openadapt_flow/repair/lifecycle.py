@@ -34,8 +34,9 @@ from __future__ import annotations
 import os
 import shutil
 import tempfile
+from datetime import datetime
 from pathlib import Path
-from typing import Literal, Optional
+from typing import TYPE_CHECKING, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -50,6 +51,11 @@ from openadapt_flow.repair.candidate import (
     TransitionRecord,
 )
 from openadapt_flow.repair.invariants import enforce_contract_invariants
+
+if TYPE_CHECKING:  # the fleet package imports this module at run time
+    from openadapt_flow.fleet.policy import RoleRegistry, SignedPromotionPolicy
+    from openadapt_flow.fleet.signing import FleetTrust
+    from openadapt_flow.fleet.status import FleetStatusSource, StatusHighWater
 
 _ACTIVE_NAME = "ACTIVE.json"
 _CANDIDATES_DIR = "candidates"
@@ -113,6 +119,36 @@ _ALLOWED: dict[RepairState, tuple[RepairState, ...]] = {
     "rejected": (),
     "rolled_back": (),
 }
+
+
+#: The campaign case kind a tenant-local qualification canary records
+#: (:mod:`openadapt_flow.fleet.canary`). Policy pre-approval requires every
+#: case of both campaigns to be of this kind, so a frame-only campaign can never
+#: stand in for a run of the tenant's own cases.
+QUALIFICATION_CASE_KIND = "qualification_case"
+
+
+class PolicyPreApproval(BaseModel):
+    """What a verified tenant policy grants, as recorded on the candidate.
+
+    ``approved_by`` is the person who approved the policy itself. Callers do
+    not hand this to the store: :meth:`RepairStore.review_under_policy` and
+    :meth:`RepairStore.approve_under_policy` take the signed policy and derive
+    it themselves after verifying the signature.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    policy_sha256: str = Field(pattern=r"^[a-f0-9]{64}$")
+    approved_by: str = Field(min_length=1, max_length=200)
+
+    @property
+    def actor(self) -> Actor:
+        return Actor(kind="automation", id=f"fleet-policy:{self.policy_sha256[:16]}")
+
+    @property
+    def label(self) -> str:
+        return f"policy:{self.policy_sha256[:16]}"
 
 
 class ActivePointer(BaseModel):
@@ -297,6 +333,146 @@ class RepairStore:
         _refuse_self_review(candidate, actor, "repair review")
         candidate.reviewed_by = actor.id
         return self._transition(candidate, "reviewed", actor, note="diff reviewed")
+
+    # -- tenant policy pre-approval (fleet patches only) ---------------------
+
+    @staticmethod
+    def _require_policy_eligible(
+        candidate: RepairCandidate, grant: PolicyPreApproval, operation: str
+    ) -> None:
+        """Refuse a policy step unless the candidate is a plain fleet patch.
+
+        Checked here, inside the store, and not only by the caller's policy:
+        only a ``fleet_patch`` candidate whose signature chain was verified,
+        that touches no identity evidence, and that weakens no contract may
+        ever be reviewed or approved without a person.
+        """
+        if grant.approved_by.startswith(("policy:", "fleet-policy:")):
+            raise RepairLifecycleError(
+                f"refused: {operation} needs a policy approved by a person"
+            )
+        fleet = candidate.fleet_patch
+        if candidate.source != "fleet_patch" or fleet is None:
+            raise RepairLifecycleError(
+                f"refused: {operation} applies only to imported fleet patches; "
+                "every other repair needs a person"
+            )
+        if fleet.identity_evidence_changed or any(
+            change.identity for change in candidate.binding_changes
+        ):
+            raise RepairLifecycleError(
+                f"refused: {operation}: the patch touches identity evidence, so "
+                "a person must review and approve it"
+            )
+        if candidate.contract_weakenings:
+            raise RepairLifecycleError(
+                f"refused: {operation}: the patch weakens the safety contract"
+            )
+        if candidate.provenance is not None:
+            raise RepairLifecycleError(
+                f"refused: {operation}: an agent-taught repair needs a person"
+            )
+
+    def review_under_policy(
+        self,
+        candidate_id: str,
+        *,
+        policy: "SignedPromotionPolicy",
+        roles: "RoleRegistry",
+    ) -> RepairCandidate:
+        """Record the tenant policy as the diff review (candidate -> reviewed).
+
+        Only for fleet patches that touch no identity evidence, under a policy
+        whose signature this method verifies against ``roles``. Every later
+        gate still runs: the qualification canary must pass on this tenant's
+        own cases before :meth:`approve_under_policy` will approve.
+        """
+        from openadapt_flow.fleet.policy import authorize_policy_step
+
+        candidate = self.load_candidate(candidate_id)
+        grant = authorize_policy_step(candidate, policy=policy, roles=roles)
+        self._require_policy_eligible(candidate, grant, "policy review")
+        candidate.reviewed_by = f"{grant.label} (approved by {grant.approved_by})"
+        return self._transition(
+            candidate,
+            "reviewed",
+            grant.actor,
+            note=f"reviewed under policy {grant.policy_sha256[:16]}",
+        )
+
+    def approve_under_policy(
+        self,
+        candidate_id: str,
+        *,
+        policy: "SignedPromotionPolicy",
+        roles: "RoleRegistry",
+        trust: "FleetTrust",
+        status_source: "FleetStatusSource",
+        status_state: "Optional[StatusHighWater]",
+        now: Optional[datetime] = None,
+    ) -> RepairCandidate:
+        """Approve under the tenant policy (fault_passed -> approved).
+
+        Verifies, here and not only in the caller, that ``policy`` is signed
+        by an approver in ``roles`` and allows this candidate, and that fleet
+        status read now from ``status_source`` is fresh, verified against
+        ``trust``, not replayed (``status_state``), revokes nothing in the
+        patch's chain, and has no kill switch against it. Any doubt refuses.
+
+        Then refuses unless the candidate is eligible (see
+        :meth:`_require_policy_eligible`), both campaigns passed and consist
+        only of this tenant's qualification cases, and the contract
+        invariants still hold against the bundles on disk. The approval binds
+        the exact bundle digests and the policy digest.
+        """
+        from openadapt_flow.fleet.policy import authorize_policy_step
+
+        candidate = self.load_candidate(candidate_id)
+        grant = authorize_policy_step(
+            candidate,
+            policy=policy,
+            roles=roles,
+            status=(trust, status_source, status_state),
+            now=now,
+        )
+        self._require_policy_eligible(candidate, grant, "policy approval")
+        if candidate.state != "fault_passed":
+            raise RepairLifecycleError(
+                f"refused: candidate {candidate_id} is in state "
+                f"{candidate.state!r}; policy approval requires the full gate "
+                "sequence to have passed first"
+            )
+        if not candidate.campaigns_passed():
+            raise RepairLifecycleError(
+                f"refused: candidate {candidate_id} has not passed both campaigns"
+            )
+        for campaign in (candidate.replay_campaign, candidate.fault_campaign):
+            assert campaign is not None
+            if not campaign.cases or any(
+                case.kind != QUALIFICATION_CASE_KIND for case in campaign.cases
+            ):
+                raise RepairLifecycleError(
+                    "refused: policy approval needs a canary of this tenant's "
+                    "own qualification cases"
+                )
+        self._reverify_invariants(candidate)
+        candidate.approval = ApprovalRecord(
+            approved_by=grant.label,
+            non_interactive=True,
+            prior_content_digest=candidate.prior_content_digest,
+            proposed_content_digest=candidate.proposed_content_digest,
+            pre_approval_policy_sha256=grant.policy_sha256,
+            pre_approved_by=grant.approved_by,
+        )
+        return self._transition(
+            candidate,
+            "approved",
+            grant.actor,
+            note=(
+                f"approved under policy {grant.policy_sha256[:16]} "
+                f"(policy approved by {grant.approved_by})"
+            ),
+        )
 
     def reject(self, candidate_id: str, actor: Actor, reason: str) -> RepairCandidate:
         candidate = self.load_candidate(candidate_id)
