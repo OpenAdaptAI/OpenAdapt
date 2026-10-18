@@ -1,6 +1,9 @@
-# Reading records: accounts ledger example
+# Reading records: library-level example
 
-A mock accounts-ledger app (`accounts_app.py`) with three synthetic accounts.
+This example calls the records library directly against a fake screen
+(`fake_screen.py`), a test double with three synthetic accounts. It is not a
+second demo app. For a full run against a desktop app, use the shared mock
+ledger in `examples/legacy_records/`.
 `demo.py` reads each account into a typed record. Proof is opt-in; the demo
 turns all of it on with `ReadProof(double_read=True, committed_readback=True,
 seal=True)` and shows each step:

@@ -1,7 +1,9 @@
-"""A mock accounts-ledger desktop app for the records example. Synthetic data only.
+"""A fake screen for the library-level records example. Synthetic data only.
 
-It draws one account screen at a time as a PNG and behaves like a Flow
-backend (``screenshot``, ``click``, ``press``). Copying a field puts the
+Not an application: a test double that draws a few labelled values as a PNG
+and behaves like a Flow backend (``screenshot``, ``click``, ``press``). The
+shared demo app for the legacy-records work is the mock ledger in
+``examples/legacy_records/apps/``; use that for a full desktop run. Copying a field puts the
 app's own text on its clipboard. ``export_csv`` stands in for the app's
 scheduled report export: it reads saved data, not the open screen, so its
 reads use ``source_kind="committed_store"``.
@@ -59,7 +61,7 @@ def region(name: str) -> tuple[int, int, int, int]:
 
 
 @dataclass
-class AccountsApp:
+class FakeScreen:
     """The app plus its clipboard. ``display_overrides`` changes what the
     screen shows for a field without changing what copy returns, to model a
     rendering problem the double read must catch."""
@@ -99,7 +101,7 @@ class AccountsApp:
     def screenshot(self) -> bytes:
         image = Image.new("RGB", self.viewport, "white")
         draw = ImageDraw.Draw(image)
-        draw.text((20, 14), "Accounts ledger", fill="black", font=_font(26))
+        draw.text((20, 14), "Account", fill="black", font=_font(26))
         if self.current is not None:
             for name in LABELS:
                 y = ROW_Y[name]
@@ -151,7 +153,7 @@ class AccountsApp:
 class AppClipboard:
     """The app's clipboard, as a ``ClipboardReader``."""
 
-    def __init__(self, app: AccountsApp) -> None:
+    def __init__(self, app: FakeScreen) -> None:
         self.app = app
 
     def read_text(self) -> Optional[str]:

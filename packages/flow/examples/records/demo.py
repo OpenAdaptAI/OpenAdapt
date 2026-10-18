@@ -1,4 +1,4 @@
-"""Read accounts out of a mock ledger app with proof, review the problem, export.
+"""Library-level example: read records off a fake screen with proof, review, export.
 
 Synthetic data, local OCR, no network and no model calls. Run from
 packages/flow:
@@ -17,10 +17,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from accounts_app import ACCOUNTS, LABELS, AccountsApp, AppClipboard, region  # noqa: E402
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (  # noqa: E402
     Ed25519PrivateKey,
 )
+from fake_screen import ACCOUNTS, LABELS, AppClipboard, FakeScreen, region  # noqa: E402
 
 from openadapt_flow.records.export import CsvSink, DbApiSink, export  # noqa: E402
 from openadapt_flow.records.read import add_read, channel_read, read_field  # noqa: E402
@@ -54,7 +54,7 @@ RUNNER = "runner:demo"
 
 
 def read_record(
-    app: AccountsApp, key: str, *, session: str = "acting", ocr=None
+    app: FakeScreen, key: str, *, session: str = "acting", ocr=None
 ) -> RecordRead:
     app.open_record(key)
     clipboard = AppClipboard(app)
@@ -96,7 +96,7 @@ def main(argv: list[str] | None = None) -> int:
     out: Path = args.out
     out.mkdir(parents=True, exist_ok=True)
 
-    app = AccountsApp()
+    app = FakeScreen()
     # The screen draws 7,905.25 as 7,965.25 for one account; copy is right.
     app.display_overrides[("AC-3307", "balance")] = "$7,965.25"
     ocr = app.simulated_ocr if args.simulated_ocr else None
