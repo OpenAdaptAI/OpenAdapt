@@ -10,6 +10,21 @@
 
 </div>
 
+## What OpenAdapt does
+
+- **Learns from any successful run**, a person's demonstration or a computer-use agent's verified run, and compiles it into a program that runs with no model calls.
+- **Uses the fastest layer the app allows**: direct API calls where possible, then page structure (DOM, UI Automation, Accessibility), and pixels only for remote desktops.
+- **Builds branching programs** from several demonstrations, repeated halts and background runs, and routes each item to the right verified variant.
+- **Works across surfaces**: web, Windows, macOS, RDP and Citrix, in one workflow.
+- **Confirms the right record before every write and reads the saved record back** from the system of record, never just the screen.
+- **Stops instead of guessing**, never retries an uncertain save, and says what changed before a stop.
+- **Binds each approval to exactly what will be saved**, with one-tap answers on a paired phone.
+- **Repairs itself when the app changes**, probing a fix up to the save and asking a person to approve it.
+- **Works as a safety layer under any agent**: MCP tools, a guarded save, Agent Skills and a CLI.
+- **Runs locally**: no model calls on healthy runs, patient data redacted, signed receipts.
+
+Status, evidence and code for each, including the few still being merged: [CAPABILITIES.md](CAPABILITIES.md).
+
 ```bash
 uvx --python 3.12 openadapt quickstart --break-it
 ```

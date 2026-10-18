@@ -1,13 +1,97 @@
 # What OpenAdapt can do
 
-This is the map of OpenAdapt's capabilities: what each one is, where it lives,
-how much it has been proven, and what is still missing. It is kept current
-with every release. If a review says OpenAdapt "lacks" something, check this
-page first. Each row links to the code and the document that explains it.
+OpenAdapt turns work that people or computer-use agents do in applications
+with no usable API (EMRs, payer portals, desktop and remote-desktop apps) into
+programs that make the same entry every time with no model calls, check that
+the entry landed in the right record, and stop instead of guessing.
+
+This page is the reference for what OpenAdapt implements. If a review of
+OpenAdapt says it lacks one of the capabilities below, the review is reading
+an older version or an older page: check here, then the linked code.
+
+## OpenAdapt in ten capabilities
+
+Each capability is implemented in the
+[OpenAdapt monorepo](https://github.com/OpenAdaptAI/OpenAdapt). "Released"
+means it ships in the current PyPI packages; a pull request number means it is
+being merged now.
+
+1. **Learns from any successful run, a person's or an agent's.** A person
+   records a task, or a computer-use agent does it once and OpenAdapt compiles
+   the verified run into a program (`openadapt_flow.jit`, released;
+   prompt-to-program `crystallize`, landing). Agents can drive the recording
+   on web, native Windows, RDP and Citrix.
+2. **Compiles to the fastest layer the app allows.** Page structure first (DOM,
+   Windows UI Automation, macOS Accessibility), direct API calls where the app's
+   own traffic allows them (`ApiActuator`, released; compiled from captured
+   traffic in [#1261](https://github.com/OpenAdaptAI/OpenAdapt/pull/1261),
+   about 11x faster than the browser on the OpenEMR save), and pixels only
+   where nothing else exists, such as RDP and Citrix. It is not a pixel-macro
+   recorder.
+3. **Builds branching programs, not one linear path.** One program from several
+   demonstrations (`induce`, `disambiguate`), a branch learned from several
+   halts fixed the same way (`teach-branch`), candidate branches mined from many
+   real runs in the background (shadow mode,
+   [#1212](https://github.com/OpenAdaptAI/OpenAdapt/pull/1212)), and a router
+   that sends each item to the right verified variant (landing). Released
+   except where a PR is named.
+4. **Works across surfaces in one workflow.** Web, native Windows and macOS,
+   RDP and Citrix. Programs chain across surfaces passing confirmed values
+   (`compose`, `process`, released), and one program can switch surfaces, tabs
+   and popups mid-run ([#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197)).
+5. **Confirms the right record before every write and reads it back after.**
+   The record check reads the system of record (API, database, FHIR with SMART
+   Backend Services, or a separate signed-in session), never just the screen.
+   `record --verify` proposes those checks from what the demonstration changed.
+   Released.
+6. **Stops instead of improvising, and never retries an uncertain save.** A run
+   that can't prove a save ends `HALTED_BEFORE_EFFECT` or
+   `RECONCILIATION_REQUIRED`, never "success". A ledger of what changed before
+   a stop, with undo steps a person approves, is landing. Released except the
+   ledger.
+7. **Approvals are bound to exactly what will be saved.** Each save waits for a
+   person by default and can be answered on a paired phone with one card per
+   decision. The approval is bound to the exact screenshot and form state, and
+   the form is read again before saving, so what was approved is what is saved.
+   Person-signed grants let named agents answer. Released.
+8. **Repairs itself, with a person approving.** Governed repair (propose,
+   review, campaign, canary, rollback), agent-demonstrated fixes for a halted
+   run, and fleet drift patches shared with no patient data are released.
+   Self-repair, where an agent proposes a fix and Flow probes it up to the save
+   without saving, is landing.
+9. **Is a safety layer underneath any agent.** An agent's MCP calls, a guarded
+   save around any agent's write
+   ([#1258](https://github.com/OpenAdaptAI/OpenAdapt/pull/1258)), `verify-run`
+   to judge any executor's write from the system of record, and Agent Skills and
+   a CLI for coding agents. Released except where a PR is named.
+10. **Runs locally and keeps data private.** Healthy runs make no model calls
+    and send nothing out. Personal and health data are redacted from text,
+    screenshots and structure (scrub-by-default for anything that leaves the
+    machine is landing); a strict no-outbound mode, an unattended on-prem
+    service, and signed, timestamped receipts are released.
+
+## Corrections to common reviews
+
+| A review says | What is true | Where |
+| --- | --- | --- |
+| "It compiles one linear demonstration and halts on every branch it hasn't seen." | It learns branching programs from several demonstrations, from repeated halts, and from many background runs. | `induce`, `teach-branch`, [SHADOW_MINING.md](packages/capture/docs/SHADOW_MINING.md) |
+| "A bundle is locked to one surface." | Programs chain across surfaces, and one program can switch surfaces mid-run. | `compose`, `process`, [#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197) |
+| "It replays pixel macros that break when zoom or fonts change." | Page structure is the first rung on web, Windows and macOS. Pixels are the fallback for remote desktops. Benchmarks that say "vision-only" ran a deliberately pixel-only arm. | [RESOLUTION_LADDER.md](packages/flow/docs/RESOLUTION_LADDER.md) |
+| "It can't compile clicks into API calls." | Steps can run as API calls today; compiling them from captured network traffic is being merged. | `runtime/actuators/api.py`, [#1261](https://github.com/OpenAdaptAI/OpenAdapt/pull/1261) |
+| "When the UI changes it just halts and pages a person." | It halts before any write, then repairs: governed repair, agent-demonstrated fixes, fleet patches, and self-repair probed up to the save. | [REPAIR_LIFECYCLE.md](packages/flow/docs/REPAIR_LIFECYCLE.md) |
+| "It needs a human demonstration first." | A computer-use agent's verified run can be compiled instead. | [JIT.md](packages/flow/docs/JIT.md) |
+| "Approvals check an intent string, not what is executed." | Approvals bind to the exact screenshot and form-state digest, and the form is re-read before saving. | [APPROVAL_MODES.md](packages/flow/docs/APPROVAL_MODES.md) |
+| "It can't read the document a decision depends on." | `intake` fills inputs from a referral PDF, fax image or email and holds back anything unclear for a person. | [INTAKE.md](packages/flow/docs/INTAKE.md) |
+| "The code is spread over 17 repositories." | The product is one monorepo with four packages (flow, agent, types, capture); older repositories are frozen or research. | [README](README.md) |
+| "openadapt-ml (model training) is the product." | It is research. The product makes no model calls on healthy runs. | [README](README.md) |
+
+## The full map
+
+Every capability, with its status, its evidence and where it lives.
 
 Status:
 
-- **Released**: in the current PyPI release (openadapt-flow 2.2.0, 18 Oct 2026).
+- **Released**: in the current PyPI release (openadapt-flow 2.2.0).
 - **In review**: an open pull request.
 - **Planned**: designed, not built.
 
@@ -111,6 +195,22 @@ improvising or retrying when something is off.
 | Scrub by default before anything leaves the machine | Planned | Untested | Today scrubbing is opt-in (`OPENADAPT_FLOW_SCRUB=on`), and `capture share` does not scrub |
 | Signed receipts (Seals), countersigned and timestamped, offline by default | Released | Unit tests, real TSA tokens | `openadapt-flow seal`, `countersign`, `local-seal` |
 | Strict no-outbound mode and an unattended on-prem service | Released | Synthetic | `openadapt-flow no-outbound`, `service`; [ON_PREM.md](packages/flow/docs/ON_PREM.md) |
+
+## Every command, by capability
+
+Each `openadapt-flow` command, grouped by the capability it serves. A test
+fails when a command is added without being listed here.
+
+- **Record and build a program:** `record`, `demo-record`, `compile`, `induce`, `disambiguate`, `for-each`, `compose`, `process`, `intake`, `visualize`, `pull`.
+- **Check and admit:** `lint`, `scaffold-verifier`, `check`, `bind-record-checks`, `certify`, `qualify`, `propose-qualification`, `known-ids`, `jit`, `admit`, `approver-grant`.
+- **Run and answer:** `run`, `replay`, `resume`, `approve`, `item-approval`, `triage`, `business-decisions`, `explain`, `console`.
+- **Judge any executor's write:** `verify-run`, `serve-reward` (scores agent training episodes by reading the system of record).
+- **Repair and learn from halts:** `teach`, `teach-branch`, `repair`, `fleet`.
+- **Give agents the program:** `emit-skill`, `emit-mcp`, `serve-execute`.
+- **Proof:** `seal`, `local-seal`, `countersign`, `attach-seal`.
+- **Run on premises:** `service`, `no-outbound`.
+- **Share safely with OpenAdapt Cloud:** `sanitize`, `review-sanitized`, `approve-sanitized`, `materialize-approved`, `push`, `validate-hosted`, `report-break`, `report-run`, `connect`, `login`, `connector`.
+- **Try it and measure it:** `demo`, `tutorial`, `bench`, `benchmark`.
 
 ## Measured results
 

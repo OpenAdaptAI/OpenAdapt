@@ -11,7 +11,12 @@ under `packages/flow`, next to `packages/agent`, `packages/types` and
 `packages/capture`. The standalone openadapt-flow, openadapt-agent and
 openadapt-types repositories are frozen; changes go here.
 [CAPABILITIES.md](CAPABILITIES.md) is the map of what exists and how proven
-it is; update it in the same pull request as any capability change.
+it is; update it in the same pull request as any capability change, and list
+any new `openadapt-flow` command under "Every command, by capability" (a test
+enforces it). After editing README.md, CAPABILITIES.md, packages/flow/docs/
+SURFACES.md or LIMITS.md, or the flow CHANGELOG, run
+`python scripts/build_llms_full.py` to refresh the review brief llms-full.txt
+(a test checks it).
 
 The current product compiles demonstrated GUI workflows into deterministic,
 locally executable programs. Healthy runs make no model calls. Training,
