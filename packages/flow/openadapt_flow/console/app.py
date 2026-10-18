@@ -583,11 +583,14 @@ def create_app(
         ]
 
     @app.get("/api/save-approvals/{request_id}")
-    def save_approval_detail(request_id: str) -> dict[str, Any]:
+    def save_approval_detail(request_id: str) -> JSONResponse:
         try:
-            return save_approvals_mod.save_approval_detail(runs, request_id)
+            detail = save_approvals_mod.save_approval_detail(runs, request_id)
         except save_approvals_mod.SaveApprovalRefused as exc:
             raise HTTPException(status_code=404, detail=exc.code) from exc
+        # The presentation can carry the values a save writes: never cached,
+        # whatever the middleware does.
+        return JSONResponse(content=detail, headers={"Cache-Control": "no-store"})
 
     @app.get("/api/save-approvals/{request_id}/frame")
     def save_approval_frame(request_id: str) -> Response:

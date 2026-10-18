@@ -406,12 +406,25 @@ def action_evidence_error(
             receipt_error = _delivery_receipt_error(step, result, params=scoped_params)
             if receipt_error is not None:
                 return receipt_error
-    elif step.action is ActionKind.WAIT and actuation is None:
+    elif (
+        step.action in (ActionKind.WAIT, ActionKind.SWITCH_SURFACE)
+        and actuation is None
+    ):
         if result.delivery_attempted not in {None, False}:
-            return "wait action claims an input-delivery boundary"
+            return f"{step.action.value} action claims an input-delivery boundary"
     elif strict_production:
         return "production action lacks a closed runtime actuation path"
 
+    if step.action is ActionKind.SWITCH_SURFACE:
+        # A switch is armed by its SURFACE identity check (the recorded screen
+        # text and origin of its target, docs/MULTI_SURFACE.md), not by an
+        # entity identity row: it acts on no record. Its proof is the passed
+        # postconditions on the new surface.
+        if result.identity is not None:
+            return "surface switch contains an entity identity verdict"
+        if identity_required and step.expect and result.postconditions_ok is not True:
+            return "surface switch lacks a passed surface identity check"
+        return None
     if identity_required:
         return nonvacuous_identity_error(result.identity)
     # A step without an armed identity contract may continue when the optional

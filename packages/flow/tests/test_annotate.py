@@ -393,7 +393,25 @@ class _StubClient:
         self.messages = _StubMessages(text)
 
 
-def test_anthropic_annotator_parses_json_with_a_stub_client():
+class _PassthroughScrubber:
+    def scrub_text(self, text, is_separated=False):
+        return text
+
+    def scrub_image(self, image, fill_color=None):
+        return image
+
+
+@pytest.fixture
+def passthrough_scrubber():
+    """The annotator scrubs its request; these tests cover parsing, not scrubbing."""
+    from openadapt_flow import privacy
+
+    privacy.set_text_scrubber(_PassthroughScrubber())
+    yield
+    privacy.reset_scrubbers()
+
+
+def test_anthropic_annotator_parses_json_with_a_stub_client(passthrough_scrubber):
     # Exercises the REAL annotator's prompt + parse path with a stub client --
     # NO network, NO key, NO anthropic import. Proves the wiring, not the model.
     wf = _wf(_click("step_000", ocr="Pay invoice"))
@@ -420,7 +438,7 @@ def test_anthropic_annotator_parses_json_with_a_stub_client():
     assert result.workflow.steps[0].risk == "irreversible"
 
 
-def test_anthropic_annotator_ignores_a_junk_reply_fail_safe():
+def test_anthropic_annotator_ignores_a_junk_reply_fail_safe(passthrough_scrubber):
     wf = _wf(_click("step_000"))
     annotator = AnthropicStepAnnotator(
         model="stub", client=_StubClient("sorry, no JSON here")
