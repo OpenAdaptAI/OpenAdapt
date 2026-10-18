@@ -2352,10 +2352,12 @@ def _approver_settings(args: argparse.Namespace):
     if path:
         loaded = load_approver_policy(path, default_key_dir())
         if loaded.refusal is not None:
+            from openadapt_flow.cli_hints import command
+
             print(
                 f"approver policy not used ({loaded.refusal}): only a person "
                 "answers this run's saves. A delegate needs a grant a "
-                "registered person signed (openadapt-flow approver-grant sign).",
+                f"registered person signed ({command('approver-grant sign')}).",
                 file=sys.stderr,
             )
     approver = None
