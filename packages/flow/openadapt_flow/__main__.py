@@ -1795,13 +1795,16 @@ def _cmd_induce(args: argparse.Namespace) -> int:
         else:
             traces.append(path)
 
+    spoken = _induce_narration_args(args)
+    if isinstance(spoken, int):
+        return spoken
     if args.probe_on:
-        probed = _induce_with_probes(args, traces)
+        probed = _induce_with_probes(args, traces, spoken)
         if isinstance(probed, int):
             return probed
         result = probed
     else:
-        result = induce_program(traces)
+        result = induce_program(traces, **spoken)
     print(result.render())
     if args.report:
         report_path = Path(args.report)
@@ -1835,7 +1838,44 @@ def _cmd_induce(args: argparse.Namespace) -> int:
     return 0
 
 
-def _induce_with_probes(args: argparse.Namespace, traces: list) -> Any:
+def _induce_narration_args(args: argparse.Namespace) -> Any:
+    """Narration arguments for induce: each trace's narration.json, the
+    narrated guards a person accepted, and the opt-in compile-time model."""
+    from openadapt_flow.compiler.narration_rules import (
+        AnthropicNarrationInterpreter,
+        recording_screen_texts,
+    )
+    from openadapt_flow.narration import NarrationRefused, load_narration
+
+    narration = []
+    for d in args.recording:
+        try:
+            narration.append(load_narration(Path(d)))
+        except NarrationRefused as exc:
+            print(f"Narration not used for {d}: {exc}")
+            narration.append(None)
+    accepted = {}
+    if args.accept_narrated:
+        if not (args.accepted_by or "").strip():
+            print("--accept-narrated needs --accepted-by NAME (who accepted it)")
+            return 2
+        accepted = {loc: args.accepted_by.strip() for loc in args.accept_narrated}
+    frames = {
+        i: Path(d)
+        for i, d in enumerate(args.recording)
+        if (Path(d) / "frames").is_dir()
+    }
+    return {
+        "narration": narration,
+        "screen_texts": recording_screen_texts(frames) if frames else None,
+        "interpreter": AnthropicNarrationInterpreter() if args.narration_model else None,
+        "accepted_narration": accepted or None,
+    }
+
+
+def _induce_with_probes(
+    args: argparse.Namespace, traces: list, spoken: Optional[dict] = None
+) -> Any:
     """``induce --probe-on``: refuse a non-test target, else probe and induce.
 
     Returns the InductionResult, or an exit code when the target is refused.
@@ -1882,7 +1922,11 @@ def _induce_with_probes(args: argparse.Namespace, traces: list) -> Any:
         target = probing.DeploymentProbeTarget(cfg)
         print(f"Probing on declared test copy {cfg.name!r} (read-back: {contract})")
         return probing.probe_and_induce(
-            probe_traces, target=target, reward_contract=contract, work_dir=work
+            probe_traces,
+            target=target,
+            reward_contract=contract,
+            work_dir=work,
+            **(spoken or {}),
         )
 
     if args.probe_work_dir:
@@ -1891,6 +1935,53 @@ def _induce_with_probes(args: argparse.Namespace, traces: list) -> Any:
         return _run(work)
     with tempfile.TemporaryDirectory(prefix="induce-probe-") as tmp:
         return _run(Path(tmp))
+
+
+def _cmd_narration_attach(args: argparse.Namespace) -> int:
+    import json
+
+    from openadapt_flow.narration import (
+        NarrationRefused,
+        attach_narration,
+        sentences_from_transcript,
+        transcribe_audio,
+    )
+
+    recording = Path(args.recording)
+    try:
+        from openadapt_flow.narration import require_scrubber
+
+        scrubber = require_scrubber()  # refuse before any transcription
+        if args.audio:
+            result = transcribe_audio(args.audio, model=args.model, backend=args.backend)
+        else:
+            result = json.loads(Path(args.transcript).read_text(encoding="utf-8"))
+        path = attach_narration(
+            recording,
+            sentences_from_transcript(result, offset=args.offset),
+            scrubber=scrubber,
+        )
+    except (NarrationRefused, FileNotFoundError, ValueError, ImportError) as exc:
+        print(f"Narration not written: {exc}")
+        return 2
+    print(f"Scrubbed narration written to {path}")
+    return _cmd_narration_show(args)
+
+
+def _cmd_narration_show(args: argparse.Namespace) -> int:
+    from openadapt_flow.narration import NarrationRefused, load_narration
+
+    try:
+        narration = load_narration(Path(args.recording))
+    except NarrationRefused as exc:
+        print(str(exc))
+        return 2
+    if narration is None:
+        print(f"No narration.json in {args.recording}")
+        return 1
+    for line in narration.lines:
+        print(f"[{line.t_start:7.2f}s] {line.step_id or '-':>9}  {line.text}")
+    return 0
 
 
 def _cmd_for_each(args: argparse.Namespace) -> int:
@@ -7424,7 +7515,72 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Write the induction report (JSON, every probe run included) here",
     )
+    p.add_argument(
+        "--accept-narrated",
+        action="append",
+        default=[],
+        metavar="LOCATION",
+        help=(
+            "Accept the guard narration proposed at LOCATION (opt_N or "
+            "divergence_N, as the report names it). A guard any recording "
+            "contradicts stays refused. Repeatable; needs --accepted-by"
+        ),
+    )
+    p.add_argument(
+        "--accepted-by",
+        default=None,
+        help="Who accepted the narrated guard(s); recorded in the program",
+    )
+    p.add_argument(
+        "--narration-model",
+        action="store_true",
+        help=(
+            "Let a compile-time model (your own Anthropic key) read narrated "
+            "sentences the built-in parser cannot. Its answer is a flagged "
+            "proposal, checked like any other; never used at run time. The "
+            "sentence is scrubbed before it is sent. See docs/NARRATION.md"
+        ),
+    )
     p.set_defaults(func=_cmd_induce)
+
+    p = sub.add_parser(
+        "narration",
+        help=(
+            "Spoken narration for a recording: transcribe on this machine, "
+            "scrub, line up with the steps (narration.json), or show it"
+        ),
+    )
+    nsub = p.add_subparsers(dest="narration_cmd", required=True)
+    pa = nsub.add_parser(
+        "attach",
+        help=(
+            "Transcribe audio on this machine (or read a transcript), scrub it "
+            "with openadapt-privacy, and line it up with the recording's steps"
+        ),
+    )
+    pa.add_argument("recording", help="Recording directory (events.jsonl)")
+    src = pa.add_mutually_exclusive_group(required=True)
+    src.add_argument("--audio", help="16 kHz audio file (WAV, or FLAC with soundfile)")
+    src.add_argument(
+        "--transcript",
+        help="Whisper-style JSON transcript ({'segments': [{start, end, text}]})",
+    )
+    pa.add_argument(
+        "--offset",
+        type=float,
+        default=0.0,
+        help="Seconds after the recording started that the audio starts (default 0)",
+    )
+    pa.add_argument("--model", default="base", help="Whisper model (default: base)")
+    pa.add_argument(
+        "--backend",
+        default="auto",
+        help="On-device backend: auto | faster-whisper | openai-whisper",
+    )
+    pa.set_defaults(func=_cmd_narration_attach)
+    ps = nsub.add_parser("show", help="Print a recording's narration by step")
+    ps.add_argument("recording", help="Recording or bundle directory")
+    ps.set_defaults(func=_cmd_narration_show)
 
     p = sub.add_parser(
         "for-each",

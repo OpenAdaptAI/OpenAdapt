@@ -427,3 +427,170 @@ def test_synthetic_speech_end_to_end(tmp_path):
     induced = induce_program(traces, narration=[load_narration(rec), None])
     (ng,) = induced.narrated_guards
     assert ng.status == "certified" and induced.certified
+
+
+# -- probing on a test copy -----------------------------------------------------
+
+
+def test_probing_confirms_a_narrated_guard_the_recordings_cannot_check(tmp_path, monkeypatch):
+    """Coverage shows on screen and is never typed, so the recordings cannot
+    check "skip the copay when it's Medicare". The scripted test copy can:
+    the narrated reading produces the recorded effect in both contexts and
+    dropping the copay does not."""
+    from types import SimpleNamespace
+
+    from openadapt_flow.compiler import probing
+    from openadapt_flow.reward.models import RewardBundle
+
+    coverage = {"p-med": "Medicare", "p-aet": "Aetna"}
+
+    class ScreenVision(FakeVision):
+        def __init__(self, patient):
+            super().__init__()
+            self.patient = patient
+
+        def text_present(self, screen_png, text, **_kw):
+            return text.lower() in f"coverage: {coverage[self.patient]}".lower()
+
+    class TestCopy:
+        name = "scripted-test-copy"
+
+        def __init__(self):
+            self.last: dict[str, bool] = {}
+
+        def reset(self):
+            pass
+
+        def run(self, workflow, *, bundle_dir, run_dir, params):
+            patient = params["patient_id"]
+            backend = FakeBackend()
+            report = Replayer(backend, vision=ScreenVision(patient), poll_interval_s=0.01).run(
+                workflow, bundle_dir=bundle_dir, run_dir=run_dir, params=params
+            )
+            copay = ("type", "20") in backend.actions
+            # The recorded effect: a copay exactly when coverage is not Medicare.
+            self.last[patient] = report.success and copay == (coverage[patient] != "Medicare")
+            return probing.RunSignal(probing.runtime_signal_of(report), report.model_calls)
+
+    target = TestCopy()
+
+    class Scorer:
+        def __init__(self, bundle):
+            pass
+
+        def baseline(self, identity):
+            return None
+
+        def judge(self, identity, signal, before):
+            ok = target.last.get(identity["patient_id"], False)
+            return SimpleNamespace(
+                outcome=SimpleNamespace(value="verified" if ok else "wrong_effect"), reason=""
+            )
+
+    bundle = SimpleNamespace(identity_keys=("patient_id",), check_identity=lambda i: None)
+    monkeypatch.setattr(probing, "_Scorer", Scorer)
+    monkeypatch.setattr(RewardBundle, "load", classmethod(lambda cls, x: x))
+
+    def recording(patient, copay):
+        steps = [_type("step_000", "patient", patient)]
+        if copay:
+            steps.append(_type("step_002", "copay", "20", risk="irreversible"))
+        steps.append(_key("step_003", "Enter", "finish"))
+        return probing.ProbeTrace(
+            workflow=Workflow(name="c", steps=steps, params={"patient_id": patient}),
+            bundle_dir=tmp_path / patient,
+            label=patient,
+        )
+
+    traces = [recording("p-med", False), recording("p-aet", True)]
+    plain = induce_program([t.workflow for t in traces], narration=[said(RULE, "step_003"), None])
+    assert plain.narrated_guards[0].status == "proposed" and not plain.certified
+
+    result = probing.probe_and_induce(
+        traces,
+        target=target,
+        reward_contract=bundle,
+        work_dir=tmp_path / "probe",
+        narration=[said(RULE, "step_003"), None],
+    )
+    (verdict,) = result.probe_verdicts
+    assert verdict.certified == "narrated", verdict
+    assert verdict.interpretations["narrated"] == "passed"
+    assert verdict.interpretations["incidental"] == "failed"
+    (ng,) = result.narrated_guards
+    assert (ng.status, ng.certified_by) == ("certified", "probe")
+    assert result.certified
+    assert all(run.model_calls == 0 for run in result.probe_runs)
+
+
+# -- CLI ------------------------------------------------------------------------
+
+
+def _screen_only_traces():
+    return [
+        Workflow(name="c", steps=[_type("step_000", "patient", "A"), _key("step_003", "Enter", "finish")]),
+        Workflow(
+            name="c",
+            steps=[
+                _type("step_000", "patient", "A"),
+                _type("step_002", "copay", "20", risk="irreversible"),
+                _key("step_003", "Enter", "finish"),
+            ],
+        ),
+    ]
+
+
+def test_cli_induce_accepts_a_narrated_guard_only_with_a_name(tmp_path, capsys):
+    from openadapt_flow.__main__ import main
+    from openadapt_flow.narration import write_narration
+
+    dirs = []
+    for i, wf in enumerate(_screen_only_traces()):
+        d = tmp_path / f"b{i}"
+        wf.save(d)
+        dirs.append(str(d))
+    write_narration(Path(dirs[0]), said(RULE, "step_003"))
+    out = tmp_path / "out"
+
+    assert main(["induce", *dirs, "--out", str(out)]) == 2
+    assert "[narrated]" in capsys.readouterr().out and not out.exists()
+
+    assert main(["induce", *dirs, "--out", str(out), "--accept-narrated", "opt_1"]) == 2
+    assert "--accepted-by" in capsys.readouterr().out
+
+    rc = main(
+        ["induce", *dirs, "--out", str(out), "--accept-narrated", "opt_1", "--accepted-by", "R. Reviewer"]
+    )
+    assert rc == 0, capsys.readouterr().out
+    written = Workflow.load(out)
+    (source,) = written.guard_sources.values()
+    assert (source.sentence, source.accepted_by) == (RULE, "R. Reviewer")
+
+
+def test_cli_narration_attach_scrubs_a_transcript(tmp_path, capsys):
+    from openadapt_flow import privacy
+    from openadapt_flow.__main__ import main
+
+    rec = tmp_path / "rec"
+    rec.mkdir()
+    (rec / "events.jsonl").write_text(json.dumps({"i": 0, "kind": "type", "t": 2.0}) + "\n")
+    transcript = tmp_path / "t.json"
+    transcript.write_text(
+        json.dumps({"segments": [{"start": 0.5, "end": 1.5, "text": "Patient John Smith is Medicare."}]})
+    )
+
+    class Scrubber:
+        def scrub_text(self, text, is_separated=False):
+            return text.replace("John Smith", "<PERSON>")
+
+    privacy.set_text_scrubber(None)
+    try:
+        assert main(["narration", "attach", str(rec), "--transcript", str(transcript)]) == 2
+        assert not (rec / "narration.json").exists()
+        privacy.set_text_scrubber(Scrubber())
+        assert main(["narration", "attach", str(rec), "--transcript", str(transcript)]) == 0
+    finally:
+        privacy.reset_scrubbers()
+    out = capsys.readouterr().out
+    assert "John Smith" not in out and "<PERSON>" in out
+    assert "John Smith" not in (rec / "narration.json").read_text()
