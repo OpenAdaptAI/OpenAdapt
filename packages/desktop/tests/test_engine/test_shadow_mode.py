@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import os
 import socket
 from pathlib import Path
 
@@ -27,6 +28,25 @@ class Clock:
 
     def __call__(self) -> float:
         return self.now
+
+
+# POSIX permission bits don't exist on Windows (NTFS uses ACLs, and
+# %LOCALAPPDATA% is private to the user by default), so mode checks run only
+# where the bits mean something.
+POSIX = os.name != "nt"
+
+
+def _mode_is(path: Path, mode: str) -> bool:
+    return not POSIX or oct(path.stat().st_mode & 0o777) == mode
+
+
+def _home(monkeypatch, path: Path) -> None:
+    """Point the home directory at ``path`` on every platform (Windows reads
+    USERPROFILE, not HOME)."""
+
+    monkeypatch.setenv("HOME", str(path))
+    monkeypatch.setenv("USERPROFILE", str(path))
+    monkeypatch.setattr(Path, "home", classmethod(lambda cls: path))
 
 
 def _invoice_events(start: float):
@@ -101,8 +121,8 @@ def test_enable_records_the_acknowledgement_time_locally(svc):
     assert status["buffer_hours"] == 24
     ledger = json.loads((root / "shadow" / "consent.json").read_text())
     assert ledger["events"][-1]["event"] == "acknowledged"
-    assert oct((root / "shadow" / "consent.json").stat().st_mode & 0o777) == "0o600"
-    assert oct((root / "shadow").stat().st_mode & 0o777) == "0o700"
+    assert _mode_is(root / "shadow" / "consent.json", "0o600")
+    assert _mode_is(root / "shadow", "0o700")
     assert events[-1][0] == STATE_EVENT and events[-1][1]["active"] is True
 
 
@@ -127,7 +147,7 @@ def test_prompt_review_draft_and_ignore(svc):
     assert export["schema"] == "openadapt.shadow.episodes/v2"
     for raw in ("INV-1000", "INV-1003", "Invoice number"):
         assert raw not in draft.read_text()
-    assert oct(draft.stat().st_mode & 0o777) == "0o600"
+    assert _mode_is(draft, "0o600")
     assert service.status()["pending"] == []
 
 
@@ -285,6 +305,7 @@ def test_purge_says_so_when_the_keychain_kept_the_key(tmp_path):
     assert again.purge_and_disable()["key_deleted"] is True and store._values == {}
 
 
+@pytest.mark.skipif(not POSIX, reason="POSIX permission bits; Windows uses ACLs")
 def test_shadow_files_are_owner_only_from_the_start(svc, monkeypatch):
     import os
 
@@ -307,7 +328,7 @@ def test_shadow_files_are_owner_only_from_the_start(svc, monkeypatch):
     monkeypatch.setattr(os, "open", real_open)
     assert opened and all(mode == 0o600 for _p, mode in opened)
     draft = Path(result["draft_path"])
-    assert oct(draft.stat().st_mode & 0o777) == "0o600"
+    assert _mode_is(draft, "0o600")
     assert not list(draft.parent.glob(".*.tmp"))
 
 
@@ -527,7 +548,7 @@ def test_pause_records_nothing_and_survives_a_restart(svc):
 def test_default_location_is_unsynced_app_data(tmp_path, monkeypatch):
     from openadapt_desktop import shadow_mode
 
-    monkeypatch.setenv("HOME", str(tmp_path))
+    _home(monkeypatch, tmp_path)
     monkeypatch.setattr(shadow_mode.sys, "platform", "darwin")
     expected = tmp_path / "Library" / "Application Support" / "ai.openadapt.desktop" / "shadow"
     assert shadow_mode.default_shadow_dir() == expected
@@ -542,7 +563,7 @@ def test_default_location_is_unsynced_app_data(tmp_path, monkeypatch):
 
 def test_refuses_to_start_in_a_synced_folder(tmp_path, monkeypatch):
     storage = pytest.importorskip("openadapt_capture.shadow.storage")
-    monkeypatch.setenv("HOME", str(tmp_path))
+    _home(monkeypatch, tmp_path)
     store = MemoryKeyStore()
     for synced in (
         tmp_path / "Documents" / "shadow",
