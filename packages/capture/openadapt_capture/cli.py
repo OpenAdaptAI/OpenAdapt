@@ -101,6 +101,11 @@ def record(
         except NoLocalTranscriptionBackend as exc:
             print(str(exc))
             raise SystemExit(1) from exc
+        from openadapt_capture.narration import NO_SCRUBBER_MESSAGE, narration_scrubber
+
+        if narration_scrubber() is None:
+            print(NO_SCRUBBER_MESSAGE)
+            raise SystemExit(1)
 
         retain = settings.RECORD_AUDIO_RETAIN_WAVEFORM
         print("MICROPHONE ON: this recording captures spoken narration.")
@@ -111,8 +116,8 @@ def record(
             else "  Waveform discarded after transcription; only text is retained."
         )
         print(
-            "  Anything said aloud is retained as text. Do not speak names, "
-            "dates of birth, or other identifying details."
+            "  The text is scrubbed of patient data before it is stored. Still, "
+            "do not speak names, dates of birth, or other identifying details."
         )
         print()
 
@@ -328,11 +333,13 @@ def transcribe(
     model: str = "base",
     backend: str = "auto",
 ) -> None:
-    """Transcribe a capture's audio using an on-device Whisper model.
+    """Transcribe a capture's retained audio on this machine and store narration.
 
     Transcription runs entirely on this machine. There is no remote backend:
     a raw waveform cannot be sanitized before upload and discloses the
-    speaker's voice as well as their words.
+    speaker's voice as well as their words. The transcript is scrubbed with
+    openadapt-privacy and written to ``narration.json`` (timed sentences) and
+    ``transcript.txt``. Without the scrubber nothing is written.
 
     Args:
         capture_dir: Path to capture directory.
@@ -346,11 +353,17 @@ def transcribe(
         NoLocalTranscriptionBackend,
         resolve_transcription_backend,
     )
+    from openadapt_capture.narration import (
+        NO_SCRUBBER_MESSAGE,
+        narration_scrubber,
+        scrub_utterances,
+        transcribe_file,
+        utterances_from_transcript,
+        write_narration,
+    )
 
     capture_dir = Path(capture_dir)
     audio_path = capture_dir / "audio.flac"
-    transcript_path = capture_dir / "transcript.txt"
-    transcript_json_path = capture_dir / "transcript.json"
 
     if not audio_path.exists():
         print(f"No audio file found at: {audio_path}")
@@ -361,124 +374,54 @@ def transcribe(
     except (NoLocalTranscriptionBackend, ValueError) as exc:
         print(str(exc))
         raise SystemExit(1) from exc
+    scrubber = narration_scrubber()
+    if scrubber is None:
+        print(NO_SCRUBBER_MESSAGE)
+        raise SystemExit(1)
+
+    offset = 0.0
+    try:
+        from openadapt_capture.capture import CaptureSession
+
+        offset = CaptureSession.load(capture_dir).audio_start_time or 0.0
+    except Exception:  # noqa: BLE001 - a bare audio folder has no recording clock
+        offset = 0.0
 
     print(f"Transcribing on-device with backend: {backend}")
-
-    if backend == "faster-whisper":
-        _transcribe_faster_whisper(audio_path, transcript_path, transcript_json_path, model)
-    else:
-        _transcribe_local(audio_path, transcript_path, transcript_json_path, model)
-
-
-def _transcribe_local(
-    audio_path: Path,
-    transcript_path: Path,
-    transcript_json_path: Path,
-    model: str,
-) -> None:
-    """Transcribe using local openai-whisper model."""
-
-    print(f"Transcribing audio with openai-whisper ({model} model)...")
-    print("This may take a moment...")
-
-    try:
-        import whisper
-    except ImportError:
-        print("Whisper not installed. Install with: pip install openai-whisper")
-        print("Or use faster-whisper: pip install faster-whisper")
-        return
-
-    # Load model and transcribe with word timestamps
-    whisper_model = whisper.load_model(model)
-    result = whisper_model.transcribe(str(audio_path), fp16=False, word_timestamps=True)
-
-    transcript = result.get("text", "").strip()
-
-    # Extract segments with timestamps
-    segments = []
-    for segment in result.get("segments", []):
-        segments.append({
-            "start": segment["start"],
-            "end": segment["end"],
-            "text": segment["text"].strip(),
-        })
-
-    # Save transcripts
-    _save_transcript(transcript, segments, transcript_path, transcript_json_path)
-
-
-def _transcribe_faster_whisper(
-    audio_path: Path,
-    transcript_path: Path,
-    transcript_json_path: Path,
-    model: str,
-) -> None:
-    """Transcribe using faster-whisper (4x faster than openai-whisper)."""
-
-    print(f"Transcribing audio with faster-whisper ({model} model)...")
-    print("This is 4x faster than openai-whisper...")
-
-    try:
-        from faster_whisper import WhisperModel
-    except ImportError:
-        print("faster-whisper not installed. Install with: pip install faster-whisper")
-        print("Or use openai-whisper: pip install openai-whisper")
-        return
-
-    # Load model with CPU and int8 for efficiency
-    whisper_model = WhisperModel(model, device="cpu", compute_type="int8")
-
-    # Transcribe with word timestamps
-    segments_iter, info = whisper_model.transcribe(
-        str(audio_path),
-        word_timestamps=True,
+    result = transcribe_file(audio_path, backend=backend, model=model)
+    utterances = scrub_utterances(
+        utterances_from_transcript(result, offset=offset), scrubber
     )
-
-    # Collect segments
-    segments = []
-    full_text_parts = []
-    for segment in segments_iter:
-        segments.append({
-            "start": segment.start,
-            "end": segment.end,
-            "text": segment.text.strip(),
-        })
-        full_text_parts.append(segment.text)
-
-    transcript = "".join(full_text_parts).strip()
-
-    # Save transcripts
-    _save_transcript(transcript, segments, transcript_path, transcript_json_path)
-
-
-def _save_transcript(
-    transcript: str,
-    segments: list[dict],
-    transcript_path: Path,
-    transcript_json_path: Path,
-) -> None:
-    """Save transcript to files and print output."""
-    import json
-
-    # Save plain text transcript
-    transcript_path.write_text(transcript, encoding="utf-8")
-
-    # Save JSON with timestamps
-    transcript_json_path.write_text(
-        json.dumps({"text": transcript, "segments": segments}, indent=2),
-        encoding="utf-8"
+    path = write_narration(
+        capture_dir,
+        utterances,
+        scrubber=scrubber,
+        transcription_backend=backend,
+        audio_start=offset,
     )
+    transcript_path = capture_dir / "transcript.txt"
+    transcript_path.write_text(
+        " ".join(u.text for u in utterances) + "\n", encoding="utf-8"
+    )
+    print(f"Saved scrubbed narration to: {path}")
+    print(f"Saved scrubbed transcript to: {transcript_path}")
+    for u in utterances:
+        rel = u.start - offset
+        print(f"[{int(rel // 60)}:{rel % 60:05.2f}] {u.text}")
 
-    print(f"Saved transcript to: {transcript_path}")
-    print(f"Saved timestamps to: {transcript_json_path}")
-    print()
-    print("Transcript:")
-    print("-" * 40)
-    for seg in segments:
-        start = seg["start"]
-        mins = int(start // 60)
-        secs = start % 60
-        print(f"[{mins}:{secs:05.2f}] {seg['text']}")
+
+def narration(capture_dir: str) -> None:
+    """Print a capture's scrubbed narration, one timed sentence per line."""
+    from openadapt_capture.narration import read_narration
+
+    utterances = read_narration(capture_dir)
+    if utterances is None:
+        print(f"No narration.json in {capture_dir}")
+        return
+    first = utterances[0].start if utterances else 0.0
+    for u in utterances:
+        rel = u.start - first
+        print(f"[{int(rel // 60)}:{rel % 60:05.2f}] {u.text}")
 
 
 def install_ffmpeg(
@@ -618,6 +561,7 @@ def main() -> None:
         "visualize": visualize,
         "info": info,
         "transcribe": transcribe,
+        "narration": narration,
         "share": share,
         "install-ffmpeg": install_ffmpeg,
         "uninstall-ffmpeg": uninstall_ffmpeg,

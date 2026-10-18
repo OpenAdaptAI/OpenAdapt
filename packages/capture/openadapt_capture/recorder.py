@@ -2684,6 +2684,10 @@ def record_audio(
       text is retained by default.
     - The transcript is never logged. Spoken narration may contain identifying
       details and must not be copied into logs or terminal scrollback.
+    - The transcript is scrubbed with openadapt-privacy before it is stored.
+      Without a scrubber this refuses before the microphone opens. The scrubbed
+      sentences are written to ``narration.json`` beside the database, timed on
+      the recording clock; per-word text and timings are not stored.
 
     Args:
         recording: The recording object.
@@ -2698,6 +2702,13 @@ def record_audio(
     # captured, and only then did the missing backend surface -- recording the
     # operator for nothing and failing the capture at the end.
     backend = require_local_transcription_backend()
+    # The transcript is scrubbed before it is stored. Without a scrubber there
+    # is nothing safe to store, so refuse before the microphone opens too.
+    from openadapt_capture.narration import NarrationNotScrubbed, narration_scrubber
+
+    scrubber = narration_scrubber()
+    if scrubber is None:
+        raise NarrationNotScrubbed()
 
     utils.set_start_time(recording.timestamp)
 
@@ -2784,13 +2795,34 @@ def record_audio(
         "Transcription complete ({} characters).".format(len(result_info.get("text") or ""))
     )
 
-    # empty word_list if the user didn't say anything
-    word_list = []
-    # segments could be empty
-    if len(result_info["segments"]) > 0:
-        # there won't be a 'words' list if the user didn't say anything
-        if "words" in result_info["segments"][0]:
-            word_list = result_info["segments"][0]["words"]
+    # Cut the transcript into timed sentences and scrub each one before
+    # anything is stored. Word-level timings are dropped: a name spoken one
+    # word at a time cannot be recognised by a text scrubber.
+    from pathlib import Path
+
+    from openadapt_capture.narration import (
+        scrub_utterances,
+        utterances_from_transcript,
+        write_narration,
+    )
+
+    try:
+        utterances = scrub_utterances(
+            utterances_from_transcript(result_info, offset=start_timestamp), scrubber
+        )
+    except NarrationNotScrubbed as exc:
+        logger.error("Narration not stored: {}", type(exc).__name__)
+        utterances = None
+    transcript = " ".join(u.text for u in utterances) if utterances else ""
+    word_list: list = []
+    if utterances and db_path not in (None, ":memory:"):
+        write_narration(
+            Path(db_path).parent,
+            utterances,
+            scrubber=scrubber,
+            transcription_backend=backend,
+            audio_start=start_timestamp,
+        )
 
     if config.RECORD_AUDIO_RETAIN_WAVEFORM:
         # Explicitly opted in. The retained waveform is biometric identifying
@@ -2817,7 +2849,7 @@ def record_audio(
     crud.insert_audio_info(
         session,
         compressed_audio_bytes,
-        result_info["text"],
+        transcript,
         recording,
         start_timestamp,
         sample_rate,
