@@ -19,7 +19,7 @@ import json
 from collections.abc import Sequence
 from dataclasses import dataclass
 from importlib.metadata import entry_points
-from typing import Any, Literal, Protocol, runtime_checkable
+from typing import Any, Literal, Optional, Protocol, runtime_checkable
 
 from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
@@ -412,6 +412,9 @@ class QualificationFaultContext:
     #: with. A driver that signs a frame hash should hash this capture, since
     #: two capture paths can encode identical pixels as different bytes.
     capture_frame: Any = None
+    #: Multi-surface runs only: the surface the targeted step runs on (and
+    #: that ``backend`` drives). None on a single-surface run.
+    surface_id: Optional[str] = None
 
 
 @dataclass(frozen=True)

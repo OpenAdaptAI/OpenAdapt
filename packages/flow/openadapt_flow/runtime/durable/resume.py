@@ -1042,6 +1042,7 @@ def _resume_under_lease(
         replayer.revalidate_linear_checkpoint_state(
             last_linear,
             bundle_dir=resolved_bundle,
+            workflow=workflow,
         )
     if (
         bundle_version(resolved_bundle) != live_bundle_version

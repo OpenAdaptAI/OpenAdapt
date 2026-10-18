@@ -364,6 +364,14 @@
       "sha256": "c8b8cfc97f7ba654d3b016798a5ec442570fb3361b717b53b7363c6e0dd8d6ad"
     },
     {
+      "path": "benchmark/openemr_referral_timing/figures.json",
+      "sha256": "8fc9a7ae6a3d8ef84b845a785280688370fa103d1a5ddd2b202c7915290cdaae"
+    },
+    {
+      "path": "benchmark/openemr_referral_timing/runs.csv",
+      "sha256": "b4b24eaa8df86c9a54cc3a435cb6baff1940931e893750a4896fca57bf3eaa87"
+    },
+    {
       "path": "benchmark/openimis_claims/deployment.eligibility.yaml",
       "sha256": "03f46f4762bad3e465b65217f6080f203e8fe0b167288f65a7a76edfe469d538"
     },
@@ -6238,6 +6246,18 @@
     {
       "path": "tests/fixtures/runtime-validation-canonical-vector.json",
       "sha256": "a238b23846705f081603c7fe8a66ee16a88281ad21acfd0d047052716a49b912"
+    },
+    {
+      "path": "tests/fixtures/shadow/invoice_exact.episodes.json",
+      "sha256": "e555e3913c02df609cdf490872fad30574a1c438b2c110b0ff3345e1a31c26ce"
+    },
+    {
+      "path": "tests/fixtures/shadow/invoice_variant.episodes.json",
+      "sha256": "cc2d9508eac86e6115485025525e7529b4830f720eb28c21e258622e7a70ec79"
+    },
+    {
+      "path": "tests/fixtures/shadow/report_mail.episodes.json",
+      "sha256": "4e3f1fed5b5bfba9220fd37d53eff1bea2655df4903fb6a59ec215bc3e2d2ec0"
     },
     {
       "path": "tests/fixtures/terminal_verification_v2_delivery_consumer_vector.json",
