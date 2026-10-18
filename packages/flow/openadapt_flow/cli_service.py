@@ -59,6 +59,92 @@ def _cmd_egress_audit(args: argparse.Namespace) -> int:
     return 0 if report.get("verdict") == "clean" else 1
 
 
+def _cmd_boot_check(args: argparse.Namespace) -> int:
+    import getpass
+
+    from openadapt_flow.onprem_reboot import (
+        SettingsError,
+        boot_check,
+        boot_id,
+        default_session_probe,
+        load_settings,
+    )
+
+    root = Path(args.root)
+    try:
+        settings = load_settings(root)
+    except SettingsError as exc:
+        print(f"service: {exc}", file=sys.stderr)
+        return 2
+    account = args.account or getpass.getuser()
+    result = boot_check(
+        root,
+        boot_id=boot_id(),
+        probe=default_session_probe(account),
+        settings=settings,
+    )
+    print(
+        json.dumps(
+            {
+                "boot_id": result.boot_id,
+                "logged_in": result.logged_in,
+                "waited_s": round(result.waited_s, 1),
+                "notice": result.notice["id"] if result.notice else None,
+                "alerts": result.alerts,
+            },
+            sort_keys=True,
+        )
+    )
+    return 0 if result.logged_in else 1
+
+
+def _cmd_notices(args: argparse.Namespace) -> int:
+    import getpass
+
+    from openadapt_flow.onprem_reboot import acknowledge, list_notices, summarize
+
+    root = Path(args.root)
+    if args.ack:
+        notice = acknowledge(root, args.ack, by=args.by or getpass.getuser())
+        if notice is None:
+            print(f"no notice {args.ack}", file=sys.stderr)
+            return 1
+        print(json.dumps(summarize([notice])[0], indent=2, sort_keys=True))
+        return 0
+    notices = list_notices(root, include_closed=args.all)
+    print(json.dumps(summarize(notices), indent=2, sort_keys=True))
+    return 0
+
+
+def _cmd_pf_render(args: argparse.Namespace) -> int:
+    from openadapt_flow.no_outbound_allow import AllowList, AllowListError
+    from openadapt_flow.pf_firewall import PfRuleError, plan
+
+    try:
+        allow = AllowList.load_or_empty(Path(args.allow_file))
+        text = plan(args.user, allow.entries).anchor_text
+    except (AllowListError, PfRuleError) as exc:
+        print(f"service pf: {exc}", file=sys.stderr)
+        return 2
+    if args.out:
+        Path(args.out).write_text(text, encoding="utf-8")
+    else:
+        sys.stdout.write(text)
+    return 0
+
+
+def _cmd_pf_check(args: argparse.Namespace) -> int:
+    from openadapt_flow.pf_firewall import missing_pf_conf_lines, validate_anchor
+
+    problems = validate_anchor(Path(args.anchor).read_text(encoding="utf-8"), args.user)
+    if args.pf_conf:
+        for line in missing_pf_conf_lines(Path(args.pf_conf).read_text("utf-8")):
+            problems.append(f"pf.conf lacks: {line}")
+    for p in problems:
+        print(p, file=sys.stderr)
+    return 1 if problems else 0
+
+
 def register(sub: Any) -> None:
     p = sub.add_parser(
         "service", help="Unattended on-prem service: run, health, restart, egress audit"
@@ -116,3 +202,31 @@ def register(sub: Any) -> None:
     e.add_argument("--samples", type=int, default=5)
     e.add_argument("--interval", type=float, default=2.0)
     e.set_defaults(func=_cmd_egress_audit)
+
+    b = s.add_parser(
+        "boot-check",
+        help="After a restart: wait for the service account to sign in; alert if late",
+    )
+    root(b)
+    b.add_argument("--account", default=None, help="Default: the current user")
+    b.set_defaults(func=_cmd_boot_check)
+
+    n = s.add_parser("notices", help="List or acknowledge service notices")
+    root(n)
+    n.add_argument("--ack", default=None, metavar="ID")
+    n.add_argument("--by", default=None, help="Who acknowledges (default: you)")
+    n.add_argument("--all", action="store_true", help="Include acknowledged notices")
+    n.set_defaults(func=_cmd_notices)
+
+    pf = s.add_parser("pf", help="macOS pf rules for the service account (text only)")
+    pfs = pf.add_subparsers(dest="pf_cmd", required=True)
+    pr = pfs.add_parser("render", help="Render the anchor from the allow list")
+    pr.add_argument("--user", required=True, help="Service account")
+    pr.add_argument("--allow-file", required=True)
+    pr.add_argument("--out", default=None)
+    pr.set_defaults(func=_cmd_pf_render)
+    pc = pfs.add_parser("check", help="Check a rendered anchor (and pf.conf)")
+    pc.add_argument("anchor")
+    pc.add_argument("--user", required=True)
+    pc.add_argument("--pf-conf", default=None)
+    pc.set_defaults(func=_cmd_pf_check)

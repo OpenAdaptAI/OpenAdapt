@@ -28,6 +28,8 @@
     <string>1</string>
     <key>OPENADAPT_NO_OUTBOUND_LOG</key>
     <string>@STORAGE_ROOT@/audit/outbound-blocked.jsonl</string>
+    <key>OPENADAPT_NO_OUTBOUND_ALLOW_FILE</key>
+    <string>@STORAGE_ROOT@/no-outbound-allow.json</string>
     <key>OPENADAPT_FLOW_SCRUB</key>
     <string>on</string>
     <key>OPENADAPT_FLOW_SCRUB_IMAGES</key>

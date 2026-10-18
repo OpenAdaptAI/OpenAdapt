@@ -404,16 +404,22 @@ def test_live_egress_audit_sees_a_real_loopback_connection(tmp_path):
         srv.close()
 
 
-def test_launchd_templates_render_to_valid_plists(tmp_path):
-    if sys.platform != "darwin":
-        pytest.skip("install-macos.sh renders with macOS tools")
+def _oaf_wrapper(tmp_path: Path) -> Path:
+    """An ``openadapt-flow`` executable that runs this checkout."""
     oaf = tmp_path / "venv" / "bin" / "openadapt-flow"
     oaf.parent.mkdir(parents=True)
-    oaf.write_text("#!/bin/sh\n")
+    oaf.write_text(
+        f'#!/bin/sh\nPYTHONPATH="{ROOT}" exec "{sys.executable}" -m openadapt_flow "$@"\n'
+    )
     oaf.chmod(0o755)
+    return oaf
+
+
+def _render(tmp_path: Path, *extra: str) -> "tuple[Path, Path, Path, str]":
+    oaf = _oaf_wrapper(tmp_path)
     out = tmp_path / "agents"
     root = tmp_path / "root"
-    subprocess.run(
+    proc = subprocess.run(
         [
             "bash",
             str(DEPLOY / "bin" / "install-macos.sh"),
@@ -423,25 +429,110 @@ def test_launchd_templates_render_to_valid_plists(tmp_path):
             str(root),
             "--openadapt-flow",
             str(oaf),
+            *extra,
         ],
-        check=True,
         capture_output=True,
+        text=True,
     )
+    assert proc.returncode == 0, proc.stderr
+    return oaf, out, root, proc.stdout
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="bash installer")
+def test_launchd_templates_render_to_valid_plists(tmp_path):
+    oaf, out, root, _ = _render(tmp_path)
     service = plistlib.loads((out / "ai.openadapt.flow-service.plist").read_bytes())
     assert service["KeepAlive"] is True and service["RunAtLoad"] is True
     assert service["ProgramArguments"][:3] == [str(oaf), "service", "run"]
-    assert service["EnvironmentVariables"]["OPENADAPT_NO_OUTBOUND"] == "1"
-    assert service["EnvironmentVariables"]["OPENADAPT_FLOW_SCRUB"] == "on"
+    env = service["EnvironmentVariables"]
+    assert env["OPENADAPT_NO_OUTBOUND"] == "1"
+    assert env["OPENADAPT_FLOW_SCRUB"] == "on"
+    assert env["OPENADAPT_NO_OUTBOUND_ALLOW_FILE"] == str(
+        root / "no-outbound-allow.json"
+    )
     health_plist = plistlib.loads((out / "ai.openadapt.flow-health.plist").read_bytes())
     assert health_plist["StartInterval"] == 60
     assert "--restart-on-fail" in health_plist["ProgramArguments"]
+    boot = plistlib.loads((out / "ai.openadapt.flow-boot-check.plist").read_bytes())
+    assert boot["UserName"] and boot["RunAtLoad"] is True
+    assert boot["ProgramArguments"][1:3] == ["service", "boot-check"]
+    pf = plistlib.loads((out / "ai.openadapt.flow-pf.plist").read_bytes())
+    assert pf["ProgramArguments"] == ["/sbin/pfctl", "-E", "-f", "/etc/pf.conf"]
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="bash installer")
+def test_installer_starts_with_an_empty_allow_list_and_default_reboot_policy(tmp_path):
+    _, out, root, stdout = _render(tmp_path)
+    allow = json.loads((root / "no-outbound-allow.json").read_text())
+    assert allow["entries"] == []
+    assert "only this machine is reachable" in stdout
+    settings = json.loads((root / "service" / "service.json").read_text())
+    assert settings["reboot"]["auto_login"] is False
+    assert settings["alerts"]["channels"] == []
+    rules = [
+        ln
+        for ln in (out / "ai.openadapt.flow.pf").read_text().splitlines()
+        if ln and not ln.startswith("#")
+    ]
+    assert rules[0] == "pass out quick on lo0 all" and len(rules) == 2
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="bash installer")
+def test_installer_derives_the_session_host_and_shows_it(tmp_path):
+    rdp = tmp_path / "site.rdp"
+    rdp.write_text("full address:s:10.20.0.15:3390\nusername:s:svc\n")
+    _, out, root, stdout = _render(
+        tmp_path, "--session-profile", str(rdp), "--auto-login"
+    )
+    assert "added: 10.20.0.15/32 port 3390" in stdout
+    entries = json.loads((root / "no-outbound-allow.json").read_text())["entries"]
+    assert [e["network"] for e in entries] == ["10.20.0.15/32"]
+    anchor = (out / "ai.openadapt.flow.pf").read_text()
+    assert "to 10.20.0.15 port 3390 user" in anchor
+    settings = json.loads((root / "service" / "service.json").read_text())
+    assert settings["reboot"]["auto_login"] is True
+
+
+@pytest.mark.skipif(sys.platform == "win32", reason="bash installer")
+def test_installer_no_pf_skips_the_anchor_and_daemon(tmp_path):
+    _, out, _, _ = _render(tmp_path, "--no-pf")
+    assert not (out / "ai.openadapt.flow.pf").exists()
+    assert not (out / "ai.openadapt.flow-pf.plist").exists()
+    assert (out / "ai.openadapt.flow-boot-check.plist").exists()
+
+
+def test_health_reports_the_firewall_record(tmp_path):
+    root = tmp_path / "root"
+    p = svc.paths(root)
+    p["heartbeat"].parent.mkdir(parents=True)
+    beat = {
+        "pid": os.getpid(),
+        "poll_seconds": 10,
+        "no_outbound": True,
+        "state": "running",
+        "last_beat": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+    }
+    p["heartbeat"].write_text(json.dumps(beat))
+    checks = {c["name"]: c for c in health(root)["checks"]}
+    assert checks["firewall"]["status"] == "warn"
+    p["firewall"].write_text(json.dumps({"pf": "installed"}))
+    checks = {c["name"]: c for c in health(root)["checks"]}
+    assert checks["firewall"]["status"] == "pass"
 
 
 def test_launchd_templates_parse_as_plists_with_placeholders():
-    for name in ("ai.openadapt.flow-service.plist", "ai.openadapt.flow-health.plist"):
+    for name in (
+        "ai.openadapt.flow-service.plist",
+        "ai.openadapt.flow-health.plist",
+        "ai.openadapt.flow-boot-check.plist",
+    ):
         data = plistlib.loads((DEPLOY / "launchd" / name).read_bytes())
         assert data["Label"] == name[: -len(".plist")]
         assert data["EnvironmentVariables"]["OPENADAPT_NO_OUTBOUND"] == "1"
+    pf = plistlib.loads(
+        (DEPLOY / "launchd" / "ai.openadapt.flow-pf.plist").read_bytes()
+    )
+    assert pf["Label"] == "ai.openadapt.flow-pf"
 
 
 def test_service_loop_end_to_end_in_a_subprocess_with_the_real_hook(tmp_path):

@@ -114,6 +114,8 @@ def paths(root: Path) -> dict[str, Path]:
         "audit": root / "audit",
         "blocked_log": root / "audit" / BLOCKED_LOG,
         "seal_home": root / "seal",
+        "allow_file": root / "no-outbound-allow.json",
+        "firewall": root / "service" / "firewall.json",
     }
 
 
@@ -127,7 +129,18 @@ def child_env(cfg: ServiceConfig, base: Mapping[str, str]) -> dict[str, str]:
     if not cfg.allow_outbound:
         env["OPENADAPT_NO_OUTBOUND"] = "1"
         env["OPENADAPT_NO_OUTBOUND_LOG"] = str(p["blocked_log"])
+        if p["allow_file"].is_file():
+            env.setdefault(no_outbound.ENV_ALLOW_FILE, str(p["allow_file"]))
     return env
+
+
+def audit_allow(root: Path, env: Mapping[str, str]) -> tuple[Any, ...]:
+    """The allow list the audit judges peers against: env plus the root's file."""
+    env = dict(env)
+    allow_file = paths(root)["allow_file"]
+    if allow_file.is_file():
+        env.setdefault(no_outbound.ENV_ALLOW_FILE, str(allow_file))
+    return no_outbound.allow_from_env(env)
 
 
 def seal_unsealed_runs(runs_dir: Path, seal_home: Path) -> "tuple[int, list[str]]":
@@ -181,6 +194,14 @@ def run_service(
     if not cfg.allow_outbound:
         enforce(cenv)  # this process too, not just its children
     seal_home = Path(cenv["OPENADAPT_SEAL_HOME"])
+    from openadapt_flow.onprem_reboot import list_notices, record_event
+
+    record_event(
+        cfg.root,
+        "service_started",
+        no_outbound=not cfg.allow_outbound,
+        open_notices=len(list_notices(cfg.root)),
+    )
     stop = stop or threading.Event()
     if install_signals:
         for sig in (signal.SIGTERM, signal.SIGINT):
@@ -381,6 +402,32 @@ def health(
             f"{blocked} refused connection attempts logged" if blocked else "none",
         )
     )
+    from openadapt_flow.onprem_reboot import list_notices
+
+    notices = list_notices(Path(root))
+    checks.append(
+        Check(
+            "service_notices",
+            "warn" if notices else "pass",
+            "; ".join(sorted({n["kind"] for n in notices})) if notices else "none",
+        )
+    )
+    if beat.get("no_outbound"):
+        try:
+            fw = json.loads(p["firewall"].read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            fw = {}
+        state = fw.get("pf")
+        checks.append(
+            Check(
+                "firewall",
+                "pass" if state == "installed" else "warn",
+                {
+                    "installed": "pf rules for the service account",
+                    "declined": "pf rules not installed (--no-pf at install)",
+                }.get(str(state), "no firewall record from the installer"),
+            )
+        )
     healthy = all(c.status != "fail" for c in checks)
     return {
         "schema": HEALTH_SCHEMA,
@@ -507,7 +554,7 @@ def egress_audit(
     """
     env = os.environ if env is None else env
     p = paths(Path(root))
-    allow = no_outbound.parse_allow(env.get(no_outbound.ENV_ALLOW))
+    allow = audit_allow(Path(root), env)
     if pid is None:
         try:
             pid = int(json.loads(p["heartbeat"].read_text(encoding="utf-8"))["pid"])
