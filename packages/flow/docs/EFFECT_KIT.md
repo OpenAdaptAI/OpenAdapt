@@ -667,6 +667,8 @@ live Windows VM or the Docker RDP fixture.
   confidence floor (`min_ocr_confidence`) and exact comparison make that
   unlikely, not impossible. For a field where one character matters (a dose,
   an amount), use UI Automation or a system-of-record read.
+- OCR drops and adds spaces, so a field read with OCR is compared with every
+  space removed on both sides: a difference only in spaces is invisible there.
 - On the pixel path Flow can't prove keyboard focus. It checks that the
   search box shows the query before it submits, and stops otherwise.
 - The search query must be text the run already knows (an identifier or a
