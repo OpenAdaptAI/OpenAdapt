@@ -35,7 +35,7 @@ to the review queue. It is unset by default.
 
 ## Proof is opt-in
 
-By default a field is read through one channel, gets the grade `unconfirmed`
+By default a field is read through one channel, gets the grade `unchecked`
 and has no Seal. Turn proof on for the whole schema, or per field, with
 `ReadProof`:
 
@@ -75,21 +75,22 @@ field grade.
 
 ## Read grades
 
-Weakest first:
-
-The grade only ever reflects what was proven.
+Weakest first. The names are check levels 0, 1, 2 and 4 from the
+[check-level table](APPROVAL_AND_VERIFICATION.md#how-a-save-is-checked), so a
+read grade means the same as the check level of a save. The grade only ever
+reflects what was proven.
 
 | Grade | What it needs |
 |---|---|
-| `unconfirmed` | Nothing cross-checked. The default for a single-channel read. Reads that disagree also get it, and go to review. |
-| `screen_readback` | Two screen channels agree in the same session, such as clipboard and OCR. |
-| `committed_record_readback` | The record was closed, reopened by its identity fields and read again, and the reads agree. |
-| `verified` | A channel independent of the acting session agrees: a read-only database, an API, or an export of committed data. |
+| `unchecked` | Nothing cross-checked. The default for a single-channel read. Reads that disagree also get it, and go to review. |
+| `same_screen` | Two screen channels agree in the same session, such as clipboard and OCR. |
+| `reopened` | The record was closed, reopened by its identity fields and read again, and the reads agree. |
+| `system_of_record` | A channel independent of the acting session agrees: a read-only database, an API, or an export of committed data. |
 
 `grade_for()` computes the strongest grade a set of reads supports, and a
 `FieldRead` that claims more is rejected. Only `database` and `api` reads and
 exports of committed data count as independent, so screen reads alone can
-never be `verified`.
+never be `system_of_record`.
 
 ### Exports from the application
 
@@ -98,8 +99,8 @@ is derived from it:
 
 | `source_kind` | Taken from | Counts as | Best grade |
 |---|---|---|---|
-| `live_session` | The same live UI session that typed or showed the value. It can include that session's unsaved state. | A screen read | `screen_readback` |
-| `committed_store` | Saved data, through a separate process, a database read or a scheduled export. | An independent read | `verified` |
+| `live_session` | The same live UI session that typed or showed the value. It can include that session's unsaved state. | A screen read | `same_screen` |
+| `committed_store` | Saved data, through a separate process, a database read or a scheduled export. | An independent read | `system_of_record` |
 
 ```python
 ChannelRead(channel="export", raw="AC-1042", source_kind="live_session")
@@ -107,7 +108,7 @@ ChannelRead(channel="export", raw="AC-1042", session="independent",
             source_kind="committed_store")
 ```
 
-A workflow can use either kind. A write step that needs `verified` values
+A workflow can use either kind. A write step that needs `system_of_record` values
 (see below) halts on values backed only by a live-session export.
 
 ## Requiring a grade before a write
@@ -118,7 +119,7 @@ minimum grade it accepts. Below it, the run halts instead of writing:
 ```python
 from openadapt_flow.records.schema import GradeGate
 
-GradeGate(min_grade="committed_record_readback", fields=("amount_due",)).check(record)
+GradeGate(min_grade="reopened", fields=("amount_due",)).check(record)
 # raises GradeTooLow if amount_due is weaker, missing or still needs review
 ```
 
