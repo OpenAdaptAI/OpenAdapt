@@ -221,6 +221,33 @@ class Decision(_Strict):
     advisory: list[Suggestion] = Field(default_factory=list)
 
 
+class NoAction(_Strict):
+    """Why an executor wrote nothing, who decided it, and the read-back that
+    shows nothing was written.
+
+    A ``no_action`` outcome is never a save and never billable.
+    """
+
+    decided_by: Principal
+    reason_code: str = Field(
+        pattern=_NAME, description="Why nothing was written, e.g. declined, held"
+    )
+    decision_id: Optional[str] = Field(
+        default=None,
+        max_length=100,
+        description="The decision this follows, in this exchange or the one it answers",
+    )
+    decided_at: Optional[str] = None
+    required_grade: ReadGrade = Field(
+        description="The check level a commit of this workflow needs. Every "
+        "evidence field must be graded at least this, and it cannot be unchecked"
+    )
+    evidence: list[str] = Field(
+        default_factory=list,
+        description="Fields whose read-back shows no new or changed record",
+    )
+
+
 class PayloadRef(_Strict):
     """A file next to the exchange, addressed relative to it."""
 
@@ -289,8 +316,11 @@ class Exchange(_Strict):
     fields: list[FieldValue] = Field(default_factory=list)
     identities: list[Identity] = Field(default_factory=list)
     decisions: list[Decision] = Field(default_factory=list)
-    outcome: Optional[Literal["committed", "halted", "pending"]] = None
+    outcome: Optional[Literal["committed", "halted", "pending", "no_action"]] = None
     halt_reason: Optional[str] = Field(default=None, max_length=2000)
+    no_action: Optional[NoAction] = Field(
+        default=None, description="Required when outcome is no_action"
+    )
     provenance: Provenance
     seals: list[SealRef] = Field(default_factory=list)
     extensions: dict[str, dict[str, Any]] = Field(

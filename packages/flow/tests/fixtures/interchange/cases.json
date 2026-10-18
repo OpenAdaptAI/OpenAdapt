@@ -41,6 +41,10 @@
       "expect": []
     },
     {
+      "file": "valid/referral_no_action.json",
+      "expect": []
+    },
+    {
       "file": "invalid/system_of_record_without_independent_read.json",
       "expect": [
         "IX030"
@@ -249,6 +253,42 @@
       "file": "invalid/payload_hash_mismatch.json",
       "expect": [
         "IX070"
+      ]
+    },
+    {
+      "file": "invalid/no_action_without_evidence.json",
+      "expect": [
+        "IX082"
+      ]
+    },
+    {
+      "file": "invalid/no_action_write_detected.json",
+      "expect": [
+        "IX083"
+      ]
+    },
+    {
+      "file": "invalid/no_action_below_commit_level.json",
+      "expect": [
+        "IX082"
+      ]
+    },
+    {
+      "file": "invalid/no_action_without_record.json",
+      "expect": [
+        "IX080"
+      ]
+    },
+    {
+      "file": "invalid/no_action_decided_by_model.json",
+      "expect": [
+        "IX081"
+      ]
+    },
+    {
+      "file": "invalid/no_action_to_executor.json",
+      "expect": [
+        "IX084"
       ]
     },
     {
