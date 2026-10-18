@@ -21,6 +21,8 @@ First release from the [OpenAdapt monorepo](https://github.com/OpenAdaptAI/OpenA
 
 ### Features
 
+- `openadapt_flow.jit` wraps a computer-use agent: the first run of a task is recorded and compiled into a Flow program, and later runs replay it with zero model calls. A compiled run stays a draft until a person, a registered admitter key, or a registered agent under a signed policy admits it; the recording identity can never admit its own run ([#1207](https://github.com/OpenAdaptAI/OpenAdapt/pull/1207)).
+- Read-back verifiers taught by demonstration, with assurance grades ([#1203](https://github.com/OpenAdaptAI/OpenAdapt/pull/1203)).
 - `openadapt-flow verify-run` judges any executor's write from the system of record and emits an RFC-0002 effect receipt; it reads the same `verify.yaml` as qualify and accepts `--remediates` and `--correlation-id` ([#1198](https://github.com/OpenAdaptAI/OpenAdapt/pull/1198)).
 - Declarative qualify from `verify.yaml` ([#1186](https://github.com/OpenAdaptAI/OpenAdapt/pull/1186), from [openadapt-flow#532](https://github.com/OpenAdaptAI/openadapt-flow/pull/532)).
 - Delegated approvers, read-back field checks, triage, and eligibility ([#1190](https://github.com/OpenAdaptAI/OpenAdapt/pull/1190), from [openadapt-flow#534](https://github.com/OpenAdaptAI/openadapt-flow/pull/534)); approver identity, approver policy, and an approval record in the shared contracts ([#1187](https://github.com/OpenAdaptAI/OpenAdapt/pull/1187)).
@@ -39,6 +41,7 @@ First release from the [OpenAdapt monorepo](https://github.com/OpenAdaptAI/OpenA
 
 ### Fixes
 
+- CLI help and built-in URLs point at the docs glossary and the monorepo ([#1200](https://github.com/OpenAdaptAI/OpenAdapt/pull/1200)).
 - Benchmarks fetch the openIMIS and OpenEMR compose files from upstream at run time ([openadapt-flow#523](https://github.com/OpenAdaptAI/openadapt-flow/pull/523)).
 - uv.lock bumps fsspec, urllib3, mako, and oauthlib for open Dependabot alerts ([openadapt-flow#524](https://github.com/OpenAdaptAI/openadapt-flow/pull/524)).
 
