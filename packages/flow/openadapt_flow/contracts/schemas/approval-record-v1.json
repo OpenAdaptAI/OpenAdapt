@@ -191,6 +191,7 @@
     "route": {
       "enum": [
         "desktop_run_it",
+        "decision_portal",
         "review_item",
         "review_batch",
         "local_cli",

@@ -43,6 +43,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, Literal, Optional, Protocol
 
 from openadapt_flow.approval_mode.approver import (
+    DEFAULT_APPROVER_POLICY,
     Approver,
     ApproverPolicyV1,
     step_class_for,
@@ -267,13 +268,19 @@ class ApprovalGate:
             self.approval_store = approval_store
         else:
             self.approval_store = ItemApprovalStore(approval_store)
-        # Who may answer a save. Person-only unless the deployment widened it;
-        # the run's store records the policy so every reader applies the same.
+        # Who may answer a save. Person-only unless the deployment widened it.
+        # The run's store records the policy at run start, always, so every
+        # reader applies the same one, and this gate applies only that one: a
+        # policy file that appears or changes later is refused or ignored.
         self.approver_policy = approver_policy
         self.approver = approver
         self._policy_name = policy_name
-        if approver_policy is not None and self.approval_store is not None:
-            self.approval_store.write_policy(approver_policy)
+        if self.approval_store is not None:
+            self.approval_store.write_policy(
+                approver_policy
+                if approver_policy is not None
+                else DEFAULT_APPROVER_POLICY
+            )
         self._approval_wait_s = float(approval_wait_s)
         self._approval_poll_s = float(approval_poll_s)
         self._sleep = sleep

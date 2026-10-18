@@ -34,9 +34,9 @@ audit_log: /srv/openadapt/audit/audit.log
 
 # -- engine wiring: the deployment.yaml handed to `openadapt-flow run` --------
 # Its backend.url / effects.base_url MUST be loopback or LAN (verify-airgap.sh
-# checks this). For a Citrix/Accuro clinic the backend drives the RDP/Windows
-# session on the LAN; the system-of-record effect verifier points at the local
-# EMR API.
+# checks this). For an application published over Citrix or RDP the backend
+# drives the RDP/Windows session on the LAN; the system-of-record effect
+# verifier points at the application's local API.
 deployment_config: /srv/openadapt/deployment.yaml
 
 # -- privacy posture (FAIL CLOSED) -------------------------------------------

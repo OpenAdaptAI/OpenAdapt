@@ -7,7 +7,7 @@ and the human-readable run report. This page is the honest map of **where PHI
 lives, what is scrubbed, and what is a documented boundary** (in-flight PHI whose
 control is a boundary policy, not scrubbing).
 
-Scrubbing is provided by [openadapt-privacy](https://github.com/OpenAdaptAI/openadapt-privacy)
+Scrubbing is provided by the `openadapt-privacy` package
 (Presidio-backed NER), wired in through the single choke point
 `openadapt_flow/privacy.py`.
 

@@ -1859,8 +1859,12 @@ console = [
     { name = "openadapt-types" },
     { name = "uvicorn" },
 ]
+countersign = [
+    { name = "asn1crypto" },
+]
 dev = [
     { name = "anthropic" },
+    { name = "asn1crypto" },
     { name = "fastapi" },
     { name = "hypothesis" },
     { name = "jsonschema" },
@@ -1945,6 +1949,8 @@ requires-dist = [
     { name = "aardwolf", marker = "extra == 'rdp'", specifier = "==0.2.14" },
     { name = "anthropic", marker = "extra == 'dev'", specifier = ">=0.40" },
     { name = "anthropic", marker = "extra == 'grounder'", specifier = ">=0.40" },
+    { name = "asn1crypto", marker = "extra == 'countersign'", specifier = ">=1.5" },
+    { name = "asn1crypto", marker = "extra == 'dev'", specifier = ">=1.5" },
     { name = "click", marker = "extra == 'privacy'", specifier = ">=8.0,<9" },
     { name = "cryptography", specifier = ">=42.0" },
     { name = "fastapi", marker = "extra == 'console'", specifier = ">=0.110" },
@@ -2009,7 +2015,7 @@ requires-dist = [
     { name = "winrt-windows-media-ocr", marker = "sys_platform == 'win32' and extra == 'native-ocr'", specifier = ">=2.0" },
     { name = "winrt-windows-storage-streams", marker = "sys_platform == 'win32' and extra == 'native-ocr'", specifier = ">=2.0" },
 ]
-provides-extras = ["native-ocr", "browser", "dev", "grounder", "grounding", "console", "execute", "windows", "reward", "macos", "linux", "rdp", "privacy", "hosted", "service", "service-mlx", "capture", "interop"]
+provides-extras = ["native-ocr", "browser", "dev", "grounder", "grounding", "console", "countersign", "execute", "windows", "reward", "macos", "linux", "rdp", "privacy", "hosted", "service", "service-mlx", "capture", "interop"]
 
 [[package]]
 name = "openadapt-grounding"

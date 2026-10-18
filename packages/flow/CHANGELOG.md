@@ -5584,7 +5584,7 @@ Co-authored-by: Claude Opus 4.8 <noreply@anthropic.com>
 
 * feat: FreeRDP backend adapter (L1 over RDP; transport-abstracted, mock-tested + gated live smoke)
 
-The L1/Retinology wedge reaches a legacy ophthalmology EMR over RDP, read pixel-only (no
+The RDP backend reaches a legacy desktop EMR over RDP, read pixel-only (no
   accessibility tree) — exactly the vision-only substrate the runtime was built for, so RDP is an
   adapter, not a rewrite.
 
