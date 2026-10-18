@@ -60,7 +60,7 @@ def _post(base: str, patient_id: str, note: str, typ: str = "Triage") -> None:
             -1.0,
             ("duplicate",),
         ),
-        ([("p1", "Consult")], "completed", "wrong_effect", -0.5, ()),
+        ([("p1", "Consult")], "completed", "wrong_effect", -0.5, ("wrong_value",)),
         ([], "completed", "wrong_effect", -0.5, ()),
         ([], "halted_before_effect", "halted_before_effect", 0.0, ("safe_stop",)),
         ([("p1", None)], "halted_before_effect", "reconciliation_required", None, ()),
@@ -72,6 +72,14 @@ def _post(base: str, patient_id: str, note: str, typ: str = "Triage") -> None:
             "reconciliation_required",
             -1.0,
             ("wrong_record",),
+        ),
+        # Halted after writing the wrong type on the right patient.
+        (
+            [("p1", "Consult")],
+            "halted_before_effect",
+            "reconciliation_required",
+            -0.5,
+            ("wrong_value",),
         ),
     ],
 )
@@ -91,11 +99,27 @@ def test_scorer_reads_the_store_not_the_report(
     assert score.outcome == outcome
     assert score.reward == reward
     assert score.oracle_tier == 2
-    for flag in ("wrong_record", "duplicate", "safe_stop"):
+    for flag in ("wrong_record", "duplicate", "safe_stop", "wrong_value"):
         assert getattr(score, flag) is (flag in flags)
     assert (
         tmp_path / "worker" / "rewards" / score.receipt_id / "receipt.json"
     ).is_file()
+
+
+def test_a_duplicate_is_never_the_right_outcome(tmp_path):
+    # The timeout task accepts reconciliation_required, but not with two records.
+    task = mockmed_tasks(("timeout",))[0]
+    session = MockMedTarget().start()
+    try:
+        scorer = ReadBackScorer(task, session.oracle_recipe(), tmp_path)
+        scorer.begin("episode_timeout_0001")
+        _post(session.base_url, "p1", task.params["note"])
+        _post(session.base_url, "p1", task.params["note"])
+        score = scorer.score("episode_timeout_0001", "halted_before_effect")
+    finally:
+        session.stop()
+    assert score.outcome == "reconciliation_required" and score.duplicate
+    assert score.passed is False and score.reward == -1.0
 
 
 def test_unknown_variant_is_refused():
@@ -138,18 +162,55 @@ def test_rollout_is_scored_by_readback(tmp_path, variant, harness, outcome, flag
     assert score.passed is (outcome in task.expected)
     run = load_run(run_dir)
     assert run["steps"] > 0 and run["agent_cost_usd"] == 0.0
-    # The rollout is idempotent by run directory.
-    assert (
-        run_rollout(
-            task,
-            harness,
-            ScriptedGuiAgent(),
-            run_dir,
-            target=MockMedTarget(),
-            run_id="x",
-        )
-        == run_dir
+    # The worker's private key and token do not outlive the rollout.
+    worker = run_dir / "reward" / "worker"
+    assert (worker / "keys" / "ed25519.pub").is_file()
+    assert not (worker / "keys" / "ed25519.pem").exists()
+    assert not (worker / "token").exists()
+    # The same task under the same harness reuses the finished run.
+    mtime = (run_dir / "run.json").stat().st_mtime_ns
+    run_rollout(
+        task, harness, ScriptedGuiAgent(), run_dir, target=MockMedTarget(), run_id="x"
     )
+    assert (run_dir / "run.json").stat().st_mtime_ns == mtime
+
+
+def test_a_rollout_is_redone_when_the_harness_changed(tmp_path):
+    pytest.importorskip("playwright.sync_api")
+    task = mockmed_tasks(("lookalike",))[0]
+    run_dir = tmp_path / "run"
+    run_rollout(
+        task, "", ScriptedGuiAgent(), run_dir, target=MockMedTarget(), run_id="r1"
+    )
+    assert load_score(run_dir).wrong_record
+    run_rollout(
+        task, CAREFUL, ScriptedGuiAgent(), run_dir, target=MockMedTarget(), run_id="r1"
+    )
+    assert load_score(run_dir).outcome == "verified"
+
+
+def test_reward_selection_ranks_the_right_outcome_first(tmp_path, h2):
+    from harness2.core.spec import RunView
+
+    from openadapt_flow.integrations.harness2.selection import reward_selection
+
+    scores = {
+        # A single save a person reconciles: right on the timeout task, unscored.
+        "a": {"reward": None, "all_pass": True},
+        # Never saved: a safe stop, reward 0, not the task.
+        "b": {"reward": 0.0, "all_pass": False},
+        "c": {"reward": -1.0, "all_pass": False},
+    }
+
+    class Fake:
+        def score(self, run_dir, task_id):
+            return scores[Path(run_dir).name]
+
+    pool = {k: RunView(k, k, tmp_path / k, ok=True, delivered=True) for k in scores}
+    sel = reward_selection(
+        "mockmed/timeout", 3, "agg", pool, adapter=Fake(), work_dir=tmp_path
+    )
+    assert sel.chosen_label == "a"
 
 
 def test_model_requests_pass_the_privacy_gate(monkeypatch, tmp_path):

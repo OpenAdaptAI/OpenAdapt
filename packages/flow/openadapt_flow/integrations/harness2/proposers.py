@@ -166,7 +166,7 @@ def _inline(context: Path, cap: int) -> str:
         if (
             not p.is_file()
             or p.suffix not in (".md", ".txt", ".json")
-            or "/library/" in p.as_posix()
+            or p.relative_to(context).parts[0] == "library"
         ):
             continue
         body = p.read_text(encoding="utf-8", errors="replace")

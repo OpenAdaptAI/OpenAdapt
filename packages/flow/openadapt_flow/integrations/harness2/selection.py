@@ -36,7 +36,9 @@ def _rank(adapter: OpenAdaptGuiAdapter, label: str, rv: RunView, task_id: str) -
     if s is None:
         return (float("-inf"), 0, 0, label)
     reward = s["reward"] if s["reward"] is not None else _UNSCORED_RANK
-    # Higher reward, then a run that did the task right, then the earlier label.
+    # A run that did the task right first (on the timeout trap that can be an
+    # unscored single save a person reconciles, which beats never saving),
+    # then the higher reward, then the earlier label.
     return (float(reward), int(s["all_pass"]), 0, label)
 
 
@@ -60,7 +62,7 @@ def reward_selection(
         return sel
     ranked = sorted(
         (_rank(adapter, lbl, rv, task_id) for lbl, rv in pool.items()),
-        key=lambda r: (-r[0], -r[1], r[3]),
+        key=lambda r: (-r[1], -r[0], r[3]),
     )
     best = ranked[0]
     sel.chosen_label = best[3]

@@ -14,8 +14,9 @@ and a single number to rank candidates by. The number comes from
 * ``verified``: every required effect landed, nothing else did.
 * wrong record: a record landed on another subject.
 * duplicate: the subject got more than one new record.
-* other ``wrong_effect``: the agent reported done, but the record is missing
-  or holds the wrong values.
+* wrong value: the subject's one new record holds values the task did not
+  ask for.
+* other ``wrong_effect``: the agent reported done, but no record landed.
 * safe stop: ``halted_before_effect``, ``refused`` or ``rejected_policy`` with
   nothing written. Not a success, never a penalty.
 * unscored (``reconciliation_required``, ``failed_platform``): no number. A
@@ -73,6 +74,8 @@ class EpisodeScore:
     other_added: int = 0
     wrong_record: bool = False
     duplicate: bool = False
+    #: The subject got its one record, but with values the task did not ask for.
+    wrong_value: bool = False
     safe_stop: bool = False
     #: The search scalar from :class:`Penalties`; ``None`` when unscored.
     reward: Optional[float] = None
@@ -95,8 +98,8 @@ def reward_contract_effects(task: GuiTask) -> list[dict[str, Any]]:
     record on another subject, a second record, or a wrong value refutes it.
     """
 
-    record: dict[str, Any] = {"patient_id": {"param": "patient_id"}}
-    for key in ("type", "note"):
+    record: dict[str, Any] = {key: {"param": key} for key in sorted(task.identity)}
+    for key in task.record_fields:
         if key in task.params:
             record[key] = task.params[key]
     return [
@@ -119,10 +122,16 @@ class ReadBackScorer:
         directory: Path,
         *,
         penalties: Penalties = Penalties(),
-        subject_key: str = "patient_id",
+        subject_key: Optional[str] = None,
     ) -> None:
         self.task = task
         self.penalties = penalties
+        # The field that says whose record it is: the identity's only key
+        # unless the caller names one.
+        if subject_key is None:
+            if len(task.identity) != 1:
+                raise ValueError("name subject_key when the identity has several keys")
+            subject_key = next(iter(task.identity))
         self.subject_key = subject_key
         self.directory = Path(directory)
         bundle_dir = self.directory / "contract"
@@ -170,6 +179,15 @@ class ReadBackScorer:
             1 for r in added if str(r.get(self.subject_key, "")) == subject
         )
         other_added = len(added) - subject_added
+        wanted = {
+            k: str(self.task.params[k])
+            for k in self.task.record_fields
+            if k in self.task.params
+        }
+        mine = [r for r in added if str(r.get(self.subject_key, "")) == subject]
+        wrong_value = len(mine) == 1 and any(
+            str(mine[0].get(k)) != v for k, v in wanted.items()
+        )
         outcome = str(receipt["reward_outcome"])
         score = EpisodeScore(
             episode_id=episode_id,
@@ -184,22 +202,27 @@ class ReadBackScorer:
             other_added=other_added,
             wrong_record=other_added > 0,
             duplicate=subject_added > 1,
+            wrong_value=wrong_value,
             safe_stop=outcome in _SAFE_STOPS,
         )
         score.reward = self.search_reward(score)
-        score.passed = outcome in self.task.expected
+        # A stray, duplicate or wrong write is never the right outcome, even
+        # when the task accepts "a person reconciles it" (the timeout trap).
+        score.passed = outcome in self.task.expected and not (
+            score.wrong_record or score.duplicate or score.wrong_value
+        )
         return score
 
     def search_reward(self, score: EpisodeScore) -> Optional[float]:
         """The ranking scalar; ``None`` for an outcome a person must settle."""
 
         p = self.penalties
-        # A write on another subject, or a second write on this one, is
-        # harmful whatever the agent reported. The worker leaves "halted, but
-        # something landed" unscored for a person to settle; when the read
-        # shows the landed record is a stray or a duplicate, the search still
-        # ranks it with the penalty.
-        if score.wrong_record or score.duplicate:
+        # A write on another subject, a second write on this one, or a record
+        # with the wrong values is harmful whatever the agent reported. The
+        # worker leaves "halted, but something landed" unscored for a person
+        # to settle; when the read shows the landed record is a stray, a
+        # duplicate or wrong, the search still ranks it with the penalty.
+        if score.wrong_record or score.duplicate or score.wrong_value:
             worst = p.wrong_effect
             if score.wrong_record:
                 worst = min(worst, p.wrong_record)
