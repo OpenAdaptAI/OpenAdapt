@@ -185,7 +185,9 @@ class _Vision:
         ]
 
 
-def _replayer_check(row_text: str, band_text: str, recorded: str) -> tuple[str, int]:
+def _replayer_check(
+    row_text: str, band_text: str, recorded: str
+) -> tuple[str, list[Any]]:
     from openadapt_flow.ir import ActionKind, Anchor, Resolution, Step, Workflow
     from openadapt_flow.runtime.replayer import Replayer
 
@@ -208,7 +210,7 @@ def _replayer_check(row_text: str, band_text: str, recorded: str) -> tuple[str, 
         {},
         workflow,
     )
-    return check.status, len(vision.calls)
+    return check.status, vision.calls
 
 
 RECORDED = "MG367459 Sorensen, Philip 1957-10-28 M Active"
@@ -218,8 +220,17 @@ def test_row_reread_recovers_a_row_the_band_read_short() -> None:
     status, calls = _replayer_check(
         RECORDED, "MG367459 Sorensen, Philip 1957-10-28", RECORDED
     )
-    assert calls == 3
+    assert len(calls) == 3
     assert status == "verified"
+
+
+def test_row_reread_crops_without_resizing() -> None:
+    # Vision upscales short images itself; resizing here too stacks the two.
+    _status, calls = _replayer_check(
+        RECORDED, "MG367459 Sorensen, Philip 1957-10-28", RECORDED
+    )
+    (width, height), region = calls[-1]
+    assert region is None and width == 1120 and height < 64
 
 
 def test_row_reread_of_a_different_patient_does_not_verify() -> None:
@@ -227,13 +238,13 @@ def test_row_reread_of_a_different_patient_does_not_verify() -> None:
     status, calls = _replayer_check(
         sibling, "MG619501 Sorenson, Philip 1957-10-28", RECORDED
     )
-    assert calls == 3
+    assert len(calls) == 3
     assert status != "verified"
 
 
 def test_verified_band_skips_the_row_reread() -> None:
     status, calls = _replayer_check("ignored", RECORDED, RECORDED)
-    assert status == "verified" and calls == 1
+    assert status == "verified" and len(calls) == 1
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="Apple Vision is macOS-only")

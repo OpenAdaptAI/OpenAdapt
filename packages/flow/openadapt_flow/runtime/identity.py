@@ -429,8 +429,12 @@ def lines_near_point(lines: Iterable[Any], point_y: int) -> list[Any]:
     return kept
 
 
-#: Upscale factor of the row re-read (see :func:`row_region`).
-ROW_REREAD_FACTOR = 2
+#: Upscale factor of the row re-read (see :func:`row_region`). 1 crops
+#: without resizing: a row crop is short, and an engine that does better on
+#: short images upscales them itself (Apple Vision reads under 300 px at 2x).
+#: Upscaling here as well stacks the two (4x on Vision), which on the dense
+#: surface misread 'Philip' as 'Phllip' where the plain crop read it clean.
+ROW_REREAD_FACTOR = 1
 
 
 def row_region(lines: Iterable[Any], band: Region) -> Optional[Region]:
