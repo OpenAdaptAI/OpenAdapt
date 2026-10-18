@@ -5,6 +5,8 @@ import re
 import tomllib
 from pathlib import Path
 
+import pytest
+
 from scripts.check_release_consistency import release_versions, sync_lock_version
 from scripts.smoke_test_native_installer import bundled_flow_version
 from scripts.verify_build_artifact import bundled_flow_banner
@@ -24,7 +26,9 @@ README_INTERNAL_TERMS = (
     "governed",
     "Production default",
 )
-COMPLIANCE_URL = "https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/docs/COMPLIANCE.md"
+COMPLIANCE_URL = (
+    "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/docs/COMPLIANCE.md"
+)
 
 
 def test_public_metadata_identifies_component_role_and_admission_boundary() -> None:
@@ -144,9 +148,7 @@ def test_readme_does_not_publish_hard_coded_package_version_claims() -> None:
 def test_release_docs_do_not_claim_installers_before_native_release() -> None:
     policy = (ROOT / "RELEASES.md").read_text(encoding="utf-8")
     normalized_policy = " ".join(policy.split())
-    candidates = (ROOT / "docs" / "RELEASE_CANDIDATE_INSTALLERS.md").read_text(
-        encoding="utf-8"
-    )
+    candidates = (ROOT / "docs" / "RELEASE_CANDIDATE_INSTALLERS.md").read_text(encoding="utf-8")
 
     assert "It has no native installers" in policy
     assert "there is no trusted candidate now" in policy
@@ -155,35 +157,72 @@ def test_release_docs_do_not_claim_installers_before_native_release() -> None:
     assert "vX.Y.Z carries the assets today" not in policy
 
 
-def test_semantic_release_preserves_pre_one_versions() -> None:
-    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    release = pyproject["tool"]["semantic_release"]
+MONOREPO_WORKFLOWS = ROOT.parents[1] / ".github" / "workflows"
 
-    assert release["major_on_zero"] is False
-    assert release["allow_zero_version"] is True
+
+def test_engine_release_has_no_semantic_release_or_bot_commit() -> None:
+    """The monorepo releases a reviewed version; nothing pushes a version commit."""
+
+    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
+    lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
+    assert "semantic_release" not in pyproject.get("tool", {})
+    dev = pyproject["project"]["optional-dependencies"]["dev"]
+    assert not any("semantic-release" in requirement for requirement in dev)
+    assert 'name = "python-semantic-release"' not in lock
+    assert "click>=8.3.3" in pyproject["tool"]["uv"]["constraint-dependencies"]
+
+
+def test_monorepo_engine_release_publishes_only_a_green_reviewed_version() -> None:
+    workflow_path = MONOREPO_WORKFLOWS / "desktop-release.yml"
+    if not workflow_path.is_file():
+        pytest.skip("not running from the OpenAdapt monorepo checkout")
+    workflow = workflow_path.read_text(encoding="utf-8")
+    triggers = workflow[workflow.index("\non:\n") : workflow.index("\njobs:\n")]
+    skip = workflow.index("- name: Read the version and skip one that is already published")
+    wait = workflow.index("- name: Wait for this exact commit's Packages run")
+    unchanged = workflow.index(
+        "- name: Require that main has not changed Desktop since this commit"
+    )
+    dispatch = workflow.index("- name: Dispatch the package release")
+
+    assert (
+        "  push:\n    branches: [main]\n    paths:\n      - packages/desktop/pyproject.toml"
+        in triggers
+    )
+    assert skip < wait < unchanged < dispatch
+    assert "https://pypi.org/pypi/openadapt-desktop/${version}/json" in workflow
+    assert "actions/workflows/packages.yml/runs" in workflow
+    assert '--raw-field head_sha="${GITHUB_SHA}"' in workflow
+    assert "git merge-base --is-ancestor" in workflow
+    assert "-- packages/desktop" in workflow
+    assert "gh workflow run release-package.yml" in workflow
+    assert "-f package=desktop" in workflow
+    for forbidden in ("ADMIN_TOKEN", "git push", "semantic-release", "id-token: write"):
+        assert forbidden not in workflow.split("\njobs:\n", 1)[1]
+    uses = re.findall(r"\buses:\s+\S+@([^\s#]+)", workflow)
+    assert uses and all(re.fullmatch(r"[0-9a-f]{40}", revision) for revision in uses)
+
+
+def test_monorepo_package_release_runs_the_desktop_contract() -> None:
+    workflow_path = MONOREPO_WORKFLOWS / "release-package.yml"
+    if not workflow_path.is_file():
+        pytest.skip("not running from the OpenAdapt monorepo checkout")
+    workflow = workflow_path.read_text(encoding="utf-8")
+    assert re.search(r"options: \[[^\]]*\bdesktop\b", workflow)
+    assert '"desktop": "openadapt-desktop"' in workflow
+    contract = workflow[workflow.index('if [ "$PACKAGE" = desktop ]; then') :]
+    for check in (
+        "scripts/check_release_consistency.py --require-dist",
+        "scripts/native_release.py version",
+        "scripts/check_source_boundary.py --require-dist",
+        "scripts/verify_build_artifact.py python-distribution",
+    ):
+        assert check in contract
 
 
 def test_release_versions_are_synchronized() -> None:
     versions = release_versions()
     assert len(set(versions.values())) == 1, versions
-
-
-def test_semantic_release_refreshes_lock_and_builds_before_tagging() -> None:
-    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    build_command = pyproject["tool"]["semantic_release"]["build_command"]
-
-    assert "python -m ensurepip --upgrade" in build_command
-    assert "uv==0.11.29" in build_command
-    assert "check_release_consistency.py --sync" in build_command
-    assert "git add uv.lock" in build_command
-    assert "uv build --wheel --sdist" in build_command
-    assert "check_release_consistency.py --require-dist" in build_command
-    assert "verify_build_artifact.py python-distribution" in build_command
-    assert build_command.index("uv build --wheel --sdist") < build_command.index(
-        "verify_build_artifact.py python-distribution"
-    )
-    assert "uv lock" not in build_command
-    assert "$PACKAGE_NAME" not in build_command
 
 
 def test_release_lock_sync_updates_only_editable_root_version(tmp_path: Path) -> None:
@@ -204,61 +243,6 @@ def test_release_lock_sync_updates_only_editable_root_version(tmp_path: Path) ->
     assert 'name = "dependency"\nversion = "1.2.3"' in lock
 
 
-def test_release_workflow_uses_matching_pinned_actions() -> None:
-    workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
-    uses = re.findall(r"^\s*uses:\s+\S+@([^\s#]+)", workflow, flags=re.MULTILINE)
-
-    assert uses
-    assert all(re.fullmatch(r"[0-9a-f]{40}", revision) for revision in uses)
-    assert "# v10.7.0" in workflow
-    assert "# v9.15.2" not in workflow
-    assert "token: ${{ secrets.ADMIN_TOKEN }}" in workflow
-    assert workflow.count("github_token: ${{ secrets.ADMIN_TOKEN }}") == 2
-    assert "- name: Build package" not in workflow
-
-
-def test_release_runs_on_main_and_is_gated_on_exact_test_and_build_heads() -> None:
-    workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
-    triggers = workflow[workflow.index("\non:\n") : workflow.index("\njobs:\n")]
-    semantic = workflow[workflow.index("\n  semantic-release:") :]
-    wait_index = semantic.index("- name: Wait for exact-head Test and Build workflows")
-    head_index = semantic.index("- name: Require dispatched head to remain current protected main")
-    release_index = semantic.index("- name: Python Semantic Release")
-
-    assert "  push:\n    branches: [main]\n" in triggers
-    assert "  workflow_dispatch:" in triggers
-    assert "operation:" in triggers
-    assert "- semantic-release" in triggers
-    assert "- publish-existing-ref" in triggers
-    assert "github.ref == 'refs/heads/main'" in semantic
-    assert wait_index < head_index < release_index
-    for workflow_name in ("test.yml", "build.yml"):
-        assert workflow_name in semantic
-    assert '--raw-field head_sha="${GITHUB_SHA}"' in semantic
-    assert "refs/remotes/origin/main" in semantic
-    assert "Refusing stale release dispatch" in semantic
-
-
-def test_dev_semantic_release_floor_matches_the_pinned_v10_action() -> None:
-    """A merge must not silently install python-semantic-release 9 against the v10 action."""
-
-    pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
-    lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
-    workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
-    dev = pyproject["project"]["optional-dependencies"]["dev"]
-
-    assert "python-semantic-release>=10.6.1,<11" in dev
-    assert re.search(
-        r'^name = "python-semantic-release"\nversion = "10\.\d+\.\d+"',
-        lock,
-        flags=re.MULTILINE,
-    )
-    assert "# v10.7.0" in workflow
-    assert "python-semantic-release>=9" not in "\n".join(dev)
-    uv = pyproject["tool"]["uv"]
-    assert "click>=8.3.3" in uv["constraint-dependencies"]
-
-
 def test_pyinstaller_build_floor_matches_the_reviewed_bootloader_pin() -> None:
     """The frozen sidecar must freeze the reviewed PyInstaller, not the old 6.16 floor."""
 
@@ -274,23 +258,6 @@ def test_pyinstaller_build_floor_matches_the_reviewed_bootloader_pin() -> None:
     assert PYINSTALLER_NOTICE_SHA256 == (
         "dcf75fdb959db1e3b41c0f8505069d2ece781b5ec6b3d0a4d30975cfc6580245"
     )
-
-
-def test_release_recovery_ref_is_main_contained_and_exact_ci_green() -> None:
-    workflow = (ROOT / ".github/workflows/release.yml").read_text(encoding="utf-8")
-    recovery = workflow[workflow.index("\n  publish-existing-ref:") :]
-    build_index = recovery.index("- name: Build and validate exact recovery artifacts")
-    publish_index = recovery.index("- name: Publish to PyPI")
-
-    assert "inputs.operation == 'publish-existing-ref'" in recovery
-    assert "github.ref == 'refs/heads/main'" in recovery
-    assert "git merge-base --is-ancestor" in recovery
-    assert 'head_sha="${TARGET_SHA}"' in recovery
-    for workflow_name in ("test.yml", "build.yml"):
-        assert workflow_name in recovery
-    assert "guard/scripts/verify_build_artifact.py python-distribution --root target" in recovery
-    assert "packages-dir: target/dist/" in recovery
-    assert build_index < publish_index
 
 
 def test_candidate_release_notes_describe_the_bundled_flow_runtime() -> None:
@@ -329,10 +296,10 @@ def test_candidate_release_notes_describe_the_bundled_flow_runtime() -> None:
 
 
 # The README is also the PyPI page, where relative links and images break, so
-# it links to this repository by absolute URL. Those URLs must still name files
-# that exist in this checkout.
-OWN_BLOB = "https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/"
-OWN_RAW = "https://raw.githubusercontent.com/OpenAdaptAI/openadapt-desktop/main/"
+# it links to this package in the OpenAdapt monorepo by absolute URL. Those URLs
+# must still name files that exist in this checkout.
+OWN_BLOB = "https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/"
+OWN_RAW = "https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/packages/desktop/"
 
 
 def test_readme_local_links_exist() -> None:

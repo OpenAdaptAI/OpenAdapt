@@ -92,7 +92,14 @@ def _package_ruleset(pattern: str, *rule_types: str) -> dict:
 
 
 @pytest.mark.parametrize(
-    "package", ["openadapt-flow", "openadapt-agent", "openadapt-types", "openadapt-privacy"]
+    "package",
+    [
+        "openadapt-flow",
+        "openadapt-agent",
+        "openadapt-types",
+        "openadapt-privacy",
+        "openadapt-desktop",
+    ],
 )
 def test_release_hosting_accepts_a_package_tag_under_its_own_rules(package: str) -> None:
     MODULE.verify_release_hosting_documents(
