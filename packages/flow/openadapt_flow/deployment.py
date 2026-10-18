@@ -40,6 +40,7 @@ from openadapt_flow.remote_frame_contract import RemoteFrameContract
 # with the exact ``{param: ...}`` / ``{literal: ...}`` form bundles use.
 from openadapt_flow.runtime.effects.auth import AuthRef, ResolvedSecrets
 from openadapt_flow.runtime.effects.effect import Region, ValueExpr
+from openadapt_flow.runtime.effects.smart_auth import SmartBackendConfig
 from openadapt_flow.runtime.effects.ui_readback import UiReadbackSpec
 
 
@@ -391,6 +392,11 @@ class EffectsConfig(BaseModel):
     #: Name of the env var holding the OAuth2 bearer token (secret-isolated;
     #: wins over ``access_token``; missing var fails loud).
     access_token_env: Optional[str] = None
+    #: SMART Backend Services (client_credentials + private_key_jwt): a
+    #: short-lived token is requested and renewed as needed. Mutually
+    #: exclusive with ``access_token`` / ``access_token_env``. See
+    #: ``runtime/effects/smart_auth.py``.
+    smart_backend: Optional[SmartBackendConfig] = None
     verify_tls: bool = True
     #: FHIR search params whose VALUES bind to run parameters (merged over
     #: ``search_params`` after resolution) — e.g.
@@ -519,6 +525,19 @@ class EffectsConfig(BaseModel):
         return self
 
     @model_validator(mode="after")
+    def _validate_smart_backend(self) -> "EffectsConfig":
+        if self.smart_backend is None:
+            return self
+        if (self.kind or "").strip().lower() != "fhir":
+            raise ValueError("effects.smart_backend applies only to kind fhir")
+        if self.access_token or self.access_token_env:
+            raise ValueError(
+                "effects.smart_backend and access_token / access_token_env are "
+                "mutually exclusive"
+            )
+        return self
+
+    @model_validator(mode="after")
     def _validate_candidates(self) -> "EffectsConfig":
         if not self.candidates:
             return self
@@ -629,6 +648,24 @@ class RuntimeSection(BaseModel):
     #: :func:`openadapt_flow.runtime.identity.verify_pixel_identity` and
     #: docs/LIMITS.md.
     pixel_verify_enabled: bool = False
+    #: Path to an export of the system of record that lists every identifier
+    #: in the namespace (CSV, JSON or one per line). When set, an OCR identity
+    #: check that abstained only on a look-alike identifier (O/0, l/1, B/8) is
+    #: lifted to verified if a second read from a fresh screenshot agrees and
+    #: exactly one listed ID is in that look-alike class. An operator must
+    #: first confirm the export's source and completeness
+    #: (``openadapt-flow known-ids confirm``); replay refuses to start, and a
+    #: step that needs the list halts, when that confirmation is missing, the
+    #: export's hash changed, or the export is older than
+    #: ``known_ids_max_age_hours``. See :mod:`openadapt_flow.runtime.known_ids`.
+    #: None (default) keeps the halt.
+    known_ids_path: Optional[str] = None
+    #: Identifier column when ``known_ids_path`` is a CSV/TSV export.
+    known_ids_column: Optional[str] = None
+    #: Confirmation record; default ``<known_ids_path>.confirmation.json``.
+    known_ids_confirmation_path: Optional[str] = None
+    #: Oldest export (by its export time) replay will use.
+    known_ids_max_age_hours: float = Field(default=24.0, gt=0)
     #: Font/layout drift check before each recorded click step
     #: (:mod:`openadapt_flow.runtime.layout_drift`). None (default) turns it on
     #: for remote-desktop replays (``rdp``/``citrix``) and off elsewhere;
@@ -1149,6 +1186,19 @@ def build_replayer(
         qualification_environment_observer = BackendQualificationEnvironmentObserver(
             backend
         )
+    known_ids = None
+    if runtime_config is not None and runtime_config.known_ids_path:
+        from openadapt_flow.runtime.known_ids import KnownIdAdmission
+
+        # Raises KnownIdAdmissionHalt (named reason) when the export is not
+        # confirmed, changed since confirmation, or too old: replay does not
+        # start on an unusable list.
+        known_ids = KnownIdAdmission.load(
+            runtime_config.known_ids_path,
+            column=runtime_config.known_ids_column,
+            confirmation_path=runtime_config.known_ids_confirmation_path,
+            max_age_s=runtime_config.known_ids_max_age_hours * 3600.0,
+        )
     return Replayer(
         backend,
         layout_drift=(
@@ -1156,6 +1206,7 @@ def build_replayer(
         ),
         grounder=grounder,
         identity_vlm=appliance.identity_vlm if appliance else None,
+        known_ids=known_ids,
         state_verifier=(appliance.state_verifier if appliance else None),
         allow_model_grounding=allow_egress,
         effect_verifier=effect_verifier,
@@ -1382,11 +1433,11 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
     config = _identity_config_dump(cfg)
     # Fields added after identities were first issued enter the digest only
     # when they are set, so every existing verifier keeps its identity.
-    for added in ("ui_readback",):
+    for added in ("ui_readback", "smart_backend"):
         if config.get(added) is None:
             config.pop(added, None)
     for candidate in config.get("candidates") or []:
-        for added in ("ui_readback",):
+        for added in ("ui_readback", "smart_backend"):
             if isinstance(candidate, dict) and candidate.get(added) is None:
                 candidate.pop(added, None)
     payload = {
@@ -1483,6 +1534,15 @@ def _build_effect_verifier_unredacted(
             access_token = _require_env(
                 cfg.access_token_env, "effects.access_token_env"
             )
+        token_source = None
+        if cfg.smart_backend is not None:
+            from openadapt_flow.runtime.effects.smart_auth import (
+                SmartBackendTokenSource,
+            )
+
+            token_source = SmartBackendTokenSource.from_config(
+                cfg.smart_backend, fhir_base_url=cfg.base_url
+            )
         search_params = dict(cfg.search_params)
         if cfg.search_param_exprs:
             search_params.update(
@@ -1496,6 +1556,7 @@ def _build_effect_verifier_unredacted(
             search_params=search_params or None,
             field_paths=cfg.field_paths,
             access_token=access_token,
+            token_source=token_source,
             verify_tls=cfg.verify_tls,
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,

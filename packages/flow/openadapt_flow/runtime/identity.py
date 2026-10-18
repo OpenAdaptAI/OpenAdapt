@@ -1526,6 +1526,17 @@ def band_verdict(match: BandMatch) -> Literal["verified", "mismatch", "abstain"]
     return "verified"
 
 
+def band_abstain_reason(
+    match: BandMatch,
+) -> Optional[Literal["glyph_confusable_identifier", "identity_evidence_short"]]:
+    """Why :func:`band_verdict` abstains on ``match``, or None if it does not."""
+    if band_verdict(match) != "abstain":
+        return None
+    if match.glyph_ambiguous_id_chars > GLYPH_AMBIGUOUS_ID_CHARS_CAP:
+        return "glyph_confusable_identifier"
+    return "identity_evidence_short"
+
+
 def verify_target_identity(
     context_text: str,
     observed_text: str,
@@ -1613,6 +1624,7 @@ def verify_target_identity(
         match = band_match(substituted, observed_text)
         return IdentityCheck(
             status=band_verdict(match),
+            abstain_reason=band_abstain_reason(match),
             mode="param",
             coverage=round(match.coverage, 4),
             expected=substituted,
@@ -1625,6 +1637,7 @@ def verify_target_identity(
     match = band_match(context_text, observed_text)
     return IdentityCheck(
         status=band_verdict(match),
+        abstain_reason=band_abstain_reason(match),
         coverage=round(match.coverage, 4),
         expected=expected,
         observed=observed_text,

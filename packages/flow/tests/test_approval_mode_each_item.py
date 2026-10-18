@@ -653,3 +653,54 @@ def test_an_approval_never_carries_over_to_another_execution_of_the_step(tmp_pat
     assert not gate.before_step(start).proceed  # nobody answers this time
     assert not gate.before_save(edge).proceed
     assert len(store.requests()) == 2
+
+
+# -- the phone answers after the run stopped waiting ---------------------------------
+
+
+def _answer_from_phone(item: "Item", action: str, **extra: Any):
+    from openadapt_flow.console import save_approvals
+
+    request = item.store.requests()[0]
+    root = item.run_dir.parent
+    detail = save_approvals.save_approval_detail(root, request.request_id)
+    payload = save_approvals.SaveApprovalActionRequest(
+        action=action,
+        task_digest=detail["task_digest"],
+        task_signature=detail["task"]["signature"],
+        **extra,
+    )
+    return save_approvals.decide_save_approval(root, request.request_id, payload)
+
+
+def test_a_phone_approval_after_the_wait_reaches_the_pause_and_resumes(
+    tmp_path, monkeypatch
+):
+    """The phone wrote the answer but never carried it to the durable pause,
+    so the run that had stopped waiting stayed paused."""
+    monkeypatch.setenv("OPENADAPT_BUNDLE_KEY", _KEY)
+    item = Item(tmp_path, person=Person([None]), wait_s=5)
+    assert item.run().transaction_outcome == "HALTED_BEFORE_EFFECT"
+    assert item.pending().status == "pending"
+
+    receipt = _answer_from_phone(item, "verify_and_resume")
+
+    assert receipt.state.value == "accepted_pending_runner"
+    assert item.pending().status == "approved"
+    resumed_backend = FormBackend()
+    item.person = Person([])
+    item.person.store = ItemApprovalStore(item.run_dir)
+    resumed = resume(item.run_dir, item.replayer(backend=resumed_backend), key=_KEY)
+    assert _save_delivered(resumed_backend)
+    assert resumed.transaction_outcome == "VERIFIED"
+
+
+def test_a_phone_decline_after_the_wait_ends_the_pause(tmp_path, monkeypatch):
+    monkeypatch.setenv("OPENADAPT_BUNDLE_KEY", _KEY)
+    item = Item(tmp_path, person=Person([None]), wait_s=5)
+    item.run()
+
+    receipt = _answer_from_phone(item, "reject", decline_reason="wrong_values")
+
+    assert receipt.state.value == "rejected"
+    assert item.pending().status == "rejected"
