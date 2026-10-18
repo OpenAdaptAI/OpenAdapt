@@ -6,8 +6,8 @@ keyboard, timing, window-scope, and media capture.
 An exact Capture release can receive a Production admission only through the
 [live signed Production record](https://docs.openadapt.ai/production-lifecycle.json).
 
-Source: moving into `packages/capture` in
-[OpenAdaptAI/OpenAdapt](https://github.com/OpenAdaptAI/OpenAdapt).
+Source: [`packages/capture`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/capture)
+in OpenAdaptAI/OpenAdapt.
 
 ## Install
 
