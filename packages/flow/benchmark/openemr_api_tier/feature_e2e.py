@@ -27,6 +27,7 @@ import argparse
 import csv
 import json
 import os
+import shutil
 import subprocess
 import sys
 import time
@@ -227,6 +228,8 @@ def run_one(env: dict[str, Any], arm: str, ref_idx: int, bundle: Path, out: Path
     res.update(wall_s=round(t_end - t0, 3), setup_s=round(t_setup - t0, 3), engine_s=round(t_task - t_setup, 3),
                readback_s=round(t_end - t_task, 3))
     (out / "result.json").write_text(json.dumps(res, indent=1, default=str))
+    # Keep the engine report, drop its per-step screenshots (disk is tight).
+    shutil.rmtree(out / "engine" / "steps", ignore_errors=True)
     return res
 
 
