@@ -621,7 +621,7 @@
     },
     {
       "path": "deploy/on-prem/onprem.example.yaml",
-      "sha256": "da0ff6718ec6fd15f603bcc015146b4801b1cc2d40d580cc869616210f9749bf"
+      "sha256": "a8bbc42cde104e7fb42b0fd9521dccacf71ee7a1ea2f321b7b1c03c3281e3665"
     },
     {
       "path": "docs/console/run-halted.png",

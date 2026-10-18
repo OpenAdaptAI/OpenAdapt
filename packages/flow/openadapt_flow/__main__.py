@@ -7577,6 +7577,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sa.set_defaults(func=_cmd_attach_seal)
 
+    from openadapt_flow.cli_local_seal import register as _register_local_seal
+
+    _register_local_seal(sub)
+
+    from openadapt_flow.cli_no_outbound import register as _register_no_outbound
+
+    _register_no_outbound(sub)
+
+    from openadapt_flow.cli_service import register as _register_service
+
+    _register_service(sub)
+
     p = sub.add_parser(
         "verify-run",
         help=(
@@ -9798,6 +9810,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_jit_parser(sub)
 
+    from openadapt_flow.cli_fleet import register_fleet_parser
+
+    register_fleet_parser(sub)
+
     return parser
 
 
@@ -10220,9 +10236,24 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     argv = list(sys.argv[1:] if argv is None else argv)
     argv = _qualify_default_form(argv)
+    # Strict no-outbound mode (OPENADAPT_NO_OUTBOUND=1) is installed before
+    # any command runs, so no code path can open a connection off the machine.
+    from openadapt_flow import no_outbound
+
+    no_outbound.enforce_from_env()
     args = build_parser().parse_args(argv)
     try:
-        return args.func(args)
+        code = args.func(args)
+        if getattr(args, "command", None) in ("run", "replay"):
+            # Offline Seal by default (OPENADAPT_LOCAL_SEAL=off disables). It
+            # never changes the run's exit code.
+            from openadapt_flow.offline_seal import seal_after_run
+
+            run_dir = getattr(args, "run_dir", None)
+            note = seal_after_run(Path(run_dir) if run_dir else None)
+            if note:
+                print(note, file=sys.stderr)
+        return code
     except BrowserSupportMissing as exc:
         # Missing optional browser support is a setup decision, not a crash.
         print(f"Browser setup required:\n{exc}", file=sys.stderr)
