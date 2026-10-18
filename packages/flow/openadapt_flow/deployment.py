@@ -36,6 +36,7 @@ from openadapt_flow.remote_frame_contract import RemoteFrameContract
 # with the exact ``{param: ...}`` / ``{literal: ...}`` form bundles use.
 from openadapt_flow.runtime.effects.auth import AuthRef, ResolvedSecrets
 from openadapt_flow.runtime.effects.effect import Region, ValueExpr
+from openadapt_flow.runtime.effects.smart_auth import SmartBackendConfig
 from openadapt_flow.runtime.effects.ui_readback import UiReadbackSpec
 
 
@@ -363,6 +364,11 @@ class EffectsConfig(BaseModel):
     #: Name of the env var holding the OAuth2 bearer token (secret-isolated;
     #: wins over ``access_token``; missing var fails loud).
     access_token_env: Optional[str] = None
+    #: SMART Backend Services (client_credentials + private_key_jwt): a
+    #: short-lived token is requested and renewed as needed. Mutually
+    #: exclusive with ``access_token`` / ``access_token_env``. See
+    #: ``runtime/effects/smart_auth.py``.
+    smart_backend: Optional[SmartBackendConfig] = None
     verify_tls: bool = True
     #: FHIR search params whose VALUES bind to run parameters (merged over
     #: ``search_params`` after resolution) — e.g.
@@ -487,6 +493,19 @@ class EffectsConfig(BaseModel):
             raise ValueError(
                 "effects.option_params keys must not repeat effects.options keys: "
                 + ", ".join(overlap)
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_smart_backend(self) -> "EffectsConfig":
+        if self.smart_backend is None:
+            return self
+        if (self.kind or "").strip().lower() != "fhir":
+            raise ValueError("effects.smart_backend applies only to kind fhir")
+        if self.access_token or self.access_token_env:
+            raise ValueError(
+                "effects.smart_backend and access_token / access_token_env are "
+                "mutually exclusive"
             )
         return self
 
@@ -1384,11 +1403,11 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
     config = _identity_config_dump(cfg)
     # Fields added after identities were first issued enter the digest only
     # when they are set, so every existing verifier keeps its identity.
-    for added in ("ui_readback",):
+    for added in ("ui_readback", "smart_backend"):
         if config.get(added) is None:
             config.pop(added, None)
     for candidate in config.get("candidates") or []:
-        for added in ("ui_readback",):
+        for added in ("ui_readback", "smart_backend"):
             if isinstance(candidate, dict) and candidate.get(added) is None:
                 candidate.pop(added, None)
     payload = {
@@ -1485,6 +1504,15 @@ def _build_effect_verifier_unredacted(
             access_token = _require_env(
                 cfg.access_token_env, "effects.access_token_env"
             )
+        token_source = None
+        if cfg.smart_backend is not None:
+            from openadapt_flow.runtime.effects.smart_auth import (
+                SmartBackendTokenSource,
+            )
+
+            token_source = SmartBackendTokenSource.from_config(
+                cfg.smart_backend, fhir_base_url=cfg.base_url
+            )
         search_params = dict(cfg.search_params)
         if cfg.search_param_exprs:
             search_params.update(
@@ -1498,6 +1526,7 @@ def _build_effect_verifier_unredacted(
             search_params=search_params or None,
             field_paths=cfg.field_paths,
             access_token=access_token,
+            token_source=token_source,
             verify_tls=cfg.verify_tls,
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,
