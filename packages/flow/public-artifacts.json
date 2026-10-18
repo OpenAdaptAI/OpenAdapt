@@ -621,7 +621,7 @@
     },
     {
       "path": "claims.yaml",
-      "sha256": "ec1bd4acfa3d487e78809d6a5ecb742a60c6d8e858ab6fa7d50c75ea76083e7e"
+      "sha256": "416980c4e39abe5d0d4f3c8a9056365bb7b846867839def1b5d5af0307c4698a"
     },
     {
       "path": "deploy/on-prem/docker-compose.yml",
@@ -1857,7 +1857,7 @@
     },
     {
       "path": "docs/verification.json",
-      "sha256": "a0512978638a854e31a1b6f6f2538f717345168c6e89d42369637499223c6c9f"
+      "sha256": "ba542789703d75627379444437689cbee209055348a8c1a7e0e1d21abda4728b"
     },
     {
       "path": "examples/claude-code-demo/demo.gif",
