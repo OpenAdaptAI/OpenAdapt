@@ -220,16 +220,48 @@ def _send_profiling_via_wormhole(profile_path: str, timeout: int = 60) -> None:
         print(f"Profiling saved to: {profile_path}")
         return
 
+    # The profile holds timings plus a few strings (the capture folder and the
+    # window title filter) that can name a patient. Only numbers and flags
+    # leave the computer; every string is withheld.
+    import json as _json
+    import shutil as _shutil
+    import tempfile as _tempfile
+
+    try:
+        with open(profile_path, encoding="utf-8") as _f:
+            minimal = _numbers_only(_json.load(_f))
+    except (OSError, ValueError) as exc:
+        print(f"Profiling not sent: could not read {profile_path} ({exc})")
+        return
+    send_dir = _tempfile.mkdtemp(prefix="capture-profile-")
+    send_path = os.path.join(send_dir, "profiling.json")
+    with open(send_path, "w", encoding="utf-8") as _f:
+        _json.dump(minimal, _f, indent=2, sort_keys=True)
+
     print(f"Sending profiling via wormhole (waiting up to {timeout}s for receiver)...")
+    print("Strings (folder names, window titles) are withheld; numbers only.")
     print("Give the wormhole code below to the receiver.\n")
     try:
-        _sp.run([wormhole_bin, "send", profile_path], check=True, timeout=timeout)
+        _sp.run([wormhole_bin, "send", send_path], check=True, timeout=timeout)
     except _sp.TimeoutExpired:
         logger.warning(f"Wormhole send timed out after {timeout}s. File at: {profile_path}")
     except _sp.CalledProcessError:
         print(f"Wormhole send failed. File at: {profile_path}")
     except KeyboardInterrupt:
         print(f"\nCancelled. File at: {profile_path}")
+    finally:
+        _shutil.rmtree(send_dir, ignore_errors=True)
+
+
+def _numbers_only(value):
+    """Return ``value`` with every string replaced by ``"<withheld>"``."""
+    if isinstance(value, dict):
+        return {str(k): _numbers_only(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_numbers_only(v) for v in value]
+    if isinstance(value, str):
+        return "<withheld>"
+    return value
 
 
 Event = namedtuple(

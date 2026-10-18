@@ -77,9 +77,12 @@ transcribe = [
     "openai-whisper>=20230314",
 ]
 
-# Privacy scrubbing support
+# Privacy scrubbing: `capture share send` needs it and refuses without it.
+# After install: python -m spacy download en_core_web_sm
 privacy = [
-    "openadapt-privacy>=0.1.0",
+    "openadapt-privacy[presidio]>=1.1.3",
+    # spaCy imports Click from its CLI package without declaring it.
+    "click>=8.0,<9",
 ]
 
 # Shadow-mode pattern mining: AES-GCM for the on-disk buffer and the OS
