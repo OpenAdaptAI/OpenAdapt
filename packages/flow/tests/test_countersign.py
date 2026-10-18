@@ -319,6 +319,29 @@ def test_real_digicert_token_verifies_against_pinned_root():
     )
 
 
+def test_token_naming_its_signer_only_by_sha1_ess_v1_is_refused():
+    """ESS v1 (RFC 2634) names the signer certificate by SHA-1 only; refuse it."""
+    from asn1crypto import cms
+
+    token = (FIXTURES / "digicert-token.der").read_bytes()
+    digest = bytes.fromhex((FIXTURES / "digicert-digest.hex").read_text().strip())
+    root = x509.load_pem_x509_certificates(
+        (FIXTURES / "digicert-trusted-root-g4.pem").read_bytes()
+    )
+    info = cms.ContentInfo.load(token)
+    signer = info["content"]["signer_infos"][0]
+    kept = [
+        attr
+        for attr in signer["signed_attrs"]
+        if attr["type"].native != "signing_certificate_v2"
+    ]
+    assert any(attr["type"].native == "signing_certificate" for attr in kept)
+    signer["signed_attrs"] = cms.CMSAttributes(kept)
+    result = verify_timestamp_token(info.dump(force=True), digest, root)
+    assert not result.ok
+    assert result.reason == "malformed"
+
+
 def test_http_tsa_sends_only_the_digest_and_checks_the_nonce(tsa):
     from asn1crypto import tsp
 

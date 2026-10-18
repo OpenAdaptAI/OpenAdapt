@@ -211,8 +211,9 @@ Verification reads only what the holder pinned:
   `timeStamping` alone (RFC 3161 section 2.3). Each issuer must be a CA whose
   key usage allows certificate signing, whose path length allows the chain
   below it, and whose extended key usage, if any, includes `timeStamping`.
-  The ESS signing-certificate attribute must name the signer certificate by
-  hash and, when present, by issuer and serial number. A TSTInfo with a
+  The ESS signing-certificate-v2 attribute (RFC 5035) must name the signer
+  certificate by a SHA-2 hash and, when present, by issuer and serial number.
+  A token with only the SHA-1 ESS v1 attribute is refused. A TSTInfo with a
   critical extension is refused.
 
 The countersignature is a `openadapt.seal-signature/v1` over an

@@ -738,23 +738,20 @@ def verify_timestamp_token(
         or message_digest.native != hashlib.new(digest_name, tst_der).digest()
     ):
         return TimestampVerification(False, "content_mismatch", **base)
-    ess_v2 = _attr(signed_attrs, "signing_certificate_v2")
-    ess_v1 = _attr(signed_attrs, "signing_certificate")
-    ess = ess_v2 if ess_v2 is not None else ess_v1
-    if ess is not None:
-        first = ess["certs"][0]
-        if ess_v2 is not None:
-            ess_hash = first["hash_algorithm"]["algorithm"].native
-        else:
-            ess_hash = "sha1"  # ESS v1 (RFC 2634) fixes SHA-1
-        if (
-            ess_hash not in (*_HASHES, "sha1")
-            or first["cert_hash"].native != hashlib.new(ess_hash, cert_der).digest()
-            or not _issuer_serial_matches(first["issuer_serial"], signer_cert, a)
-        ):
-            return TimestampVerification(False, "signer_certificate_mismatch", **base)
-    else:
+    # ESSCertIDv2 (RFC 5035) only. ESS v1 (RFC 2634) can name the signer
+    # certificate only by SHA-1, so a token carrying only v1 is refused;
+    # DigiCert and Sigstore both send v2.
+    ess = _attr(signed_attrs, "signing_certificate_v2")
+    if ess is None:
         return TimestampVerification(False, "malformed", **base)
+    first = ess["certs"][0]
+    ess_hash = first["hash_algorithm"]["algorithm"].native
+    if (
+        ess_hash not in _HASHES
+        or first["cert_hash"].native != hashlib.new(ess_hash, cert_der).digest()
+        or not _issuer_serial_matches(first["issuer_serial"], signer_cert, a)
+    ):
+        return TimestampVerification(False, "signer_certificate_mismatch", **base)
     to_verify = b"\x31" + signed_attrs.dump()[1:]
     try:
         _verify_signature(signer_cert, signer, to_verify, digest_name)
