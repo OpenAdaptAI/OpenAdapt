@@ -1,0 +1,176 @@
+{
+  "cases": [
+    {
+      "file": "valid/invoice_posting.json",
+      "expect": [],
+      "expect_l1_rows": [
+        {
+          "filename": "V-0042_2026-10-29_invoice.txt",
+          "doctype": "invoice",
+          "source_type": "pdf_scan",
+          "sha256": "f08370b52af688de721c0f673bb759449f5690b8836dc032dff4548f829432c3"
+        }
+      ]
+    },
+    {
+      "file": "valid/invoice_posting_result.json",
+      "expect": [],
+      "expect_l1_rows": [
+        {
+          "filename": "V-0042_2026-10-29_invoice-posting.json",
+          "source_type": "rdp_screen"
+        }
+      ]
+    },
+    {
+      "file": "valid/referral_intake.json",
+      "expect": [],
+      "expect_l1_rows": [
+        {
+          "filename": "TEST-0007_2026-10-29_referral.txt",
+          "sha256": "e15b9b1523df9ac14f3010931330d5e2cb2dcf11b9bec70671805d16e28bd66b"
+        }
+      ]
+    },
+    {
+      "file": "valid/referral_result.json",
+      "expect": []
+    },
+    {
+      "file": "valid/referral_halted.json",
+      "expect": []
+    },
+    {
+      "file": "invalid/verified_without_independent_read.json",
+      "expect": [
+        "IX030"
+      ]
+    },
+    {
+      "file": "invalid/readback_without_screen_read.json",
+      "expect": [
+        "IX031"
+      ]
+    },
+    {
+      "file": "invalid/model_decided.json",
+      "expect": [
+        "IX040"
+      ]
+    },
+    {
+      "file": "invalid/self_approval.json",
+      "expect": [
+        "IX041"
+      ]
+    },
+    {
+      "file": "invalid/unauthorized_role.json",
+      "expect": [
+        "IX042"
+      ]
+    },
+    {
+      "file": "invalid/choice_not_option.json",
+      "expect": [
+        "IX023"
+      ]
+    },
+    {
+      "file": "invalid/duplicate_field.json",
+      "expect": [
+        "IX021"
+      ]
+    },
+    {
+      "file": "invalid/unknown_output_field.json",
+      "expect": [
+        "IX024"
+      ]
+    },
+    {
+      "file": "invalid/confirmed_without_person.json",
+      "expect": [
+        "IX032"
+      ]
+    },
+    {
+      "file": "invalid/dangling_artifact.json",
+      "expect": [
+        "IX020"
+      ]
+    },
+    {
+      "file": "invalid/unknown_identity_field.json",
+      "expect": [
+        "IX022"
+      ]
+    },
+    {
+      "file": "invalid/wrong_value_type.json",
+      "expect": [
+        "IX025"
+      ]
+    },
+    {
+      "file": "invalid/unnamespaced_extension.json",
+      "expect": [
+        "IX050"
+      ]
+    },
+    {
+      "file": "invalid/domain_field_in_core.json",
+      "expect": [
+        "IX001"
+      ]
+    },
+    {
+      "file": "invalid/checksum_tampered.json",
+      "expect": [
+        "IX010"
+      ]
+    },
+    {
+      "file": "invalid/seal_covers_other.json",
+      "expect": [
+        "IX011"
+      ]
+    },
+    {
+      "file": "invalid/ambiguous_identity_to_executor.json",
+      "expect": [
+        "IX060"
+      ]
+    },
+    {
+      "file": "invalid/existing_without_record.json",
+      "expect": [
+        "IX061"
+      ]
+    },
+    {
+      "file": "invalid/halted_without_reason.json",
+      "expect": [
+        "IX062"
+      ]
+    },
+    {
+      "file": "invalid/committed_unresolved_identity.json",
+      "expect": [
+        "IX063"
+      ]
+    },
+    {
+      "file": "invalid/payload_hash_mismatch.json",
+      "expect": [
+        "IX070"
+      ]
+    },
+    {
+      "file": "invalid/payload_escapes_dir.json",
+      "expect": [
+        "IX071"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,984 @@
+{
+  "$defs": {
+    "Artifact": {
+      "additionalProperties": false,
+      "description": "A source artifact, in the ``L1Artifact`` envelope shape.\n\n``file_number``, ``date`` and ``doctype`` are the L1 manifest naming keys\n(``{file_number}_{date}_{doctype}``).",
+      "properties": {
+        "artifact_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Artifact Id",
+          "type": "string"
+        },
+        "kind": {
+          "enum": [
+            "source_document",
+            "structured_observation"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "source_type": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Source Type",
+          "type": "string"
+        },
+        "file_number": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "File Number",
+          "type": "string"
+        },
+        "date": {
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+          "title": "Date",
+          "type": "string"
+        },
+        "doctype": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Doctype",
+          "type": "string"
+        },
+        "payload": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/PayloadRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "metadata": {
+          "additionalProperties": true,
+          "title": "Metadata",
+          "type": "object"
+        }
+      },
+      "required": [
+        "artifact_id",
+        "kind",
+        "source_type",
+        "file_number",
+        "date",
+        "doctype"
+      ],
+      "title": "Artifact",
+      "type": "object"
+    },
+    "Decision": {
+      "additionalProperties": false,
+      "description": "A finite choice made by an authorized person.\n\n``decided_by`` must be a human. Model output goes in ``advisory`` only and\nnever authorizes anything.",
+      "properties": {
+        "decision_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Decision Id",
+          "type": "string"
+        },
+        "question": {
+          "maxLength": 500,
+          "minLength": 1,
+          "title": "Question",
+          "type": "string"
+        },
+        "options": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 2,
+          "title": "Options",
+          "type": "array"
+        },
+        "choice": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Choice"
+        },
+        "output_field": {
+          "anyOf": [
+            {
+              "pattern": "^[a-z][a-z0-9_]{0,63}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Output Field"
+        },
+        "authorized_roles": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Authorized Roles",
+          "type": "array"
+        },
+        "decided_by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Principal"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "decided_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decided At"
+        },
+        "receipt_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Receipt Sha256"
+        },
+        "advisory": {
+          "items": {
+            "$ref": "#/$defs/Suggestion"
+          },
+          "title": "Advisory",
+          "type": "array"
+        }
+      },
+      "required": [
+        "decision_id",
+        "question",
+        "options",
+        "authorized_roles"
+      ],
+      "title": "Decision",
+      "type": "object"
+    },
+    "FieldValue": {
+      "additionalProperties": false,
+      "description": "A typed value, with where it came from and how well it was checked.",
+      "properties": {
+        "name": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Name",
+          "type": "string"
+        },
+        "type": {
+          "enum": [
+            "string",
+            "integer",
+            "decimal",
+            "boolean",
+            "date",
+            "datetime",
+            "enum",
+            "identifier"
+          ],
+          "title": "Type",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Value"
+        },
+        "unit": {
+          "anyOf": [
+            {
+              "maxLength": 50,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Unit"
+        },
+        "confidence": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Confidence",
+          "type": "number"
+        },
+        "status": {
+          "default": "proposed",
+          "enum": [
+            "proposed",
+            "confirmed",
+            "corrected",
+            "rejected"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "confirmed_by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Principal"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "grade": {
+          "default": "unchecked",
+          "enum": [
+            "unchecked",
+            "screen_readback",
+            "committed_readback",
+            "verified"
+          ],
+          "title": "Grade",
+          "type": "string"
+        },
+        "reads": {
+          "items": {
+            "$ref": "#/$defs/Read"
+          },
+          "title": "Reads",
+          "type": "array"
+        }
+      },
+      "required": [
+        "name",
+        "type",
+        "value",
+        "confidence"
+      ],
+      "title": "FieldValue",
+      "type": "object"
+    },
+    "Identity": {
+      "additionalProperties": false,
+      "description": "A party or record the exchange is about (a customer, an account, a\nsupplier, a case). ``fields`` name the FieldValue entries that identify it.",
+      "properties": {
+        "identity_id": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Identity Id",
+          "type": "string"
+        },
+        "role": {
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Role",
+          "type": "string"
+        },
+        "fields": {
+          "items": {
+            "type": "string"
+          },
+          "minItems": 1,
+          "title": "Fields",
+          "type": "array"
+        },
+        "match": {
+          "$ref": "#/$defs/IdentityMatch"
+        }
+      },
+      "required": [
+        "identity_id",
+        "role",
+        "fields",
+        "match"
+      ],
+      "title": "Identity",
+      "type": "object"
+    },
+    "IdentityMatch": {
+      "additionalProperties": false,
+      "description": "How an identity resolved against records in the target application.",
+      "properties": {
+        "status": {
+          "enum": [
+            "new",
+            "existing",
+            "ambiguous",
+            "not_checked"
+          ],
+          "title": "Status",
+          "type": "string"
+        },
+        "record_ref": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Target-application record id when existing",
+          "title": "Record Ref"
+        },
+        "candidates": {
+          "default": 0,
+          "minimum": 0,
+          "title": "Candidates",
+          "type": "integer"
+        },
+        "checked_by": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Principal"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "title": "IdentityMatch",
+      "type": "object"
+    },
+    "Locator": {
+      "additionalProperties": false,
+      "description": "Where in a source a value came from. Every member is optional; use the\nones that apply to the channel.",
+      "properties": {
+        "page": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Page"
+        },
+        "line": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Line"
+        },
+        "span": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "UTF-8 byte offsets [start, end) in the artifact",
+          "title": "Span"
+        },
+        "screen": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Screen"
+        },
+        "region": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Region"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "frame_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Sha256"
+        },
+        "crop_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Crop Sha256"
+        }
+      },
+      "title": "Locator",
+      "type": "object"
+    },
+    "PayloadRef": {
+      "additionalProperties": false,
+      "description": "A file next to the exchange, addressed relative to it.",
+      "properties": {
+        "path": {
+          "maxLength": 1000,
+          "minLength": 1,
+          "title": "Path",
+          "type": "string"
+        },
+        "sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Sha256",
+          "type": "string"
+        },
+        "mime": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Mime",
+          "type": "string"
+        },
+        "bytes": {
+          "anyOf": [
+            {
+              "minimum": 0,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Bytes"
+        }
+      },
+      "required": [
+        "path",
+        "sha256",
+        "mime"
+      ],
+      "title": "PayloadRef",
+      "type": "object"
+    },
+    "Principal": {
+      "additionalProperties": false,
+      "description": "Who did something. ``kind`` separates people, the executor and models.",
+      "properties": {
+        "kind": {
+          "enum": [
+            "human",
+            "executor",
+            "model",
+            "system"
+          ],
+          "title": "Kind",
+          "type": "string"
+        },
+        "id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Id",
+          "type": "string"
+        },
+        "role": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Role"
+        }
+      },
+      "required": [
+        "kind",
+        "id"
+      ],
+      "title": "Principal",
+      "type": "object"
+    },
+    "Provenance": {
+      "additionalProperties": false,
+      "description": "Who produced the exchange, and a checksum over its content.",
+      "properties": {
+        "tool_name": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Tool Name",
+          "type": "string"
+        },
+        "tool_version": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Tool Version",
+          "type": "string"
+        },
+        "producer": {
+          "$ref": "#/$defs/Principal"
+        },
+        "captured_at": {
+          "title": "Captured At",
+          "type": "string"
+        },
+        "checksum": {
+          "anyOf": [
+            {
+              "pattern": "^sha256:[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "sha256 of the canonical JSON without checksum and seals",
+          "title": "Checksum"
+        }
+      },
+      "required": [
+        "tool_name",
+        "tool_version",
+        "producer",
+        "captured_at"
+      ],
+      "title": "Provenance",
+      "type": "object"
+    },
+    "Read": {
+      "additionalProperties": false,
+      "description": "One observation of a value through one channel.",
+      "properties": {
+        "channel": {
+          "enum": [
+            "document_parse",
+            "screen_ocr",
+            "screen_structured",
+            "clipboard",
+            "export",
+            "database",
+            "api",
+            "human"
+          ],
+          "title": "Channel",
+          "type": "string"
+        },
+        "value": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "number"
+            },
+            {
+              "type": "boolean"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Value"
+        },
+        "artifact_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Artifact the read came from, if any",
+          "title": "Artifact Id"
+        },
+        "locator": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Locator"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "observed_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Observed At"
+        },
+        "run_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Run Id"
+        }
+      },
+      "required": [
+        "channel",
+        "value"
+      ],
+      "title": "Read",
+      "type": "object"
+    },
+    "Region": {
+      "additionalProperties": false,
+      "description": "A rectangle on a captured frame, in frame pixels.",
+      "properties": {
+        "x": {
+          "minimum": 0,
+          "title": "X",
+          "type": "integer"
+        },
+        "y": {
+          "minimum": 0,
+          "title": "Y",
+          "type": "integer"
+        },
+        "width": {
+          "exclusiveMinimum": 0,
+          "title": "Width",
+          "type": "integer"
+        },
+        "height": {
+          "exclusiveMinimum": 0,
+          "title": "Height",
+          "type": "integer"
+        }
+      },
+      "required": [
+        "x",
+        "y",
+        "width",
+        "height"
+      ],
+      "title": "Region",
+      "type": "object"
+    },
+    "SealRef": {
+      "additionalProperties": false,
+      "description": "A pointer to a Seal (a signed receipt) that covers this exchange.",
+      "properties": {
+        "kind": {
+          "maxLength": 100,
+          "minLength": 1,
+          "title": "Kind",
+          "type": "string"
+        },
+        "covers": {
+          "description": "The checksum the Seal signs",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Covers",
+          "type": "string"
+        },
+        "key_id": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Key Id"
+        },
+        "signature": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Signature"
+        },
+        "uri": {
+          "anyOf": [
+            {
+              "maxLength": 1000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Uri"
+        }
+      },
+      "required": [
+        "kind",
+        "covers"
+      ],
+      "title": "SealRef",
+      "type": "object"
+    },
+    "Suggestion": {
+      "additionalProperties": false,
+      "description": "A non-binding suggestion (for example from a local model).",
+      "properties": {
+        "source": {
+          "$ref": "#/$defs/Principal"
+        },
+        "option": {
+          "title": "Option",
+          "type": "string"
+        },
+        "rationale": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Rationale"
+        }
+      },
+      "required": [
+        "source",
+        "option"
+      ],
+      "title": "Suggestion",
+      "type": "object"
+    }
+  },
+  "additionalProperties": false,
+  "description": "One unit of work between a document side and an executor.",
+  "properties": {
+    "schema_version": {
+      "const": "openadapt.records-interchange/v0",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "exchange_id": {
+      "maxLength": 100,
+      "minLength": 1,
+      "title": "Exchange Id",
+      "type": "string"
+    },
+    "direction": {
+      "enum": [
+        "to_executor",
+        "from_executor"
+      ],
+      "title": "Direction",
+      "type": "string"
+    },
+    "workflow": {
+      "maxLength": 200,
+      "minLength": 1,
+      "title": "Workflow",
+      "type": "string"
+    },
+    "session_id": {
+      "anyOf": [
+        {
+          "maxLength": 100,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Session Id"
+    },
+    "in_reply_to": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "exchange_id this exchange answers",
+      "title": "In Reply To"
+    },
+    "artifacts": {
+      "items": {
+        "$ref": "#/$defs/Artifact"
+      },
+      "title": "Artifacts",
+      "type": "array"
+    },
+    "fields": {
+      "items": {
+        "$ref": "#/$defs/FieldValue"
+      },
+      "title": "Fields",
+      "type": "array"
+    },
+    "identities": {
+      "items": {
+        "$ref": "#/$defs/Identity"
+      },
+      "title": "Identities",
+      "type": "array"
+    },
+    "decisions": {
+      "items": {
+        "$ref": "#/$defs/Decision"
+      },
+      "title": "Decisions",
+      "type": "array"
+    },
+    "outcome": {
+      "anyOf": [
+        {
+          "enum": [
+            "committed",
+            "halted",
+            "pending"
+          ],
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Outcome"
+    },
+    "halt_reason": {
+      "anyOf": [
+        {
+          "maxLength": 2000,
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Halt Reason"
+    },
+    "provenance": {
+      "$ref": "#/$defs/Provenance"
+    },
+    "seals": {
+      "items": {
+        "$ref": "#/$defs/SealRef"
+      },
+      "title": "Seals",
+      "type": "array"
+    },
+    "extensions": {
+      "additionalProperties": {
+        "additionalProperties": true,
+        "type": "object"
+      },
+      "description": "Domain data under reverse-DNS keys, e.g. org.example.referral",
+      "title": "Extensions",
+      "type": "object"
+    }
+  },
+  "required": [
+    "schema_version",
+    "exchange_id",
+    "direction",
+    "workflow",
+    "provenance"
+  ],
+  "title": "Exchange",
+  "type": "object"
+}
