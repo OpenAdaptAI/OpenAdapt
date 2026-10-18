@@ -39,15 +39,16 @@ they are, and turns the outcome into one number for ranking:
 |---|---|
 | `verified` | 1.0 |
 | Safe stop: `halted_before_effect`, nothing written | 0.0 |
-| `wrong_effect`: reported saved, record missing or wrong value | -0.5 |
+| The requested patient's one new record has the wrong values | -0.5 |
+| `wrong_effect`: reported saved, but no record landed | -0.5 |
 | A record landed on another patient | -1.0 |
 | The patient got more than one record | -1.0 |
 | `reconciliation_required` or `failed_platform` | none (a person settles it) |
 
 The penalties are the caller's choice (`Penalties`). A write on another
-patient or a second write is penalised even when the agent reported
-"stopped"; the worker leaves that case for a person to settle, and the
-search still ranks it last.
+patient, a second write, or a record with the wrong values is penalised even
+when the agent reported "stopped". The worker leaves that case for a person
+to settle; the search still ranks it below a safe stop.
 
 ## The MockMed task family
 
