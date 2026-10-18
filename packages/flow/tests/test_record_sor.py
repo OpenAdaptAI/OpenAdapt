@@ -318,3 +318,23 @@ def test_cli_record_without_verify_is_unchanged(tmp_path, monkeypatch):
 def test_record_parser_accepts_verify():
     args = cli.build_parser().parse_args(["record", "--out", "r", "--verify", "v.yaml"])
     assert args.verify == "v.yaml"
+
+
+@pytest.mark.parametrize(
+    "verifier",
+    [
+        # Fails validation: pydantic's error text echoes the expanded input.
+        {"kind": "${SOR_TOKEN}"},
+        # Validates, then fails when the verifier is built.
+        {"kind": "rest", "token": "${SOR_TOKEN}", "not_a_field": "${SOR_TOKEN}"},
+    ],
+)
+def test_an_invalid_verifier_section_never_prints_its_secrets(
+    tmp_path, monkeypatch, verifier
+):
+    """`${ENV}` values are expanded before validation, and the raw error text
+    was printed, token included."""
+    monkeypatch.setenv("SOR_TOKEN", "s3cret-token-value")
+    with pytest.raises(RecordSorError) as refused:
+        load_observer(_verify_file(tmp_path, verifier))
+    assert "s3cret-token-value" not in str(refused.value)

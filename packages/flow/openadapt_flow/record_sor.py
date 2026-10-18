@@ -141,7 +141,19 @@ def load_observer(path: str | Path) -> tuple[SystemOfRecordObserver, dict[str, A
     try:
         cfg = EffectsConfig.model_validate(expanded)
     except Exception as exc:
-        raise RecordSorError(f"invalid verifier section: {exc}") from exc
+        # Never print the exception text: ${ENV} values are already expanded,
+        # and pydantic echoes the input (tokens and passwords included).
+        errors = getattr(exc, "errors", None)
+        detail = (
+            "; ".join(
+                f"{'.'.join(str(p) for p in item.get('loc', ())) or '(top level)'}: "
+                f"{item.get('msg', 'invalid')}"
+                for item in errors()
+            )
+            if callable(errors)
+            else type(exc).__name__
+        )
+        raise RecordSorError(f"invalid verifier section: {detail}") from None
     if cfg.candidates:
         raise RecordSorError("record --verify does not support verifier candidates")
     if cfg.kind in _NOT_SYSTEM_OF_RECORD:
@@ -149,11 +161,13 @@ def load_observer(path: str | Path) -> tuple[SystemOfRecordObserver, dict[str, A
     try:
         verifier = build_effect_verifier(cfg, {})
     except Exception as exc:  # noqa: BLE001 - plugin factories raise anything
+        # Name only the exception type: a plugin's message can echo a DSN or
+        # a password from the expanded config.
         raise RecordSorError(
-            f"cannot build the verifier: {exc}. While recording, the verifier "
-            "has no run parameters, so its read must name its records with "
-            "literals."
-        ) from exc
+            f"cannot build the verifier ({type(exc).__name__}). While recording, "
+            "the verifier has no run parameters, so its read must name its "
+            "records with literals."
+        ) from None
     # The tier a proposed record check would get: a record read, no
     # on-screen read-back spec.
     probe = Effect(kind=EffectKind.RECORD_WRITTEN, match={"_": ValueExpr(literal="_")})
