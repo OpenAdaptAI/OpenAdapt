@@ -1,7 +1,8 @@
 # Apple Vision text recognition: published accuracy advice, and what we measured
 
 Sources and what they recommend, followed by what each did on the identity
-evidence (see RESULTS.md for the numbers).
+evidence. `harness.py --config NAME --out DIR` measures one configuration;
+`table.py DIR` collects the runs into one table.
 
 | advice | source | measured here |
 |---|---|---|
