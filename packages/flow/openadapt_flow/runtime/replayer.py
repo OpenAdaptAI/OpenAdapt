@@ -557,21 +557,43 @@ def _scroll_target_positioned(
     return True
 
 
+def _identity_tokens(text: Any) -> set[str]:
+    return {t for t in re.split(r"[^0-9a-z]+", str(text or "").lower()) if t}
+
+
+def identity_read_contradicts(check: Any) -> bool:
+    """A ``mismatch`` read that saw text the expected identity doesn't have.
+
+    "mismatch" also covers a read that is merely incomplete (columns cut
+    off). Only a read that shows a token the expected record lacks (another
+    MRN, a different spelling or date) is evidence of a different record.
+    """
+
+    if getattr(check, "status", None) != "mismatch":
+        return False
+    expected = _identity_tokens(getattr(check, "expected", None))
+    observed = _identity_tokens(getattr(check, "observed", None))
+    if not expected or not observed:
+        return True  # nothing to compare: keep the refusal
+    return not observed <= expected
+
+
 def better_identity_read(first: Any, retry: Any) -> Any:
     """The identity read to keep from a first read and its upscaled re-read.
 
-    An affirmative ``mismatch`` on either read is final: the record on screen
-    was read as a different one, and a second read of the same screen must
-    never turn that into ``verified``. Otherwise ``verified`` beats the two
-    "cannot certify" outcomes, ``abstain`` beats a blank ``unreadable``, and a
-    tie goes to the read that covered more of the expected identity.
+    A read that contradicts the expected record (:func:`identity_read_contradicts`)
+    is final: a second read of the same screen must never turn it into
+    ``verified``. A mismatch that is only incomplete can be rescued by a
+    re-read that verifies. Otherwise ``verified`` beats the "cannot certify"
+    outcomes, then a mismatch, then ``abstain``, then a blank ``unreadable``;
+    a tie goes to the read that covered more of the expected identity.
     """
 
-    if first.status == "mismatch":
+    if identity_read_contradicts(first):
         return first
-    if retry.status == "mismatch":
+    if identity_read_contradicts(retry):
         return retry
-    rank = {"unreadable": 0, "abstain": 1, "verified": 3}
+    rank = {"unreadable": 0, "abstain": 1, "mismatch": 2, "verified": 3}
     if (rank[retry.status], retry.coverage) > (rank[first.status], first.coverage):
         return retry
     return first
@@ -712,6 +734,7 @@ class Replayer:
         approval_gate: Optional["ApprovalGate"] = None,
         attended_draft_by: Optional[Any] = None,
         draft_key_dir: Optional[Path] = None,
+        deployment_surface: Optional[str] = None,
         layout_drift: Optional[bool] = None,
         layout_drift_tolerances: Optional[Any] = None,
         layout_drift_advisor: Optional[Callable[[Any], Optional[str]]] = None,
@@ -776,6 +799,13 @@ class Replayer:
         # (RDP/Citrix/VDI) on a Playwright surface (see the e2e visual-floor
         # drift/heal suites). Never disables the visual ladder itself.
         self.use_structural = use_structural
+        # Where this runtime runs relative to the application (deployment.yaml
+        # ``backend.deployment_surface``): ``local``, ``remote_in_session``,
+        # ``remote_display`` or ``unknown``. None derives it from the run's
+        # execution target (rdp / citrix => remote_display). A workflow
+        # qualified with structure lookups halts before any action when the
+        # resolved surface offers pixels only (see lookup_capabilities).
+        self.deployment_surface = deployment_surface
         # Arm the pixel-compare identity tier's VERIFY branch (experimental,
         # evidence-gated; OFF by default = today's behavior). When False the
         # pixel tier only HALTs on a localized glyph change or ABSTAINs; it
@@ -1634,6 +1664,22 @@ class Replayer:
             )
             report.success = False
             return self._finalize_report(report, workflow, run_dir)
+        lookup_refusal = self._lookup_capability_refusal(
+            workflow, execution_target_kind
+        )
+        if lookup_refusal is not None:
+            report.results.append(
+                StepResult(
+                    step_id="<lookup-capabilities>",
+                    intent="check this surface offers the qualified lookups",
+                    ok=False,
+                    safety_halt=True,
+                    failure_category="safety_halt",
+                    error=lookup_refusal,
+                )
+            )
+            report.success = False
+            return self._finalize_report(report, workflow, run_dir)
         self._begin_control_overlay(report.execution_profile)
         # At-most-once idempotency (Section 3): a repeat under an already-seen
         # key is SUPPRESSED before any actuation. A durable RESUME carries the
@@ -2114,6 +2160,49 @@ class Replayer:
                     "durable continuation lost its terminal authority guard"
                 )
         return finalized
+
+    def _lookup_capability_refusal(
+        self,
+        workflow: Workflow,
+        execution_target_kind: Optional[ExecutionTargetKind],
+    ) -> Optional[str]:
+        """Refuse a surface that offers fewer lookups than were qualified.
+
+        A workflow qualified with structure lookups (DOM / accessibility)
+        must not run where only pixels exist, such as an RDP or Citrix window
+        viewed from outside the session: it passed qualification on evidence
+        this surface cannot produce. Checked before any action.
+        """
+
+        from openadapt_flow.lookup_capabilities import (
+            DeploymentSurface,
+            declared_surface_problem,
+            lookup_capability_refusal,
+            qualified_lookup_of,
+            resolve_deployment_surface,
+        )
+
+        if qualified_lookup_of(workflow) is None:
+            return None
+        kind = execution_target_kind or workflow.surface
+        surface: DeploymentSurface
+        if declared_surface_problem(self.deployment_surface, kind) is not None:
+            # A declaration that contradicts the backend is read the
+            # conservative way: the remote session is viewed from outside.
+            surface = "remote_display"
+        else:
+            try:
+                surface = resolve_deployment_surface(self.deployment_surface, kind)
+            except ValueError:
+                surface = "remote_display"
+        structure_available = (
+            surface != "remote_display"
+            and self.use_structural
+            and callable(getattr(self.backend, "locate_structural", None))
+        )
+        return lookup_capability_refusal(
+            workflow, surface=surface, structure_available=structure_available
+        )
 
     def _stamp_execution_outcome(
         self, report: RunReport, workflow: Workflow, run_dir: Path
@@ -4974,7 +5063,7 @@ class Replayer:
         if nonrelative:
             verification_step = step.model_copy(update={"expect": nonrelative})
             post_ok, frame, failed = self._check_postconditions(
-                verification_step, frame, bundle_dir, {}, result
+                verification_step, frame, bundle_dir, {}, result, workflow=workflow
             )
             result.postconditions_ok = post_ok
             if not post_ok:
@@ -6800,7 +6889,12 @@ class Replayer:
                             last_frame,
                             failed,
                         ) = self._check_postconditions(
-                            step, after_png, bundle_dir, start_state, result
+                            step,
+                            after_png,
+                            bundle_dir,
+                            start_state,
+                            result,
+                            workflow=workflow,
                         )
                     else:
                         postconditions_ok = False
@@ -7638,6 +7732,7 @@ class Replayer:
                     bundle_dir,
                     start_state,
                     result,
+                    workflow=workflow,
                 )
                 result.postconditions_ok = postconditions_ok
                 if not postconditions_ok:
@@ -12941,7 +13036,7 @@ class Replayer:
             )
 
         check = native_attempt(before_png)
-        if check.status in ("verified", "mismatch"):
+        if check.status == "verified" or identity_read_contradicts(check):
             # A read that names a different record is final: a later read of
             # the same screen must never overrule it into "verified".
             return check
@@ -13999,6 +14094,8 @@ class Replayer:
         bundle_dir: Path,
         start_state: dict[str, Any],
         result: Optional[StepResult] = None,
+        *,
+        workflow: Optional[Workflow] = None,
     ) -> tuple[bool, bytes, list[str]]:
         """Poll postconditions until each passes or times out.
 
@@ -14006,7 +14103,11 @@ class Replayer:
         ``timeout_s``. If any fails, the screen is re-settled once and all
         postconditions are re-checked a single time. If a VLM state-verifier
         is configured, a render-drift-sensitive postcondition that still failed
-        gets one last drift-oracle pass (see :meth:`_drift_oracle_rescue`).
+        gets one last drift-oracle pass (see :meth:`_drift_oracle_rescue`),
+        but never on a step that can leave a business effect behind (see
+        :meth:`_postcondition_confirms_a_write`). ``workflow`` lets a qualified
+        operator risk decision count; without it the classification is the
+        stricter step-only one.
 
         Returns:
             (ok, last_frame, failed) — the frame the final verdict was based
@@ -14025,10 +14126,43 @@ class Replayer:
             for pc in step.expect
             if not self._postcondition_passes(pc, frame_png, bundle_dir, start_state)
         ]
-        if failed_pcs and self.state_verifier is not None:
+        if (
+            failed_pcs
+            and self.state_verifier is not None
+            and not self._postcondition_confirms_a_write(step, workflow)
+        ):
             failed_pcs = self._drift_oracle_rescue(failed_pcs, frame_png, result)
         failed = [self._describe_postcondition(pc) for pc in failed_pcs]
         return not failed_pcs, frame_png, failed
+
+    @staticmethod
+    def _postcondition_confirms_a_write(
+        step: Step, workflow: Optional[Workflow]
+    ) -> bool:
+        """Whether ``step``'s postcondition is the screen's check on a write.
+
+        True for any step that can leave a business effect behind: the shared
+        fail-closed classifier :func:`run_gate.is_consequential` (the compiled
+        ``risk`` label, the write-shaped heuristic, and any declared
+        system-of-record effect), plus an unresolved risk review, which the
+        transaction outcome also treats as consequential.
+
+        On such a step the drift oracle is never asked, so a failed
+        postcondition stays failed. A model "yes" is not evidence that a write
+        did what was intended. The step fails exactly as it would with no
+        verifier configured: the run halts unless the program declares its
+        own exception handler for that state. The action was already
+        delivered and nothing has proven the write absent, so
+        :func:`transaction.classify_transaction_outcome` reports
+        ``RECONCILIATION_REQUIRED`` for the halted run.
+
+        Read-only and navigation steps keep the drift-oracle rescue. A wrong
+        "yes" there lets the run reach the next step, which still runs its own
+        identity, risk, and postcondition checks before it acts.
+        """
+        if step.risk_review_required:
+            return True
+        return is_consequential(step, workflow)
 
     def _drift_oracle_rescue(
         self,
@@ -14041,6 +14175,8 @@ class Replayer:
 
         VETO-SAFE by construction:
 
+        * The caller never invokes this on an irreversible or effect-bearing
+          step (see :meth:`_postcondition_confirms_a_write`).
         * Only ``text_present`` and ``region_stable`` are eligible — the kinds
           a theme/scale/font re-render can legitimately break. Structural
           postconditions (``url_changed`` etc.) and ``text_absent`` are NEVER
