@@ -98,8 +98,15 @@ On Linux (aarch64, `python:3.12-slim-bookworm` with `libxcb1`), the same tree
 measures as follows: types 6 / 7.9 MB, privacy 7 / 28.7 MB, capture 20 / 107.9
 MB, Flow 29 / 328.6 MB, agent 47 / 334.5 MB, desktop 40 / 130.3 MB, launcher 58
 / 476.9 MB. That Linux run predates the lazy `openadapt_types` root, so its
-import times are not comparable. The budgets are the Linux sizes plus about 25
-percent.
+import times are not comparable.
+
+CI runs on x86_64 Linux, where the OpenCV and onnxruntime wheels are larger.
+The first CI run (still on main before the types and capture changes) measured
+Flow at 28 distributions and 407.0 MB, agent at 46 and 412.8 MB, the launcher at 57 and
+558.5 MB, privacy at 7 and 28.0 MB, and capture with its old core at 35 and
+170.1 MB. The size budgets are those x86_64 numbers, plus about 8 MB for
+openadapt-types where it is now a dependency, plus about 20 percent. The
+distribution-count budgets are the measured counts plus about 25 percent.
 
 ### `uvx openadapt quickstart --help`
 

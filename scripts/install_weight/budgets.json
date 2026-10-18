@@ -3,7 +3,7 @@
     "Install-weight budgets, enforced by scripts/install_weight/weigh.py check in CI (packages.yml, install-weight).",
     "Each package is built from this tree and installed alone with Python 3.12. allow lists every distribution",
     "the install may pull (fnmatch patterns; macOS and Linux sets); forbid always fails, even if allow matches.",
-    "max_mb is the size of site-packages; budgets are the Linux measurement plus about 25 percent headroom.",
+    "max_mb is the size of site-packages, set from the x86_64 CI measurement (larger wheels than arm64) plus about 20 percent.",
     "To change one, see docs/monorepo/INSTALL_WEIGHT.md. privacy and desktop fall back to PyPI until their",
     "directories exist in packages/."
   ],
@@ -82,7 +82,7 @@
     "capture": {
       "path": "packages/capture",
       "module": "openadapt_capture",
-      "max_mb": 140,
+      "max_mb": 150,
       "max_dists": 30,
       "forbid": [
         "openadapt-flow",
@@ -129,7 +129,7 @@
     "flow": {
       "path": "packages/flow",
       "module": "openadapt_flow",
-      "max_mb": 410,
+      "max_mb": 500,
       "max_dists": 36,
       "forbid": [
         "openadapt-desktop",
@@ -176,7 +176,7 @@
     "agent": {
       "path": "packages/agent",
       "module": "openadapt_agent",
-      "max_mb": 420,
+      "max_mb": 510,
       "max_dists": 58,
       "forbid": [
         "openadapt-desktop",
@@ -293,7 +293,7 @@
     "launcher": {
       "path": ".",
       "module": "openadapt",
-      "max_mb": 600,
+      "max_mb": 680,
       "max_dists": 70,
       "forbid": [
         "openadapt-desktop",
