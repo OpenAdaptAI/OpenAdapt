@@ -467,6 +467,9 @@ class CompiledAgent:
             "effects": _effect_summary(self.bundle_dir),
             "agent_actions": computer.actions,
         }
+        # Who made the recording, signed with the bundle digest, so editing
+        # candidate.json can't turn the recorder into someone else.
+        candidate = lifecycle.sign_recorder(program, candidate, key_dir=self.key_dir)
         (program / "capture.json").write_text(json.dumps(computer.log, indent=2) + "\n")
         (program / CANDIDATE_FILE).write_text(json.dumps(candidate, indent=2) + "\n")
         lifecycle._event(program, "draft", recorded_by=candidate["recorded_by"])
@@ -532,6 +535,7 @@ class CompiledAgent:
             principal_id=principal_id,
             reviewed_steps=reviewed_steps,
             confirm=confirm,
+            key_dir=self.key_dir,
         )
 
     def canary(self, *, principal_id: Any, **params: Any) -> JitResult:
@@ -558,7 +562,7 @@ class CompiledAgent:
         if candidate is None or self.admitted:
             raise AdmissionError("a canary runs a DRAFT; there is none")
         _, principal = lifecycle.resolve_actor(
-            principal_id, candidate, key_dir=self.key_dir
+            principal_id, self.program_dir, key_dir=self.key_dir
         )
         workflow = Workflow.load(self.bundle_dir)
         digest = lifecycle._digest(workflow)
