@@ -46,6 +46,7 @@ from openadapt_flow.remote_frame_contract import RemoteFrameContract
 # declarative config vocabulary, so a deployment YAML binds run parameters
 # with the exact ``{param: ...}`` / ``{literal: ...}`` form bundles use.
 from openadapt_flow.runtime.effects.auth import AuthRef, ResolvedSecrets
+from openadapt_flow.runtime.effects.deferred_report import DeferredReportSpec
 from openadapt_flow.runtime.effects.desktop_readback import DesktopReadbackSpec
 from openadapt_flow.runtime.effects.effect import Region, ValueExpr
 from openadapt_flow.runtime.effects.smart_auth import SmartBackendConfig
@@ -220,6 +221,8 @@ BUILTIN_EFFECT_KINDS = frozenset(
         "document-hash",
         "desktop_readback",
         "desktop-readback",
+        "deferred_report",
+        "deferred-report",
     }
 )
 
@@ -348,6 +351,14 @@ class EffectsConfig(BaseModel):
     #: ``runtime/effects/desktop_readback.py`` and ``docs/EFFECT_KIT.md``.
     #: Required for ``kind: desktop_readback``; ignored otherwise.
     desktop_readback: Optional[DesktopReadbackSpec] = None
+
+    # -- deferred_report (a save confirmed by a later report) -----------------
+    #: The report that confirms the save later (an X12 999 or 277CA, a CSV
+    #: export, a saved status page), the item's key, the deadline, and the
+    #: pending-check ledger. A run whose only check is this ends
+    #: SAVED_AWAITING_CHECK until ``openadapt-flow deferred settle`` matches a
+    #: report row. See ``runtime/effects/deferred_report.py``.
+    deferred_report: Optional[DeferredReportSpec] = None
 
     # -- rest (JSON REST system of record, e.g. MockMed /api/db) -------------
     base_url: Optional[str] = None
@@ -578,8 +589,9 @@ class EffectsConfig(BaseModel):
         """Keep configs without a desktop read-back byte-identical."""
 
         data: dict[str, Any] = handler(self)
-        if data.get("desktop_readback", "") is None:
-            data.pop("desktop_readback", None)
+        for added in ("desktop_readback", "deferred_report"):
+            if data.get(added, "") is None:
+                data.pop(added, None)
         return data
 
 
@@ -1611,11 +1623,21 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
     config = _identity_config_dump(cfg)
     # Fields added after identities were first issued enter the digest only
     # when they are set, so every existing verifier keeps its identity.
-    for added in ("ui_readback", "smart_backend", "desktop_readback"):
+    for added in (
+        "ui_readback",
+        "smart_backend",
+        "desktop_readback",
+        "deferred_report",
+    ):
         if config.get(added) is None:
             config.pop(added, None)
     for candidate in config.get("candidates") or []:
-        for added in ("ui_readback", "smart_backend", "desktop_readback"):
+        for added in (
+            "ui_readback",
+            "smart_backend",
+            "desktop_readback",
+            "deferred_report",
+        ):
             if isinstance(candidate, dict) and candidate.get(added) is None:
                 candidate.pop(added, None)
     payload = {
@@ -1653,6 +1675,18 @@ def _build_effect_verifier_unredacted(
             region=cfg.readback_region,
             min_ratio=cfg.readback_min_ratio,
         )
+
+    if kind in ("deferred_report", "deferred-report"):
+        if cfg.deferred_report is None:
+            raise ValueError(
+                "effects.kind 'deferred_report' requires an effects.deferred_report "
+                "section"
+            )
+        from openadapt_flow.runtime.effects.deferred_report import (
+            build_deferred_report_verifier,
+        )
+
+        return build_deferred_report_verifier(cfg.deferred_report, params)
 
     if kind in ("desktop_readback", "desktop-readback"):
         if cfg.desktop_readback is None:
@@ -1890,7 +1924,8 @@ def _build_effect_verifier_unredacted(
 
     raise ValueError(
         f"unknown effects.kind {cfg.kind!r} "
-        "(expected: none | onscreen | ui_readback | desktop_readback | rest | graphql | fhir | sql | "
+        "(expected: none | onscreen | ui_readback | desktop_readback | "
+        "deferred_report | rest | graphql | fhir | sql | "
         "file | email | document | document-hash, or a registered plugin kind)"
     )
 

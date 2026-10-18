@@ -101,6 +101,7 @@ TRANSACTION_OUTCOMES = frozenset(
         "REJECTED_POLICY",
         "COMPLETED_UNVERIFIED",
         "ROLLED_BACK",
+        "SAVED_AWAITING_CHECK",
     }
 )
 #: Flow transaction outcomes that prove no business effect occurred.
@@ -571,6 +572,8 @@ _NO_EFFECT_DID_NOT_RUN = {
 #: person rather than invite a retry; ``reason_for_run`` refines them.
 TRANSACTION_REASONS = {
     "RECONCILIATION_REQUIRED": "save_not_confirmed",
+    # Saved, waiting for a later report: not confirmed yet, never retried.
+    "SAVED_AWAITING_CHECK": "save_not_confirmed",
     "COMPLETED_UNVERIFIED": "not_checked",
     "ROLLED_BACK": "change_reversed",
     **{outcome: "stopped_for_review" for outcome in _NO_EFFECT_OUTCOMES},

@@ -415,6 +415,32 @@ claims:
         prove where keyboard focus is; it checks the search box shows the
         query before it submits.
 
+  - id: deferred-report-check
+    claim: >-
+      A save that only a later report can confirm (an X12 999 or 277CA
+      acknowledgment, a CSV export, a saved status page) ends
+      SAVED_AWAITING_CHECK: never VERIFIED or billable until a matching
+      accepting report row settles it, and RECONCILIATION_REQUIRED when the
+      report rejects it or no row arrives by the deadline.
+    surfaces: [docs]
+    tier: supported
+    evidence:
+      - path: tests/test_deferred_report.py
+        proves: >-
+          Synthetic 999, 277CA, CSV and text reports parse into accepted,
+          rejected, pending and conflicting rows; the ledger keeps keys only as
+          private digests; a real replayer run ends SAVED_AWAITING_CHECK and
+          not billable; anything else uncertain stays RECONCILIATION_REQUIRED;
+          an accepting row settles VERIFIED, a rejecting row, a duplicate key
+          or the deadline settles RECONCILIATION_REQUIRED; the CLI settles it
+          and never rewrites report.json.
+    caveats:
+      - >-
+        The report confirms acceptance of the item with that key, not its
+        field values. The hosted runner and the Execute v1 and
+        production-receipt wire formats carry the outcome as
+        RECONCILIATION_REQUIRED.
+
   # --------------------------------------------------- identity gate / halt
   - id: identity-gate-halt-armed
     claim: >-

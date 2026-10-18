@@ -273,6 +273,11 @@ def _map_outcome(coarse: str, txn: Any) -> ExecuteTerminalOutcomeV1:
         TransactionOutcome.RECONCILIATION_REQUIRED: (
             ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED
         ),
+        # Execute v1 has no "waiting for a later report": the closest wire
+        # value is the one that forbids a retry and asks for a check.
+        TransactionOutcome.SAVED_AWAITING_CHECK: (
+            ExecuteTerminalOutcomeV1.RECONCILIATION_REQUIRED
+        ),
         # The run executed but did not prove its effect. Execute has no
         # "completed, not verified" outcome, and rejected_policy would misstate
         # why the run stopped.

@@ -376,7 +376,10 @@ is a system-of-record read, and each has its own limits
 ([`EFFECT_KIT.md`](EFFECT_KIT.md#separate-session-ui-read-back-ui_readback),
 [`desktop_readback`](EFFECT_KIT.md#separate-session-desktop-read-back-desktop_readback)).
 If a person can look the record up, the check can too. A pixel-only Citrix or
-RDP deployment that declares no such look-up is the remaining case. The on-screen
+RDP deployment that declares no such look-up is the remaining case.
+A save that only a later report can confirm (a claim acknowledgment, a
+nightly export) ends `SAVED_AWAITING_CHECK` and becomes `VERIFIED` only when
+that report accepts it ([`deferred_report`](EFFECT_KIT.md#checked-later-deferred_report)). The on-screen
 oracle can still halt when the region is unreadable or wrong. If a
 consequential write may already have been delivered, the production
 `transaction_outcome` is `RECONCILIATION_REQUIRED`, never `VERIFIED`.

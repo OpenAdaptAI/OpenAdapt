@@ -80,6 +80,13 @@ class TransactionOutcome(str, Enum):
     #: A detected duplicate / collateral write was compensated and re-verified.
     #: Carried through from the existing ROLLED_BACK lifecycle; non-success.
     ROLLED_BACK = "ROLLED_BACK"
+    #: The save went out, and its only check is a later report (a claim
+    #: acknowledgment, an export, an end-of-day file, a status page) declared
+    #: as a deferred check. Never billable and never a production success.
+    #: A matching accepted report row settles it as VERIFIED; a rejecting row,
+    #: or no row by the deadline, settles it as RECONCILIATION_REQUIRED
+    #: (:mod:`openadapt_flow.runtime.effects.deferred_report`). Don't retry it.
+    SAVED_AWAITING_CHECK = "SAVED_AWAITING_CHECK"
 
     @property
     def is_production_success(self) -> bool:
@@ -154,6 +161,40 @@ def _result_has_unresolved_uncertainty(result: StepResult) -> bool:
         if evidence.observed_effect != "absent":
             return True
     return False
+
+
+def _deferred_only(result: StepResult) -> bool:
+    """Whether every unsettled effect on this step waits for a declared later
+    report, and nothing else about the step is uncertain."""
+
+    uncertainty = result.delivery_uncertainty
+    if uncertainty is not None and not uncertainty.resolved_by_contract:
+        return False
+    waiting = False
+    for evidence in result.effect_evidence:
+        if evidence.final_verdict == "confirmed":
+            continue
+        if evidence.final_verdict != "indeterminate" or not evidence.deferred_check:
+            return False
+        waiting = True
+    return waiting
+
+
+def _awaiting_report_only(report: RunReport) -> bool:
+    """True when the run's only open question is a declared later report.
+
+    Some step's save waits for its report, and every other step is settled:
+    no other uncertainty, and no other consequential step without proof of
+    what happened. Anything more falls back to RECONCILIATION_REQUIRED.
+    """
+
+    deferred = [r for r in report.results if _deferred_only(r)]
+    if not deferred:
+        return False
+    deferred_ids = {r.step_id for r in deferred}
+    return all(
+        step_id in deferred_ids for step_id in steps_requiring_reconciliation(report)
+    )
 
 
 def steps_requiring_reconciliation(report: RunReport) -> list[str]:
@@ -358,6 +399,11 @@ def classify_transaction_outcome(report: RunReport) -> TransactionOutcome:
     coarse = report.execution_outcome
     if coarse == "VERIFIED":
         return TransactionOutcome.VERIFIED
+
+    # A save whose only check is a declared later report: saved, waiting for
+    # that report. Never billable until a matching row settles it.
+    if not report.canceled and _awaiting_report_only(report):
+        return TransactionOutcome.SAVED_AWAITING_CHECK
 
     # Uncertain / conflicting delivery or persistence dominates every remaining
     # coarse bucket. This is where #250's no-blind-retry behavior surfaces as a

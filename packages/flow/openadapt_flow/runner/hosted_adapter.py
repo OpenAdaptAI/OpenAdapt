@@ -3236,6 +3236,13 @@ class HostedRunnerAdapter:
             proof: ProductionTerminalVerificationEnvelope | None = None
             if execution.terminal_verification is not None:
                 raise ValueError("managed child supplied an untrusted terminal proof")
+            if outcome is TransactionOutcome.SAVED_AWAITING_CHECK:
+                # The hosted runner has no way to settle a later report yet,
+                # and its frozen wire events have no such outcome: fail
+                # closed to reconciliation.
+                raise ValueError(
+                    "a deferred check can't be settled by the hosted runner"
+                )
             if outcome in {
                 TransactionOutcome.VERIFIED,
                 TransactionOutcome.HALTED_BEFORE_EFFECT,

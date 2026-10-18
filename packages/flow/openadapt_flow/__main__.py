@@ -10125,6 +10125,10 @@ def build_parser() -> argparse.ArgumentParser:
     register_admit_parser(sub)
     register_check_parser(sub)
 
+    from openadapt_flow.cli_deferred import register_deferred_parser
+
+    register_deferred_parser(sub)
+
     from openadapt_flow.jit.cli import add_parser as _add_jit_parser
 
     _add_jit_parser(sub)

@@ -956,6 +956,9 @@ class EffectVerdict(BaseModel):
     #: the read cannot certify the CURRENT state -> STALE, an INDETERMINATE
     #: refinement, never a pass. Additive; default False.
     stale: bool = False
+    #: The pending entry a later report settles, when this effect's check is
+    #: a declared deferred report (the verdict is then INDETERMINATE).
+    deferred_check: Optional[str] = None
     #: How the check was done, when the verifier states it:
     #: ``independent_readback``, ``screen_readback`` or ``unchecked``
     #: (:mod:`openadapt_flow.assurance`). None for verifiers that don't.
