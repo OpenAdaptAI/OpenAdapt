@@ -262,6 +262,126 @@ Both reads are kept in `sor_snapshots.json` (mode 0600, raw records). The
 proposed file is also mode 0600 and copies `verifier:` as written, with
 `${NAME}` references unexpanded. Without `--verify`, `record` is unchanged.
 
+## A record check built from the app's own reads (`scaffold-verifier`)
+
+After a save, the app usually reads the saved record back to show it. That
+read is the record check, already written by the app. `openadapt-flow
+scaffold-verifier <recording>` finds it, builds the check, and tries to break
+it before a person reviews it.
+
+```bash
+openadapt-flow scaffold-verifier rec/                      # network capture only
+openadapt-flow scaffold-verifier rec/ --db app.sqlite      # plus every table
+openadapt-flow scaffold-verifier rec/ --verifier verify.yaml --bundle bundle/
+openadapt-flow scaffold-verifier rec/ --db app.sqlite --prove effect-e2e
+```
+
+### Finding the read
+
+The recording's parameter values (`meta.json`) identify the saved record.
+The command looks for a read that returns a record holding them:
+
+- **Network capture.** `network.jsonl` in the `openadapt.network-capture/1`
+  format that `record --capture-network` writes. Each `GET` after the save
+  (by the recording's timeline) whose JSON response holds a record list is a
+  candidate: a REST list (`{"records": [...]}`, `{"data": [...]}`, a bare
+  list) or a FHIR `Bundle`. The read whose record holds the most recorded
+  values wins; a persisted record (one with an `id`) beats an echo of the
+  form. A read whose URL carries a session token, or whose values sit only in
+  nested fields, is rejected and reported.
+- **A database read path** (`--db`, SQLite). Every table is scanned. A table
+  with a row holding the recorded values is read, scoped by the recorded
+  identifiers (`WHERE patient_id = :patient_id`). Every other table gets a
+  no-new-rows guard.
+- **A verifier section** (`--verifier verify.yaml`). The `verifier:` section
+  is read once. With `sor_snapshots.json` from `record --verify`, its
+  before read becomes the baseline.
+
+### What the check holds
+
+- The `verifier:` section is `kind: surfaces`: one read per table or
+  resource. Each effect names its read in `probe` (`surface=<name>`), and a
+  bad write is judged only against the read that can see it.
+- For each read that holds the saved record: a `record_written` effect for
+  exactly one NEW record (`count_new_only`), matched on every field equal to
+  a recorded value (bound as `{param: NAME}`, so each run is checked against
+  its own values) and on fields the save sent with a fixed value under the
+  same name (`type: Triage`). `forbid_collateral_loss` stops the run if a
+  record that was there before is gone.
+- Recorded values in the read's URL become placeholders (`path_params`,
+  FHIR `search_param_exprs`), so the read is scoped to the run's record.
+- For each other table (database path only): a no-new-rows guard.
+
+### Proving it before review
+
+Two tests, both written to `record_check.proof.json`:
+
+1. **Recorded-state faults** (always). The fault classes of
+   `benchmark/effect_e2e` are applied to the records the recording saw:
+   nothing saved, a field dropped, saved twice, saved on another record,
+   another record of the same subject destroyed, and a stray row in another
+   table. The check must stop each one and pass the clean save.
+2. **End to end** (`--prove mockmed` or `--prove effect-e2e`). On a fixture
+   that injects bad writes at the persistence boundary, each fault runs
+   through the real replayer and API actuator with the proposed check as the
+   effect verifier, judged by the fixture's own ground truth. Free-text values
+   change on every run, so a check that froze the demonstration's values fails
+   the clean save.
+
+A check that misses any fault, or stops the clean save, is written as a
+draft: the file starts with `# DRAFT`, lists each `MISS:`, and the command
+exits 1. A working check exits 0.
+
+On the effect_e2e service, a check built from one REST read (`/api/records`)
+misses the stray billing write, the same blind spot as the REST arm in
+[`EFFECT_E2E.md`](../benchmark/effect_e2e/EFFECT_E2E.md), so it stays a
+draft. With `--db`, the billing guard catches it and every fault is stopped.
+
+A check built from API reads alone can't see tables it doesn't read. If one
+store really holds everything the save can change (MockMed's `/api/db`), a
+person can say so with `--complete-read`. The proof records that as
+`closed_world: declared`, not as proven.
+
+### What a person still does
+
+Every effect carries `needs_operator_confirmation: true`. `verify-run`
+refuses the file and `qualify` reports a problem until a person:
+
+- confirms each read is the system of record and gives it its own read-only
+  credential (`auth`, `access_token_env`, `sql_password_env`); the
+  recording's reads used the browser's sign-in;
+- checks each `{param: ...}` and removes match fields that change on every
+  save;
+- decides whether a guarded table is shared by other users (a guard stops a
+  run when anyone else writes there) and removes that guard if so;
+- deletes every `needs_operator_confirmation: true` line.
+
+### Identity evidence for unarmed clicks
+
+With `--bundle` (or `--recording` when the source is a bundle) the command
+also reports identity coverage: how many clicks have a right-record check
+armed now, and how many would with evidence from the recording's DOM or
+accessibility text at each unarmed click (the clicked row's structured text,
+or the accessible name of a clicked `row`, `listitem`, `option` or
+`treeitem`). It proposes only evidence the runtime checks on the bundle's
+surface; on RDP or Citrix nothing is proposed. A record named elsewhere on the
+page (title, URL) is listed but not counted, because the runtime checks
+identity at the click point. The evidence text goes to `identity.proposed.json`
+(mode 0600); the proof holds counts and parameter names only. Nothing is
+applied to the bundle.
+
+### Limits
+
+- Saves that update an existing record are not handled yet; the check
+  expects one new record.
+- A REST read must return its records at the top level of the response, or
+  under one key; nested record lists are rejected.
+- `--db` reads SQLite files. Other databases go through `--verifier` with a
+  `kind: sql` section.
+- The fault classes are a hand-written taxonomy. Passing them is coverage of
+  that taxonomy, not a field rate.
+- No model calls. The only network read is the `--verifier` read you name.
+
 ## A read-back taught by demonstration ("Now show how you'd check it saved")
 
 For an application with no API, database or export (a legacy desktop app,
@@ -590,6 +710,7 @@ Per-kind required fields:
 | `email` | `root` | `mail_pattern`, `file_mtime_window_s` (freshness), `file_content_probe` (body regex) |
 | `document` | `root` | `file_pattern`, `document_format` (`json` \| `text`), `document_field_paths`, `document_text_pattern`, `file_mtime_window_s` |
 | `document-hash` | `root` | `glob` |
+| `surfaces` | `surfaces`: name -> one plain verifier config (any kind above) | each effect's `probe` names its surface (`surface=<name>`); an effect naming none, or an unknown one, halts |
 
 Any kind additionally accepts the evidence-minimization fields
 `evidence_redact_fields` / `evidence_keep_fields` (see "Evidence minimization"
