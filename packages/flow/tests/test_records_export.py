@@ -193,3 +193,28 @@ def test_webhook_posts_to_loopback() -> None:
     server.server_close()
     assert received[0]["schema"] == "urn:openadapt:record:customer_account:v1"
     assert received[0]["rows"][0]["account_number"] == "AC1"
+
+
+def test_default_single_reads_export_as_unconfirmed() -> None:
+    fields = []
+    for name, raw in (
+        ("account_number", "AC9"),
+        ("holder", "Sam Lee"),
+        ("open_items", "0"),
+        ("active", "no"),
+    ):
+        spec = SCHEMA.field(name)
+        fields.append(combine_reads(spec, [channel_read(spec, "clipboard", raw)]))
+    record = RecordRead(
+        schema_name="customer_account",
+        schema_version=1,
+        record_key="AC9",
+        run_id="run-2",
+        read_at="2026-10-17T21:00:00-04:00",
+        fields=tuple(fields),
+    )
+    (row,) = export_rows([record], SCHEMA).rows
+    assert row["_grade"] == "unconfirmed"
+    assert row["_receipt_sha256"] is None
+    assert row["active"] is False
+    assert export_rows([record], SCHEMA, min_grade="screen_readback").rows == []

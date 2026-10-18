@@ -236,7 +236,7 @@ provenance columns:
 | `_provenance` | JSON: per field, the grade, channels, confidence, screenshot hash, region, crop hash and review decision. |
 
 A record is exported only when no field still needs review and each field is
-at least `min_grade` (default `screen_readback`) or was settled by a signed
+at least `min_grade` (default `unconfirmed`, so every settled record) or was settled by a signed
 review decision. Pass `min_grade="verified"` to export only values confirmed
 by an independent channel. Skipped records are returned with the reason.
 

@@ -5,11 +5,10 @@ field, typed by its kind, plus provenance columns (``_record_key``,
 ``_run_id``, ``_read_at``, ``_grade``, ``_receipt_sha256`` and
 ``_provenance``, a JSON list of each field's grade, channels, confidence and
 screen region). A record is exported only when no field still needs review
-and every field is at least ``min_grade`` (default ``screen_readback``) or
-was settled by a signed review decision. ``_grade`` is always the weakest
-read grade, so a value a person settled is never labelled stronger than its
-reads.
-Everything else is returned as skipped, with the reason.
+and every field is at least ``min_grade`` or was settled by a signed review
+decision. The default ``min_grade`` is ``unconfirmed``, so every settled
+record is exported. ``_grade`` is always the weakest read grade, so a value
+is never labelled stronger than what was proven. Everything else is returned as skipped, with the reason.
 
 Sinks:
 
@@ -139,7 +138,7 @@ def export_rows(
     records: Iterable[RecordRead],
     schema: RecordSchema,
     *,
-    min_grade: ReadGrade = "screen_readback",
+    min_grade: ReadGrade = "unconfirmed",
 ) -> ExportResult:
     """Rows for every record that is settled and at least ``min_grade``."""
 
@@ -293,7 +292,7 @@ def export(
     sink: CsvSink | DbApiSink | WebhookSink,
     *,
     mapping: Optional[ColumnMapping] = None,
-    min_grade: ReadGrade = "screen_readback",
+    min_grade: ReadGrade = "unconfirmed",
 ) -> ExportResult:
     """Export settled records to ``sink``; returns the rows and what was skipped."""
 
