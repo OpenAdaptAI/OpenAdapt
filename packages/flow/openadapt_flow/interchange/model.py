@@ -67,8 +67,16 @@ SCREEN_CHANNELS: frozenset[str] = frozenset(
     {"clipboard", "ocr", "structure", "accessibility"}
 )
 #: Channels that do not go through the application's screens. A ``verified``
-#: grade requires at least one read through one of them.
+#: grade requires at least one read through one of them. An ``export`` read
+#: counts only when its ``source_kind`` is ``committed_store``.
 INDEPENDENT_CHANNELS: frozenset[str] = frozenset({"export", "database", "api"})
+
+#: Where an export came from. ``live_session``: the export was triggered from
+#: the same signed-in UI session that did the work, so it can share that
+#: session's view (graded like a screen read). ``committed_store``: the export
+#: was produced from saved data by a separate process, a database read or a
+#: scheduled job (an independent read).
+ExportSource = Literal["live_session", "committed_store"]
 
 ValueType = Literal[
     "text", "code", "date", "currency", "integer", "decimal", "boolean", "enum"
@@ -121,6 +129,10 @@ class Read(_Strict):
         default=None,
         description="For application reads: the acting session, the record "
         "reopened by id, or an independent channel",
+    )
+    source_kind: Optional[ExportSource] = Field(
+        default=None,
+        description="Required on export reads: live_session or committed_store",
     )
     observed_at: Optional[str] = None
     run_id: Optional[str] = None

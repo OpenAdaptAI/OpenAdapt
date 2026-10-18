@@ -47,6 +47,19 @@
       ]
     },
     {
+      "file": "invalid/verified_from_live_session_export.json",
+      "expect": [
+        "IX030"
+      ]
+    },
+    {
+      "file": "invalid/export_without_source_kind.json",
+      "expect": [
+        "IX030",
+        "IX035"
+      ]
+    },
+    {
       "file": "invalid/readback_without_screen_read.json",
       "expect": [
         "IX031"

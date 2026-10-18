@@ -15,6 +15,8 @@ Files:
 - Conformance checks: `openadapt_flow/interchange/conformance.py`.
 - Fixtures and expected results: [`tests/fixtures/interchange/`](../tests/fixtures/interchange/).
 
+**Where the spec lives.** The spec is kept in the OpenAdapt monorepo for now. If the document-side party agrees to co-own it, it will move to a neutral shared repository under the same license, with the same version history and fixtures.
+
 ## One exchange
 
 An exchange is one JSON document. Payload files sit next to it and are addressed by relative path.
@@ -64,11 +66,18 @@ Each value carries its evidence:
 | `confidence` | 0 to 1, from the producer. |
 | `status` | `proposed`, `confirmed`, `corrected` or `rejected`. `confirmed` and `corrected` need `confirmed_by`, a person. |
 | `grade` | How well the value was checked in the target application (below). |
-| `reads` | Each observation: `channel`, observed `value`, `artifact_id`, `session` (`acting`, `reopened` or `independent`), `locator` (page, line, byte span, screen, and a `region` with `bbox`, frame sha256 and crop sha256), time and run id. |
+| `reads` | Each observation: `channel`, observed `value`, `artifact_id`, `session` (`acting`, `reopened` or `independent`), `source_kind` on export reads (below), `locator` (page, line, byte span, screen, and a `region` with `bbox`, frame sha256 and crop sha256), time and run id. |
 | `needs_review`, `review_reason` | Set when the value goes to a review queue. A reason is required. |
 | `seal` | Optional per-value Seal pointer: `run_id`, `receipt_sha256`, `field_commitment`. |
 
-Channels: `clipboard`, `ocr`, `structure` and `accessibility` read the target application through its screens. `export`, `database` and `api` do not. `document_parse` and `human` are the document side.
+Channels: `clipboard`, `ocr`, `structure` and `accessibility` read the target application through its screens. `database` and `api` do not. `document_parse` and `human` are the document side.
+
+An `export` read must say where the export came from in `source_kind`:
+
+- `live_session`: the export was triggered from the same signed-in UI session that did the work. It can share that session's view, so it counts as a screen read.
+- `committed_store`: the export was produced from saved data by a separate process, a database read or a scheduled job. It counts as an independent read.
+
+The grade is derived from `source_kind`. A producer records where the export came from and does not assert a stronger grade.
 
 Read grades, weakest first:
 
@@ -77,7 +86,7 @@ Read grades, weakest first:
 | `unconfirmed` | Not read back, one channel only, or the channels disagreed. | None. |
 | `screen_readback` | Read from the screen in the session that wrote it. | Needs a read through a screen channel. |
 | `committed_record_readback` | The record was closed, reopened by id and read again. | Needs a screen read with `session` set to `reopened`. |
-| `verified` | Read through a channel that does not use the application's screens. | Needs a read through `export`, `database` or `api`. |
+| `verified` | Read through a channel that does not use the application's screens. | Needs a read through `database` or `api`, or an `export` with `source_kind` set to `committed_store`. |
 
 The grade, channel and kind names match `openadapt_flow.records.schema`, the record and field schema owned by the reading step. Until that module is on main they are spelled out in `interchange/model.py`; after it merges they are imported from it, and the wire names do not change.
 
@@ -131,6 +140,7 @@ A document conforms when it matches the JSON Schema and has no violation from th
 | `IX031` | Read-back grade without any read of the target application. |
 | `IX033` | Committed-record grade without a read of the reopened record. |
 | `IX034` | A value that needs review has no reason. |
+| `IX035` | An export read does not say where the export came from. |
 | `IX032` | Confirmed or corrected value without a person who confirmed it. |
 | `IX040` | A decision was made by something other than a person. |
 | `IX041` | The producer approved its own work. |

@@ -43,6 +43,7 @@ CODES: dict[str, str] = {
     "IX031": "read-back grade without any read of the target application",
     "IX033": "committed-record grade without a read of the reopened record",
     "IX034": "a value that needs review has no reason",
+    "IX035": "an export read does not say where the export came from",
     "IX032": "confirmed or corrected value without a person who confirmed it",
     "IX040": "a decision was made by something other than a person",
     "IX041": "the producer approved its own work",
@@ -101,6 +102,13 @@ def _dupes(values: Iterable[str]) -> set[str]:
     for v in values:
         (dup if v in seen else seen).add(v)
     return dup
+
+
+def _independent(read: Any) -> bool:
+    """A read outside the screens. An export counts only from committed data."""
+    if read.channel == "export":
+        return bool(read.source_kind == "committed_store")
+    return read.channel in INDEPENDENT_CHANNELS
 
 
 _DECIMAL = re.compile(r"^-?\d+(\.\d+)?$")
@@ -178,11 +186,20 @@ def check(doc: dict[str, Any], *, base_dir: Optional[Path] = None) -> list[Viola
                 )
         if f.value is not None and not _type_ok(f.type, f.value):
             add("IX025", where, f"{f.value!r} is not a valid {f.type}")
-        channels = {r.channel for r in f.reads}
-        if f.grade == "verified" and not channels & INDEPENDENT_CHANNELS:
+        for j, r in enumerate(f.reads):
+            if r.channel == "export" and r.source_kind is None:
+                add("IX035", f"{where}.reads[{j}]")
+        independent = {r.channel for r in f.reads if _independent(r)}
+        app_reads = independent | {
+            r.channel
+            for r in f.reads
+            if r.channel in SCREEN_CHANNELS or r.channel == "export"
+        }
+        if f.grade == "verified" and not independent:
             add("IX030", where)
-        if f.grade in ("screen_readback", "committed_record_readback") and not (
-            channels & (SCREEN_CHANNELS | INDEPENDENT_CHANNELS)
+        if (
+            f.grade in ("screen_readback", "committed_record_readback")
+            and not app_reads
         ):
             add("IX031", where)
         elif f.grade == "committed_record_readback" and not any(

@@ -6173,7 +6173,7 @@
     },
     {
       "path": "schemas/records-interchange-v0.json",
-      "sha256": "1452550bd18a685b451499226537309b1810b0c7807a6d356d3b834e3f2b8c47"
+      "sha256": "c6bb70a39e5e50c3d1d8c6b21d8cb57f416a001fde344b0bb427d4a3240424e9"
     },
     {
       "path": "schemas/runtime-validation-attestation-v1.json",
@@ -6209,7 +6209,7 @@
     },
     {
       "path": "tests/fixtures/interchange/cases.json",
-      "sha256": "0de075c7cde89099c3bc9c5842cc147eed2e8c1affaf02fd4b2f6a1c660e68e0"
+      "sha256": "9b56972fab7d1e1aae8c53d743de0d0065b25a7c10e2918c406cbbcdc8d845b9"
     },
     {
       "path": "tests/fixtures/interchange/invalid/ambiguous_identity_to_executor.json",
@@ -6252,6 +6252,10 @@
       "sha256": "def540bcd18b3da8892b292e2171c8a232c95fdc87b6acfcb57225dcbfb09f04"
     },
     {
+      "path": "tests/fixtures/interchange/invalid/export_without_source_kind.json",
+      "sha256": "3d0bcf4ee48364489e2184e60042191020e079c1891419cb8de277974be51a8c"
+    },
+    {
       "path": "tests/fixtures/interchange/invalid/halted_without_reason.json",
       "sha256": "401e7ff5da615995e634a58c6807268172644583eb1d9f18f7b1521668278994"
     },
@@ -6277,7 +6281,7 @@
     },
     {
       "path": "tests/fixtures/interchange/invalid/seal_covers_other.json",
-      "sha256": "50cee2fe2aaaf7f57df8350d83e6b30d31e175d03e58dc4f7b19bf222a71352d"
+      "sha256": "d2b06daa2e58cea15993de45df7a5605e1a81ff10ab7d2c98a21a61dda731624"
     },
     {
       "path": "tests/fixtures/interchange/invalid/self_approval.json",
@@ -6300,8 +6304,12 @@
       "sha256": "57aaec8c3929d60e066a9a504c6573bb86e50bcd540e779a48fa61c8028576d2"
     },
     {
+      "path": "tests/fixtures/interchange/invalid/verified_from_live_session_export.json",
+      "sha256": "3fde7aea1c071441db57c9366948bc6ecaa4be79eac9b0ff2f9058fb2953ab11"
+    },
+    {
       "path": "tests/fixtures/interchange/invalid/verified_without_independent_read.json",
-      "sha256": "bc0fa22235f1aa3ee32e979173a2e73ce10a05e53b99c45bff6a1b53a4dc590c"
+      "sha256": "8ab27ca1d8bd9e0f7df53d7ce5181e6dea295adf13ece39fd4e144de499999f2"
     },
     {
       "path": "tests/fixtures/interchange/invalid/wrong_value_type.json",
@@ -6313,7 +6321,7 @@
     },
     {
       "path": "tests/fixtures/interchange/valid/invoice_posting_result.json",
-      "sha256": "55f6703129150cf8f68d5008085d3c6812564f75cf10090fc8cbef4cd4b5b982"
+      "sha256": "de787f261227bbfcecd36b75f9ad0195eb45775346a5b9370e3c6746045ab6cf"
     },
     {
       "path": "tests/fixtures/interchange/valid/referral_halted.json",

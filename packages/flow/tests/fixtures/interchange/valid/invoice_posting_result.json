@@ -70,7 +70,29 @@
         {
           "channel": "export",
           "value": "1249.50",
+          "source_kind": "committed_store",
           "session": "independent"
+        }
+      ]
+    },
+    {
+      "name": "due_date",
+      "type": "date",
+      "value": "2026-11-15",
+      "confidence": 0.98,
+      "grade": "screen_readback",
+      "reads": [
+        {
+          "channel": "ocr",
+          "value": "2026-11-15",
+          "artifact_id": "r1",
+          "session": "acting"
+        },
+        {
+          "channel": "export",
+          "value": "2026-11-15",
+          "source_kind": "live_session",
+          "session": "acting"
         }
       ]
     }
@@ -102,12 +124,12 @@
       "id": "openadapt-flow@site-runner-1"
     },
     "captured_at": "2026-10-29T14:00:00+00:00",
-    "checksum": "sha256:f8fd8612d336be710f7ffa65ec87eb813ad1fdf84f57bbdf021235caeda5381f"
+    "checksum": "sha256:fd6cd426f87a36e6e18d142088acf903de917374f4ab392fff26702487625777"
   },
   "seals": [
     {
       "kind": "openadapt.seal/offline-ed25519",
-      "covers": "sha256:f8fd8612d336be710f7ffa65ec87eb813ad1fdf84f57bbdf021235caeda5381f",
+      "covers": "sha256:fd6cd426f87a36e6e18d142088acf903de917374f4ab392fff26702487625777",
       "key_id": "site-key-1",
       "uri": "seals/run-0001.seal.json"
     }

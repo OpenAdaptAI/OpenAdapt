@@ -43,7 +43,9 @@ def sessions(doc: dict) -> None:
     """Mark which session each application read came from."""
     for f in doc["fields"]:
         for r in f.get("reads", []):
-            if r["channel"] in ("export", "database", "api"):
+            if r["channel"] == "export" and r.get("source_kind") == "live_session":
+                r["session"] = "acting"
+            elif r["channel"] in ("export", "database", "api"):
                 r["session"] = "independent"
             elif r["channel"] in ("clipboard", "ocr", "structure", "accessibility"):
                 reopened = f.get("grade") == "committed_record_readback"
@@ -234,7 +236,28 @@ invoice_result = {
             "grade": "verified",
             "reads": [
                 {"channel": "ocr", "value": "1249.50", "artifact_id": "r1"},
-                {"channel": "export", "value": "1249.50"},
+                {
+                    "channel": "export",
+                    "value": "1249.50",
+                    "source_kind": "committed_store",
+                },
+            ],
+        },
+        {
+            # An export started from the same live session grades like a
+            # screen read, not as verified.
+            "name": "due_date",
+            "type": "date",
+            "value": "2026-11-15",
+            "confidence": 0.98,
+            "grade": "screen_readback",
+            "reads": [
+                {"channel": "ocr", "value": "2026-11-15", "artifact_id": "r1"},
+                {
+                    "channel": "export",
+                    "value": "2026-11-15",
+                    "source_kind": "live_session",
+                },
             ],
         },
     ],
@@ -493,6 +516,17 @@ invalid = {
     "invalid/verified_without_independent_read.json": (
         mutate(invoice_result, lambda d: d["fields"][1]["reads"].pop()),
         ["IX030"],
+    ),
+    "invalid/verified_from_live_session_export.json": (
+        mutate(
+            invoice_result,
+            _set(["fields", 1, "reads", 1, "source_kind"], "live_session"),
+        ),
+        ["IX030"],
+    ),
+    "invalid/export_without_source_kind.json": (
+        mutate(invoice_result, lambda d: d["fields"][1]["reads"][1].pop("source_kind")),
+        ["IX030", "IX035"],
     ),
     "invalid/readback_without_screen_read.json": (
         mutate(referral_result, _set(["fields", 1, "reads"], [])),
