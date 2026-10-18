@@ -484,6 +484,7 @@ class RepairStore:
         *,
         policy: "SignedAdmissionPolicy",
         key_dir: Path,
+        preflight_run_dir: Path,
         now: Optional[datetime] = None,
     ) -> tuple[RepairCandidate, "StandardChangeGrant"]:
         """Review and approve a self-repair under a signed repair policy.
@@ -492,9 +493,11 @@ class RepairStore:
         caller, everything :func:`~openadapt_flow.repair.standard_change.authorize`
         checks: the policy's signature and expiry, the agent, the change class,
         and that the save step, its identity evidence and its record check
-        are byte-identical. Both campaigns must already have passed. The
-        approval names the policy, binds its digest and the exact bundle
-        digests, and records the person who signed the policy.
+        are byte-identical. Both campaigns must already have passed, and the
+        run in ``preflight_run_dir`` must be a ``VERIFIED`` run of exactly the
+        proposed bundle (the test record's pre-flight). The approval names the
+        policy, binds its digest and the exact bundle digests, and records the
+        person who signed the policy.
         """
         from openadapt_flow.repair.standard_change import (
             StandardChangeRefused,
@@ -513,6 +516,26 @@ class RepairStore:
                 f"refused: candidate {candidate_id} has not passed both campaigns"
             )
         self._reverify_invariants(candidate)
+        report_path = Path(preflight_run_dir) / "report.json"
+        try:
+            preflight = RunReport.model_validate_json(report_path.read_text())
+        except (OSError, ValueError) as exc:
+            raise RepairLifecycleError(
+                f"refused: no readable test-record run at {report_path}"
+            ) from exc
+        if (
+            not preflight.success
+            or preflight.execution_outcome not in (None, "VERIFIED")
+            or (
+                preflight.execution_outcome is None
+                and preflight.transaction_outcome != "VERIFIED"
+            )
+            or preflight.bundle_content_digest != candidate.proposed_content_digest
+        ):
+            raise RepairLifecycleError(
+                "refused: the test-record run is not a VERIFIED run of the "
+                "proposed bundle"
+            )
         try:
             grant = authorize(
                 candidate, policy=policy, key_dir=key_dir, store_root=self.root, now=now

@@ -204,7 +204,8 @@ bundles from disk and refuses unless:
   they use are byte-identical;
 - no step's identity evidence changed;
 - the change fits a class the policy allows;
-- both campaigns passed.
+- both campaigns passed;
+- the test record's run of exactly the proposed bundle is `VERIFIED`.
 
 The approval record names the policy digest and the person who signed it.
 See [Standard changes](#standard-changes-repairs-a-person-approved-in-advance).
@@ -425,11 +426,12 @@ Each automatic repair is also a row in `repair-store/standard-changes/ledger.jso
 | Command | Purpose |
 | --- | --- |
 | `openadapt-flow repair standard-changes [--day YYYY-MM-DD] [--json]` | The daily digest of repairs applied without a person. |
-| `openadapt-flow repair revert <id> --by <name>` | Undo one: the prior bundle is active again (a rollback), and repairs of that step go to a person. |
+| `openadapt-flow repair revert <id> --by <name>` | Undo the repair in use: the prior bundle is active again (a rollback), and repairs of that step go to a person. A rollback or a canary regression holds the step too. |
 | `openadapt-flow repair clear-hold --workflow W --step S --by <name>` | Let that step's repairs apply under the policy again. |
 
-The console lists the same rows at `GET /api/standard-changes`, and an
-attended console takes a revert from the phone portal at
+Started with `--repair-store DIR`, the console lists the same rows at
+`GET /api/standard-changes`, and an attended console takes a revert from the
+phone portal at
 `POST /api/standard-changes/<id>/revert`. The phone sends back the digest of
 the row it showed.
 

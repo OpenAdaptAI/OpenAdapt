@@ -737,8 +737,41 @@ def test_revert_from_the_phone_portal(mockmed, keys, tmp_path) -> None:
             AUTOMATION,
         )
     policy = _policy(key, relabel_or_move=True)
+
+    def preflight(digest: str, outcome: str = "VERIFIED") -> Path:
+        run = tmp_path / f"preflight-{digest[:8]}-{outcome}"
+        run.mkdir()
+        RunReport(
+            workflow_name="triage",
+            started_at="2026-10-18T00:00:00+00:00",
+            success=outcome == "VERIFIED",
+            execution_outcome=outcome,
+            transaction_outcome=(
+                outcome if outcome == "VERIFIED" else "HALTED_BEFORE_EFFECT"
+            ),
+            bundle_content_digest=digest,
+        ).save(run)
+        return run
+
+    # The store checks the test-record run itself: it must be a VERIFIED run
+    # of exactly the proposed bundle.
+    for bad in (
+        preflight(candidate.prior_content_digest),
+        preflight(candidate.proposed_content_digest, "HALTED"),
+        tmp_path / "no-run",
+    ):
+        with pytest.raises(RepairLifecycleError, match="test-record run"):
+            store.approve_standard_change(
+                candidate.candidate_id,
+                policy=policy,
+                key_dir=key_dir,
+                preflight_run_dir=bad,
+            )
     approved, grant = store.approve_standard_change(
-        candidate.candidate_id, policy=policy, key_dir=key_dir
+        candidate.candidate_id,
+        policy=policy,
+        key_dir=key_dir,
+        preflight_run_dir=preflight(candidate.proposed_content_digest),
     )
     assert approved.approval.pre_approved_by == SIGNER
     store.stage(approved.candidate_id, AUTOMATION)
@@ -759,7 +792,10 @@ def test_revert_from_the_phone_portal(mockmed, keys, tmp_path) -> None:
     # A person approving the same candidate is refused: it is already approved.
     with pytest.raises(RepairLifecycleError):
         store.approve_standard_change(
-            candidate.candidate_id, policy=policy, key_dir=key_dir
+            candidate.candidate_id,
+            policy=policy,
+            key_dir=key_dir,
+            preflight_run_dir=tmp_path / "no-run",
         )
 
     runs = tmp_path / "runs"
@@ -806,3 +842,120 @@ def test_revert_from_the_phone_portal(mockmed, keys, tmp_path) -> None:
 
     clear_hold(store.root, "triage", "step_001", by="ops-lead")
     assert authorize(candidate, policy=policy, key_dir=key_dir, store_root=store.root)
+
+
+# -- review regressions -------------------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    ("name", "ocr", "problem"),
+    [
+        ("", "", "the control has no readable label"),
+        ("Void encounter", "Void encounter", "the control reads as 'void'"),
+        ("Sign note", "Sign note", "the control reads as 'sign'"),
+    ],
+    ids=["unlabeled", "void", "sign"],
+)
+def test_a_relabel_onto_an_unclear_or_risky_control_goes_to_a_person(
+    mockmed, tmp_path, name, ocr, problem
+) -> None:
+    """The new control's own label decides, never the recorded intent."""
+
+    _base, bundle = mockmed
+
+    def edit(workflow: Workflow) -> None:
+        _relabel(workflow)
+        anchor = _step(workflow, "step_001").anchor
+        anchor.ocr_text = ocr or None
+        if anchor.structural is not None:
+            anchor.structural = anchor.structural.model_copy(update={"name": name})
+
+    patched = _copy(bundle, tmp_path / "patched", edit)
+    verdict = classify_change(
+        Workflow.load(bundle), Workflow.load(patched), bundle, patched, ALL_CLASSES
+    )
+    assert not verdict.allowed
+    assert any(problem in p for p in verdict.problems), verdict.problems
+
+
+def test_a_changed_file_of_another_step_goes_to_a_person(mockmed, tmp_path) -> None:
+    """Bytes behind an unchanged step's JSON are compared too."""
+
+    _base, bundle = mockmed
+    out = tmp_path / "patched"
+    template = _step(Workflow.load(bundle), "step_002").anchor.template
+
+    def edit(workflow: Workflow) -> None:
+        _relabel(workflow)
+        (out / template).write_bytes((out / template).read_bytes() + b"\0")
+
+    patched = _copy(bundle, out, edit)
+    verdict = classify_change(
+        Workflow.load(bundle), Workflow.load(patched), bundle, patched, ALL_CLASSES
+    )
+    assert f"the bundle file {template} changed" in verdict.problems
+
+
+def test_only_the_no_control_refusal_is_repairable(mockmed) -> None:
+    """An ambiguous locator or a changed record is never self-repaired."""
+
+    from openadapt_flow.ir import HaltObservation, Resolution, StepResult
+    from openadapt_flow.repair.self_repair import _repairable
+
+    _base, bundle = mockmed
+    workflow = Workflow.load(bundle)
+
+    def report(error: str) -> RunReport:
+        first = StepResult(
+            step_id="step_000", intent="click 'Open'", ok=True, delivery_attempted=True
+        )
+        halted = StepResult(
+            step_id="step_001",
+            intent="click 'New Encounter'",
+            ok=False,
+            delivery_attempted=False,
+            error=error,
+            resolution=Resolution(
+                rung="geometry", point=(1, 1), confidence=0.9, elapsed_ms=0
+            ),
+        )
+        return RunReport(
+            workflow_name="triage",
+            started_at="2026-10-18T00:00:00Z",
+            results=[first, halted],
+            halt=HaltObservation(state_id="step_001", reason=error),
+        )
+
+    prefix = "Structural safety refusal for step 'step_001' (click 'New Encounter'): "
+    no_control = (
+        "visual point is not an identity-bearing actionable DOM element — "
+        "no action was admitted"
+    )
+    assert not isinstance(_repairable(report(prefix + no_control), workflow), str)
+    for other in (
+        "DOM locator is ambiguous (2 matches) — no action was admitted",
+        "guarded DOM target or record identity changed before delivery — "
+        "no action was admitted",
+    ):
+        assert isinstance(_repairable(report(prefix + other), workflow), str)
+
+
+def test_a_rollback_by_any_route_holds_the_step(mockmed, keys, tmp_path) -> None:
+    from openadapt_flow.repair.standard_change import hold_reason
+
+    store_root = tmp_path / "store"
+    Ledger(store_root).append(
+        {
+            "event": "applied",
+            "candidate_id": "0123456789abcdef",
+            "workflow": "triage",
+            "step_id": "step_001",
+        }
+    )
+    # The candidate is not in the store at all: held, fail closed.
+    assert "missing" in hold_reason(store_root, "triage", "step_001")
+    assert hold_reason(store_root, "triage", "step_002") is None
+    from openadapt_flow.repair.standard_change import clear_hold
+
+    clear_hold(store_root, "triage", "step_001", by="ops-lead")
+    assert hold_reason(store_root, "triage", "step_001") is None

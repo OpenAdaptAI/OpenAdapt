@@ -9919,6 +9919,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--repair-store",
+        default=None,
+        help=(
+            "Repair store whose automatic repairs (standard changes) the "
+            "console lists and, when attended, lets a person revert"
+        ),
+    )
+    p.add_argument(
         "--attend",
         action="store_true",
         help=(
@@ -10327,6 +10335,7 @@ def _cmd_console(args: argparse.Namespace) -> int:
             attended_service=attended_service,
             decision_supervisor=_decision_supervisor_from_args(args, attended_service),
             port=args.port,
+            repair_store=getattr(args, "repair_store", None),
         )
     return 0
 

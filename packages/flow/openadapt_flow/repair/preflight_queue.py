@@ -200,10 +200,8 @@ class WorklistQueue:
                 bundle, candidate_id = fixed
                 pending.extend(group)
         waiting = [r for r in results.values() if r.status != "verified"]
-        if (
-            any(r.halt_code for r in waiting)
-            and repairs
-            and repairs[-1].status == "awaiting_approval"
+        if any(r.halt_code for r in waiting) and any(
+            r.status == "awaiting_approval" for r in repairs
         ):
             return done(
                 "waiting_for_person", "items wait for one person's answer", preflight

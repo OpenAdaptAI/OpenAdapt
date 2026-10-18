@@ -45,9 +45,22 @@ def _entry_sha256(row: dict[str, Any]) -> str:
 def list_standard_changes(store_root: Path) -> list[dict[str, Any]]:
     """Every automatic repair, newest first, with what a phone card needs."""
 
+    store = RepairStore(store_root)
+    pointer = store.active_pointer()
+    in_use = pointer.candidate_id if pointer is not None else None
     rows = []
     for row in reversed(Ledger(store_root).applied()):
         reverted = row.get("reverted")
+        try:
+            state = store.load_candidate(row["candidate_id"]).state
+        except RepairLifecycleError:
+            state = "missing"
+        # Only the repair in use, or one that never went live, can be
+        # reverted: reverting an older one would drop a newer repair.
+        revertable = not reverted and (
+            state in ("approved", "staged")
+            or (state in ("canary", "active") and in_use == row["candidate_id"])
+        )
         rows.append(
             {
                 "candidate_id": row["candidate_id"],
@@ -62,7 +75,8 @@ def list_standard_changes(store_root: Path) -> list[dict[str, Any]]:
                 "preflight_outcome": row.get("preflight_outcome"),
                 "reverted_by": reverted.get("reverted_by") if reverted else None,
                 "reverted_at": reverted.get("at") if reverted else None,
-                "actions": [] if reverted else ["revert"],
+                "state": state,
+                "actions": ["revert"] if revertable else [],
                 "entry_sha256": _entry_sha256(row),
             }
         )

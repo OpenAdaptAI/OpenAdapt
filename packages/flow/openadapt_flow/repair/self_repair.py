@@ -123,9 +123,14 @@ _NOT_FOUND = "Could not resolve target for step"
 _BELOW_RUNG = "only resolved via the"
 _UNTRUSTED_RUNGS = frozenset({"geometry", "grounder"})
 #: A step that does not save may act on geometry; the structural safety check
-#: then refuses a point that is no actionable control, before any input.
+#: then refuses a point where no actionable control is, before any input.
+#: Only that refusal counts: an ambiguous locator or a target whose record
+#: identity changed is a different structural refusal and is never repaired.
 _NOT_A_CONTROL = "Structural safety refusal"
-_NOTHING_ADMITTED = "no action was admitted"
+_NO_CONTROL_THERE = (
+    "visual point is not an identity-bearing actionable DOM element — "
+    "no action was admitted"
+)
 
 
 class SelfRepairRefused(RuntimeError):
@@ -1801,7 +1806,7 @@ def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, int, Any]
             )
     elif halted.resolution.rung not in _UNTRUSTED_RUNGS or not (
         _BELOW_RUNG in error
-        or (error.startswith(_NOT_A_CONTROL) and _NOTHING_ADMITTED in error)
+        or (error.startswith(_NOT_A_CONTROL) and error.endswith(_NO_CONTROL_THERE))
     ):
         return (
             f"{step.id} found its target ({halted.resolution.rung}) and stopped for "

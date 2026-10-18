@@ -361,18 +361,26 @@ person only when every one of these holds:
 3. No step's identity evidence changed, and the patch weakens nothing in the
    contract.
 4. The change fits an allowed class, and it touches exactly one recorded
-   step.
-5. No person has reverted an automatic repair of this step (see
+   step, which is a click. No recorded bundle file changed: the manifests'
+   plaintext hashes are compared, so encrypted bundles are covered too.
+5. The new control, and every new menu click, has a readable label of its
+   own (from its accessible name or OCR, never the recorded intent). That
+   label doesn't read as a save, or as an action like sign, void, delete,
+   send, approve, cancel or close. A dismiss label is checked against the
+   labels the person declared.
+6. No automatic repair of this step was reverted, rolled back or stopped by
+   its canary since a person last cleared the step (see
    [Undo](#audit-and-undo)).
-6. The repaired bundle runs once, start to finish, on the deployment's test
+7. The repaired bundle runs once, start to finish, on the deployment's test
    record (`TestRecord`, for example `TEST-001`). The run ends `VERIFIED`,
    with the record check reading the save back.
 
 If any check fails, the run's self-repair ledger records the reason as a
 failed `approval` stage ("not a standard change ..."), and a person is asked
-as usual. The repair store checks items 1 to 5 again itself against the
-bundles on disk (`RepairStore.approve_standard_change`), so a caller can't
-skip them. The approval names the policy, binds its digest, and records the
+as usual. The repair store checks items 1 to 6 again itself against the
+bundles on disk (`RepairStore.approve_standard_change`). It also reads the
+test record's `report.json` and refuses unless that run is `VERIFIED` and ran
+exactly the proposed bundle. A caller can't skip a check. The approval names the policy, binds its digest, and records the
 person who signed it.
 
 ```python
@@ -439,11 +447,18 @@ To undo one:
 openadapt-flow repair revert <candidate-id> --store repair-store --by <your-name>
 ```
 
-The prior bundle is active again. Repairs of the same step then go to a
-person until someone runs `openadapt-flow repair clear-hold`. The phone
-portal does the same through the attended console
-(`POST /api/standard-changes/<id>/revert`). The phone sends back the digest
-of the row it showed.
+The prior bundle is active again. Only the repair in use can be reverted, so
+reverting an older one never drops a newer one silently: revert the newer one
+first. Repairs of the same step then go to a person until someone runs
+`openadapt-flow repair clear-hold`. A `repair rollback` or a canary
+regression holds the step the same way. Every automatic repair is written to
+the ledger before its bundle goes live.
+
+The phone portal does the same through the attended console. Start it with
+`openadapt-flow console --attend --repair-store repair-store`.
+`GET /api/standard-changes` lists the rows, with `revert` offered only where
+it applies, and `POST /api/standard-changes/<id>/revert` reverts one. The
+phone sends back the digest of the row it showed.
 
 ### Every backend
 

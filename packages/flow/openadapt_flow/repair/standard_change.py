@@ -40,7 +40,6 @@ automatic repair of that step until a person clears it.
 
 from __future__ import annotations
 
-import hashlib
 import json
 import re
 from dataclasses import dataclass, field
@@ -134,26 +133,39 @@ def _strings(value: Any) -> list[str]:
     return []
 
 
-def _file_digests(step: Step, *bundle_dirs: Path) -> dict[str, tuple[str, ...]]:
-    """Each bundle file the step names, with its digest in each bundle."""
+def _referenced(steps: list[Step]) -> set[str]:
+    return {text for step in steps for text in _strings(_dump(step))}
 
-    out: dict[str, tuple[str, ...]] = {}
-    for text in _strings(_dump(step)):
-        if not text or text.startswith("/") or ".." in text or len(text) > 512:
+
+def _file_problems(
+    prior: Workflow, patched: Workflow, saves: set[str], allowed_new: set[str]
+) -> list[str]:
+    """Bundle files that changed, from the manifests' plaintext hashes.
+
+    The manifests are integrity-checked when a bundle loads, and they hash
+    the plaintext of sealed assets too, so this also covers encrypted
+    bundles. No recorded file may change or go away. A new file is allowed
+    only when the changed step or a new step names it.
+    """
+
+    if prior.manifest is None or patched.manifest is None:
+        return ["a bundle has no manifest to compare files against"]
+    old, new = prior.manifest.file_hashes, patched.manifest.file_hashes
+    save_files = _referenced([s for s in prior.steps if s.id in saves])
+    problems = []
+    for path in sorted(set(old) | set(new)):
+        if path in old and path in new and old[path] == new[path]:
             continue
-        if "/" not in text and "." not in text:
+        if path not in old and path in allowed_new:
             continue
-        paths = [d / text for d in bundle_dirs]
-        try:
-            if not any(p.is_file() for p in paths):
-                continue
-        except OSError:
-            continue
-        out[text] = tuple(
-            hashlib.sha256(p.read_bytes()).hexdigest() if p.is_file() else "missing"
-            for p in paths
-        )
-    return out
+        owner = next((sid for sid in sorted(saves) if path in save_files), None)
+        if owner is not None:
+            problems.append(f"{owner}: the save step's file {path} changed")
+        elif path not in new:
+            problems.append(f"the bundle file {path} was removed")
+        else:
+            problems.append(f"the bundle file {path} changed")
+    return problems
 
 
 def _changed_fields(old: Step, new: Step) -> set[str]:
@@ -171,6 +183,77 @@ def _identity_changed(old: Step, new: Step) -> list[str]:
         for f in IDENTITY_FIELDS
         if _canon(getattr(old.anchor, f, None)) != _canon(getattr(new.anchor, f, None))
     ]
+
+
+#: Words a control reached without a person may not carry, besides the save
+#: words :func:`openadapt_flow.risk.is_write_shaped` already refuses. A control
+#: that signs, voids or sends something is never a routine re-target.
+_RISKY_WORDS = frozenset(
+    {
+        "accept",
+        "approve",
+        "archive",
+        "authorize",
+        "authorise",
+        "cancel",
+        "close",
+        "confirm",
+        "delete",
+        "deny",
+        "discharge",
+        "discontinue",
+        "finalize",
+        "finalise",
+        "lock",
+        "merge",
+        "order",
+        "pay",
+        "post",
+        "prescribe",
+        "publish",
+        "purge",
+        "refund",
+        "reject",
+        "release",
+        "remove",
+        "revoke",
+        "send",
+        "sign",
+        "transfer",
+        "transmit",
+        "void",
+    }
+)
+
+
+def _anchor_label(step: Step) -> Optional[str]:
+    """What the control is called on screen, from its anchor only.
+
+    Never the step's intent: a patch keeps the recorded intent, so the
+    intent names the old control, not the new one.
+    """
+
+    anchor = step.anchor
+    if anchor is None:
+        return None
+    if anchor.structural is not None and anchor.structural.name:
+        return anchor.structural.name
+    return anchor.ocr_text or None
+
+
+def _label_problem(step_id: str, label: Optional[str]) -> Optional[str]:
+    from openadapt_flow.risk import is_meaningful_label, is_write_shaped
+
+    if not is_meaningful_label(label):
+        return f"{step_id}: the control has no readable label"
+    assert label is not None
+    if is_write_shaped(label):
+        return f"{step_id}: the control reads as a save ({label!r})"
+    words = set(re.findall(r"[a-z]+", label.lower()))
+    risky = sorted(words & _RISKY_WORDS)
+    if risky:
+        return f"{step_id}: the control reads as {risky[0]!r} ({label!r})"
+    return None
 
 
 def _label(step: Step) -> Optional[str]:
@@ -212,9 +295,6 @@ def _save_problems(
         if _canon(_dump(step)) != _canon(_dump(new)) and not problems:
             fields = ", ".join(sorted(_changed_fields(step, new)))
             problems.append(f"{step.id}: the save step changed ({fields})")
-        for path, digests in _file_digests(step, prior_dir, patched_dir).items():
-            if len(set(digests)) != 1:
-                problems.append(f"{step.id}: the save step's file {path} changed")
     new_saves = {s.id for s in patched.steps if is_consequential(s, patched)}
     if new_saves - saves:
         problems.append(
@@ -273,13 +353,15 @@ def classify_change(
     positions = [i for i, s in enumerate(patched.steps) if s.id not in old_by_id]
     inserted = [patched.steps[i] for i in positions]
     for step in inserted:
-        label = _label(step)
+        label = _anchor_label(step)
         if step.action not in _POINTER:
             problems.append(f"{step.id}: a new step that is not a click")
         elif is_consequential(step, patched) or (label and is_write_shaped(label)):
             problems.append(f"{step.id}: a new step reads as a save ({label!r})")
         elif not is_meaningful_label(label):
             problems.append(f"{step.id}: a new click has no readable label")
+    touched = [s for s in patched.steps if s.id in changed] + inserted
+    problems.extend(_file_problems(prior, patched, saves, _referenced(touched)))
     if problems:
         return ChangeVerdict(None, tuple(problems))
     if len(changed) != 1:
@@ -294,9 +376,17 @@ def classify_change(
     if step_id in saves:  # unreachable: the save is byte-identical
         return ChangeVerdict(None, (f"{step_id} is the save",))
     new_step = next(s for s in patched.steps if s.id == step_id)
-    new_label = _label(new_step)
-    if new_label and is_write_shaped(new_label):
-        return ChangeVerdict(None, (f"{step_id} now reads as a save ({new_label!r})",))
+    if new_step.action not in _POINTER:
+        return ChangeVerdict(None, (f"{step_id} is not a click",))
+    new_label = _anchor_label(new_step)
+    if fields == {"anchor"}:
+        # The re-targeted control, and every new click before it, must be a
+        # plainly harmless control. A dismiss label is checked against the
+        # labels the person declared instead.
+        for step in [*inserted, new_step]:
+            why = _label_problem(step.id, _anchor_label(step))
+            if why is not None:
+                return ChangeVerdict(None, (why,), step_id=step_id)
 
     if not inserted:
         if fields != {"anchor"}:
@@ -319,7 +409,7 @@ def classify_change(
     before = patched.steps[positions[0] - 1] if positions[0] > 0 else None
     after_index = positions[-1] + 1
     after = patched.steps[after_index] if after_index < len(patched.steps) else None
-    labels = [repr(_label(s)) for s in inserted]
+    labels = [repr(_anchor_label(s)) for s in inserted]
 
     if after is not None and after.id == step_id and fields == {"anchor"}:
         detail = f"{step_id}: reached through {', '.join(labels)}, now {new_label!r}"
@@ -346,7 +436,7 @@ def classify_change(
                 None, ("the dismiss click does not lead to the recorded screen",)
             )
         texts = [p.text for p in before.expect if p.text]
-        label = _label(dismiss)
+        label = _anchor_label(dismiss)
         for pattern in repairs.dialogs:
             if pattern.matches(texts) and pattern.dismisses_with(label):
                 return ChangeVerdict(
@@ -449,12 +539,11 @@ def authorize(
         raise StandardChangeRefused("; ".join(verdict.problems)[:900])
     assert verdict.change_class is not None
     if store_root is not None:
-        held = Ledger(store_root).held(candidate.workflow_name, verdict.step_id)
-        if held is not None:
+        why = hold_reason(store_root, candidate.workflow_name, verdict.step_id)
+        if why is not None:
             raise StandardChangeRefused(
-                f"{held.get('reverted_by', 'a person')} reverted an automatic "
-                f"repair of {verdict.step_id} on {str(held.get('at', ''))[:10]}; "
-                "a person decides repairs of this step until they clear it"
+                f"{why}; a person decides repairs of {verdict.step_id} until "
+                "someone runs `repair clear-hold`"
             )
     return StandardChangeGrant(
         policy_id=verified.policy_id,
@@ -604,6 +693,46 @@ class Ledger:
         return held
 
 
+def hold_reason(
+    store_root: Path | str, workflow: str, step_id: Optional[str]
+) -> Optional[str]:
+    """Why automatic repair of this step is held, or ``None``.
+
+    Held after a person reverted an automatic repair of the step, and after
+    one was rolled back or left its canary window by any route (``repair
+    rollback``, a canary regression), until a person clears the hold.
+    """
+
+    from openadapt_flow.repair.lifecycle import RepairLifecycleError, RepairStore
+
+    reason: Optional[str] = None
+    applied: list[str] = []
+    for row in Ledger(store_root).entries():
+        if row.get("workflow") != workflow or row.get("step_id") != step_id:
+            continue
+        event = row.get("event")
+        if event == "hold_cleared":
+            reason, applied = None, []
+        elif event == "reverted":
+            reason = (
+                f"{row.get('reverted_by', 'a person')} reverted an automatic "
+                f"repair of it on {str(row.get('at', ''))[:10]}"
+            )
+        elif event == "applied":
+            applied.append(str(row.get("candidate_id")))
+    if reason is not None:
+        return reason
+    store = RepairStore(store_root)
+    for candidate_id in applied:
+        try:
+            state = store.load_candidate(candidate_id).state
+        except RepairLifecycleError:
+            return f"automatic repair {candidate_id} is missing from the store"
+        if state in ("rolled_back", "staged", "rejected"):
+            return f"automatic repair {candidate_id} is {state}"
+    return None
+
+
 def daily_digest(store_root: Path | str, day: Optional[str] = None) -> str:
     """The day's automatic repairs as Markdown (UTC day, ``YYYY-MM-DD``)."""
 
@@ -664,9 +793,20 @@ def revert(
     if entry.get("reverted"):
         raise RepairLifecycleError(f"refused: {candidate_id} is already reverted")
     candidate = store.load_candidate(candidate_id)
+    person = Actor(kind="human", id=by)
     if candidate.state in ("canary", "active"):
-        candidate = store.rollback(Actor(kind="human", id=by), candidate_id)
-    elif candidate.state not in ("staged", "rolled_back"):
+        pointer = store.active_pointer()
+        if pointer is None or pointer.candidate_id != candidate_id:
+            newer = pointer.candidate_id if pointer is not None else "none"
+            raise RepairLifecycleError(
+                f"refused: {candidate_id} is not the bundle in use (that is "
+                f"{newer}); revert the newer repair first"
+            )
+        candidate = store.rollback(person, candidate_id)
+    elif candidate.state in ("approved", "staged"):
+        # Never live, or its canary already put the prior bundle back.
+        candidate = store.reject(candidate_id, person, "reverted by a person")
+    elif candidate.state not in ("rolled_back", "rejected"):
         raise RepairLifecycleError(
             f"refused: candidate {candidate_id} is {candidate.state!r}"
         )
@@ -790,33 +930,15 @@ class StandardChanges:
                 candidate.candidate_id,
                 policy=self.policy,
                 key_dir=self.key_dir,
+                preflight_run_dir=preflight.run_dir,
                 now=self._now(),
-            )
-            repair.store.stage(approved.candidate_id, AUTOMATION)
-            approved = repair.store.start_canary(
-                approved.candidate_id, AUTOMATION, max_runs=repair.canary_runs
             )
         except RepairLifecycleError as exc:
             to_person(f"the repair store refused: {exc}")
             return None
         undo = revert_command(approved.candidate_id, repair.store.root)
-        record = StandardChangeEvidence(
-            change_class=grant.change_class,
-            detail=grant.detail[:512],
-            policy_id=grant.policy_id,
-            policy_sha256=grant.policy_sha256,
-            policy_signed_by=grant.signed_by,
-            test_record=self.test_record.record_id,
-            preflight_outcome=preflight.outcome,
-            preflight_run_dir=str(preflight.run_dir),
-            applied_at=datetime.now(timezone.utc).isoformat(),
-            revert_command=undo,
-        )
-        evidence.standard_change = record
-        evidence.approval_route = ROUTE
-        evidence.approved_by = (
-            approved.approval.approved_by if approved.approval else None
-        )
+        # The ledger row comes before the bundle goes live, so every live
+        # automatic repair is in the digest and can be reverted.
         Ledger(repair.store.root).append(
             {
                 "event": "applied",
@@ -836,6 +958,33 @@ class StandardChanges:
                 "proposed_digest": approved.proposed_content_digest,
                 "revert_command": undo,
             }
+        )
+        try:
+            repair.store.stage(approved.candidate_id, AUTOMATION)
+            approved = repair.store.start_canary(
+                approved.candidate_id, AUTOMATION, max_runs=repair.canary_runs
+            )
+        except RepairLifecycleError as exc:
+            # Approved but never live: hold the step, so a person looks.
+            repair.store.reject(approved.candidate_id, AUTOMATION, str(exc)[:300])
+            to_person(f"the repair store refused to stage it: {exc}")
+            return None
+        record = StandardChangeEvidence(
+            change_class=grant.change_class,
+            detail=grant.detail[:512],
+            policy_id=grant.policy_id,
+            policy_sha256=grant.policy_sha256,
+            policy_signed_by=grant.signed_by,
+            test_record=self.test_record.record_id,
+            preflight_outcome=preflight.outcome,
+            preflight_run_dir=str(preflight.run_dir),
+            applied_at=datetime.now(timezone.utc).isoformat(),
+            revert_command=undo,
+        )
+        evidence.standard_change = record
+        evidence.approval_route = ROUTE
+        evidence.approved_by = (
+            approved.approval.approved_by if approved.approval else None
         )
         evidence.steps.append(
             SelfRepairStepRecord(
