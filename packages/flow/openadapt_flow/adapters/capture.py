@@ -1198,6 +1198,7 @@ def convert_capture(
         frames_dir.mkdir(parents=True, exist_ok=True)
 
         used_params: dict[str, str] = {}
+        step_times: list[dict[str, Any]] = []
         viewport: Optional[list[int]] = None
         lines: list[str] = []
 
@@ -1244,6 +1245,7 @@ def convert_capture(
             line.update({k: v for k, v in event.items() if k != "_ts"})
             line["t"] = round(ts - started_at, 3)
             lines.append(json.dumps(line))
+            step_times.append({"i": i, "t": line["t"], "kind": event["kind"]})
 
         (out_dir / "events.jsonl").write_text("\n".join(lines) + "\n")
 
@@ -1293,6 +1295,39 @@ def convert_capture(
         elif desktop_provenance is not None:
             meta["desktop_capture"] = desktop_provenance
         (out_dir / "meta.json").write_text(json.dumps(meta, indent=2))
+        _write_capture_narration(session, out_dir, started_at, step_times)
         return out_dir
     finally:
         session.close()
+
+
+def _write_capture_narration(
+    session: Any, out_dir: Path, started_at: float, step_times: list[dict[str, Any]]
+) -> None:
+    """Copy capture's scrubbed narration into the recording, lined up by time.
+
+    Capture scrubbed the sentences before storing them (it refuses to store
+    narration otherwise) and its file says so; this only re-times them to the
+    recording's ``t`` clock and lines each one up with a step. A capture with
+    no narration writes nothing.
+    """
+    reader = getattr(session, "narration", None)
+    if reader is None:
+        return
+    utterances = reader()
+    if not utterances:
+        return
+    from openadapt_flow.narration import Narration, align, write_narration
+
+    sentences = [
+        (u.start - started_at, u.end - started_at, u.text) for u in utterances
+    ]
+    write_narration(
+        out_dir,
+        Narration(
+            scrubbed=True,
+            scrubbed_by={"by": "openadapt-capture"},
+            source="openadapt-capture",
+            lines=align(sentences, step_times),
+        ),
+    )

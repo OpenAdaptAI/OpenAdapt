@@ -94,7 +94,7 @@ import tempfile
 import warnings
 from difflib import SequenceMatcher
 from pathlib import Path
-from typing import Any, Optional, Protocol, Union, runtime_checkable
+from typing import Any, Callable, Optional, Protocol, Sequence, Union, runtime_checkable
 
 from pydantic import BaseModel, Field
 
@@ -107,6 +107,7 @@ from openadapt_flow.compiler.disambiguation import (
 from openadapt_flow.ir import (
     ActionKind,
     Guard,
+    GuardSource,
     LoopSpec,
     ParamKind,
     ParamSpec,
@@ -299,6 +300,39 @@ class ProbeVerdict(BaseModel):
     detail: str = ""
 
 
+class NarratedGuard(BaseModel):
+    """A guard a spoken sentence suggested for one branch point.
+
+    It starts as a flagged proposal. ``status`` is ``certified`` only when
+    every recording agrees with it (``certified_by="recordings_agree"``),
+    probing on a declared test copy confirmed it (``"probe"``), or a person
+    accepted it (``"person"``). A recording that contradicts it keeps the point
+    refused (``status="contradicted"``); a person cannot accept it then.
+    """
+
+    location: str = Field(description="opt_<column> or divergence_<column>")
+    sentence: str = Field(description="The scrubbed sentence")
+    recording: int = Field(description="Index of the recording that said it")
+    step_id: Optional[str] = None
+    guard: Predicate = Field(description="Run the step (or arm) when this holds")
+    rule: str = Field(description="The guard in plain words")
+    source: str = "narration"
+    status: str = Field(description="'certified' | 'proposed' | 'contradicted'")
+    certified_by: Optional[str] = None
+    accepted_by: Optional[str] = None
+    agree: list[int] = Field(default_factory=list)
+    contradict: list[int] = Field(default_factory=list)
+    unknown: list[int] = Field(
+        default_factory=list,
+        description="Recordings where the guard could not be checked",
+    )
+    trace_params: dict[int, dict[str, str]] = Field(
+        default_factory=dict,
+        description="Per recording, the run parameter a param guard compares",
+    )
+    detail: str = ""
+
+
 class InductionResult(BaseModel):
     """The induced program (or an honest refusal) plus the full audit trail."""
 
@@ -326,6 +360,10 @@ class InductionResult(BaseModel):
             "Worklist of missing demonstrations (blocking uncertainties) and "
             "uncovered-branch notes on an emitted program (non-blocking)."
         ),
+    )
+    narrated_guards: list[NarratedGuard] = Field(
+        default_factory=list,
+        description="Guards spoken narration suggested, with how each was decided.",
     )
     probe_target: Optional[str] = Field(
         default=None,
@@ -362,6 +400,23 @@ class InductionResult(BaseModel):
             lines.append(f"  [proposed]  {p.target}: {p.content}  (NOT trusted)")
         for u in self.uncertainties:
             lines.append(f"  [REFUSED]   {u.location}: {u.detail}")
+        for ng in self.narrated_guards:
+            if ng.status == "certified":
+                how = {
+                    "recordings_agree": "every recording agrees",
+                    "probe": "confirmed on the test copy",
+                    "person": f"accepted by {ng.accepted_by}",
+                }.get(ng.certified_by or "", ng.certified_by or "")
+                verdict = f"CERTIFIED ({how})"
+            elif ng.status == "contradicted":
+                verdict = "REFUSED (recording " + ", ".join(
+                    str(t) for t in ng.contradict
+                ) + " contradicts it)"
+            else:
+                verdict = "proposed, NOT trusted"
+            lines.append(
+                f"  [narrated]  {ng.location}: {ng.sentence!r} -> {ng.rule} -- {verdict}"
+            )
         if self.probe_target is not None:
             lines.append(
                 f"probes on test copy {self.probe_target!r}: "
@@ -975,6 +1030,10 @@ def induce_program(
     *,
     propose: Optional[Proposer] = None,
     probe_resolutions: Optional[dict[str, str]] = None,
+    narration: Optional[Sequence[Optional[Any]]] = None,
+    screen_texts: Optional[Callable[[int, str], Optional[Sequence[str]]]] = None,
+    interpreter: Optional[Any] = None,
+    accepted_narration: Optional[dict[str, str]] = None,
 ) -> InductionResult:
     """Induce a parameterized :class:`ProgramGraph` from multiple demonstrations
     of the same task -- the RFC §3 induction loop (step [4] + [5]).
@@ -995,6 +1054,21 @@ def induce_program(
             is the only caller that sets it). ``"incidental"`` drops the step;
             ``"conditional"`` keeps it guarded on its own presence. A point
             not listed here is refused exactly as without probing.
+            ``"narrated"`` certifies the guard narration suggested there.
+        narration: One :class:`~openadapt_flow.narration.Narration` (or None)
+            per trace. Default: read ``narration.json`` from each trace that is
+            a recording or bundle directory. A sentence lined up near a branch
+            point PROPOSES a guard (:mod:`.narration_rules`); it is certified
+            only when every recording agrees, probing confirms it, or a person
+            accepts it (``accepted_narration``).
+        screen_texts: ``(trace, step_id) -> screen lines`` used to check a
+            screen-element guard. Default for recording directories: OCR of
+            the step's before-frame.
+        interpreter: Optional compile-time
+            :class:`~.narration_rules.NarrationInterpreter` for sentences the
+            parser cannot read. Its answer is checked like any narrated guard.
+        accepted_narration: ``{location: person}`` -- narrated guards a
+            person accepted. A guard a recording contradicts stays refused.
 
     Returns:
         An :class:`InductionResult` with the induced program (or a refusal) and
@@ -1005,6 +1079,10 @@ def induce_program(
     result = InductionResult(n_traces=n)
     if n == 0:
         return result
+    if narration is None:
+        narration = _narration_from_traces(traces)
+    if screen_texts is None:
+        screen_texts = _default_screen_texts(traces)
 
     reduced = [_reduce_trace(wf.steps) for wf in workflows]
     columns = _align(reduced)
@@ -1031,6 +1109,8 @@ def induce_program(
     data_sources: dict[str, Relation] = {}
     taken: set[str] = set()
     seen_div_groups: set[int] = set()
+    optional_nodes: dict[int, _Node] = {}
+    divergences: dict[int, tuple[list[_Column], int]] = {}
 
     for idx, col in enumerate(columns):
         present = sorted(col.tokens)
@@ -1043,7 +1123,9 @@ def induce_program(
             seen_div_groups.add(grp)
             group_cols = [c for c in columns if c.divergent_group == grp]
             _handle_divergence(idx, group_cols, workflows, result, propose, decisions)
-            # Underdetermined divergence => refuse to emit (handled below).
+            # Underdetermined divergence => refuse to emit (handled below),
+            # unless narration settles it after the loop.
+            divergences[idx] = (group_cols, len(nodes))
             continue
 
         # --- loop ----------------------------------------------------------
@@ -1072,7 +1154,26 @@ def induce_program(
         )
         if node is not None:
             nodes.append(node)
+            optional_nodes[idx] = node
         decisions.append(dec)
+
+    guard_sources: dict[str, GuardSource] = {}
+    if narration and any(narration):
+        _apply_narration(
+            result=result,
+            columns=columns,
+            decisions=decisions,
+            nodes=nodes,
+            optional_nodes=optional_nodes,
+            divergences=divergences,
+            narration=list(narration),
+            n=n,
+            screen_texts=screen_texts,
+            interpreter=interpreter,
+            probe_resolutions=probe_resolutions or {},
+            accepted=accepted_narration or {},
+            guard_sources=guard_sources,
+        )
 
     result.column_decisions = decisions
     result.param_specs = param_specs
@@ -1097,6 +1198,7 @@ def induce_program(
             for key, spec in param_specs.items()
         },
         data_sources=data_sources,
+        guard_sources=guard_sources,
     )
     result.program = program
     result.workflow = workflow
@@ -1760,6 +1862,476 @@ def _maybe_propose(
         return propose.propose(target, kind, context)
     except Exception:  # pragma: no cover - advisory path never breaks induction
         return None
+
+
+# ===========================================================================
+# Narration: a spoken sentence PROPOSES a guard; the recordings, a probe on a
+# test copy, or a person certify it (see compiler.narration_rules).
+# ===========================================================================
+
+
+def _narration_from_traces(traces: list[TraceInput]) -> list[Optional[Any]]:
+    """``narration.json`` of each trace that is a directory (None otherwise).
+
+    A file that does not say it was scrubbed is refused, which here means it
+    is not used.
+    """
+    from openadapt_flow.narration import NarrationRefused, load_narration
+
+    out: list[Optional[Any]] = []
+    for trace in traces:
+        if isinstance(trace, (str, Path)) and Path(trace).is_dir():
+            try:
+                out.append(load_narration(Path(trace)))
+            except (NarrationRefused, ValueError):
+                out.append(None)
+        else:
+            out.append(None)
+    return out
+
+
+def _default_screen_texts(traces: list[TraceInput]):
+    from openadapt_flow.compiler.narration_rules import recording_screen_texts
+
+    dirs = {
+        i: Path(t)
+        for i, t in enumerate(traces)
+        if isinstance(t, (str, Path)) and (Path(t) / "frames").is_dir()
+    }
+    return recording_screen_texts(dirs) if dirs else None
+
+
+def _tok_steps(tok: Any) -> list[Step]:
+    if tok.kind == "single":
+        return [tok.step]
+    return [s for iteration in tok.iterations for s in iteration]
+
+
+def _step_words(step: Step) -> set[str]:
+    from openadapt_flow.compiler.narration_rules import tokens
+
+    parts = [step.intent or "", step.field_label or "", step.param or ""]
+    if step.anchor is not None:
+        parts.append(step.anchor.ocr_text or "")
+    return tokens(" ".join(parts))
+
+
+def _window_ids(columns: list[_Column], lo: int, hi: int, t: int) -> set[str]:
+    """Step ids of trace ``t`` around columns ``lo..hi``: its steps there plus
+    its nearest step before and after. A sentence lined up with one of these
+    was spoken at that point."""
+    ids: set[str] = set()
+    for c in columns[lo : hi + 1]:
+        if t in c.tokens:
+            ids.update(s.id for s in _tok_steps(c.tokens[t]))
+    for c in reversed(columns[:lo]):
+        if t in c.tokens:
+            ids.add(_tok_steps(c.tokens[t])[-1].id)
+            break
+    for c in columns[hi + 1 :]:
+        if t in c.tokens:
+            ids.add(_tok_steps(c.tokens[t])[0].id)
+            break
+    return ids
+
+
+def _next_step_id(columns: list[_Column], hi: int, t: int) -> Optional[str]:
+    for c in columns[hi + 1 :]:
+        if t in c.tokens:
+            return _tok_steps(c.tokens[t])[0].id
+    return None
+
+
+def _param_fields(columns, decisions, n):
+    from openadapt_flow.compiler.narration_rules import FieldValues
+
+    fields = []
+    for dec in decisions:
+        if dec.kind != "param" or dec.param_name is None:
+            continue
+        col = columns[dec.index]
+        fields.append(
+            FieldValues(
+                param=dec.param_name,
+                label=dec.field,
+                values=[
+                    _value(col.tokens[t].step)
+                    if t in col.tokens and col.tokens[t].kind == "single"
+                    else None
+                    for t in range(n)
+                ],
+            )
+        )
+    return fields
+
+
+def _narrated_candidate(columns, lo, hi, narration, fields, descriptors, interpreter):
+    """The first sentence that reads as a rule about this point, or None.
+
+    Sentences lined up at the point come first, then sentences anywhere whose
+    action names the step. With several arms (a divergence) the sentence must
+    be about exactly one of them.
+    """
+    from openadapt_flow.compiler import narration_rules as nr
+
+    ranked = []
+    for t, nar in enumerate(narration):
+        if nar is None:
+            continue
+        window = _window_ids(columns, lo, hi, t)
+        for line in nar.lines:
+            ranked.append((0 if line.step_id in window else 1, t, line.t_start, line))
+    ranked.sort(key=lambda r: r[:3])
+    for rank, t, _, line in ranked:
+        rule = nr.parse_rule(line.text)
+        if rule is None:
+            continue
+        about = [
+            k
+            for k, words in enumerate(descriptors)
+            if nr.is_about(rule, words, in_window=rank == 0)
+        ]
+        if len(about) != 1:
+            continue
+        cand = nr.candidate_from_rule(rule, trace=t, step_id=line.step_id, fields=fields)
+        cand.target_arm = about[0]
+        return cand
+    if interpreter is None or len(descriptors) != 1:
+        return None
+    for rank, t, _, line in ranked:
+        if rank != 0 or nr.parse_rule(line.text) is not None:
+            continue
+        try:
+            data = interpreter.interpret(
+                line.text,
+                {
+                    "fields": [f.param for f in fields],
+                    "step": " ".join(sorted(descriptors[0])),
+                },
+            )
+        except Exception:  # noqa: BLE001 - advisory path never breaks induction
+            data = None
+        if not data:
+            continue
+        cand = nr.candidate_from_model(
+            data,
+            sentence=line.text,
+            trace=t,
+            step_id=line.step_id,
+            fields=fields,
+            source=getattr(interpreter, "source", "narration+model"),
+        )
+        if cand is not None:
+            cand.target_arm = 0
+            return cand
+    return None
+
+
+_HOW = {
+    "recordings_agree": "every recording agrees",
+    "probe": "confirmed on the test copy",
+    "person": "accepted by a person",
+}
+
+
+def _decide_narrated(
+    cand, *, location, rule, expected, screen_step, fields, screen_texts,
+    probe_resolutions, accepted,
+) -> NarratedGuard:
+    from openadapt_flow.compiler.narration_rules import check_against_recordings
+
+    agreement = check_against_recordings(
+        cand.guard,
+        expected,
+        fields=fields,
+        screen_step=screen_step,
+        screen_texts=screen_texts,
+    )
+    certified_by = accepted_by = None
+    if agreement.contradict:
+        status = "contradicted"
+        detail = (
+            "recording(s) "
+            + ", ".join(str(t) for t in agreement.contradict)
+            + " did the opposite of what the sentence says"
+        )
+    elif agreement.all_agree:
+        status, certified_by = "certified", "recordings_agree"
+        detail = f"all {len(agreement.agree)} recordings agree"
+    elif probe_resolutions.get(location) == "narrated":
+        status, certified_by = "certified", "probe"
+        detail = "replaying it on the declared test copy produced every recorded effect"
+    elif accepted.get(location):
+        status, certified_by, accepted_by = "certified", "person", accepted[location]
+        detail = f"accepted by {accepted_by}"
+    else:
+        status = "proposed"
+        detail = (
+            "could not be checked in recording(s) "
+            + ", ".join(str(t) for t in agreement.unknown)
+            if agreement.unknown
+            else "not checked"
+        )
+    trace_params: dict[int, dict[str, str]] = {}
+    cond = cand.condition
+    if cond.kind is PredicateKind.PARAM_EQUALS:
+        f = next(x for x in fields if x.param == cond.param)
+        trace_params = {
+            t: {f.param: v} for t, v in enumerate(f.values) if v is not None
+        }
+    return NarratedGuard(
+        location=location,
+        sentence=cand.sentence,
+        recording=cand.trace,
+        step_id=cand.step_id,
+        guard=cand.guard,
+        rule=rule,
+        source=cand.source,
+        status=status,
+        certified_by=certified_by,
+        accepted_by=accepted_by,
+        agree=agreement.agree,
+        contradict=agreement.contradict,
+        unknown=agreement.unknown,
+        trace_params=trace_params,
+        detail=detail,
+    )
+
+
+def _guard_source(ng: NarratedGuard) -> GuardSource:
+    return GuardSource(
+        sentence=ng.sentence,
+        rule=ng.rule,
+        certified_by=ng.certified_by,  # type: ignore[arg-type]
+        accepted_by=ng.accepted_by,
+        recording=ng.recording,
+        source=ng.source,  # type: ignore[arg-type]
+    )
+
+
+def _flag_on_uncertainty(result, uncertainty_location, ng, proposal) -> None:
+    for u in result.uncertainties:
+        if u.location != uncertainty_location:
+            continue
+        u.proposal = proposal
+        if ng.status == "contradicted":
+            u.detail += (
+                f" Narration suggested {ng.rule!r}, but {ng.detail}, so it is "
+                "not used."
+            )
+            continue
+        u.detail += f" Narration suggests: {ng.rule} ({ng.detail})."
+        u.record_next = (
+            (u.record_next + " ") if u.record_next else ""
+        ) + (
+            f"Or accept the narrated rule: induce --accept-narrated {ng.location}."
+        )
+        if u.question is not None and not any(
+            o.key == "narrated" for o in u.question.options
+        ):
+            u.question.options.append(
+                QuestionOption(
+                    key="narrated",
+                    label=f"Use the narrated rule: {ng.rule}",
+                    effect=OptionEffect.NONE,
+                )
+            )
+
+
+def _divergence_arms(group_cols, n):
+    """The two paths a divergence takes: (steps per arm, traces per arm).
+
+    None unless there are exactly two, each the same steps with the same
+    values in every recording that took it.
+    """
+    arms: dict[tuple, list[tuple[int, list[Step]]]] = {}
+    for t in range(n):
+        steps: list[Step] = []
+        for c in group_cols:
+            tok = c.tokens.get(t)
+            if tok is None:
+                continue
+            if tok.kind != "single":
+                return None
+            steps.append(tok.step)
+        arms.setdefault(tuple(_sig(s) for s in steps), []).append((t, steps))
+    if len(arms) != 2:
+        return None
+    arm_steps, members = [], []
+    for entries in arms.values():
+        first = entries[0][1]
+        for _, steps in entries[1:]:
+            if [_value(s) for s in steps] != [_value(s) for s in first]:
+                return None
+        arm_steps.append(first)
+        members.append([t for t, _ in entries])
+    return arm_steps, members
+
+
+def _branch_node(idx: int, guard: Predicate, arm_steps, target: int) -> _Node:
+    bid = f"branch_div_{idx}"
+    node = _Node(bid)
+    entries: list[Optional[str]] = []
+    for k, steps in enumerate(arm_steps):
+        ids = [f"div{idx}_{k}_{j}" for j in range(len(steps))]
+        for j, step in enumerate(steps):
+            tr = Transition(target=ids[j + 1] if j + 1 < len(ids) else "__PATCH__")
+            node.states[ids[j]] = State(
+                id=ids[j],
+                kind=StateKind.ACTION,
+                step=step.model_copy(deep=True),
+                transitions=[tr],
+            )
+            if j + 1 == len(ids):
+                node.exits.append(tr)
+        entries.append(ids[0] if ids else None)
+    other = 1 - target
+    t_rule = Transition(
+        guard=guard, target=entries[target] or "__PATCH__", label="narrated rule holds"
+    )
+    t_else = Transition(target=entries[other] or "__PATCH__", label="otherwise")
+    for tr, entry in ((t_rule, entries[target]), (t_else, entries[other])):
+        if entry is None:
+            node.exits.append(tr)
+    node.states[bid] = State(id=bid, kind=StateKind.BRANCH, transitions=[t_rule, t_else])
+    return node
+
+
+def _apply_narration(
+    *, result, columns, decisions, nodes, optional_nodes, divergences, narration,
+    n, screen_texts, interpreter, probe_resolutions, accepted, guard_sources,
+) -> None:
+    fields = _param_fields(columns, decisions, n)
+
+    # -- optional steps (present in some recordings, absent in others) ------
+    for idx, node in optional_nodes.items():
+        col = columns[idx]
+        present = sorted(col.tokens)
+        step0 = col.tokens[present[0]].step
+        sid = f"opt_{idx}"
+        if _looks_like_dialog(step0) or probe_resolutions.get(sid) in (
+            "incidental",
+            "conditional",
+        ):
+            continue
+        state = node.states.get(sid)
+        if state is None or state.step is None:
+            continue
+        cand = _narrated_candidate(
+            columns, idx, idx, narration, fields, [_step_words(step0)], interpreter
+        )
+        if cand is None:
+            continue
+        field = _field_key(step0)
+        ng = _decide_narrated(
+            cand,
+            location=sid,
+            rule=cand.describe(f"run {step0.intent!r}"),
+            expected={t: t in col.tokens for t in range(n)},
+            screen_step={
+                t: col.tokens[t].step.id if t in col.tokens else _next_step_id(columns, idx, t)
+                for t in range(n)
+            },
+            fields=fields,
+            screen_texts=screen_texts,
+            probe_resolutions=probe_resolutions,
+            accepted=accepted,
+        )
+        result.narrated_guards.append(ng)
+        if ng.status == "certified":
+            state.step.guard = Guard(predicate=cand.guard, on_unmet="skip")
+            result.uncertainties = [u for u in result.uncertainties if u.location != sid]
+            result.inferred = [
+                line
+                for line in result.inferred
+                if not line.startswith(f"optional step '{field}' at column {idx} ")
+            ]
+            result.inferred.append(
+                f"guard at {sid}: {ng.rule} -- suggested by narration, "
+                f"certified: {_HOW[ng.certified_by]}"
+            )
+            guard_sources[sid] = _guard_source(ng)
+            for dec in decisions:
+                if dec.index == idx:
+                    dec.kind = "branch"
+                    dec.note = f"narrated guard on '{field}' ({ng.certified_by})"
+            continue
+        proposal = Proposal(
+            target=sid,
+            kind="guard",
+            content=f"{ng.rule} (narration: {ng.sentence!r})",
+            source=ng.source,
+        )
+        result.proposed.append(proposal)
+        _flag_on_uncertainty(result, sid, ng, proposal)
+
+    # -- divergences (recordings took different paths at the same point) ----
+    for idx, (group_cols, pos) in sorted(
+        divergences.items(), key=lambda kv: -kv[1][1]
+    ):
+        where = f"column {idx}"
+        location = f"divergence_{idx}"
+        if not any(
+            u.location == where and u.kind == "ambiguous_branch"
+            for u in result.uncertainties
+        ):
+            continue
+        arms = _divergence_arms(group_cols, n)
+        if arms is None:
+            continue
+        arm_steps, members = arms
+        indices = [i for i, c in enumerate(columns) if any(c is g for g in group_cols)]
+        lo, hi = min(indices), max(indices)
+        descriptors = [
+            set().union(*(_step_words(s) for s in steps)) if steps else set()
+            for steps in arm_steps
+        ]
+        cand = _narrated_candidate(
+            columns, lo, hi, narration, fields, descriptors, interpreter
+        )
+        if cand is None:
+            continue
+        target = cand.target_arm or 0
+        label = " then ".join(s.intent for s in arm_steps[target]) or "empty"
+        screen_step = {}
+        for t in members[0] + members[1]:
+            first = next(
+                (c.tokens[t].step.id for c in group_cols if t in c.tokens), None
+            )
+            screen_step[t] = first or _next_step_id(columns, hi, t)
+        ng = _decide_narrated(
+            cand,
+            location=location,
+            rule=cand.describe(f"take the path {label!r}"),
+            expected={t: t in members[target] for t in members[0] + members[1]},
+            screen_step=screen_step,
+            fields=fields,
+            screen_texts=screen_texts,
+            probe_resolutions=probe_resolutions,
+            accepted=accepted,
+        )
+        result.narrated_guards.append(ng)
+        if ng.status == "certified":
+            nodes.insert(pos, _branch_node(idx, cand.guard, arm_steps, target))
+            result.uncertainties = [u for u in result.uncertainties if u.location != where]
+            result.inferred.append(
+                f"branch at {location}: {ng.rule} -- suggested by narration, "
+                f"certified: {_HOW[ng.certified_by]}"
+            )
+            guard_sources[f"branch_div_{idx}"] = _guard_source(ng)
+            for dec in decisions:
+                if dec.index == idx:
+                    dec.kind = "branch"
+                    dec.note = f"narrated branch ({ng.certified_by})"
+            continue
+        proposal = Proposal(
+            target=location,
+            kind="guard",
+            content=f"{ng.rule} (narration: {ng.sentence!r})",
+            source=ng.source,
+        )
+        result.proposed.append(proposal)
+        _flag_on_uncertainty(result, where, ng, proposal)
 
 
 def _wire(nodes: list[_Node]):

@@ -760,6 +760,27 @@ class Guard(BaseModel):
 Predicate.model_rebuild()  # resolve the self-referential `operands`
 
 
+class GuardSource(BaseModel):
+    """Why a guard is in the program, when spoken narration suggested it.
+
+    Written by induction (``compiler.narration_rules``) for a guard that
+    started as a narrated proposal and was then certified. The sentence is
+    scrubbed narration. It explains the guard to a reviewer; the runtime never
+    reads it.
+    """
+
+    sentence: str = Field(description="The scrubbed sentence that suggested it")
+    rule: str = Field(default="", description="The guard in plain words")
+    certified_by: Literal["recordings_agree", "probe", "person"]
+    accepted_by: Optional[str] = Field(
+        default=None, description="Who accepted it, when a person certified it"
+    )
+    recording: Optional[int] = Field(
+        default=None, description="Index of the recording the sentence came from"
+    )
+    source: Literal["narration", "narration+model"] = "narration"
+
+
 def predicate_contract_sha256(predicate: Optional[Predicate]) -> str:
     """Return the canonical contract digest for one program transition guard."""
 
@@ -2416,6 +2437,11 @@ class Workflow(BaseModel):
     # review, canary or admission pins. None for every other bundle, and
     # omitted from its serialized bytes.
     origin: Optional[Literal["agent_run"]] = None
+    # Narration that suggested a certified guard, keyed by the program state
+    # (or step) id the guard sits on. Explanation only: the runtime never reads
+    # it. Empty for every bundle without narrated guards, and then omitted
+    # from its serialized bytes.
+    guard_sources: dict[str, GuardSource] = Field(default_factory=dict)
     # -- schema v2 integrity + provenance manifest --------------------------
     # Sealed on ``save`` (per-asset hashes, a whole-bundle content digest, the
     # compiler version, and -- for a certified bundle -- the certifying policy +
@@ -2451,6 +2477,8 @@ class Workflow(BaseModel):
             data.pop("surfaces", None)
         if self.origin is None:
             data.pop("origin", None)
+        if not self.guard_sources:
+            data.pop("guard_sources", None)
         return data
 
     @model_validator(mode="after")
