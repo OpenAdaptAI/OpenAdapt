@@ -14,6 +14,7 @@ This module imports nothing heavy itself.
 
 from __future__ import annotations
 
+import atexit
 import threading
 
 _started = False
@@ -80,6 +81,16 @@ def _touch_driver() -> None:
         pass
 
 
+# onnxruntime starts native threads while it loads. If the interpreter exits
+# during that load, the C++ runtime aborts the process ("terminate called
+# without an active exception", exit -6), so exit waits up to this long for it.
+_EXIT_WAIT_S = 30.0
+
+
+def _wait_for_load(thread: threading.Thread) -> None:
+    thread.join(timeout=_EXIT_WAIT_S)
+
+
 def start() -> None:
     """Start the background work once per process and return at once."""
     global _started
@@ -88,4 +99,6 @@ def start() -> None:
             return
         _started = True
     threading.Thread(target=_touch_driver, name="driver-prewarm", daemon=True).start()
-    threading.Thread(target=_load, name="ocr-prewarm", daemon=True).start()
+    ocr = threading.Thread(target=_load, name="ocr-prewarm", daemon=True)
+    ocr.start()
+    atexit.register(_wait_for_load, ocr)

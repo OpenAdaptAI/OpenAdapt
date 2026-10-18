@@ -154,4 +154,4 @@ def test_the_demo_proof_page_reads_this_pair(break_it_path: TutorialResult) -> N
     assert len(evidence.choices) == 3
     page = demo_proof.render_demo_page(evidence)
     assert "identical, pixel for pixel" in page
-    assert "Stopped: the screen said saved, the record says no" in page
+    assert "Stopped: the note never reached the record" in page

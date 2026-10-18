@@ -158,9 +158,10 @@ audit at review time: `_deliver_backend_call`,
 
 `_check_postconditions`, `_poll_postconditions`, `_postcondition_passes`,
 `_postcondition_template`, `_expected_state_text`,
-`_describe_postcondition`, `_drift_oracle_rescue` (self-attrs {`backend`,
-`poll_interval_s`, `state_verifier`, `vision`}; external calls
-`_asset_bytes`, `_structural_changed`).
+`_describe_postcondition`, `_postcondition_confirms_a_write`, `_drift_oracle_rescue`
+(self-attrs {`backend`, `poll_interval_s`, `state_verifier`, `vision`};
+external calls `_asset_bytes`, `_structural_changed`, and
+`run_gate.is_consequential`).
 
 ### Later (needs design, not just relocation)
 

@@ -732,8 +732,8 @@ def _run_break_it(
 
     say("")
     say("[break-it] Rerun the SAME certified bundle, but this time the backend")
-    say(f"[break-it] lies: fault mode {TUTORIAL_BREAK_FAULT!r} rejects the write")
-    say("[break-it] AFTER the app has painted its success banner.")
+    say(f"[break-it] runs fault mode {TUTORIAL_BREAK_FAULT!r}: it rejects the write,")
+    say("[break-it] so the save never reaches the record.")
     base_url, _db, stop = serve()
     try:
         report = run_tutorial_workflow(
