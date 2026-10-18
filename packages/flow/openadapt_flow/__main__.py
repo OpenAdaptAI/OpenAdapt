@@ -7563,6 +7563,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     _register_local_seal(sub)
 
+    from openadapt_flow.cli_no_outbound import register as _register_no_outbound
+
+    _register_no_outbound(sub)
+
     p = sub.add_parser(
         "verify-run",
         help=(

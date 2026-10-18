@@ -9,9 +9,14 @@ is on this machine:
 * loopback addresses (``127.0.0.0/8``, ``::1``) and ``localhost``;
 * Unix domain sockets;
 * IP literals or CIDR ranges named in ``OPENADAPT_NO_OUTBOUND_ALLOW``
-  (comma-separated). Only private, loopback or link-local ranges are
-  accepted, and never host names, so allowing a LAN system of record never
-  needs a DNS query.
+  (comma-separated), or listed in the JSON file named by
+  ``OPENADAPT_NO_OUTBOUND_ALLOW_FILE`` (see :mod:`no_outbound_allow`, which
+  derives that file from the remote-desktop session profile). Only private,
+  loopback or link-local ranges are accepted, and never host names, so
+  allowing a LAN host never needs a DNS query.
+
+Other machines on the LAN are refused like any outside host. Nothing is
+allowed by default except this machine.
 
 Name lookups for any other host are refused too, because the DNS query
 itself would carry the host name off the machine.
@@ -46,6 +51,7 @@ from typing import Any, Mapping, Optional, Sequence, Union
 ENV_MODE = "OPENADAPT_NO_OUTBOUND"
 ENV_ALLOW = "OPENADAPT_NO_OUTBOUND_ALLOW"
 ENV_LOG = "OPENADAPT_NO_OUTBOUND_LOG"
+ENV_ALLOW_FILE = "OPENADAPT_NO_OUTBOUND_ALLOW_FILE"
 
 _TRUE = {"1", "true", "on", "yes", "strict"}
 _LOCAL_NAMES = {"localhost", "localhost.", "ip6-localhost"}
@@ -102,6 +108,24 @@ def parse_allow(value: Optional[str]) -> tuple[Network, ...]:
                 f"{ENV_ALLOW} refuses public range {item!r}: it would leave the site"
             )
         nets.append(net)
+    return tuple(nets)
+
+
+def allow_from_env(env: Optional[Mapping[str, str]] = None) -> tuple[Network, ...]:
+    """Every allowed range: ``OPENADAPT_NO_OUTBOUND_ALLOW`` plus the allow file.
+
+    Raises ``ValueError`` when either is invalid, or when the allow file is
+    named but missing.
+    """
+    env = os.environ if env is None else env
+    nets = list(parse_allow(env.get(ENV_ALLOW)))
+    path = env.get(ENV_ALLOW_FILE)
+    if path:
+        from pathlib import Path
+
+        from openadapt_flow.no_outbound_allow import AllowList
+
+        nets.extend(AllowList.load(Path(path)).networks())
     return tuple(nets)
 
 
@@ -202,12 +226,13 @@ def _hook(event: str, args: tuple) -> None:
 def enforce(env: Optional[Mapping[str, str]] = None) -> None:
     """Install the no-outbound audit hook in this process. Idempotent.
 
-    Raises ``ValueError`` if ``OPENADAPT_NO_OUTBOUND_ALLOW`` is invalid, so a
-    mistyped allow list stops startup instead of widening the mode.
+    Raises ``ValueError`` if ``OPENADAPT_NO_OUTBOUND_ALLOW`` or the allow file
+    is invalid, so a mistyped allow list stops startup instead of widening the
+    mode.
     """
     global _installed, _allow, _log_path
     env = os.environ if env is None else env
-    allow = parse_allow(env.get(ENV_ALLOW))
+    allow = allow_from_env(env)
     with _lock:
         if _installed:
             return
