@@ -1868,6 +1868,14 @@
       "sha256": "831387f3481c7ea2d064b713361cc7650e46d30caf7ab54f72608e011676973b"
     },
     {
+      "path": "examples/legacy_records/answers.demo.json",
+      "sha256": "ad7454bb8842613cd93bce930a640ca1f5033b2a499b8aec3beb9d38c902de04"
+    },
+    {
+      "path": "examples/legacy_records/answers.ledger.demo.json",
+      "sha256": "7224b959de2dc681862bd6c28781360680a9b9a809efb2f23da6965491424bf1"
+    },
+    {
       "path": "openadapt_flow/console/static/console.css",
       "sha256": "24c23e7bc857eec761781388762e3d97d2506c88ea801b3f644f129064ad0f64"
     },
