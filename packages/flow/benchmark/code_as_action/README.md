@@ -1,5 +1,11 @@
 # Code as action against the screenshot loop
 
+> **Quotable figures come from the scoreboard** (`benchmark/scoreboard`, arm 7,
+> [#1307](https://github.com/OpenAdaptAI/OpenAdapt/pull/1307)), built by
+> `python -m scoreboard.build` from committed rows. This folder is the earlier,
+> exploratory measurement made before the scoreboard existed. It used its own
+> runner and is kept as raw data.
+
 Measured 2026-10-18 with `claude-sonnet-5-5` at effort `medium`, on the
 operator's own key, in the compile-agent harness. Every arm runs through the
 same harness, save gate, JIT capture and compiler; only what the agent sees

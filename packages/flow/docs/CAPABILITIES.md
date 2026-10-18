@@ -115,8 +115,8 @@ time cost of structure-first observation against a screenshot every turn.
 With `--vision code` the agent acts through code: one `run` tool that takes a
 script (query the DOM or accessibility tree, click, fill and select by role
 and name, read back, a read-only sandboxed shell), screenshots only on
-request. On the OpenEMR referral it was correct 8 of 8 at $0.055 a run,
-against 6 of 8 at $0.33 for the screenshot loop. See
+request. Scoreboard arm 7: MockMed 5 of 5 correct at $0.0095 a run, the
+OpenEMR referral 4 of 5 correct (the fifth a safe stop) at $0.041. See
 [`CODE_AS_ACTION.md`](CODE_AS_ACTION.md).
 
 ## Answer a halt from a phone
