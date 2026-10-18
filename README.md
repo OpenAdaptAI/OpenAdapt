@@ -225,7 +225,8 @@ repository; engine changes go in [`packages/flow/`](https://github.com/OpenAdapt
 [Contribution guide](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CONTRIBUTING.md) ·
 [Issues](https://github.com/OpenAdaptAI/OpenAdapt/issues) ·
 [Discussions](https://github.com/OpenAdaptAI/OpenAdapt/discussions) ·
-[Report a vulnerability](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/SECURITY.md)
+[Report a vulnerability](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/SECURITY.md) ·
+[Code signing policy](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CODE_SIGNING_POLICY.md)
 
 Maintained by [OpenAdaptAI](https://github.com/OpenAdaptAI) under the
 [MIT License](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE).
