@@ -67,7 +67,7 @@ def test_allow_list_takes_private_ip_ranges_only():
         "192.168.1.0/24",
     ]
     with pytest.raises(ValueError):
-        parse_allow("emr.example.org")  # a host name would need DNS
+        parse_allow("records.example.org")  # a host name would need DNS
     with pytest.raises(ValueError):
         parse_allow("8.8.8.8")  # public
     with pytest.raises(ValueError):
@@ -217,7 +217,7 @@ def test_bad_allow_list_stops_startup(tmp_path):
         no_outbound.enforce_from_env()
         """,
         tmp_path,
-        OPENADAPT_NO_OUTBOUND_ALLOW="emr.example.org",
+        OPENADAPT_NO_OUTBOUND_ALLOW="records.example.org",
     )
     assert proc.returncode != 0
     assert "OPENADAPT_NO_OUTBOUND_ALLOW" in proc.stderr
