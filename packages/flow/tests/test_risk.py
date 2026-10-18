@@ -713,7 +713,11 @@ def _drafted(step: Step):
 
 @pytest.mark.parametrize(
     "kind",
-    [kind for kind in ActionKind if kind not in {ActionKind.WAIT, ActionKind.SCROLL}],
+    [
+        kind
+        for kind in ActionKind
+        if kind not in {ActionKind.WAIT, ActionKind.SCROLL, ActionKind.SWITCH_SURFACE}
+    ],
 )
 @pytest.mark.parametrize("label", [None, "日", "日日", "OK", "Close", "Save"])
 @pytest.mark.parametrize("operator_override", [False, True])

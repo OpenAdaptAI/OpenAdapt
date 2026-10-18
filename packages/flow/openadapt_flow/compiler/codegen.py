@@ -113,6 +113,8 @@ def _step_call(step: Step) -> str:
             f"    record[{step.read.field.name!r}] = "
             f"flow.read({step.read.field.kind!r}, region={step.read.region!r})"
         )
+    if step.action is ActionKind.SWITCH_SURFACE:
+        return f"    flow.switch_surface({step.surface!r})"
     raise ValueError(f"unknown action {step.action!r}")
 
 

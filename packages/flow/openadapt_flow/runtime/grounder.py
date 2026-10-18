@@ -498,6 +498,54 @@ _PROMPT = (
 )
 
 
+class _OutboundScreen:
+    """Scrub a grounding request before it leaves the machine.
+
+    Resolved once when a grounder is built, so a missing privacy extra refuses
+    the grounder before any run starts. A loopback endpoint (a self-hosted model
+    on this machine) needs no scrubbing. Elsewhere the screenshot is redacted
+    and the intent and label are scrubbed, unless the operator set
+    ``OPENADAPT_FLOW_SEND_UNSCRUBBED`` (recorded in the local ledger).
+    """
+
+    def __init__(self, endpoint: Optional[str]) -> None:
+        from openadapt_flow import privacy
+
+        self.scrubber: Any = None
+        if endpoint is not None and _is_loopback_url(endpoint):
+            return
+        purpose = "screenshots for model grounding"
+        if privacy.outbound_opt_out(purpose) is not None:
+            return
+        self.scrubber = privacy.require_outbound_scrubber(purpose)
+
+    def prepare(
+        self, screen_png: bytes, intent: str, ocr_text: Optional[str]
+    ) -> tuple[bytes, str, Optional[str]]:
+        if self.scrubber is None:
+            return screen_png, intent, ocr_text
+        from openadapt_flow import privacy
+
+        return (
+            privacy.scrub_outbound_image(screen_png, self.scrubber),
+            privacy.scrub_outbound_text(intent, self.scrubber) or "",
+            privacy.scrub_outbound_text(ocr_text, self.scrubber),
+        )
+
+
+def _is_loopback_url(url: str) -> bool:
+    import ipaddress
+    from urllib.parse import urlsplit
+
+    host = (urlsplit(url).hostname or "").strip("[]").lower()
+    if host == "localhost" or host.endswith(".localhost"):
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 class AnthropicGrounder:
     """Grounder backed by the Anthropic API (vision-capable Claude model).
 
@@ -530,6 +578,7 @@ class AnthropicGrounder:
             ) from exc
         self._model = model
         self._client = client if client is not None else anthropic.Anthropic()
+        self._outbound = _OutboundScreen(None)
 
     def locate(
         self,
@@ -549,6 +598,12 @@ class AnthropicGrounder:
             if the model reports the target is not visible or replies in an
             unparseable format.
         """
+        try:
+            screen_png, intent, ocr_text = self._outbound.prepare(
+                screen_png, intent, ocr_text
+            )
+        except Exception:  # noqa: BLE001 - a failed scrub sends nothing
+            return None
         image_b64 = base64.standard_b64encode(screen_png).decode("utf-8")
         response = self._client.messages.create(
             model=self._model,
@@ -693,6 +748,7 @@ class OpenAICompatibleGrounder:
         self._timeout = timeout
         self._headers = {"Authorization": f"Bearer {api_key}"} if api_key else {}
         self._client = client
+        self._outbound = _OutboundScreen(self._url)
 
     def locate(
         self,
@@ -708,6 +764,9 @@ class OpenAICompatibleGrounder:
         answer. Never raises.
         """
         try:
+            screen_png, intent, ocr_text = self._outbound.prepare(
+                screen_png, intent, ocr_text
+            )
             image_b64 = base64.standard_b64encode(screen_png).decode("utf-8")
             body = {
                 "model": self._model,

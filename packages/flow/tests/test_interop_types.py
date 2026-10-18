@@ -48,6 +48,7 @@ def test_action_kind_map_covers_losslessly_shared_values() -> None:
     assert set(interop.ACTION_KIND_TO_ACTION_TYPE) == set(ir.ActionKind) - {
         ir.ActionKind.SELECT_OPTION,
         ir.ActionKind.READ,
+        ir.ActionKind.SWITCH_SURFACE,
     }
     assert interop.ACTION_KIND_TO_ACTION_TYPE == expected
 
@@ -94,6 +95,17 @@ def test_read_refuses_lossy_shared_type_conversion() -> None:
         ),
     )
     with pytest.raises(ValueError, match="not representable"):
+        interop.step_to_action(step)
+
+
+def test_switch_surface_refuses_shared_type_conversion() -> None:
+    step = ir.Step(
+        id="switch",
+        intent="switch to the approval window",
+        action=ir.ActionKind.SWITCH_SURFACE,
+        surface="approval",
+    )
+    with pytest.raises(ValueError, match="flow-only control step"):
         interop.step_to_action(step)
 
 
