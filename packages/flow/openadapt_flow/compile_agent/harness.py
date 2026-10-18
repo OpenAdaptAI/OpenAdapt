@@ -313,6 +313,11 @@ class Harness:
                 focused = _observe.focused_element(self.page) or {}
                 if op.key == "Space" and focused.get("editable"):
                     continue
+                # Enter on a native drop-down picks an option; it does not
+                # submit the form. (A text area stays gated: chat-style
+                # boxes send on Enter.)
+                if op.key == "Enter" and focused.get("tag") == "select":
+                    continue
                 label = str(focused.get("name") or "the focused element")
                 return (f"{op.key} on {label}", focused.get("scope"))
         return None

@@ -1109,7 +1109,11 @@ class CodeActionTool:
             hint = CommitHint(
                 name=str(focus.get("name") or "the focused element"),
                 scope=str(focus.get("scope") or ""),
-                key=key if key in ("Enter", "Space") else None,
+                key=(
+                    key
+                    if key in ("Enter", "Space") and focus.get("tag") != "select"
+                    else None
+                ),
             )
             event = self._event_index()
             self._gates_before = len(self.harness.gate_log)

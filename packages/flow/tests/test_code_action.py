@@ -329,6 +329,29 @@ def test_without_a_page_an_unhinted_click_is_gated(tmp_path: Path) -> None:
         )
 
 
+def test_enter_on_a_native_drop_down_is_not_a_save(tmp_path: Path) -> None:
+    from openadapt_flow.compile_agent import observe
+
+    class Page:
+        url = "http://app.test/"
+
+        def evaluate(self, script: str, arg: Any = None) -> Any:
+            return {"tag": "select", "name": "State", "scope": "", "editable": False}
+
+    computer = SimpleNamespace(
+        dialect="generic",
+        page=Page(),
+        pointer=None,
+        executed=[],
+        screenshot=lambda: b"png",
+    )
+    computer.execute = lambda native: computer.executed.append(native)
+    harness = Harness(computer, SaveGate(["MRN P1"]))  # type: ignore[arg-type]
+    harness.act({"kind": "press", "key": "Enter"})
+    assert harness.stats.gate_checks == 0 and computer.executed
+    assert observe.focused_element(Page())["tag"] == "select"
+
+
 def test_fill_refuses_a_field_that_holds_text(tmp_path: Path) -> None:
     tool, computer, _ = _tool(tmp_path)
     tool.run('click role=button name=Open near="Jane Sample"')
