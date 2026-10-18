@@ -113,11 +113,15 @@ _ROLE_ALIASES = {
 }
 
 _MAX_WAIT_MS = 2000
+#: Roles a click only focuses or opens: it commits nothing by itself.
+_FIELD_ROLES = ("textbox", "searchbox", "spinbutton", "combobox", "listbox")
 _MAX_LINES = 40
 
 
 class ScriptError(ValueError):
-    """A line could not run. Nothing in it was performed; the agent sees why."""
+    """A line could not run; the agent sees why. Nothing in it was performed,
+    unless the message says what was (a list opened, a scroll sent), and any
+    action that was performed is in the trace."""
 
 
 class LeftTheApp(RuntimeError):
@@ -171,6 +175,8 @@ class Element:
     automation_id: Optional[str] = None
     #: A desktop tree node the authoring session remembers.
     node_id: Optional[str] = None
+    #: A drop-down whose change submits its form (an ``onchange`` handler).
+    submits: bool = False
 
     def identity(self) -> dict[str, Any]:
         out: dict[str, Any] = {"role": self.role, "name": self.name}
@@ -298,6 +304,8 @@ _DOM_JS = (
         scopeText.set(scope, (clean(scope.innerText) + ' ' + values.join(' ')).slice(0, 6000));
       }
       out.push({kind: 'control', tag: tag, role: roleOf(el), name: nameOf(el),
+        submits: !!(el.getAttribute('onchange') ||
+          (el.form && el.form.getAttribute('onchange'))),
         value: value, options: options,
         focused: document.activeElement === el,
         checked: !!el.checked || el.getAttribute('aria-checked') === 'true' ||
@@ -436,6 +444,7 @@ class DomSurface:
                         checked=bool(item.get("checked")),
                         frame=index,
                         source="dom",
+                        submits=bool(item.get("submits")),
                     )
                     elements.append(element)
                     item["ref"] = element.ref
@@ -862,7 +871,13 @@ class CodeActionTool:
                 text, image = self._line(line)
             except (ScriptError, ShellRefused, UnsupportedAction, LookupError) as exc:
                 self.trace.errors += 1
-                chunks.append(f"$ {line}\nerror: {exc}")
+                chunks.append(f"$ {line}\nerror: {self._out(str(exc))}")
+                if self.harness.stats.gate_checks > gates:
+                    committed = True
+                    chunks.append(
+                        "(a write may have been committed by this line; read the "
+                        "screen to check the result)"
+                    )
                 if number < len(lines):
                     chunks.append(f"(stopped; {len(lines) - number} lines not run)")
                 break
@@ -916,7 +931,7 @@ class CodeActionTool:
             png = self.harness.screenshot("requested")
             return "(screenshot attached)", png
         if command == "wait":
-            ms = min(max(int(named.get("ms", "500") or 0), 0), _MAX_WAIT_MS)
+            ms = min(max(_number(named, "ms", 500), 0), _MAX_WAIT_MS)
             time.sleep(ms / 1000)
             return f"waited {ms} ms", None
         if command == "read":
@@ -985,7 +1000,7 @@ class CodeActionTool:
         grep = named.get("grep")
         if grep:
             lines = [ln for ln in lines if grep.lower() in ln.lower()]
-        limit = int(named.get("max", "0") or 0)
+        limit = _number(named, "max", 0)
         cut = ""
         if limit and len(lines) > limit:
             cut = f"\n({len(lines) - limit} more lines; use grep= or max=)"
@@ -1124,14 +1139,21 @@ class CodeActionTool:
                 raise ScriptError("press needs one key, such as Enter or Tab")
             key = positional[0]
             focus = self.surface.focused() or {}
-            hint = CommitHint(
-                name=str(focus.get("name") or "the focused element"),
-                scope=str(focus.get("scope") or ""),
-                key=(
-                    key
-                    if key in ("Enter", "Space") and focus.get("tag") != "select"
-                    else None
-                ),
+            # No reading of the focus (a desktop or pixel surface): no hint,
+            # so the harness gates Enter and Space.
+            hint = (
+                None
+                if not focus
+                else CommitHint(
+                    name=str(focus.get("name") or "the focused element"),
+                    scope=str(focus.get("scope") or ""),
+                    key=(
+                        key
+                        if key in ("Enter", "Space")
+                        and (focus.get("tag") != "select" or focus.get("submits"))
+                        else None
+                    ),
+                )
             )
             event = self._event_index()
             self._gates_before = len(self.harness.gate_log)
@@ -1147,7 +1169,7 @@ class CodeActionTool:
         hint = CommitHint(
             name=element.name,
             scope=element.scope or element.context,
-            editable=element.role in ("textbox", "searchbox", "spinbutton"),
+            editable=element.role in _FIELD_ROLES,
         )
         events: list[int] = []
         if command == "click":
@@ -1186,7 +1208,19 @@ class CodeActionTool:
         # select
         if "option" not in named:
             raise ScriptError('select needs option="..."')
+        if element.tag != "select" and element.role not in ("combobox", "listbox"):
+            raise ScriptError(
+                f"@{element.ref} is a {element.role}, not a list or drop-down; "
+                "use click"
+            )
         wanted = named["option"]
+        # A drop-down whose change submits its form is gated like a save.
+        list_hint = CommitHint(
+            name=element.name,
+            scope=element.scope or element.context,
+            editable=not element.submits,
+            commits=element.submits,
+        )
         if element.tag == "select":
             options = {_norm(o): o for o in element.options}
             option = options.get(_norm(wanted))
@@ -1196,9 +1230,7 @@ class CodeActionTool:
                     + ", ".join(f'"{o}"' for o in element.options[:20])
                 )
             events.append(self._event_index())
-            recorded = self._click(
-                element, CommitHint(name=element.name, editable=True)
-            )
+            recorded = self._click(element, list_hint)
             events.append(self._event_index())
             self._do({"kind": "type", "text": option}, None)
             events.append(self._event_index())
@@ -1220,7 +1252,7 @@ class CodeActionTool:
             return out
         # A custom list: open it, then click the option by name.
         events.append(self._event_index())
-        recorded = self._click(element, CommitHint(name=element.name, editable=True))
+        recorded = self._click(element, list_hint)
         self._read()
         options = [
             e
@@ -1229,9 +1261,12 @@ class CodeActionTool:
             and _norm(e.name) == _norm(wanted)
         ]
         if len(options) != 1:
+            step = {"action": "click", "element": element.identity()}
+            out = self._finish_step(step, recorded, events, line)
             raise ScriptError(
-                f"opened @{element.ref}, but {len(options)} options are named "
-                f"{wanted!r}; run find role=option to see them"
+                out + f"\nopened @{element.ref} (the list is open), but "
+                f"{len(options)} options are named {wanted!r}; run find "
+                "role=option to see them"
             )
         events.append(self._event_index())
         self._click(options[0], CommitHint(name=options[0].name, scope=""))
@@ -1249,7 +1284,7 @@ class CodeActionTool:
         where = (positional[0] if positional else "down").lower()
         if where not in ("down", "up"):
             raise ScriptError("scroll down or scroll up, with px=N (default 500)")
-        px = min(max(int(named.get("px", "500") or 0), 1), 2000)
+        px = min(max(_number(named, "px", 500), 1), 2000)
         dy = px if where == "down" else -px
         if self.harness.computer.pointer is None:
             raise ScriptError(
@@ -1292,7 +1327,8 @@ class CodeActionTool:
             getattr(self.harness.computer, "session", None), "_recorder", None
         )
         count = getattr(recorder, "event_count", None)
-        return int(count) if count is not None else len(self.trace.steps)
+        # No recorder (a test computer): no event index to match.
+        return int(count) if count is not None else -1
 
     def _recorded_event(self, index: int) -> Optional[dict[str, Any]]:
         """Line ``index`` of the recording's events.jsonl, or None."""
@@ -1401,6 +1437,16 @@ class CodeActionTool:
         return self._out(text + header)
 
     _gates_before: int = 0
+
+
+def _number(named: Mapping[str, str], key: str, default: int) -> int:
+    raw = named.get(key)
+    if raw is None or raw == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        raise ScriptError(f"{key}= needs a whole number, not {raw!r}") from None
 
 
 def _describe(named: Mapping[str, str]) -> str:

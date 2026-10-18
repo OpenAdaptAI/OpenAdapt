@@ -156,20 +156,26 @@ Nothing here loosens what run 1 may do.
   harness's right-record check and hold before it is performed
   ([COMPILE_AGENT.md](COMPILE_AGENT.md)). The tool passes the harness what it
   resolved (`CommitHint`: the control's name and the text and field values
-  around it). A hint can add a gate, never remove one. On a surface with no
-  page, a click the tool did not resolve is gated and refused.
+  around it). On the web a hint can add a gate, never remove one. On a
+  surface with no page, the tool's resolved element is the only reading: a
+  click it did not resolve is gated and refused, and Enter and Space are
+  always gated. A drop-down whose change submits its form (an `onchange`
+  handler) is gated like a save.
 - **The customer's key.** The agent calls the model on the key the operator
   supplies; OpenAdapt holds none. The spend cap (`max_cost_usd`) holds as for
   any `ClaudeAgent`.
 - **The shell.** `sh` runs only text tools (`cat`, `grep`, `head`, `wc`,
-  `sort`, ...) from `/usr/bin` and `/bin`, joined with `|`. No `;`, `&`,
-  subshells or input redirection; output redirection only to a plain file name
-  in the working directory; no argument may leave that directory; an empty
-  environment; 5 seconds per command. On macOS each command also runs under
-  `sandbox-exec` with network access denied and writes allowed only in the
-  working directory; on Linux under `unshare --net` when available. None of
-  the allowed tools can open a connection, so the agent reaches nothing but
-  the app, through the recorded actions.
+  `sort`, ...) from `/usr/bin` and `/bin`, each with a short list of allowed
+  flags and no long options, so no flag can name a file, write one or run a
+  program (`sort --compress-program`, `grep -f`, `sort -o` are refused).
+  Commands join with `|` only; no `;`, `&`, subshells or input redirection;
+  output redirection only to a plain file name in the working directory; no
+  argument may leave that directory; an empty environment; 5 seconds per
+  command, in its own process group that is killed whole. On macOS each
+  command also runs under `sandbox-exec`: no network, no program but the one
+  named, reads only in the working directory and system directories, writes
+  only in the working directory. On Linux it runs under `unshare --net` when
+  available.
 - **The app's origin.** On the web, an action that leaves the app's origin
   ends the run.
 - **Privacy.** Everything the tool returns is scrubbed with the same scrubber

@@ -156,6 +156,9 @@ function oaDescribe(c, interactive, scopeSel) {
             (c.tagName === 'INPUT' &&
              !/^(button|submit|reset|checkbox|radio|image|file|range|color)$/i
                .test(c.type)),
+          // A drop-down whose change submits the form: Enter on it is a save.
+          submits: !!(c.getAttribute('onchange') ||
+            (c.form && c.form.getAttribute('onchange'))),
           context: oaRow(c), scope: String(scope.innerText || '')};
 }
 """

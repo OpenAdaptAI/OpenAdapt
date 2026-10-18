@@ -68,6 +68,12 @@ def test_the_shell_reads_files_in_its_directory(sandbox: Sandbox) -> None:
         "ls > ../x",
         "ls > a > b",
         "sort -o out.txt page.txt",
+        "sort -uo/tmp/x page.txt",
+        "sort --compress=sh -S 64K -T . page.txt",
+        "grep -f/etc/hosts page.txt",
+        "grep --file=/etc/hosts page.txt",
+        "diff --from-file=/etc/hosts page.txt",
+        "head -5 page.txt",
         "tail -f page.txt",
         "ls |",
     ],
@@ -77,14 +83,41 @@ def test_the_shell_refuses_anything_else(sandbox: Sandbox, command: str) -> None
         sandbox.run(command)
 
 
+def test_a_quoted_operator_is_a_word(sandbox: Sandbox) -> None:
+    assert sandbox.run("cut -d '|' -f 2 page.txt").output == " MRN P1\n MRN P2\n"
+    assert sandbox.run("echo 'a;b'").output == "a;b\n"
+
+
 def test_the_shell_has_no_environment(sandbox: Sandbox) -> None:
     # printenv is not allowed; echo of a variable is not expanded (no shell).
     assert sandbox.run("echo $HOME").output.strip() == "$HOME"
 
 
 @pytest.mark.skipif(sys.platform != "darwin", reason="sandbox-exec is macOS")
-def test_on_macos_each_command_runs_under_sandbox_exec(sandbox: Sandbox) -> None:
+def test_on_macos_the_profile_denies_reads_and_programs(sandbox: Sandbox) -> None:
+    import subprocess
+
     assert sandbox.isolation == "sandbox-exec"
+    # Even a command the parser let through can't read outside the directory
+    # or start another program.
+    outside = subprocess.run(
+        sandbox._wrap(["/bin/cat", "/etc/hosts"]),
+        capture_output=True,
+        cwd=sandbox.workdir,
+    )
+    assert outside.returncode != 0
+    inside = subprocess.run(
+        sandbox._wrap(["/bin/cat", "page.txt"]),
+        capture_output=True,
+        cwd=sandbox.workdir,
+    )
+    assert inside.returncode == 0 and b"MRN P1" in inside.stdout
+    profile = sandbox._wrap(["/bin/cat"])[2]
+    exec_other = subprocess.run(
+        ["/usr/bin/sandbox-exec", "-p", profile, "/bin/sh", "-c", "true"],
+        capture_output=True,
+    )
+    assert exec_other.returncode != 0
 
 
 # -- a fake desktop surface ------------------------------------------------------------
@@ -116,6 +149,7 @@ class FakeSurface:
                     tag=item.get("tag", ""),
                     options=tuple(item.get("options", ())),
                     source="tree",
+                    submits=bool(item.get("submits")),
                 )
             )
         return out
@@ -350,6 +384,54 @@ def test_enter_on_a_native_drop_down_is_not_a_save(tmp_path: Path) -> None:
     harness.act({"kind": "press", "key": "Enter"})
     assert harness.stats.gate_checks == 0 and computer.executed
     assert observe.focused_element(Page())["tag"] == "select"
+
+
+def test_without_a_page_enter_and_space_are_always_gated(tmp_path: Path) -> None:
+    tool, computer, harness = _tool(tmp_path)
+    tool.run('click role=button name=Open near="Jane Sample"')
+    # Space on a control the tool can't name as a save: still gated, and with
+    # no reading of what is around it, refused.
+    with pytest.raises(GateRefused):
+        tool.run("press Space")
+    assert [n["kind"] for n in computer.executed] == ["click"]
+    # Enter is gated; here the focused field's scope shows the record.
+    gates = harness.stats.gate_checks
+    assert "(save gate passed)" in tool.run("press Enter").text
+    assert harness.stats.gate_checks == gates + 1
+
+
+def test_select_on_a_button_is_refused_before_any_click(tmp_path: Path) -> None:
+    tool, computer, _ = _tool(tmp_path)
+    tool.run('click role=button name=Open near="Jane Sample"')
+    out = tool.run('select name="Save note" option=x').text
+    assert "not a list or drop-down" in out
+    assert len(computer.executed) == 1
+
+
+def test_a_drop_down_that_submits_is_gated(tmp_path: Path) -> None:
+    tool, computer, harness = _tool(tmp_path, on_screen=("MRN P9",))
+    tool.run('click role=button name=Open near="Jane Sample"')
+    tool.surface.screens["form"][2]["submits"] = True
+    with pytest.raises(GateRefused):
+        tool.run("select name=Type option=Triage")
+    assert len(computer.executed) == 1
+
+
+def test_a_bad_number_is_a_line_error_and_earlier_lines_are_kept(
+    tmp_path: Path,
+) -> None:
+    tool, computer, _ = _tool(tmp_path)
+    out = tool.run('click role=button name=Open near="Jane Sample"\nwait ms=soon')
+    assert 'ok: click button "Open"' in out.text
+    assert "ms= needs a whole number" in out.text
+    assert tool.trace.errors == 1 and len(tool.trace.log) == 1
+    assert "max= needs" in tool.run("tree max=lots").text
+
+
+def test_error_text_is_scrubbed(tmp_path: Path) -> None:
+    tool, _, _ = _tool(tmp_path)
+    tool._out = lambda text: "SCRUBBED"  # type: ignore[method-assign]
+    assert "error: SCRUBBED" in tool.run("click role=button name=Open").text
 
 
 def test_fill_refuses_a_field_that_holds_text(tmp_path: Path) -> None:

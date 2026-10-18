@@ -71,6 +71,9 @@ class CommitHint:
     key: Optional[str] = None
     #: A text field: a click on it only focuses it, so it commits nothing.
     editable: bool = False
+    #: The tool knows the action commits (a drop-down whose change submits
+    #: the form): always gated.
+    commits: bool = False
 
 
 @dataclass(frozen=True)
@@ -246,7 +249,11 @@ class Harness:
         for op in translate(self.dialect, native):
             if op.kind in ("click", "double_click", "right_click"):
                 if hint is not None and hint.key is None:
-                    if not hint.editable and _observe.commit_label(hint.name):
+                    # Without a page, the tool's resolved element is the only
+                    # reading there is; with one, the harness read it too.
+                    if hint.commits or (
+                        not hint.editable and _observe.commit_label(hint.name)
+                    ):
                         return (hint.name, hint.scope)
                 elif not self.has_page:
                     return ("a click on an element the harness could not read", None)
@@ -260,7 +267,8 @@ class Harness:
                 if hint is not None and hint.key == op.key:
                     if op.key == "Enter" or _observe.commit_label(hint.name):
                         return (f"{op.key} on {hint.name}", hint.scope)
-                elif not self.has_page:
+                if not self.has_page:
+                    # Nothing can rule a key on an unread element out.
                     return (f"{op.key} on an element the harness could not read", None)
         return None
 
@@ -316,7 +324,11 @@ class Harness:
                 # Enter on a native drop-down picks an option; it does not
                 # submit the form. (A text area stays gated: chat-style
                 # boxes send on Enter.)
-                if op.key == "Enter" and focused.get("tag") == "select":
+                if (
+                    op.key == "Enter"
+                    and focused.get("tag") == "select"
+                    and not focused.get("submits")
+                ):
                     continue
                 label = str(focused.get("name") or "the focused element")
                 return (f"{op.key} on {label}", focused.get("scope"))
