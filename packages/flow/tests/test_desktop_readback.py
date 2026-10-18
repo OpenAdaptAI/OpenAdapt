@@ -890,3 +890,162 @@ def test_a_later_unreadable_look_up_never_replaces_a_readable_verdict(
     )
     verdict = verifier.verify(effect, before)
     assert verdict.verdict is Verdict.REFUTED
+
+
+# -- the same look-up through a Citrix window and a macOS window -----------------------
+
+
+def _kiosk_window_client(base: type, kiosk: KioskLookupTransport, **kw: Any) -> Any:
+    """``base`` (a fake window client) whose window shows the kiosk."""
+
+    from openadapt_flow.backends.remote_display import resolve_mac_key
+
+    codes: dict[int, str] = {}
+    for token in ["enter", *"abcdefghijklmnopqrstuvwxyz"]:
+        resolved = resolve_mac_key(token)
+        if resolved is not None:
+            codes[resolved[0]] = token
+
+    class KioskWindow(base):  # type: ignore[misc, valid-type]
+        def capture(self, window_id: int) -> tuple[bytes, int, int]:
+            import io
+
+            buffer = io.BytesIO()
+            kiosk.render().save(buffer, format="PNG")
+            return buffer.getvalue(), 1280, 800
+
+        def mouse(self, x, y, *, button, down, click_count):
+            kiosk.pointer(int(x), int(y), button, down)
+
+        def type_chars(self, text):
+            for ch in text:
+                kiosk.key(ch, True)
+                kiosk.key(ch, False)
+
+        def replace_selected_text(self, window, text):
+            self.type_chars(text)
+            return True
+
+        def replace_selected_text_guarded(self, window, text, **_kw):
+            self.type_chars(text)
+            return True
+
+        def key(self, keycode, *, down, flags):
+            token = codes.get(keycode)
+            if token is None or not down:
+                return
+            held = {"ctrl", "control", "command", "cmd"} & set(flags)
+            if held:
+                kiosk.key("ctrl", True)
+            kiosk.key(token, True)
+            kiosk.key(token, False)
+            if held:
+                kiosk.key("ctrl", False)
+
+    return KioskWindow(**kw)
+
+
+def _window_verifier(open_backend: Any, kind: str) -> Any:
+    return build_desktop_readback_verifier(
+        _kiosk_spec(
+            session={"kind": kind, "rdp_window": "Citrix Viewer"}, credentials=None
+        )
+        if kind == "citrix"
+        else _kiosk_spec(
+            session={
+                "kind": "macos",
+                "macos_app": "Kiosk",
+                "macos_window_title": "Lookup",
+            },
+            credentials=None,
+        ),
+        {"request_id": "REQ-4815"},
+        timeout_s=0.0,
+        poll_interval_s=0.0,
+        driver=BackendSessionDriver(open_backend, settle_s=0.0),
+        environ={},
+    )
+
+
+def test_kiosk_through_a_citrix_window(tmp_path: Path) -> None:
+    pytest.importorskip("rapidocr_onnxruntime")
+    from openadapt_flow.backends.citrix_workspace import CitrixWorkspaceBackend
+    from openadapt_flow.backends.remote_display import WindowInfo
+
+    from .test_remote_display_backend import FakeClient
+
+    kiosk = KioskLookupTransport(tmp_path / "appointments.sqlite3")
+    kiosk.book("REQ-4815", "MRN A1001", "Ada Lovelace", "2026-11-02 09:30", "Follow-up")
+
+    def open_backend(_u: str, _p: str) -> tuple[Any, DesktopSessionFacts]:
+        screen = KioskLookupTransport(kiosk.db_path)  # a fresh window
+        kiosk.sessions.append(screen)
+        client = _kiosk_window_client(
+            FakeClient,
+            screen,
+            window=WindowInfo(
+                window_id=7,
+                owner="Citrix Viewer",
+                title="Kiosk",
+                pid=77,
+                bounds=(0.0, 0.0, 1280.0, 800.0),
+            ),
+            px=(1280, 800),
+        )
+        backend = CitrixWorkspaceBackend(
+            client, owner_substr="Citrix Viewer", settle_s=0.0
+        )
+        return backend, DesktopSessionFacts(True, False, False, "ocr")
+
+    verifier = _window_verifier(open_backend, "citrix")
+    # A window as the same user: tier 3 (reopened), not a separate sign-in.
+    assert (
+        verifier_effect_tier(verifier) is VerificationTier.PERSISTED_STATE_REACQUISITION
+    )
+    verdict = verifier.verify(_booked(), verifier.capture_pre_state())
+    assert verdict.verdict is Verdict.CONFIRMED, verdict.reason
+    assert all(s.save_clicks == 0 and s.booking_typed == "" for s in kiosk.sessions)
+
+
+def test_kiosk_through_a_macos_window(tmp_path: Path) -> None:
+    pytest.importorskip("rapidocr_onnxruntime")
+    from openadapt_flow.backends.macos_backend import MacOSBackend
+    from openadapt_flow.backends.remote_display import WindowInfo
+
+    from .test_macos_backend import FakeMacClient
+
+    kiosk = KioskLookupTransport(tmp_path / "appointments.sqlite3")
+    kiosk.book("REQ-4815", "MRN A1001", "Ada Lovelace", "2026-11-02 09:30", "Follow-up")
+
+    class NoAX:
+        def element_at_point(self, *a: Any, **k: Any) -> None:
+            return None
+
+        def find_candidates(self, *a: Any, **k: Any) -> Any:
+            return None
+
+        def structured_text(self, *a: Any, **k: Any) -> None:
+            return None
+
+    def open_backend(_u: str, _p: str) -> tuple[Any, DesktopSessionFacts]:
+        screen = KioskLookupTransport(kiosk.db_path)
+        kiosk.sessions.append(screen)
+        client = _kiosk_window_client(
+            FakeMacClient,
+            screen,
+            windows=[WindowInfo(41, "Kiosk", "Lookup", 9001, (0, 0, 1280, 800))],
+        )
+        backend = MacOSBackend(
+            client,
+            app="Kiosk",
+            window_title="Lookup",
+            settle_s=0,
+            foreground_settle_s=0,
+            ax_client=NoAX(),
+        )
+        return backend, DesktopSessionFacts(True, False, False, "ocr")
+
+    verifier = _window_verifier(open_backend, "macos")
+    verdict = verifier.verify(_booked(), verifier.capture_pre_state())
+    assert verdict.verdict is Verdict.CONFIRMED, verdict.reason
+    assert all(s.save_clicks == 0 and s.booking_typed == "" for s in kiosk.sessions)
