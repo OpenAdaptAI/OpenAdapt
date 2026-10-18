@@ -47,7 +47,10 @@ def test_embedded_manifest_covers_exact_supported_targets() -> None:
     payload = json.loads(vision.MANIFEST_PATH.read_text())
 
     assert payload["schema_version"] == 1
-    assert payload["runtime_version"] == "rapidocr-1.4.4-opencv-5.0.0.93-numpy-2.4.2-r3"
+    assert (
+        payload["runtime_version"]
+        == "rapidocr-1.4.4-opencv-5.0.0.93-numpy-2.4.2-r3"
+    )
     assert {artifact["target"] for artifact in payload["artifacts"]} == (vision.SUPPORTED_TARGETS)
     for target in vision.SUPPORTED_TARGETS:
         contract = vision.load_contract(target=target)
@@ -308,7 +311,9 @@ def test_ensure_reuses_only_hash_valid_cache(
     (first / "cv2" / "__init__.py").write_text("tampered\n")
     marker_path = first / vision.MARKER_NAME
     marker = json.loads(marker_path.read_text())
-    cv2_record = next(record for record in marker["files"] if record["member"] == "cv2/__init__.py")
+    cv2_record = next(
+        record for record in marker["files"] if record["member"] == "cv2/__init__.py"
+    )
     cv2_record["sha256"] = hashlib.sha256(b"tampered\n").hexdigest()
     cv2_record["bytes"] = len(b"tampered\n")
     marker_path.write_text(json.dumps(marker))

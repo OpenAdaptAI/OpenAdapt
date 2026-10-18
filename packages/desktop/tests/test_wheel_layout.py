@@ -57,7 +57,9 @@ def test_wheel_installs_only_the_namespaced_package(built_wheel: Path) -> None:
     assert top_level == {IMPORT_PACKAGE, f"openadapt_desktop-{_version()}.dist-info"}
 
 
-def test_console_script_runs_from_the_installed_wheel(built_wheel: Path, tmp_path: Path) -> None:
+def test_console_script_runs_from_the_installed_wheel(
+    built_wheel: Path, tmp_path: Path
+) -> None:
     with zipfile.ZipFile(built_wheel) as wheel:
         entry_points = next(
             wheel.read(name).decode("utf-8")
@@ -67,7 +69,11 @@ def test_console_script_runs_from_the_installed_wheel(built_wheel: Path, tmp_pat
         site = tmp_path / "site-packages"
         wheel.extractall(site)
 
-    scripts = dict(line.split(" = ", 1) for line in entry_points.splitlines() if " = " in line)
+    scripts = dict(
+        line.split(" = ", 1)
+        for line in entry_points.splitlines()
+        if " = " in line
+    )
     assert scripts == {"openadapt-desktop": f"{IMPORT_PACKAGE}.cli:main"}
 
     module, function = scripts["openadapt-desktop"].split(":")

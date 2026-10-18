@@ -25,11 +25,11 @@ class TestHostedConfig:
         toml = tmp_path / "config.toml"
         _write_toml(
             toml,
-            "[hosted]\n"
+            '[hosted]\n'
             'host = "https://byoc.example"\n'
             'deployment_lane = "byoc"\n'
             'phi_mode = "on"\n'
-            "poll_interval_s = 120\n",
+            'poll_interval_s = 120\n',
         )
         monkeypatch.setenv("OPENADAPT_CONFIG_TOML", str(toml))
         cfg = EngineConfig()

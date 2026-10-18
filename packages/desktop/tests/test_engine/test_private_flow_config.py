@@ -246,7 +246,11 @@ def test_remote_decisions_is_read_from_the_same_snapshot_as_the_payload(tmp_path
     source = tmp_path / "deployment.json"
     source.write_text(
         json.dumps(
-            {"human_decisions": {"remote": {"enabled": True, "runner_id": " runner_exact_01 "}}}
+            {
+                "human_decisions": {
+                    "remote": {"enabled": True, "runner_id": " runner_exact_01 "}
+                }
+            }
         ),
         encoding="utf-8",
     )
@@ -309,7 +313,9 @@ def test_signed_in_browser_fields_are_cleared_when_another_backend_is_selected(
     tmp_path: Path,
 ) -> None:
     source = tmp_path / "deployment.yaml"
-    source.write_text("backend:\n  kind: web\n  browser_cdp_endpoint: http://127.0.0.1:9334\n")
+    source.write_text(
+        "backend:\n  kind: web\n  browser_cdp_endpoint: http://127.0.0.1:9334\n"
+    )
     prepared = prepare_flow_config(
         source, ExecutionTarget(backend="windows", agent_url="http://localhost:5001")
     )
@@ -351,7 +357,9 @@ def test_staged_config_says_when_it_names_a_signed_in_browser(tmp_path: Path) ->
 
     web = ExecutionTarget(backend="web", url="http://127.0.0.1:9401/front/")
     from_file = tmp_path / "deployment.yaml"
-    from_file.write_text("backend:\n  kind: web\n  browser_cdp_endpoint: http://127.0.0.1:9334\n")
+    from_file.write_text(
+        "backend:\n  kind: web\n  browser_cdp_endpoint: http://127.0.0.1:9334\n"
+    )
     plain = tmp_path / "plain.yaml"
     plain.write_text("backend:\n  kind: web\n")
 

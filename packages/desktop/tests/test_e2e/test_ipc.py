@@ -90,25 +90,12 @@ class TestIPCHandlerRegistration:
         """Every frontend CMD name from engine.ts must be registered."""
         assert isinstance(handler._handlers, dict)
         for cmd in (
-            "start_recording",
-            "stop_recording",
-            "get_status",
-            "compile_recording",
-            "replay_workflow",
-            "run_workflow",
-            "teach_fix",
-            "push_workflow",
-            "get_workflows",
-            "get_needs_attention",
-            "login_browser",
-            "login_paste",
-            "logout",
-            "get_auth_status",
-            "get_config",
-            "set_config",
-            "check_permissions",
-            "request_input_monitoring",
-            "get_sync_state",
+            "start_recording", "stop_recording", "get_status",
+            "compile_recording", "replay_workflow", "run_workflow",
+            "teach_fix", "push_workflow", "get_workflows", "get_needs_attention",
+            "login_browser", "login_paste", "logout", "get_auth_status",
+            "get_config", "set_config", "check_permissions",
+            "request_input_monitoring", "get_sync_state",
         ):
             assert cmd in handler._handlers, f"missing handler: {cmd}"
 

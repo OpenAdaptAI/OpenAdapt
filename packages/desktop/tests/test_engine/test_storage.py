@@ -30,9 +30,7 @@ class TestStorageManager:
         assert usage["capture_count"] == 0
 
     def test_register_and_get_captures(
-        self,
-        config: EngineConfig,
-        sample_capture_dir: Path,
+        self, config: EngineConfig, sample_capture_dir: Path,
     ) -> None:
         """Registered captures should be retrievable."""
         manager = StorageManager(config)
@@ -43,9 +41,7 @@ class TestStorageManager:
         assert caps[0]["capture_id"] == "test123"
 
     def test_get_storage_usage_with_data(
-        self,
-        config: EngineConfig,
-        sample_capture_dir: Path,
+        self, config: EngineConfig, sample_capture_dir: Path,
     ) -> None:
         """Usage should reflect file sizes."""
         manager = StorageManager(config)
@@ -58,9 +54,7 @@ class TestStorageManager:
         assert usage["hot_bytes"] > 0
 
     def test_archive_capture(
-        self,
-        config: EngineConfig,
-        sample_capture_dir: Path,
+        self, config: EngineConfig, sample_capture_dir: Path,
     ) -> None:
         """Archiving should create tar.gz and remove original."""
         manager = StorageManager(config)
@@ -78,9 +72,7 @@ class TestStorageManager:
         assert cap["tier"] == "warm"
 
     def test_delete_capture(
-        self,
-        config: EngineConfig,
-        sample_capture_dir: Path,
+        self, config: EngineConfig, sample_capture_dir: Path,
     ) -> None:
         """Deleting should remove files and update DB."""
         manager = StorageManager(config)

@@ -65,7 +65,9 @@ def test_field_diffs_handle_either_quote_style_and_skip_matches() -> None:
             }
         ]
     }
-    assert field_diffs(report) == [{"field": "last_name", "typed": "OBrien", "on_file": "O'Brien"}]
+    assert field_diffs(report) == [
+        {"field": "last_name", "typed": "OBrien", "on_file": "O'Brien"}
+    ]
 
 
 def test_structured_field_checks_win_over_lines() -> None:

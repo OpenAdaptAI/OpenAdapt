@@ -119,7 +119,9 @@ class TestTransitionStatus:
             scrubbed = tmp_path / "cap.scrubbed"
             scrubbed.mkdir()
             (scrubbed / "scrub_manifest.json").write_text("{}")
-            (scrubbed / "review_status.json").write_text('{"status":"pending_review"}')
+            (scrubbed / "review_status.json").write_text(
+                '{"status":"pending_review"}'
+            )
             db.update_capture("test-id", scrubbed_path=str(scrubbed))
         transition_status("test-id", from_status, to_status, db=db)
         cap = db.get_capture("test-id")
@@ -154,7 +156,9 @@ class TestCheckEgress:
         scrubbed = tmp_path / "cap.scrubbed"
         raw.mkdir()
         scrubbed.mkdir()
-        (scrubbed / "scrub_manifest.json").write_text('{"scrub_level":"standard"}')
+        (scrubbed / "scrub_manifest.json").write_text(
+            '{"scrub_level":"standard"}'
+        )
         from openadapt_desktop.review import derivative_tree_sha256
 
         (scrubbed / "review_status.json").write_text(
@@ -224,7 +228,9 @@ class TestCheckEgress:
         raw.mkdir()
         scrubbed.mkdir()
         (scrubbed / "scrub_manifest.json").write_text("{}")
-        (scrubbed / "review_status.json").write_text('{"status":"pending_review"}')
+        (scrubbed / "review_status.json").write_text(
+            '{"status":"pending_review"}'
+        )
         artifact = scrubbed / "data.bin"
         artifact.write_bytes(b"reviewed")
         db.insert_capture("test-id", str(raw), "2026-03-02T10:00:00Z")
@@ -261,7 +267,9 @@ class TestCheckEgress:
         (scrubbed / "scrub_manifest.json").write_text("{}")
         (scrubbed / "review_status.json").write_text("{}")
         db.insert_capture("test-id", str(raw), "2026-03-02T10:00:00Z")
-        db.update_capture("test-id", review_status="reviewed", scrubbed_path=str(scrubbed))
+        db.update_capture(
+            "test-id", review_status="reviewed", scrubbed_path=str(scrubbed)
+        )
 
         with pytest.raises(EgressArtifactError, match="hard-linked"):
             check_egress_allowed("test-id", db)
@@ -285,7 +293,9 @@ class TestCheckEgress:
             + '"}'
         )
         db.insert_capture("test-id", str(raw), "2026-03-02T10:00:00Z")
-        db.update_capture("test-id", review_status="reviewed", scrubbed_path=str(scrubbed))
+        db.update_capture(
+            "test-id", review_status="reviewed", scrubbed_path=str(scrubbed)
+        )
 
         with pytest.raises(EgressArtifactError, match="Image-capable"):
             check_egress_allowed("test-id", db)
@@ -300,7 +310,9 @@ class TestCheckEgress:
         raw.mkdir()
         scrubbed.write_bytes(b"raw replacement")
         db.insert_capture("test-id", str(raw), "2026-03-02T10:00:00Z")
-        db.update_capture("test-id", review_status="reviewed", scrubbed_path=str(scrubbed))
+        db.update_capture(
+            "test-id", review_status="reviewed", scrubbed_path=str(scrubbed)
+        )
 
         with pytest.raises(EgressArtifactError, match="directory"):
             check_egress_allowed("test-id", db)
@@ -316,7 +328,9 @@ class TestCheckEgress:
         scrubbed = tmp_path / "cap.scrubbed"
         raw.mkdir()
         scrubbed.mkdir()
-        (scrubbed / "scrub_manifest.json").write_text('{"scrub_level":"standard"}')
+        (scrubbed / "scrub_manifest.json").write_text(
+            '{"scrub_level":"standard"}'
+        )
         digest = derivative_tree_sha256(scrubbed)
         (scrubbed / "review_status.json").write_text(
             '{"status":"reviewed","approved_tree_sha256":"'
@@ -324,7 +338,9 @@ class TestCheckEgress:
             + '","secret":"Jane Doe record 12345"}'
         )
         db.insert_capture("test-id", str(raw), "2026-03-02T10:00:00Z")
-        db.update_capture("test-id", review_status="reviewed", scrubbed_path=str(scrubbed))
+        db.update_capture(
+            "test-id", review_status="reviewed", scrubbed_path=str(scrubbed)
+        )
 
         with pytest.raises(EgressArtifactError, match="schema"):
             check_egress_allowed("test-id", db)

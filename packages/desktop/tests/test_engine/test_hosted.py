@@ -24,7 +24,9 @@ _BUNDLE_VERSION_ID = "423e4567-e89b-42d3-a456-426614174000"
 _RUNTIME_VALIDATION_ID = "523e4567-e89b-42d3-a456-426614174000"
 
 
-def _push_document(*, status: str = "accepted_for_ingest", kind: str = "recording") -> dict:
+def _push_document(
+    *, status: str = "accepted_for_ingest", kind: str = "recording"
+) -> dict:
     document = {
         "schema": "openadapt.push-result/v1",
         "status": status,
@@ -289,7 +291,9 @@ class TestPush:
         document = _push_document(status="paused_for_review")
         monkeypatch.setattr(
             "openadapt_desktop.hosted.FlowBridge.push",
-            lambda *args, **kwargs: FlowResult(ok=True, returncode=0, stdout=json.dumps(document)),
+            lambda *args, **kwargs: FlowResult(
+                ok=True, returncode=0, stdout=json.dumps(document)
+            ),
         )
 
         result = hosted.push(rec)
@@ -327,7 +331,9 @@ class TestPush:
 
         assert result["success"] is True
         assert calls[0]["token"] is None
-        assert calls[0]["env_overrides"] == {"OPENADAPT_INGEST_TOKEN": "stored-secret"}
+        assert calls[0]["env_overrides"] == {
+            "OPENADAPT_INGEST_TOKEN": "stored-secret"
+        }
 
     def test_credential_for_another_host_is_not_forwarded(
         self,
@@ -484,7 +490,9 @@ class TestReportBreak:
         assert result["ok"] is True
         assert result["halt_id"] == "h1"
         assert result["teach_url"].endswith("/teach")
-        assert calls[0]["env_overrides"] == {"OPENADAPT_INGEST_TOKEN": "oai_ingest_x"}
+        assert calls[0]["env_overrides"] == {
+            "OPENADAPT_INGEST_TOKEN": "oai_ingest_x"
+        }
 
     def test_422_local_fallback(self, tmp_path: Path, monkeypatch) -> None:
         run_dir = tmp_path / "run"

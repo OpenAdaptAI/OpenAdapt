@@ -160,7 +160,9 @@ def test_a_cross_origin_claim_or_decision_is_refused() -> None:
 def test_a_decision_requires_the_session_csrf_token() -> None:
     app, pairings = build(FakeFlow())
     headers = paired(app, pairings) | {"x-openadapt-portal-csrf": "wrong"}
-    status, _, body = app.handle("POST", "/api/portal/tasks/run-1/actions/continue", headers, b"{}")
+    status, _, body = app.handle(
+        "POST", "/api/portal/tasks/run-1/actions/continue", headers, b"{}"
+    )
     assert status == 403
     assert json.loads(body)["reason"] == "csrf"
 
@@ -380,7 +382,9 @@ def test_an_upstream_server_error_body_is_not_forwarded_to_a_phone() -> None:
 
     def transport(request: httpx.Request) -> httpx.Response:
         if "actions" in str(request.url):
-            return httpx.Response(500, json={"detail": 'File "/srv/phi/openemr/run.py", line 42'})
+            return httpx.Response(
+                500, json={"detail": 'File "/srv/phi/openemr/run.py", line 42'}
+            )
         return httpx.Response(409, json={"detail": "the pause is no longer current"})
 
     client = FlowConsoleClient(
@@ -427,7 +431,9 @@ def test_a_waiting_save_is_relayed_like_any_other_task() -> None:
     headers = paired(app, pairings)
     status, _, _ = app.handle("GET", "/api/portal/save-approvals", headers, b"")
     assert status == 200 and flow.calls[-1] == ("save_approvals", {})
-    status, _, _ = app.handle("GET", f"/api/portal/save-approvals/{SAVE_ID}", headers, b"")
+    status, _, _ = app.handle(
+        "GET", f"/api/portal/save-approvals/{SAVE_ID}", headers, b""
+    )
     assert status == 200
     assert flow.calls[-1] == ("save_approval_detail", {"request_id": SAVE_ID})
     status, response_headers, body = app.handle(

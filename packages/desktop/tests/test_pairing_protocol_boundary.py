@@ -67,7 +67,7 @@ def test_python_runner_bind_is_parse_only() -> None:
     assert "BIND_HEX_BODY_RE" in runner_bind
     assert "LEASE_BASE64URL_BODY_RE" in runner_bind
     authoring = (ROOT / "openadapt_desktop/authoring_runner.py").read_text(encoding="utf-8")
-    assert "action not in MAILBOX_ACTIONS" in authoring
+    assert 'action not in MAILBOX_ACTIONS' in authoring
     assert '"allow"' in authoring
     assert "win_agent" in authoring
     assert "from openadapt_flow.backends.win_agent" not in authoring

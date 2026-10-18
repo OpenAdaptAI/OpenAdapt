@@ -170,11 +170,12 @@ class TestCLI:
         bundle = tmp_path / "bundle"
         rec.mkdir()
         bundle.mkdir()
-        result = FlowResult(ok=True, returncode=0, stdout='{"status":"draft"}', stderr="")
-        with (
-            patch("openadapt_desktop.cli.EngineConfig", return_value=cli_config),
-            patch("openadapt_desktop.flow_bridge.FlowBridge") as bridge_cls,
-        ):
+        result = FlowResult(
+            ok=True, returncode=0, stdout='{"status":"draft"}', stderr=""
+        )
+        with patch("openadapt_desktop.cli.EngineConfig", return_value=cli_config), patch(
+            "openadapt_desktop.flow_bridge.FlowBridge"
+        ) as bridge_cls:
             bridge_cls.return_value.qualify_propose.return_value = result
             main(["qualify", str(bundle), "--recording", str(rec)])
         captured = capsys.readouterr()
@@ -183,18 +184,10 @@ class TestCLI:
 
     def test_login_success(self, cli_config: EngineConfig, capsys) -> None:
         """login should dispatch to engine.auth.login and report the org."""
-        cred = {
-            "kind": "ingest_token",
-            "token": "t",
-            "refresh_token": None,
-            "org_id": "org_5",
-            "host": "https://app.openadapt.ai",
-            "expires_at": None,
-        }
-        with (
-            patch("openadapt_desktop.cli.EngineConfig", return_value=cli_config),
-            patch("openadapt_desktop.auth.login", return_value=cred),
-        ):
+        cred = {"kind": "ingest_token", "token": "t", "refresh_token": None,
+                "org_id": "org_5", "host": "https://app.openadapt.ai", "expires_at": None}
+        with patch("openadapt_desktop.cli.EngineConfig", return_value=cli_config), \
+                patch("openadapt_desktop.auth.login", return_value=cred):
             main(["login"])
         captured = capsys.readouterr()
         assert "Logged in" in captured.out
@@ -241,16 +234,10 @@ class TestCLI:
 
     def test_push_success(self, cli_config: EngineConfig, capsys) -> None:
         """push should print the returned workflow id + dashboard URL."""
-        result = {
-            "success": True,
-            "workflow_id": "wf_2",
-            "dashboard_url": "https://app/dashboard/workflows/wf_2",
-            "error": "",
-        }
-        with (
-            patch("openadapt_desktop.cli.EngineConfig", return_value=cli_config),
-            patch("openadapt_desktop.hosted.push", return_value=result),
-        ):
+        result = {"success": True, "workflow_id": "wf_2",
+                  "dashboard_url": "https://app/dashboard/workflows/wf_2", "error": ""}
+        with patch("openadapt_desktop.cli.EngineConfig", return_value=cli_config), \
+                patch("openadapt_desktop.hosted.push", return_value=result):
             main(["push", "/tmp/rec"])
         captured = capsys.readouterr()
         assert "wf_2" in captured.out
@@ -258,10 +245,8 @@ class TestCLI:
     def test_push_failure_exits(self, cli_config: EngineConfig) -> None:
         """push failure should exit nonzero."""
         result = {"success": False, "workflow_id": "", "dashboard_url": "", "error": "nope"}
-        with (
-            patch("openadapt_desktop.cli.EngineConfig", return_value=cli_config),
-            patch("openadapt_desktop.hosted.push", return_value=result),
-        ):
+        with patch("openadapt_desktop.cli.EngineConfig", return_value=cli_config), \
+                patch("openadapt_desktop.hosted.push", return_value=result):
             with pytest.raises(SystemExit):
                 main(["push", "/tmp/rec"])
 
@@ -274,15 +259,15 @@ class TestCLI:
             "pending_review": True,
             "sanitized_path": "/tmp/sanitized/artifact-abc",
             "review_command": (
-                "openadapt-flow review-sanitized /tmp/sanitized/artifact-abc --original /tmp/rec"
+                "openadapt-flow review-sanitized /tmp/sanitized/artifact-abc "
+                "--original /tmp/rec"
             ),
             "workflow_id": "",
             "dashboard_url": "",
             "error": "",
         }
-        with (
-            patch("openadapt_desktop.cli.EngineConfig", return_value=cli_config),
-            patch("openadapt_desktop.hosted.push", return_value=result),
+        with patch("openadapt_desktop.cli.EngineConfig", return_value=cli_config), patch(
+            "openadapt_desktop.hosted.push", return_value=result
         ):
             main(["push", "/tmp/rec"])
 
@@ -304,10 +289,9 @@ class TestCLI:
         db.insert_capture("cap1", str(raw), "2026-08-18T00:00:00Z")
         db.close()
 
-        with (
-            patch("openadapt_desktop.cli.EngineConfig", return_value=cli_config),
-            patch("openadapt_desktop.cli.cmd_push") as governed_push,
-        ):
+        with patch("openadapt_desktop.cli.EngineConfig", return_value=cli_config), patch(
+            "openadapt_desktop.cli.cmd_push"
+        ) as governed_push:
             main(["upload", "cap1", "--backend", "hosted_ingest"])
 
         args, _kwargs = governed_push.call_args

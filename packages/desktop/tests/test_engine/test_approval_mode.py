@@ -252,7 +252,7 @@ def test_no_switch_reads_off_and_has_nothing_to_turn_off(task) -> None:
     # The card shows no switch for a task that has none on this computer.
     assert mode["visible"] is False
     assert mode["can_turn_off"] is False
-    assert mode["blockers"][-len(NOT_BUILT) :] == list(NOT_BUILT)
+    assert mode["blockers"][-len(NOT_BUILT):] == list(NOT_BUILT)
     refused = disp.dispatch("turn_off_approval_mode", {"workflow_id": "wf-note"})
     assert refused["ok"] is False
     assert "no switch" in refused["error"]
@@ -319,19 +319,15 @@ def test_a_closed_switch_stays_closed_until_cloud_sends_a_new_one(task) -> None:
     accept_switch(config.data_dir, "wf-note", _envelope(digest))
     turn_off(config.data_dir, "wf-note")
     view = read_switch(
-        config.data_dir,
-        "wf-note",
-        bundle_dir=config.data_dir / "bundles" / "wf-note",
-        runner_id=RUNNER,
+        config.data_dir, "wf-note",
+        bundle_dir=config.data_dir / "bundles" / "wf-note", runner_id=RUNNER,
     )
     assert view["state"] == "off"
 
     accept_switch(config.data_dir, "wf-note", _envelope(digest, switch_id="sw-2"))
     view = read_switch(
-        config.data_dir,
-        "wf-note",
-        bundle_dir=config.data_dir / "bundles" / "wf-note",
-        runner_id=RUNNER,
+        config.data_dir, "wf-note",
+        bundle_dir=config.data_dir / "bundles" / "wf-note", runner_id=RUNNER,
     )
     assert view["state"] == "on"
     assert view["switch_id"] == "sw-2"
@@ -346,8 +342,7 @@ def test_a_switch_for_another_version_or_runner_never_reads_on(task) -> None:
     assert mode["off_reason"] == "version_changed"
 
     accept_switch(
-        config.data_dir,
-        "wf-note",
+        config.data_dir, "wf-note",
         _envelope(digest, runner_id="runner-other", switch_id="sw-b"),
     )
     mode = disp.dispatch("get_approval_mode", {"workflow_id": "wf-note"})
@@ -373,10 +368,8 @@ def test_a_tampered_or_missing_log_reads_off(task) -> None:
     log = config.data_dir / "approval_mode" / "wf-note" / "switch.log"
     log.write_text(log.read_text().replace('"opened"', '"opened" '))
     view = read_switch(
-        config.data_dir,
-        "wf-note",
-        bundle_dir=config.data_dir / "bundles" / "wf-note",
-        runner_id=RUNNER,
+        config.data_dir, "wf-note",
+        bundle_dir=config.data_dir / "bundles" / "wf-note", runner_id=RUNNER,
     )
     assert view["state"] == "off"
     assert view["off_reason"] == "uncertain_result"
@@ -385,20 +378,16 @@ def test_a_tampered_or_missing_log_reads_off(task) -> None:
     result = turn_off(config.data_dir, "wf-note")
     assert result["logged"] is False
     view = read_switch(
-        config.data_dir,
-        "wf-note",
-        bundle_dir=config.data_dir / "bundles" / "wf-note",
-        runner_id=RUNNER,
+        config.data_dir, "wf-note",
+        bundle_dir=config.data_dir / "bundles" / "wf-note", runner_id=RUNNER,
     )
     assert view["state"] == "off"
     assert view["off_reason"] == "turned_off"
 
     log.unlink()
     view = read_switch(
-        config.data_dir,
-        "wf-note",
-        bundle_dir=config.data_dir / "bundles" / "wf-note",
-        runner_id=RUNNER,
+        config.data_dir, "wf-note",
+        bundle_dir=config.data_dir / "bundles" / "wf-note", runner_id=RUNNER,
     )
     assert view["state"] == "off"
 
@@ -409,10 +398,8 @@ def test_an_unfinished_item_in_the_log_reads_off(task) -> None:
     log = switch_api.SwitchLog(config.data_dir / "approval_mode" / "wf-note" / "switch.log")
     log.append("item_started", run_ref=HEX)
     view = read_switch(
-        config.data_dir,
-        "wf-note",
-        bundle_dir=config.data_dir / "bundles" / "wf-note",
-        runner_id=RUNNER,
+        config.data_dir, "wf-note",
+        bundle_dir=config.data_dir / "bundles" / "wf-note", runner_id=RUNNER,
     )
     assert view["state"] == "off"
     assert view["off_reason"] == "uncertain_result"
@@ -435,10 +422,14 @@ def test_a_switch_from_cloud_is_validated_before_it_is_stored(task) -> None:
 def test_requirements_come_from_flow_and_are_not_confirmed_here(task) -> None:
     disp, _db, config, digest = task
     # A task with no switch here doesn't pay for reading its requirements.
-    hidden = disp.dispatch("get_approval_mode", {"workflow_id": "wf-note", "requirements": True})
+    hidden = disp.dispatch(
+        "get_approval_mode", {"workflow_id": "wf-note", "requirements": True}
+    )
     assert "requirements" not in hidden
     accept_switch(config.data_dir, "wf-note", _envelope(digest))
-    mode = disp.dispatch("get_approval_mode", {"workflow_id": "wf-note", "requirements": True})
+    mode = disp.dispatch(
+        "get_approval_mode", {"workflow_id": "wf-note", "requirements": True}
+    )
     requirements = mode["requirements"]
     if not requirements["available"]:
         pytest.skip(f"Flow couldn't read the test workflow: {requirements['reason']}")
@@ -602,9 +593,8 @@ def test_an_item_held_for_approval_offers_no_rerun(task) -> None:
     held = {
         "mode": "problems_only",
         "channel": "desktop_run_it_list_with_header",
-        "item_checks": _checks(
-            ["channel", "record_key_not_recent"], failed={"record_key_not_recent": "seen_recently"}
-        ),
+        "item_checks": _checks(["channel", "record_key_not_recent"],
+                               failed={"record_key_not_recent": "seen_recently"}),
         "pre_checks": [],
         "post_checks": [],
         "decision": "approval_required",
@@ -676,13 +666,8 @@ def test_control_a_bound_no_person_item_counts_when_the_switch_is_on_here(switch
 
 
 @pytest.mark.parametrize(
-    "transaction",
-    [
-        "RECONCILIATION_REQUIRED",
-        "HALTED_BEFORE_EFFECT",
-        "COMPLETED_UNVERIFIED",
-        "NOT_A_REAL_OUTCOME",
-    ],
+    "transaction", ["RECONCILIATION_REQUIRED", "HALTED_BEFORE_EFFECT", "COMPLETED_UNVERIFIED",
+                    "NOT_A_REAL_OUTCOME"]
 )
 def test_attack_inconsistent_verified_pair_never_closes_an_item(task, transaction: str) -> None:
     """Execution VERIFIED with a transaction outcome that disagrees.
@@ -723,7 +708,9 @@ def test_attack_inconsistent_pair_under_the_switch_never_reads_confirmed(switch_
         needs_person=True,
         counts_toward_problems=True,
         switch_off_reason="uncertain_result",
-        post_checks=_checks(["verified", "whole_run_clean"], failed={"verified": "not_verified"}),
+        post_checks=_checks(
+            ["verified", "whole_run_clean"], failed={"verified": "not_verified"}
+        ),
     )
     disp.services._flow_bridge = _Bridge(
         [_report(transaction="RECONCILIATION_REQUIRED", execution="VERIFIED", approval=block)]
@@ -922,10 +909,8 @@ def test_attack_cloud_cannot_reopen_a_switch_turned_off_here(task) -> None:
         accept_switch(config.data_dir, "wf-note", _envelope(digest))
 
     view = read_switch(
-        config.data_dir,
-        "wf-note",
-        bundle_dir=config.data_dir / "bundles" / "wf-note",
-        runner_id=RUNNER,
+        config.data_dir, "wf-note",
+        bundle_dir=config.data_dir / "bundles" / "wf-note", runner_id=RUNNER,
     )
     assert view["state"] == "off"
     assert view["off_reason"] == "turned_off"
@@ -942,10 +927,8 @@ def test_attack_an_archived_closed_switch_cannot_return(task) -> None:
     with pytest.raises(SwitchApprovalError):
         accept_switch(config.data_dir, "wf-note", _envelope(digest, switch_id="sw-1"))
     view = read_switch(
-        config.data_dir,
-        "wf-note",
-        bundle_dir=config.data_dir / "bundles" / "wf-note",
-        runner_id=RUNNER,
+        config.data_dir, "wf-note",
+        bundle_dir=config.data_dir / "bundles" / "wf-note", runner_id=RUNNER,
     )
     assert view["switch_id"] == "sw-3"
 
@@ -966,10 +949,8 @@ def test_attack_resending_the_same_switch_keeps_its_log(task) -> None:
 
     assert log.state().open_items == [HEX]
     view = read_switch(
-        config.data_dir,
-        "wf-note",
-        bundle_dir=config.data_dir / "bundles" / "wf-note",
-        runner_id=RUNNER,
+        config.data_dir, "wf-note",
+        bundle_dir=config.data_dir / "bundles" / "wf-note", runner_id=RUNNER,
     )
     assert view["state"] == "off"
     assert view["off_reason"] == "uncertain_result"
@@ -1035,7 +1016,9 @@ def test_attack_a_turn_off_that_cannot_be_appended_still_reaches_flow(
     assert result["moved_aside"] is True
     # What Flow's gate reads before every save: a missing log means off.
     with pytest.raises(switch_api.SwitchLogError):
-        switch_api.SwitchLog(config.data_dir / "approval_mode" / "wf-note" / "switch.log").state()
+        switch_api.SwitchLog(
+            config.data_dir / "approval_mode" / "wf-note" / "switch.log"
+        ).state()
     assert result["mode"]["state"] == "off"
     assert result["mode"]["off_reason"] == "turned_off"
     # And the same switch can't come back.

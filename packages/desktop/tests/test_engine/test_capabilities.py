@@ -275,7 +275,9 @@ class TestCitrixSurface:
     def test_darwin_with_workspace_app_is_available(self, monkeypatch) -> None:
         _platform(monkeypatch, "darwin")
         _specs(monkeypatch, {"Quartz"})
-        monkeypatch.setattr(capabilities, "_citrix_workspace_installed", lambda: (True, "24.5.0"))
+        monkeypatch.setattr(
+            capabilities, "_citrix_workspace_installed", lambda: (True, "24.5.0")
+        )
         monkeypatch.setattr(capabilities, "_mac_screen_recording_granted", lambda: True)
         cap = capabilities._check_citrix()
         assert cap.state == "available"
@@ -461,12 +463,15 @@ class TestDispatchIntegration:
                 },
             )
         assert any(
-            e == "recording_error" and d["error"].startswith("record refused: ") for e, d in events
+            e == "recording_error" and d["error"].startswith("record refused: ")
+            for e, d in events
         )
 
 
 class TestRecordHelperRefusal:
-    def test_private_record_helper_refuses_before_flow(self, tmp_path, monkeypatch, capsys) -> None:
+    def test_private_record_helper_refuses_before_flow(
+        self, tmp_path, monkeypatch, capsys
+    ) -> None:
         from openadapt_desktop import flow_record_entry
 
         monkeypatch.setattr(capabilities, "detect_capability", _refused)

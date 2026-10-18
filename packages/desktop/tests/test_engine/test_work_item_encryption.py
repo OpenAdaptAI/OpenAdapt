@@ -53,7 +53,6 @@ def task(tmp_path: Path, monkeypatch):
     if disp.services._db is not None:
         disp.services._db.close()
 
-
 MEMBER = "M-48213377"
 OBSERVED = "M-99120044"
 

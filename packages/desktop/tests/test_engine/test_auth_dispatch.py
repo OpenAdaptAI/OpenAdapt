@@ -16,14 +16,8 @@ class TestAvailableProviders:
 class TestLoginDispatch:
     def test_skips_unavailable_provider(self, monkeypatch) -> None:
         """When browser is unavailable, dispatch falls through to paste."""
-        marker = {
-            "kind": "ingest_token",
-            "token": "t",
-            "refresh_token": None,
-            "org_id": None,
-            "host": "https://app.openadapt.ai",
-            "expires_at": None,
-        }
+        marker = {"kind": "ingest_token", "token": "t", "refresh_token": None,
+                  "org_id": None, "host": "https://app.openadapt.ai", "expires_at": None}
 
         class _Browser:
             name = "browser_pkce"
@@ -58,14 +52,8 @@ class TestLoginDispatch:
 
             def login(self):
                 called.append("paste")
-                return {
-                    "kind": "ingest_token",
-                    "token": "t",
-                    "refresh_token": None,
-                    "org_id": None,
-                    "host": "h",
-                    "expires_at": None,
-                }
+                return {"kind": "ingest_token", "token": "t", "refresh_token": None,
+                        "org_id": None, "host": "h", "expires_at": None}
 
         class _Browser:
             name = "browser_pkce"

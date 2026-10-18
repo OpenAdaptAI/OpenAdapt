@@ -18,7 +18,9 @@ PACK = "p.abcdefghijkl"
 ORIGIN = "https://openadapt.ai"
 VALID_URI = f"openadapt://runner?pack={PACK}&bind={BIND}&origin=https%3A%2F%2Fopenadapt.ai"
 CONNECT_SECRET = "oap_" + "A" * 43
-CONNECT_URI = f"openadapt://connect?pairing={CONNECT_SECRET}&host=https%3A%2F%2Fapp.openadapt.ai"
+CONNECT_URI = (
+    f"openadapt://connect?pairing={CONNECT_SECRET}&host=https%3A%2F%2Fapp.openadapt.ai"
+)
 
 
 def test_parser_accepts_only_the_fixed_runner_action() -> None:
@@ -44,7 +46,9 @@ def test_connect_parser_rejects_runner_shapes() -> None:
     with pytest.raises(pairing.PairingError, match="Invalid OpenAdapt connect link"):
         pairing.parse_connect_uri(VALID_URI)
     with pytest.raises(pairing.PairingError):
-        pairing.parse_connect_uri(f"openadapt://connect?pack={PACK}&bind={BIND}&origin={ORIGIN}")
+        pairing.parse_connect_uri(
+            f"openadapt://connect?pack={PACK}&bind={BIND}&origin={ORIGIN}"
+        )
 
 
 def test_parser_rejects_malformed_missing_duplicate_and_unknown_fields() -> None:

@@ -111,7 +111,8 @@ def _mailbox(
                 return httpx.Response(
                     201,
                     headers={"Cache-Control": "no-store"},
-                    json=claim_body or {"leaseSecret": LEASE, "lease_s": 900},
+                    json=claim_body
+                    or {"leaseSecret": LEASE, "lease_s": 900},
                 )
             return httpx.Response(
                 claim_status,
@@ -228,7 +229,7 @@ def test_poll_wait_is_zero_not_twenty_five(tmp_path: Path) -> None:
     assert "launch_agent(" not in source
     assert "import parallels_vm" not in source
     assert "hashlib.sha256(lease_secret" not in source
-    assert 'hashlib.sha256(stored["lease_secret"]' not in source
+    assert "hashlib.sha256(stored[\"lease_secret\"]" not in source
     assert "bytes.fromhex(lease_secret[5:])" in source
     assert '"allow"' in source
     assert "PAUSE_PROMPT" in source
@@ -246,11 +247,16 @@ def test_bind_pack_allow_is_per_sub_and_required_for_halt(tmp_path: Path) -> Non
     runner.claim_uri(URI, start_loop=False)
     runner.handle_envelope(_envelope("bind_pack"))
     assert any(
-        event == "authoring_state" and data["status"] == "pending_allow" for event, data in events
+        event == "authoring_state" and data["status"] == "pending_allow"
+        for event, data in events
     )
     runner.handle_envelope(_envelope("observe"))
     runner.handle_envelope(_envelope("halt"))
-    denied = [json.loads(item.content) for item in requests if item.url.path.endswith("/callback")]
+    denied = [
+        json.loads(item.content)
+        for item in requests
+        if item.url.path.endswith("/callback")
+    ]
     assert {item["result"]["error"] for item in denied} == {"not_allowed"}
     assert runner.allow()["allowed"] is True
     allow_req = next(item for item in requests if item.url.path.endswith("/allow"))
@@ -392,8 +398,8 @@ def test_windows_native_is_coach_only_and_does_not_start_recorder(tmp_path: Path
 def test_playwright_launcher_gets_the_desktop_url_not_an_mcp_string(tmp_path: Path) -> None:
     launched: list[str] = []
     runner, _requests, _recorder, _audit = _mailbox(tmp_path)
-    runner._playwright_launcher = lambda url: (
-        launched.append(url) or SimpleNamespace(cookies=lambda: [])
+    runner._playwright_launcher = lambda url: launched.append(url) or SimpleNamespace(
+        cookies=lambda: []
     )
     runner.claim_uri(URI, start_loop=False)
     runner.handle_envelope(_envelope("bind_pack"))

@@ -438,13 +438,13 @@ def test_reviewed_notice_hash_is_stable_across_windows_line_endings(
         (
             (
                 "reviewed-upstream:"
-                + notices.REVIEWED_EXTERNAL_NOTICE_FILES[("flatbuffers", str(flatbuffers.version))][
-                    "source_url"
-                ]
+                + notices.REVIEWED_EXTERNAL_NOTICE_FILES[
+                    ("flatbuffers", str(flatbuffers.version))
+                ]["source_url"]
                 + "#commit="
-                + notices.REVIEWED_EXTERNAL_NOTICE_FILES[("flatbuffers", str(flatbuffers.version))][
-                    "source_commit"
-                ]
+                + notices.REVIEWED_EXTERNAL_NOTICE_FILES[
+                    ("flatbuffers", str(flatbuffers.version))
+                ]["source_commit"]
             ),
             notice,
         )
