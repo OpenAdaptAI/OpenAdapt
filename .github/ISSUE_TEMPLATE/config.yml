@@ -1,8 +1,5 @@
 blank_issues_enabled: true
 contact_links:
-  - name: openadapt-capture issues
-    url: https://github.com/OpenAdaptAI/openadapt-capture/issues
-    about: For issues related to GUI recording and capture
   - name: openadapt-ml issues
     url: https://github.com/OpenAdaptAI/openadapt-ml/issues
     about: For issues related to ML training and inference

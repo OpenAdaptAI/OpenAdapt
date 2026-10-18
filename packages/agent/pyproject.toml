@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "openadapt-agent"
-version = "2.2.0"
+version = "2.2.1"
 description = "Let your AI agent enter information in apps with no API and get back whether it saved (MCP and Agent Skills)"
 readme = "README.md"
 # openadapt-flow pins <3.13 (rapidocr-onnxruntime); this package inherits it.
@@ -39,7 +39,7 @@ dependencies = [
     # 2.0 gates every saving run by default (each_item); the agent reports
     # that wait as waiting_for_approval (tests/test_approval_flow.py) and
     # 2.0 ships cloud_seal for Cloud-connected Seals.
-    "openadapt-flow>=2.1.0,<3",
+    "openadapt-flow>=2.2.0,<3",
     # Flow uses cryptography for encrypted bundles and signed runtime evidence.
     # Keep the published Agent artifact above the PKCS#7 oracle fixed by 50.0.0
     # (GHSA-g6cj-pr64-35w5), even when an existing environment already has an
@@ -70,7 +70,7 @@ tutorial = [
     # query, added in openadapt-flow 1.29.0. Older Flow falls back to the
     # simulated engine. Flow's macos extra (pyobjc, darwin-only markers) lets
     # `serve --authoring` without --url pin the frontmost macOS window.
-    "openadapt-flow[browser,macos]>=2.1.0,<3",
+    "openadapt-flow[browser,macos]>=2.2.0,<3",
 ]
 
 [project.scripts]

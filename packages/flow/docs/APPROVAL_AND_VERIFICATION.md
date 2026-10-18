@@ -183,13 +183,24 @@ exactly what will be saved before approving it.
 
 ## How a save is checked
 
-`ReadBackTier`, with RFC-0002's labels, weakest wins:
+Every check has a check level (`openadapt_flow.check_level.CheckLevel`).
+Higher is stronger, and when a save has several checks the weakest wins. The
+older scales keep their published numbers and map onto it:
 
-| Label | Flow tier | Can be clean |
-|---|---|---|
-| `independent_readback` | 1: the system of record, not through the UI (REST, SQL, FHIR, GraphQL, file export) | Yes, when confirmed |
-| `screen_readback` | 2 UI in a separate session, 3 acting session re-reads, 4 acting screen | No |
-| `unchecked` | No read, unreachable or stale store, no tier | No |
+| Check level | Meaning | `VerificationTier` | Seal `OracleTier` | RFC-0002 label | Can be clean |
+|---|---|---|---|---|---|
+| 5 `counterparty_confirmed` | The other party confirmed it received the value | (none) | 3 `COUNTERPARTY` | `independent_readback` | Yes, when confirmed |
+| 4 `system_of_record` | Read without the UI: REST, SQL, FHIR, GraphQL, file export | 1 `INDEPENDENT_SYSTEM` | 2 `SYSTEM_OF_RECORD` | `independent_readback` | Yes, when confirmed |
+| 3 `separate_session` | The app's own screens in a separately signed-in, read-only session | 2 `INDEPENDENT_SESSION` | 1 `INDEPENDENT_SESSION` | `screen_readback` | No |
+| 2 `reopened` | The acting session reopened the record and read it again | 3 `PERSISTED_STATE_REACQUISITION` | 0 `VISUAL` | `screen_readback` | No |
+| 1 `same_screen` | Only the acting screen shows the value | 4 `IMMEDIATE_SCREEN` | 0 `VISUAL` | `screen_readback` | No |
+| 0 `unchecked` | No read, unreachable or stale store, no tier | (no confirmed tier) | (no Seal) | `unchecked` | No |
+
+`VerificationTier` counts the other way (lower is stronger), so compare
+checks by `.check_level`, not by the tier number. A Seal at `VISUAL` reads as
+`same_screen`, because the Seal does not record whether the screen was
+reopened. The RFC-0002 labels (`ReadBackTier`) are the coarse rollup of this
+table.
 
 A save that declares effects and has no verifier stops before the write. A
 run with no check at all ends **Finished, not checked**. The verifier now

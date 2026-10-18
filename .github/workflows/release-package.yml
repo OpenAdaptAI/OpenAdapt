@@ -8,6 +8,7 @@
 #   flow     openadapt-flow   pypi-flow
 #   types    openadapt-types  pypi-types
 #   agent    openadapt-agent  pypi-agent
+#   capture  openadapt-capture  pypi-capture
 #
 # Manual dispatch only: there is no tag or push trigger, so nothing here runs
 # unless someone starts it. It refuses any ref other than the current tip of
@@ -33,7 +34,7 @@ on:
         description: "Package directory under packages/"
         required: true
         type: choice
-        options: [flow, types, agent]
+        options: [flow, types, agent, capture]
       version:
         description: "Version to publish; must equal packages/<package>/pyproject.toml"
         required: true
@@ -87,7 +88,12 @@ jobs:
           pkg, version = os.environ["PACKAGE"], os.environ["VERSION"]
           with open(f"packages/{pkg}/pyproject.toml", "rb") as fh:
               project = tomllib.load(fh)["project"]
-          expected = {"flow": "openadapt-flow", "types": "openadapt-types", "agent": "openadapt-agent"}[pkg]
+          expected = {
+              "flow": "openadapt-flow",
+              "types": "openadapt-types",
+              "agent": "openadapt-agent",
+              "capture": "openadapt-capture",
+          }[pkg]
           if project["name"] != expected:
               sys.exit(f"packages/{pkg} is {project['name']!r}, expected {expected!r}")
           if project["version"] != version:
@@ -128,6 +134,12 @@ jobs:
           python -m pip install 'build==1.6.1' 'twine==7.0.0'
           python -m build "packages/$PACKAGE" --outdir dist
           python -m twine check --strict dist/*
+          if [ "$PACKAGE" = capture ]; then
+            # Capture's release contract: notes for this version, and archives
+            # that carry only the public source boundary.
+            python packages/capture/scripts/check_changelog.py --skip-tags
+            python packages/capture/scripts/verify_distribution.py dist/*
+          fi
           ls -l dist
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -343,15 +355,27 @@ jobs:
             exit 1
           fi
 
-          release_url="$GITHUB_API_URL/repos/$GITHUB_REPOSITORY/releases/tags/$RELEASE_TAG"
+          # GET /releases/tags/{tag} never returns a draft, so find the release
+          # in the full list, which includes drafts for this token.
           fetch_release() {
-            curl --silent --show-error \
-              --output /tmp/github-release.json \
-              --write-out '%{http_code}' \
-              --header "Accept: application/vnd.github+json" \
-              --header "Authorization: Bearer $GH_TOKEN" \
-              --header "X-GitHub-Api-Version: 2026-03-10" \
-              "$release_url"
+            "$GH_CLI" api --paginate --slurp \
+              "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              > /tmp/github-releases.json || { echo 500; return; }
+            python - "$RELEASE_TAG" <<'PY'
+          import json
+          import sys
+
+          tag = sys.argv[1]
+          pages = json.load(open("/tmp/github-releases.json", encoding="utf-8"))
+          found = [r for page in pages for r in page if r.get("tag_name") == tag]
+          if len(found) > 1:
+              print(409)
+          elif found:
+              json.dump(found[0], open("/tmp/github-release.json", "w", encoding="utf-8"))
+              print(200)
+          else:
+              print(404)
+          PY
           }
           verify() {
             python scripts/verify_github_release.py \
