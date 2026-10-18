@@ -648,7 +648,9 @@ def run_worklist_pool(
                 wall = time.monotonic() - t_item
                 summary.busy_s += wall
                 detail = {**out.detail, "wall_s": round(wall, 3), "worker": worker.name}
-                if out.pending_readback is not None and out.state in SUCCESS_STATES:
+                if out.pending_readback is not None:
+                    # The final state comes from the read-back, whatever the
+                    # report said when the item returned.
                     queue.set_state(idx, worker.name, READBACK_PENDING, detail)
                     fut: Future = Future()
 
