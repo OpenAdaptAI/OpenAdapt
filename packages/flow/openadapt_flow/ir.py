@@ -4300,6 +4300,28 @@ class LoopIterationBinding(BaseModel):
     params: dict[str, Union[str, bool, int, float]] = Field(default_factory=dict)
 
 
+class VariantRouteStamp(BaseModel):
+    """Which admitted variant of a workflow ran, as chosen by the variant router.
+
+    Written into :class:`RunReport` only for a run the deterministic
+    pre-run router started (see :mod:`openadapt_flow.variants`). Names and
+    digests only: no input value and no screen content.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    router: Literal["openadapt.variant-router/v0"] = "openadapt.variant-router/v0"
+    variant_set: str = Field(min_length=1, max_length=256)
+    variant_set_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    variant: str = Field(min_length=1, max_length=128)
+    variant_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    admission_id: str = Field(min_length=1, max_length=64)
+    bundle_content_digest: str = Field(pattern=r"^[a-f0-9]{64}$")
+    #: Digest of the first-screen fingerprint; ``None`` when no variant in the
+    #: set has a screen condition, so no screen was read.
+    fingerprint_digest: Optional[str] = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+
+
 class RunReport(BaseModel):
     workflow_name: str
     started_at: str
@@ -4659,6 +4681,14 @@ class RunReport(BaseModel):
             "PHI-free approval-mode evidence for this item. The engine's "
             "outcome words are unchanged by it."
         ),
+    )
+    # Variant-router stamp: present only when the deterministic pre-run router
+    # chose this bundle from a variant set, so every other report serializes
+    # exactly as before.
+    variant_route: Optional[VariantRouteStamp] = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description="The admitted variant the router chose for this run.",
     )
 
     @model_serializer(mode="wrap")

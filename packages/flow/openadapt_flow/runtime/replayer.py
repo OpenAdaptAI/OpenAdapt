@@ -2419,6 +2419,10 @@ class Replayer:
                 self._surface_environment_observations
             )
         report.qualification_fault_mutations = list(self._qualification_fault_mutations)
+        from openadapt_flow.runtime.variant_stamp import current_variant_route
+
+        if (variant_route := current_variant_route()) is not None:
+            report.variant_route = variant_route
         self._stamp_execution_outcome(report, workflow, run_dir)
         self._stamp_approval(report)
         if persist:
