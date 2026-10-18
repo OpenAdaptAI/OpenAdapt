@@ -1,4 +1,4 @@
-"""Agents that drive the crystallize harness on run 1.
+"""Agents that drive the compile-agent harness on run 1.
 
 :class:`ClaudeAgent` is a live Claude computer-use loop on the customer's own
 key, in one of two observation modes:
@@ -29,7 +29,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, ClassVar, Mapping, Optional, Sequence
 
-from openadapt_flow.crystallize.harness import GateRefused, Harness, StaleRef
+from openadapt_flow.compile_agent.harness import GateRefused, Harness, StaleRef
 from openadapt_flow.jit.adapters import UnsupportedAction
 from openadapt_flow.jit.compile_agent import TaskRequest
 
@@ -108,6 +108,7 @@ class AgentLedger:
     finished: bool = False
     summary: Optional[str] = None
     tool_errors: int = 0
+    prices: Optional[dict[str, float]] = None
 
     @property
     def model_calls(self) -> int:
@@ -117,7 +118,7 @@ class AgentLedger:
         return sum(int(getattr(call, name)) for call in self.calls)
 
     def cost_usd(self) -> float:
-        prices = PRICES_PER_MTOK.get(self.model or "")
+        prices = self.prices or PRICES_PER_MTOK.get(self.model or "")
         if prices is None:
             return 0.0
         return (
@@ -366,11 +367,20 @@ class ClaudeAgent:
     max_tokens: int = 8000
     client: Any = None
     principal_id: Optional[str] = None
+    #: USD per million tokens (input, output, cache_write, cache_read) for a
+    #: model not in :data:`PRICES_PER_MTOK`. The cost cap needs a price.
+    prices: Optional[dict[str, float]] = None
     requires_model_key: ClassVar[bool] = True
 
     def __post_init__(self) -> None:
         if self.vision not in VISION_MODES:
             raise ValueError(f"vision must be one of {VISION_MODES}")
+        if self.prices is None and self.model not in PRICES_PER_MTOK:
+            raise ValueError(
+                f"no price for {self.model!r}, so the cost cap can't hold; pass "
+                "prices={'input': ..., 'output': ..., 'cache_write': ..., "
+                "'cache_read': ...} in USD per million tokens"
+            )
         if self.principal_id is None:
             self.principal_id = f"agent:{self.model}"
 
@@ -389,7 +399,11 @@ class ClaudeAgent:
 
     def drive(self, request: TaskRequest, harness: Harness) -> AgentLedger:
         client = self._client(request)
-        ledger = AgentLedger(agent="claude", model=self.model, vision=self.vision)
+        ledger = AgentLedger(
+            agent="claude", model=self.model, vision=self.vision, prices=self.prices
+        )
+        #: Kept so a run that raises still reports what it spent.
+        self.last_ledger = ledger
         selective = self.vision == "selective"
         if selective:
             system = _SELECTIVE_SYSTEM

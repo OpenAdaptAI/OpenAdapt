@@ -30,7 +30,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence
 
-from openadapt_flow.crystallize import observe as _observe
+from openadapt_flow.compile_agent import observe as _observe
 from openadapt_flow.jit.adapters import CaptureComputer, Observation, translate
 
 __all__ = [
@@ -109,7 +109,7 @@ class HarnessStats:
 
 @dataclass
 class Harness:
-    """One run's harness. Built by the crystallize pipeline around the capture
+    """One run's harness. Built by the compile-agent pipeline around the capture
     computer; agents call its methods."""
 
     computer: CaptureComputer
@@ -126,7 +126,7 @@ class Harness:
     def page(self) -> Any:
         page = self.computer.page
         if page is None:
-            raise RuntimeError("the crystallize harness needs a browser page")
+            raise RuntimeError("the compile-agent harness needs a browser page")
         return page
 
     @property
@@ -161,7 +161,12 @@ class Harness:
             raise StaleRef(f"{ref!r} is not in the latest observation; observe again")
         control = last.controls[ref]
         at = _observe.element_at(self.page, control.x, control.y) or {}
-        if str(at.get("name", "")).lower() != control.name.lower():
+        # Same name, and the same row: a re-sorted list must not turn a ref
+        # into another row's control with the same label.
+        if (
+            str(at.get("name", "")).lower() != control.name.lower()
+            or str(at.get("context", "")) != control.context
+        ):
             raise StaleRef(
                 f"{ref!r} ({control.name!r}) is no longer at its place; observe again"
             )
@@ -192,7 +197,7 @@ class Harness:
 
         commit = self._commit_target(native)
         if commit is not None:
-            self._check_gate(commit)
+            self._check_gate(*commit)
         obs = self.computer.execute(native)
         self.stats.actions += 1
         if commit is not None:
@@ -200,8 +205,18 @@ class Harness:
             _settle(self.page)
         return obs
 
-    def _commit_target(self, native: Mapping[str, Any]) -> Optional[str]:
-        """The label of the control this action commits, or None."""
+    def _commit_target(
+        self, native: Mapping[str, Any]
+    ) -> Optional[tuple[str, Optional[str]]]:
+        """``(what commits, the text around it)`` when the action may commit a
+        write, else None.
+
+        Every action that can change the app is gated unless it is plainly not
+        a commit: a click on a control whose label names no write, typing
+        without a line break, or a navigation key. A click on something the
+        harness can't read, Enter, Space on a control, a typed line break, and
+        any shortcut are all gated.
+        """
 
         for op in translate(self.dialect, native):
             if op.kind in ("click", "double_click", "right_click"):
@@ -209,26 +224,33 @@ class Harness:
                 point = (op.x, op.y) if op.x is not None else self.computer.pointer
                 if point is None or point[0] is None:
                     continue
-                at = _observe.element_at(self.page, point[0], point[1]) or {}
+                at = _observe.element_at(self.page, point[0], point[1])
+                if at is None:
+                    return ("a click on an element the harness could not read", None)
                 name = str(at.get("name") or "")
-                if at.get("tag") in ("button", "a", "input") and _observe.commit_label(
-                    name
-                ):
-                    return name
-            if op.kind == "press" and op.key == "Enter":
+                if at.get("interactive") and _observe.commit_label(name):
+                    return (name, at.get("scope"))
+            elif op.kind == "type" and any(ch in (op.text or "") for ch in "\r\n"):
                 focused = _observe.focused_element(self.page) or {}
-                if focused.get("tag") == "input" and focused.get("in_form"):
-                    return f"Enter in {focused.get('name') or 'a form field'}"
-                if focused.get("tag") == "button" and _observe.commit_label(
-                    str(focused.get("name") or "")
-                ):
-                    return str(focused.get("name"))
+                return ("a typed line break", focused.get("scope"))
+            elif op.kind == "hotkey":
+                focused = _observe.focused_element(self.page) or {}
+                shortcut = "+".join([*op.modifiers, op.key or ""])
+                return (f"the shortcut {shortcut}", focused.get("scope"))
+            elif op.kind == "press" and op.key in ("Enter", "Space"):
+                focused = _observe.focused_element(self.page) or {}
+                if op.key == "Space" and focused.get("editable"):
+                    continue
+                label = str(focused.get("name") or "the focused element")
+                return (f"{op.key} on {label}", focused.get("scope"))
         return None
 
-    def _check_gate(self, control: str) -> None:
+    def _check_gate(self, control: str, scope: Optional[str]) -> None:
+        """The right-record check: the identity must be shown, as whole words,
+        in the row, dialog, form or section the commit happens in."""
+
         self.stats.gate_checks += 1
-        screen = _observe.page_text(self.page)
-        missing = [s for s in self.gate.on_screen if s not in screen]
+        missing = [s for s in self.gate.on_screen if not _observe.shows(scope or "", s)]
         if not self.gate.on_screen:
             missing = ["(the task names no record identity to check)"]
         shot: Optional[Path] = None
@@ -250,8 +272,8 @@ class Harness:
             entry["decision"] = "refused_wrong_record"
             self.gate_log.append(entry)
             self._refuse(
-                f"{control!r} would commit a write, but the screen does not show "
-                f"{missing}; the right-record check refused it"
+                f"{control!r} may commit a write, but the form, row or section it "
+                f"is in does not show {missing}; the right-record check refused it"
             )
         if self.gate.hold is not None:
             approved = bool(

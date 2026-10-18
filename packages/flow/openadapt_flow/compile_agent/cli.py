@@ -1,14 +1,19 @@
-"""``openadapt-flow crystallize``: an agent's first verified run becomes a program.
+"""``openadapt-flow compile-agent``: compile an agent's first verified run.
+
+A computer-use agent does the task once in the app at ``--url``. That run is
+real: the agent makes the entry in that app. Point ``--url`` at a test copy
+with test records. If the system of record shows exactly the record the task
+named, the run is compiled into a program that later runs with no model calls.
 
 ::
 
-    openadapt-flow crystallize "Open the referral for Jane Sample and save this note: {note}" \\
+    openadapt-flow compile-agent "Open the referral for Jane Sample and save this note: {note}" \\
         --url http://localhost:8080/#tasks --verify verify.yaml \\
         --param note="Follow up in two weeks" \\
         --expect patient_id=p1 --on-screen "Jane Sample" --on-screen "MRN P1" \\
         --admit-key agent.pem --admission-policy signed-policy.json
 
-    openadapt-flow crystallize run <task dir> --param note="Recheck in ten days"
+    openadapt-flow compile-agent run <task dir> --param note="Recheck in ten days"
 
 The command is re-entrant. Run it again with the same arguments and it picks
 up where it stopped: the agent runs only when the task has no draft and no
@@ -25,7 +30,7 @@ import sys
 from pathlib import Path
 from typing import Any, Callable, Optional
 
-__all__ = ["add_parser", "cmd_crystallize"]
+__all__ = ["add_parser", "cmd_compile_agent"]
 
 
 def _pairs(items: Optional[list[str]], flag: str) -> dict[str, str]:
@@ -40,23 +45,25 @@ def _pairs(items: Optional[list[str]], flag: str) -> dict[str, str]:
 
 def add_parser(sub: argparse._SubParsersAction) -> None:
     p = sub.add_parser(
-        "crystallize",
+        "compile-agent",
         help=(
-            "Let a computer-use agent do a task once, check the record it wrote, "
-            "and compile it into a program that runs with no model calls"
+            "Run a computer-use agent once against --url (it writes to that app; "
+            "use a test copy), check the record it wrote, and compile the run "
+            "into a program that runs with no model calls"
         ),
         description=__doc__,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument(
         "prompt",
-        help='the task, with {name} for each --param; or "run" to run a crystallized task',
+        help='the task, with {name} for each --param; or "run" to run a compiled task',
     )
-    p.add_argument(
-        "task_dir", nargs="?", help="with run: the crystallized task directory"
-    )
+    p.add_argument("task_dir", nargs="?", help="with run: the compiled task directory")
     p.add_argument("--param", action="append", metavar="NAME=VALUE")
-    p.add_argument("--url", help="the app's entry URL")
+    p.add_argument(
+        "--url",
+        help="the app's entry URL; the agent makes real entries there, so use a test copy",
+    )
     p.add_argument(
         "--verify",
         help="verify.yaml whose verifier: section reads the system of record",
@@ -83,7 +90,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     p.add_argument("--effort", default="medium")
     p.add_argument("--max-cost", type=float, default=2.0, help="USD cap for run 1")
     p.add_argument("--task-id", default=None)
-    p.add_argument("--cache", default=".openadapt-crystallize")
+    p.add_argument("--cache", default=".openadapt-compile-agent")
     p.add_argument("--key-dir", default=None, help="JIT admission key directory")
     p.add_argument("--policy", default="clinical-write", help="Flow risk policy")
     p.add_argument(
@@ -98,6 +105,15 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     )
     p.add_argument("--admission-policy", help="signed admission policy for --admit-key")
     p.add_argument(
+        "--canary-param",
+        action="append",
+        metavar="NAME=VALUE",
+        help=(
+            "the value each canary saves; a canary is a real save on the record "
+            "--expect names, so use a value that is safe there (required to admit)"
+        ),
+    )
+    p.add_argument(
         "--admit-as",
         help="a person who reviews, attends the canary and admits at this terminal",
     )
@@ -109,7 +125,7 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
     )
     p.add_argument("--show-browser", action="store_true")
     p.add_argument("--json", action="store_true", help="print the result as JSON")
-    p.set_defaults(func=cmd_crystallize)
+    p.set_defaults(func=cmd_compile_agent)
 
 
 def _interactive() -> bool:
@@ -117,7 +133,7 @@ def _interactive() -> bool:
 
 
 def _agent(args: argparse.Namespace) -> Any:
-    from openadapt_flow.crystallize.agents import (
+    from openadapt_flow.compile_agent.agents import (
         DEFAULT_MODEL,
         ClaudeAgent,
         ScriptedAgent,
@@ -160,6 +176,10 @@ def _terminal_confirm(
             for name, value in effect["match"].items():
                 print(f"    {name} = {value}")
         print(f"  file: {proposed['file']}")
+        print(
+            "Parameters (each run supplies a new value): "
+            + (", ".join(proposed["params"]) or "none")
+        )
         name = ask("Your name (the person confirming these checks): ").strip()
         if not name:
             return None
@@ -168,6 +188,29 @@ def _terminal_confirm(
         return name
 
     return confirm
+
+
+def _terminal_review(
+    ask: Callable[[str], str],
+) -> Callable[[str, dict[str, Any]], bool]:
+    def review(stage: str, shown: dict[str, Any]) -> bool:
+        if stage == "review":
+            print("The compiled program's steps:")
+            for step in shown["steps"]:
+                print(
+                    f"  {step.get('id')}: {step.get('action')} {step.get('intent') or ''}"
+                )
+            print(f"Parameters: {', '.join(shown['params']) or 'none'}")
+            prompt = "Type ok to confirm you reviewed every step: "
+        else:
+            for canary in shown["canaries"]:
+                print(
+                    f"Canary: {canary['status']}, receipt {canary['receipt_outcome']}"
+                )
+            prompt = "Type ok to admit this program: "
+        return ask(prompt).strip().lower() == "ok"
+
+    return review
 
 
 def _terminal_hold(ask: Callable[[str], str]) -> Callable[[Any], bool]:
@@ -195,25 +238,25 @@ def _print(result: dict[str, Any], as_json: bool) -> None:
         print(f"{key}: {value}")
 
 
-def cmd_crystallize(
+def cmd_compile_agent(
     args: argparse.Namespace,
     *,
     ask: Callable[[str], str] = input,
     interactive: Callable[[], bool] = _interactive,
 ) -> int:
-    from openadapt_flow.crystallize.pipeline import crystallize, run_crystallized
+    from openadapt_flow.compile_agent.pipeline import compile_first_run, run_compiled
 
     params = _pairs(args.param, "--param")
     if args.prompt == "run":
         if not args.task_dir:
-            raise SystemExit("crystallize run needs the crystallized task directory")
-        replay = run_crystallized(args.task_dir, **params)
+            raise SystemExit("compile-agent run needs the compiled task directory")
+        replay = run_compiled(args.task_dir, **params)
         _print(replay.to_dict(), args.json)
         return 0 if replay.verified else 1
     missing = [f for f in ("url", "verify") if not getattr(args, f)]
     if missing or not args.expect or not args.on_screen:
         raise SystemExit(
-            "crystallize needs --url, --verify, at least one --expect FIELD=VALUE "
+            "compile-agent needs --url, --verify, at least one --expect FIELD=VALUE "
             "and at least one --on-screen TEXT"
         )
     tty = interactive()
@@ -228,7 +271,7 @@ def cmd_crystallize(
         from openadapt_flow.jit.keys import load_customer_model_key
 
         model_key = load_customer_model_key("anthropic")
-    result = crystallize(
+    result = compile_first_run(
         args.prompt,
         params=params,
         url=args.url,
@@ -240,6 +283,10 @@ def cmd_crystallize(
         drop_fields=args.drop_field,
         admitter=_admitter(args),
         person=args.admit_as,
+        review=_terminal_review(ask) if (tty and args.admit_as) else None,
+        canary_params=(
+            [_pairs(args.canary_param, "--canary-param")] if args.canary_param else None
+        ),
         hold=hold,
         task_id=args.task_id,
         policy=args.policy,

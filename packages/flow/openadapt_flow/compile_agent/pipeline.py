@@ -1,4 +1,4 @@
-"""Crystallize: a computer-use agent's first verified run becomes a program.
+"""Compile a computer-use agent's first verified run into a program.
 
 Run 1 lets a computer-use agent do the task inside the harness
 (:mod:`.harness`): structural observations first, a screenshot only when the
@@ -21,7 +21,7 @@ Then, in order:
    only when that policy allows it). Without either, a person admits at a
    terminal.
 4. **Emit.** An Agent Skill, an MCP server with one tool, and a one-line CLI
-   command, all calling :func:`run_crystallized`.
+   command, all calling :func:`run_compiled`.
 
 Every later run executes the admitted program with no model calls, reads each
 save back through the verifier, and gets a ``verify-run`` receipt against the
@@ -39,7 +39,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Sequence, Union
 
-from openadapt_flow.crystallize.harness import GateRequest, Harness, SaveGate
+from openadapt_flow.compile_agent.harness import GateRequest, Harness, SaveGate
 from openadapt_flow.jit import lifecycle
 from openadapt_flow.jit.compile_agent import (
     CompiledAgent,
@@ -52,19 +52,19 @@ from openadapt_flow.jit.keys import CustomerModelKey
 from openadapt_flow.jit.signature import TaskSignature
 
 __all__ = [
-    "CrystallizeResult",
-    "Crystallizer",
+    "CompileResult",
+    "FirstRunCompiler",
     "RecordCheck",
     "ReplayResult",
     "SPEC_SCHEMA",
     "check_run_record",
-    "crystallize",
-    "run_crystallized",
+    "compile_first_run",
+    "run_compiled",
 ]
 
-SPEC_SCHEMA = "openadapt.crystallize/v1"
-SPEC_FILE = "crystallize.json"
-OUT_DIR = "crystallized"
+SPEC_SCHEMA = "openadapt.compile-agent/v1"
+SPEC_FILE = "compile_agent.json"
+OUT_DIR = "compiled"
 PROPOSED_FILE = "verify.proposed.yaml"
 CONFIRMED_FILE = "verify.yaml"
 CHECKS_FILE = "record_checks.json"
@@ -90,7 +90,7 @@ def _write_json(path: Path, data: Any) -> Path:
 
 def _slug(text: str) -> str:
     words = re.findall(r"[a-z0-9]+", _PLACEHOLDER_RE.sub("", text.lower()))
-    return "crystallize." + ("-".join(words[:6]) or "task")
+    return "compile-agent." + ("-".join(words[:6]) or "task")
 
 
 # -- the run-1 record check ------------------------------------------------------
@@ -164,8 +164,8 @@ def check_run_record(
 
 
 @dataclass
-class CrystallizeResult:
-    """What :func:`crystallize` did.
+class CompileResult:
+    """What :func:`compile_first_run` did.
 
     ``status`` is ``admitted`` (later runs make no model calls), ``draft``
     (run 1 passed; checks or admission wait for a person), ``needs_person``
@@ -265,10 +265,10 @@ class _HarnessedAgent:
 # -- the pipeline -------------------------------------------------------------------
 
 
-class Crystallizer:
-    """One task's crystallize state, on disk under ``<cache_dir>/<task key>``.
+class FirstRunCompiler:
+    """One task's compile-agent state, on disk under ``<cache_dir>/<task key>``.
 
-    :func:`crystallize` runs every step. Use the steps when a person confirms
+    :func:`compile_first_run` runs every step. Use the steps when a person confirms
     later: :meth:`record`, :meth:`confirm_checks`, :meth:`admit`, :meth:`emit`,
     then :meth:`run` for every later run.
     """
@@ -284,7 +284,7 @@ class Crystallizer:
         on_screen: Sequence[str],
         task_id: Optional[str] = None,
         policy: str = "clinical-write",
-        cache_dir: Union[str, Path] = ".openadapt-crystallize",
+        cache_dir: Union[str, Path] = ".openadapt-compile-agent",
         key_dir: Optional[Union[str, Path]] = None,
         reset: Optional[Callable[[], None]] = None,
         headless: bool = True,
@@ -293,6 +293,9 @@ class Crystallizer:
     ) -> None:
         from openadapt_flow.record_sor import load_observer
 
+        reserved = sorted(set(params) & {"reset", "task_dir"})
+        if reserved:
+            raise ValueError(f"parameter names {reserved} are reserved")
         placeholders = set(_PLACEHOLDER_RE.findall(prompt))
         if placeholders != set(params):
             raise ValueError(
@@ -398,10 +401,10 @@ class Crystallizer:
     @classmethod
     def load(
         cls, task_dir: Union[str, Path], *, reset: Optional[Callable[[], None]] = None
-    ) -> "Crystallizer":
+    ) -> "FirstRunCompiler":
         spec = json.loads((Path(task_dir) / SPEC_FILE).read_text())
         if spec.get("schema") != SPEC_SCHEMA:
-            raise ValueError(f"{task_dir} is not a crystallized task")
+            raise ValueError(f"{task_dir} is not a compiled agent task")
         task = spec["task"]
         return cls(
             task["instruction"],
@@ -427,7 +430,7 @@ class Crystallizer:
         *,
         hold: Optional[Callable[[GateRequest], bool]] = None,
         principal_id: Optional[str] = None,
-    ) -> CrystallizeResult:
+    ) -> CompileResult:
         """Run 1: the agent does the task in the harness; Flow records it.
 
         ``principal_id`` is the identity the recording is signed with (the
@@ -438,9 +441,20 @@ class Crystallizer:
         self.save_spec()
         jit = self._jit()
         values = self.task.validate(params)
+        if jit.admitted or jit.candidate() is not None:
+            raise lifecycle.AdmissionError(
+                "this task already has a draft or an admitted program; run 1 runs "
+                "only once (reject the draft to record again)"
+            )
         # A new run 1 makes a new draft: checks a person confirmed for an
         # earlier draft must not carry over to it.
-        for stale in (CONFIRMED_FILE, CHECKS_FILE, "admission.json", "emitted.json"):
+        for stale in (
+            PROPOSED_FILE,
+            CONFIRMED_FILE,
+            CHECKS_FILE,
+            "admission.json",
+            "emitted.json",
+        ):
             (self.out_dir / stale).unlink(missing_ok=True)
         attempt = self.dir / "attempts" / _stamp()
         harnessed = _HarnessedAgent(
@@ -469,8 +483,8 @@ class Crystallizer:
         }
         _write_json(attempt / "run1.json", run1)
 
-        def done(status: str, detail: Optional[str], **kw: Any) -> CrystallizeResult:
-            out = CrystallizeResult(
+        def done(status: str, detail: Optional[str], **kw: Any) -> CompileResult:
+            out = CompileResult(
                 status=status,
                 dir=self.dir,
                 task_key=self.task.key,
@@ -490,6 +504,10 @@ class Crystallizer:
                 if decision == "refused_by_hold"
                 else "refused_wrong_record"
             )
+            if jit.candidate() is not None:
+                # An agent that caught the refusal and went on still made a
+                # draft; it must never be admitted.
+                self._set_aside(jit, status, [harness.refusal])
             return done(status, harness.refusal)
         if result.status != lifecycle_status_draft():
             return done(result.status, result.detail)
@@ -549,6 +567,8 @@ class Crystallizer:
         effects = doc.get("effects") or []
         return {
             "file": str(self.out_dir / PROPOSED_FILE),
+            # Confirming the checks also confirms these as the parameters.
+            "params": sorted(self.task.params),
             "effects": [
                 {
                     "kind": e.get("kind"),
@@ -641,16 +661,16 @@ class Crystallizer:
             "effects": effects,
         }
         parse_verify_config(config, source="confirmed checks")
+        if self.task.params:
+            jit.confirm_params(
+                principal_id=name, accept_params=sorted(self.task.params), confirm="ok"
+            )
         path = self.out_dir / CONFIRMED_FILE
         _write_private(
             path,
             f"# Confirmed by {name} at {_now()} from {PROPOSED_FILE}.\n"
             + yaml.safe_dump(config, sort_keys=False, allow_unicode=True),
         )
-        if self.task.params:
-            jit.confirm_params(
-                principal_id=name, accept_params=sorted(self.task.params), confirm="ok"
-            )
         _write_json(
             self.out_dir / CHECKS_FILE,
             {
@@ -693,6 +713,7 @@ class Crystallizer:
         work = self.dir / "receipts" / f"{kind}-{_stamp()}"
         work.mkdir(parents=True, exist_ok=True)
         self._pending = (cfg, values, work / "baseline.json")
+        self._receipt_baseline = None
         try:
             result = run()
         finally:
@@ -707,7 +728,7 @@ class Crystallizer:
                 "executor_id": self.task.key,
                 "executor_build": {"openadapt-flow": __version__},
             },
-            authorization_ref=f"crystallize:{self.task.key}:{kind}",
+            authorization_ref=f"compile-agent:{self.task.key}:{kind}",
             baseline_path=self._receipt_baseline,
         )
         return result, receipt, write_result(receipt, work)
@@ -717,14 +738,21 @@ class Crystallizer:
         *,
         admitter: Any = None,
         person: Optional[str] = None,
+        review: Optional[Callable[[str, dict[str, Any]], bool]] = None,
         canary_params: Optional[Sequence[Mapping[str, Any]]] = None,
-    ) -> CrystallizeResult:
+    ) -> CompileResult:
         """Canary the draft, then admit it.
 
         ``admitter`` is a registered :class:`~openadapt_flow.jit.authority.Principal`:
         an admitter key, or an agent under a signed admission policy (which
-        needs ``min_clean_canaries`` canaries). Without one, ``person`` reviews
-        every step, attends one canary and admits at an interactive terminal.
+        needs ``min_clean_canaries`` canaries). Without one, ``person`` admits
+        at an interactive terminal: ``review`` shows them the steps and the
+        parameters (``"review"``), then the canary results (``"admit"``), and
+        returns True only when they confirm each.
+
+        ``canary_params`` are the values each canary saves, one mapping per
+        canary (the last is reused). A canary is a real save on the record the
+        task names, so the operator chooses values that are safe there.
 
         Each canary also gets a verify-run receipt against the confirmed
         checks; a canary passes only when both end VERIFIED.
@@ -738,17 +766,36 @@ class Crystallizer:
                 "no admitter: pass a registered key or agent principal, or a person "
                 "at a terminal",
             )
+        rows = [dict(row) for row in canary_params or []]
+        if not rows:
+            return self._result(
+                "draft",
+                "pass canary values: each canary saves them on the record "
+                f"{self.expect}, so choose values that are safe to write there",
+            )
         if admitter is not None:
             policy = getattr(admitter, "policy", None)
             count = policy.policy.min_clean_canaries if policy is not None else 1
         else:
+            if review is None:
+                return self._result(
+                    "draft",
+                    f"{person} reviews the steps at a terminal: openadapt-flow jit "
+                    f"review {self.dir}, then pass review= to show them here",
+                )
+            status = jit.status()
+            shown = {"steps": status["steps"], "params": sorted(self.task.params)}
+            if not review("review", shown):
+                return self._result("draft", f"{person} did not confirm the review")
+            jit.review(
+                principal_id=str(person),
+                reviewed_steps=[s["id"] for s in status["steps"]],
+                confirm="ok",
+            )
             count = 1
-            steps = [s["id"] for s in jit.status()["steps"]]
-            jit.review(principal_id=str(person), reviewed_steps=steps, confirm="ok")
-        rows = list(canary_params or [])
         canaries: list[dict[str, Any]] = []
         for i in range(count):
-            params = dict(rows[i]) if i < len(rows) else self._canary_values(i + 1)
+            params = rows[min(i, len(rows) - 1)]
             values = self.task.validate(params)
             try:
                 result, receipt, path = self._governed(
@@ -790,6 +837,13 @@ class Crystallizer:
                 )
             manifest = out["manifest"]
         else:
+            assert review is not None
+            if not review("admit", {"canaries": canaries}):
+                return self._result(
+                    "draft",
+                    f"{person} did not admit the program",
+                    admission={"canaries": canaries},
+                )
             manifest = jit.admit(principal_id=str(person), confirm="ok")
         admission = {
             "canaries": canaries,
@@ -801,14 +855,9 @@ class Crystallizer:
         _write_json(self.out_dir / "admission.json", admission)
         return self._result("admitted", None, admission=admission)
 
-    def _canary_values(self, n: int) -> dict[str, str]:
-        return {name: f"Canary test {name} {n}" for name in self.task.params}
-
-    def _result(
-        self, status: str, detail: Optional[str], **kw: Any
-    ) -> CrystallizeResult:
+    def _result(self, status: str, detail: Optional[str], **kw: Any) -> CompileResult:
         confirmed = self.out_dir / CONFIRMED_FILE
-        return CrystallizeResult(
+        return CompileResult(
             status=status,
             dir=self.dir,
             task_key=self.task.key,
@@ -824,13 +873,13 @@ class Crystallizer:
         flags = " ".join(
             f"--param {name}=<{name}>" for name in sorted(self.task.params)
         )
-        line = f"openadapt-flow crystallize run {self.dir}"
+        line = f"openadapt-flow compile-agent run {self.dir}"
         return f"{line} {flags}".rstrip()
 
     def emit(self) -> dict[str, Any]:
         """Write the Agent Skill, the MCP server, and the CLI line."""
 
-        from openadapt_flow.crystallize.emit import emit_mcp, emit_skill_for
+        from openadapt_flow.compile_agent.emit import emit_mcp, emit_skill_for
 
         jit = self._jit()
         if not jit.admitted:
@@ -858,7 +907,7 @@ class Crystallizer:
                 model_calls=None,
                 seconds=0.0,
                 run_dir=None,
-                detail="this task has no admitted program; crystallize it first",
+                detail="this task has no admitted program; compile an agent run first",
             )
         result, receipt, path = self._governed("run", values, lambda: jit.run(**params))
         outcome = _receipt_outcome(receipt)
@@ -893,13 +942,13 @@ def lifecycle_status_draft() -> str:
     return NEEDS_HUMAN_ADMIT
 
 
-def _confirmer(confirm: PersonOrCallback, crystallizer: Crystallizer) -> Optional[str]:
+def _confirmer(confirm: PersonOrCallback, compiler: FirstRunCompiler) -> Optional[str]:
     if confirm is None or isinstance(confirm, str):
         return confirm
-    return confirm(crystallizer.proposed())
+    return confirm(compiler.proposed())
 
 
-def crystallize(
+def compile_first_run(
     prompt: str,
     *,
     params: Mapping[str, Any],
@@ -912,17 +961,18 @@ def crystallize(
     drop_fields: Sequence[str] = (),
     admitter: Any = None,
     person: Optional[str] = None,
+    review: Optional[Callable[[str, dict[str, Any]], bool]] = None,
     hold: Optional[Callable[[GateRequest], bool]] = None,
     canary_params: Optional[Sequence[Mapping[str, Any]]] = None,
     task_id: Optional[str] = None,
     policy: str = "clinical-write",
-    cache_dir: Union[str, Path] = ".openadapt-crystallize",
+    cache_dir: Union[str, Path] = ".openadapt-compile-agent",
     key_dir: Optional[Union[str, Path]] = None,
     model_key: Optional[CustomerModelKey] = None,
     reset: Optional[Callable[[], None]] = None,
     headless: bool = True,
     on_warning: Optional[Callable[[str], None]] = None,
-) -> CrystallizeResult:
+) -> CompileResult:
     """Turn an agent's first verified run of ``prompt`` into an admitted program.
 
     Args:
@@ -934,8 +984,8 @@ def crystallize(
         expect: Fields the new record must have, such as ``{"patient_id": "p1"}``.
         on_screen: The record's identity as the screen shows it, such as
             ``["Jane Sample", "MRN P1"]``. Checked before every save.
-        agent: :class:`~openadapt_flow.crystallize.agents.ClaudeAgent`,
-            :class:`~openadapt_flow.crystallize.agents.ScriptedAgent`, or any
+        agent: :class:`~openadapt_flow.compile_agent.agents.ClaudeAgent`,
+            :class:`~openadapt_flow.compile_agent.agents.ScriptedAgent`, or any
             object with ``dialect`` and ``drive(request, harness)``.
         confirm_checks: The person who confirms the proposed checks, or a
             callback that gets them and returns that person's name (None to
@@ -945,8 +995,12 @@ def crystallize(
             (:func:`~openadapt_flow.jit.authority.principal_from_key`).
         person: Without an admitter, the person who reviews, attends the
             canary and admits at a terminal.
+        review: With ``person``: shows them the steps, then the canary
+            results, and returns True only when they confirm each.
         hold: Asked before every save in run 1; True lets it through.
-        canary_params: Values for each canary (default: generated test text).
+        canary_params: The values each canary saves, one mapping per canary
+            (the last is reused). A canary is a real save on the record the
+            task names, so choose values that are safe there. Required.
         model_key: The customer's own model key, for a model-driven agent.
         reset: Called before every run to reset a test app. Tests only.
 
@@ -954,7 +1008,7 @@ def crystallize(
     admitted program.
     """
 
-    crystallizer = Crystallizer(
+    compiler = FirstRunCompiler(
         prompt,
         params=list(params),
         url=url,
@@ -970,27 +1024,25 @@ def crystallize(
         on_warning=on_warning,
         model_key=model_key,
     )
-    jit = crystallizer._jit()
-    first: Optional[CrystallizeResult] = None
+    jit = compiler._jit()
+    first: Optional[CompileResult] = None
     if not jit.admitted:
         if jit.candidate() is None:
-            principal = getattr(admitter, "principal_id", None)
-            if getattr(admitter, "kind", None) != "agent":
-                principal = None
-            first = crystallizer.record(
-                agent, params, hold=hold, principal_id=principal
-            )
+            first = compiler.record(agent, params, hold=hold)
             if first.status != "draft":
                 return first
-        if not (crystallizer.out_dir / CONFIRMED_FILE).is_file():
-            name = _confirmer(confirm_checks, crystallizer)
+        if not (compiler.out_dir / CONFIRMED_FILE).is_file():
+            name = _confirmer(confirm_checks, compiler)
             if name is None:
-                return first or crystallizer._result(
+                return first or compiler._result(
                     "draft", "the proposed checks wait for a person"
                 )
-            crystallizer.confirm_checks(principal_id=name, drop_fields=drop_fields)
-        admitted = crystallizer.admit(
-            admitter=admitter, person=person, canary_params=canary_params
+            compiler.confirm_checks(principal_id=name, drop_fields=drop_fields)
+        admitted = compiler.admit(
+            admitter=admitter,
+            person=person,
+            review=review,
+            canary_params=canary_params,
         )
         if first is not None:
             admitted.run1 = first.run1
@@ -999,25 +1051,25 @@ def crystallize(
             return admitted
         result = admitted
     else:
-        result = crystallizer._result(
+        result = compiler._result(
             "admitted", "already admitted; the agent was not called"
         )
-    result.emitted = crystallizer.emit()
-    _write_json(crystallizer.out_dir / "result.json", result.to_dict())
+    result.emitted = compiler.emit()
+    _write_json(compiler.out_dir / "result.json", result.to_dict())
     return result
 
 
-def run_crystallized(
+def run_compiled(
     task_dir: Union[str, Path],
     *,
     reset: Optional[Callable[[], None]] = None,
     **params: Any,
 ) -> ReplayResult:
-    """Run a crystallized task's admitted program with ``params``.
+    """Run a compiled task's admitted program with ``params``.
 
     No model calls. Every save is read back through the verifier, and the run
     gets a verify-run receipt against the person-confirmed checks. A run that
     doesn't end VERIFIED goes to the exception inbox.
     """
 
-    return Crystallizer.load(task_dir, reset=reset).run(**params)
+    return FirstRunCompiler.load(task_dir, reset=reset).run(**params)

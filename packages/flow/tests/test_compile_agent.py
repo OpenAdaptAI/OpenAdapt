@@ -1,8 +1,8 @@
-"""openadapt_flow.crystallize without a browser or a model.
+"""openadapt_flow.compile_agent without a browser or a model.
 
 The record check, the commit-label rule, scrubbing that keeps the task's own
 values, the Claude loop's accounting and stops, and the emitted MCP server.
-tests/e2e/test_crystallize_e2e.py runs the whole pipeline on MockMed.
+tests/e2e/test_compile_agent_e2e.py runs the whole pipeline on MockMed.
 """
 
 from __future__ import annotations
@@ -16,14 +16,14 @@ from typing import Any
 import pytest
 
 from openadapt_flow import privacy
-from openadapt_flow.crystallize import (
+from openadapt_flow.compile_agent import (
     BudgetExceeded,
     ClaudeAgent,
     GateRefused,
     check_run_record,
 )
-from openadapt_flow.crystallize.agents import AgentLedger, ModelCall
-from openadapt_flow.crystallize.observe import _render, commit_label, scrub_lines
+from openadapt_flow.compile_agent.agents import AgentLedger, ModelCall
+from openadapt_flow.compile_agent.observe import _render, commit_label, scrub_lines
 from openadapt_flow.jit.compile_agent import TaskRequest
 
 BEFORE = [{"id": 1, "patient_id": "p2", "note": "old"}]
@@ -175,7 +175,7 @@ class _Harness:
 
     def click(self, ref: str) -> None:
         if ref == "e9":
-            from openadapt_flow.crystallize.harness import StaleRef
+            from openadapt_flow.compile_agent.harness import StaleRef
 
             raise StaleRef("e9 is not in the latest observation")
         if self.refuse:
@@ -271,7 +271,7 @@ def test_ledger_prices_opus() -> None:
 
 
 def test_the_emitted_mcp_server_parses(tmp_path: Path) -> None:
-    from openadapt_flow.crystallize.emit import emit_mcp
+    from openadapt_flow.compile_agent.emit import emit_mcp
     from openadapt_flow.jit.signature import TaskSignature
 
     fake = SimpleNamespace(
@@ -291,14 +291,33 @@ def test_the_emitted_mcp_server_parses(tmp_path: Path) -> None:
 class _Page:
     url = "http://app.test/#encounter"
 
-    def __init__(self, screen: str) -> None:
+    def __init__(self, screen: str, element: Any = "save", focused: Any = None):
         self.screen = screen
+        self.element = element
+        self.focused = focused
+
+    def _describe(self, name: str, **kw: Any) -> dict[str, Any]:
+        return {
+            "tag": "button",
+            "type": "submit",
+            "name": name,
+            "role": "",
+            "interactive": True,
+            "editable": False,
+            "context": "",
+            "scope": self.screen,
+            **kw,
+        }
 
     def evaluate(self, script: str, arg: Any = None) -> Any:
-        if "innerText" in script and arg is None:
-            return self.screen
         if "elementFromPoint" in script:
-            return {"tag": "button", "type": "submit", "name": "Save", "in_form": False}
+            if self.element is None:
+                raise RuntimeError("navigating")
+            if self.element == "save":
+                return self._describe("Save")
+            return self._describe(**self.element)
+        if "activeElement" in script:
+            return self._describe(**self.focused) if self.focused else None
         return None
 
 
@@ -306,8 +325,8 @@ class _Computer:
     dialect = "anthropic"
     pointer = (40, 50)
 
-    def __init__(self, screen: str) -> None:
-        self.page = _Page(screen)
+    def __init__(self, screen: str, **page: Any) -> None:
+        self.page = _Page(screen, **page)
         self.executed: list[dict[str, Any]] = []
 
     def screenshot(self) -> bytes:
@@ -318,25 +337,80 @@ class _Computer:
         return SimpleNamespace(png=b"png", notes=[])
 
 
+def _refused(computer: _Computer, native: dict[str, Any], tmp_path: Path) -> Any:
+    from openadapt_flow.compile_agent.harness import Harness, SaveGate
+
+    harness = Harness(computer, SaveGate(["MRN P1"]), evidence_dir=tmp_path)  # type: ignore[arg-type]
+    with pytest.raises(GateRefused, match="MRN P1"):
+        harness.act(native)
+    assert computer.executed == []
+    return harness
+
+
 @pytest.mark.parametrize(
     "native", [{"action": "left_click"}, {"action": "left_click", "coordinate": [1, 2]}]
 )
 def test_a_save_on_the_wrong_record_is_never_performed(
     native: dict, tmp_path: Path
 ) -> None:
-    from openadapt_flow.crystallize.harness import Harness, SaveGate
-
-    computer = _Computer("Alex Testcase — MRN P2")
-    harness = Harness(computer, SaveGate(["MRN P1"]), evidence_dir=tmp_path)  # type: ignore[arg-type]
-    with pytest.raises(GateRefused, match="MRN P1"):
-        harness.act(native)
-    assert computer.executed == []
+    harness = _refused(_Computer("Alex Testcase — MRN P2"), native, tmp_path)
     assert harness.gate_log[0]["decision"] == "refused_wrong_record"
     assert (tmp_path / "gate-01.png").is_file()
 
 
+def test_the_identity_must_be_whole_words(tmp_path: Path) -> None:
+    _refused(
+        _Computer("Sam Specimen — MRN P12"),
+        {"action": "left_click", "coordinate": [1, 2]},
+        tmp_path,
+    )
+
+
+BUTTON = {"name": "Save note", "tag": "div", "role": "button"}
+TEXT = {"name": "Note", "tag": "textarea", "editable": True}
+
+
+@pytest.mark.parametrize(
+    ("page", "native"),
+    [
+        ({"focused": TEXT}, {"action": "type", "text": "done\n"}),
+        ({"focused": {"name": "Open"}}, {"action": "key", "text": "space"}),
+        ({"focused": TEXT}, {"action": "key", "text": "ctrl+Return"}),
+        ({"focused": TEXT}, {"action": "key", "text": "ctrl+s"}),
+        ({"focused": TEXT}, {"action": "key", "text": "Tab Return"}),
+        ({"focused": TEXT}, {"action": "key", "text": "Return"}),
+        ({"element": BUTTON}, {"action": "left_click", "coordinate": [1, 2]}),
+        ({"element": None}, {"action": "left_click", "coordinate": [1, 2]}),
+        (
+            {"element": {"name": "Delete encounter"}},
+            {"action": "double_click", "coordinate": [1, 2]},
+        ),
+    ],
+)
+def test_every_way_to_commit_is_gated(page: dict, native: dict, tmp_path: Path) -> None:
+    _refused(_Computer("Alex Testcase — MRN P2", **page), native, tmp_path)
+
+
+@pytest.mark.parametrize(
+    ("page", "native"),
+    [
+        ({"element": {"name": "Open"}}, {"action": "left_click", "coordinate": [1, 2]}),
+        ({"focused": TEXT}, {"action": "type", "text": "no line break"}),
+        ({"focused": TEXT}, {"action": "key", "text": "space"}),
+        ({"focused": TEXT}, {"action": "key", "text": "Tab"}),
+    ],
+)
+def test_plain_actions_are_not_gated(page: dict, native: dict) -> None:
+    from openadapt_flow.compile_agent.harness import Harness, SaveGate
+
+    computer = _Computer("Alex Testcase — MRN P2", **page)
+    harness = Harness(computer, SaveGate(["MRN P1"]))  # type: ignore[arg-type]
+    harness.act(native)
+    assert len(computer.executed) == 1 and harness.stats.gate_checks == 0
+
+
 def test_the_hold_decides_after_the_identity_check(tmp_path: Path) -> None:
-    from openadapt_flow.crystallize.harness import Harness, SaveGate
+    from openadapt_flow.compile_agent.harness import Harness, SaveGate
 
     asked: list[Any] = []
     computer = _Computer("Jane Sample — MRN P1")
@@ -352,3 +426,24 @@ def test_the_hold_decides_after_the_identity_check(tmp_path: Path) -> None:
     allow.act({"action": "left_click", "coordinate": [1, 2]})
     assert len(computer.executed) == 1
     assert allow.gate_log[-1]["decision"] == "approved_by_hold"
+
+
+def test_a_ref_is_stale_when_its_row_changed() -> None:
+    from openadapt_flow.compile_agent.harness import Harness, SaveGate, StaleRef
+    from openadapt_flow.compile_agent.observe import Control, StructuralObservation
+
+    computer = _Computer(
+        "x", element={"name": "Save", "context": "Alex Testcase | Save"}
+    )
+    harness = Harness(computer, SaveGate(["MRN P1"]))  # type: ignore[arg-type]
+    harness._last = StructuralObservation(
+        url="",
+        title="",
+        text="",
+        controls={
+            "e1": Control("e1", "button", "Save", 1, 2, context="Jane Sample | Save")
+        },
+    )
+    with pytest.raises(StaleRef, match="no longer at its place"):
+        harness.click("e1")
+    assert computer.executed == []

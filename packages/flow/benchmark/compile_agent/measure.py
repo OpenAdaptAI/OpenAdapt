@@ -1,4 +1,4 @@
-"""Measure crystallize on MockMed: selective vision against screenshot-every-turn.
+"""Measure compile-agent on MockMed: selective vision against screenshot-every-turn.
 
 Run 1 is a live Claude computer-use run (``claude-opus-5-5``) on the operator's
 own key. Each trial runs both arms, in alternating order, on the same task
@@ -15,7 +15,7 @@ passing program is admitted (a person's name confirms the checks; a
 throwaway admitter key admits) and replayed ``--replays`` times, to measure
 later runs: model calls, tokens and time.
 
-    PYTHONPATH=. python benchmark/crystallize/measure.py --env-file /path/to/.env --trials 3
+    PYTHONPATH=. python benchmark/compile_agent/measure.py --env-file /path/to/.env --trials 3
 
 The key is read from ``--env-file`` (``ANTHROPIC_API_KEY=...``) into this
 process only, and never printed. ``--max-total-usd`` stops before a run that
@@ -75,12 +75,12 @@ def _verify_yaml(dirpath: Path, base: str) -> Path:
     return path
 
 
-def _crystallizer(work: Path, base: str, task_id: str) -> Any:
-    from openadapt_flow.crystallize import Crystallizer
+def _compiler(work: Path, base: str, task_id: str) -> Any:
+    from openadapt_flow.compile_agent import FirstRunCompiler
     from openadapt_flow.jit.keys import load_customer_model_key
     from openadapt_flow.tutorial import _http_json
 
-    return Crystallizer(
+    return FirstRunCompiler(
         PROMPT,
         params=["note"],
         url=f"{base}/?fault=ok&idempotency=demo#tasks",
@@ -226,7 +226,7 @@ def main() -> int:
     args = parser.parse_args()
     _load_key(args.env_file)
 
-    from openadapt_flow.crystallize import ClaudeAgent
+    from openadapt_flow.compile_agent import ClaudeAgent
     from openadapt_flow.mockmed.fault_server import serve
 
     args.out.mkdir(parents=True, exist_ok=True)
@@ -235,7 +235,7 @@ def main() -> int:
     runs: list[dict[str, Any]] = []
     replays: list[dict[str, Any]] = []
     spent = 0.0
-    work_root = Path(tempfile.mkdtemp(prefix="crystallize-measure-"))
+    work_root = Path(tempfile.mkdtemp(prefix="compile-agent-measure-"))
     base, _db, stop = serve()
     base = base.rstrip("/")
     passing: list[tuple[str, Any]] = []
@@ -252,9 +252,7 @@ def main() -> int:
                     raise StopIteration
                 work = work_root / f"t{trial}-{arm}"
                 work.mkdir(parents=True)
-                crystallizer = _crystallizer(
-                    work, base, f"mockmed.measure-{arm}-t{trial}"
-                )
+                compiler = _compiler(work, base, f"mockmed.measure-{arm}-t{trial}")
                 agent = ClaudeAgent(
                     vision=arm, effort=args.effort, max_cost_usd=args.max_run_usd
                 )
@@ -264,7 +262,7 @@ def main() -> int:
                 # with one note for every trial, later runs read earlier runs'
                 # screenshots from the prompt cache and cost less than a real run.
                 note = f"{NOTE}, trial {trial}"
-                result = crystallizer.record(agent, {"note": note})
+                result = compiler.record(agent, {"note": note})
                 run1 = _clean_run1(result.run1)
                 cost = float(((run1.get("agent") or {}).get("cost_usd")) or 0.0)
                 spent += cost
@@ -297,7 +295,7 @@ def main() -> int:
                     flush=True,
                 )
                 if result.status == "draft":
-                    passing.append((arm, crystallizer))
+                    passing.append((arm, compiler))
     except StopIteration:
         pass
     try:
@@ -306,19 +304,20 @@ def main() -> int:
             found = [c for a, c in passing if a == arm]
             if not found:
                 continue
-            crystallizer = found[0]
-            crystallizer.confirm_checks(
+            compiler = found[0]
+            compiler.confirm_checks(
                 principal_id="measurement.operator", drop_fields=["key", "source"]
             )
-            admitted = crystallizer.admit(
-                admitter=_admitter(crystallizer.dir.parent.parent)
+            admitted = compiler.admit(
+                admitter=_admitter(compiler.dir.parent.parent),
+                canary_params=[{"note": "Canary test note 1"}],
             )
             print(f"admit {arm}: {admitted.status} {admitted.detail or ''}", flush=True)
             if not admitted.admitted:
                 continue
-            crystallizer.emit()
+            compiler.emit()
             for i, note in enumerate(REPLAY_NOTES[: args.replays], start=1):
-                replay = crystallizer.run(note=note)
+                replay = compiler.run(note=note)
                 row = {
                     "program_from": arm,
                     "replay": i,

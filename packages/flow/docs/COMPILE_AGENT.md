@@ -1,18 +1,22 @@
-# Crystallize: from a prompt to a program
+# Compile an agent's first verified run
 
-`crystallize` lets a computer-use agent do a task once, checks the record it
-wrote, and compiles that run into a program. Every later run executes the
+`compile-agent` lets a computer-use agent do a task once, checks the record
+it wrote, and compiles that run into a program. Every later run executes the
 program: no model calls, every save read back from the system of record.
 
+The agent runs against the app at `--url` and makes real entries there. Point
+it at a test copy of the app with test records.
+
 ```bash
-openadapt-flow crystallize \
+openadapt-flow compile-agent \
   "Open the referral for Jane Sample, start a Triage encounter, and save this note: {note}" \
   --url http://localhost:8080/#tasks --verify verify.yaml \
   --param note="Follow up in two weeks" \
   --expect patient_id=p1 --on-screen "Jane Sample" --on-screen "MRN P1" \
+  --canary-param note="Canary test note" \
   --admit-key agent.pem --admission-policy signed-policy.json
 
-openadapt-flow crystallize run .openadapt-crystallize/<task key> \
+openadapt-flow compile-agent run .openadapt-compile-agent/<task key> \
   --param note="Recheck knee in ten days"
 ```
 
@@ -41,17 +45,21 @@ no key. `--agent steps.json` runs a scripted agent with no model calls.
    parameter must still be read back.
 4. **Admission.** Canaries, then the JIT admission
    ([JIT_ADMISSION.md](JIT_ADMISSION.md)): a registered admitter key, or a
-   registered agent under an admission policy a person signed. With the policy,
-   the agent that recorded may admit its own draft only when the policy sets
-   `allow_self_admission`; it still needs `min_clean_canaries` clean canaries
-   and a read-back on every write step. Without a key, `--admit-as NAME` lets a
-   person review, attend one canary and admit at the terminal. Each canary also
-   gets a `verify-run` receipt against the confirmed checks; both must end
-   VERIFIED.
-5. **Emit.** An Agent Skill (`crystallized/skill/<name>/SKILL.md`), an MCP
-   server with one tool (`crystallized/mcp/server.py`), and the one-line
-   `openadapt-flow crystallize run` command. All three call
-   `run_crystallized`, so every call goes through the admission check, the
+   registered agent under an admission policy a person signed. The recording
+   is signed with the driving agent's `principal_id`. When that is the same
+   registered agent that admits, it is self-admission, which the policy must
+   allow (`allow_self_admission`); either way the agent needs
+   `min_clean_canaries` clean canaries and a read-back on every write step.
+   Without a key, `--admit-as NAME` at a terminal shows that person every step
+   and the parameters, asks them to confirm the review, runs one canary, shows
+   its result, and asks them to admit. A canary is a real save on the record
+   `--expect` names, so its values come from the operator
+   (`--canary-param NAME=VALUE`); there is no default. Each canary also gets a
+   `verify-run` receipt against the confirmed checks; both must end VERIFIED.
+5. **Emit.** An Agent Skill (`compiled/skill/<name>/SKILL.md`), an MCP
+   server with one tool (`compiled/mcp/server.py`), and the one-line
+   `openadapt-flow compile-agent run` command. All three call
+   `run_compiled`, so every call goes through the admission check, the
    read-back and the receipt. Neither copies the bundle out of the task
    directory.
 
@@ -83,7 +91,9 @@ Note
 ```
 
 It acts with `click(ref)`, `type_text(text, ref)` and `press_key(key)`, and
-gets a new listing after each action. It can call `screenshot` when the
+gets a new listing after each action. A ref still has to name a control with
+the same label in the same table row when it is used; otherwise the action is
+refused and the agent observes again. It can call `screenshot` when the
 listing is not enough. After an action that committed a write, it gets a
 screenshot of the result. An action on a ref becomes an ordinary click at the
 control's center, so the recording and the compiled program are the same as
@@ -100,13 +110,25 @@ toolset (`computer_toolset_20260801`) with a screenshot after every action.
 
 ### The save gate
 
-Before any action that commits a write (a click on a control labelled Save,
-Submit, Sign, Approve, Confirm, Send or Post, or Enter in a form field), the
-harness:
+Every action that can commit a write is gated unless it plainly does not:
 
-1. checks that every `--on-screen` string is visible. If one is missing, the
-   action is not performed and run 1 ends `refused_wrong_record`: nothing is
-   saved and nothing is compiled;
+- a click on a control whose label names a write (Save, Submit, Sign, Approve,
+  Confirm, Send, Post, Delete, Remove, Update, Apply, Done, Finish, Finalize,
+  Complete), whatever its tag or role;
+- a click on an element the harness can't read;
+- Enter, a typed line break, Space on anything but a text field, and any
+  keyboard shortcut.
+
+A click on a control with another label (Open, New Encounter), typing without
+a line break, and navigation keys pass without a check. For a gated action,
+the harness:
+
+1. checks that every `--on-screen` string appears, as whole words ("MRN P1"
+   is not "MRN P12"), in the row, dialog, form or section that holds the
+   control (or the focused field). A name in a sidebar or a worklist does not
+   count. If one is missing, the action is not performed and run 1 ends
+   `refused_wrong_record`: nothing is saved and nothing is compiled, even if
+   the agent catches the refusal and carries on;
 2. keeps a screenshot as evidence (`attempts/<stamp>/gates/`);
 3. asks the hold when there is one. At a terminal the CLI asks before every
    save (`--no-hold` turns it off). A hold that says no ends the run
@@ -120,7 +142,7 @@ save back.
 ## Measured on MockMed
 
 Ten live trials per arm with `claude-opus-5-5`, alternating order, a distinct
-note per trial ([benchmark/crystallize](../benchmark/crystallize/README.md),
+note per trial ([benchmark/compile_agent](../benchmark/compile_agent/README.md),
 raw rows committed):
 
 | Per run 1 (median) | Structure first | Screenshot every turn |
@@ -139,10 +161,10 @@ the admitted programs ended VERIFIED with 0 model calls and 0 tokens.
 ## Python
 
 ```python
-from openadapt_flow.crystallize import ClaudeAgent, crystallize, run_crystallized
+from openadapt_flow.compile_agent import ClaudeAgent, compile_first_run, run_compiled
 from openadapt_flow.jit import load_customer_model_key
 
-result = crystallize(
+result = compile_first_run(
     "Open the referral for Jane Sample, start a Triage encounter, and save this note: {note}",
     params={"note": "Follow up in two weeks"},
     url="http://localhost:8080/#tasks",
@@ -153,17 +175,18 @@ result = crystallize(
     model_key=load_customer_model_key("anthropic"),
     confirm_checks="dana@clinic.example",     # or a callback that shows them to a person
     drop_fields=["key"],
+    canary_params=[{"note": "Canary test note"}],  # a real save; choose safe values
     admitter=agent_principal,                  # principal_from_key(...)
 )
 result.status          # "admitted"
 result.run1["agent"]   # model calls, tokens, cost, seconds
 result.emitted         # {"skill": ..., "mcp_server": ..., "cli": ...}
 
-later = run_crystallized(result.dir, note="Recheck knee in ten days")
+later = run_compiled(result.dir, note="Recheck knee in ten days")
 later.verified, later.model_calls, later.receipt_outcome   # True, 0, "VERIFIED"
 ```
 
-`Crystallizer` exposes the same steps one at a time (`record`,
+`FirstRunCompiler` exposes the same steps one at a time (`record`,
 `confirm_checks`, `admit`, `emit`, `run`) for a flow where a person confirms
 later.
 
@@ -189,10 +212,10 @@ object with `messages.create`; the tests pass a fake.
 
 ```
 <cache>/<task key>/
-  crystallize.json          the task, app, verifier file, expect, on_screen
+  compile_agent.json        the task, app, verifier file, expect, on_screen
   program/                  the JIT draft, then the admitted bundle (JIT.md)
   attempts/<stamp>/         run 1: run1.json (tokens, time, screenshots, gate log), gates/
-  crystallized/
+  compiled/
     verify.proposed.yaml    the proposed checks (mode 0600)
     verify.yaml             the checks a person confirmed
     record_checks.json      who confirmed them, digests, dropped fields
@@ -207,10 +230,13 @@ object with `messages.create`; the tests pass a fake.
 ## Limits
 
 - Web apps only, like the JIT path.
-- The save gate recognizes commits by control label and by Enter in a form
-  field. A write behind another control (an icon with no label, a keyboard
-  shortcut) is not gated in run 1; the record check after run 1 still refuses
-  a wrong record.
+- The save gate recognizes a click that commits by the control's label. An
+  icon with no label, or a label that names no write ("OK"), is not gated in
+  run 1; the record check after run 1 still refuses a wrong record, but only
+  after the write landed.
+- The identity must be shown in the same row, dialog, form or section as the
+  control. An app that shows the patient only in a page header outside them
+  is refused at every save.
 - The run-1 record check compares two reads of the system of record. A change
   someone else makes during run 1 makes it fail closed.
 - A verifier read has no run parameters while recording, so it must name its
@@ -223,5 +249,8 @@ object with `messages.create`; the tests pass a fake.
 - MockMed's demo idempotency key makes a second note on the same patient a
   duplicate, so the tests and the measurement reset MockMed before each run.
   A real app is never reset.
-- The canaries write test records to the app. Pass `canary_params` (Python)
-  with values that are safe to save there.
+- A canary that fails its verify-run receipt is still recorded as passed in
+  the JIT's canary log. `compile-agent` stops on it, but an admission made
+  directly with `openadapt-flow jit admit` does not see the receipt.
+- Screenshot-every-turn mode keeps every screenshot in the conversation, so a
+  long run can reach the API's request size limit.

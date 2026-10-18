@@ -172,36 +172,36 @@
       "sha256": "c5eb58d234ecbd5b03a687745fb6afeb53d0965459b0e42779942441b19dbbd6"
     },
     {
-      "path": "benchmark/cosmetic_drift/results.json",
-      "sha256": "464b6b6f2ac5850b86f7abf469b301e778c97e36d69c2af94f43b0e137fee962"
-    },
-    {
-      "path": "benchmark/crystallize/results/identical-inputs/runs.jsonl",
+      "path": "benchmark/compile_agent/results/identical-inputs/runs.jsonl",
       "sha256": "8bded49ba14efb9f72b58c6916a0d91380cc58e77ab9a9e5c248a35a7cd812b0"
     },
     {
-      "path": "benchmark/crystallize/results/pilot/replays.jsonl",
+      "path": "benchmark/compile_agent/results/pilot/replays.jsonl",
       "sha256": "05104d0513de5aede95c5d06a16244e6f96ea30035870bcb70898491b34e0fc3"
     },
     {
-      "path": "benchmark/crystallize/results/pilot/runs.jsonl",
+      "path": "benchmark/compile_agent/results/pilot/runs.jsonl",
       "sha256": "57c948a29b97e14e81d9747dd04ff230ea1605219fed6b29fbdcc28fbe01d32d"
     },
     {
-      "path": "benchmark/crystallize/results/pilot/summary.json",
+      "path": "benchmark/compile_agent/results/pilot/summary.json",
       "sha256": "65aba72eb964041d4f0717e253908901f8fe0ed3579ebbabeef1118412a26660"
     },
     {
-      "path": "benchmark/crystallize/results/replays.jsonl",
+      "path": "benchmark/compile_agent/results/replays.jsonl",
       "sha256": "5e824e0df9ef2eeef09a8aa283f423b74d5a8b1f5273b652e516f811d0d2fdfc"
     },
     {
-      "path": "benchmark/crystallize/results/runs.jsonl",
+      "path": "benchmark/compile_agent/results/runs.jsonl",
       "sha256": "8b1959f636d186bd1e47423b8c1b7223facb9b2a207812a1b62035d044d1d5a4"
     },
     {
-      "path": "benchmark/crystallize/results/summary.json",
+      "path": "benchmark/compile_agent/results/summary.json",
       "sha256": "6bc82419b5195c1554b4becff386b6d798b7047b08867329408eed54bbfdac11"
+    },
+    {
+      "path": "benchmark/cosmetic_drift/results.json",
+      "sha256": "464b6b6f2ac5850b86f7abf469b301e778c97e36d69c2af94f43b0e137fee962"
     },
     {
       "path": "benchmark/dense_surface/dense_surface.json",

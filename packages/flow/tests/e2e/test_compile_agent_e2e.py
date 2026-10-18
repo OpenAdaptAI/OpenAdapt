@@ -1,4 +1,4 @@
-"""Crystallize end to end on MockMed, with a fake Claude client and no network.
+"""compile-agent end to end on MockMed, with a fake Claude client and no network.
 
 The agent is the real :class:`ClaudeAgent` loop in selective-vision mode. Its
 client is a fake that reads the structural listing the harness sends and
@@ -11,7 +11,7 @@ gate, the JIT capture and the admission all run for real. It asserts:
 * the agent saw no screenshot except the one after the save (the gate);
 * the skill, the MCP server and the CLI line are emitted;
 * run 2 replays with zero model calls, ends VERIFIED, and gets a VERIFIED
-  verify-run receipt; a second crystallize call does not call the agent;
+  verify-run receipt; compiling again does not call the agent;
 * an agent that opens the wrong patient is refused at the save and nothing
   is written or compiled;
 * the admitted program, run against an app that files the note on another
@@ -29,11 +29,11 @@ from typing import Any, Iterator, Optional
 
 import pytest
 
-from openadapt_flow.crystallize import (
+from openadapt_flow.compile_agent import (
     ClaudeAgent,
-    Crystallizer,
-    crystallize,
-    run_crystallized,
+    FirstRunCompiler,
+    compile_first_run,
+    run_compiled,
 )
 from openadapt_flow.jit.keys import CustomerModelKey
 from openadapt_flow.mockmed.fault_server import serve
@@ -47,7 +47,7 @@ NOTE = "Synthetic follow-up in two weeks"
 NEW_NOTE = "Recheck knee in ten days"
 ON_SCREEN = ["Jane Sample", "MRN P1"]
 EXPECT = {"patient_id": "p1", "type": "Triage"}
-AGENT_ID = "agent:crystallize-e2e"
+AGENT_ID = "agent:compile-agent-e2e"
 TEST_KEY = CustomerModelKey("anthropic", "env:TEST_ONLY", "not-a-real-key")
 
 
@@ -186,13 +186,19 @@ class FakeClaude:
         )
 
 
+def _without_agent_args(tmp_path: Path, base: str) -> dict[str, Any]:
+    common = _common(tmp_path, base)
+    common.pop("on_warning")
+    return common
+
+
 def _common(tmp_path: Path, base: str) -> dict[str, Any]:
     return dict(
         url=f"{base}/?fault=ok&idempotency=demo#tasks",
         verify=_verify_yaml(tmp_path, base),
         expect=EXPECT,
         on_screen=ON_SCREEN,
-        task_id="mockmed.crystallize_note",
+        task_id="mockmed.compile_agent_note",
         cache_dir=tmp_path / "cache",
         key_dir=tmp_path / "keys",
         model_key=TEST_KEY,
@@ -201,19 +207,22 @@ def _common(tmp_path: Path, base: str) -> dict[str, Any]:
     )
 
 
-def test_crystallize_then_replay_with_no_model_calls(
+def test_compile_agent_then_replay_with_no_model_calls(
     mockmed: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     admitter = _policy_agent(tmp_path / "keys", mockmed, monkeypatch)
     fake = FakeClaude("Jane Sample", NOTE)
-    agent = ClaudeAgent(client=fake)
-    result = crystallize(
+    # The registered agent drives run 1 and admits it: self-admission, which
+    # its signed policy allows.
+    agent = ClaudeAgent(client=fake, principal_id=AGENT_ID)
+    result = compile_first_run(
         PROMPT,
         params={"note": NOTE},
         agent=agent,
         confirm_checks="dana.reviewer",
         drop_fields=["key", "source"],
         admitter=admitter,
+        canary_params=[{"note": "Canary test note"}],
         **_common(tmp_path, mockmed),
     )
     assert result.status == "admitted", result.detail
@@ -241,14 +250,14 @@ def test_crystallize_then_replay_with_no_model_calls(
     )
     # What it is called through.
     skill = Path(result.emitted["skill"]) / "SKILL.md"
-    assert "crystallize run" in skill.read_text() and NOTE not in skill.read_text()
+    assert "compile-agent run" in skill.read_text() and NOTE not in skill.read_text()
     server = Path(result.emitted["mcp_server"]).read_text()
     ast.parse(server)
-    assert "run_crystallized" in server and NOTE not in server
+    assert "run_compiled" in server and NOTE not in server
     assert result.emitted["cli"].endswith("--param note=<note>")
 
     # Run 2: the program, a new note, no model calls, read back and receipted.
-    replay = run_crystallized(result.dir, reset=_reset(mockmed), note=NEW_NOTE)
+    replay = run_compiled(result.dir, reset=_reset(mockmed), note=NEW_NOTE)
     assert replay.verified, replay.to_dict()
     assert replay.model_calls == 0 and fake.calls == calls_after_run1
     assert replay.receipt_outcome == "VERIFIED"
@@ -257,8 +266,8 @@ def test_crystallize_then_replay_with_no_model_calls(
         ("p1", "Triage", NEW_NOTE)
     ]
 
-    # Crystallizing again uses the admitted program; the agent is not called.
-    again = crystallize(
+    # Compiling again uses the admitted program; the agent is not called.
+    again = compile_first_run(
         PROMPT,
         params={"note": NOTE},
         agent=agent,
@@ -266,13 +275,21 @@ def test_crystallize_then_replay_with_no_model_calls(
         **_common(tmp_path, mockmed),
     )
     assert again.status == "admitted" and fake.calls == calls_after_run1
+    # Run 1 never runs again on an admitted task, not even step by step.
+    from openadapt_flow.jit import AdmissionError
+
+    stepwise = FirstRunCompiler(
+        PROMPT, params=["note"], **_without_agent_args(tmp_path, mockmed)
+    )
+    with pytest.raises(AdmissionError, match="runs only once"):
+        stepwise.record(agent, {"note": NOTE})
 
     # The admitted program against an app that files the note on patient p2.
     common = _common(tmp_path, mockmed)
     common["url"] = f"{mockmed}/?fault=wrong_record&idempotency=demo#tasks"
     common.pop("model_key")
     common.pop("on_warning")
-    wrong = Crystallizer(PROMPT, params=["note"], **common).run(note=NEW_NOTE)
+    wrong = FirstRunCompiler(PROMPT, params=["note"], **common).run(note=NEW_NOTE)
     assert not wrong.verified and wrong.model_calls == 0
     assert wrong.status == "HALTED" and wrong.inbox_item is not None
     assert fake.calls == calls_after_run1
@@ -283,7 +300,7 @@ def test_wrong_patient_is_refused_at_the_save(
 ) -> None:
     admitter = _policy_agent(tmp_path / "keys", mockmed, monkeypatch)
     fake = FakeClaude("Alex Testcase", NOTE)  # opens the wrong chart
-    result = crystallize(
+    result = compile_first_run(
         PROMPT,
         params={"note": NOTE},
         agent=ClaudeAgent(client=fake),
@@ -317,32 +334,32 @@ def test_cli_scripted_agent_person_confirms_key_admits(
     import json
 
     from openadapt_flow.__main__ import build_parser
-    from openadapt_flow.crystallize.cli import cmd_crystallize
+    from openadapt_flow.compile_agent.cli import cmd_compile_agent
     from openadapt_flow.jit import authority
 
     # The CLI has no reset hook (a real app is never reset). MockMed's demo
     # idempotency key makes a second note on p1 a duplicate, so reset it
     # before each run here, the way the Python API's reset= does.
-    original = Crystallizer._on_reset
+    original = FirstRunCompiler._on_reset
 
-    def reset_first(self: Crystallizer) -> None:
+    def reset_first(self: FirstRunCompiler) -> None:
         _reset(mockmed)()
         original(self)
 
-    monkeypatch.setattr(Crystallizer, "_on_reset", reset_first)
+    monkeypatch.setattr(FirstRunCompiler, "_on_reset", reset_first)
     monkeypatch.setenv(authority.KEY_PASSPHRASE_ENV, "e2e passphrase")
     key_dir = tmp_path / "keys"
     pem = tmp_path / "keyfiles" / "ci.pem"
     authority.register_principal(
         key_dir,
         role="admitter_key",
-        principal_id="ci:crystallize",
+        principal_id="ci:compile-agent",
         public_key_hex=authority.generate_encrypted_key(pem),
     )
     script = tmp_path / "script.json"
     script.write_text(json.dumps(SCRIPT))
     argv = [
-        "crystallize",
+        "compile-agent",
         PROMPT,
         "--url",
         f"{mockmed}/?fault=ok&idempotency=demo#tasks",
@@ -359,7 +376,7 @@ def test_cli_scripted_agent_person_confirms_key_admits(
         "--agent",
         str(script),
         "--task-id",
-        "mockmed.crystallize_cli",
+        "mockmed.compile_agent_cli",
         "--cache",
         str(tmp_path / "cache"),
         "--key-dir",
@@ -368,11 +385,13 @@ def test_cli_scripted_agent_person_confirms_key_admits(
         str(pem),
         "--drop-field",
         "key",
+        "--canary-param",
+        "note=Canary test note",
         "--json",
     ]
     # No terminal: run 1 passes, and the checks wait for a person.
     args = build_parser().parse_args(argv)
-    assert cmd_crystallize(args, interactive=lambda: False) == 3
+    assert cmd_compile_agent(args, interactive=lambda: False) == 3
     first = json.loads(capsys.readouterr().out)
     assert first["status"] == "draft" and "next" in first
     assert first["record_check"]["passed"]
@@ -382,7 +401,7 @@ def test_cli_scripted_agent_person_confirms_key_admits(
     answers = iter(["dana.reviewer", "ok"])
     args = build_parser().parse_args([*argv, "--no-hold"])
     assert (
-        cmd_crystallize(args, ask=lambda _: next(answers), interactive=lambda: True)
+        cmd_compile_agent(args, ask=lambda _: next(answers), interactive=lambda: True)
         == 0
     )
     out = capsys.readouterr().out
@@ -390,14 +409,14 @@ def test_cli_scripted_agent_person_confirms_key_admits(
     admitted = json.loads(out[out.index("\n{") + 1 :])
     assert admitted["status"] == "admitted", admitted["detail"]
     assert admitted["admission"]["mode"] == "admitter_key"
-    task_dir = next((tmp_path / "cache").glob("mockmed.crystallize_cli-*"))
-    emitted = json.loads((task_dir / "crystallized" / "emitted.json").read_text())
-    assert emitted["cli"].startswith("openadapt-flow crystallize run ")
+    task_dir = next((tmp_path / "cache").glob("mockmed.compile_agent_cli-*"))
+    emitted = json.loads((task_dir / "compiled" / "emitted.json").read_text())
+    assert emitted["cli"].startswith("openadapt-flow compile-agent run ")
 
     run = build_parser().parse_args(
-        ["crystallize", "run", str(task_dir), "--param", f"note={NEW_NOTE}", "--json"]
+        ["compile-agent", "run", str(task_dir), "--param", f"note={NEW_NOTE}", "--json"]
     )
-    assert cmd_crystallize(run) == 0
+    assert cmd_compile_agent(run) == 0
     replay = json.loads(capsys.readouterr().out)
     assert replay["verified"] and replay["model_calls"] == 0
     assert replay["receipt_outcome"] == "VERIFIED"

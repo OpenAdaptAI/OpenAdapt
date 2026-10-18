@@ -99,7 +99,7 @@ Compiled workflows can also be emitted as Agent Skills or MCP servers
 
 ## From a prompt to a program
 
-`openadapt-flow crystallize "<prompt>"` lets a computer-use agent (Claude, on
+`openadapt-flow compile-agent "<prompt>"` lets a computer-use agent (Claude, on
 your own key) do the task once in a harness that gives it the page's structure
 first and a screenshot only when it asks or after a save, and that checks the
 right record is on screen before every save. If the system of record shows
@@ -109,7 +109,7 @@ proposed record checks, and the program is admitted under the JIT lifecycle
 command also emits an Agent Skill, an MCP tool and a one-line CLI command.
 Every later run makes no model calls and gets a `verify-run` receipt. An agent
 that opens the wrong patient is refused at the save, and nothing is compiled.
-See [`CRYSTALLIZE.md`](CRYSTALLIZE.md), which also has the measured token and
+See [`COMPILE_AGENT.md`](COMPILE_AGENT.md), which also has the measured token and
 time cost of structure-first observation against a screenshot every turn.
 
 ## Answer a halt from a phone

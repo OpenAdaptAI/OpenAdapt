@@ -14,6 +14,7 @@ same way as any other click. The page itself is never modified.
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, field
 from typing import Any, Iterable, Optional, Sequence
 
@@ -24,6 +25,7 @@ __all__ = [
     "element_at",
     "observe",
     "scrub_lines",
+    "shows",
 ]
 
 #: Controls an agent can act on.
@@ -35,8 +37,32 @@ INTERACTIVE = (
 
 #: Labels that commit a write. Narrower than the risk classifier's write list
 #: (``openadapt_flow.risk``) on purpose: the gate checks the record identity
-#: on screen, and "Continue" or "Add" on a list page has none to check.
-_COMMIT_WORDS = ("save", "submit", "sign", "approve", "confirm", "send", "post")
+#: next to the control, and "Continue" or "Add" on a list page, which opens a
+#: form, has none to check. The save on that form is gated.
+_COMMIT_WORDS = (
+    "save",
+    "submit",
+    "sign",
+    "approve",
+    "confirm",
+    "send",
+    "post",
+    "delete",
+    "remove",
+    "update",
+    "apply",
+    "done",
+    "finish",
+    "finaliz",
+    "complet",
+)
+
+#: The container whose text must show the record's identity when a control in
+#: it commits a write: the nearest row, dialog, form or section around it.
+SCOPE = (
+    "tr, [role=row], [role=listitem], dialog, [role=dialog], form, section, "
+    "article, main"
+)
 
 _NAME_JS = """
 function oaName(el) {
@@ -46,6 +72,10 @@ function oaName(el) {
     (el.tagName === 'INPUT' && /^(button|submit)$/i.test(el.type) ? el.value : '') ||
     el.getAttribute('title') || '';
   return String(n).replace(/\\s+/g, ' ').trim().slice(0, 80);
+}
+function oaRow(el) {
+  var r = el.closest('tr, [role=row]');
+  return r ? String(r.innerText).replace(/\\s+/g, ' ').trim().slice(0, 300) : '';
 }
 """
 
@@ -96,7 +126,7 @@ _OBSERVE_JS = (
           el.getAttribute('aria-pressed') === 'true' || !!el.checked,
         disabled: !!el.disabled,
         x: Math.round(r.left + r.width / 2), y: Math.round(r.top + r.height / 2),
-        row: row
+        row: row, context: oaRow(el)
       });
       continue;
     }
@@ -111,28 +141,40 @@ _OBSERVE_JS = (
 """
 )
 
+_DESCRIBE_JS = """
+function oaDescribe(c, interactive, scopeSel) {
+  var scope = c.closest(scopeSel) || document.body;
+  return {tag: c.tagName.toLowerCase(), type: c.type || '', name: oaName(c),
+          role: c.getAttribute('role') || '', interactive: interactive,
+          editable: c.isContentEditable || c.tagName === 'TEXTAREA' ||
+            (c.tagName === 'INPUT' &&
+             !/^(button|submit|reset|checkbox|radio|image|file|range|color)$/i
+               .test(c.type)),
+          context: oaRow(c), scope: String(scope.innerText || '')};
+}
+"""
+
 _ELEMENT_AT_JS = (
-    "([x, y, sel]) => {"
+    "([x, y, sel, scopeSel]) => {"
     + _NAME_JS
+    + _DESCRIBE_JS
     + """
   var el = document.elementFromPoint(x, y);
   if (!el) return null;
-  var c = el.closest(sel) || el;
-  var form = c.closest('form');
-  return {tag: c.tagName.toLowerCase(), type: c.type || '', name: oaName(c),
-          in_form: !!form};
+  var c = el.closest(sel);
+  return oaDescribe(c || el, !!c, scopeSel);
 }
 """
 )
 
 _FOCUSED_JS = (
-    "(sel) => {"
+    "([sel, scopeSel]) => {"
     + _NAME_JS
+    + _DESCRIBE_JS
     + """
   var c = document.activeElement;
   if (!c || c === document.body) return null;
-  return {tag: c.tagName.toLowerCase(), type: c.type || '', name: oaName(c),
-          in_form: !!c.closest('form')};
+  return oaDescribe(c, c.matches(sel), scopeSel);
 }
 """
 )
@@ -149,6 +191,8 @@ class Control:
     y: int
     role: str = ""
     type: str = ""
+    #: The text of the table row the control is in, when it is in one.
+    context: str = ""
 
     @property
     def kind(self) -> str:
@@ -188,9 +232,17 @@ def commit_label(name: str) -> bool:
     """True when a control labelled ``name`` commits a write (Save, Submit)."""
 
     words = "".join(ch if ch.isalnum() else " " for ch in name.lower()).split()
-    if "sign" in words and "in" in words:
+    if "sign" in words and ("in" in words or "up" in words):
         return False
     return any(word.startswith(stem) for word in words for stem in _COMMIT_WORDS)
+
+
+def shows(text: str, identity: str) -> bool:
+    """True when ``identity`` appears in ``text`` as whole words: "MRN P1"
+    is not shown by "MRN P12"."""
+
+    pattern = r"(?<!\w)" + re.escape(identity.strip()) + r"(?!\w)"
+    return re.search(pattern, " ".join(text.split())) is not None
 
 
 def scrub_lines(text: str, keep: Iterable[str] = ()) -> str:
@@ -244,6 +296,7 @@ def _render(raw: dict[str, Any]) -> tuple[str, dict[str, Control]]:
                 y=int(item["y"]),
                 role=str(item.get("role") or ""),
                 type=str(item.get("type") or ""),
+                context=str(item.get("context") or ""),
             )
             controls[ref] = control
             part = f'[{ref}] {control.kind} "{control.name}"'
@@ -289,14 +342,14 @@ def element_at(page: Any, x: int, y: int) -> Optional[dict[str, Any]]:
     """The control (or element) at a point: tag, type, name, in_form."""
 
     try:
-        return page.evaluate(_ELEMENT_AT_JS, [int(x), int(y), INTERACTIVE])
+        return page.evaluate(_ELEMENT_AT_JS, [int(x), int(y), INTERACTIVE, SCOPE])
     except Exception:  # noqa: BLE001 - an unreadable page has no element
         return None
 
 
 def focused_element(page: Any) -> Optional[dict[str, Any]]:
     try:
-        return page.evaluate(_FOCUSED_JS, INTERACTIVE)
+        return page.evaluate(_FOCUSED_JS, [INTERACTIVE, SCOPE])
     except Exception:  # noqa: BLE001
         return None
 

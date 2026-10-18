@@ -1,7 +1,8 @@
-# Crystallize on MockMed: selective vision against a screenshot every turn
+# compile-agent on MockMed: structure first against a screenshot every turn
 
 Measured 2026-10-18 with `measure.py` in this folder, engine commit
-`2d5e4c15`, model `claude-opus-5-5` at effort `medium`, on the operator's own
+`2d5e4c15` (when the command was still named `crystallize`; the code paths
+it measures are unchanged), model `claude-opus-5-5` at effort `medium`, on the operator's own
 key. MockMed with its transactional system of record (`?fault=ok`), 1280x800,
 synthetic data only.
 
@@ -80,7 +81,7 @@ record check. `results/replays.jsonl` has one row per later run.
 ## Reproduce
 
 ```bash
-PYTHONPATH=. python benchmark/crystallize/measure.py \
+PYTHONPATH=. python benchmark/compile_agent/measure.py \
   --env-file /path/to/.env --trials 10 --replays 5 --max-total-usd 15
 ```
 
