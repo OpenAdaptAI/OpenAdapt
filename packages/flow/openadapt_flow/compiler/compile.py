@@ -17,7 +17,7 @@ import re
 from collections import Counter
 from datetime import date, datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Iterable, Literal, Optional, Sequence, cast
+from typing import TYPE_CHECKING, Any, Iterable, Literal, Optional, Sequence, cast
 
 if TYPE_CHECKING:
     from openadapt_flow.compiler.annotate import StepAnnotator
@@ -2037,6 +2037,10 @@ def compile_recording(
     from openadapt_flow.runtime import layout_drift as _layout
 
     layout_fingerprints: dict[str, "_layout.LayoutFingerprint"] = {}
+    from openadapt_flow.runtime import render_scale as _render_scale
+
+    scale_salt = _render_scale.new_salt_hex()
+    scale_landmarks: dict[str, list[list[Any]]] = {}
 
     def cached_lines(i: int, suffix: str, png: bytes) -> list[OcrLine]:
         key = (i, suffix)
@@ -2110,6 +2114,11 @@ def compile_recording(
             # size and font metrics, no text (runtime.layout_drift).
             layout_fingerprints[step_id] = _layout.fingerprint(
                 frame_lines, (int(frame.shape[1]), int(frame.shape[0]))
+            )
+            # Unique label lines as salted hashes with their centres, for the
+            # display-scale estimate (runtime.render_scale). No text.
+            scale_landmarks[step_id] = _render_scale.scale_landmark_set(
+                frame_lines, salt_hex=scale_salt, exclude_texts=exclude_texts
             )
             crop_region = _clip_away_param_lines(
                 crop_region, click, frame_lines, exclude_texts
@@ -3214,7 +3223,12 @@ def compile_recording(
     if layout_fingerprints:
         fp_path = bundle / _layout.FINGERPRINT_ASSET
         fp_path.parent.mkdir(parents=True, exist_ok=True)
-        fp_path.write_bytes(_layout.dump_bundle_fingerprints(layout_fingerprints))
+        fp_path.write_bytes(
+            _layout.dump_bundle_fingerprints(
+                layout_fingerprints,
+                scale_landmarks={"salt": scale_salt, "steps": scale_landmarks},
+            )
+        )
 
     write_compile_notes(bundle, compile_notes)
     workflow.save(bundle)
