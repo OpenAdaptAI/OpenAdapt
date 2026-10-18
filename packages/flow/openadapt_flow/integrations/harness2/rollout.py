@@ -56,6 +56,23 @@ def is_complete(run_dir: Path) -> bool:
     return (run_dir / RUN_FILE).is_file() and (run_dir / READBACK_FILE).is_file()
 
 
+def _reusable(run_dir: Path, task: GuiTask, harness_text: str) -> bool:
+    """A finished run of this task, under this harness, that did not crash."""
+
+    if not is_complete(run_dir):
+        return False
+    try:
+        run = json.loads((run_dir / RUN_FILE).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return False
+    return (
+        run.get("task_id") == task.task_id
+        and run.get("harness_digest") == harness_digest(harness_text)
+        and not run.get("error")
+        and run.get("runtime_signal") != "failed_platform"
+    )
+
+
 def run_rollout(
     task: GuiTask,
     harness_text: str,
@@ -76,7 +93,7 @@ def run_rollout(
     """
 
     run_dir = Path(run_dir)
-    if is_complete(run_dir):
+    if _reusable(run_dir, task, harness_text):
         return run_dir
     if run_dir.exists():
         shutil.rmtree(run_dir)
@@ -107,7 +124,7 @@ def run_rollout(
         score = scorer.score(episode_id, signal)
     finally:
         session.stop()
-        _drop_secrets(run_dir / "reward" / "worker")
+        drop_worker_secrets(run_dir / "reward" / "worker")
     _write(
         run_dir,
         task,
@@ -123,7 +140,7 @@ def run_rollout(
     return run_dir
 
 
-def _drop_secrets(worker_dir: Path) -> None:
+def drop_worker_secrets(worker_dir: Path) -> None:
     """Delete the worker's per-rollout signing key and bearer token.
 
     Each rollout's worker is used once. The receipts it signed stay
@@ -223,6 +240,7 @@ def load_steps(run_dir: Path) -> list[dict[str, Any]]:
 
 
 __all__ = [
+    "drop_worker_secrets",
     "READBACK_FILE",
     "REPORT_FILE",
     "RUN_FILE",

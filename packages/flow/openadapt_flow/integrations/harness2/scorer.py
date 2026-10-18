@@ -98,8 +98,8 @@ def reward_contract_effects(task: GuiTask) -> list[dict[str, Any]]:
     record on another subject, a second record, or a wrong value refutes it.
     """
 
-    record: dict[str, Any] = {"patient_id": {"param": "patient_id"}}
-    for key in ("type", "note"):
+    record: dict[str, Any] = {key: {"param": key} for key in sorted(task.identity)}
+    for key in task.record_fields:
         if key in task.params:
             record[key] = task.params[key]
     return [
@@ -122,10 +122,16 @@ class ReadBackScorer:
         directory: Path,
         *,
         penalties: Penalties = Penalties(),
-        subject_key: str = "patient_id",
+        subject_key: Optional[str] = None,
     ) -> None:
         self.task = task
         self.penalties = penalties
+        # The field that says whose record it is: the identity's only key
+        # unless the caller names one.
+        if subject_key is None:
+            if len(task.identity) != 1:
+                raise ValueError("name subject_key when the identity has several keys")
+            subject_key = next(iter(task.identity))
         self.subject_key = subject_key
         self.directory = Path(directory)
         bundle_dir = self.directory / "contract"
@@ -174,11 +180,13 @@ class ReadBackScorer:
         )
         other_added = len(added) - subject_added
         wanted = {
-            k: str(v) for k, v in self.task.params.items() if k in ("type", "note")
+            k: str(self.task.params[k])
+            for k in self.task.record_fields
+            if k in self.task.params
         }
         mine = [r for r in added if str(r.get(self.subject_key, "")) == subject]
         wrong_value = len(mine) == 1 and any(
-            str(mine[0].get(k)) != v for k, v in wanted.items() if k in mine[0]
+            str(mine[0].get(k)) != v for k, v in wanted.items()
         )
         outcome = str(receipt["reward_outcome"])
         score = EpisodeScore(
