@@ -207,4 +207,4 @@ The queue enforces these rules:
   decision and the hash of the item. `queue.check()` verifies both.
 - A corrected value must be valid for the field's kind.
 - A decision settles the value but keeps its grade. A person's choice is not a
-  read, so it never makes a value `verified`.
+  read, so it never raises the grade.
