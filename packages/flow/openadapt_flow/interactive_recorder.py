@@ -2441,6 +2441,7 @@ class InteractiveRecorder:
                 ),
                 structural_state_reader=self._read_scrubbed_page_state,
                 screenshot_guard=self._guard_screenshot_privacy,
+                bring_to_front_before_capture=not self._owns_browser,
             )
             assert self._recording_dir is not None
             self.recorder = Recorder(
@@ -3141,6 +3142,7 @@ class InteractiveRecorder:
             structural_state_reader=self._read_scrubbed_page_state,
             screenshot_guard=self._guard_screenshot_privacy,
             closed_page_frame=True,
+            bring_to_front_before_capture=not self._owns_browser,
         )
 
     def _arm_followed_page(self, page: Any) -> None:
@@ -3487,6 +3489,16 @@ class InteractiveRecorder:
                 return
             event["_oaflow_geometry"] = event_geometry
             if kind == "viewport":
+                # Only the ACTIVE page's coordinate space is bound. Another
+                # followed page is rebound when Flow switches to it, and its
+                # own actions carry their geometry. Chromium also fires
+                # "resize" when a background tab is shown again (Flow brings
+                # the active page to front before each capture) without
+                # changing its viewport: that is not a new coordinate space.
+                if source_page is not None and source_page is not self.page:
+                    return
+                if event_geometry == self._attached_geometry:
+                    return
                 self._viewport_dirty = True
                 return
         else:

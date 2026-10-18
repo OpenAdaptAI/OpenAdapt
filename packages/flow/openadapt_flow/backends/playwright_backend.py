@@ -1009,6 +1009,7 @@ class PlaywrightBackend:
         structural_state_reader: Optional[Callable[[], dict[str, Any]]] = None,
         screenshot_guard: Optional[Callable[[], None]] = None,
         closed_page_frame: bool = False,
+        bring_to_front_before_capture: bool = False,
     ) -> None:
         """Wrap an existing Playwright page.
 
@@ -1039,9 +1040,18 @@ class PlaywrightBackend:
                 shows another window, every screen postcondition fails on it,
                 and acting elsewhere still needs an explicit surface switch.
                 The primary page keeps the default (a closed page raises).
+            bring_to_front_before_capture: Make ``page`` the browser's
+                foreground tab before each screenshot. Chromium draws no new
+                frames for a background tab, so a capture of one can wait
+                forever (Playwright's own launch disables that throttling with
+                command-line flags; a person's browser reached over CDP has no
+                such flags). Recording in an attached browser sets this: a
+                popup or tab the recorded page opens takes the foreground, and
+                the opener's after-frame must still be a live, current frame.
         """
         self.page = page
         self._closed_page_frame = closed_page_frame
+        self._bring_to_front_before_capture = bring_to_front_before_capture
         self._last_frame_size: Optional[tuple[int, int]] = None
         # JavaScript dialogs (docs/MULTI_SURFACE.md, "Dialogs"): no listener
         # is registered until a step arms one, so a bundle without dialog
@@ -2932,6 +2942,9 @@ class PlaywrightBackend:
         if self._closed_page_frame and self._page_is_closed():
             return self._closed_frame()
         try:
+            if self._bring_to_front_before_capture:
+                # A no-op for the tab already in front.
+                self.page.bring_to_front()
             png = self._live_screenshot()
         except Exception:
             # The page closed itself while the frame was being captured.
