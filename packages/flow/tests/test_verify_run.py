@@ -19,16 +19,16 @@ import requests
 import yaml
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
-
-import openadapt_flow.runtime.effects.adapter as adapter_mod
-import openadapt_flow.verify_run as verify_run_mod
-from openadapt_flow.contracts.execute import ExecuteEvidenceReceiptV1
-from openadapt_flow.contracts.seal import (
+from openadapt_types.execute import ExecuteEvidenceReceiptV1
+from openadapt_types.seal import (
     parse_key_registry,
     seal_key_id,
     signing_payload,
     verify_sealed_receipt,
 )
+
+import openadapt_flow.runtime.effects.adapter as adapter_mod
+import openadapt_flow.verify_run as verify_run_mod
 from openadapt_flow.mockmed.fault_server import serve as fault_serve
 from openadapt_flow.runtime.effects import (
     ConnectionProbe,
@@ -966,7 +966,7 @@ def test_checked_how_must_agree_with_verification_tier(cfg, sor, tmp_path):
 
 
 def test_checked_how_keeps_a_same_session_reopen_apart_from_a_separate_session():
-    from openadapt_flow.contracts.approval import (
+    from openadapt_types.approval import (
         CHECKED_HOW_TIER,
         checked_how_for_flow_tier,
     )

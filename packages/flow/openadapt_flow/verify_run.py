@@ -56,13 +56,13 @@ from pathlib import Path
 from typing import Any, Literal, Mapping, Optional, Sequence, cast
 from uuid import uuid4
 
-from pydantic import BaseModel, ConfigDict, Field
-
-from openadapt_flow.contracts.approval import (
+from openadapt_types.approval import (
     CHECKED_HOW_TIER,
     CHECKED_HOW_VALUES,
     checked_how_for_flow_tier,
 )
+from pydantic import BaseModel, ConfigDict, Field
+
 from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
 from openadapt_flow.qualify.result import verify_config_sha256
 from openadapt_flow.runtime.effects.adapter import verifier_identity
@@ -261,12 +261,14 @@ def parse_verify_config(data: Any, *, source: str = "verify config") -> VerifyCo
         cfg = VerifyConfig.model_validate(data)
     except Exception as exc:
         raise VerifyRunError(f"invalid {source}: {exc}") from exc
-    if cfg.verifier.kind in _NOT_INDEPENDENT:
-        raise VerifyRunError(
-            f"verifier kind {cfg.verifier.kind!r} does not read independently of "
-            "the executor; verify-run needs a system-of-record or "
-            "separate-session verifier"
-        )
+    kinds = [cfg.verifier.kind] + [s.kind for s in cfg.verifier.surfaces.values()]
+    for kind in kinds:
+        if kind in _NOT_INDEPENDENT:
+            raise VerifyRunError(
+                f"verifier kind {kind!r} does not read independently of "
+                "the executor; verify-run needs a system-of-record or "
+                "separate-session verifier"
+            )
     if cfg.verifier.candidates:
         raise VerifyRunError("verify-run does not support verifier candidates yet")
     for effect in cfg.effects:
@@ -373,6 +375,11 @@ def _tag_reads(verifier: Any, execution_id: str) -> None:
     across runs of one ``verify.yaml``.
     """
 
+    routed = getattr(verifier, "verifiers", None)
+    if isinstance(routed, dict):
+        for sub in routed.values():
+            _tag_reads(sub, execution_id)
+        return
     if not hasattr(verifier, "headers"):
         return
     trace = secrets.token_hex(16)
@@ -611,7 +618,7 @@ def verify_run(
     (mode 0600), so ``private_dir`` is required.
     """
 
-    from openadapt_flow.contracts.execute import (
+    from openadapt_types.execute import (
         EffectStrengthV1,
         ExecuteEvidenceContractV1,
         ExecuteEvidenceReceiptV1,
@@ -890,7 +897,7 @@ def write_result(result: Mapping[str, Any], out_dir: Path) -> Path:
 def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
     """None when the receipt meets the schema and the cross-field rules."""
 
-    from openadapt_flow.contracts.execute import (
+    from openadapt_types.execute import (
         EXECUTE_EVIDENCE_RECEIPT_SCHEMA,
         ExecuteEvidenceReceiptV1,
     )
@@ -1020,7 +1027,7 @@ def check_effect_receipt(
     missing signature is ``unsigned`` and is never a pass.
     """
 
-    from openadapt_flow.contracts.seal import parse_key_registry
+    from openadapt_types.seal import parse_key_registry
 
     receipt = document.get("receipt") if "receipt" in document else document
     result: dict[str, Any] = {"verified": False, "verified_outcome": False, "ok": False}

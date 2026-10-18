@@ -28,7 +28,7 @@ from openadapt_flow.approval_mode.item_approval import (
 from openadapt_flow.approval_mode.model import ApprovalMode
 from openadapt_flow.console import save_approvals
 from openadapt_flow.console.app import create_app
-from openadapt_flow.contracts.human_decision import HumanDecisionTaskV1
+from openadapt_types.human_decision import HumanDecisionTaskV1
 
 FRAME = b"\x89PNG\r\n\x1a\nmade-up filled form"
 FORM = ("dom", "sha256:" + "1" * 64)
