@@ -75,6 +75,14 @@ def executor_line(report: CountersignReport) -> str:
     )
 
 
+_CHECKED_HOW_TEXT = {
+    "not_checked": "not_checked (Not checked)",
+    "screen_said_saved": "screen_said_saved (The screen said it saved)",
+    "reopened": "reopened (Reopened and checked on screen)",
+    "records": "records (Checked in your system's records)",
+}
+
+
 def tier_line(report: CountersignReport) -> str:
     if report.receipt_schema == EXECUTE_RECEIPT_SCHEMA:
         return f"not stated by Execute v1 (oracle_tier {report.oracle_tier})"
@@ -152,6 +160,11 @@ def render_report(report: CountersignReport, *, show_names: bool = True) -> str:
     rows: list[tuple[str, str]] = [
         ("Executor", executor_line(report)),
         ("Verification tier", tier_line(report)),
+        *(
+            [("Checked how", _CHECKED_HOW_TEXT.get(report.checked_how, "unrecognized"))]
+            if report.checked_how is not None
+            else []
+        ),
         ("Effect verdict", str(report.effect_verdict or "not stated (Execute v1)")),
         ("Outcome", str(report.outcome)),
         ("Receipt schema", str(report.receipt_schema)),

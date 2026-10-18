@@ -391,6 +391,45 @@ class ReadBackTier(IntEnum):
 #: RFC-0002 ``verification_tier`` wire values.
 VerificationTierLabel = Literal["independent_readback", "screen_readback", "unchecked"]
 
+#: RFC-0002 ``checked_how`` wire values: the read-back ladder rung (R0 to R3)
+#: a check reached. ``not_checked``: nothing read the save back.
+#: ``screen_said_saved``: the screen the save left (Flow tier 4).
+#: ``reopened``: the record opened again in the acting session (tier 3) or a
+#: separate session (tier 2). ``records``: the system of record (tier 1).
+CheckedHowLabel = Literal["not_checked", "screen_said_saved", "reopened", "records"]
+
+CHECKED_HOW_VALUES: tuple[CheckedHowLabel, ...] = (
+    "not_checked",
+    "screen_said_saved",
+    "reopened",
+    "records",
+)
+
+
+def checked_how_for_flow_tier(tier: Optional[int]) -> CheckedHowLabel:
+    """The ``checked_how`` value for a Flow ``VerificationTier`` (1 to 4).
+
+    ``None`` or any other value is ``not_checked``.
+    """
+
+    if tier == 1:
+        return "records"
+    if tier in (2, 3):
+        return "reopened"
+    if tier == 4:
+        return "screen_said_saved"
+    return "not_checked"
+
+
+#: The ``verification_tier`` each ``checked_how`` value is consistent with.
+CHECKED_HOW_TIER: Mapping[CheckedHowLabel, VerificationTierLabel] = {
+    "not_checked": "unchecked",
+    "screen_said_saved": "screen_readback",
+    "reopened": "screen_readback",
+    "records": "independent_readback",
+}
+
+
 _TIER_LABELS: Mapping[ReadBackTier, VerificationTierLabel] = {
     ReadBackTier.INDEPENDENT_READBACK: "independent_readback",
     ReadBackTier.SCREEN_READBACK: "screen_readback",
@@ -660,6 +699,10 @@ __all__ = [
     "ReadBackOutcome",
     "ReadBackTier",
     "VerificationTierLabel",
+    "CHECKED_HOW_TIER",
+    "CHECKED_HOW_VALUES",
+    "CheckedHowLabel",
+    "checked_how_for_flow_tier",
     "ReviewReason",
     "StepClass",
     "approver_from_legacy",

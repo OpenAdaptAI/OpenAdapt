@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from typing import Any, Final, Iterable, Literal, Mapping, Optional
 
+from openadapt_flow.contracts.approval import CheckedHowLabel
 from openadapt_flow.verification import VerificationTier
 
 __all__ = [
@@ -54,7 +55,7 @@ MINIMUM_READBACK_VALUES: Final[tuple[MinimumReadback, ...]] = ("R1", "R2", "R3")
 DEFAULT_MINIMUM_READBACK: Final[MinimumReadback] = "R2"
 
 #: Closed code for each rung, as the agent result's ``checked_how``.
-CHECKED_HOW: Final[dict[Rung, str]] = {
+CHECKED_HOW: Final[dict[Rung, CheckedHowLabel]] = {
     "R0": "not_checked",
     "R1": "screen_said_saved",
     "R2": "reopened",

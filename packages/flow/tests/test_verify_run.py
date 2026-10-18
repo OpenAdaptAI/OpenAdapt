@@ -443,6 +443,7 @@ def test_receipt_keeps_every_execute_v1_field(cfg, sor, tmp_path):
         "executor_ref_sha256",
         "effect_verdict",
         "verification_tier",
+        "checked_how",
     }
     assert receipt["schema_version"] == EFFECT_RECEIPT_SCHEMA
     # A strict Execute consumer refuses it rather than mistaking it for a
@@ -919,3 +920,63 @@ def test_unset_environment_reference_is_refused(monkeypatch):
     data = _verify_yaml("${OA_TEST_UNSET_SOR_URL}")
     with pytest.raises(VerifyRunError, match="OA_TEST_UNSET_SOR_URL"):
         parse_verify_config(data)
+
+
+# -- checked_how (RFC-0002 open question 5) ------------------------------------
+
+
+def test_receipt_signs_how_the_save_was_checked(cfg, sor, tmp_path):
+    base, _db = sor
+    result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base))
+    receipt = result["receipt"]
+    # A REST read of the system of record is the top rung.
+    assert receipt["checked_how"] == "records"
+    assert result["evidence"]["readback"]["checked_how"] == "records"
+    signed = _issuer_sign(receipt)
+    assert (
+        check_effect_receipt({**result, "receipt": signed}, _registry())["verified"]
+        is True
+    )
+    # It is inside receipt_sha256, so editing it breaks the signature.
+    edited = {**signed, "checked_how": "reopened"}
+    assert (
+        check_effect_receipt({**result, "receipt": edited}, _registry())["verified"]
+        is False
+    )
+
+
+def test_a_receipt_from_before_checked_how_still_checks(cfg, sor, tmp_path):
+    base, _db = sor
+    result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base))
+    evidence = json.loads(json.dumps(result["evidence"]))
+    del evidence["readback"]["checked_how"]
+    receipt = dict(result["receipt"])
+    del receipt["checked_how"]
+    receipt["evidence_digest"] = verify_run_mod.sha256_tagged(evidence)
+    old = {**result, "receipt": _issuer_sign(receipt), "evidence": evidence}
+    assert check_effect_receipt(old, _registry())["verified"] is True
+
+
+def test_checked_how_must_agree_with_verification_tier(cfg, sor, tmp_path):
+    base, _db = sor
+    result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base))
+    for wrong in ("reopened", "screen_said_saved", "not_checked", "maybe"):
+        receipt = {**result["receipt"], "checked_how": wrong}
+        assert verify_run_mod.receipt_problem(receipt) == "checked_how"
+
+
+def test_countersign_verify_reads_checked_how(cfg, sor, tmp_path):
+    from openadapt_flow.countersign.document import verify_countersigned
+    from openadapt_flow.countersign.render import render_report
+
+    base, _db = sor
+    result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base))
+    signed = {**result, "receipt": _issuer_sign(result["receipt"])}
+    report = verify_countersigned(signed, registry=_registry())
+    assert report.checked_how == "records"
+    assert "checked_how_mismatch" not in report.problems
+    assert "Checked in your system's records" in render_report(report)
+    receipt = {**result["receipt"], "checked_how": "reopened"}
+    wrong = {**result, "receipt": _issuer_sign(receipt)}
+    report = verify_countersigned(wrong, registry=_registry())
+    assert "checked_how_mismatch" in report.problems
