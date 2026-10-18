@@ -7,7 +7,7 @@ An optional read-back window lets each worker start its next item while the
 previous save is still being read back.
 
 Speed figures are published in one place, the
-[scoreboard](../benchmark/scoreboard/): arm 4 (`program_fast`) is the `fast`
+scoreboard (`benchmark/scoreboard/`, added in [#1303](https://github.com/OpenAdaptAI/OpenAdapt/pull/1303)): arm 4 (`program_fast`) is the `fast`
 speed profile below, and arm 6 (`parallel`) is `--workers N`.
 
 ## What changes and what doesn't

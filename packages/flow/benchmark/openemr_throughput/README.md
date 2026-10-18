@@ -7,7 +7,7 @@ address, phone number (555-01xx) and email (`example.invalid`) is made up.
 OpenAdapt isn't affiliated with the OpenEMR project.
 
 Speed figures are published only through the
-[scoreboard](../scoreboard/) (arm 4, `program_fast`, and arm 6, `parallel`).
+scoreboard (`benchmark/scoreboard/`, added in [#1303](https://github.com/OpenAdaptAI/OpenAdapt/pull/1303)) (arm 4, `program_fast`, and arm 6, `parallel`).
 This folder holds the runner and the profiler, not results.
 
 | File | What it is |
