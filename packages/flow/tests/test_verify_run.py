@@ -242,6 +242,22 @@ def test_no_record_with_baseline_is_refuted_absent(cfg, sor, tmp_path):
     result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base, fault="no_persist"))
     assert result["receipt"]["effect_verdict"] == "REFUTED"
     assert result["receipt"]["outcome"] == "halted_before_effect"
+
+
+def test_absent_after_a_known_dispatch_needs_reconciliation(cfg, sor, tmp_path):
+    base, _db = sor
+    # The caller knows the save was sent, so an empty store proves nothing:
+    # the write may still land, and a retry could save it twice.
+    result = _run(
+        cfg,
+        tmp_path,
+        pre=lambda: _actor_writes(base, fault="no_persist"),
+        write_attempted=True,
+    )
+    receipt = result["receipt"]
+    assert receipt["effect_verdict"] == "REFUTED"
+    assert receipt["outcome"] == "reconciliation_required"
+    assert receipt["delivery_uncertain"] is True
     assert result["evidence"]["readback"]["effects"][0]["observed_effect"] == "absent"
 
 

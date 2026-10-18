@@ -147,6 +147,38 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--guard",
+        default=None,
+        metavar="VERIFY_YAML",
+        help=(
+            "Serve only the guarded-save tools (guard_begin, guard_commit, "
+            "guard_confirm) for any agent's own writes. VERIFY_YAML is the "
+            "verify-run file: the system-of-record reader and the record the "
+            "save must produce. Needs --guard-tasks and --guard-state."
+        ),
+    )
+    p.add_argument(
+        "--guard-tasks",
+        default=None,
+        metavar="DIR",
+        help="With --guard: folder of <task_id>.json task files the operator wrote",
+    )
+    p.add_argument(
+        "--guard-state",
+        default=None,
+        metavar="DIR",
+        help=(
+            "With --guard: folder for baselines, approval requests, receipts and "
+            "the per-task ledger"
+        ),
+    )
+    p.add_argument(
+        "--guard-approval",
+        choices=("each_item", "not_gated"),
+        default="each_item",
+        help="With --guard: each_item (default) holds every save for a person",
+    )
+    p.add_argument(
         "--tutorial",
         action="store_true",
         help=(
@@ -486,6 +518,8 @@ def _cmd_serve(args: argparse.Namespace) -> int:
     from openadapt_flow.agent.runner import default_flow_cli
     from openadapt_flow.agent.tutorial import TutorialError
 
+    if args.guard:
+        return _serve_guard(args, serve)
     desktop_pin = bool(
         args.windows_agent_url
         or args.remote_window
@@ -758,6 +792,40 @@ def _cmd_serve(args: argparse.Namespace) -> int:
             closer = getattr(authoring_bridge.session, "close", None)
             if callable(closer):
                 closer()
+    return 0
+
+
+def _serve_guard(args: argparse.Namespace, serve) -> int:
+    """Serve only the guarded-save tools over local stdio."""
+    from openadapt_flow.agent.guard_tools import GuardBridge
+    from openadapt_flow.guard import GuardedSave
+    from openadapt_flow.verify_run import VerifyRunError
+
+    if args.authoring or args.bundles or args.tutorial:
+        print(
+            "serve: --guard serves only the guarded-save tools; it cannot be "
+            "combined with --authoring, --bundles or --tutorial",
+            file=sys.stderr,
+        )
+        return 2
+    if not args.guard_tasks or not args.guard_state:
+        print("serve: --guard needs --guard-tasks and --guard-state", file=sys.stderr)
+        return 2
+    try:
+        guarded = GuardedSave.from_file(
+            args.guard,
+            Path(args.guard_state).expanduser().resolve(),
+            approval=args.guard_approval,
+        )
+    except VerifyRunError as exc:
+        print(f"serve: {exc}", file=sys.stderr)
+        return 2
+    print(
+        f"openadapt-agent {__version__}: guarded-save tools over local stdio; "
+        f"approval {args.guard_approval}; tasks {args.guard_tasks}",
+        file=sys.stderr,
+    )
+    serve(None, guard=GuardBridge(guarded, Path(args.guard_tasks).expanduser()))
     return 0
 
 

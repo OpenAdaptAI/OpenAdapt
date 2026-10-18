@@ -153,7 +153,9 @@ async def _confirm_admit(context: Any, authoring: AuthoringBridge) -> None:
 
 
 def _server_instructions(
-    authoring: AuthoringBridge | None, bridge: AgentBridge | None = None
+    authoring: AuthoringBridge | None,
+    bridge: AgentBridge | None = None,
+    guard: Any = None,
 ) -> str:
     text = ""
     if bridge is not None:
@@ -206,21 +208,32 @@ def _server_instructions(
             "enable run tools. This process must not be port-forwarded or "
             "served over HTTP."
         )
+    if guard is not None:
+        from openadapt_flow.agent.guard_tools import GUARD_INSTRUCTIONS
+
+        text += " " + GUARD_INSTRUCTIONS
     return text.strip()
 
 
 def build_server(
     bridge: AgentBridge | None = None,
     authoring: AuthoringBridge | None = None,
+    guard: Any = None,
 ) -> Server:
-    """Wrap workflow and/or authoring bridges in an MCP Server (no I/O started)."""
-    if bridge is None and authoring is None:
-        raise ValueError("MCP server requires a workflow bridge or an authoring bridge")
+    """Wrap workflow, authoring and/or guard bridges in an MCP Server (no I/O started).
+
+    ``guard`` is a :class:`~openadapt_flow.agent.guard_tools.GuardBridge`.
+    """
+    if bridge is None and authoring is None and guard is None:
+        raise ValueError(
+            "MCP server requires a workflow, authoring or guarded-save bridge"
+        )
 
     def _tool_specs():
         return (
             *(bridge.list_tool_specs() if bridge is not None else ()),
             *(authoring.list_tool_specs() if authoring is not None else ()),
+            *(guard.list_tool_specs() if guard is not None else ()),
         )
 
     async def _list_tools(context: Any = None) -> list[types.Tool]:
@@ -274,6 +287,8 @@ def build_server(
 
             def call() -> dict[str, Any]:
                 payload = dict(arguments or {})
+                if guard is not None and guard.handles(name):
+                    return guard.dispatch(name, payload)
                 if authoring is not None and authoring.handles(name):
                     if human_confirmed:
                         return authoring.dispatch(name, payload, human_confirmed=True)
@@ -326,7 +341,7 @@ def build_server(
         server = Server(
             SERVER_NAME,
             version=__version__,
-            instructions=_server_instructions(authoring, bridge),
+            instructions=_server_instructions(authoring, bridge, guard),
         )
 
         async def _list_v1() -> list[types.Tool]:
@@ -351,7 +366,7 @@ def build_server(
         server = Server(
             SERVER_NAME,
             version=__version__,
-            instructions=_server_instructions(authoring, bridge),
+            instructions=_server_instructions(authoring, bridge, guard),
             on_list_tools=_list_v2,
             on_call_tool=_call_v2,
         )
@@ -387,8 +402,9 @@ def _protected_stdout() -> Iterator[Any]:
 async def _run_stdio(
     bridge: AgentBridge | None,
     authoring: AuthoringBridge | None = None,
+    guard: Any = None,
 ) -> None:
-    server = build_server(bridge, authoring=authoring)
+    server = build_server(bridge, authoring=authoring, guard=guard)
     with _protected_stdout() as wire:
         kwargs = {"stdout": wire} if wire is not None else {}
         async with stdio_server(**kwargs) as (read_stream, write_stream):
@@ -400,9 +416,13 @@ async def _run_stdio(
 def serve(
     bridge: AgentBridge | None = None,
     authoring: AuthoringBridge | None = None,
+    guard: Any = None,
 ) -> None:
     """Serve the bridge over stdio until the client disconnects."""
-    anyio.run(_run_stdio, bridge, authoring)
+    if guard is None:
+        anyio.run(_run_stdio, bridge, authoring)
+        return
+    anyio.run(_run_stdio, bridge, authoring, guard)
 
 
 if __name__ == "__main__":  # pragma: no cover - exercised by smoke test
