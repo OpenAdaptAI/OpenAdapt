@@ -183,7 +183,7 @@ def _compare(spec: FieldSpec, a: ChannelRead, b: ChannelRead) -> str:
         return "mismatch"
     other = b if ocr_side is a else a
     return compare_value(
-        ocr_side.normalized, other.normalized or "", kind=spec.kind, source="ocr"
+        ocr_side.normalized or "", other.normalized or "", kind=spec.kind, source="ocr"
     )
 
 
