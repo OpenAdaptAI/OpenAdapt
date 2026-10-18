@@ -167,3 +167,131 @@ def test_scroll_target_must_reach_its_demonstrated_position() -> None:
     assert _scroll_target_positioned((40, 40), (40, 10), (0, 300), frame)
     # Scrolling up mirrors it.
     assert not _scroll_target_positioned((40, 50), (40, 10), (0, -300), frame)
+
+
+C = _png(10, box=(50, 30, 70, 50))
+
+
+def _dropped(tmp_path: Path, steps: list[tuple[dict, bytes, bytes]], name: str):
+    report = distill_recording(
+        _recording(tmp_path / name, steps), tmp_path / name / "out"
+    )
+    return [(d.index, d.rule) for d in report.dropped]
+
+
+def test_drops_a_dead_end_that_ends_where_it_started(tmp_path: Path) -> None:
+    steps = [
+        ({"kind": "click", "x": 1, "y": 1}, A, B),  # opens the wrong menu
+        ({"kind": "key", "key": "Escape"}, B, A),  # and closes it again
+        ({"kind": "click", "x": 9, "y": 9}, A, C),  # the real next step
+        ({"kind": "type", "text": "hello"}, C, C),
+    ]
+    assert _dropped(tmp_path, steps, "a") == [(0, "dead_end"), (1, "dead_end")]
+
+
+def test_dead_end_takes_the_longest_run_from_the_earliest_start(tmp_path: Path) -> None:
+    steps = [
+        ({"kind": "click", "x": 1, "y": 1}, A, B),
+        ({"kind": "click", "x": 2, "y": 2}, B, A),  # back at A: a dead end ...
+        ({"kind": "click", "x": 3, "y": 3}, A, C),
+        ({"kind": "click", "x": 4, "y": 4}, C, A),  # ... that keeps going to A
+        ({"kind": "click", "x": 5, "y": 5}, A, B),
+    ]
+    first = _dropped(tmp_path, steps, "a")
+    assert first == [(i, "dead_end") for i in range(4)]
+    assert _dropped(tmp_path, steps, "b") == first
+
+
+@pytest.mark.parametrize(
+    "inner",
+    [
+        {"kind": "click", "x": 2, "y": 2, "structural": {"name": "Save Encounter"}},
+        {"kind": "click", "x": 2, "y": 2, "submit_binding": {"form": "f"}},
+        {"kind": "click", "x": 2, "y": 2, "sor_before": [], "sor_after": [{"id": 1}]},
+        {"kind": "key", "key": "Enter"},
+        {"kind": "type", "text": "x"},
+        {"kind": "type", "text": "x", "param": "note"},
+    ],
+)
+def test_dead_end_never_spans_a_write_or_typing(tmp_path: Path, inner: dict) -> None:
+    steps = [
+        ({"kind": "click", "x": 1, "y": 1}, A, B),
+        (inner, B, C),
+        ({"kind": "click", "x": 3, "y": 3}, C, A),
+        ({"kind": "click", "x": 9, "y": 9}, A, B),
+    ]
+    assert not any(rule == "dead_end" for _, rule in _dropped(tmp_path, steps, "a"))
+
+
+def test_dead_end_needs_the_same_url_at_both_ends(tmp_path: Path) -> None:
+    steps = [
+        (
+            {"kind": "click", "x": 1, "y": 1, "url_before": "/a", "url_after": "/b"},
+            A,
+            B,
+        ),
+        (
+            {"kind": "click", "x": 2, "y": 2, "url_before": "/b", "url_after": "/c"},
+            B,
+            A,
+        ),
+        (
+            {"kind": "click", "x": 9, "y": 9, "url_before": "/c", "url_after": "/c"},
+            A,
+            B,
+        ),
+    ]
+    assert _dropped(tmp_path, steps, "a") == []
+
+
+def test_dead_end_keeps_a_focus_click_for_the_next_typing(tmp_path: Path) -> None:
+    steps = [
+        ({"kind": "click", "x": 1, "y": 1}, A, B),
+        ({"kind": "click", "x": 2, "y": 2}, B, A),  # focus for the typing below
+        ({"kind": "type", "text": "hello"}, A, C),
+    ]
+    assert _dropped(tmp_path, steps, "a") == []
+
+
+def test_a_click_that_changed_the_system_of_record_is_not_a_no_effect_step(
+    tmp_path: Path,
+) -> None:
+    steps = [
+        (
+            {
+                "kind": "click",
+                "x": 1,
+                "y": 1,
+                "sor_before": [],
+                "sor_after": [{"id": 1}],
+            },
+            A,
+            A,
+        ),
+        ({"kind": "click", "x": 9, "y": 9}, A, B),
+    ]
+    assert _dropped(tmp_path, steps, "a") == []
+
+
+def _edge(level: int) -> bytes:
+    arr = np.full((60, 80, 3), 10, dtype=np.uint8)
+    arr[50, 5:40] = level  # one repainted edge
+    buf = io.BytesIO()
+    Image.fromarray(arr).save(buf, format="PNG")
+    return buf.getvalue()
+
+
+def test_dead_end_ignores_repaint_noise_but_not_a_real_change(tmp_path: Path) -> None:
+    noisy, changed = _edge(12), _edge(40)  # two levels off; thirty levels off
+    steps = [
+        ({"kind": "click", "x": 1, "y": 1}, A, B),
+        ({"kind": "click", "x": 2, "y": 2}, B, noisy),
+        ({"kind": "click", "x": 9, "y": 9}, noisy, C),
+    ]
+    assert _dropped(tmp_path, steps, "a") == [(0, "dead_end"), (1, "dead_end")]
+    real = [
+        ({"kind": "click", "x": 1, "y": 1}, A, B),
+        ({"kind": "click", "x": 2, "y": 2}, B, changed),
+        ({"kind": "click", "x": 9, "y": 9}, changed, C),
+    ]
+    assert _dropped(tmp_path, real, "b") == []

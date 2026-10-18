@@ -511,3 +511,47 @@ def test_readback_effect_rendered_in_workflow_py_for_review():
     rendered2 = "\n".join(_effect_comment(step.effects))
     assert "onscreen-readback=different-path" in rendered2
     assert "renav=" in rendered2
+
+
+def test_field_equals_reads_back_the_parameter_when_bound():
+    event = {
+        "i": 0,
+        "kind": "key",
+        "key": "Enter",
+        SOR_BEFORE_KEY: [],
+        SOR_AFTER_KEY: [_record()],
+    }
+    literal = mine_step_effects(event, _key_step(), exclude_texts=(NOTE,))
+    bound = mine_step_effects(
+        event, _key_step(), exclude_texts=(NOTE,), param_bindings={NOTE: "note"}
+    )
+    lit_field = next(e for e in literal.effects if e.kind is EffectKind.FIELD_EQUALS)
+    field = next(e for e in bound.effects if e.kind is EffectKind.FIELD_EQUALS)
+    assert lit_field.value.literal == NOTE and lit_field.value.param is None
+    assert field.value.param == "note" and field.value.literal is None
+    # The identity selector does not change.
+    assert bound.effects[0].match == literal.effects[0].match
+
+
+def test_compile_binds_effect_params_only_when_asked(tmp_path):
+    rec = _write_recording(tmp_path, sor_after=[_record()])
+    default = compile_recording(
+        rec,
+        tmp_path / "a",
+        name="mine-demo",
+        risk_overrides={"step_001": "irreversible"},
+        mine_effects=True,
+    )
+    bound = compile_recording(
+        rec,
+        tmp_path / "b",
+        name="mine-demo",
+        risk_overrides={"step_001": "irreversible"},
+        mine_effects=True,
+        bind_effect_params=True,
+    )
+    assert default.steps[1].effects[1].value.literal == NOTE
+    assert bound.steps[1].effects[1].value.param == "note"
+    assert default.manifest is not None and bound.manifest is not None
+    a_cfg = default.manifest.provenance.compiler_config_sha256
+    assert a_cfg != bound.manifest.provenance.compiler_config_sha256
