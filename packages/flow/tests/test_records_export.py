@@ -121,12 +121,16 @@ def test_reviewed_value_exports_with_honest_grade(tmp_path) -> None:
         schema=SCHEMA,
     )
     fields = tuple(
-        apply_decision(f, decision) if f.field == "holder" else f for f in record.fields
+        apply_decision(f, decision, item) if f.field == "holder" else f
+        for f in record.fields
     )
     settled = record.model_copy(update={"fields": fields})
     (row,) = export_rows([settled], SCHEMA).rows
     assert row["holder"] == "Jane Roe"
     assert row["_grade"] == "unchecked"
+    # A review decision does not lift a value over min_grade.
+    strict = export_rows([settled], SCHEMA, min_grade="same_screen")
+    assert strict.rows == [] and "below same_screen" in strict.skipped[0].reason
 
 
 def test_csv_sink(tmp_path) -> None:
@@ -218,3 +222,36 @@ def test_default_single_reads_export_as_unchecked() -> None:
     assert row["_receipt_sha256"] is None
     assert row["active"] is False
     assert export_rows([record], SCHEMA, min_grade="same_screen").rows == []
+
+
+def test_csv_cells_cannot_run_as_formulas(tmp_path) -> None:
+    from openadapt_flow.records.export import _csv_cell
+
+    assert _csv_cell('=HYPERLINK("x")') == '\'=HYPERLINK("x")'
+    assert _csv_cell("@SUM(A1)") == "'@SUM(A1)"
+    assert _csv_cell("-12.50") == "-12.50"
+    assert _csv_cell(None) == ""
+
+
+def test_webhook_ignores_proxy_settings(monkeypatch) -> None:
+    import urllib.request
+
+    from openadapt_flow.records.export import WebhookSink
+
+    monkeypatch.setenv("HTTP_PROXY", "http://proxy.invalid:3128")
+    seen = {}
+
+    class _Opener:
+        def open(self, request, timeout):
+            raise RuntimeError("stop")
+
+    def build_opener(*handlers):
+        seen["handlers"] = handlers
+        return _Opener()
+
+    monkeypatch.setattr(urllib.request, "build_opener", build_opener)
+    with pytest.raises(RuntimeError, match="stop"):
+        WebhookSink("http://127.0.0.1:9/x").write([], "s")
+    (handler,) = seen["handlers"]
+    assert isinstance(handler, urllib.request.ProxyHandler)
+    assert handler.proxies == {}

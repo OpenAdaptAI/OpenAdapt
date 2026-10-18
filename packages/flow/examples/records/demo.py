@@ -165,7 +165,7 @@ def main(argv: list[str] | None = None) -> int:
         for i, record in enumerate(records):
             if record.record_key == item.record_key:
                 fields = tuple(
-                    apply_decision(f, decision) if f.field == item.field else f
+                    apply_decision(f, decision, item) if f.field == item.field else f
                     for f in record.fields
                 )
                 records[i] = record.model_copy(

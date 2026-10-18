@@ -282,3 +282,25 @@ def test_export_reads_grade_by_source() -> None:
     assert saved.value == "AC1042"  # the independent read is reported
     with pytest.raises(ValueError, match="needs source_kind"):
         channel_read(CODE, "export", "AC-1042")
+
+
+def test_codes_split_in_different_places_disagree() -> None:
+    clip = channel_read(CODE, "clipboard", "12-345")
+    db = channel_read(CODE, "database", "123-45")
+    field = combine_reads(CODE, [clip, db])
+    assert field.agreement == "disagree"
+    assert field.grade == "unchecked"
+    assert field.needs_review
+    # Formatting added on one side only is still the same code.
+    plain = channel_read(CODE, "database", "AC1042")
+    shown = channel_read(CODE, "clipboard", "AC-1042")
+    assert combine_reads(CODE, [shown, plain]).grade == "system_of_record"
+
+
+def test_unparsed_optional_field_goes_to_review() -> None:
+    count = FieldSpec(name="count", kind="integer", required=False)
+    field = combine_reads(count, [channel_read(count, "ocr", "l2O")])
+    assert field.value is None
+    assert field.needs_review
+    empty = combine_reads(count, [channel_read(count, "ocr", "")])
+    assert not empty.needs_review

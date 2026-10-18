@@ -172,11 +172,22 @@ def channel_read(
 
 
 def _compare(spec: FieldSpec, a: ChannelRead, b: ChannelRead) -> str:
-    """match, mismatch or ambiguous for two parsed reads of one field."""
+    """match, mismatch or ambiguous for two parsed reads of one field.
+
+    Only equal normalized values match. Reads that differ but could be the
+    same value under OCR look-alikes are ambiguous, never a match.
+    """
 
     assert a.normalized is not None and b.normalized is not None
     if a.normalized == b.normalized:
+        if spec.kind == "code" and not _same_code_layout(a.raw, b.raw):
+            return "mismatch"
         return "match"
+    verdict = _compare_different(spec, a, b)
+    return "ambiguous" if verdict == "match" else verdict
+
+
+def _compare_different(spec: FieldSpec, a: ChannelRead, b: ChannelRead) -> str:
     if spec.kind not in ("text", "code"):
         # Typed values compared in canonical form; OCR look-alikes in the raw
         # text still count as ambiguous rather than wrong.
@@ -201,6 +212,25 @@ def _compare(spec: FieldSpec, a: ChannelRead, b: ChannelRead) -> str:
     return compare_value(
         ocr_side.normalized or "", other.normalized or "", kind=spec.kind, source="ocr"
     )
+
+
+_CODE_PARTS = re.compile(r"[^\s\-./]+")
+
+
+def _same_code_layout(a: Optional[str], b: Optional[str]) -> bool:
+    """False when both codes are split by separators, in different places.
+
+    Code values are compared without separators, so ``AC1042`` from a
+    database matches ``AC-1042`` on screen. ``12-345`` and ``123-45`` are
+    different codes, though: when both sides have separators, the parts
+    between them must line up.
+    """
+
+    parts_a = _CODE_PARTS.findall((a or "").lower())
+    parts_b = _CODE_PARTS.findall((b or "").lower())
+    if len(parts_a) < 2 or len(parts_b) < 2:
+        return True
+    return parts_a == parts_b
 
 
 def _agreement(spec: FieldSpec, parsed: Sequence[ChannelRead]) -> Agreement:
@@ -275,7 +305,9 @@ def combine_reads(
     reasons = []
     if not parsed:
         reasons.append("no channel read a valid value")
-        if not spec.required:
+        if not spec.required and not any(r.raw and r.raw.strip() for r in reads):
+            # An optional field that is empty on every channel is fine; one
+            # that shows text no channel could parse is not.
             reasons.clear()
     elif agreement == "disagree":
         reasons.append("channels disagree")

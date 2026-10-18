@@ -277,7 +277,7 @@ decision = queue.decide(
     signing_key=load_or_create_private_key(data_dir),
     schema=schema,
 )
-settled = apply_decision(field_read, decision)
+settled = apply_decision(field_read, decision, item)
 ```
 
 The queue enforces these rules:
@@ -319,13 +319,15 @@ provenance columns:
 | `_provenance` | JSON: per field, the grade, channels, confidence, screenshot hash, region, crop hash and review decision. |
 
 A record is exported only when no field still needs review and each field is
-at least `min_grade` (default `unchecked`, so every settled record) or was settled by a signed
-review decision. Pass `min_grade="system_of_record"` to export only values confirmed
+at least `min_grade` (default `unchecked`, so every settled record). A review
+decision settles a value but does not lift it over `min_grade`. Pass `min_grade="system_of_record"` to export only values confirmed
 by an independent channel. Skipped records are returned with the reason.
 
 `DbApiSink` takes any DB-API 2.0 connection. For Postgres, pass a `psycopg`
 connection and `paramstyle="format"`. `WebhookSink` refuses a URL that is not
-on this machine unless you pass `allow_remote=True`.
+on this machine unless you pass `allow_remote=True`, and never sends through a
+proxy. `CsvSink` prefixes text cells that start with `=`, `+`, `-` or `@` with
+an apostrophe so a spreadsheet does not run them as formulas.
 
 A `ColumnMapping` renames fields and adds fixed columns for a layout you
 define. Standard target models are templates outside the core; see
