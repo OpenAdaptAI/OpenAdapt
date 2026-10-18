@@ -667,8 +667,10 @@ assurance grade is `screen_readback` either way, and the adapter sets
 fixture as a UI Automation stand-in served by the real in-guest agent and read
 by the real `WindowsBackend` client, with the fixture's own `pn_db.py`
 persistence, and the RDP kiosk's look-up panel drawn at the Tk layout and read
-by the real OCR engine through the RDP backend. It has not yet been run on the
-live Windows VM or the Docker RDP fixture.
+by the real OCR engine through the RDP backend, a Citrix Workspace window
+(`CitrixWorkspaceBackend`) and a native macOS window (`MacOSBackend`). It has
+not yet been run on the live Windows VM, the Docker RDP fixture, or a live
+Citrix session.
 
 ### Limits
 

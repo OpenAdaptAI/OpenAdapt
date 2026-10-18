@@ -573,7 +573,7 @@
           "node_found": null,
           "ci_job": "test",
           "junit_status": null,
-          "proves": "On the WinForms patient-notes fixture through the real in-guest agent and Windows client (UI Automation): confirms a saved note, refutes a wrong one, opens only the row that shows the full identity past a same-first-name decoy, halts on two matching rows, and refuses a search button with a save-like label. On the RDP kiosk's look-up panel through the RDP backend and real OCR: confirms a booking from its own RDP logon (tier 2), never turns an OCR mismatch into REFUTED, and never takes \"not found\" as proof that nothing was saved. Neither fixture's save control or form is touched. The deployment refuses a read-back session that is the session that types."
+          "proves": "On the WinForms patient-notes fixture through the real in-guest agent and Windows client (UI Automation): confirms a saved note, refutes a wrong one, opens only the row that shows the full identity past a same-first-name decoy, halts on two matching rows, and refuses a search button with a save-like label. On the RDP kiosk's look-up panel through the RDP backend and real OCR: confirms a booking from its own RDP logon (tier 2), never turns an OCR mismatch into REFUTED, and never takes \"not found\" as proof that nothing was saved. The same look-up confirms through a Citrix Workspace window and a native macOS window (tier 3, a window as the same user). Neither fixture's save control or form is touched. The deployment refuses a read-back session that is the session that types."
         }
       ],
       "errors": []
