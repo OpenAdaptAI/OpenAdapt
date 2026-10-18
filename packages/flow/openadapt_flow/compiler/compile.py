@@ -1653,6 +1653,7 @@ def compile_recording(
     target_surface: Optional[ExecutionTargetKind] = None,
     pixel_verify_enabled: bool = False,
     bind_effect_params: bool = False,
+    drop_redundant_keys: bool = False,
 ) -> Workflow:
     """Compile a recording directory into a workflow bundle.
 
@@ -1780,6 +1781,11 @@ def compile_recording(
             a pixel identifier crop as a step's only identity evidence only
             when that runtime can verify it (see
             :func:`openadapt_flow.runtime.identity.verifiable_identity_evidence`).
+        drop_redundant_keys: Let the fix-up passes drop a demonstrated Enter
+            after a ``<select>`` type and a Ctrl+A on a field that was empty
+            in the demonstration. Off by default: the TYPE read-back at replay
+            doesn't catch a wrong drop (see
+            :mod:`openadapt_flow.compiler.fixup_passes`).
 
     Returns:
         The compiled :class:`Workflow` (also saved to the bundle).
@@ -1867,6 +1873,9 @@ def compile_recording(
 
     # Each recording frame is OCRed at most once across both passes.
     ocr_cache: dict[tuple[int, str], list[OcrLine]] = {}
+    from openadapt_flow.runtime import layout_drift as _layout
+
+    layout_fingerprints: dict[str, "_layout.LayoutFingerprint"] = {}
 
     def cached_lines(i: int, suffix: str, png: bytes) -> list[OcrLine]:
         key = (i, suffix)
@@ -1935,6 +1944,11 @@ def compile_recording(
             )
             crop_region = _discriminative_crop_region(frame, click)
             frame_lines = cached_lines(i, "before", before_png)
+            # Font/layout fingerprint of the frame the step acts on: frame
+            # size and font metrics, no text (runtime.layout_drift).
+            layout_fingerprints[step_id] = _layout.fingerprint(
+                frame_lines, (int(frame.shape[1]), int(frame.shape[0]))
+            )
             crop_region = _clip_away_param_lines(
                 crop_region, click, frame_lines, exclude_texts
             )
@@ -2633,7 +2647,7 @@ def compile_recording(
             if _sa is not None:
                 view_lines[step.id] = cached_lines(i_event, "after", _sa)
             if mined.disposition == "readback" and _sb is not None and _sa is not None:
-                # A reference number the save's screen newly shows: R1
+                # A reference number the save's screen newly shows: same-screen
                 # evidence, and a way to find the record again.
                 found = mine_reference(
                     cached_lines(i_event, "before", _sb),
@@ -2727,6 +2741,7 @@ def compile_recording(
         phash_png=phash_png,
         surface=surface,
         pixel_verify_enabled=pixel_verify_enabled,
+        drop_redundant_keys=drop_redundant_keys,
     )
     for note in compile_notes:
         logger.info("compile-pass %s: %s", note["step"], note["change"])
@@ -2983,6 +2998,13 @@ def compile_recording(
         for s in workflow.steps
     )
     workflow.encrypted = False
+
+    kept = {s.id for s in workflow.steps}
+    layout_fingerprints = {k: v for k, v in layout_fingerprints.items() if k in kept}
+    if layout_fingerprints:
+        fp_path = bundle / _layout.FINGERPRINT_ASSET
+        fp_path.parent.mkdir(parents=True, exist_ok=True)
+        fp_path.write_bytes(_layout.dump_bundle_fingerprints(layout_fingerprints))
 
     write_compile_notes(bundle, compile_notes)
     workflow.save(bundle)

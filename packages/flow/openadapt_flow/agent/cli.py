@@ -250,10 +250,12 @@ def build_parser() -> argparse.ArgumentParser:
             "Let the calling agent answer saves that wait for an approval, as "
             "the opaque id AGENT_ID (for example agent:intake-bot). Adds the "
             "list_approval_requests and answer_approval_request tools. Flow "
-            "accepts the agent's answer only where the run's approver policy "
-            "(openadapt-flow run --approver-policy) allows an agent for that "
-            "step; by default only a person may answer. Flow records the agent "
-            "as the approver."
+            "accepts the agent's answer only under a person-signed approver "
+            "grant (openadapt-flow run --approver-policy) that names AGENT_ID "
+            "and allows an agent for that step; by default only a person may "
+            "answer. Runs this server starts record AGENT_ID as their "
+            "initiator, so the agent can never approve its own runs. Flow "
+            "records the agent and the grant's digest as the approver."
         ),
     )
     p.add_argument(

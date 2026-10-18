@@ -494,7 +494,7 @@ class CountersignReport:
     effect_verdict: Optional[str]
     outcome: Optional[str]
     oracle_tier: Optional[int]
-    #: The read-back ladder rung the receipt states, or None on a receipt
+    #: The check level the receipt states, or None on a receipt
     #: issued before ``checked_how`` existed.
     checked_how: Optional[str] = None
     seal: dict[str, Any] = field(default_factory=dict)

@@ -5,6 +5,8 @@ from __future__ import annotations
 from enum import IntEnum
 from typing import Any, Optional
 
+from openadapt_flow.check_level import CheckLevel, from_verification_tier
+
 
 class EffectContractMutationError(RuntimeError):
     """An external verifier changed the effect contract it received."""
@@ -46,22 +48,33 @@ def verify_effect_without_mutation(
 class VerificationTier(IntEnum):
     """Strength of evidence for a declared business effect.
 
-    Lower values are stronger. Verifiers advertise strength explicitly; callers
-    never infer it from class names, substrate labels, or prose.
+    Lower values are stronger. These numbers are a persisted wire value; use
+    :attr:`check_level` (``openadapt_flow.check_level``, higher is stronger)
+    to compare with Seal tiers or show the strength to a person. Verifiers
+    advertise strength explicitly; callers never infer it from class names,
+    substrate labels, or prose.
     """
 
     #: A read through the system of record's own API, database, or store
-    #: (REST, GraphQL, FHIR, SQL, file, email, document). Seal oracle tier 2.
+    #: (REST, GraphQL, FHIR, SQL, file, email, document). Check level
+    #: ``system_of_record``.
     INDEPENDENT_SYSTEM = 1
     #: The same application read through its own record page in a separate,
     #: separately signed-in, read-only session (``ui_readback``). Independent
-    #: of the session that acted; NOT a system-of-record read. Seal oracle
-    #: tier 1.
+    #: of the session that acted; NOT a system-of-record read. Check level
+    #: ``separate_session``.
     INDEPENDENT_SESSION = 2
-    #: The acting session re-navigates to the record and re-reads it.
+    #: The acting session re-navigates to the record and re-reads it. Check
+    #: level ``reopened``.
     PERSISTED_STATE_REACQUISITION = 3
-    #: The acting screen still shows the value.
+    #: The acting screen still shows the value. Check level ``same_screen``.
     IMMEDIATE_SCREEN = 4
+
+    @property
+    def check_level(self) -> CheckLevel:
+        """This tier on the check-level ladder (higher is stronger)."""
+
+        return from_verification_tier(int(self))
 
     def satisfies(self, minimum: "VerificationTier") -> bool:
         return int(self) <= int(minimum)
@@ -76,7 +89,9 @@ class VerificationTier(IntEnum):
 
         Tier 1 reads the system of record. Tier 2 reads the application's
         record page in a separate signed-in session. Tiers 3 and 4 re-read
-        through the acting session (different-path or same-surface).
+        through the acting session (different-path or same-surface). A
+        pixel-only Citrix run with neither tier 1 nor tier 2 evidence cannot
+        be ``VERIFIED``.
         """
 
         return int(self) <= int(VerificationTier.INDEPENDENT_SESSION)
@@ -87,8 +102,8 @@ class VerificationTier(IntEnum):
         Until the separate-session read-back existed this returned True for
         tier 2 as well, which labeled a second application session as a
         system-of-record read. It now returns True for tier 1 only. Nothing in
-        Flow's runtime calls it; outcome gating uses the workflow's read-back
-        ladder minimum (:mod:`openadapt_flow.readback_ladder`).
+        Flow's runtime calls it; outcome gating uses
+        :data:`VERIFIED_EFFECT_TIER`, which is unchanged.
         """
 
         return self.reads_system_of_record()
@@ -113,13 +128,14 @@ def oracle_tier_from_verification_tier(
     return 0
 
 
-#: The tier floor for production ``VERIFIED`` under the default read-back
-#: ladder minimum, ``R2`` (:mod:`openadapt_flow.readback_ladder`): a reopen of
-#: the record after a state reset (tier 3) or stronger. A workflow's
-#: ``minimum_readback`` moves the floor (``R1``: tier 4, ``R3``: tier 1); the
-#: Regulated profile never goes below tier 2. Kept for callers that import it;
-#: the outcome classifier reads the workflow's minimum.
-VERIFIED_EFFECT_TIER = VerificationTier.PERSISTED_STATE_REACQUISITION
+#: Production ``VERIFIED`` requires this floor or stronger (lower int).
+#: The Standard *gate* still admits persisted-state read-back so a
+#: pixel-only run can execute with halt-on-doubt; the outcome classifier
+#: refuses ``VERIFIED`` unless a read independent of the acting session
+#: (tier 1 system of record, or tier 2 separate-session read-back) confirmed
+#: every consequential effect. Policies that need a system-of-record read
+#: (the ``regulated`` policy pack) set their own tier-1 floor.
+VERIFIED_EFFECT_TIER = VerificationTier.INDEPENDENT_SESSION
 
 
 def declared_effect_is_independent_read(effect: Any) -> bool:

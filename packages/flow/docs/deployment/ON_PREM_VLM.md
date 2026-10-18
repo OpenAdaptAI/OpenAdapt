@@ -62,7 +62,9 @@ unqualified**: the appliance validation measured it non-functional at native
 frames are downscaled below ~1024px first) and ~12.5% false-rescue on
 genuinely-ambiguous in-progress screens (a `"Saving…"` read as saved). See
 [docs/LIMITS.md](../LIMITS.md) for the measured trap-set numbers before
-relying on it.
+relying on it. Because of that false-rescue rate, the replayer never asks the
+oracle about a step that can change a record (see the drift-oracle entry
+below).
 
 ## Fail-safe behaviour (mandatory)
 
@@ -197,6 +199,11 @@ handles into the `Replayer`.
   render-drift-sensitive `text_present` and `region_stable` conditions. Only a
   confident `yes` rescues the condition. A `no`, `uncertain`, error, or appliance
   outage keeps the failure. Every call and rescue is recorded in the run result.
+  The replayer does not ask at all on an irreversible or effect-bearing step
+  (the same steps the run gate treats as consequential, plus steps waiting for
+  risk review). There a failed check stays failed. Unless the workflow has its
+  own handler for that step the run stops, and because the action was already
+  sent, the transaction outcome is `RECONCILIATION_REQUIRED`.
 
 ## PHI data-flow boundary
 

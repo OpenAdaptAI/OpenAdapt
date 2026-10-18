@@ -929,9 +929,9 @@ def test_receipt_signs_how_the_save_was_checked(cfg, sor, tmp_path):
     base, _db = sor
     result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base))
     receipt = result["receipt"]
-    # A REST read of the system of record is the top rung.
-    assert receipt["checked_how"] == "records"
-    assert result["evidence"]["readback"]["checked_how"] == "records"
+    # A REST read of the system of record.
+    assert receipt["checked_how"] == "system_of_record"
+    assert result["evidence"]["readback"]["checked_how"] == "system_of_record"
     signed = _issuer_sign(receipt)
     assert (
         check_effect_receipt({**result, "receipt": signed}, _registry())["verified"]
@@ -960,9 +960,26 @@ def test_a_receipt_from_before_checked_how_still_checks(cfg, sor, tmp_path):
 def test_checked_how_must_agree_with_verification_tier(cfg, sor, tmp_path):
     base, _db = sor
     result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base))
-    for wrong in ("reopened", "screen_said_saved", "not_checked", "maybe"):
+    for wrong in ("reopened", "separate_session", "same_screen", "unchecked", "maybe"):
         receipt = {**result["receipt"], "checked_how": wrong}
         assert verify_run_mod.receipt_problem(receipt) == "checked_how"
+
+
+def test_checked_how_keeps_a_same_session_reopen_apart_from_a_separate_session():
+    from openadapt_flow.contracts.approval import (
+        CHECKED_HOW_TIER,
+        checked_how_for_flow_tier,
+    )
+
+    assert checked_how_for_flow_tier(1) == "system_of_record"
+    assert checked_how_for_flow_tier(2) == "separate_session"
+    assert checked_how_for_flow_tier(3) == "reopened"
+    assert checked_how_for_flow_tier(4) == "same_screen"
+    assert checked_how_for_flow_tier(None) == "unchecked"
+    assert checked_how_for_flow_tier(7) == "unchecked"
+    assert CHECKED_HOW_TIER["separate_session"] == "screen_readback"
+    assert CHECKED_HOW_TIER["reopened"] == "screen_readback"
+    assert CHECKED_HOW_TIER["system_of_record"] == "independent_readback"
 
 
 def test_countersign_verify_reads_checked_how(cfg, sor, tmp_path):
@@ -973,7 +990,7 @@ def test_countersign_verify_reads_checked_how(cfg, sor, tmp_path):
     result = _run(cfg, tmp_path, pre=lambda: _actor_writes(base))
     signed = {**result, "receipt": _issuer_sign(result["receipt"])}
     report = verify_countersigned(signed, registry=_registry())
-    assert report.checked_how == "records"
+    assert report.checked_how == "system_of_record"
     assert "checked_how_mismatch" not in report.problems
     assert "Checked in your system's records" in render_report(report)
     receipt = {**result["receipt"], "checked_how": "reopened"}

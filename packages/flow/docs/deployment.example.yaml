@@ -24,6 +24,19 @@ backend:
   url: http://localhost:8080
   headed: false            # true => a visible browser (demo / debugging)
 
+  # Where this Flow runtime runs relative to the application. It decides
+  # whether structure lookups (DOM, accessibility) are available:
+  #   local              same machine as the app (structure where the backend
+  #                      reads it). The default for web, windows, macos, linux.
+  #   remote_in_session  installed inside the remote or virtual desktop
+  #                      session (structure allowed).
+  #   remote_display     outside the session, looking at its client window
+  #                      (pixels only). The default for rdp and citrix.
+  #   unknown            read as remote_display.
+  # A workflow qualified with structure halts before any write on a surface
+  # that offers pixels only. See docs/SURFACES.md, "Lookup capabilities".
+  # deployment_surface: local
+
   # Native Linux alternative (AT-SPI, one exact X11 app window):
   # kind: linux
   # linux_app: gedit
@@ -122,6 +135,12 @@ effects:
   #   patient: { param: patient_ref }      # bound per-run
   # access_token_env: OPENEMR_FHIR_TOKEN   # secret-isolated (preferred over
   #                                        # the deprecated access_token literal)
+  # smart_backend:                         # instead of access_token_env: SMART
+  #   client_id: my-registered-client      # Backend Services, short-lived tokens
+  #   scope: system/Observation.rs         # read scopes only
+  #   kid: my-key-id                       # the kid registered for the key
+  #   private_key_file: /secure/smart.pem  # or private_key_env / jwks_file
+  #   # token_url: omitted -> {base_url}/.well-known/smart-configuration
   # verify_tls: true
 
   # sql (used when kind: sql) -------------------------------------------------

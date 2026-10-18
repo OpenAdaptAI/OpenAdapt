@@ -15,6 +15,49 @@
 
 <!-- version list -->
 
+## v2.2.0 (2026-10-18)
+
+First release from the [OpenAdapt monorepo](https://github.com/OpenAdaptAI/OpenAdapt) (`packages/flow`). The shared contracts (`openadapt_flow.contracts`) and the MCP agent server (`openadapt_flow.agent`) now ship inside this package; `openadapt-types` and `openadapt-agent` are thin compatibility packages over them.
+
+### Features
+
+- `openadapt_flow.jit` wraps a computer-use agent: the first run of a task is recorded and compiled into a Flow program, and later runs replay it with zero model calls. A compiled run stays a draft until a person, a registered admitter key, or a registered agent under a signed policy admits it ([#1207](https://github.com/OpenAdaptAI/OpenAdapt/pull/1207)). A signed policy can set `allow_self_admission` so the recording agent admits its own draft under the same checks; the manifest marks it `self_admitted` ([#1249](https://github.com/OpenAdaptAI/OpenAdapt/pull/1249)).
+- Read-back verifiers taught by demonstration, with assurance grades ([#1203](https://github.com/OpenAdaptAI/OpenAdapt/pull/1203)).
+- `openadapt-flow verify-run` judges any executor's write from the system of record and emits an RFC-0002 effect receipt; it reads the same `verify.yaml` as qualify and accepts `--remediates` and `--correlation-id` ([#1198](https://github.com/OpenAdaptAI/OpenAdapt/pull/1198)).
+- Declarative qualify from `verify.yaml` ([#1186](https://github.com/OpenAdaptAI/OpenAdapt/pull/1186), from [openadapt-flow#532](https://github.com/OpenAdaptAI/openadapt-flow/pull/532)).
+- Delegated approvers, read-back field checks, triage, and eligibility ([#1190](https://github.com/OpenAdaptAI/OpenAdapt/pull/1190), from [openadapt-flow#534](https://github.com/OpenAdaptAI/openadapt-flow/pull/534)); approver identity, approver policy, and an approval record in the shared contracts ([#1187](https://github.com/OpenAdaptAI/OpenAdapt/pull/1187)).
+- The MCP server reads the approval mode and can answer a waiting save as a delegated agent ([#1192](https://github.com/OpenAdaptAI/OpenAdapt/pull/1192)); it proposes a branch after a step is repaired more than once ([#1188](https://github.com/OpenAdaptAI/OpenAdapt/pull/1188)).
+- Native OCR on macOS and Windows, with no OpenCV on that path ([#1194](https://github.com/OpenAdaptAI/OpenAdapt/pull/1194), from [openadapt-flow#531](https://github.com/OpenAdaptAI/openadapt-flow/pull/531)).
+- An agent can drive recording on native Windows apps and over RDP and Citrix sessions; remote sessions are screen-only and the agent works from the client window's pixels ([openadapt-flow#527](https://github.com/OpenAdaptAI/openadapt-flow/pull/527)).
+- Learn from an agent demonstration, with replay fixes from the learn and zero-DOM benchmarks ([openadapt-flow#525](https://github.com/OpenAdaptAI/openadapt-flow/pull/525)).
+- Teach a branch from several calling-agent demonstrations ([openadapt-flow#521](https://github.com/OpenAdaptAI/openadapt-flow/pull/521)).
+- Read marked fields from the page structure ([openadapt-flow#522](https://github.com/OpenAdaptAI/openadapt-flow/pull/522)).
+- Phone approval of a waiting save through the decision portal, person-signed approver grants, and no self-approval of a run's own saves ([#1234](https://github.com/OpenAdaptAI/OpenAdapt/pull/1234)).
+- Countersigned and timestamped Seals, Sigstore TSA by default ([#1210](https://github.com/OpenAdaptAI/OpenAdapt/pull/1210)); offline Seals by default, batched timestamps, and a strict no-outbound mode ([#1216](https://github.com/OpenAdaptAI/OpenAdapt/pull/1216)).
+- One check-level scale (0 to 5) maps the verification ranks, Seal levels and read-back labels ([#1250](https://github.com/OpenAdaptAI/OpenAdapt/pull/1250)).
+- `record --verify` reads the system of record around a recording and proposes its checks for a person to confirm ([#1233](https://github.com/OpenAdaptAI/OpenAdapt/pull/1233)).
+- SMART Backend Services (`private_key_jwt`) tokens for FHIR record checks ([#1235](https://github.com/OpenAdaptAI/OpenAdapt/pull/1235)).
+- Qualify on the deployment surface: a workflow qualified with page structure halts on a pixels-only surface such as RDP or Citrix until it is requalified there ([#1231](https://github.com/OpenAdaptAI/OpenAdapt/pull/1231)).
+- A complete known-ID list lifts look-alike identity stops on pixel-only screens ([#1223](https://github.com/OpenAdaptAI/OpenAdapt/pull/1223)); a headless FreeRDP transport with a session pool ([#1226](https://github.com/OpenAdaptAI/OpenAdapt/pull/1226)).
+- Font and layout drift halts with a named reason ([#1225](https://github.com/OpenAdaptAI/OpenAdapt/pull/1225)); fleet drift patches import as policy-gated repair candidates ([#1211](https://github.com/OpenAdaptAI/OpenAdapt/pull/1211)); an unattended on-prem service with health checks and an egress audit ([#1222](https://github.com/OpenAdaptAI/OpenAdapt/pull/1222), [#1237](https://github.com/OpenAdaptAI/OpenAdapt/pull/1237)).
+- A workflow registry and `openadapt-flow pull` ([openadapt-flow#517](https://github.com/OpenAdaptAI/openadapt-flow/pull/517)).
+- OpenEMR qualification path: verifier, fault driver, and six cases for the local registration bundle ([openadapt-flow#518](https://github.com/OpenAdaptAI/openadapt-flow/pull/518)).
+
+### Performance
+
+- The demo uses the installed browser, one browser process, and an early OpenCV load ([#1189](https://github.com/OpenAdaptAI/OpenAdapt/pull/1189), from [openadapt-flow#528](https://github.com/OpenAdaptAI/openadapt-flow/pull/528)); native OCR starts faster and the OCR prewarm works ([#1199](https://github.com/OpenAdaptAI/OpenAdapt/pull/1199), from [openadapt-flow#535](https://github.com/OpenAdaptAI/openadapt-flow/pull/535)).
+
+### Fixes
+
+- A read of the identifier that contradicts the expected record is final; a later re-read can no longer overrule it into verified and act on the wrong record ([#1252](https://github.com/OpenAdaptAI/OpenAdapt/pull/1252), [#1254](https://github.com/OpenAdaptAI/OpenAdapt/pull/1254)).
+- Five fail-open gaps closed: a JIT draft can't run without its admission, a planted approver policy is ignored, CLI replay runs the JIT run checks, and two compiler key drops are opt-in ([#1232](https://github.com/OpenAdaptAI/OpenAdapt/pull/1232)).
+- The drift oracle never rescues a failed postcondition on an irreversible or effect-bearing step ([#1217](https://github.com/OpenAdaptAI/OpenAdapt/pull/1217)).
+- A phone answer reaches a run that stopped waiting ([#1234](https://github.com/OpenAdaptAI/OpenAdapt/pull/1234)); `--help` no longer starts the OCR prewarm, which could abort the process at exit ([#1242](https://github.com/OpenAdaptAI/OpenAdapt/pull/1242)).
+- The break-it run is described as a save set to fail ([#1236](https://github.com/OpenAdaptAI/OpenAdapt/pull/1236)); the contract schemas are listed in `public-artifacts.json` ([#1206](https://github.com/OpenAdaptAI/OpenAdapt/pull/1206)).
+- CLI help and built-in URLs point at the docs glossary and the monorepo ([#1200](https://github.com/OpenAdaptAI/OpenAdapt/pull/1200)).
+- Benchmarks fetch the openIMIS and OpenEMR compose files from upstream at run time ([openadapt-flow#523](https://github.com/OpenAdaptAI/openadapt-flow/pull/523)).
+- uv.lock bumps fsspec, urllib3, mako, and oauthlib for open Dependabot alerts ([openadapt-flow#524](https://github.com/OpenAdaptAI/openadapt-flow/pull/524)).
+
 ## v2.1.0 (2026-10-16)
 
 ### Features

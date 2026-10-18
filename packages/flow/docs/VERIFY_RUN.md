@@ -98,10 +98,12 @@ read-back (`onscreen`) is refused before anything runs.
 
 Only `independent_readback` can yield `verified`.
 
-`checked_how` names the same read on the read-back ladder
-([`READBACK_LADDER.md`](READBACK_LADDER.md)): `records` (tier 1), `reopened`
-(tiers 2 and 3), `screen_said_saved` (tier 4), or `not_checked`. It must agree
-with `verification_tier`. It is inside the signed receipt and in
+`checked_how` names the same read's check level
+([`READBACK_LADDER.md`](READBACK_LADDER.md)): `system_of_record` (tier 1),
+`separate_session` (tier 2), `reopened` (tier 3, the acting session),
+`same_screen` (tier 4), or `unchecked`. It must agree with
+`verification_tier`: only `system_of_record` (and `counterparty_confirmed`)
+goes with `independent_readback`. It is inside the signed receipt and in
 `evidence.readback`. A receipt issued before the field existed has neither
 and still checks.
 

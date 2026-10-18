@@ -13,6 +13,7 @@ from openadapt_flow.countersign.document import (
     EXECUTE_RECEIPT_SCHEMA,
     CountersignReport,
 )
+from openadapt_flow.readback_ladder import CHECKED_HOW_LABELS
 
 __all__ = ["executor_line", "headline", "render_report", "tier_line"]
 
@@ -76,10 +77,7 @@ def executor_line(report: CountersignReport) -> str:
 
 
 _CHECKED_HOW_TEXT = {
-    "not_checked": "not_checked (Not checked)",
-    "screen_said_saved": "screen_said_saved (The screen said it saved)",
-    "reopened": "reopened (Reopened and checked on screen)",
-    "records": "records (Checked in your system's records)",
+    code: f"{code} ({label})" for code, label in CHECKED_HOW_LABELS.items()
 }
 
 

@@ -45,6 +45,12 @@ from typing import Literal, Mapping, Optional, Protocol, runtime_checkable
 
 from pydantic import BaseModel, ConfigDict, Field, StrictStr, model_validator
 
+from openadapt_flow.check_level import (
+    CheckLevel,
+    from_verification_tier,
+    to_readback_label,
+)
+
 APPROVER_IDENTITY_SCHEMA: Literal["openadapt.approver-identity/v1"] = (
     "openadapt.approver-identity/v1"
 )
@@ -391,42 +397,49 @@ class ReadBackTier(IntEnum):
 #: RFC-0002 ``verification_tier`` wire values.
 VerificationTierLabel = Literal["independent_readback", "screen_readback", "unchecked"]
 
-#: RFC-0002 ``checked_how`` wire values: the read-back ladder rung (R0 to R3)
-#: a check reached. ``not_checked``: nothing read the save back.
-#: ``screen_said_saved``: the screen the save left (Flow tier 4).
-#: ``reopened``: the record opened again in the acting session (tier 3) or a
-#: separate session (tier 2). ``records``: the system of record (tier 1).
-CheckedHowLabel = Literal["not_checked", "screen_said_saved", "reopened", "records"]
+#: RFC-0002 ``checked_how`` wire values: the check level
+#: (:mod:`openadapt_flow.check_level`) a check reached. ``unchecked``: nothing
+#: read the save back. ``same_screen``: the screen the save left (Flow tier
+#: 4). ``reopened``: the record opened again in the acting session (tier 3).
+#: ``separate_session``: a separately signed-in session (tier 2).
+#: ``system_of_record``: the system of record (tier 1).
+#: ``counterparty_confirmed``: the other party confirmed it.
+CheckedHowLabel = Literal[
+    "unchecked",
+    "same_screen",
+    "reopened",
+    "separate_session",
+    "system_of_record",
+    "counterparty_confirmed",
+]
 
 CHECKED_HOW_VALUES: tuple[CheckedHowLabel, ...] = (
-    "not_checked",
-    "screen_said_saved",
+    "unchecked",
+    "same_screen",
     "reopened",
-    "records",
+    "separate_session",
+    "system_of_record",
+    "counterparty_confirmed",
 )
 
 
 def checked_how_for_flow_tier(tier: Optional[int]) -> CheckedHowLabel:
     """The ``checked_how`` value for a Flow ``VerificationTier`` (1 to 4).
 
-    ``None`` or any other value is ``not_checked``.
+    ``None`` or any other value is ``unchecked``.
     """
 
-    if tier == 1:
-        return "records"
-    if tier in (2, 3):
-        return "reopened"
-    if tier == 4:
-        return "screen_said_saved"
-    return "not_checked"
+    try:
+        level = from_verification_tier(tier)
+    except ValueError:
+        level = CheckLevel.UNCHECKED
+    return level.label  # type: ignore[return-value]
 
 
 #: The ``verification_tier`` each ``checked_how`` value is consistent with.
 CHECKED_HOW_TIER: Mapping[CheckedHowLabel, VerificationTierLabel] = {
-    "not_checked": "unchecked",
-    "screen_said_saved": "screen_readback",
-    "reopened": "screen_readback",
-    "records": "independent_readback",
+    level.label: to_readback_label(level)  # type: ignore[misc]
+    for level in CheckLevel
 }
 
 
@@ -562,6 +575,7 @@ def counts_as_clean(tier: ReadBackTier, outcome: ReadBackOutcome) -> bool:
 #: Where a decision was made.
 ApprovalRoute = Literal[
     "desktop_run_it",
+    "decision_portal",
     "review_item",
     "review_batch",
     "local_cli",

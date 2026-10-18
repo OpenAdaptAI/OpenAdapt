@@ -3,8 +3,10 @@
 A small scripted app sits on the fault server's record API: a save form, a
 search box, and a record page. The read-back replays a learned search (by
 this run's patient, or by the reference number the save showed), then reads
-the record page. Ground truth is the fault server's store, never the screen.
-Zero model calls, no browser.
+the record page. A search by the patient confirms only when the record it
+opens shows the number this save showed: an older note with the same text
+must not confirm a save that failed. Ground truth is the fault server's
+store, never the screen. Zero model calls, no browser.
 """
 
 from __future__ import annotations
@@ -39,6 +41,7 @@ SEARCH_AT = (60, 30)
 BANNER = (100, 100, 300, 24)
 PATIENT = (100, 150, 200, 24)
 NOTE_BOX = (100, 200, 320, 40)
+ENCOUNTER = (100, 260, 200, 24)
 REF_PATTERN = r"(?<![A-Za-z0-9])(E\d{1,6})(?![A-Za-z0-9])"
 
 
@@ -54,6 +57,7 @@ class FaultApp:
         self.record: Optional[dict] = None
         self.writes = 0
         self.extra_banner = ""
+        self.last_reason = ""
 
     # -- the application ---------------------------------------------------
 
@@ -125,6 +129,7 @@ class FaultApp:
         elif self.screen == "record" and self.record is not None:
             out.append(line(f"Patient: {self.record['patient_id']}", PATIENT))
             out.append(line(f"Note: {self.record.get('note') or ''}", NOTE_BOX))
+            out.append(line(f"Encounter E{self.record['id']}", ENCOUNTER))
         return out
 
 
@@ -220,9 +225,24 @@ def server():
     stop()
 
 
-def _run(server, fault: str, effect: Effect) -> tuple[Verdict, FaultApp, int]:
+def _older_note(base: str) -> None:
+    """An earlier run's note for the same patient, with the same text."""
+
+    reply = requests.post(
+        f"{base}/api/encounter?fault=ok",
+        json={"patient_id": "p1", "type": "Triage", "note": NOTE},
+        timeout=1.5,
+    )
+    assert reply.ok
+
+
+def _run(
+    server, fault: str, effect: Effect, *, older: bool = False
+) -> tuple[Verdict, FaultApp, int]:
     base, db = server
     db.reset()
+    if older:
+        _older_note(base)
     app = FaultApp(base, fault)
     app.save()
     rows_after_save = len(db.snapshot()["records"])
@@ -232,16 +252,49 @@ def _run(server, fault: str, effect: Effect) -> tuple[Verdict, FaultApp, int]:
     )
     rows_after_check = len(db.snapshot()["records"])
     assert rows_after_check == rows_after_save, "the read-back wrote a record"
+    app.last_reason = verdict.reason
     return verdict.verdict, app, rows_after_check
 
 
+@pytest.mark.parametrize("older", [False, True])
 @pytest.mark.parametrize("fault", sorted(FAULTS))
-def test_search_by_patient_never_confirms_a_save_that_did_not_land(server, fault):
-    verdict, _app, _rows = _run(server, fault, _effect(SEARCH_PATIENT))
-    if FAULTS[fault]:
+def test_search_by_patient_never_confirms_a_save_that_did_not_land(
+    server, fault, older
+):
+    verdict, _app, _rows = _run(
+        server, fault, _effect(SEARCH_PATIENT, reference=True), older=older
+    )
+    if fault == "timeout":
+        # No reference number on screen: nothing ties a record to this save.
+        assert verdict is Verdict.INDETERMINATE
+    elif FAULTS[fault]:
         assert verdict is Verdict.CONFIRMED
     else:
         assert verdict is not Verdict.CONFIRMED
+
+
+@pytest.mark.parametrize("fault", ["no_persist", "partial", "optimistic", "session"])
+def test_an_older_matching_note_never_confirms_a_failed_save(server, fault):
+    """The patient already has a note with this text. The save fails, the
+    search by patient opens the older note, and it reads exactly right."""
+
+    for effect in (_effect(SEARCH_PATIENT), _effect(SEARCH_PATIENT, reference=True)):
+        verdict, app, rows = _run(server, fault, effect, older=True)
+        assert app.screen in {"form", "record"}
+        assert verdict is not Verdict.CONFIRMED
+
+
+def test_a_search_by_patient_with_no_reference_number_confirms_nothing(server):
+    base, db = server
+    db.reset()
+    app = FaultApp(base, "ok")
+    app.save()
+    verifier = OnScreenReadbackVerifier(app, vision=vision_for(app))
+    verdict = verifier.verify(
+        _effect(SEARCH_PATIENT).resolve(PARAMS), verifier.capture_pre_state(), PARAMS
+    )
+    assert verdict.verdict is Verdict.INDETERMINATE
+    assert "older record with the same value" in verdict.reason
 
 
 @pytest.mark.parametrize("fault", sorted(FAULTS))
@@ -284,11 +337,45 @@ def test_the_guard_refuses_a_click_on_save(server):
     assert len(db.snapshot()["records"]) == 1
 
 
-@pytest.mark.parametrize("chord", ["ctrl+s", "cmd+s", "Delete", "ctrl+enter"])
+@pytest.mark.parametrize(
+    "chord",
+    [
+        "ctrl+s",
+        "cmd+s",
+        "Delete",
+        "ctrl+enter",
+        "control+s",
+        "Control+Enter",
+        "ctrl+shift+s",
+        "alt+s",
+        "shift+delete",
+        "command+return",
+        "Meta+S",
+        "s+ctrl",
+    ],
+)
 def test_the_guard_refuses_save_and_delete_keys(server, chord):
-    nav = [*SEARCH_PATIENT[:2], ReadbackNav(action="key", key=chord)]
-    verdict, app, _ = _run(server, "ok", _effect(nav))
+    nav = [*SEARCH_REFERENCE[:2], ReadbackNav(action="key", key=chord)]
+    verdict, app, _ = _run(server, "ok", _effect(nav, reference=True))
     assert verdict is Verdict.INDETERMINATE
+    assert "read-only guard" in app.last_reason
+
+
+@pytest.mark.parametrize("chord", ["Enter", "ctrl+f", "F5", "Escape", "Tab"])
+def test_the_guard_allows_navigation_keys(chord):
+    from openadapt_flow.runtime.effects.onscreen import is_commit_chord
+
+    assert is_commit_chord(chord) is False
+
+
+def test_the_guard_refuses_a_click_with_no_readable_label(server):
+    """An icon-only control may be Save or Delete: no label, no click."""
+
+    nav = [ReadbackNav(action="click", point=(600, 600)), *SEARCH_REFERENCE]
+    verdict, app, _ = _run(server, "ok", _effect(nav, reference=True))
+    assert verdict is Verdict.INDETERMINATE
+    assert "no readable label" in app.last_reason
+    assert app.screen == "form"  # nothing was clicked
 
 
 def test_two_reference_numbers_on_screen_open_nothing(server):

@@ -448,7 +448,7 @@ _STOPPED_KEYS = frozenset({"check_the_record", "stopped_before_saving"})
 def run_headline(run: RunEvidence) -> str:
     """The card title for one run.
 
-    The "screen said saved, record says no" title needs all three facts: the
+    The "note never reached the record" title needs all three facts: the
     transaction outcome is a stop (never done or unchecked), the app painted
     its success message, and the record check found nothing. Otherwise the
     title is the plain result's own label.
@@ -460,7 +460,7 @@ def run_headline(run: RunEvidence) -> str:
         and run.screen_showed_success
         and run.records == 0
     ):
-        return "Stopped: the screen said saved, the record says no"
+        return "Stopped: the note never reached the record"
     return run.plain.label
 
 
@@ -833,7 +833,7 @@ def _headline(evidence: DemoEvidence) -> tuple[str, str]:
         # Say what the record check found, not that run 2 wrote nothing: the
         # engine may leave that run at "Check the record".
         return (
-            "The screen said \u201csaved\u201d both times. The record check "
+            "Both runs ended on the same saved screen. The record check "
             "found only one note.",
             lede,
         )
@@ -983,8 +983,8 @@ def _technical_details(evidence: DemoEvidence) -> str:
     can't influence it. The demo app stops when the demo ends, so the stopped
     run can't be resumed here.</p>
     {reconcile_note}
-    <h3>Run 1: honest app</h3>{run1}
-    <h3>Run 2: app that drops the save</h3>{run2}
+    <h3>Run 1: normal save</h3>{run1}
+    <h3>Run 2: save set to fail</h3>{run2}
     {options_block}
     <h3>Commands</h3>
     {command_rows}
@@ -999,23 +999,23 @@ def render_demo_page(evidence: DemoEvidence) -> str:
     title, lede = _headline(evidence)
     identical = (
         "The two final screens above are identical, pixel for pixel. A tool "
-        "that trusts the screen would report both runs as done."
+        "that only looks at the screen would report both runs as done."
         if evidence.screens_identical
-        else "The two final screens above look the same. A tool that trusts "
-        "the screen would report both runs as done."
+        else "The two final screens above look the same. A tool that only "
+        "looks at the screen would report both runs as done."
     )
     next_cmd = command(f"record --backend web --url {NEXT_URL} --out my-task")
     asked = bool(evidence.choices)
     clean_card = _run_card(
         evidence.clean,
-        "honest app",
+        "normal save",
         "Final screen of run 1: the app shows its saved message",
         evidence.out_dir,
         asked_a_person=asked,
     )
     broken_card = _run_card(
         evidence.broken,
-        "app that drops the save",
+        "save set to fail",
         "Final screen of run 2: the same saved message",
         evidence.out_dir,
         asked_a_person=asked,
@@ -1031,7 +1031,7 @@ def render_demo_page(evidence: DemoEvidence) -> str:
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>OpenAdapt demo proof</title>
-<meta name="description" content="Two runs of the same automation on a fake clinic app. The screen said saved both times; the record check told them apart.">
+<meta name="description" content="Two runs of the same automation on a fake clinic app. Both ended on the same screen; the record check told them apart.">
 <style>{_CSS}</style>
 </head>
 <body>
@@ -1095,7 +1095,7 @@ def _run_summary(run: RunEvidence) -> list[str]:
         first = f"{run.title}  {headline}."
     else:
         screen = {
-            True: "The screen said saved",
+            True: "Saved message on screen",
             False: "No success message on screen",
             None: "Screen not recorded",
         }[run.screen_showed_success]

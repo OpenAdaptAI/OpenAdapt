@@ -74,7 +74,7 @@ class EngineResult:
     sandbox: Optional[dict[str, str]] = None
     #: The per-save approval mode the run used, or the operator chose.
     approval_mode: Optional[str] = None
-    #: The read-back rung the run's saves reached (``report.json``
+    #: The weakest check level the run's saves reached (``report.json``
     #: ``readback.checked_how``), a closed code.
     checked_how: Optional[str] = None
     #: Where the run halted, for a repair token. Never sent to the client

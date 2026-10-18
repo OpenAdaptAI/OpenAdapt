@@ -424,3 +424,99 @@ def test_a_headless_admit_by_name_is_refused(tmp_path: Path, monkeypatch, keys) 
     # The headless paths are unchanged: a registered admitter key admits.
     ci = principal_from_key(keys["ci"], keys["dir"])
     assert jit.admit_with_key(ci)["outcome"] == "admitted"
+
+
+# -- self-admission under a signed policy -----------------------------------------
+
+
+def _recorder_agent(keys: dict[str, Any], **changes: Any) -> Principal:
+    signed = sign_policy(_policy(**changes), keys["signer"])
+    return principal_from_key(keys["recorder"], keys["dir"], policy=signed)
+
+
+def test_a_policy_that_allows_it_lets_the_recording_agent_admit_its_draft(
+    tmp_path: Path, monkeypatch, keys
+) -> None:
+    jit = _jit(tmp_path)
+    recorder = _recorder_agent(keys, allow_self_admission=True)
+    assert recorder.principal_id == RECORDER
+    _stub_runs(jit, monkeypatch, _report())
+    jit.canary(principal_id=recorder)
+    jit.canary(principal_id=recorder)
+
+    assert jit.admit_with_key(recorder)["outcome"] == "admitted"
+
+    manifest = lifecycle.verify_admission(jit.bundle_dir, key_dir=keys["dir"])
+    assert manifest["admission_mode"] == "agent_policy"
+    assert manifest["admitted_by_principal_id"] == RECORDER
+    assert manifest["self_admitted"] is True
+    ensure_runnable(jit.bundle_dir, key_dir=keys["dir"])
+
+
+def test_another_agent_admitting_is_not_marked_self_admitted(
+    tmp_path: Path, monkeypatch, keys
+) -> None:
+    jit = _jit(tmp_path)
+    agent = _agent(keys, _policy(allow_self_admission=True))
+    _stub_runs(jit, monkeypatch, _report())
+    jit.canary(principal_id=agent)
+    jit.canary(principal_id=agent)
+    assert jit.admit_with_key(agent)["outcome"] == "admitted"
+    manifest = lifecycle.verify_admission(jit.bundle_dir, key_dir=keys["dir"])
+    assert "self_admitted" not in manifest
+
+
+def test_self_admission_still_needs_a_system_of_record_readback(
+    tmp_path: Path, monkeypatch, keys
+) -> None:
+    from tests.test_jit_lifecycle import ScreenVerifier
+
+    jit = _jit(tmp_path, ScreenVerifier())
+    recorder = _recorder_agent(keys, allow_self_admission=True)
+    _stub_runs(jit, monkeypatch, _report())
+    for _ in range(2):
+        try:
+            jit.canary(principal_id=recorder)
+        except AdmissionError:
+            pass
+    result = jit.admit_with_key(recorder)
+    assert result["outcome"] == "needs_person"
+    assert any("read" in reason for reason in result["reasons"]), result["reasons"]
+    with pytest.raises(AdmissionError):
+        lifecycle.verify_admission(jit.bundle_dir, key_dir=keys["dir"])
+
+
+def test_adding_self_admission_to_a_signed_policy_breaks_its_signature(
+    tmp_path: Path, keys
+) -> None:
+    signed = sign_policy(_policy(), keys["signer"])
+    widened = authority.SignedAdmissionPolicy(
+        policy=signed.policy.model_copy(update={"allow_self_admission": True}),
+        signer_public_key=signed.signer_public_key,
+        signature=signed.signature,
+    )
+    with pytest.raises(AuthorityError, match="signature"):
+        principal_from_key(keys["recorder"], keys["dir"], policy=widened)
+
+
+def test_policies_signed_before_the_field_existed_keep_their_digest() -> None:
+    policy = _policy()
+    assert "allow_self_admission" not in policy.model_dump(mode="json", by_alias=True)
+    assert policy.digest() != _policy(allow_self_admission=True).digest()
+
+
+def test_a_self_admitted_manifest_cant_drop_its_mark(
+    tmp_path: Path, monkeypatch, keys
+) -> None:
+    jit = _jit(tmp_path)
+    recorder = _recorder_agent(keys, allow_self_admission=True)
+    _stub_runs(jit, monkeypatch, _report())
+    jit.canary(principal_id=recorder)
+    jit.canary(principal_id=recorder)
+    jit.admit_with_key(recorder)
+    path = jit.bundle_dir / lifecycle.ADMISSION_FILE
+    manifest = json.loads(path.read_text())
+    del manifest["self_admitted"]
+    path.write_text(json.dumps(manifest))
+    with pytest.raises(AdmissionError):
+        lifecycle.verify_admission(jit.bundle_dir, key_dir=keys["dir"])

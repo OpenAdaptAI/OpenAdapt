@@ -135,7 +135,7 @@ pause, and a consistency check of the persisted report:
 | any proven-no-effect outcome whose pause a person rejected | `stopped_by_person` | `did_not_run` (no retry) |
 | `RECONCILIATION_REQUIRED` | `save_not_confirmed` | `not_sure_if_saved` |
 | `COMPLETED_UNVERIFIED` | `not_checked` | `not_sure_if_saved` |
-| `COMPLETED_UNVERIFIED` whose saves were checked, but below the workflow's `minimum_readback` | `checked_below_minimum` | `not_sure_if_saved` |
+| `COMPLETED_UNVERIFIED` whose saves were all confirmed, but at least one only on the same screen or by a same-session reopen | `checked_below_minimum` | `not_sure_if_saved` |
 | `ROLLED_BACK` | `change_reversed` | `not_sure_if_saved` |
 | timeout after start (time a person spends approving doesn't count), inconsistent or missing report, coarse `HALTED` alone | `timed_out`, `result_unreadable` | `not_sure_if_saved` |
 | a server that stopped mid-run | `interrupted` | `not_sure_if_saved` |
@@ -147,9 +147,12 @@ pause, and a consistency check of the persisted report:
 | a `request_id` whose five attempts each proved nothing was written | `retry_limit` | `did_not_run` (no retry) |
 
 A `done` or `not_sure_if_saved` result whose report records how its saves
-were checked also carries `checked_how` (`not_checked`, `screen_said_saved`,
-`reopened`, `records`) and `checked_how_label`, the weakest rung any save
-reached ([Flow's read-back ladder](../../flow/docs/READBACK_LADDER.md)).
+were checked also carries `checked_how` (`unchecked`, `same_screen`,
+`reopened`, `separate_session`, `system_of_record`) and `checked_how_label`,
+the weakest check level any save reached
+([how a save was checked](../../flow/docs/READBACK_LADDER.md)). `done` needs
+`separate_session` or stronger; a same-session reopen is never `done` by
+itself.
 
 Only `done` says the change was saved. `record_changed: "no"` and
 `safe_to_retry: true` appear only when the evidence proves nothing was
@@ -495,8 +498,9 @@ identity fails closed.
 This process must not be port-forwarded or exposed as an unauthenticated
 network service. An HTTP / Streamable-HTTP **listener** in this MIT package
 remains forbidden, including when `--authoring` is set. Hosted ChatGPT.com
-/ Claude.ai cannot talk to localhost. Send those tabs to
-https://openadapt.ai/start. They still can't click the user's GUI.
+/ Claude.ai cannot talk to localhost. Send those tabs to the job box at
+https://openadapt.ai/#job-box; its job page has **Connect this computer**,
+which gives the runner link. They still can't click the user's GUI.
 Pip users run `openadapt-agent
 authoring connect` — an **outbound** mailbox client (claim `oab_`, poll
 `wait_seconds: 0`, Allow-per-`sub`) copied from Desktop

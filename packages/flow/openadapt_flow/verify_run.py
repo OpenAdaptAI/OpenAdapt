@@ -25,8 +25,8 @@ The output is an ``openadapt.effect-receipt/v1`` document as RFC-0002
   ``correlation_id``, link a receipt to the receipt it remediates and to the
   caller's own trace; they are absent unless given, and when present they
   are inside ``receipt_sha256`` and so inside the signature. ``checked_how``
-  (``not_checked``, ``screen_said_saved``, ``reopened``, ``records``) names
-  the read-back ladder rung of the weakest read; it is signed the same way,
+  (``unchecked``, ``same_screen``, ``reopened``, ``separate_session``,
+  ``system_of_record``) names the check level of the weakest read; it is signed the same way,
   and a receipt without it (issued before it existed) still checks.
 * Every digest whose input can hold customer data is salted with a per-run
   256-bit salt (``openadapt.run-salt/v1``). The salt lives only in a private
@@ -732,10 +732,10 @@ def verify_run(
     observed_effect = _observed(verdicts)
     verification_tier = readback_class(verdicts, tiers)
     unread = verification_tier == "unchecked"
-    # The read-back ladder rung the weakest read reached (RFC-0002 open
-    # question 5): how it was checked, whatever the verdict.
+    # The check level the weakest read reached (RFC-0002 open question 5):
+    # how it was checked, whatever the verdict.
     checked_how = (
-        "not_checked"
+        "unchecked"
         if unread or weakest is None
         else checked_how_for_flow_tier(int(weakest))
     )

@@ -8,6 +8,20 @@ updates:
     open-pull-requests-limit: 5
     labels:
       - "dependencies"
+  # packages/capture keeps its own uv.lock. The uv ecosystem updates it with
+  # pyproject.toml, so the capture lanes' `uv sync --locked` accepts the bump.
+  - package-ecosystem: "uv"
+    directory: "/packages/capture"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 5
+    labels:
+      - "dependencies"
+    ignore:
+      # Keep PyGObject >=3.46,<3.51 so the Linux extra installs on GLib 2.64
+      # distros; 3.51+ needs newer GLib. See packages/capture/docs/DESIGN.md.
+      - dependency-name: "pygobject"
+        versions: [">=3.51"]
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:

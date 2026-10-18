@@ -18,16 +18,18 @@ the read-back contract, the same shape ``verify-run`` reads:
   expands to that list (record fields from inputs, the selecting fields, the
   duplicate key). With neither, the effects the compiler mined from the
   demonstration are used;
-- ``minimum_readback``: the read-back ladder rung the verifier must reach,
-  ``R1``, ``R2`` or ``R3`` (:mod:`openadapt_flow.readback_ladder`). The older
+- ``minimum_readback``: the check level the verifier must reach,
+  ``system_of_record`` or ``separate_session``
+  (:mod:`openadapt_flow.readback_ladder`). The older
   ``minimum_effect_strength`` (``independent_system_of_record``, the default,
-  or ``independent_session``) is an alias; give one or the other;
+  or ``independent_session``) means the same; give one or the other;
 - ``qualification_id`` / ``environment_id``: optional opaque ids.
 
 Qualify adds what a campaign needs on top:
 
 - ``app``: the system the workflow runs against (address, version, how a
-  trial starts, how the test system is reset between trials);
+  trial starts, how the test system is reset between trials, and the
+  deployment ``surface`` it will run on in production);
 - ``save_step``: the irreversible step, or ``auto`` to detect it;
 - ``inputs``: the test inputs for the cases;
 - ``campaign``: trials per case, cases, and the default certification policy.
@@ -50,6 +52,7 @@ from typing import Any, Literal, Mapping, Optional, Union
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from openadapt_flow.deployment import EffectsConfig
+from openadapt_flow.lookup_capabilities import DeclaredSurface
 from openadapt_flow.runtime.effects import Effect, ValueExpr
 from openadapt_flow.verification import VerificationTier
 
@@ -123,6 +126,14 @@ class AppConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     target: TargetKind = "web"
+    #: The deployment surface the workflow will run on in production, the
+    #: same vocabulary as deployment.yaml ``backend.deployment_surface``:
+    #: ``local``, ``remote_in_session``, ``remote_display`` (a remote session
+    #: viewed from outside, pixels only) or ``unknown`` (read as
+    #: ``remote_display``). Omitted means ``local`` for a web target. On a
+    #: ``remote_display`` surface the campaign runs with structure lookups
+    #: disabled and that pixels-only result decides qualification.
+    surface: Optional[DeclaredSurface] = None
     name: str = Field(min_length=1, max_length=256)
     #: The application's address. Its origin is the identity the runtime
     #: checks before every input.
@@ -270,11 +281,11 @@ class VerifyConfig(BaseModel):
     qualification_id: Optional[str] = Field(default=None, pattern=_OPAQUE)
     environment_id: Optional[str] = Field(default=None, pattern=_OPAQUE)
     minimum_effect_strength: EffectStrength = "independent_system_of_record"
-    #: The read-back ladder rung the verifier must reach (``R1``, ``R2`` or
-    #: ``R3``; :mod:`openadapt_flow.readback_ladder`). Written to the
-    #: qualified workflow, so runs enforce the same minimum. Replaces
+    #: The check level the verifier must reach (``separate_session`` or
+    #: ``system_of_record``; :mod:`openadapt_flow.readback_ladder`). Written
+    #: to the qualified workflow, so runs enforce the same minimum. Replaces
     #: ``minimum_effect_strength``, which stays as an alias; give one, not both.
-    minimum_readback: Optional[Literal["R1", "R2", "R3"]] = None
+    minimum_readback: Optional[Literal["separate_session", "system_of_record"]] = None
     verifier: SystemOfRecordConfig
     effects: Optional[list[Effect]] = None
     app: AppConfig

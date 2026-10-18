@@ -140,6 +140,29 @@ For an armed step:
   run's value into the recorded band and requires the whole band to match. A
   band that rests on a glyph-confusable identifier keeps the pixel comparison.
 
+On a pixel-only display, the OCR tier also stops the correct record whenever
+its own identifier contains a look-alike glyph (`O`/`0`, `l`/`1`, `B`/`8`).
+A deployment can remove most of that cost by giving the runtime a complete
+list of the identifiers that exist in the target system
+(`runtime.known_ids_path`, see `openadapt_flow/runtime/known_ids.py`). The
+abstain is lifted only when the first read and a second read of a fresh
+screenshot agree, every other identity check passed, and exactly one listed
+identifier falls in the look-alike class OCR read. If a look-alike twin is
+listed, the run still stops. The list must come from the system of record,
+not from the screen being checked, and must be complete: a list that misses
+a real look-alike record lets that record verify.
+
+The list is a configured export of the system of record. Before it is used,
+an operator runs `openadapt-flow known-ids confirm EXPORT --source ... --by
+...` and confirms its source and completeness. The confirmation records who
+confirmed, when, the source, the row count and the export's SHA-256. Replay
+halts with a named reason when the confirmation is missing
+(`known_ids_unconfirmed`), the export's hash no longer matches
+(`known_ids_changed`), or the export is older than
+`runtime.known_ids_max_age_hours` (`known_ids_stale`, default 24). Measured
+before and after numbers are in
+[`benchmark/known_ids/KNOWN_IDS.md`](../benchmark/known_ids/KNOWN_IDS.md).
+
 Permissive `replay` may proceed on an unreadable reversible target and reports
 that condition. Governed `run` requires an affirmative live verdict for every
 identity-required admitted step; mismatch, unreadable, or abstain halts before
@@ -343,31 +366,45 @@ value only in `O`/`0` or `l`/`1` is `INDETERMINATE`: the check halts instead
 of guessing. It confirms nothing until a person admits it. Its assurance
 grade is `screen_readback`, never `independent_readback`.
 
-**How strong a check makes a run `VERIFIED` is the workflow's
-`minimum_readback`** ([`READBACK_LADDER.md`](READBACK_LADDER.md)). The default,
-`R2`, accepts reopening the record in the acting session and reading it there
-(tier 3), so a pixel-only Citrix or RDP run can be `VERIFIED` without a
-connector. That is still the same application in the same session: it is not a
-system-of-record read, and it shares the blind spots above. `R3` needs a
-system-of-record read (REST, FHIR, SQL, file; tier 1). The Regulated profile
-keeps its own floor: a separate signed-in session (`ui_readback`; tier 2) or a
-system-of-record read
+**Without a read that is independent of the acting session, the run cannot
+be `VERIFIED`.** That read is either a system-of-record read (REST, FHIR, SQL,
+file; tier 1) or the application's record page read in a separate signed-in
+browser session (`ui_readback`; tier 2). The second goes through the same
+application, so it is not a system-of-record read and has its own limits
 ([`EFFECT_KIT.md`](EFFECT_KIT.md#separate-session-ui-read-back-ui_readback)).
-A confirmed check below the minimum is `COMPLETED_UNVERIFIED`, and the agent
-result says `not_sure_if_saved` with `checked_below_minimum`. If a
+A pixel-only Citrix or RDP session with neither is that case. Reopening the
+record in the acting session (tier 3) is reported as its own check level,
+`reopened` ("Reopened in the same session"), and is not `VERIFIED`: a
+confirmed reopen ends `COMPLETED_UNVERIFIED`, and the agent result says
+`not_sure_if_saved` with `checked_below_minimum`
+([`READBACK_LADDER.md`](READBACK_LADDER.md)). A workflow's `minimum_readback`
+can raise the floor to `system_of_record`, never lower it. The on-screen
+oracle can still halt when the region is unreadable or wrong. If a
 consequential write may already have been delivered and the check did not
-confirm it, the outcome is `RECONCILIATION_REQUIRED`, never `VERIFIED`.
-Halt-on-doubt is unchanged. This is not live Citrix Production evidence; a
-live ICA/HDX session is a deployment-specific qualification.
+confirm it, the production `transaction_outcome` is `RECONCILIATION_REQUIRED`,
+never `VERIFIED`. Halt-on-doubt is unchanged. This is not live Citrix
+Production evidence; a live ICA/HDX session is a deployment-specific
+qualification. Wire the independent read before paying a sprint for a
+`VERIFIED` outcome.
 
-The reopen itself has limits. A read-only guard refuses any reopen step whose
-key is a save, submit or delete chord, or whose click lands on a control
-labelled with a commit word (Save, Submit, Delete, Sign, Send, ...); an OCR
-error also refuses. It reads labels by OCR, so an icon-only button with no
-text passes, Enter is allowed (a search needs it), and typed text is not
+The reopen itself has limits. It earns the `reopened` level only when its
+navigation contains a recognized state reset; without one it is
+`same_screen`. A read-only guard refuses any reopen step that presses a
+delete key, or `s`, Enter, Return or Delete with a modifier held (any
+spelling: `control+s`, `Meta+S`, `ctrl+shift+s`, `alt+s`, `shift+delete`).
+It refuses a click on a control labelled with a commit word (Save, Submit,
+Delete, Sign, Send, ...), a click where OCR reads no label (an icon-only
+button may be Save), and a click whose label can't be read at all. It reads
+labels by OCR, so a control drawn with text that doesn't say what it does
+passes, Enter alone is allowed (a search needs it), and typed text is not
 checked. A whole-word match can also refuse a harmless control ("Post-op
-notes"); the check then halts. A reference number is read from one screen region and must be the
-only match there; two different numbers, or none, halt the check.
+notes"); the check then halts. A reference number is read from one screen
+region and must be the only match there; two different numbers, or none, halt
+the check. A search by a run input (this run's patient) can open an older
+record with the same value, and Flow can't read the record before the save
+without leaving the form, so such a check confirms only when the reopened
+record shows this save's reference number and no other; an application that
+shows no reference number halts there.
 
 ### 4. Model assistance can convert a halt into a false pass
 
@@ -375,6 +412,18 @@ Model use is off by default. When configured, a grounding model can propose a
 target and a state verifier can re-evaluate some failed visual postconditions.
 Only an affirmative answer is eligible to rescue the supported state checks;
 uncertainty or service failure keeps the halt.
+
+The state verifier never re-evaluates a step that can change a record: a step
+marked irreversible, a step that reads as a write (Save, Submit), a step that
+declares a system-of-record effect, or a step still waiting for risk review.
+On those steps the screen check is the only on-screen confirmation of the
+write, so a failed check stays failed, exactly as it would with no state
+verifier, and the run stops unless the workflow has its own handler for that
+step. The action was already sent, so a stopped run's transaction outcome is
+`RECONCILIATION_REQUIRED`: a person checks the record before anything is
+retried. Navigation and read-only steps can still be
+rescued. A wrong answer there lets the run go on to the next step, which still
+runs its own identity, risk, and screen checks before it acts.
 
 The model still reads the screen, can be wrong, and cannot prove a hidden
 transactional effect. A model-assisted run is counted in the report and no
