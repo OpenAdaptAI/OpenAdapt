@@ -96,6 +96,7 @@ drives an app).
 | `jit.compile_agent(app=SurfaceApp(...))` ([#1283](https://github.com/OpenAdaptAI/OpenAdapt/pull/1283)) | n/a (use `WebApp`) | works | works | works (needs `linux_allow_physical_input`) | tested | tested |
 | `AuthoringSession` (agent drives a recording) | tested | tested | tested | works | tested | tested |
 | `runtime.effects.ui_readback` | tested | see below | see below | see below | see below | see below |
+| `effects.kind: desktop_readback` ([#1280](https://github.com/OpenAdaptAI/OpenAdapt/pull/1280)) | refused: "a web record page uses effects.kind: ui_readback" | tested (UI Automation, WinForms stand-in) | works (OCR; Accessibility tree not read yet) | works (OCR; AT-SPI tree not read yet) | tested (network RDP, OCR) | works (OCR) |
 | `openadapt-agent serve --authoring` (pinning a window) | tested | tested | tested (frontmost window only) | **refused** | tested | tested |
 | `openadapt-agent` run tools | tested | works (surface from `--config`) | works | works | works | works |
 
@@ -109,6 +110,14 @@ drives an app).
   `run --profile standard` refuses the same bundle the same way.
 - `AuthoringSession`: `packages/agent/tests/test_authoring_native.py`
   (windows, rdp, citrix), `packages/agent/tests/test_authoring.py` (macOS).
+- `desktop_readback` (#1280): `tests/test_desktop_readback.py` covers Windows
+  (the real win_agent server and `WindowsBackend` over a WinForms stand-in) and
+  network RDP (`FreeRDPBackend` and RapidOCR over the RDP kiosk). It refuses a
+  read-back session that is, or may be, the one that types (same agent, same
+  RDP host and user, or the same window), at load and again after flag
+  overrides. Its proposal step (#1290) and deferred reports (#1297) work on
+  every surface; the server-answer check (#1298) is browser-only, because no
+  other backend sees HTTP.
 - `ui_readback` opens its own browser at an `http(s)` record page. It works
   with any replay surface when the app also has a web record page. A desktop
   app without one needs a reopen read-back instead (see
