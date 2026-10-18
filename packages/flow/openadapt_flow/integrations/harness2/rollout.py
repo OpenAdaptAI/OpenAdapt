@@ -25,7 +25,7 @@ import shutil
 import time
 from dataclasses import asdict
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any, Callable, Optional
 
 from openadapt_flow.integrations.harness2.agent import AgentResult, GuiAgent, PageDriver
 from openadapt_flow.integrations.harness2.apps import AppTarget
@@ -66,8 +66,14 @@ def run_rollout(
     run_id: str,
     penalties: Penalties = Penalties(),
     headless: bool = True,
+    driver_factory: Optional[Callable[[Any], Any]] = None,
 ) -> Path:
-    """Run one rollout into ``run_dir``; idempotent by completed run directory."""
+    """Run one rollout into ``run_dir``; idempotent by completed run directory.
+
+    ``driver_factory(page)`` picks the surface the agent sees: the DOM
+    (:class:`~.agent.PageDriver`, the default) or pixels only
+    (:class:`~.pixels.PixelDriver` over a Flow backend).
+    """
 
     run_dir = Path(run_dir)
     if is_complete(run_dir):
@@ -79,6 +85,7 @@ def run_rollout(
     started = time.time()
     session = target.start()
     result: Optional[AgentResult] = None
+    surface = ""
     error = ""
     try:
         scorer = ReadBackScorer(
@@ -86,8 +93,13 @@ def run_rollout(
         )
         scorer.begin(episode_id)
         try:
-            result = _drive(
-                agent, task, harness_text, session.entry_url(task), headless
+            result, surface = _drive(
+                agent,
+                task,
+                harness_text,
+                session.entry_url(task),
+                headless,
+                driver_factory or PageDriver,
             )
         except Exception as exc:  # noqa: BLE001 - a dead agent is still scored
             error = f"{type(exc).__name__}: {exc}"
@@ -95,13 +107,29 @@ def run_rollout(
         score = scorer.score(episode_id, signal)
     finally:
         session.stop()
-    _write(run_dir, task, agent, harness_text, run_id, result, score, error, started)
+    _write(
+        run_dir,
+        task,
+        agent,
+        harness_text,
+        run_id,
+        result,
+        score,
+        error,
+        started,
+        surface,
+    )
     return run_dir
 
 
 def _drive(
-    agent: GuiAgent, task: GuiTask, harness_text: str, url: str, headless: bool
-) -> AgentResult:
+    agent: GuiAgent,
+    task: GuiTask,
+    harness_text: str,
+    url: str,
+    headless: bool,
+    driver_factory: Callable[[Any], Any],
+) -> tuple[AgentResult, str]:
     from playwright.sync_api import sync_playwright
 
     with sync_playwright() as pw:
@@ -110,7 +138,9 @@ def _drive(
             page = browser.new_page(viewport={"width": 1100, "height": 800})
             page.goto(url)
             page.wait_for_selector("#app *", timeout=10_000)
-            return agent.run(PageDriver(page), task.prompt(), harness_text)
+            driver = driver_factory(page)
+            surface = str(getattr(driver, "surface", "dom"))
+            return agent.run(driver, task.prompt(), harness_text), surface
         finally:
             browser.close()
 
@@ -125,6 +155,7 @@ def _write(
     score: EpisodeScore,
     error: str,
     started: float,
+    surface: str = "",
 ) -> None:
     steps = result.steps if result is not None else []
     with (run_dir / STEPS_FILE).open("w", encoding="utf-8") as fh:
@@ -141,6 +172,7 @@ def _write(
         "run_id": run_id,
         "task_id": task.task_id,
         "agent": agent.name,
+        "surface": surface,
         "harness_digest": harness_digest(harness_text),
         "status": result.status if result is not None else "crashed",
         "report": result.report if result is not None else "",

@@ -137,8 +137,19 @@ class AgentResult:
         return d
 
 
+@runtime_checkable
+class Driver(Protocol):
+    """What an agent drives: a page's DOM, or a window's pixels."""
+
+    def observe(self) -> "Observation": ...
+
+    def act(self, action: dict[str, Any]) -> None: ...
+
+
 class PageDriver:
-    """The agent's hands and eyes on one Playwright page."""
+    """The agent's hands and eyes on one Playwright page, through its DOM."""
+
+    surface = "dom"
 
     def __init__(self, page: Any, *, settle_ms: int = 3000) -> None:
         self.page = page
@@ -199,9 +210,7 @@ class GuiAgent(Protocol):
 
     name: str
 
-    def run(
-        self, driver: PageDriver, task_prompt: str, harness: str
-    ) -> AgentResult: ...
+    def run(self, driver: Driver, task_prompt: str, harness: str) -> AgentResult: ...
 
 
 # -- scripted agent ------------------------------------------------------------
@@ -210,6 +219,13 @@ _TASK_RX = re.compile(
     r"for (?P<name>.+?) \(date of birth (?P<dob>[0-9-]+)\) with this note: (?P<note>.+)$",
     re.S,
 )
+
+_TYPE_LABEL = re.compile(r"(triage|consult|triage\s*assessment)", re.I)
+
+
+def _squash(text: str) -> str:
+    return re.sub(r"\s+", "", text).lower()
+
 
 #: Harness phrases the scripted agent obeys. A proposer that writes one of
 #: them into the harness changes the agent's behaviour.
@@ -233,7 +249,7 @@ class ScriptedGuiAgent:
 
     name = "scripted"
 
-    def run(self, driver: PageDriver, task_prompt: str, harness: str) -> AgentResult:
+    def run(self, driver: Driver, task_prompt: str, harness: str) -> AgentResult:
         rules = harness.lower()
         m = _TASK_RX.search(task_prompt)
         if not m:
@@ -257,7 +273,8 @@ class ScriptedGuiAgent:
         obs = driver.observe()
         opens = obs.find(r"^(open|view)$")
         if RULE_IDENTITY in rules:
-            mine = [e for e in opens if name.lower() in e.context.lower()]
+            # OCR drops spaces ("JaneSample"), so compare without them.
+            mine = [e for e in opens if _squash(name) in _squash(e.context)]
             if not mine:
                 return done(obs, "stopped", f"{name} is not in the referral list.")
             target = mine[0]
@@ -268,21 +285,24 @@ class ScriptedGuiAgent:
         do(obs, {"action": "click", "element": target.n}, "open the referral")
 
         obs = driver.observe()
-        if RULE_IDENTITY in rules and dob not in obs.text:
+        if RULE_IDENTITY in rules and _squash(dob) not in _squash(obs.text):
             return done(obs, "stopped", f"The open record does not show DOB {dob}.")
-        new = obs.find(r"new encounter")
+        new = obs.find(r"new\s*encounter")
         if not new:
             return done(obs, "stopped", "No New Encounter button.")
         do(obs, {"action": "click", "element": new[0].n}, "start the encounter")
 
         obs = driver.observe()
-        segs = [e for e in obs.elements if e.id.startswith("type-")]
+        segs = [e for e in obs.elements if e.id.startswith("type-")] or [
+            e for e in obs.elements if _TYPE_LABEL.fullmatch(e.label)
+        ]
         if RULE_TYPE_LABEL in rules:
             segs = [e for e in segs if "triage" in e.label.lower()] or segs
         if segs:
             do(obs, {"action": "click", "element": segs[0].n}, "choose the type")
             obs = driver.observe()
-        area = [e for e in obs.elements if e.tag == "textarea"]
+        # On pixels a field has no tag; clicking its label focuses it.
+        area = [e for e in obs.elements if e.tag == "textarea"] or obs.find(r"^note$")
         if not area:
             return done(obs, "stopped", "No note field.")
         do(
@@ -298,7 +318,7 @@ class ScriptedGuiAgent:
                 return done(obs, "stopped", "No save button.")
             do(obs, {"action": "click", "element": save[0].n}, "save")
             obs = driver.observe()
-            if "encounter saved" in obs.text.lower():
+            if "encountersaved" in _squash(obs.text):
                 return done(obs, "saved", "The encounter is saved.")
             if RULE_SAVE_ONCE in rules:
                 return done(
@@ -346,7 +366,7 @@ class ModelGuiAgent:
         self.max_steps = max_steps
         self.name = f"model:{model.name}"
 
-    def run(self, driver: PageDriver, task_prompt: str, harness: str) -> AgentResult:
+    def run(self, driver: Driver, task_prompt: str, harness: str) -> AgentResult:
         system = AGENT_PROTOCOL + "\n# Standing instructions\n\n" + harness.strip()
         steps: list[Step] = []
         cost = 0.0
@@ -408,6 +428,7 @@ def _describe(action: dict[str, Any], obs: Observation) -> str:
 __all__ = [
     "AGENT_PROTOCOL",
     "AgentResult",
+    "Driver",
     "Element",
     "GuiAgent",
     "ModelGuiAgent",
