@@ -122,6 +122,8 @@ improvising or retrying when something is off.
 | One check-level scale, 0 to 5, from "unchecked" to "counterparty confirmed" | Released | Unit tests | `openadapt_flow/check_level.py` |
 | Judge any executor's write, including an agent's or a script's, from the system of record | Released | Synthetic | `openadapt-flow verify-run`, [VERIFY_RUN.md](packages/flow/docs/VERIFY_RUN.md) |
 | Guarded save: a safety layer any agent wraps around one write (check the record, hold for approval, read back) | In review ([#1258](https://github.com/OpenAdaptAI/OpenAdapt/pull/1258)) | Synthetic | `GUARDED_SAVE.md` |
+| Draft a record check from the demonstration's write steps (`scaffold-verifier`) | Released | Synthetic | `openadapt-flow scaffold-verifier` (a person fills in the draft) |
+| Build a working record check from the reads the app made while the person viewed the saved record, and test it against injected bad writes before anyone reviews it | Planned | Untested | none yet |
 
 ## Approvals
 
@@ -144,6 +146,7 @@ improvising or retrying when something is off.
 | Watch many real runs in the background and mine candidate branches (shadow mode) | Capture released; drafts in review ([#1212](https://github.com/OpenAdaptAI/OpenAdapt/pull/1212)) | Synthetic | [SHADOW_MINING.md](packages/capture/docs/SHADOW_MINING.md) |
 | Fill a workflow's inputs from a referral PDF, fax image or email | Released | Synthetic | `openadapt-flow intake`, [INTAKE.md](packages/flow/docs/INTAKE.md) |
 | Use spoken narration while recording to learn why a branch was taken | Planned | Untested | Capture records audio (`--audio`, local Whisper). The compiler doesn't use it yet. |
+| Settle a disagreement between recordings by trying both paths on a test copy of the app and reading the record back | Planned | Untested | none yet (today `induce` names the recording that is missing) |
 
 ## Surfaces
 
@@ -165,7 +168,8 @@ improvising or retrying when something is off.
 | --- | --- | --- | --- |
 | Page structure (DOM, UI Automation, Accessibility) first, then template, OCR and geometry | Released | Real app | [RESOLUTION_LADDER.md](packages/flow/docs/RESOLUTION_LADDER.md) |
 | Run a step as a direct API call (`ApiActuator`, `ApiBinding`) | Released, hand-authored bindings | Synthetic benchmarks | `runtime/actuators/api.py` |
-| Capture a recording's network traffic and compile clean saves into API calls automatically | Planned (spike running) | Untested | none yet |
+| Capture a recording's network traffic and compile a clean save into an API step, with the same record check | In review ([#1261](https://github.com/OpenAdaptAI/OpenAdapt/pull/1261)) | Synthetic patients on a local OpenEMR test copy | [#1261](https://github.com/OpenAdaptAI/OpenAdapt/pull/1261) |
+| Fall back from the API step to page structure when the API is unavailable, before anything is sent | Planned | Untested | none yet |
 
 ## When the app changes
 
@@ -174,7 +178,8 @@ improvising or retrying when something is off.
 | Governed repair: propose, review, campaigns, approval, staging, canary, rollback | Released | Synthetic | `openadapt-flow repair`, [REPAIR_LIFECYCLE.md](packages/flow/docs/REPAIR_LIFECYCLE.md) |
 | A calling agent demonstrates the fix for a halted run; the result is a repair candidate | Released (2.1.0) | Synthetic | `run --hold-on-halt`, `repair/agent_teach.py` |
 | Font and layout drift halts with a named reason | Released | Synthetic | `runtime/layout_drift.py` |
-| Self-repair: an agent proposes a fix, Flow probes it up to the save without saving, a person approves | In progress | Untested | `SELF_REPAIR.md` (coming) |
+| Self-repair: an agent proposes a fix for one halted click, Flow probes it up to the save without saving, a person approves | In review ([#1265](https://github.com/OpenAdaptAI/OpenAdapt/pull/1265)) | Synthetic (MockMed redesign) | `run --self-repair`, [#1265](https://github.com/OpenAdaptAI/OpenAdapt/pull/1265) |
+| Self-repair across several new steps (a new dialog, a control moved into a menu) | Planned | Untested | none yet |
 | Fleet drift patches: a verified fix with no patient data, shared across sites under policy | Released, local reference hub | Simulator | `openadapt-flow fleet`, [FLEET_DRIFT_PATCHES.md](packages/flow/docs/FLEET_DRIFT_PATCHES.md) |
 
 ## Computer-use agents
@@ -231,7 +236,9 @@ fails when a command is added without being listed here.
 ## What is not done yet
 
 - No commercial EMR, claims system or real Citrix session has been tested.
-- Network capture to API calls, narration-driven rules, and scrub-by-default
-  are planned, not built.
+- Not built yet: record checks built from the app's own reads, self-repair
+  across several new steps, settling a disagreement between recordings on a
+  test copy, and narration-driven rules. Network capture to API calls and
+  scrub-by-default are in review.
 - Several capabilities have run only on OpenAdapt's synthetic apps. The
   Evidence column says which.
