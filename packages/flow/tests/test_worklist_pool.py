@@ -150,7 +150,7 @@ def test_reconciliation_required_stops_even_when_skipping_halts(tmp_path: Path) 
     def behave(idx: int) -> ItemRun:
         if idx == 0:
             return ItemRun(
-                state=HALTED, detail={"transaction_outcome": "halted_before_effect"}
+                state=HALTED, detail={"transaction_outcome": "HALTED_BEFORE_EFFECT"}
             )
         if idx == 3:
             return ItemRun(
@@ -329,6 +329,12 @@ def test_item_state_from_report() -> None:
     assert (
         item_state_from_report(
             R(transaction_outcome="reconciliation_required", execution_outcome="halted")
+        )
+        == RECONCILIATION_REQUIRED
+    )
+    assert (
+        item_state_from_report(
+            R(transaction_outcome="RECONCILIATION_REQUIRED", execution_outcome="HALTED")
         )
         == RECONCILIATION_REQUIRED
     )

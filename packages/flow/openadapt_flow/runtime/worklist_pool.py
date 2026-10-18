@@ -357,7 +357,7 @@ def item_state_from_report(report: Any) -> str:
     """Map a finished item's RunReport to a pool item state."""
 
     transaction = getattr(report, "transaction_outcome", None)
-    transaction = getattr(transaction, "value", transaction)
+    transaction = str(getattr(transaction, "value", transaction) or "").lower()
     if transaction == "reconciliation_required":
         return RECONCILIATION_REQUIRED
     outcome = getattr(report, "execution_outcome", None)
@@ -393,7 +393,8 @@ def _stops_run(state: str, detail: Mapping[str, Any], on_halt: str) -> bool:
     if (
         on_halt == ON_HALT_SKIP_UNWRITTEN
         and state == HALTED
-        and detail.get("transaction_outcome") == "halted_before_effect"
+        and str(detail.get("transaction_outcome") or "").lower()
+        == "halted_before_effect"
     ):
         return False
     return True
