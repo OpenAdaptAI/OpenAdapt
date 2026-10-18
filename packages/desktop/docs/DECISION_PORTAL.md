@@ -193,6 +193,43 @@ action, and one-use idempotency key. After an accepted answer, Flow re-reads the
 live application and repeats its required state, identity, and target checks
 before any action continues.
 
+## Approving a save
+
+Under an approval mode (`each_item`, or `problems_only` once earned) a run stops
+before a save and waits for a person. The paired phone answers that wait the
+same way it answers a paused run: Flow signs a decision task, and the portal
+relays it without adding authority. This section is the contract the phone
+screens build on.
+
+| Portal route | Flow console route | What it returns |
+|---|---|---|
+| `GET /api/portal/save-approvals` | `GET /api/save-approvals` | Waiting saves: `request_id`, `step_class`, `created_at`, `expires_at` |
+| `GET /api/portal/save-approvals/{request_id}` | `GET /api/save-approvals/{request_id}` | `task` (signed `openadapt.human-decision-task/v1`, `task_kind: save_approval`, question `approve_save`), `task_digest`, and a local-only `presentation` block |
+| `GET /api/portal/save-approvals/{request_id}/frame` | `GET /api/save-approvals/{request_id}/frame` | The exact screenshot the request was opened with (PNG, digest-checked by Flow, `no-store`) |
+| `POST /api/portal/save-approvals/{request_id}/actions/{action}` | `POST /api/save-approvals/{request_id}/actions/{action}` | A `HumanDecisionReceiptV1` |
+
+`request_id` is 32 lowercase hex characters; anything else is refused before
+Flow is called. `presentation` carries `question`, `step_intent`,
+`step_index`, `step_class`, `explanation`, `screenshot_sha256`,
+`decline_reasons` and `expires_at`. Its `screenshot_route` names the Flow
+console path; the phone loads the portal's `.../frame` route above.
+
+The task's `allowed_actions` are `verify_and_resume` (approve this save) and
+`reject` (don't save). The POST body is
+`{"action", "task_digest", "task_signature"}` plus, for `reject` only, one
+`decline_reason`: `wrong_values`, `wrong_record` or `screen_problem`. The same
+origin and session CSRF checks as every other decision apply. Flow refuses a
+task that changed or belongs to another save, and writes the answer once, so a
+second tap gets `409 request_not_waiting`. The receipt is
+`accepted_pending_runner` for an approval (the run re-reads the form before it
+saves and stops if anything changed) or `rejected` for a decline.
+
+As with every portal decision, pairing proves a device, not a person: Flow
+records a save answered here as an unauthenticated person on the
+`decision_portal` route. Save approvals stay on the runner. The hosted lane
+does not carry them, because the screenshot never leaves the runner and a
+person must see exactly what will be saved before approving it.
+
 ## Protected evidence
 
 Task projections, decision outcomes, and evidence crops are served

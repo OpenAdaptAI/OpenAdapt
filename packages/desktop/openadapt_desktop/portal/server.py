@@ -69,6 +69,22 @@ _ROUTE_TASK_EVIDENCE = re.compile(
 )
 _ROUTE_TASK_DETAIL = re.compile(rf"^/api/portal/tasks/(?P<run_id>{_RUN_ID})$")
 
+# Saves waiting for a person under an approval mode. Flow serves each one as a
+# signed ``save_approval`` decision task plus the exact screenshot; the portal
+# relays them like any other task and adds no authority.
+_REQUEST_ID = r"[0-9a-f]{32}"
+_ROUTE_SAVES = re.compile(r"^/api/portal/save-approvals$")
+_ROUTE_SAVE_DETAIL = re.compile(
+    rf"^/api/portal/save-approvals/(?P<request_id>{_REQUEST_ID})$"
+)
+_ROUTE_SAVE_FRAME = re.compile(
+    rf"^/api/portal/save-approvals/(?P<request_id>{_REQUEST_ID})/frame$"
+)
+_ROUTE_SAVE_ACTION = re.compile(
+    rf"^/api/portal/save-approvals/(?P<request_id>{_REQUEST_ID})"
+    rf"/actions/(?P<action_id>{_ACTION_ID})$"
+)
+
 _SECURITY_HEADERS = {
     "Content-Security-Policy": (
         "default-src 'self'; script-src 'self'; style-src 'self'; "
@@ -254,6 +270,32 @@ class PortalApp:
                 action.group("action_id"),
             )
 
+        if method == "GET" and _ROUTE_SAVES.fullmatch(path):
+            return self._relay("save_approvals")
+
+        save = _ROUTE_SAVE_DETAIL.fullmatch(path)
+        if method == "GET" and save:
+            return self._relay(
+                "save_approval_detail", request_id=save.group("request_id")
+            )
+
+        save_frame = _ROUTE_SAVE_FRAME.fullmatch(path)
+        if method == "GET" and save_frame:
+            return self._relay(
+                "save_approval_frame", request_id=save_frame.group("request_id")
+            )
+
+        save_action = _ROUTE_SAVE_ACTION.fullmatch(path)
+        if method == "POST" and save_action:
+            return self._decide(
+                headers,
+                body,
+                session,
+                save_action.group("request_id"),
+                save_action.group("action_id"),
+                route="save_approval_action",
+            )
+
         detail = _ROUTE_TASK_DETAIL.fullmatch(path)
         if method == "GET" and detail:
             run_id = self._safe_run_id(detail.group("run_id"))
@@ -298,8 +340,15 @@ class PortalApp:
         session: DeviceSession,
         run_id: str | None,
         action_id: str,
+        *,
+        route: str = "task_action",
     ):
-        """Relay one decision to Flow.  Desktop adds no authority of its own."""
+        """Relay one decision to Flow.  Desktop adds no authority of its own.
+
+        ``route`` is ``task_action`` for a paused run (``run_id`` is the
+        attention id) or ``save_approval_action`` for a waiting save
+        (``run_id`` is the save approval's request id).
+        """
         if run_id is None:
             return self._refusal(404, "not_found", "No such decision.")
         if len(body) > _MAX_BODY_BYTES:
@@ -324,6 +373,10 @@ class PortalApp:
         # The phone's payload is forwarded as-is. Flow validates it against the
         # signed task digest, the engine capability, and the allowed-action
         # list; Desktop must not pre-approve or rewrite any of that.
+        if route == "save_approval_action":
+            return self._relay(
+                route, request_id=run_id, action_id=action_id, json_body=payload
+            )
         return self._relay(
             "task_action", run_id=run_id, action_id=action_id, json_body=payload
         )

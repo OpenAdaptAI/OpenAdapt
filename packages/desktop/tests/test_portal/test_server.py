@@ -417,3 +417,87 @@ def test_the_relay_refuses_an_identifier_the_http_surface_would_have_rejected() 
     with pytest.raises(FlowConsoleUnavailable) as refused:
         client.request("task_action", run_id="ok", action_id="DROP TABLE")
     assert refused.value.reason == "bad_identifier"
+
+
+# ------------------------------------------------------------ save approvals
+
+SAVE_ID = "0123456789abcdef0123456789abcdef"
+
+
+def test_a_waiting_save_is_relayed_like_any_other_task() -> None:
+    png = b"\x89PNG\r\n\x1a\nfilled form"
+    flow = FakeFlow({"save_approval_frame": FlowResponse(200, None, png, "image/png")})
+    app, pairings = build(flow)
+    headers = paired(app, pairings)
+    status, _, _ = app.handle("GET", "/api/portal/save-approvals", headers, b"")
+    assert status == 200 and flow.calls[-1] == ("save_approvals", {})
+    status, _, _ = app.handle(
+        "GET", f"/api/portal/save-approvals/{SAVE_ID}", headers, b""
+    )
+    assert status == 200
+    assert flow.calls[-1] == ("save_approval_detail", {"request_id": SAVE_ID})
+    status, response_headers, body = app.handle(
+        "GET", f"/api/portal/save-approvals/{SAVE_ID}/frame", headers, b""
+    )
+    assert status == 200 and body == png
+    assert "no-store" in response_headers["Cache-Control"]
+
+
+def test_a_save_decision_is_forwarded_verbatim_with_the_session_checks() -> None:
+    flow = FakeFlow(
+        {
+            "save_approval_action": FlowResponse(
+                200, {"state": "accepted_pending_runner"}, None, "application/json"
+            )
+        }
+    )
+    app, pairings = build(flow)
+    headers = paired(app, pairings)
+    payload = {
+        "action": "verify_and_resume",
+        "task_digest": "sha256:" + "b" * 64,
+        "task_signature": "hmac-sha256:" + "c" * 64,
+    }
+    url = f"/api/portal/save-approvals/{SAVE_ID}/actions/verify_and_resume"
+    status, _, body = app.handle("POST", url, headers, json.dumps(payload).encode())
+    assert status == 200
+    assert json.loads(body) == {"state": "accepted_pending_runner"}
+    route, kwargs = flow.calls[-1]
+    assert route == "save_approval_action"
+    assert kwargs == {
+        "request_id": SAVE_ID,
+        "action_id": "verify_and_resume",
+        "json_body": payload,
+    }
+    calls = len(flow.calls)
+    for bad in (
+        headers | {"x-openadapt-portal-csrf": "wrong"},
+        headers | {"origin": "https://attacker.example"},
+    ):
+        status, _, _ = app.handle("POST", url, bad, json.dumps(payload).encode())
+        assert status == 403
+    assert len(flow.calls) == calls  # nothing reached Flow
+
+
+@pytest.mark.parametrize(
+    "path",
+    [
+        "/api/portal/save-approvals/../tasks",
+        "/api/portal/save-approvals/NOT-HEX-0123456789abcdef01234567",
+        f"/api/portal/save-approvals/{SAVE_ID}/frame/extra",
+    ],
+)
+def test_malformed_save_ids_never_reach_flow(path: str) -> None:
+    flow = FakeFlow()
+    app, pairings = build(flow)
+    status, _, _ = app.handle("GET", path, paired(app, pairings), b"")
+    assert status == 404 and flow.calls == []
+
+
+def test_the_client_refuses_a_malformed_save_id() -> None:
+    from openadapt_desktop.portal.flow_client import FlowConsoleClient
+
+    client = FlowConsoleClient(port=7863, access_token="t")
+    with pytest.raises(FlowConsoleUnavailable) as refused:
+        client.request("save_approval_detail", request_id="../session")
+    assert refused.value.reason == "bad_identifier"
