@@ -31,12 +31,19 @@ order:
    admitted it (``admitted_by_principal_id``) and when, signed with the
    local Ed25519 admission key.
 
+The draft state is ``Workflow.origin`` (:data:`DRAFT_ORIGIN`), inside the
+content digest, so deleting the ``jit_draft.json`` label frees nothing.
+
 A plain name is a person's name, checked by identity only: it can't be the
 identity that made the recording, or an ``agent:``, ``model:``, ``bot:`` or
 similar identity. Flow can't prove a person typed the name. The command line
 also requires an interactive terminal for a person. An agent or admitter key
 acts as a registered :class:`~openadapt_flow.jit.authority.Principal`, and
-it can't be the identity that made the recording either.
+it can't be the identity that made the recording either. Who made the
+recording comes from the draft's ``recorder`` block, signed with the local
+admission key over the bundle digest (:func:`sign_recorder`), not from the
+writable fields of ``candidate.json``. An agent can't act on a draft whose
+recording names no agent principal.
 
 ``REJECTED`` is terminal: :func:`reject` moves the draft aside, and the next
 run records again.
@@ -49,13 +56,14 @@ import os
 import time
 from enum import Enum
 from pathlib import Path
-from typing import Any, Mapping, Optional, Sequence
+from typing import Any, Callable, Mapping, Optional, Sequence
 
 from openadapt_flow.assurance import INDEPENDENT_READBACK, SCREEN_READBACK
 
 __all__ = [
     "ADMISSION_FILE",
     "DRAFT_MARKER",
+    "DRAFT_ORIGIN",
     "ADMISSION_SCHEMA",
     "TRANSITIONS",
     "AdmissionError",
@@ -74,9 +82,12 @@ __all__ = [
     "draft_label",
     "ensure_runnable",
     "reject",
+    "resolve_actor",
+    "sign_recorder",
     "state_of",
     "verify_admission",
     "admit_with_key",
+    "is_jit_bundle",
     "is_not_a_person_name",
     "needs_person_queue",
 ]
@@ -85,8 +96,16 @@ CANDIDATE_FILE = "candidate.json"
 REVIEW_FILE = "review.json"
 CANARY_FILE = "canary.json"
 PARAMS_FILE = "params.json"
-#: Written into a draft's bundle, so a copied bundle stays a draft.
+#: Written into a draft's bundle, for people and tools that read the folder.
+#: It is a label only: the draft state is :data:`DRAFT_ORIGIN`.
 DRAFT_MARKER = "jit_draft.json"
+#: ``Workflow.origin`` of a bundle compiled from an agent run. It is inside
+#: the content digest, so a copy stays a draft and removing it makes a
+#: different program that nothing admitted.
+DRAFT_ORIGIN = "agent_run"
+#: The fields of ``candidate.json`` that say who made the recording. They are
+#: signed with the bundle digest in the candidate's ``recorder`` block.
+RECORDER_FIELDS = ("recorded_by", "agent_principal_id", "dialect")
 EVENTS_FILE = "lifecycle.jsonl"
 ADMISSION_FILE = "admission.json"
 #: Every canary run, one JSON object per line. ``canary.json`` is the latest.
@@ -230,11 +249,24 @@ def _transition(program: Path, to: BundleState) -> None:
 
 
 def mark_draft(bundle_dir: Path | str) -> None:
-    """Mark ``bundle_dir`` as a draft. The marker is not part of the content
-    digest, so it does not change what a review or an admission pins."""
+    """Mark ``bundle_dir`` as a draft.
 
+    Sets ``Workflow.origin`` to :data:`DRAFT_ORIGIN` and re-seals the bundle,
+    so the draft state is part of the content digest: deleting a file can't
+    turn a draft into a plain bundle. Then writes the :data:`DRAFT_MARKER`
+    label. Call it before anything pins the digest (the recorder signature,
+    a review, a canary).
+    """
+
+    bundle = Path(bundle_dir)
+    workflow = _load_workflow(bundle)
+    if workflow.encrypted:
+        raise AdmissionError("a JIT draft is compiled unencrypted; this one is not")
+    if workflow.origin != DRAFT_ORIGIN:
+        workflow.origin = DRAFT_ORIGIN
+        workflow.save(bundle)
     _write(
-        Path(bundle_dir) / DRAFT_MARKER,
+        bundle / DRAFT_MARKER,
         {
             "state": BundleState.DRAFT.value,
             "note": "compiled from a computer-use agent run; runs only after "
@@ -247,44 +279,134 @@ class DraftNotAdmitted(AdmissionError):
     """An execution path was asked to run a JIT draft that is not admitted."""
 
 
+def _origin_on_disk(bundle: Path) -> Optional[str]:
+    """``origin`` from a plaintext ``workflow.json``, without loading it.
+
+    For the checks that run before a bundle is loaded. An encrypted bundle
+    can't be read here; :meth:`Replayer.run` passes the loaded workflow.
+    """
+
+    path = bundle / "workflow.json"
+    try:
+        data = json.loads(path.read_text()) if path.is_file() else {}
+    except (OSError, ValueError):
+        return None
+    origin = data.get("origin") if isinstance(data, dict) else None
+    return origin if isinstance(origin, str) else None
+
+
+def is_jit_bundle(bundle_dir: Path | str, workflow: Any = None) -> bool:
+    """True when ``bundle_dir`` came from an agent run: its workflow's
+    ``origin`` is set, or it carries the draft marker or a JIT admission."""
+
+    bundle = Path(bundle_dir)
+    origin = (
+        getattr(workflow, "origin", None)
+        if workflow is not None
+        else _origin_on_disk(bundle)
+    )
+    return bool(
+        origin
+        or (bundle / DRAFT_MARKER).is_file()
+        or (bundle / ADMISSION_FILE).is_file()
+    )
+
+
 def ensure_runnable(
     bundle_dir: Path | str,
     *,
+    workflow: Any = None,
     attended_by: Any = None,
     key_dir: Optional[Path] = None,
+    execution_origin: Optional[str] = None,
+    effect_verifier: Any = None,
+    at_run: bool = False,
 ) -> None:
     """Refuse to execute a JIT draft that has no valid admission.
 
-    A bundle without the draft marker is not a JIT draft and passes. A draft
-    passes when :func:`verify_admission` accepts its admission, or when
-    ``attended_by`` is attending this run (the canary): a person's name, a
-    registered admitter key, or a registered agent under a valid signed
-    admission policy (:func:`resolve_actor`). ``attended_by`` is for the
-    in-process JIT API. No CLI or server path passes it.
+    A bundle is a JIT bundle when its workflow's ``origin`` is
+    :data:`DRAFT_ORIGIN` (inside the content digest), or it carries the draft
+    marker or an admission manifest (:func:`is_jit_bundle`). Any other bundle
+    passes. A JIT bundle passes when :func:`verify_admission` accepts its
+    admission, or when ``attended_by`` is attending this run (the canary): a
+    person's name, a registered admitter key, or a registered agent under a
+    valid signed admission policy (:func:`resolve_actor`). ``attended_by`` is
+    for the in-process JIT API. No CLI or server path passes it.
+
+    With ``at_run`` (:meth:`Replayer.run`), an admitted bundle must also match
+    its admission on this run: the program's parameters are the admitted
+    task's, ``execution_origin`` is the origin the canary ran on, and
+    ``effect_verifier`` gives every write step an independent read-back.
 
     Raises:
-        DraftNotAdmitted: the draft is not admitted, or ``attended_by`` is not
-            a human principal.
+        DraftNotAdmitted: the draft is not admitted, this run does not match
+            its admission, or ``attended_by`` can't attend it.
     """
 
     bundle = Path(bundle_dir)
-    if not (bundle / DRAFT_MARKER).is_file():
+    if not is_jit_bundle(bundle, workflow):
         return
     if attended_by is not None:
-        candidate = _read(bundle.parent / CANDIDATE_FILE) or {}
         try:
-            resolve_actor(attended_by, candidate, key_dir=key_dir)
+            resolve_actor(attended_by, bundle.parent, key_dir=key_dir)
         except AdmissionError as exc:
             raise DraftNotAdmitted(f"{bundle}: {exc}") from None
         return
     try:
-        verify_admission(bundle, key_dir=key_dir)
+        manifest = verify_admission(bundle, key_dir=key_dir)
     except AdmissionError as exc:
         raise DraftNotAdmitted(
             f"refused: {bundle} is a DRAFT compiled from an agent run and is not "
             f"admitted ({exc}). Review, canary and admit it first "
             "(openadapt-flow jit status)."
         ) from None
+    if not at_run:
+        return
+    try:
+        _check_admitted_run(
+            manifest,
+            workflow if workflow is not None else _load_workflow(bundle),
+            execution_origin=execution_origin,
+            effect_verifier=effect_verifier,
+        )
+    except AdmissionError as exc:
+        raise DraftNotAdmitted(
+            f"refused: {bundle} was compiled from an agent run and admitted, and "
+            f"this run does not match its admission ({exc}). Nothing ran."
+        ) from None
+
+
+def _check_admitted_run(
+    manifest: Mapping[str, Any],
+    workflow: Any,
+    *,
+    execution_origin: Optional[str],
+    effect_verifier: Any,
+) -> None:
+    """What every run of an admitted bundle must match, on any path.
+
+    The JIT API (``CompiledAgent.run``) also checks the task signature and
+    the Flow policy; a replay outside it has neither to compare.
+    """
+
+    if sorted(workflow.params) != sorted(manifest.get("params") or []):
+        raise AdmissionError(
+            f"the program's parameters {sorted(workflow.params)} are not the "
+            f"admitted task's {sorted(manifest.get('params') or [])}"
+        )
+    canary_origin = (manifest.get("canary") or {}).get("target_origin")
+    if not execution_origin or execution_origin != canary_origin:
+        raise AdmissionError(
+            f"the canary ran on {canary_origin}, and this run is on "
+            f"{execution_origin or 'an origin it does not name'}; admit a canary "
+            "on this app"
+        )
+    problems = _readback_problems(readback_coverage(workflow, effect_verifier))
+    if problems:
+        raise AdmissionError(
+            "this run's verifier gives a write step no independent read-back: "
+            + "; ".join(problems)
+        )
 
 
 def draft_label(
@@ -322,33 +444,133 @@ def is_not_a_person_name(name: str) -> bool:
     return lower in _NOT_PRINCIPALS or lower.startswith(_NOT_PRINCIPAL_PREFIXES)
 
 
-def _self_check(name: str, candidate: Mapping[str, Any]) -> None:
-    recorded = {
-        str(v).strip().lower()
-        for v in (
-            candidate.get("recorded_by"),
-            candidate.get("agent_principal_id"),
-            candidate.get("dialect"),
-        )
-        if v
-    }
-    if name.strip().lower() in recorded:
-        raise AdmissionError(
-            f"{name!r} made the recording; a run can't approve its own contract"
-        )
+def sign_recorder(
+    program_dir: Path | str,
+    candidate: Mapping[str, Any],
+    *,
+    key_dir: Optional[Path] = None,
+) -> dict[str, Any]:
+    """Return ``candidate`` with a signed ``recorder`` block.
 
-
-def resolve_actor(
-    actor: Any, candidate: Mapping[str, Any], *, key_dir: Optional[Path] = None
-) -> tuple[str, Optional[Any]]:
-    """Who is acting, as ``(principal_id, principal)``.
-
-    A plain string is a person's name (:func:`check_principal`). A
-    :class:`~openadapt_flow.jit.authority.Principal` is a registered admitter
-    key or agent; it is re-verified against the registry, and an agent's
-    policy against its signature and expiry. Neither can be the identity that
-    made the recording.
+    The block holds :data:`RECORDER_FIELDS`, the task key and the bundle's
+    current content digest, signed with the local admission key. Every
+    action on the draft checks it (:func:`resolve_actor`), so editing
+    ``candidate.json`` or the bundle can't change who made the recording.
+    Flow re-signs it when it recompiles the draft (:func:`confirm_params`).
     """
+
+    program = Path(program_dir)
+    block: dict[str, Any] = {f: candidate.get(f) for f in RECORDER_FIELDS}
+    block["task_key"] = (candidate.get("task") or {}).get("key")
+    block["digest"] = _digest(_load_workflow(program / "bundle"))
+    block["signature"] = _sign_record(block, key_dir)
+    return {**candidate, "recorder": block}
+
+
+def _recorder(program: Path, key_dir: Optional[Path]) -> dict[str, Any]:
+    """The draft's signed recorder block, checked against its candidate and
+    its bundle (:func:`sign_recorder`).
+
+    Raises:
+        AdmissionError: no draft record, an unsigned block, a candidate or
+            bundle changed after the recording.
+    """
+
+    candidate = _read(program / CANDIDATE_FILE)
+    if candidate is None:
+        raise AdmissionError(
+            f"no draft record ({CANDIDATE_FILE}) next to the bundle, so who made "
+            "the recording is unknown; a copied draft runs only with an admission"
+        )
+    block = candidate.get("recorder")
+    if not isinstance(block, dict) or not _record_signed(block, key_dir):
+        raise AdmissionError(
+            "the draft's recorder is not signed by the local admission key; "
+            "record the draft again"
+        )
+    task_key = (candidate.get("task") or {}).get("key")
+    for field in (*RECORDER_FIELDS, "task_key"):
+        value = task_key if field == "task_key" else candidate.get(field)
+        if block.get(field) != value:
+            raise AdmissionError(
+                f"{CANDIDATE_FILE} changed after it was recorded ({field}); "
+                "record the draft again"
+            )
+    try:
+        digest = _digest(_load_workflow(program / "bundle"))
+    except Exception as exc:  # noqa: BLE001 - integrity failure is a refusal
+        raise AdmissionError(f"the bundle failed its integrity check: {exc}") from exc
+    if block.get("digest") != digest:
+        raise AdmissionError(
+            "the draft's recorder was signed for another bundle; the bundle "
+            "changed after the recording. Record the draft again"
+        )
+    return block
+
+
+def _is_recording_agent(name: str, recorder: Mapping[str, Any]) -> bool:
+    """``name`` is the agent principal the signed recorder block names."""
+
+    recording_agent = recorder.get("agent_principal_id")
+    return bool(recording_agent) and (
+        name.strip().lower() == str(recording_agent).strip().lower()
+    )
+
+
+def _self_check(
+    name: str,
+    recorder: Mapping[str, Any],
+    *,
+    agent: bool,
+    allow_self: bool = False,
+) -> None:
+    """``name`` is not the identity that made the recording.
+
+    ``agent``: ``name`` is a registered agent. An agent acts only when the
+    recording names the agent that made it; otherwise Flow can't show they
+    differ.
+
+    ``allow_self``: the agent's signed admission policy lets it act on its
+    own recording (``allow_self_admission``). Then the recording agent passes,
+    but only as the agent principal the signed recorder block names; a match
+    on any other recorded field is still refused.
+    """
+
+    recorded = {
+        str(recorder[f]).strip().lower() for f in RECORDER_FIELDS if recorder.get(f)
+    }
+    if name.strip().lower() in recorded and not (
+        agent and allow_self and _is_recording_agent(name, recorder)
+    ):
+        raise AdmissionError(
+            f"{name!r} made the recording; a run can't approve its own contract "
+            "unless its signed admission policy allows self-admission"
+        )
+    if agent and not recorder.get("agent_principal_id"):
+        raise AdmissionError(
+            f"the recording agent is unknown (the draft names no agent "
+            f"principal), so {name!r} can't be shown not to be it. A person or "
+            "an admitter key acts on this draft"
+        )
+
+
+def _policy_allows_self(actor: Any) -> bool:
+    """A registered agent whose (re-verified) policy allows self-admission."""
+
+    signed = getattr(actor, "policy", None)
+    return bool(
+        getattr(actor, "kind", None) == "agent"
+        and signed is not None
+        and signed.policy.allow_self_admission
+    )
+
+
+def _actor(
+    actor: Any,
+    recorder: Callable[[], Mapping[str, Any]],
+    key_dir: Optional[Path],
+) -> tuple[str, Optional[Any]]:
+    """Check who ``actor`` is, then that it did not make the recording."""
 
     from openadapt_flow.jit import authority
 
@@ -358,23 +580,37 @@ def resolve_actor(
             authority.recheck(actor, keys)
         except authority.AuthorityError as exc:
             raise AdmissionError(str(exc)) from None
-        _self_check(actor.principal_id, candidate)
+        _self_check(
+            actor.principal_id,
+            recorder(),
+            agent=actor.kind == "agent",
+            allow_self=_policy_allows_self(actor),
+        )
         return actor.principal_id, actor
-    return check_principal(actor, candidate), None
+    name = _person_name(actor)
+    _self_check(name, recorder(), agent=False)
+    return name, None
 
 
-def check_principal(principal_id: Any, candidate: Mapping[str, Any]) -> str:
-    """Return ``principal_id`` if a person by that name can act on this draft.
+def resolve_actor(
+    actor: Any, program_dir: Path | str, *, key_dir: Optional[Path] = None
+) -> tuple[str, Optional[Any]]:
+    """Who is acting on the draft in ``program_dir``, as
+    ``(principal_id, principal)``.
 
-    A registered agent or admitter key acts as a
-    :class:`~openadapt_flow.jit.authority.Principal` instead
-    (:func:`resolve_actor`); its name alone gives it nothing.
-
-    Raises:
-        AdmissionError: no name, an unregistered agent or model identity, or
-            the identity that made the recording.
+    A plain string is a person's name (:func:`check_principal`). A
+    :class:`~openadapt_flow.jit.authority.Principal` is a registered admitter
+    key or agent; it is re-verified against the registry, and an agent's
+    policy against its signature and expiry. Neither can be the identity that
+    made the recording, read from the draft's signed recorder block
+    (:func:`sign_recorder`), and an agent can't act when that block names no
+    agent principal.
     """
 
+    return _actor(actor, lambda: _recorder(Path(program_dir), key_dir), key_dir)
+
+
+def _person_name(principal_id: Any) -> str:
     if not isinstance(principal_id, str) or not principal_id.strip():
         raise AdmissionError("a named human principal is required")
     name = principal_id.strip()
@@ -383,7 +619,27 @@ def check_principal(principal_id: Any, candidate: Mapping[str, Any]) -> str:
             f"{name!r} is not a human principal; a model or agent never authorizes "
             "on its name alone (register its key under a signed admission policy)"
         )
-    _self_check(name, candidate)
+    return name
+
+
+def check_principal(
+    principal_id: Any, program_dir: Path | str, *, key_dir: Optional[Path] = None
+) -> str:
+    """Return ``principal_id`` if a person by that name can act on the draft
+    in ``program_dir``.
+
+    A registered agent or admitter key acts as a
+    :class:`~openadapt_flow.jit.authority.Principal` instead
+    (:func:`resolve_actor`); its name alone gives it nothing.
+
+    Raises:
+        AdmissionError: no name, an unregistered agent or model identity, the
+            identity that made the recording, or a recorder block that does
+            not verify.
+    """
+
+    name = _person_name(principal_id)
+    _self_check(name, _recorder(Path(program_dir), key_dir), agent=False)
     return name
 
 
@@ -609,7 +865,7 @@ def confirm_params(
 
     program = Path(program_dir)
     candidate = _require_draft(program)
-    name, _ = resolve_actor(principal_id, candidate, key_dir=key_dir)
+    name, _ = resolve_actor(principal_id, program, key_dir=key_dir)
     if not _confirm_ok(confirm):
         raise AdmissionError("confirm_params accepts confirm empty, ok, yes, or True")
     task_params = _task_params(candidate)
@@ -642,6 +898,8 @@ def confirm_params(
             )
             mark_draft(bundle)
         candidate["params_applied"] = sorted(accept_params)
+        # The recompiled bundle has a new digest; the recorder is unchanged.
+        candidate = sign_recorder(program, candidate, key_dir=key_dir)
         _write(program / CANDIDATE_FILE, candidate)
     workflow = _load_workflow(bundle)
     if sorted(workflow.params) != task_params:
@@ -667,6 +925,7 @@ def record_review(
     principal_id: str,
     reviewed_steps: Sequence[str],
     confirm: object = None,
+    key_dir: Optional[Path] = None,
 ) -> dict[str, Any]:
     """A named person reviewed every step of the program that will run.
 
@@ -678,7 +937,7 @@ def record_review(
 
     program = Path(program_dir)
     candidate = _require_draft(program)
-    name = check_principal(principal_id, candidate)
+    name = check_principal(principal_id, program, key_dir=key_dir)
     if not _confirm_ok(confirm):
         raise AdmissionError("review accepts confirm empty, ok, yes, or True")
     workflow = _load_workflow(program / "bundle")
@@ -729,8 +988,8 @@ def record_canary(
     which an admission policy's ``min_clean_canaries`` counts."""
 
     program = Path(program_dir)
-    candidate = _require_draft(program)
-    name, principal = resolve_actor(principal_id, candidate, key_dir=key_dir)
+    _require_draft(program)
+    name, principal = resolve_actor(principal_id, program, key_dir=key_dir)
     outcome = str(report.execution_outcome) if report is not None else "refused"
     model_calls = int(report.model_calls) if report is not None else None
     problems = _readback_problems(readback)
@@ -778,9 +1037,10 @@ def admit(
     program = Path(program_dir)
     candidate = _require_draft(program)
     _transition(program, BundleState.ADMITTED)
-    name = check_principal(principal_id, candidate)
+    _person_name(principal_id)
     if not _confirm_ok(confirm):
         raise AdmissionError("admit accepts confirm empty, ok, yes, or True")
+    name = check_principal(principal_id, program, key_dir=key_dir)
     if not _has_terminal():
         # A name is only a claim. Without a terminal, any script or agent
         # could make it, so a headless admission goes through a registered key.
@@ -897,6 +1157,7 @@ def _write_manifest(
 
     keys = Path(key_dir) if key_dir is not None else default_key_dir()
     private = load_or_create_private_key(keys)
+    recorder = _recorder(program, keys)
     review = review or {}
     body = {
         "schema": ADMISSION_SCHEMA,
@@ -923,12 +1184,17 @@ def _write_manifest(
             )
         },
         "readback": canary["readback"],
-        "recorded_by": candidate.get("recorded_by"),
-        "agent_principal_id": candidate.get("agent_principal_id"),
+        "recorded_by": recorder.get("recorded_by"),
+        "agent_principal_id": recorder.get("agent_principal_id"),
+        "dialect": recorder.get("dialect"),
         "model_key": candidate.get("model_key"),
         "signing_key": fingerprint_of(private.public_key()),
         **(extra or {}),
     }
+    if mode == "agent_policy" and _is_recording_agent(name, recorder):
+        # Only written when true, so manifests from before self-admission
+        # existed verify unchanged.
+        body["self_admitted"] = True
     if principal is not None:
         # The admitting key signs the body too, so the manifest names a key
         # the registry holds, not just a name.
@@ -984,7 +1250,7 @@ def admit_with_key(
             "name alone is a person, who admits with admit()"
         )
     keys = Path(key_dir) if key_dir is not None else default_key_dir()
-    name, _ = resolve_actor(principal, candidate, key_dir=keys)
+    name, _ = resolve_actor(principal, program, key_dir=keys)
     workflow = _load_workflow(program / "bundle")
     digest = _digest(workflow)
     if principal.kind == "admitter_key":
@@ -1152,7 +1418,10 @@ def _verify_mode(body: Mapping[str, Any], keys: Path) -> None:
     if mode not in ADMISSION_MODES:
         raise AdmissionError(f"unknown admission mode {mode!r}")
     name = str(body.get("admitted_by_principal_id") or "")
-    _self_check(name, body)
+    if mode != "agent_policy":
+        _self_check(name, body, agent=False)
+        if body.get("self_admitted"):
+            raise AdmissionError("only an agent under a policy can be self-admitted")
     if mode == "person":
         if is_not_a_person_name(name):
             raise AdmissionError(f"{name!r} is not a person; a model never authorizes")
@@ -1183,6 +1452,14 @@ def _verify_mode(body: Mapping[str, Any], keys: Path) -> None:
         policy.agent_principals
     ):
         raise AdmissionError("the admission does not match the policy it names")
+    # Checked only now: whether the recording agent may admit its own draft
+    # comes from the signed policy, which has just verified.
+    _self_check(name, body, agent=True, allow_self=policy.allow_self_admission)
+    if bool(body.get("self_admitted", False)) != _is_recording_agent(name, body):
+        raise AdmissionError(
+            "the manifest's self_admitted does not match who recorded the draft "
+            "and who admitted it"
+        )
 
 
 def reject(
@@ -1197,7 +1474,17 @@ def reject(
     program = Path(program_dir)
     candidate = _require_draft(program)
     _transition(program, BundleState.REJECTED)
-    name, _ = resolve_actor(principal_id, candidate, key_dir=key_dir)
+
+    def recorder() -> Mapping[str, Any]:
+        try:
+            return _recorder(program, key_dir)
+        except AdmissionError:
+            # Rejecting only sets the draft aside, so a draft whose recorder
+            # no longer verifies can still be rejected. Check the unsigned
+            # fields instead.
+            return candidate
+
+    name, _ = _actor(principal_id, recorder, key_dir)
     _write(
         program / "rejected.json",
         {"principal_id": name, "reason": reason, "rejected_at": _now()},

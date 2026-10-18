@@ -52,7 +52,9 @@ jobs:
           # openadapt-ml seam was never tested in CI; the lazy
           # __getattr__ in openadapt/__init__.py imports from all of
           # these.
-          pip install -e ".[dev]" openadapt-ml openadapt-capture \
+          # openadapt-capture is in-tree (packages/capture), so the seam
+          # is tested against the source that will ship.
+          pip install -e ".[dev]" -e packages/capture openadapt-ml \
             openadapt-evals openadapt-viewer openadapt-grounding \
             openadapt-retrieval
 

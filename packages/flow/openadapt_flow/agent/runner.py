@@ -705,6 +705,13 @@ class FlowRunner:
             cmd += ["--policy", self.config.policy]
         if self.config.approval_mode:
             cmd += ["--approval-mode", self.config.approval_mode]
+        # The calling agent started this run, so it can never answer the
+        # run's saves. Without an operator-given id Flow can't tell agents
+        # apart, and no delegate may answer at all.
+        cmd += [
+            "--started-by",
+            self.config.delegate_approver_id or "agent:unidentified",
+        ]
         if cloud_execution_id:
             # Flow fetches Cloud's signed receipt after a VERIFIED outcome and
             # writes it into report.json (needs OPENADAPT_EXECUTE_API_KEY).

@@ -26,7 +26,16 @@ openadapt-flow qualify path/to/bundle --verify verify.yaml \
 lists every problem it finds (no reset, no read-back, a save step without an
 identity check, inputs the record needs but the bundle does not have). It then
 runs the six cases, stops at the first case that does not behave as required,
+runs them again with structure lookups turned off (the pixels-only pass),
 and, with `--certify`, signs the result under the policy.
+
+The pixels-only pass decides the qualification when `app.surface` is
+`remote_display` or `unknown`: the workflow will run on a remote display
+viewed from outside the session, where Flow sees only pixels. Then the six
+cases run only once, with structure off. For any other surface the signed
+cases use structure and the pixels-only pass rate is printed for
+information. See
+[Lookup capabilities](SURFACES.md#lookup-capabilities-structure-or-pixels).
 
 ## verify.yaml
 
@@ -42,6 +51,9 @@ app:
   name: OpenEMR (local benchmark fixture)
   url: ${OPENEMR_UI_URL:-http://127.0.0.1:9301}
   version: "openemr@7c96c8eefe46"
+  # Where the workflow will run in production: local (default),
+  # remote_in_session, remote_display (pixels only) or unknown.
+  surface: local
   # Sign-in and fixture reset are app-specific; name a Python function.
   session: benchmark.openemr_local.qualify_hooks:open_session
   reset:
@@ -147,6 +159,10 @@ variable without a default is an error.
 runs/qual-1/
   bundle/                     the bundle, with the qualification project
   cases/<case>/trial-NN/      run report, screenshots, oracle.json
+  pixels-only/<case>/trial-NN/  the unsigned pixels-only pass (when the
+                              signed cases used structure)
+  qualification/lookup.json   the lookups the cases used, the surface, and
+                              the pixels-only pass rate
   qualification/result.json   openadapt.qualification-result/v1
   qualification/admission.local.json   the result bound into an admission
                               envelope (with --certify, 3+ trials per case)
@@ -219,6 +235,13 @@ certified bundle once, as the runner would, into `runs/qual-1/certified-run/`.
   A fault driver for pixel surfaces (Windows, RDP, Citrix) is the next piece;
   until it exists, `qualify` refuses `app.target` other than `web`. The two
   effect faults do not depend on the surface.
+- A web workflow can't yet be qualified for a remote-display surface. With
+  `app.surface: remote_display` the cases run with structure lookups off, and
+  the browser delivers a click only through an action bound to the page
+  element, so the first click that pixels found stops the trial. The
+  informational pixels-only pass on a `local` surface fails the same way
+  today. See
+  [Lookup capabilities](SURFACES.md#lookup-capabilities-structure-or-pixels).
 - Sign-in, reset and API sessions are often app-specific. They are Python
   hooks named in `verify.yaml`, not configuration.
 - The keys are local test keys. See

@@ -1653,6 +1653,7 @@ def compile_recording(
     target_surface: Optional[ExecutionTargetKind] = None,
     pixel_verify_enabled: bool = False,
     bind_effect_params: bool = False,
+    drop_redundant_keys: bool = False,
 ) -> Workflow:
     """Compile a recording directory into a workflow bundle.
 
@@ -1780,6 +1781,11 @@ def compile_recording(
             a pixel identifier crop as a step's only identity evidence only
             when that runtime can verify it (see
             :func:`openadapt_flow.runtime.identity.verifiable_identity_evidence`).
+        drop_redundant_keys: Let the fix-up passes drop a demonstrated Enter
+            after a ``<select>`` type and a Ctrl+A on a field that was empty
+            in the demonstration. Off by default: the TYPE read-back at replay
+            doesn't catch a wrong drop (see
+            :mod:`openadapt_flow.compiler.fixup_passes`).
 
     Returns:
         The compiled :class:`Workflow` (also saved to the bundle).
@@ -2735,6 +2741,7 @@ def compile_recording(
         phash_png=phash_png,
         surface=surface,
         pixel_verify_enabled=pixel_verify_enabled,
+        drop_redundant_keys=drop_redundant_keys,
     )
     for note in compile_notes:
         logger.info("compile-pass %s: %s", note["step"], note["change"])

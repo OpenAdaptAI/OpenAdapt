@@ -495,8 +495,9 @@ identity fails closed.
 This process must not be port-forwarded or exposed as an unauthenticated
 network service. An HTTP / Streamable-HTTP **listener** in this MIT package
 remains forbidden, including when `--authoring` is set. Hosted ChatGPT.com
-/ Claude.ai cannot talk to localhost. Send those tabs to
-https://openadapt.ai/start. They still can't click the user's GUI.
+/ Claude.ai cannot talk to localhost. Send those tabs to the job box at
+https://openadapt.ai/#job-box; its job page has **Connect this computer**,
+which gives the runner link. They still can't click the user's GUI.
 Pip users run `openadapt-agent
 authoring connect` — an **outbound** mailbox client (claim `oab_`, poll
 `wait_seconds: 0`, Allow-per-`sub`) copied from Desktop
