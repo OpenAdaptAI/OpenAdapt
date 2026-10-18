@@ -83,10 +83,18 @@ def pick_provider(requested: str) -> str:
     raise SystemExit("no provider key is set")
 
 
-def rerun(adapter: OpenAdaptGuiAdapter, task_id: str, tree: dict[str, str], root: Path, n: int, tag: str) -> list[dict[str, Any]]:
+def rerun(
+    adapter: OpenAdaptGuiAdapter,
+    task_id: str,
+    tree: dict[str, str],
+    root: Path,
+    n: int,
+    tag: str,
+    start: int = 1,
+) -> list[dict[str, Any]]:
     hdir = write_tree(GUI_SURFACE, tree, root / "harness") if tree else None
     out = []
-    for i in range(1, n + 1):
+    for i in range(start, start + n):
         rid = f"{tag}-{task_id.replace('/', '-')}-rerun{i}"
         rd = adapter.execute(task_id, hdir, rid)
         out.append({"run_id": rid, **(adapter.score(rd, task_id) or {})})
@@ -110,6 +118,12 @@ def main() -> int:
     ap.add_argument("--arms", default="base,harness2,harness2+readback")
     ap.add_argument("--out", type=Path, default=Path("runs/harness2_scorer"))
     ap.add_argument("--max-steps", type=int, default=14)
+    ap.add_argument(
+        "--more-reruns",
+        type=int,
+        default=0,
+        help="re-run each already chosen harness this many more times (reads --out)",
+    )
     args = ap.parse_args()
 
     if args.env_file:
@@ -150,6 +164,13 @@ def main() -> int:
         "arms": {},
     }
 
+    if args.more_reruns:
+        old = json.loads((out / "results.json").read_text(encoding="utf-8"))
+        results["arms"] = old["arms"]
+        results["started_at"] = old.get("started_at", results["started_at"])
+        results["more_reruns_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        results["spent_before_more_reruns_usd"] = old.get("spent_usd", 0.0)
+
     def save() -> None:
         results["spent_usd"] = round(ledger.spent_usd, 4)
         results["model_calls"] = ledger.calls
@@ -169,6 +190,24 @@ def main() -> int:
             arm_rows = results["arms"].setdefault(arm, {})
             for task in tasks:
                 if task.task_id in arm_rows and arm_rows[task.task_id].get("reruns"):
+                    if not args.more_reruns:
+                        continue
+                    row = arm_rows[task.task_id]
+                    done = len(row["reruns"])
+                    spent0 = ledger.spent_usd
+                    row["reruns"] += rerun(
+                        adapter,
+                        task.task_id,
+                        dict(row.get("chosen_tree") or {}),
+                        root / "reruns" / task.task_id.replace("/", "-"),
+                        args.more_reruns,
+                        arm.replace("+", "_"),
+                        start=done + 1,
+                    )
+                    row["usd"] = round(row.get("usd", 0.0) + ledger.spent_usd - spent0, 4)
+                    outcomes = [r.get("outcome") for r in row["reruns"]]
+                    print(f"[{arm}] {task.task_id}: more reruns -> {outcomes}", flush=True)
+                    save()
                     continue
                 spent0 = ledger.spent_usd
                 t0 = time.time()
