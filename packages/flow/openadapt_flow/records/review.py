@@ -272,7 +272,7 @@ class ReviewQueue:
                 raise ReviewError(f"not a valid {spec.kind} for {spec.name!r}")
         elif channel is not None or value is not None:
             raise ReviewError(f"{action} takes no channel or value")
-        unsigned = {
+        unsigned: dict[str, Any] = {
             "item_id": item.item_id,
             "item_sha256": item.sha256(),
             "action": action,
