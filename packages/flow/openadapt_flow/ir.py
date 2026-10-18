@@ -2042,6 +2042,14 @@ class Workflow(BaseModel):
     # None for every pre-qualification bundle and omitted from its serialized
     # bytes by ``_serialize_compatible`` below.
     qualification: Optional["QualificationProject"] = None
+    # Where the program came from, when that limits how it may run.
+    # ``"agent_run"``: compiled from a computer-use agent's run
+    # (:mod:`openadapt_flow.jit`). Such a bundle is a draft and runs only with
+    # a valid JIT admission (``jit.lifecycle.ensure_runnable``). It is part
+    # of the content digest, so removing it makes a different program that no
+    # review, canary or admission pins. None for every other bundle, and
+    # omitted from its serialized bytes.
+    origin: Optional[Literal["agent_run"]] = None
     # -- schema v2 integrity + provenance manifest --------------------------
     # Sealed on ``save`` (per-asset hashes, a whole-bundle content digest, the
     # compiler version, and -- for a certified bundle -- the certifying policy +
@@ -2073,6 +2081,8 @@ class Workflow(BaseModel):
             data.pop("execution_mode", None)
         if self.qualification is None:
             data.pop("qualification", None)
+        if self.origin is None:
+            data.pop("origin", None)
         return data
 
     # -- bundle I/O ---------------------------------------------------------
