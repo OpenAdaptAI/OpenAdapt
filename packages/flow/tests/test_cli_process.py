@@ -165,7 +165,7 @@ def test_process_run_defaults_to_governed_run(monkeypatch: pytest.MonkeyPatch) -
 def test_process_run_binds_execute_client_when_cloud_creds_present(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    pytest.importorskip("openadapt_flow.contracts")
+    pytest.importorskip("openadapt_types")
     monkeypatch.setenv("OPENADAPT_EXECUTE_URL", "https://app.openadapt.ai/api")
     monkeypatch.setenv("OPENADAPT_EXECUTE_TOKEN", "partner-token")
     monkeypatch.setenv("OPENADAPT_EXECUTE_ENVIRONMENT_ID", "environment_12345678")

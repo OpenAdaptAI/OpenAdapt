@@ -33,12 +33,13 @@ from openadapt_flow.interop.decision_relay_transport import (
 from openadapt_flow.runtime.durable.business_decision import BusinessDecisionStore
 
 if TYPE_CHECKING:
-    from openadapt_flow.contracts import (
+    from openadapt_types import (
         BusinessDecisionAnswerV1,
         BusinessDecisionDeliveryPolicyV1,
         BusinessDecisionPresentationV1,
         BusinessDecisionTaskV1,
     )
+
     from openadapt_flow.ir import Workflow
     from openadapt_flow.policy import Policy
 
@@ -140,7 +141,7 @@ def poll_business_decision_cloud_answer(
 ) -> Optional[BusinessDecisionCloudDelivery]:
     """Poll one runner queue without assuming which local task it names."""
 
-    from openadapt_flow.contracts import BusinessDecisionAnswerV1
+    from openadapt_types import BusinessDecisionAnswerV1
 
     if not 0 <= wait_s <= 25:
         raise BusinessDecisionCloudRefused("the answer poll wait is invalid")
@@ -218,7 +219,7 @@ def refuse_unmatched_business_decision_cloud_answer(
     It discloses no local task inventory and creates no resume authority.
     """
 
-    from openadapt_flow.contracts import (
+    from openadapt_types import (
         BusinessDecisionAnswerReceiptReason,
         BusinessDecisionAnswerReceiptState,
         sign_business_decision_answer_receipt_hmac,
@@ -565,7 +566,7 @@ def build_qualified_business_decision_cloud_relay(
     caller constructs a portable task or policy by hand.
     """
 
-    from openadapt_flow.contracts import (
+    from openadapt_types import (
         BusinessDecisionContextCardV1,
         BusinessDecisionContextKind,
         BusinessDecisionJudgmentReason,
@@ -575,6 +576,7 @@ def build_qualified_business_decision_cloud_relay(
         BusinessDecisionPresentationV1,
         sign_business_decision_delivery_policy_hmac,
     )
+
     from openadapt_flow.interop.business_decision import (
         business_decision_role_mapping_digest,
         project_portable_business_decision_task,

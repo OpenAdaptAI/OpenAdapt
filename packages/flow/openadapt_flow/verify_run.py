@@ -602,7 +602,7 @@ def verify_run(
     (mode 0600), so ``private_dir`` is required.
     """
 
-    from openadapt_flow.contracts.execute import (
+    from openadapt_types.execute import (
         EffectStrengthV1,
         ExecuteEvidenceContractV1,
         ExecuteEvidenceReceiptV1,
@@ -872,7 +872,7 @@ def write_result(result: Mapping[str, Any], out_dir: Path) -> Path:
 def receipt_problem(receipt: Mapping[str, Any]) -> Optional[str]:
     """None when the receipt meets the schema and the cross-field rules."""
 
-    from openadapt_flow.contracts.execute import (
+    from openadapt_types.execute import (
         EXECUTE_EVIDENCE_RECEIPT_SCHEMA,
         ExecuteEvidenceReceiptV1,
     )
@@ -990,7 +990,7 @@ def check_effect_receipt(
     missing signature is ``unsigned`` and is never a pass.
     """
 
-    from openadapt_flow.contracts.seal import parse_key_registry
+    from openadapt_types.seal import parse_key_registry
 
     receipt = document.get("receipt") if "receipt" in document else document
     result: dict[str, Any] = {"verified": False, "verified_outcome": False, "ok": False}

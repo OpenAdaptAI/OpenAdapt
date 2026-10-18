@@ -1,6 +1,6 @@
 """Universal action parser for DSL strings, JSON strings, and BenchmarkAction dicts.
 
-Converts multiple input formats into the canonical :class:`openadapt_flow.contracts.Action`
+Converts multiple input formats into the canonical :class:`openadapt_types.Action`
 model.  Every public function is safe to call with arbitrary input -- malformed
 data yields ``Action(type=ActionType.FAIL)`` with a logged warning instead of
 raising.
@@ -31,7 +31,7 @@ from typing import Any, Optional
 
 from pydantic import ValidationError
 
-from openadapt_flow.contracts.action import Action, ActionTarget, ActionType
+from openadapt_types.action import Action, ActionTarget, ActionType
 
 logger = logging.getLogger(__name__)
 

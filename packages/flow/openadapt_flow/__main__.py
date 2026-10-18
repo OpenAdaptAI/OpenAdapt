@@ -10260,7 +10260,7 @@ def _cmd_serve_execute(args: argparse.Namespace) -> int:
 
     missing = [
         name
-        for name in ("fastapi", "uvicorn", "openadapt_flow.contracts")
+        for name in ("fastapi", "uvicorn", "openadapt_types")
         if find_spec(name) is None
     ]
     if missing:
@@ -10302,7 +10302,7 @@ def _cmd_serve_reward(args: argparse.Namespace) -> int:
 
     missing = [
         name
-        for name in ("fastapi", "uvicorn", "openadapt_flow.contracts")
+        for name in ("fastapi", "uvicorn", "openadapt_types")
         if find_spec(name) is None
     ]
     if missing:

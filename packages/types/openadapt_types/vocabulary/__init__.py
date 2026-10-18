@@ -9,12 +9,12 @@ Two JSON files are the source of truth, so code in any language can read them:
     How every run outcome OpenAdapt emits maps to one plain result, whether
     anything may have changed, and whether a retry is safe.
 
-:mod:`openadapt_flow.contracts.plain_results` applies the outcome table in Python.
-:mod:`openadapt_flow.contracts.vocabulary.lint` checks user-facing text against the
+:mod:`openadapt_types.plain_results` applies the outcome table in Python.
+:mod:`openadapt_types.vocabulary.lint` checks user-facing text against the
 registry and needs only the standard library.
 """
 
-from openadapt_flow.contracts.vocabulary.lint import (
+from openadapt_types.vocabulary.lint import (
     LEVELS,
     REGISTRY_DIR,
     RESULTS,
