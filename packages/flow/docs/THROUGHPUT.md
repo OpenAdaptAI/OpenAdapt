@@ -98,6 +98,38 @@ starts.
   verify inline, because their terminal state is written once; the Standard
   and Regulated profiles are durable, so for them the window has no effect.
 
+## One entry, faster
+
+Every check still runs on every step. These changes only remove waiting
+and repeated work around them:
+
+| Change | What it saves | Tradeoff |
+| --- | --- | --- |
+| Scroll readiness asks the page first. While the DOM shows the next target exists but is still off-screen, the scroll keeps going without a full-frame OCR search. | About 1 s per scroll step on the referral (two OCR searches per scroll) | None found: "not ready" is the stricter answer; the target step still runs the full resolver. |
+| Text postconditions are confirmed from the page when the recorded text matches its letters and digits (OCR-recorded texts lose spaces and misread punctuation), and rendered text counts when hidden option lists interleave `textContent`. | One full-frame OCR per such check | A DOM miss still falls back to OCR. The DOM match is exact, so it remains stricter than the OCR check (80% contiguous match). |
+| Ordinary text fields get the text in one call (native fill: the field's `input` event fires, and `change` on blur) instead of one key event per character. Comboboxes, autocomplete and datalist fields, and any typing through the guarded keyboard path, still get every key. | About 50-150 ms per typed field | Apps that react to individual key presses in an ordinary text field won't see them. The input read-back after typing and the system-of-record read-back still check the value. Set `OPENADAPT_FLOW_NATIVE_FILL=0` to type every key. |
+| A structural lookup checks the element's box and frame chain once, after binding it, instead of before and after. | Two browser round trips per lookup | None: the remaining check is the same test, later. |
+| `runtime.page_quiet_ms` sets how long a page must be quiet before a step counts as settled (default 100 ms). | Up to 50 ms per step; see [Measured results](#measured-results) for the 50 ms arm | Less time for the app to start reacting before the next check. Reactions that start later are still caught by postconditions, identity checks and the read-back, but as a halt rather than a wait. Applies to the whole process. |
+| `OPENADAPT_FLOW_OCR_THREADS` caps the OCR engine's threads. | CPU oversubscription when several workers run OCR at once | None for one worker; leave it unset there. |
+
+What was left alone: the guarded click (it re-checks the bound element,
+frame chain and context around Playwright's actionability trial), the
+identity checks, the input read-back, and the system-of-record read-back.
+Those are the checks.
+
+Every step in `report.json` now records where its time went, as `timings`:
+milliseconds of exclusive time for `settle_before`, `screenshot`, `resolve`,
+`identity`, `ocr`, `actuate`, `settle_after`, `postcondition`, `readback`,
+`artifact_write` and `other`. They add up to the step's `elapsed_ms`.
+
+## Worker processes
+
+`--workers` runs its workers as threads in one process. Browser automation
+makes many small calls per step, so on a busy machine workers can wait on each
+other inside one Python interpreter. The library's `ProcessWorker`
+(`runtime/worklist_pool.py`) runs each worker in its own process with the same
+queue and stop flag; the benchmark uses it for 4 and 8 workers.
+
 ## Remote desktop
 
 On RDP, `--workers` uses the FreeRDP session pool
