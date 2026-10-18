@@ -639,8 +639,10 @@ class Replayer:
             :mod:`openadapt_flow.jit`): a person's name, or a registered
             ``openadapt_flow.jit.authority.Principal`` (an admitter key, or an
             agent under a valid signed admission policy). None (default): a bundle
-            carrying ``jit_draft.json`` runs only with a valid admission, and
-            :meth:`run` raises ``DraftNotAdmitted`` otherwise.
+            compiled from an agent run (``Workflow.origin``) runs only with a
+            valid admission, on the origin its canary ran on and with an
+            independent read-back from ``effect_verifier``; :meth:`run` raises
+            ``DraftNotAdmitted`` otherwise.
         draft_key_dir: Where the JIT admission key lives, for that check.
             None uses ``$OPENADAPT_JIT_KEY_DIR`` or ``~/.openadapt/jit``.
     """
@@ -1360,13 +1362,18 @@ class Replayer:
             raise ValueError(campaign_refusal)
         if bundle_dir is not None:
             # Every execution path runs through here, so a JIT draft with no
-            # valid admission is refused before any action.
+            # valid admission, or an admitted one run on another app or
+            # without its independent read-back, is refused before any action.
             from openadapt_flow.jit.lifecycle import ensure_runnable
 
             ensure_runnable(
                 bundle_dir,
+                workflow=workflow,
                 attended_by=self._attended_draft_by,
                 key_dir=self._draft_key_dir,
+                execution_origin=execution_origin,
+                effect_verifier=self.effect_verifier,
+                at_run=True,
             )
         bundle_dir = Path(bundle_dir)
         run_dir = Path(run_dir)

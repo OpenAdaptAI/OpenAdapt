@@ -457,8 +457,8 @@
       "provenance": {
         "repository": "OpenAdaptAI/openadapt-privacy",
         "release_ref": "v1.1.2",
-        "commit": "52bfbba842c44e26a5a986a68ead3b09cd91f5cb",
-        "tree": "b32df21e02c9b70b4c33fc28a8ea7293de130f55",
+        "commit": "9ae96d8ed73ea5b9e445d0604b5db48788936a04",
+        "tree": "fe59ca5f04fc99d16424e9228dcd797b05115cb8",
         "url": "https://github.com/OpenAdaptAI/openadapt-privacy/tree/v1.1.2"
       },
       "artifacts": [

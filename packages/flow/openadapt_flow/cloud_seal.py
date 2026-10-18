@@ -25,6 +25,9 @@ Configuration (or the matching keyword arguments):
 * ``OPENADAPT_CLOUD_EXECUTION_ID`` - the Cloud execution this run belongs to.
 * ``OPENADAPT_EXECUTE_API_KEY`` - an Execute API key for that org.
 * ``OPENADAPT_CLOUD_URL`` - default ``https://app.openadapt.ai``.
+
+In strict no-outbound mode (``OPENADAPT_NO_OUTBOUND=1``) nothing is fetched
+and the result is ``no_outbound``.
 """
 
 from __future__ import annotations
@@ -187,6 +190,12 @@ def attach_from_cloud(
 ) -> AttachResult:
     """Fetch and attach the Seal for a connected, VERIFIED run. Never raises."""
     env = os.environ if env is None else env
+    from openadapt_flow import no_outbound
+
+    if no_outbound.enabled(env):
+        # Strict no-outbound mode: Cloud is never contacted. The run keeps
+        # its offline Seal (openadapt_flow.offline_seal).
+        return AttachResult(False, "no_outbound", execution_id)
     execution_id = (execution_id or env.get("OPENADAPT_CLOUD_EXECUTION_ID", "")).strip()
     if not execution_id:
         return AttachResult(False, "not_connected")
