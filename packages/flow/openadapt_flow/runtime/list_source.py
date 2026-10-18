@@ -23,6 +23,8 @@ Rules:
 - Caps on pages and rows halt the run. The list is never silently cut short.
 - Searches that the application caps (for example "first 1,000 results")
   are split by :func:`partition_search` until every part is under the cap.
+  A part that is truncated when walked, or whose reported count differs
+  from the rows read, halts.
 
 Every stop that is not a clean end raises :class:`ListHalt` with a reason a
 person can act on. Nothing here calls a model.
@@ -57,6 +59,8 @@ HaltReason = Literal[
     "row_cap_reached",
     "partition_unsplittable",
     "partition_cap_reached",
+    "partition_truncated",
+    "partition_count_mismatch",
     "pager_stalled",
 ]
 
