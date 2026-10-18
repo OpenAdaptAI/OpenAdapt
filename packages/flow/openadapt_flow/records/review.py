@@ -20,8 +20,8 @@ refused. Rules the queue enforces:
 - the reviewer is a person (``person:`` principal). A model or agent
   principal cannot decide;
 - the reviewer is not the principal that created the item (no self-approval);
-- a settled value keeps the grade its reads support. A person's choice does
-  not make a value ``verified``; only an independent read does.
+- a settled value keeps the grade its reads support. A person's choice is
+  not a read, so it never raises the grade.
 
 Storage is a directory, ``items/<id>.json`` and ``decisions/<id>.json``, so
 it works offline and on a shared drive. No network or model calls.

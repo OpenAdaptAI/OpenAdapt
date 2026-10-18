@@ -79,7 +79,7 @@ def test_person_accepts_a_read_and_it_is_signed(tmp_path) -> None:
     settled = apply_decision(_record().fields[1], decision)
     assert settled is not None
     assert settled.value == "1234.5"
-    assert settled.grade == "unconfirmed"  # a person's choice is not a read
+    assert settled.grade == "unchecked"  # a person's choice is not a read
     assert settled.review_decision == item.item_id
     assert not settled.needs_review
 

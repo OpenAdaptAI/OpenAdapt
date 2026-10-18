@@ -310,9 +310,15 @@ def resolve_attention(
     return path, item
 
 
-def notification(items: list[AttentionItem]) -> AttentionNotification:
-    """Build the only payload an OS notification integration should render."""
-    count = len(items)
+def notification(
+    items: list[AttentionItem], service_notices: int = 0
+) -> AttentionNotification:
+    """Build the only payload an OS notification integration should render.
+
+    ``service_notices`` counts open on-prem service notices (for example, the
+    machine restarted and is waiting for a sign-in). They carry no run data.
+    """
+    count = len(items) + max(0, int(service_notices))
     noun = "item needs" if count == 1 else "items need"
     return AttentionNotification(
         body=f"{count} {noun} review on this computer.",
