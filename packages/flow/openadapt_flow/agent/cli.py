@@ -27,7 +27,7 @@ import os
 import shlex
 import sys
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 
 from openadapt_flow.agent import __version__
 from openadapt_flow.agent.contract import APPROVAL_MODES
@@ -240,6 +240,31 @@ def build_parser() -> argparse.ArgumentParser:
             "for that approval reports needs_review. not_gated turns the pause "
             "off for every run this server starts, and each run's result and "
             "Flow's report record that. Callers can't change it."
+        ),
+    )
+    p.add_argument(
+        "--admissions",
+        default=None,
+        metavar="DIR",
+        help=(
+            "Add prepare_admission, list_admissions and decide_admission: the "
+            "`openadapt-flow admit` command over recordings in DIR/recordings "
+            "and shadow candidates in DIR/shadow-candidates. A person decides "
+            "in the client's form, or, with --delegate-approvals, the agent "
+            "decides as that approver. An agent can't decide an admission it "
+            "prepared."
+        ),
+    )
+    p.add_argument(
+        "--approver-grant",
+        default=None,
+        metavar="FILE",
+        help=(
+            "With --admissions and --delegate-approvals: the approver grant a "
+            "person signed (openadapt-flow approver-grant sign) that lets "
+            "AGENT_ID decide admissions. It must name AGENT_ID, cover the "
+            "workflow and let an agent approve saves; Flow verifies it on "
+            "every decision. Without it only a person decides."
         ),
     )
     p.add_argument(
@@ -554,6 +579,14 @@ def _cmd_serve(args: argparse.Namespace) -> int:
                 file=sys.stderr,
             )
             return 2
+    if getattr(args, "approver_grant", None) is not None and (
+        args.delegate_approvals is None or getattr(args, "admissions", None) is None
+    ):
+        print(
+            "serve: --approver-grant needs --admissions and --delegate-approvals",
+            file=sys.stderr,
+        )
+        return 2
     if args.delegate_approvals is not None:
         import re as _re
 
@@ -721,6 +754,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
                 allow_recorded_defaults=args.allow_synthetic_recorded_defaults,
                 mode=mode,
                 repair_desk=_repair_desk(args, runner_config.runs_dir),
+                admission_desk=_admission_desk(args),
             )
             n = len(bridge.workflows)
             print(
@@ -794,6 +828,19 @@ def _cmd_emit_skill(args: argparse.Namespace) -> int:
         return 2
     print(f"Wrote Agent Skill folder: {skill_dir}")
     return 0
+
+
+def _admission_desk(args: argparse.Namespace) -> Optional[Any]:
+    """The admission tools, only when the operator passed ``--admissions``."""
+    if getattr(args, "admissions", None) is None:
+        return None
+    from openadapt_flow.agent.admission import AdmissionDesk
+
+    return AdmissionDesk(
+        args.admissions,
+        delegate_id=args.delegate_approvals,
+        approver_grant=getattr(args, "approver_grant", None),
+    )
 
 
 def _repair_desk(args: argparse.Namespace, runs_dir: Path):
