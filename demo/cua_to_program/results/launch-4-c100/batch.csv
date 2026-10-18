@@ -10,3 +10,5 @@ record,attempt,claim_no,insurance_no,ui_changed,outcome,success,model_calls,wall
 9,1,CP009,999000109,False,COMPLETED_UNVERIFIED,True,0,42.807,10.781,31.3,1,True,4/4 confirmed,,,,out/runs/launch-4-c100/record-009-1,1792353721.335,462.8
 10,1,CP010,999000110,False,COMPLETED_UNVERIFIED,True,0,38.791,8.772,29.403,1,True,4/4 confirmed,,,,out/runs/launch-4-c100/record-010-1,1792353764.282,532.9
 11,1,CP011,999000101,False,COMPLETED_UNVERIFIED,True,0,41.008,25.044,15.189,1,True,4/4 confirmed,,,,out/runs/launch-4-c100/record-011-1,1792353803.183,468.7
+12,1,CP012,999000102,False,COMPLETED_UNVERIFIED,True,0,19.847,6.728,12.525,1,True,4/4 confirmed,,,,out/runs/launch-4-c100/record-012-1,1792353844.264,398.8
+13,1,CP013,999000103,False,COMPLETED_UNVERIFIED,True,0,26.246,6.194,19.509,1,True,4/4 confirmed,,,,out/runs/launch-4-c100/record-013-1,1792353864.18,359.0

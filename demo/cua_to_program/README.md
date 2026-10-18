@@ -11,6 +11,48 @@ refuses these openIMIS forms today (reasons below), so the program runs under
 the demo profile with a system-of-record check attached. Every number here is
 measured on one Mac and is in `results/`. All data is synthetic.
 
+## Results (run `launch-4`, 2026-10-18)
+
+Every number below is in `results/launch-4/` (`agent_ledger.json`,
+`agent_run.json`, `batch.csv`, `summary.json`). **All times were measured on a
+shared host under heavy load** (1-minute load average 59 to 620 on 12 cores
+during the batch). They are not a timing benchmark. Timed runs belong to the
+scoreboard (`packages/flow/benchmark/scoreboard`), which times only at load 12
+or under.
+
+| | Agent (once) | Compiled program |
+|---|---|---|
+| Model | `claude-opus-5-5`, `computer_toolset_20260801` | none |
+| Time | 44.75 s (first model call to final answer) | median 14.38 s per saved claim (p10 12.39, p90 24.59; n=49), sign-in excluded |
+| Model calls | 8 | 0 |
+| Cost (list price) | $0.1176 | $0 |
+| Save read back from the database | no; correct when we read it afterwards | 49 of 50 claims saved and confirmed (4 of 4 checks each), all on the first attempt |
+| After the UI change (claim 50) | not run | stopped before saving on 3 of 3 attempts; nothing written |
+
+- **Claim 50:** a script relabels the icon-only Save button as "Save claim".
+  The program can't find the Save it learned, so it stops before saving. The
+  batch then pauses: claims 51 to 100 wait for a person (`paused.json`).
+  Self-repair (#1265) would propose the fix for a one-tap approval, but it
+  wasn't merged when this ran, so the video says "sent to a person".
+- **Correctness batch (`results/launch-4-c100/`):** 100 claims with no UI
+  change, same program and engine.
+- **Engine:** origin/main ccb0fe06 with #1293 merged in locally (commit
+  a8cca993, recorded in `batch_meta.json`). #1293 makes the program look once
+  more when a list re-renders under a slow lookup. On main without it, the
+  program halted at step 11 on most claims at this load (see the pilots).
+- **Pilots, kept as measured:**
+  - `pilot-without-readiness-gate.csv`: main, 7 claims.
+  - `pilot-high-load.csv`, `pilot-high-load-2.csv`: main, every attempt halted
+    at step 11.
+
+### Videos
+
+- `results/launch-4/cua-to-program-full.mp4`: 83.9 s, 1920x1080.
+- `results/launch-4/cua-to-program-social.mp4`: 19.6 s.
+
+Both are rendered by `render.py` from the screen recordings and the measured
+counters above. Stretches that are sped up are labelled with their speed.
+
 ## Reproduce
 
 ```bash
@@ -40,7 +82,7 @@ about 10 GB of free disk.
 ## The record check
 
 After the save, the program reads the claims table as a read-only role
-(`openimis_app.CLAIMS_SQL`) and requires all of the following:
+(`scoreboard/tasks/openimis.py`, `CLAIMS_SQL`) and requires all of the following:
 
 - exactly one claim with this run's claim number, insurance number and
   explanation, in status Entered (2), at facility VIHOS001, with diagnosis A389;
@@ -65,10 +107,10 @@ Along the way we also found and fixed or split out these engine gaps:
 | A mined record check matched every earlier record with the same constant fields, so it refuted every claim after the first | Fixed here: confirmed parameters join the selector (`effect_mining.py`, tests) |
 | The run gate ignored a submit binding as the identity of an icon-only Save | Follow-up PR #1274 (draft, needs safety review) |
 | Guarded focusing clicks refused id-less fields on new-record forms | Follow-up PR #1275 (draft, needs safety review) |
-| The service option list closes before the DOM identity probe, so the program halts at step 11 on part of the claims | Open; the halt is correct, and the fix is to wait for the list to stay open |
+| The service option list re-renders between the screenshot and the DOM identity probe, so the program halted at step 11 on most claims under load | PR #1293: look once more only when the screen was still changing; act only if identity then verifies (reviewed; CI pending) |
 | Parameter hygiene misses a parameter value that OCR misreads (`0` read as `O`), which compiles into an on-screen check | Open |
 | Postconditions get compiled from transient screens (`Loading...`, text read mid-typing) | Open; `capture_settle_timeout_s` reduces it |
-| A fetch cut off by a page navigation never finishes in Playwright, so page quiescence waits forever | Worked around in `openimis_app.setup`; open in the engine |
+| A fetch cut off by a page navigation never finishes in Playwright, so page quiescence waits forever | Worked around in `scoreboard/tasks/openimis.py` (`setup`); open in the engine |
 
 ## Files
 
