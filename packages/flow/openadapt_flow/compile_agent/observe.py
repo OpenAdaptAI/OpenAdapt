@@ -143,7 +143,13 @@ _OBSERVE_JS = (
 
 _DESCRIBE_JS = """
 function oaDescribe(c, interactive, scopeSel) {
-  var scope = c.closest(scopeSel) || document.body;
+  var scope = c.closest(scopeSel);
+  // A table row with many controls is page layout, not a record row: the
+  // scope is the form or section around it.
+  while (scope && scope.matches('tr, [role=row]') &&
+         scope.querySelectorAll('input, select, textarea, button').length > 8)
+    scope = scope.parentElement && scope.parentElement.closest(scopeSel);
+  scope = scope || document.body;
   return {tag: c.tagName.toLowerCase(), type: c.type || '', name: oaName(c),
           role: c.getAttribute('role') || '', interactive: interactive,
           editable: c.isContentEditable || c.tagName === 'TEXTAREA' ||
