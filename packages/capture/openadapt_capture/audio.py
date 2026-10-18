@@ -56,6 +56,13 @@ def _import_audio_deps() -> None:
                 "Recording audio needs the audio extra. Install it with: "
                 "pip install 'openadapt-capture[audio]'"
             ) from e
+        except OSError as e:
+            # sounddevice loads the PortAudio system library at import.
+            raise ImportError(
+                "Recording audio needs the PortAudio library. Install it with "
+                "your package manager (for example libportaudio2 on Debian and "
+                f"Ubuntu, or portaudio with Homebrew): {e}"
+            ) from e
 
 
 def require_audio_dependencies() -> None:

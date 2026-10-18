@@ -877,6 +877,18 @@ def collect_stats(performance_snapshots: list[tracemalloc.Snapshot]) -> None:
     performance_snapshots.append(tracemalloc.take_snapshot())
 
 
+def _require_pympler() -> type["SummaryTracker"]:
+    """Return Pympler's SummaryTracker, or name the extra that provides it."""
+    try:
+        from pympler.tracker import SummaryTracker
+    except ImportError as exc:
+        raise ImportError(
+            "log_memory needs Pympler. Install it with: "
+            "pip install 'openadapt-capture[profile]'"
+        ) from exc
+    return SummaryTracker
+
+
 def log_memory_usage(
     tracker: "SummaryTracker",
     performance_snapshots: list[tracemalloc.Snapshot],
@@ -2892,6 +2904,9 @@ def record(
         config.RECORD_VIDEO,
         config.RECORD_IMAGES,
     )
+    if log_memory:
+        # Refuse before the capture database or any worker exists.
+        _require_pympler()
     # Refuse before touching the display or starting any worker. Capture never
     # downloads or bundles FFmpeg; Desktop/standalone provisioning owns it.
     video_provision = None
@@ -3332,14 +3347,7 @@ def record(
 
         if log_memory:
             performance_snapshots = []
-            try:
-                from pympler.tracker import SummaryTracker
-            except ImportError as exc:
-                raise ImportError(
-                    "log_memory needs Pympler. Install it with: "
-                    "pip install 'openadapt-capture[profile]'"
-                ) from exc
-            _tracker = SummaryTracker()
+            _tracker = _require_pympler()()
             tracemalloc.start()
             collect_stats(performance_snapshots)
 

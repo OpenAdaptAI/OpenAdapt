@@ -148,3 +148,44 @@ print("CORE_RECORDER_OK")
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
     assert "CORE_RECORDER_OK" in result.stdout
+
+
+def test_log_memory_without_pympler_refuses_before_creating_a_capture(
+    monkeypatch, tmp_path
+) -> None:
+    """A missing [profile] extra must not leave a half-started recording."""
+    import pytest
+
+    from openadapt_capture import recorder
+
+    monkeypatch.setitem(sys.modules, "pympler", None)
+    monkeypatch.setitem(sys.modules, "pympler.tracker", None)
+
+    def must_not_run(*args, **kwargs):
+        raise AssertionError("create_recording ran before the Pympler check")
+
+    monkeypatch.setattr(recorder, "create_recording", must_not_run)
+    with pytest.raises(ImportError, match=r"openadapt-capture\[profile\]"):
+        recorder.record("task", str(tmp_path / "capture"), log_memory=True)
+    assert not (tmp_path / "capture").exists()
+
+
+def test_missing_portaudio_gives_the_install_hint(monkeypatch) -> None:
+    """sounddevice raises OSError without PortAudio; report it like a missing extra."""
+    import importlib.abc
+
+    import pytest
+
+    from openadapt_capture import audio
+
+    class NoPortAudio(importlib.abc.MetaPathFinder):
+        def find_spec(self, fullname, path=None, target=None):
+            if fullname == "sounddevice":
+                raise OSError("PortAudio library not found")
+            return None
+
+    monkeypatch.delitem(sys.modules, "sounddevice", raising=False)
+    monkeypatch.setattr(audio, "_sounddevice", None)
+    monkeypatch.setattr(sys, "meta_path", [NoPortAudio(), *sys.meta_path])
+    with pytest.raises(ImportError, match="PortAudio"):
+        audio.require_audio_dependencies()
