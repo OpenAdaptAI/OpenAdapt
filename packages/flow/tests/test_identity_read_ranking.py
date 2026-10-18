@@ -11,7 +11,10 @@ from types import SimpleNamespace
 
 import pytest
 
-from openadapt_flow.runtime.replayer import better_identity_read
+from openadapt_flow.runtime.replayer import (
+    better_identity_read,
+    identity_read_contradicts,
+)
 
 
 def _read(status: str, coverage: float = 1.0) -> SimpleNamespace:
@@ -40,3 +43,35 @@ def test_ties_go_to_the_read_that_covered_more() -> None:
     first, retry = _read("abstain", 0.4), _read("abstain", 0.9)
     assert better_identity_read(first, retry) is retry
     assert better_identity_read(retry, first) is retry
+
+
+RECORDED = "MG367459 Sorensen, Philip 1957-10-28 M Active"
+
+
+def _check(observed: str):
+    from openadapt_flow.runtime import identity
+
+    check = identity.verify_target_identity(RECORDED, observed)
+    assert check.observed == observed
+    return check
+
+
+def test_a_read_of_a_sibling_record_contradicts_and_is_final() -> None:
+    sibling = _check("MG619501 Sorenson, Philip 1957-10-28")
+    assert sibling.status == "mismatch" and identity_read_contradicts(sibling)
+    assert better_identity_read(sibling, _check(RECORDED)) is sibling
+
+
+def test_an_incomplete_read_of_the_right_record_can_be_rescued() -> None:
+    """Columns cut off are not evidence of another record, so the re-read may
+    still confirm it; refusing here only added false stops."""
+    short = _check("MG367459 Sorensen, Philip 1957-10-28")
+    assert short.status == "mismatch" and not identity_read_contradicts(short)
+    full = _check(RECORDED)
+    assert better_identity_read(short, full) is full
+
+
+def test_an_incomplete_read_then_a_sibling_read_stays_refused() -> None:
+    short = _check("Sorensen, Philip 1957-10-28")
+    sibling = _check("MG619501 Sorenson, Philip 1957-10-28")
+    assert better_identity_read(short, sibling) is sibling
