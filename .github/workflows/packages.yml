@@ -52,6 +52,7 @@ jobs:
       types: ${{ steps.classify.outputs.types }}
       agent: ${{ steps.classify.outputs.agent }}
       capture: ${{ steps.classify.outputs.capture }}
+      weight: ${{ steps.classify.outputs.weight }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -65,7 +66,7 @@ jobs:
         run: |
           set -euo pipefail
           all() {
-            for pkg in flow types agent capture; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
+            for pkg in flow types agent capture weight; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
             exit 0
           }
           case "$EVENT_NAME" in
@@ -91,11 +92,15 @@ jobs:
           types="$(hit "^packages/(types|flow)/|$wf")"
           agent="$(hit "^packages/(agent|flow)/|$wf")"
           capture="$(hit "^packages/capture/|$wf")"
+          # Any package's metadata, or the launcher's, can change what an
+          # install pulls in.
+          weight="$(hit "^packages/|^pyproject\.toml$|^openadapt/|^hatch_build\.py$|^scripts/install_weight/|$wf")"
           {
             echo "flow=$flow"
             echo "types=$types"
             echo "agent=$agent"
             echo "capture=$capture"
+            echo "weight=$weight"
           } | tee -a "$GITHUB_OUTPUT"
 
   types:
@@ -538,6 +543,55 @@ jobs:
           uv run --no-sync python scripts/verify_distribution.py dist/*
           uv run --no-sync python scripts/check_source_boundary.py --require-dist
 
+  install-weight:
+    # Each package is published on its own and must stay cheap to install:
+    # build every in-tree wheel, install each one alone, and fail on a
+    # distribution outside its allow list, a forbidden one (privacy never
+    # pulls Flow, Desktop, OpenCV, onnxruntime or torch), or a size budget.
+    # Budgets: scripts/install_weight/budgets.json. Numbers and how to change
+    # a budget: docs/monorepo/INSTALL_WEIGHT.md.
+    name: install weight (each package alone)
+    needs: scope
+    if: needs.scope.outputs.weight == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+        with:
+          version: "0.11.29"
+      - name: Set up Python 3.12
+        run: uv python install 3.12
+      - name: Build each package, install it alone, enforce its budget
+        run: >-
+          uv run --no-project --python 3.12
+          scripts/install_weight/weigh.py check --json install-weight.json
+      - name: Keep the measurements
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: install-weight
+          path: install-weight.json
+          if-no-files-found: ignore
+
+  capture-core-record:
+    # A plain `capture record` and `capture info` must work without any extra.
+    # The script pip-installs the package with no extras in a container, records
+    # a real click and typed text under Xvfb, and reads them back.
+    name: capture record and read without extras (Linux, Xvfb)
+    needs: scope
+    if: needs.scope.outputs.capture == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Record and read with the core-only install
+        run: CONTAINER_ENGINE=docker bash packages/capture/scripts/linux_xvfb_quickstart.sh
+
   packages-gate:
     name: packages-gate
     needs:
@@ -551,6 +605,8 @@ jobs:
       - capture-macos
       - capture-windows
       - capture-contract
+      - install-weight
+      - capture-core-record
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
