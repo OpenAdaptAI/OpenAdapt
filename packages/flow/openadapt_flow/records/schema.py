@@ -310,6 +310,10 @@ class FieldRead(BaseModel):
     seal: Optional[SealRef] = None
     needs_review: bool = False
     review_reason: Optional[str] = None
+    review_decision: Optional[str] = Field(
+        default=None,
+        description="Id of the signed review decision that settled this value.",
+    )
 
     @model_validator(mode="after")
     def _grade_matches_reads(self) -> "FieldRead":
