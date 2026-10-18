@@ -1,9 +1,9 @@
-# On-prem (air-gapped) clinic deployment
+# On-prem (air-gapped) deployment
 
-The deployable form the first healthcare pilot needs: a regulated clinic — e.g.
-a Canadian family practice on Accuro over Citrix, under PHIPA — installs
-openadapt-flow on **their own** machine so that **PHI never leaves their network
-and nothing phones home**. This page is the architecture and the install story.
+A regulated organization, such as a medical practice whose records application
+runs over Citrix or RDP, installs openadapt-flow on **its own** machine so that
+**PHI never leaves its network and nothing phones home**. This page is the
+architecture and the install story.
 The runnable scaffold is in [`deploy/on-prem/`](../deploy/on-prem/); the
 compliance posture is in
 [`deploy/on-prem/COMPLIANCE.md`](../deploy/on-prem/COMPLIANCE.md).
@@ -12,13 +12,13 @@ compliance posture is in
 > **no** account, telemetry, public cloud model, or hosted-execution dependency
 > in this lane. If a step here would require an internet call, it is wrong.
 
-## What runs on the clinic machine
+## What runs on the site host
 
-One clinic host (a server or a workstation next to the Citrix client) runs the
+One host (a server or a workstation next to the Citrix client) runs the
 whole stack locally:
 
 ```
-  Clinic host (offline; site firewall denies egress)
+  Site host (offline; site firewall denies egress)
   ┌──────────────────────────────────────────────────────────────────┐
   │  jobs/inbox/*.job  ──►  run-queue.sh  ──►  openadapt-flow run      │
   │   (operator drops        (LOCAL queue,      (THE ENGINE:           │
@@ -29,11 +29,11 @@ whole stack locally:
   │        │                     │                    │                 │
   │        │                     ▼                    ▼ drives GUI       │
   │        │              audit/audit.log      Citrix/RDP/Windows        │
-  │        │              (append-only,        session (Accuro) on LAN   │
+  │        │              (append-only,        session on the LAN        │
   │        │               PHI-free,                 │                   │
   │        │               hash-chained)             ▼                   │
   │        │                     │            effects verifier →         │
-  │        │                     │            local EMR API/DB/FHIR      │
+  │        │                     │            local records API/DB/FHIR  │
   │        │                     ▼                                       │
   │        └────────►  runs/<id>/{report.json, REPORT.md,               │
   │                              checkpoints/, templates/*.png}          │
@@ -60,7 +60,7 @@ Components, and how each maps to what already ships in this repo:
 
 ## "Nothing leaves your network" — concrete and verifiable
 
-The air-gap is enforced by the clinic firewall; openadapt-flow's job is to (a)
+The air-gap is enforced by the site firewall; openadapt-flow's job is to (a)
 need no egress and (b) let an operator *prove* it. Four defence-in-depth layers:
 
 1. **No egress by default in the software.** The engine is deterministic and
@@ -144,26 +144,26 @@ WORM store — the hash chain is tamper-*evidence*, not tamper-*proof*.
 
 ## Where the automation sits relative to the Citrix client
 
-The engine drives the target application through its configured backend. In a
-Citrix/Accuro clinic the automation process runs **on the clinic host inside the
-clinic network**, and reaches the application over the LAN via the RDP/pixel or
-Windows backend (`docs/backends/RDP.md`, the `windows`/`rdp` extras) — the same
-path a clinician's session already uses. The runner needs LAN reachability to
-the Citrix/RDP endpoint and to the local EMR's system-of-record API (for effect
+The engine drives the target application through its configured backend. When
+the application is published over Citrix, the automation process runs **on the
+site host inside the site network**, and reaches the application over the LAN
+via the RDP/pixel or Windows backend (`docs/backends/RDP.md`, the `windows`/`rdp` extras) — the same
+path a user's session already uses. The runner needs LAN reachability to
+the Citrix/RDP endpoint and to the application's system-of-record API (for effect
 verification), and **nothing beyond the LAN**. No component sits between the
-clinic and the internet. On pure-pixel Citrix/RDP substrates the identity ladder
+site and the internet. On pure-pixel Citrix/RDP substrates the identity ladder
 falls back from DOM/a11y structured text to the pixel/OCR tiers — read
 `docs/LIMITS.md` for the wrong-patient guarantees and their availability cost on
 that substrate before relying on it.
 
 ## Offline updates (operator-pulled, signed — never phoned)
 
-The clinic **never** auto-updates over the internet. Updates are prepared
+The site **never** auto-updates over the internet. Updates are prepared
 out-of-band and pulled in by the operator:
 
 1. An engineer builds a signed release (engine wheels / bundle) on a connected
    host and produces a **detached signature**.
-2. The operator copies the archive + signature onto the clinic host on removable
+2. The operator copies the archive + signature onto the site host on removable
    media, and points `onprem.yaml:updates` at them.
 3. `install.sh --update` verifies the signature against the **pinned vendor
    public key** in `keys/`, installs into a fresh blue/green venv, runs the
@@ -195,7 +195,7 @@ Containers instead of systemd: `docker compose -f docker-compose.yml config`
 [`deploy/on-prem/UPDATE.md`](../deploy/on-prem/UPDATE.md) for the runnable
 package and update/rollback runbook, and
 [`deploy/on-prem/COMPLIANCE.md`](../deploy/on-prem/COMPLIANCE.md) for the
-PHIPA/HIPAA-adjacent posture and boundaries.
+regulatory posture and boundaries.
 
 ## Unattended service on macOS
 
