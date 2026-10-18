@@ -18,10 +18,11 @@ the read-back contract, the same shape ``verify-run`` reads:
   expands to that list (record fields from inputs, the selecting fields, the
   duplicate key). With neither, the effects the compiler mined from the
   demonstration are used;
-- ``minimum_readback``: the read-back ladder rung the verifier must reach,
-  ``R1``, ``R2`` or ``R3`` (:mod:`openadapt_flow.readback_ladder`). The older
+- ``minimum_readback``: the check level the verifier must reach,
+  ``system_of_record`` or ``separate_session``
+  (:mod:`openadapt_flow.readback_ladder`). The older
   ``minimum_effect_strength`` (``independent_system_of_record``, the default,
-  or ``independent_session``) is an alias; give one or the other;
+  or ``independent_session``) means the same; give one or the other;
 - ``qualification_id`` / ``environment_id``: optional opaque ids.
 
 Qualify adds what a campaign needs on top:
@@ -280,11 +281,11 @@ class VerifyConfig(BaseModel):
     qualification_id: Optional[str] = Field(default=None, pattern=_OPAQUE)
     environment_id: Optional[str] = Field(default=None, pattern=_OPAQUE)
     minimum_effect_strength: EffectStrength = "independent_system_of_record"
-    #: The read-back ladder rung the verifier must reach (``R1``, ``R2`` or
-    #: ``R3``; :mod:`openadapt_flow.readback_ladder`). Written to the
-    #: qualified workflow, so runs enforce the same minimum. Replaces
+    #: The check level the verifier must reach (``separate_session`` or
+    #: ``system_of_record``; :mod:`openadapt_flow.readback_ladder`). Written
+    #: to the qualified workflow, so runs enforce the same minimum. Replaces
     #: ``minimum_effect_strength``, which stays as an alias; give one, not both.
-    minimum_readback: Optional[Literal["R1", "R2", "R3"]] = None
+    minimum_readback: Optional[Literal["separate_session", "system_of_record"]] = None
     verifier: SystemOfRecordConfig
     effects: Optional[list[Effect]] = None
     app: AppConfig

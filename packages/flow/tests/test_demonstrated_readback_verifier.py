@@ -240,8 +240,12 @@ class ScreenBackend:
 
 
 def _ocr_showing(text, confidence=0.95):
+    # One line across the whole screen: it is also the label under every
+    # click, which the read-only guard reads before clicking.
     return SimpleNamespace(
-        ocr=lambda png, region=None: [SimpleNamespace(text=text, confidence=confidence)]
+        ocr=lambda png, region=None: [
+            SimpleNamespace(text=text, confidence=confidence, region=(0, 0, 400, 300))
+        ]
     )
 
 

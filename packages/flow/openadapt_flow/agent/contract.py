@@ -732,7 +732,7 @@ def build_result(
 
     ``approval_mode`` is the per-save approval mode the run used (Flow's
     report) or that the operator chose; it is recorded under ``technical``.
-    ``checked_how`` is the read-back rung the run's saves reached
+    ``checked_how`` is the weakest check level the run's saves reached
     (:mod:`openadapt_flow.readback_ladder`), from ``report.json``.
     """
     spec = REASONS.get(reason)
@@ -886,9 +886,12 @@ RUN_RESULT_SCHEMA: dict[str, Any] = {
             "type": "string",
             "enum": list(CHECKED_HOW_LABELS),
             "description": (
-                "How far the saves were read back: not_checked, "
-                "screen_said_saved, reopened (found again and re-read on "
-                "screen), or records (read from the system of record)."
+                "How the saves were checked, the weakest check level any "
+                "save reached: unchecked, same_screen, reopened (found again "
+                "and re-read in the acting session), separate_session (read "
+                "in a separately signed-in session), system_of_record, or "
+                "counterparty_confirmed. Only separate_session and stronger "
+                "make a run done by default."
             ),
         },
         "checked_how_label": {"type": "string"},

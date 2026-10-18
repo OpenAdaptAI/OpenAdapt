@@ -2647,7 +2647,7 @@ def compile_recording(
             if _sa is not None:
                 view_lines[step.id] = cached_lines(i_event, "after", _sa)
             if mined.disposition == "readback" and _sb is not None and _sa is not None:
-                # A reference number the save's screen newly shows: R1
+                # A reference number the save's screen newly shows: same-screen
                 # evidence, and a way to find the record again.
                 found = mine_reference(
                     cached_lines(i_event, "before", _sb),

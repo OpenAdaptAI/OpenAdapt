@@ -689,7 +689,10 @@ def derive_different_path_readback(
                     demonstrated=True,
                     reset=reset,
                     guard=guard,
-                    reference=reference if _types_reference(nav) else None,
+                    # Kept for a search by a run input too: the reopened
+                    # record must show this save's number, or an older
+                    # record with the same value could pass.
+                    reference=reference,
                 )
                 if value in bindings:
                     effect.value = ValueExpr(param=bindings[value])
@@ -703,10 +706,14 @@ def derive_different_path_readback(
                 upgraded += 1
                 break
             if len(nav) >= MIN_RENAV_ACTIONS:
+                # Reopen credit needs a state reset inside the navigation;
+                # without one the spec stays different-path but earns only
+                # the same-screen level (onscreen._is_persisted_reacquisition).
                 effect.readback = ReadbackSpec(
                     region=region,
                     different_path=True,
                     renavigation=list(nav),
+                    reset=detect_reset(nav_steps),
                     guard=guard,
                     reference=reference if _types_reference(nav) else None,
                 )

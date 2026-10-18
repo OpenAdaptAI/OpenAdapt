@@ -1208,7 +1208,7 @@ def qualify(
     if verifier_tier is None:
         raise QualifyConfigError("verifier declares no verification tier")
     verifier_tier = VerificationTier(verifier_tier)
-    from openadapt_flow.readback_ladder import tier_floor, workflow_minimum
+    from openadapt_flow.readback_ladder import workflow_tier_floor
 
     tier = config.minimum_tier()
     wanted = (
@@ -1221,8 +1221,8 @@ def qualify(
             f"verifier reads at {verifier_tier.name.lower()}, weaker than {wanted}"
         )
     if workflow.minimum_readback is not None:
-        workflow_floor = tier_floor(workflow_minimum(workflow))
-        if int(verifier_tier) > int(workflow_floor):
+        workflow_floor = workflow_tier_floor(workflow)
+        if workflow_floor is not None and int(verifier_tier) > int(workflow_floor):
             raise QualifyConfigError(
                 f"verifier reads at {verifier_tier.name.lower()}, weaker than the "
                 f"workflow's minimum_readback {workflow.minimum_readback}"
