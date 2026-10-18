@@ -307,20 +307,34 @@ class ReviewQueue:
         return verify_signature(public_key, decision.payload(), decision.signature)
 
 
-def apply_decision(read: FieldRead, decision: ReviewDecision) -> Optional[FieldRead]:
+def apply_decision(
+    read: FieldRead, decision: ReviewDecision, item: ReviewItem
+) -> Optional[FieldRead]:
     """The field read as settled by ``decision``; None when it is not exported.
 
-    The grade is unchanged: a person's choice settles the value but is not a
-    read. ``reject`` and ``reread`` return None.
+    ``item`` is the review item the decision answers; a decision for another
+    item, or for an item that changed after it was decided, is refused. A
+    person's choice settles the value but is not a read, so the grade never
+    goes up: it stays only when the settled value is the value the reads
+    already agreed on, and is ``unchecked`` otherwise. ``reject`` and
+    ``reread`` return None.
     """
 
+    if decision.item_id != item.item_id or decision.item_sha256 != item.sha256():
+        raise ReviewError("the decision does not answer this review item")
     if decision.action in ("reject", "reread"):
         return None
-    return read.model_copy(
-        update={
-            "value": decision.value,
-            "needs_review": False,
-            "review_reason": None,
-            "review_decision": decision.item_id,
-        }
+    if item.field != read.field:
+        raise ReviewError(
+            f"the decision is for field {item.field!r}, not {read.field!r}"
+        )
+    kept = decision.value is not None and decision.value == read.value
+    data = read.model_dump()
+    data.update(
+        value=decision.value,
+        grade=read.grade if kept else "unchecked",
+        needs_review=False,
+        review_reason=None,
+        review_decision=decision.item_id,
     )
+    return FieldRead.model_validate(data)
