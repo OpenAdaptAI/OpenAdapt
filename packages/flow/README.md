@@ -129,8 +129,8 @@ behavior: we haven't timed a codegen script on the same task or run one
 through our UI-change fixtures.
 
 A newer test on a local OpenEMR copy (14 and 15 Oct 2026, synthetic
-referrals) compared compiled replay with a Claude Sonnet agent over 63 timed
-warm runs each; each saved 62 correctly. Over those correct runs, replay took
+referrals) compared compiled replay with a Claude Sonnet agent over 63
+new-patient referrals each, in timed warm runs; each saved 62 correctly. Over those correct runs, replay took
 29.7 s median from sign-in to saved record, the
 agent 36.5 s, so replay was about 19% faster, with no model calls against the
 agent's median of about $0.08 per run. A separate database read-back matched

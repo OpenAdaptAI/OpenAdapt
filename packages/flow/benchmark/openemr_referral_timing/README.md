@@ -14,9 +14,15 @@ blog cite for this comparison must be in [`figures.json`](figures.json), which
 | `CAVEATS.md` | Known limits of the run |
 
 All patients, clinicians, addresses, phone numbers (555-01xx) and email
-addresses (`example.invalid`) are made up. The `dir` column points at per-run
-evidence (screenshots, screen recordings, engine reports) that is kept outside
-the repository.
+addresses (`example.invalid`) are made up. The rows hold timings, counts and
+costs only. The `dir` column points at per-run evidence (screenshots, screen
+recordings, engine reports, agent transcripts) that is kept outside the
+repository.
+
+`runs.csv` is the harness's `data/runs.csv` with two changes: `dir` was made
+relative to the harness folder, and line endings were normalized from CRLF to
+LF. That is why its sha256 differs from the original file; every value is the
+same.
 
 ## What was measured
 

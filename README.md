@@ -134,7 +134,7 @@ screen. [Connect an agent](https://docs.openadapt.ai/how-to/connect-an-agent/) c
 
 On a local OpenEMR 8.0.0.3 test copy with synthetic referrals (14 and
 15 October 2026), OpenAdapt and a Claude computer-use agent each entered 63
-timed referrals. Median time over the correct runs was 29.7 seconds for
+new-patient referrals in timed runs. Median time over the correct runs was 29.7 seconds for
 OpenAdapt and 36.5 seconds for the agent. OpenAdapt made no model calls; the agent cost about
 $0.08 a run at list price. Both saved 62 of 63 normal referrals correctly,
 judged by the same database read-back, and the agent matched or beat OpenAdapt
