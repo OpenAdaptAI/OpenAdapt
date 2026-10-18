@@ -377,6 +377,9 @@ class ItemApprovalStore:
     def __init__(self, run_dir: Path | str) -> None:
         self.run_dir = Path(run_dir)
         self.dir = self.run_dir / APPROVAL_DIRNAME
+        # The policy this store wrote at run start. Once set, it is the only
+        # policy this store applies, whatever the file says later.
+        self._pinned_policy: Optional[ApproverPolicyV1] = None
 
     # -- layout --------------------------------------------------------------
     def _checked_dir(self, *, create: bool) -> Path:
@@ -408,25 +411,35 @@ class ItemApprovalStore:
 
     # -- approver policy -----------------------------------------------------
     def write_policy(self, policy: ApproverPolicyV1) -> None:
-        """Record the run's approver policy once. A second, different policy
-        is refused; the same policy again is a no-op."""
+        """Record the run's approver policy once, and apply only it from now
+        on. A second, different policy is refused; the same policy again is
+        a no-op."""
 
         self._checked_dir(create=True)
         payload = canonical_json(policy.model_dump(mode="json"))
         try:
             _write_exclusive(self.dir / POLICY_FILENAME, payload)
         except FileExistsError:
-            if self.policy() != policy:
+            if self._policy_on_disk() != policy:
                 raise ItemApprovalRefused(
                     "policy_changed", "this run already has a different approver policy"
                 ) from None
+        self._pinned_policy = policy
 
     def policy(self) -> ApproverPolicyV1:
         """The run's approver policy. Person-only when none was written.
 
-        An unreadable policy file is never "no policy": it means person-only.
+        After :meth:`write_policy` (the gate calls it at run start), this
+        store applies the policy it wrote: a file replaced later changes
+        nothing. A reader that wrote no policy reads the file. An unreadable
+        policy file is never "no policy": it means person-only.
         """
 
+        if self._pinned_policy is not None:
+            return self._pinned_policy
+        return self._policy_on_disk()
+
+    def _policy_on_disk(self) -> ApproverPolicyV1:
         try:
             raw = _read_regular(self._path(POLICY_FILENAME))
         except (OSError, ItemApprovalRefused):

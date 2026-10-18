@@ -105,6 +105,7 @@ def _jit(
     agent: Any = None,
     task: TaskSignature = TASK,
     require_distinct_reviewer_and_admitter: bool = False,
+    agent_principal_id: Any = "cua-bot-7",
 ) -> Any:
     jit = compile_agent(
         agent or NeverCalled(),
@@ -128,25 +129,26 @@ def _jit(
     ]
     Workflow(name="t", steps=steps).save(program / "bundle")
     lifecycle.mark_draft(program / "bundle")
-    (program / "candidate.json").write_text(
-        json.dumps(
-            {
-                "state": "DRAFT",
-                "status": "needs_human_admit",
-                "task": task.to_dict(),
-                "require_distinct_reviewer_and_admitter": (
-                    require_distinct_reviewer_and_admitter
-                ),
-                "workflow_id": "wf",
-                "recorded_by": "agent:anthropic",
-                "agent_principal_id": "cua-bot-7",
-                "dialect": "anthropic",
-                "policy": "clinical-write",
-                "mine_effects": True,
-                "compiled_recording": str(program / "recording"),
-            }
-        )
+    candidate = lifecycle.sign_recorder(
+        program,
+        {
+            "state": "DRAFT",
+            "status": "needs_human_admit",
+            "task": task.to_dict(),
+            "require_distinct_reviewer_and_admitter": (
+                require_distinct_reviewer_and_admitter
+            ),
+            "workflow_id": "wf",
+            "recorded_by": "agent:anthropic",
+            "agent_principal_id": agent_principal_id,
+            "dialect": "anthropic",
+            "policy": "clinical-write",
+            "mine_effects": True,
+            "compiled_recording": str(program / "recording"),
+        },
+        key_dir=jit.key_dir,
     )
+    (program / "candidate.json").write_text(json.dumps(candidate))
     return jit
 
 
@@ -368,7 +370,9 @@ def test_review_and_canary_pin_the_digest(tmp_path: Path, monkeypatch) -> None:
     wf = Workflow.load(jit.bundle_dir)
     wf.steps[0].intent = "type something else"
     wf.save(jit.bundle_dir)
-    with pytest.raises(AdmissionError, match="no human review"):
+    # The edited bundle is refused before the review is even looked up: the
+    # recorder was signed for the bundle as recorded.
+    with pytest.raises(AdmissionError, match="signed for another bundle"):
         jit.admit(principal_id=REVIEWER, confirm="ok")
 
 
@@ -667,7 +671,15 @@ def test_cli_review_and_admit_need_a_terminal(
     task = str(jit.task_dir)
     assert _cli("status", task, "--key-dir", keys, tty=False) == 0
     assert json.loads(capsys.readouterr().out)["state"] == "DRAFT"
-    review = ("review", task, "--principal", REVIEWER, "--all-steps-shown")
+    review = (
+        "review",
+        task,
+        "--principal",
+        REVIEWER,
+        "--all-steps-shown",
+        "--key-dir",
+        keys,
+    )
     assert _cli(*review, tty=False) == 2
     assert "interactive terminal" in capsys.readouterr().err
     assert _cli(*review, answer="no") == 2
