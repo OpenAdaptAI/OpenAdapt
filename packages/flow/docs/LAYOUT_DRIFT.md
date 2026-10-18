@@ -48,14 +48,48 @@ the advice records the failure.
 
 ## Tests
 
+`tests/test_layout_drift_replay.py` runs the replayer: a matching frame
+proceeds with no advisor call; font size, font and resolution drift halt
+before input with the named reason; the check is off outside remote desktop
+unless forced. `tests/test_compiler.py` checks the compiler stores the
+fingerprints and the manifest hashes them.
+
 `tests/test_layout_drift.py` covers each reason on synthetic OCR lines and
 on a synthetic form rendered in a browser and read with the repository OCR.
 The rendered cases are: unchanged, window moved (passes), font size 16 to 20
 and 16 to 13 px, Arial to Courier, one row shifted 240 px, and viewport
 1280x800 to 1440x900.
 
-## Not yet done
+## In the replayer
 
-The replayer does not call `check_layout` yet. A deployment that wants the
-check must call it on the first frame of each step against the fingerprint
-stored with the recording.
+The compiler stores one fingerprint for each click step of a recording in
+`templates/layout_fingerprint.json`, from the frame the step acted on. It
+holds frame size and font metrics only, no screen text and no landmarks, and
+the bundle manifest hashes it like the template images.
+
+Before resolving each step that has a stored fingerprint, the replayer reads
+the live frame with the same OCR, fingerprints it, and calls `check_layout`.
+On drift the step halts before any input, as a safety halt, with the reasons
+in the message:
+
+```text
+Layout drift before step 'step_004' (click 'Save'): font_size_changed: text is
+1.38x the recorded height — the screen no longer matches the recording;
+refusing to act.
+```
+
+The check is on by default for remote-desktop replays: an `rdp` or `citrix`
+target, or the FreeRDP backend. It is off for other targets. Set
+`runtime.layout_drift_check` in the deployment config to `true` or `false` to
+force it, or pass `layout_drift=` to `Replayer`. When the backend's transport
+carries a pinned session profile, its digest is compared too.
+
+Bundles compiled before this change have no stored fingerprints, so their
+steps are not checked. Recompile to arm the check.
+
+Limits:
+
+- Landmark positions are not stored, so a moved panel is caught only when it
+  changes font metrics or the frame size. `fingerprint(..., landmarks=...)`
+  supports landmarks for callers that store them.
+- Each checked step adds one full-frame OCR pass.

@@ -12,6 +12,12 @@ returns a :class:`DriftVerdict` listing every difference outside tolerance.
 :func:`check_layout` raises :class:`LayoutDriftHalt` so the run stops before
 acting and a person sees why.
 
+The compiler stores one fingerprint per click step of the recording in
+:data:`FINGERPRINT_ASSET`. The replayer compares the frame it is about to act
+on against it, by default on remote-desktop replays (``rdp``/``citrix``
+targets and the FreeRDP backend), and halts the step with the named reasons
+on drift. The stored fingerprints hold frame size and font metrics only.
+
 An optional advisor (for example a small local layout model) may be given.
 Its output is recorded as advice for the person reviewing the halt. It never
 changes the verdict, never authorizes a step and is never called on a frame
@@ -20,6 +26,7 @@ that matches. Healthy runs make no model calls.
 
 from __future__ import annotations
 
+import json
 import statistics
 from dataclasses import dataclass, field
 from typing import Any, Callable, Literal, Mapping, Optional, Sequence
@@ -236,3 +243,66 @@ def check_layout(
         except Exception as exc:  # noqa: BLE001 - advice is optional
             verdict.advice = f"advisor failed: {type(exc).__name__}"
     raise LayoutDriftHalt(verdict)
+
+
+# ------------------------------------------------------- bundle storage
+
+#: Where the compiler stores the recorded fingerprints. Under ``templates/``
+#: so the bundle manifest hashes it (and an encrypted bundle seals it) like
+#: every other recorded asset.
+FINGERPRINT_ASSET = "templates/layout_fingerprint.json"
+FINGERPRINT_SCHEMA = "openadapt.layout-fingerprints/v1"
+
+
+def fingerprint_to_dict(fp: LayoutFingerprint) -> dict[str, Any]:
+    return {
+        "viewport": list(fp.viewport),
+        "text_height": fp.text_height,
+        "char_width": fp.char_width,
+        "lines": fp.lines,
+        "landmarks": {k: list(v) for k, v in fp.landmarks.items()},
+        "profile_sha256": fp.profile_sha256,
+    }
+
+
+def fingerprint_from_dict(data: Mapping[str, Any]) -> LayoutFingerprint:
+    vw, vh = data["viewport"]
+    return LayoutFingerprint(
+        viewport=(int(vw), int(vh)),
+        text_height=data.get("text_height"),
+        char_width=data.get("char_width"),
+        lines=int(data.get("lines") or 0),
+        landmarks={
+            str(k): (int(v[0]), int(v[1]))
+            for k, v in (data.get("landmarks") or {}).items()
+        },
+        profile_sha256=data.get("profile_sha256"),
+    )
+
+
+def dump_bundle_fingerprints(steps: Mapping[str, LayoutFingerprint]) -> bytes:
+    body = {
+        "schema": FINGERPRINT_SCHEMA,
+        "steps": {k: fingerprint_to_dict(v) for k, v in sorted(steps.items())},
+    }
+    return (json.dumps(body, indent=2, sort_keys=True) + "\n").encode("utf-8")
+
+
+def load_bundle_fingerprints(raw: Optional[bytes]) -> dict[str, LayoutFingerprint]:
+    """Recorded fingerprints by step id. Empty when absent or unreadable."""
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw.decode("utf-8"))
+        if data.get("schema") != FINGERPRINT_SCHEMA:
+            return {}
+        return {
+            str(k): fingerprint_from_dict(v) for k, v in data.get("steps", {}).items()
+        }
+    except (ValueError, KeyError, TypeError, AttributeError):
+        return {}
+
+
+def describe(verdict: DriftVerdict) -> str:
+    """``reason[, reason]: detail; detail`` for a halt message."""
+    return f"{', '.join(verdict.reasons)}: {'; '.join(verdict.details)}"
