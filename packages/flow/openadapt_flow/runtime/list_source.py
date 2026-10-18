@@ -218,6 +218,27 @@ def row_key(row: Mapping[str, str], schema: RecordSchema) -> tuple[str, ...]:
     return tuple(key)
 
 
+def _guarded_read(
+    reader: PageReader, guard: Optional[CopyGuard]
+) -> Sequence[Mapping[str, str]]:
+    """Read one page with the guard checked before and after the read.
+
+    A modal or focus change that appears during the copy would leave the
+    clipboard holding the previous page. If the check after the read had to
+    dismiss a modal, the page is read again; any other failure halts.
+    """
+    if guard is None:
+        return reader.read_page()
+    for _ in range(guard.max_dismissals + 1):
+        guard.check()
+        page_rows = reader.read_page()
+        before = len(guard.dismissed)
+        guard.check()
+        if len(guard.dismissed) == before:
+            return page_rows
+    raise ListHalt("modal_not_cleared", "a modal kept appearing during the copy")
+
+
 def iterate_list(
     reader: PageReader,
     pager: Pager,
@@ -246,19 +267,26 @@ def iterate_list(
     while True:
         if walk.pages >= limits.max_pages:
             raise ListHalt("page_cap_reached", f"read {walk.pages} pages")
-        if guard is not None:
-            guard.check()
-        page_rows = reader.read_page()
+        page_rows = _guarded_read(reader, guard)
         walk.pages += 1
         local_pages += 1
         if not page_rows:
+            if local_pages > 1:
+                # The pager said it advanced, so an empty page is a lost
+                # click or a failed copy, not the end of the list.
+                raise ListHalt(
+                    "pager_stalled",
+                    f"page {walk.pages} was empty after the pager advanced",
+                )
             walk.ended_by = "empty_page"
             return
-        new = 0
+        # Check the whole page before any of its rows go downstream.
+        fresh: list[ListRow] = []
+        page_seen: dict[tuple[str, ...], Mapping[str, str]] = {}
         for raw in page_rows:
             key = row_key(raw, schema)
             values = {k: str(raw[k]) for k in fields if k in raw}
-            prior = seen.get(key)
+            prior = seen.get(key, page_seen.get(key))
             if prior is not None:
                 if {k: _norm(v) for k, v in prior.items()} != {
                     k: _norm(v) for k, v in values.items()
@@ -269,12 +297,15 @@ def iterate_list(
                     )
                 walk.duplicates_skipped += 1
                 continue
-            if walk.rows >= limits.max_rows:
+            if walk.rows + len(fresh) >= limits.max_rows:
                 raise ListHalt("row_cap_reached", f"read {walk.rows} rows")
-            seen[key] = values
+            page_seen[key] = values
+            fresh.append(ListRow(key=key, values=values, page=walk.pages))
+        new = len(fresh)
+        for row in fresh:
+            seen[row.key] = row.values
             walk.rows += 1
-            new += 1
-            yield ListRow(key=key, values=values, page=walk.pages)
+            yield row
         if new == 0 and local_pages > 1:
             if limits.repeat_page_is_end:
                 walk.ended_by = "repeat_page"
@@ -362,7 +393,10 @@ def split_date_range(r: DateRange) -> Optional[list[DateRange]]:
 
 
 def iterate_partitioned(
-    open_partition: Callable[[R], tuple[PageReader, Pager]],
+    open_partition: Callable[
+        [R],
+        tuple[PageReader, Pager] | tuple[PageReader, Pager, SearchResult[R]],
+    ],
     partitions: Sequence[R],
     schema: RecordSchema,
     *,
@@ -370,11 +404,30 @@ def iterate_partitioned(
     limits: ListLimits = ListLimits(),
     walk: Optional[ListWalk] = None,
 ) -> Iterator[ListRow]:
-    """Walk each partition's list, deduplicating rows across partitions."""
+    """Walk each partition's list, deduplicating rows across partitions.
+
+    ``open_partition`` may also return the :class:`SearchResult` the
+    application showed when the partition was opened. Data can change between
+    :func:`partition_search` and the walk, so a partition that is truncated
+    now halts, and one whose reported count differs from the rows read halts.
+    """
     seen: dict[tuple[str, ...], Mapping[str, str]] = {}
     walk = ListWalk() if walk is None else walk
     for part in partitions:
-        reader, pager = open_partition(part)
+        opened = open_partition(part)
+        reader, pager = opened[0], opened[1]
+        result = opened[2] if len(opened) == 3 else None
+        if result is not None and result.truncated:
+            raise ListHalt(
+                "partition_truncated", f"range {part!r} is truncated when walked"
+            )
+        before = walk.rows + walk.duplicates_skipped
         yield from iterate_list(
             reader, pager, schema, guard=guard, limits=limits, seen=seen, walk=walk
         )
+        read = walk.rows + walk.duplicates_skipped - before
+        if result is not None and result.count is not None and read != result.count:
+            raise ListHalt(
+                "partition_count_mismatch",
+                f"range {part!r} reported {result.count} results; read {read}",
+            )

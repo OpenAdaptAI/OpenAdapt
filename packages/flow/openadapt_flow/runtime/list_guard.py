@@ -37,8 +37,15 @@ PredicateHolds = Callable[[Predicate, bytes], bool]
 CloseLocator = Callable[[Interstitial, bytes], Optional[tuple[int, int]]]
 
 
-def program_predicate_holds(vision: Any) -> PredicateHolds:
-    """Evaluate a predicate on a frame with the runtime's model-free rules."""
+def program_predicate_holds(
+    vision: Any, asset_loader: Callable[[str], Optional[bytes]]
+) -> PredicateHolds:
+    """Evaluate a predicate on a frame with the runtime's model-free rules.
+
+    ``asset_loader`` reads the bundle's templates. Without it, a dialog
+    detected by a template anchor would never match, and the guard would let
+    a copy run with the dialog showing.
+    """
 
     def holds(pred: Predicate, frame_png: bytes) -> bool:
         return evaluate_program_predicate(
@@ -47,7 +54,7 @@ def program_predicate_holds(vision: Any) -> PredicateHolds:
             {},
             vision=vision,
             viewport=None,
-            asset_loader=lambda _rel: None,
+            asset_loader=asset_loader,
         )
 
     return holds

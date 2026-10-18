@@ -329,7 +329,8 @@ def test_guard_runs_before_every_page_read():
 
     g.check = counting  # type: ignore[method-assign]
     list(iterate_list(t, t, SCHEMA, guard=g))
-    assert len(checks) == t.reads == 4
+    # Checked before and after every read.
+    assert t.reads == 4 and checks == [0, 1, 1, 2, 2, 3, 3, 4]
     # A modal that appears mid-walk halts before the next read.
     t2 = Worktable(rows)
     s2 = Screen()
@@ -345,3 +346,65 @@ def test_guard_runs_before_every_page_read():
     with pytest.raises(ListHalt):
         list(iterate_list(t2, Pager(), SCHEMA, guard=g2))
     assert t2.reads == 2
+
+
+def test_modal_during_copy_rereads_the_page():
+    rows = make_rows(30)
+    s = Screen()
+
+    class Popping(Worktable):
+        def read_page(self):
+            page = super().read_page()
+            if self.reads == 1:
+                s.modal = "Tip of the day"  # appears during the first copy
+            return page
+
+    t = Popping(rows)
+    got = list(iterate_list(t, t, SCHEMA, guard=_guard(s)))
+    assert len(got) == 30
+    assert t.reads == 3  # page 1 read again after the dismissal, then page 2
+
+
+def test_empty_page_after_the_pager_advanced_halts():
+    t = Worktable(make_rows(30))
+    real = t.read_page
+    t.read_page = lambda: [] if t.page == 1 else real()  # type: ignore[method-assign]
+    with pytest.raises(ListHalt) as exc:
+        list(iterate_list(t, t, SCHEMA))
+    assert exc.value.reason == "pager_stalled"
+
+
+def test_conflicting_page_yields_none_of_its_rows():
+    rows = make_rows(3)
+    clash = dict(rows[0], holder="Someone Else")
+    t = Worktable([*rows, clash], page_size=10)
+    got = []
+    with pytest.raises(ListHalt) as exc:
+        for row in iterate_list(t, t, SCHEMA):
+            got.append(row)
+    assert exc.value.reason == "duplicate_identity_conflict"
+    assert got == []
+
+
+def test_partition_rechecked_when_walked():
+    from openadapt_flow.runtime.list_source import SearchResult
+
+    rows = make_rows(10)
+
+    def opened(result):
+        def open_partition(_part):
+            t = Worktable(rows)
+            return t, t, result
+
+        return open_partition
+
+    with pytest.raises(ListHalt) as exc:
+        list(iterate_partitioned(opened(SearchResult(None, True)), ["a"], SCHEMA))
+    assert exc.value.reason == "partition_truncated"
+    with pytest.raises(ListHalt) as exc:
+        list(iterate_partitioned(opened(SearchResult(11, False)), ["a"], SCHEMA))
+    assert exc.value.reason == "partition_count_mismatch"
+    assert (
+        len(list(iterate_partitioned(opened(SearchResult(10, False)), ["a"], SCHEMA)))
+        == 10
+    )
