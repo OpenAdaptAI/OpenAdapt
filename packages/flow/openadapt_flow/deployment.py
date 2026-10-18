@@ -216,6 +216,7 @@ BUILTIN_EFFECT_KINDS = frozenset(
         "email",
         "document",
         "document-hash",
+        "surfaces",
     }
 )
 
@@ -319,6 +320,19 @@ class EffectsConfig(BaseModel):
     #: Nested lists are refused to keep the selected verifier and its evidence
     #: unambiguous.
     candidates: list["EffectsConfig"] = Field(default_factory=list)
+
+    #: ``kind: surfaces`` only: one reviewed read per table or resource the
+    #: save touches (surface name -> that read's own ``effects`` settings).
+    #: Each effect names its surface in ``probe`` (``surface=<name>``) and is
+    #: judged by that read alone; an effect naming no configured surface
+    #: halts. See ``runtime/effects/surfaces.py`` and docs/EFFECT_KIT.md.
+    surfaces: dict[str, "EffectsConfig"] = Field(default_factory=dict)
+
+    #: ``rest`` / ``sql`` / ``fhir``: record fields removed before judging.
+    #: ``[id]`` judges records by their whole content, so a save that changes
+    #: another record shows as that record lost (``forbid_collateral_loss``)
+    #: instead of passing because its id is unchanged. Empty -> as read.
+    records_drop_fields: list[str] = Field(default_factory=list)
 
     # -- onscreen (no-API screen read-back; auto-derived per-effect region) ---
     #: Explicit read-back region ``(x, y, w, h)`` for a hand-configured
@@ -557,6 +571,38 @@ class EffectsConfig(BaseModel):
             if (candidate.kind or "none").strip().lower() in ("", "none"):
                 raise ValueError(
                     "every effects.candidates entry must configure a verifier kind"
+                )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_records_drop_fields(self) -> "EffectsConfig":
+        kind = (self.kind or "none").strip().lower()
+        if self.records_drop_fields and kind not in ("rest", "sql", "fhir"):
+            raise ValueError(
+                "effects.records_drop_fields applies only to kinds rest, sql and fhir"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_surfaces(self) -> "EffectsConfig":
+        kind = (self.kind or "none").strip().lower()
+        if kind != "surfaces":
+            if self.surfaces:
+                raise ValueError("effects.surfaces applies only to kind surfaces")
+            return self
+        if not self.surfaces:
+            raise ValueError("effects.kind 'surfaces' needs at least one surface")
+        for name, surface in self.surfaces.items():
+            if not re.fullmatch(r"[A-Za-z0-9_.-]{1,64}", str(name)):
+                raise ValueError(
+                    f"effects.surfaces name {name!r} must be letters, digits, "
+                    "'_', '.' or '-'"
+                )
+            surface_kind = (surface.kind or "none").strip().lower()
+            if surface_kind in ("", "none", "surfaces") or surface.candidates:
+                raise ValueError(
+                    f"effects.surfaces[{name!r}] must configure one plain "
+                    "verifier kind (not none, surfaces or candidates)"
                 )
         return self
 
@@ -1426,6 +1472,14 @@ def _identity_config_dump(cfg: EffectsConfig) -> dict[str, Any]:
             if not dumped.get(name):
                 dumped.pop(name, None)
         dumped["candidates"] = [prune(item) for item in dumped.get("candidates", [])]
+        # Added after identities were first issued: present only when set.
+        if not dumped.get("records_drop_fields"):
+            dumped.pop("records_drop_fields", None)
+        surfaces = dumped.pop("surfaces", None) or {}
+        if surfaces:
+            dumped["surfaces"] = {
+                name: prune(item) for name, item in sorted(surfaces.items())
+            }
         return dumped
 
     return prune(cfg.model_dump(mode="json"))
@@ -1513,6 +1567,17 @@ def _build_effect_verifier_unredacted(
             poll_interval_s=cfg.poll_interval_s,
         )
 
+    if kind == "surfaces":
+        from openadapt_flow.runtime.effects.surfaces import SurfaceRoutedVerifier
+
+        built: dict[str, Any] = {}
+        for name, surface in cfg.surfaces.items():
+            verifier = build_effect_verifier(surface, params)
+            if verifier is None:  # guarded by EffectsConfig, retained fail-closed
+                raise ValueError(f"effects.surfaces[{name!r}] built no verifier")
+            built[name] = verifier
+        return SurfaceRoutedVerifier(built)
+
     if kind == "rest":
         if not cfg.base_url:
             raise ValueError("effects.kind 'rest' requires effects.base_url")
@@ -1543,6 +1608,7 @@ def _build_effect_verifier_unredacted(
             headers=headers,
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,
+            drop_fields=tuple(cfg.records_drop_fields),
         )
 
     if kind == "fhir":
@@ -1581,6 +1647,7 @@ def _build_effect_verifier_unredacted(
             verify_tls=cfg.verify_tls,
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,
+            drop_fields=tuple(cfg.records_drop_fields),
         )
 
     if kind == "sql":
@@ -1618,6 +1685,7 @@ def _build_effect_verifier_unredacted(
             ),
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,
+            drop_fields=tuple(cfg.records_drop_fields),
         )
 
     if kind == "file":

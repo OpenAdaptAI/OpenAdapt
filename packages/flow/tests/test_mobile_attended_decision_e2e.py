@@ -27,7 +27,7 @@ from pathlib import Path
 
 import pytest
 from fastapi.testclient import TestClient
-from openadapt_flow.contracts import HumanDecisionReceiptV1
+from openadapt_types import HumanDecisionReceiptV1
 from pydantic import ValidationError
 
 from openadapt_flow.console import data, human_decisions
@@ -745,7 +745,7 @@ def test_a_pause_that_had_not_been_delivered_becomes_uncertain_after_a_lost_answ
 def test_cloud_safe_schema_rejects_evidence_free_text_and_unknown_fields(
     tmp_path, monkeypatch
 ):
-    from openadapt_flow.contracts import HumanDecisionTaskV1
+    from openadapt_types import HumanDecisionTaskV1
 
     _wf, bundles, runs, _bundle, run, _capability = _halt(tmp_path)
     _app, client = _phone(bundles, runs, monkeypatch)
@@ -865,7 +865,7 @@ def test_no_receipt_field_can_carry_free_text():
 
 def test_every_engine_terminal_state_projects_to_a_permitted_receipt_pair():
     """Flow's status map must stay inside the shared contract's pair table."""
-    from openadapt_flow.contracts import HUMAN_DECISION_RECEIPT_REASONS
+    from openadapt_types import HUMAN_DECISION_RECEIPT_REASONS
 
     from openadapt_flow.runtime.durable.attended import AttendedDecision
 

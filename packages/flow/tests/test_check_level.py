@@ -16,7 +16,7 @@ from openadapt_flow.check_level import (
     to_readback_label,
     weakest,
 )
-from openadapt_flow.contracts.oracle import OracleTier
+from openadapt_types.oracle import OracleTier
 from openadapt_flow.verification import VerificationTier
 
 
