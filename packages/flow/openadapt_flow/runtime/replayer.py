@@ -9279,16 +9279,9 @@ class Replayer:
                     "arm_guarded_editable_coordinate",
                     None,
                 )
-                if (
-                    step.action in (ActionKind.TYPE, ActionKind.SELECT_OPTION)
-                    or (
-                        # A click that is not itself a write may focus a
-                        # field: it binds the editable target under the same
-                        # lease as the focusing click of a TYPE.
-                        step.action is ActionKind.CLICK
-                        and step.submit_binding is None
-                        and not is_consequential(step, workflow)
-                    )
+                if step.action in (
+                    ActionKind.TYPE,
+                    ActionKind.SELECT_OPTION,
                 ) and callable(editable_arm):
                     editable_arm(*fresh_resolution.point)
                 elif step.submit_binding is not None:

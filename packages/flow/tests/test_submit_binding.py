@@ -477,37 +477,3 @@ def test_an_unbound_reversible_click_is_not_refused(tmp_path) -> None:
 
     assert report.success is True, report.results[0].error
     assert [action[0] for action in backend.actions] == ["click"]
-
-
-# -- run gate -------------------------------------------------------------------
-
-
-def test_the_run_gate_counts_a_submit_binding_as_the_saves_identity() -> None:
-    """The gate agrees with the runtime: a bound icon-only Save is armed (its
-    binding is checked live before the click); the same Save unbound is not."""
-
-    from openadapt_flow.ir import Workflow
-    from openadapt_flow.run_gate import _gate_identity
-
-    def gate(step: Step) -> Any:
-        workflow = Workflow(name="w", steps=[step])
-        return _gate_identity(
-            workflow,
-            [step],
-            require_current_risk_certification=False,
-            certifying_policy=None,
-        )
-
-    bound = Step(
-        id="save",
-        intent="click recorded visual target",
-        action=ActionKind.CLICK,
-        risk="irreversible",
-        identity_armed=False,
-        anchor=_anchor(),
-        submit_binding=_binding(),
-    )
-    unbound = bound.model_copy(update={"submit_binding": None})
-    assert gate(bound).passed
-    result = gate(unbound)
-    assert not result.passed and result.offenders == ["save"]

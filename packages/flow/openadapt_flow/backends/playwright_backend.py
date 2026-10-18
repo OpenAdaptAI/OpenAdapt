@@ -281,17 +281,11 @@ _INSTALL_GUARD_BODY_JS = (
         // template by the readback that follows, so this only replaces the
         // missing row tie, never the identity check.
         const type = (el.getAttribute('type') || '').toLowerCase();
-        const dataEntry = el.matches('input, select, textarea') &&
-            !['hidden', 'password', 'submit', 'button', 'reset', 'image',
-              'file'].includes(type);
-        if (dataEntry && el.id &&
+        if (el.matches('input, select, textarea') && el.id &&
+                !['hidden', 'password', 'submit', 'button', 'reset', 'image',
+                  'file'].includes(type) &&
                 document.querySelectorAll('#' + CSS.escape(el.id)).length === 1) {
             recordTie = 'form-field:' + el.id;
-        } else if (dataEntry && !el.id && el.closest('form') &&
-                document.querySelectorAll('form').length === 1) {
-            // A field without an id on the page's only form: the new record
-            // that form creates is the only record it can belong to.
-            recordTie = 'form-field:only-form';
         }
     }
     if (args.requireRowIdentity && !recordTie) return null;
@@ -1000,11 +994,10 @@ class PlaywrightBackend:
             such as the demo driver may use locators; replay never does).
     """
 
-    # Guarded keyboard actuation, and a guarded click that focuses a field,
-    # normally require the target to sit in a record row. A backend for a
-    # new-record form (no row exists yet) may opt in to admitting a uniquely
-    # identified form control instead; identity readback against the compiled
-    # template still decides.
+    # Guarded keyboard actuation normally requires the focused element to sit
+    # in a record row. A backend for a new-record form (no row exists yet) may
+    # opt in to admitting a focused, uniquely identified form control instead;
+    # identity readback against the compiled template still decides.
     keyboard_admits_form_fields: bool = False
 
     def __init__(
@@ -2267,12 +2260,6 @@ class PlaywrightBackend:
                     "requireRowIdentity": True,
                     "allowEditable": allow_editable,
                     "submitBinding": submit_binding,
-                    # The same opt-in as guarded keyboard delivery: on a
-                    # new-record form, focusing a uniquely identified field
-                    # stands in for the missing record row.
-                    "admitFormField": bool(
-                        allow_editable and self.keyboard_admits_form_fields
-                    ),
                 },
             )
             if not isinstance(observed, dict):

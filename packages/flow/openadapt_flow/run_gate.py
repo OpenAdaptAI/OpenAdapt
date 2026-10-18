@@ -668,12 +668,7 @@ def _gate_identity(
     unarmed = []
     for step in must_arm:
         paths = executable_actuation_paths(step)
-        # A submit binding is the identity contract of an unlabeled form
-        # control (an icon-only Save): the runtime treats it as one and
-        # verifies it live before the click, refusing on any difference
-        # (Replayer._step_has_identity_contract, docs/LIMITS.md).
-        gui_armed = is_identity_armed(step) or step.submit_binding is not None
-        if ("gui" in paths and not gui_armed) or (
+        if ("gui" in paths and not is_identity_armed(step)) or (
             "api" in paths
             and (step.api_binding is None or not step.api_binding.identity)
         ):

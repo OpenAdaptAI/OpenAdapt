@@ -96,11 +96,11 @@ class WebApp:
         record_video_dir: OPT-IN. Each capture and run records a WebM of its
             browser page into this directory (for demo media). ``None``
             records nothing.
-        new_record_form: The task fills a form for a record that does not
-            exist yet, so its fields sit in no record row. Guarded input
-            then admits a uniquely identified form field in place of the row
-            (``PlaywrightBackend.keyboard_admits_form_fields``); the field's
-            identity is still checked.
+        capture_settle_timeout_s: How long the capture waits for the page to
+            settle after each agent action before it takes the after-frame
+            the compiler reads. ``None`` keeps the authoring default. Raise
+            it for an app whose lookups take seconds, or the program
+            inherits checks compiled from a still-loading screen.
     """
 
     url: str
@@ -109,7 +109,7 @@ class WebApp:
     headless: bool = True
     setup: Optional[Callable[[Any], None]] = None
     record_video_dir: Optional[str] = None
-    new_record_form: bool = False
+    capture_settle_timeout_s: Optional[float] = None
 
     def launch(self) -> tuple[Any, Callable[[], None]]:
         """Open the browser at ``url`` and run :attr:`setup`."""
@@ -119,8 +119,6 @@ class WebApp:
         backend, close = PlaywrightBackend.launch(
             self.url, headless=self.headless, record_video_dir=self.record_video_dir
         )
-        if self.new_record_form:
-            backend.keyboard_admits_form_fields = True
         if self.setup is not None:
             try:
                 self.setup(backend.page)
@@ -253,6 +251,11 @@ class Recording:
                 backend_kind="web",
                 app_url=owner.app.url,
                 system_of_record_reader=owner.app.record_reader,
+                **(
+                    {"settle_timeout_s": owner.app.capture_settle_timeout_s}
+                    if owner.app.capture_settle_timeout_s is not None
+                    else {}
+                ),
             )
             self.computer = CaptureComputer(
                 self._session,

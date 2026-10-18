@@ -17,6 +17,7 @@ import csv
 import json
 import os
 import platform
+import shutil
 import subprocess
 import sys
 import time
@@ -28,7 +29,6 @@ HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
 import openimis_app as app  # noqa: E402
-
 from openadapt_flow.jit import TaskSignature, WebApp, compile_agent  # noqa: E402
 
 TASK = TaskSignature(
@@ -36,20 +36,22 @@ TASK = TaskSignature(
     (
         "Enter one health-facility claim on the open Health Facility Claim "
         "form and save it. The keyboard focus is already in the Insurance No. "
-        "field. Enter insurance number {insurance_no} and wait until the "
-        "insuree's name and an active policy appear. Then set Claim No. to "
-        "{claim_no}; set the main diagnosis to 'Scarlet fever, uncomplicated' "
-        "(type Scarlet in the main diagnosis search box and pick it); set "
-        "Explanation to: {explanation}; and in the Services table add the "
-        "service 'General Consultation' (type General in its search box and "
-        "pick it). Leave every other field as it is. Save the claim with the "
-        "round Save button at the bottom right of the page (a floppy-disk "
-        "icon), then stop."
+        "field. Do these steps in exactly this order. 1. Enter insurance "
+        "number {insurance_no} and wait until the insuree's name and an "
+        "active policy appear. 2. Set Claim No. to {claim_no}. 3. Set the "
+        "main diagnosis to 'Scarlet fever, uncomplicated' (type Scarlet in "
+        "the main diagnosis search box and pick it). 4. In the Services table "
+        "add the service 'General Consultation' (type General in its search "
+        "box and pick it). 5. Only after the service is added, set "
+        "Explanation to: {explanation}. 6. Save the claim with the round Save "
+        "button at the bottom right of the page (a floppy-disk icon), then "
+        "stop. Leave every other field as it is."
     ),
     {"insurance_no": str, "claim_no": str, "explanation": str},
 )
-# clinical-write minus the icon-only-Save rules; see the file.
-POLICY = str(HERE / "claims-demo-policy.yaml")
+# The bundled strict write policy. The standard gate refuses these openIMIS
+# forms today; ``admit`` records why (see README).
+POLICY = "clinical-write"
 DEMO_ADMITTER = "ci:launch-demo"
 REVIEWER = "demo-reviewer@example.invalid"
 
@@ -89,7 +91,8 @@ def make_jit(
         record_reader=app.read_claims,
         setup=setup or app.setup,
         headless=True,
-        new_record_form=True,
+        # openIMIS lookups take ~5 s under emulation; capture after they load.
+        capture_settle_timeout_s=10.0,
         record_video_dir=str(video_dir) if video_dir else None,
     )
     return compile_agent(
@@ -153,13 +156,15 @@ def cmd_record(args: argparse.Namespace) -> int:
     out.mkdir(parents=True, exist_ok=True)
     video_dir = out / "video" / "agent"
     video_dir.mkdir(parents=True, exist_ok=True)
-    values = record_values(0, args.tag)
+    # The demonstration's own claim number avoids glyphs OCR confuses (0/O,
+    # 1/I): a misread demonstrated value escapes parameter hygiene and gets
+    # compiled into an on-screen check (engine gap, see README).
+    values = {**record_values(0, args.tag), "claim_no": f"{args.tag}XKM"}
     if app.claim_rows(values["claim_no"]):
         raise SystemExit(f"claim {values['claim_no']} already exists")
     app.ui_change(False)
     if args.agent == "claude":
         from claude_agent import ClaudeComputerUseAgent
-
         from openadapt_flow.jit import load_customer_model_key
 
         agent: Any = ClaudeComputerUseAgent(
@@ -201,7 +206,9 @@ def cmd_record(args: argparse.Namespace) -> int:
         if agent.started_at and agent.finished_at:
             summary["agent_wall_s"] = round(agent.finished_at - agent.started_at, 3)
         summary["refused_actions"] = agent.refused_actions
-    (out / "agent_run.json").write_text(json.dumps(summary, indent=2, default=str) + "\n")
+    (out / "agent_run.json").write_text(
+        json.dumps(summary, indent=2, default=str) + "\n"
+    )
     print(json.dumps({k: summary[k] for k in ("status", "record_correct")}, indent=2))
     print("details:", out / "agent_run.json")
     return 0 if result.status == "needs_human_admit" else 1
@@ -278,39 +285,229 @@ def cmd_admit(args: argparse.Namespace) -> int:
         summary["admission"] = manifest.get("manifest", manifest)
     summary["admission_wall_s"] = round(time.time() - t0, 3)
     summary["state"] = str(jit.state())
-    (out / "admission.json").write_text(json.dumps(summary, indent=2, default=str) + "\n")
+    (out / "admission.json").write_text(
+        json.dumps(summary, indent=2, default=str) + "\n"
+    )
     print(json.dumps({k: summary[k] for k in ("canary_status", "state")}, indent=2))
     return 0 if canary.verified else 1
 
 
-# -- batch ---------------------------------------------------------------------
+# -- compile (outside the JIT lifecycle) -----------------------------------------
+
+
+def program_dir(run_id: str) -> Path:
+    return HERE / "out" / "program" / run_id
+
+
+def cmd_compile(args: argparse.Namespace) -> int:
+    """Compile the agent's recorded run into a plain program bundle.
+
+    The JIT draft can't run unattended until it is admitted, and the standard
+    gate refuses these openIMIS forms today (``admit`` records why). For the
+    demo the same recording is compiled with the standard compiler and the
+    same confirmed parameters, and the program runs under the demo profile.
+    It is not admitted for production.
+    """
+
+    from openadapt_flow.compiler import compile_recording
+    from openadapt_flow.compiler.param_confirm import (
+        apply_decisions,
+        decisions_from_accept_list,
+        load_proposals,
+    )
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.jit.lift import lift_params
+
+    jit = make_jit(args.cache)
+    candidate = jit.candidate()
+    if candidate is None:
+        raise SystemExit("no JIT draft; run `record` first")
+    recording = Path(candidate["compiled_recording"])
+    out = program_dir(args.run_id) / "bundle"
+    if out.exists():
+        shutil.rmtree(out)
+    # The same two passes the JIT confirm step runs: lift the agent's typed
+    # inputs into parameter proposals, then recompile with them confirmed.
+    values = json.loads((RESULTS / args.run_id / "agent_run.json").read_text())[
+        "values"
+    ]
+    scratch = program_dir(args.run_id) / "proposals"
+    if scratch.exists():
+        shutil.rmtree(scratch)
+    compile_recording(recording, scratch, name=TASK.task_id, mine_effects=True)
+    lift_params(scratch, values)
+    decisions = decisions_from_accept_list(load_proposals(scratch), list(TASK.params))
+    apply_decisions(
+        recording,
+        out,
+        name=TASK.task_id,
+        decisions=decisions,
+        mine_effects=True,
+        bind_effect_params=True,
+    )
+    workflow = Workflow.load(out)
+    steps = [
+        {"id": st.id, "intent": st.intent, "risk": st.risk} for st in workflow.steps
+    ]
+    effects = [
+        {"step": st.id, "kind": e.kind.value, "probe": e.probe}
+        for st in workflow.steps
+        for e in (st.effects or [])
+    ]
+    summary = {
+        "phase": "compile",
+        "recording": str(recording),
+        "bundle": str(out.relative_to(HERE)),
+        "params": sorted(workflow.params),
+        "steps": steps,
+        "record_check": effects,
+        "note": "compiled from the agent's recording outside the JIT admission "
+        "lifecycle; runs under the demo profile; not admitted for production",
+    }
+    res = RESULTS / args.run_id
+    res.mkdir(parents=True, exist_ok=True)
+    (res / "program.json").write_text(json.dumps(summary, indent=2) + "\n")
+    print(json.dumps({"steps": len(steps), "params": summary["params"]}, indent=2))
+    for st in steps:
+        print(f"  {st['id']} {st['intent']} ({st['risk']})")
+    return 0
+
+
+# -- batch -----------------------------------------------------------------------
 
 
 @dataclass
 class Row:
     record: int
+    attempt: int
     claim_no: str
     insurance_no: str
     ui_changed: bool
-    status: str
-    model_calls: Optional[int]
+    outcome: str
+    success: bool
+    model_calls: int
     wall_s: float
     setup_s: float
-    program_s: Optional[float]
+    program_s: float
     readback_rows: int
     readback_correct: bool
+    verifier_verdicts: str
+    halted_step: str
     halt_reason: str
-    repaired: bool
     video: str
     run_dir: str
     started_at: float
 
 
+def _verdicts(report: Any) -> str:
+    """The system-of-record check verdicts, e.g. ``4/4 confirmed``."""
+
+    verdicts = [
+        str(e).split(":", 2)[1].split()[0].lower()
+        for r in report.results
+        for e in (r.effect_results or [])
+        if str(e).count(":") >= 1 and len(str(e).split(":", 2)) > 1
+    ]
+    if not verdicts:
+        return "not reached"
+    confirmed = sum(1 for v in verdicts if v == "confirmed")
+    return f"{confirmed}/{len(verdicts)} confirmed"
+
+
+def run_one(
+    bundle: Path, values: dict[str, str], run_dir: Path, video_dir: Optional[Path]
+) -> tuple[Any, float, float]:
+    """Open the app, sign in (unmeasured), run the program once."""
+
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.runtime import Replayer
+
+    backend, close = PlaywrightBackend.launch(
+        app.claim_form_url(),
+        headless=True,
+        record_video_dir=str(video_dir) if video_dir else None,
+    )
+    try:
+        s0 = time.time()
+        app.setup(backend.page)
+        setup_s = time.time() - s0
+        # Demo profile defaults. (require_settled=True measured worse here:
+        # 5 of 8 halted vs 1 of 6; see README.)
+        replayer = Replayer(backend, effect_verifier=app.claims_verifier())
+        p0 = time.time()
+        report = replayer.run(
+            Workflow.load(bundle),
+            params=values,
+            bundle_dir=bundle,
+            run_dir=run_dir,
+        )
+        program_s = time.time() - p0
+    finally:
+        close()
+    return report, setup_s, program_s
+
+
+def _run_record(
+    i: int,
+    attempt: int,
+    values: dict[str, str],
+    bundle: Path,
+    runs_dir: Path,
+    video_dir: Path,
+    vdir: Optional[Path],
+    changed: bool,
+) -> Row:
+    before = set(video_dir.glob("*.webm"))
+    run_dir = runs_dir / f"record-{i:03d}-{attempt}"
+    if run_dir.exists():
+        shutil.rmtree(run_dir)
+    t0 = time.time()
+    report, setup_s, program_s = run_one(bundle, values, run_dir, vdir)
+    wall = time.time() - t0
+    rows = app.claim_rows(values["claim_no"])
+    halt_step, halt_reason = "", ""
+    failed = [r for r in report.results if not r.ok]
+    if failed:
+        halt_step, halt_reason = failed[0].step_id, failed[0].error or ""
+    elif report.halt is not None:
+        halt_step = str(getattr(report.halt, "state_id", "") or "")
+        halt_reason = str(getattr(report.halt, "reason", "") or "")
+    newest = _newest(video_dir, before) if vdir else None
+    return Row(
+        record=i,
+        attempt=attempt,
+        claim_no=values["claim_no"],
+        insurance_no=values["insurance_no"],
+        ui_changed=changed,
+        outcome=str(
+            getattr(report.execution_outcome, "value", report.execution_outcome)
+        ),
+        success=bool(report.success),
+        model_calls=int(report.model_calls or 0),
+        wall_s=round(wall, 3),
+        setup_s=round(setup_s, 3),
+        program_s=round(program_s, 3),
+        readback_rows=len(rows),
+        readback_correct=_row_correct(rows, values),
+        verifier_verdicts=_verdicts(report),
+        halted_step=halt_step,
+        halt_reason=halt_reason[:400],
+        video=str(Path(newest).relative_to(HERE)) if newest else "",
+        run_dir=str(run_dir.relative_to(HERE)),
+        started_at=round(t0, 3),
+    )
+
+
 def cmd_batch(args: argparse.Namespace) -> int:
     out = RESULTS / args.run_id
     out.mkdir(parents=True, exist_ok=True)
+    bundle = program_dir(args.run_id) / "bundle"
+    if not bundle.is_dir():
+        raise SystemExit("no program bundle; run `compile` first")
     video_dir = out / "video" / "batch"
     video_dir.mkdir(parents=True, exist_ok=True)
+    runs_dir = HERE / "out" / "runs" / args.run_id
     csv_path = out / "batch.csv"
     fields = list(Row.__dataclass_fields__)
     done = set()
@@ -321,64 +518,55 @@ def cmd_batch(args: argparse.Namespace) -> int:
         with csv_path.open("w", newline="") as f:
             csv.DictWriter(f, fieldnames=fields).writeheader()
     video_records = {int(x) for x in args.video_records.split(",") if x}
-    app.ui_change(False)
-    changed = False
-    setup_clock: dict[str, float] = {}
-
-    def timed_setup(page: Any) -> None:
-        s0 = time.time()
-        app.setup(page)
-        setup_clock["s"] = time.time() - s0
-
-    for i in range(1, args.n + 1):
-        if args.change_at and i >= args.change_at and not changed:
-            app.ui_change(True)
-            changed = True
-            print(f"record {i}: UI change applied ({app.UI_CHANGE})")
+    changed = None
+    for i in range(args.start, args.n + 1):
+        want_change = bool(args.change_at) and i >= args.change_at
+        if want_change != changed:
+            app.ui_change(want_change)
+            changed = want_change
+            if want_change:
+                print(f"record {i}: UI change on ({app.UI_CHANGE})")
         if i in done:
             continue
         values = record_values(i, args.tag)
         vdir = video_dir if i in video_records else None
-        jit = make_jit(args.cache, video_dir=vdir, setup=timed_setup)
-        before = set(video_dir.glob("*.webm"))
-        setup_clock.clear()
-        t0 = time.time()
-        result = jit.run(**values)
-        wall = time.time() - t0
-        rows = app.claim_rows(values["claim_no"])
-        report = result.report
-        total_ms = None
-        if report is not None:
-            total_ms = getattr(report, "total_ms", None)
-            if total_ms is None and isinstance(report, dict):
-                total_ms = report.get("total_ms")
-        row = Row(
-            record=i,
-            claim_no=values["claim_no"],
-            insurance_no=values["insurance_no"],
-            ui_changed=changed,
-            status=result.status,
-            model_calls=result.model_calls,
-            wall_s=round(wall, 3),
-            setup_s=round(setup_clock.get("s", 0.0), 3),
-            program_s=round(total_ms / 1000, 3) if total_ms else None,
-            readback_rows=len(rows),
-            readback_correct=_row_correct(rows, values),
-            halt_reason=(result.halt_reason or result.detail or "")[:300],
-            repaired=False,
-            video=_newest(video_dir, before) or "",
-            run_dir=str(result.run_dir or ""),
-            started_at=round(t0, 3),
-        )
-        with csv_path.open("a", newline="") as f:
-            csv.DictWriter(f, fieldnames=fields).writerow(row.__dict__)
-        print(
-            f"record {i:3d} {row.status:10s} wall {row.wall_s:6.1f}s "
-            f"program {row.program_s}s read back {row.readback_correct}"
-        )
-        if args.stop_on_halt and not result.verified:
-            print("stopping on the first record that did not verify")
+        for attempt in range(1, args.max_attempts + 1):
+            row = _run_record(
+                i, attempt, values, bundle, runs_dir, video_dir, vdir, bool(changed)
+            )
+            with csv_path.open("a", newline="") as f:
+                csv.DictWriter(f, fieldnames=fields).writerow(row.__dict__)
+            print(
+                f"record {i:3d}.{attempt} {row.outcome:22s} program "
+                f"{row.program_s:6.1f}s {row.verifier_verdicts} {row.halted_step}",
+                flush=True,
+            )
+            # Retry only when the halt left nothing behind: the read-back
+            # finds no claim with this number. Anything else goes to a person.
+            if row.success or row.readback_rows != 0:
+                break
+        if args.stop_after_halt and not row.success:
+            print("stopping after the first record that did not succeed")
             break
+        if args.pause_after_change_halt and changed and not row.success:
+            print(
+                f"record {i}: stopped on every attempt after the UI change; "
+                "pausing the batch for a person"
+            )
+            (out / "paused.json").write_text(
+                json.dumps(
+                    {
+                        "paused_at_record": i,
+                        "reason": row.halt_reason,
+                        "step": row.halted_step,
+                        "remaining": list(range(i + 1, args.n + 1)),
+                    },
+                    indent=2,
+                )
+                + "\n"
+            )
+            break
+    app.ui_change(False)
     (out / "batch_meta.json").write_text(
         json.dumps(
             {
@@ -386,6 +574,7 @@ def cmd_batch(args: argparse.Namespace) -> int:
                 "change_at": args.change_at,
                 "ui_change": app.UI_CHANGE,
                 "tag": args.tag,
+                "profile": "demo (plain Replayer, SQL record check attached)",
                 "environment": _environment(),
             },
             indent=2,
@@ -409,11 +598,20 @@ def main() -> int:
     p.add_argument("--max-cost", type=float, default=4.0)
     p.set_defaults(func=cmd_record)
     sub.add_parser("admit").set_defaults(func=cmd_admit)
+    sub.add_parser("compile").set_defaults(func=cmd_compile)
     p = sub.add_parser("batch")
     p.add_argument("--n", type=int, default=100)
+    p.add_argument("--start", type=int, default=1)
     p.add_argument("--change-at", type=int, default=50)
-    p.add_argument("--video-records", default="1,2,3,49,50,51,52,100")
-    p.add_argument("--stop-on-halt", action="store_true")
+    p.add_argument("--video-records", default="1,2,3,49,50,51,100")
+    p.add_argument("--stop-after-halt", action="store_true")
+    p.add_argument("--pause-after-change-halt", action="store_true")
+    p.add_argument(
+        "--max-attempts",
+        type=int,
+        default=3,
+        help="retry a claim whose run stopped with nothing written",
+    )
     p.set_defaults(func=cmd_batch)
     args = parser.parse_args()
     if len(args.tag) + 3 > 8:

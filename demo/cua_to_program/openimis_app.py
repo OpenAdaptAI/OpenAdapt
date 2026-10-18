@@ -21,6 +21,7 @@ What this module supplies:
 from __future__ import annotations
 
 import os
+import subprocess
 import sys
 import time
 from pathlib import Path
@@ -73,25 +74,40 @@ WHERE c."ValidityTo" IS NULL
 ORDER BY c."ClaimID"
 """
 
-# The UI change: the field the program types the claim's explanation into is
-# relabelled, as a vendor UI update would. The script only rewrites label
-# text in the page; it does not touch data, layout or the API.
+# The UI change at record #50: a vendor update relabels the claim form's
+# icon-only Save button. It becomes an extended button reading "Save claim",
+# with that accessible name. The script only changes that button's look and
+# name; it does not touch data, other controls or the API.
 UI_CHANGE_JS = r"""
 (function () {
-  var FROM = "Explanation", TO = "Claim notes";
+  var LABEL = "Save claim";
   function apply() {
-    document.querySelectorAll("label").forEach(function (l) {
-      if (l.textContent.trim().indexOf(FROM) === 0) {
-        l.textContent = l.textContent.replace(FROM, TO);
-      }
-    });
+    if (!/\/claim\/healthFacilities\/claim/.test(location.pathname)) return;
+    var fabs = document.querySelectorAll("button.MuiFab-root");
+    if (!fabs.length) return;
+    var save = fabs[fabs.length - 1];
+    if (save.getAttribute("data-oa-relabel")) return;
+    save.setAttribute("data-oa-relabel", "1");
+    save.setAttribute("aria-label", LABEL);
+    save.setAttribute("title", LABEL);
+    save.style.width = "auto";
+    save.style.borderRadius = "28px";
+    save.style.padding = "0 20px";
+    var text = document.createElement("span");
+    text.textContent = LABEL;
+    text.style.marginLeft = "8px";
+    text.style.fontWeight = "600";
+    save.appendChild(text);
   }
   new MutationObserver(apply).observe(document.documentElement,
     {childList: true, subtree: true});
   apply();
 })();
 """
-UI_CHANGE = {"from": "Explanation", "to": "Claim notes"}
+UI_CHANGE = {
+    "control": "claim form Save button (icon only)",
+    "change": 'relabelled "Save claim" (extended button, new accessible name)',
+}
 
 
 def fixture() -> OpenIMISFixture:
@@ -125,7 +141,27 @@ def _wait_network_quiet(page: Any, open_requests: set, quiet_s: float = 0.5) -> 
     raise FixtureError(f"{len(open_requests)} request(s) still open after 60 s")
 
 
-def setup(page: Any) -> None:
+def _pick_facility_and_admin(
+    page: Any, fx: OpenIMISFixture, open_requests: set
+) -> None:
+    page.goto(f"{fx.base_url}/front/claim/healthFacilities", wait_until="networkidle")
+    _wait_network_quiet(page, open_requests)
+    hf = page.get_by_placeholder("Search a Health Facility")
+    hf.click(timeout=15_000)
+    hf.fill(HEALTH_FACILITY_CODE)
+    option = page.locator("[role=option]", has_text=HEALTH_FACILITY_CODE).first
+    option.wait_for(state="visible", timeout=15_000)
+    option.click()
+    _wait_network_quiet(page, open_requests)
+    admin = page.get_by_placeholder("Search a Claim")
+    admin.click(timeout=15_000)
+    option = page.locator("[role=option]", has_text=CLAIM_ADMIN_CODE).first
+    option.wait_for(state="visible", timeout=15_000)
+    option.click()
+    _wait_network_quiet(page, open_requests)
+
+
+def _setup_once(page: Any) -> None:
     """Sign in with the synthetic demo actor and open a blank claim form.
 
     Leaves the keyboard focus in the Insurance No. field. Unmeasured: the
@@ -146,28 +182,16 @@ def setup(page: Any) -> None:
     # navigation cuts off gets no finished or failed event in Playwright, and
     # the run's readiness gate would wait on it forever.
     _wait_network_quiet(page, open_requests)
-    page.goto(f"{fx.base_url}/front/claim/healthFacilities", wait_until="networkidle")
-    hf = page.get_by_placeholder("Search a Health Facility")
-    hf.click()
-    hf.fill(HEALTH_FACILITY_CODE)
-    option = page.locator("[role=option]", has_text=HEALTH_FACILITY_CODE).first
-    option.wait_for(state="visible", timeout=30_000)
-    option.click()
-    _wait_network_quiet(page, open_requests)
-    admin = page.get_by_placeholder("Search a Claim")
     for attempt in range(3):
-        admin.click()
-        option = page.locator("[role=option]", has_text=CLAIM_ADMIN_CODE).first
         try:
-            option.wait_for(state="visible", timeout=10_000)
+            _pick_facility_and_admin(page, fx, open_requests)
             break
         except Exception:
+            # The pickers load from GraphQL and sometimes render late under
+            # emulation. Start the list page again; give up after 3 tries.
             if attempt == 2:
                 raise
-            page.keyboard.press("Escape")
             _wait_network_quiet(page, open_requests)
-    option.click()
-    _wait_network_quiet(page, open_requests)
     fab = page.locator("button.MuiFab-root:enabled").last
     fab.wait_for(state="visible", timeout=30_000)
     fab.click()
@@ -176,6 +200,24 @@ def setup(page: Any) -> None:
     ins.wait_for(state="visible", timeout=30_000)
     _wait_network_quiet(page, open_requests)
     ins.click()
+
+
+def setup(page: Any) -> None:
+    """Sign in with the synthetic demo actor and open a blank claim form.
+
+    Retries the whole sign-in up to three times: under emulation the
+    openIMIS pickers sometimes render late. Unmeasured, like a person's
+    sign-in before the work starts.
+    """
+
+    for attempt in range(3):
+        try:
+            _setup_once(page)
+            return
+        except Exception:
+            if attempt == 2:
+                raise
+            page.context.clear_cookies()
 
 
 # -- system of record ---------------------------------------------------------
@@ -260,7 +302,22 @@ _TAG = '<script src="/front/oa-ui-change.js"></script>'
 
 
 def _frontend(fx: OpenIMISFixture, *args: str, input_text: Optional[str] = None) -> str:
-    return fx._compose("exec", "-T", "frontend", *args, input_text=input_text)
+    """Run a command in the frontend container.
+
+    Calls ``docker exec`` on the compose project's container directly: going
+    through the fixture's compose wrapper re-fetches and re-verifies the
+    pinned upstream compose files on every new process.
+    """
+
+    proc = subprocess.run(
+        ["docker", "exec", "-i", f"{fx.project_name}-frontend-1", *args],
+        input=input_text,
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise FixtureError(f"frontend exec failed: {proc.stderr[-500:]}")
+    return proc.stdout
 
 
 def ui_change(on: bool, fx: Optional[OpenIMISFixture] = None) -> None:
@@ -277,9 +334,7 @@ def ui_change(on: bool, fx: Optional[OpenIMISFixture] = None) -> None:
             f"sed -i 's#</head>#{_TAG}</head>#' {_HTML}",
         )
     else:
-        _frontend(
-            fx, "sh", "-c", f"sed -i 's#{_TAG}##' {_HTML}; rm -f {_JS}"
-        )
+        _frontend(fx, "sh", "-c", f"sed -i 's#{_TAG}##' {_HTML}; rm -f {_JS}")
 
 
 def ui_change_is_on(fx: Optional[OpenIMISFixture] = None) -> bool:
