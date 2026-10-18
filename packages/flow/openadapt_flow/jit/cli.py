@@ -149,6 +149,7 @@ def cmd_jit(
                     principal_id=args.principal,
                     accept_params=accept,
                     confirm=confirm(f"Make {accept} the task's parameters?"),
+                    key_dir=_key_dir(args),
                 )
                 status = lifecycle.admission_status(program, key_dir=_key_dir(args))
             for i, step in enumerate(status["steps"], 1):
@@ -163,6 +164,7 @@ def cmd_jit(
                 principal_id=args.principal,
                 reviewed_steps=steps,
                 confirm=confirm(f"{args.principal} reviewed every step above?"),
+                key_dir=_key_dir(args),
             )
             print(f"reviewed by {record['principal_id']}; digest {record['digest']}")
             return 0
@@ -222,7 +224,10 @@ def cmd_jit(
                 print("Not rejected.")
                 return 1
             kept = lifecycle.reject(
-                program, principal_id=args.principal, reason=args.reason or ""
+                program,
+                principal_id=args.principal,
+                reason=args.reason or "",
+                key_dir=_key_dir(args),
             )
             print(f"REJECTED; kept at {kept}")
             return 0
