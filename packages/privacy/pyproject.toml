@@ -48,8 +48,8 @@ dev = [
 openadapt-privacy-scan = "openadapt_privacy.scan:main"
 
 [project.urls]
-Homepage = "https://github.com/OpenAdaptAI/openadapt-privacy"
-Repository = "https://github.com/OpenAdaptAI/openadapt-privacy"
+Homepage = "https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/privacy"
+Repository = "https://github.com/OpenAdaptAI/OpenAdapt"
 
 [build-system]
 requires = ["hatchling"]
@@ -73,19 +73,3 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
-
-[tool.semantic_release]
-version_toml = ["pyproject.toml:project.version"]
-commit_message = "chore: release {version}"
-# The public package is on the 1.x line. Declare that policy explicitly rather
-# than inheriting version-line behavior from the semantic-release runtime.
-allow_zero_version = false
-major_on_zero = true
-
-[tool.semantic_release.branches.main]
-match = "main"
-
-[tool.semantic_release.commit_parser_options]
-allowed_tags = ["build", "chore", "ci", "docs", "feat", "fix", "perf", "refactor", "style", "test"]
-minor_tags = ["feat"]
-patch_tags = ["fix", "perf"]

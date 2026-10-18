@@ -1,8 +1,6 @@
 """Tests using synthetic fixtures."""
 
-from typing import ClassVar
 
-import pytest
 
 from openadapt_privacy.base import ScrubbingProvider
 from openadapt_privacy.loaders import DictRecordingLoader

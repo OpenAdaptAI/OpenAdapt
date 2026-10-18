@@ -1,6 +1,134 @@
 # CHANGELOG
 
 
+## v1.1.3 (2026-10-18)
+
+### Bug Fixes
+
+- **scan**: Drop site-specific tokens from the forbidden-path list
+
+
+## v1.1.2 (2026-10-14)
+
+### Bug Fixes
+
+- Correct the fill colour docs and give the scan CLI real help text (openadapt-privacy#23)
+
+- Drop internal wording from the scan output and config docs (openadapt-privacy#23)
+
+- Keep a surname that matches a label abbreviation redacted (openadapt-privacy#23)
+
+- Keep field labels readable and find addresses after any address label (openadapt-privacy#23)
+
+### Chores
+
+- Sync the published source policy (openadapt-privacy#22)
+
+### Documentation
+
+- Lead the README with what the package does and a quick start (openadapt-privacy#23)
+
+- Make the README's card, scan, and setup claims match the code (openadapt-privacy#23)
+
+
+## v1.1.1 (2026-10-14)
+
+### Bug Fixes
+
+- Fail the PHI scan closed and drop the pip runtime dependency (openadapt-privacy#21)
+
+- Fail the PHI scan when the root is missing, empty, or unreadable (openadapt-privacy#21)
+
+- Keep the scan's fail-closed checks precise across Python versions (openadapt-privacy#21)
+
+- Stop requiring pip at install time (openadapt-privacy#21)
+
+
+## v1.1.0 (2026-09-01)
+
+### Features
+
+- Add stdlib git/CI PHI scanner (openadapt-privacy#20)
+
+
+## v1.0.4 (2026-08-28)
+
+### Bug Fixes
+
+- Decide separated action text by shape, and label identifiers by recognizer (openadapt-privacy#19)
+
+### Chores
+
+- Ignore every .env variant, not one at a time (openadapt-privacy#16)
+
+- **policy**: Sync generated source boundary (openadapt-privacy#17)
+
+### Documentation
+
+- Rewrite the README, and replace the examples with measured output (openadapt-privacy#18)
+
+
+## v1.0.3 (2026-08-19)
+
+### Bug Fixes
+
+- **ci**: Publish with an action that accepts Metadata-Version 2.5 (openadapt-privacy#14)
+
+
+## v1.0.2 (2026-07-29)
+
+### Bug Fixes
+
+- Fail closed when privacy dependencies fail
+
+### Chores
+
+- Scrub nested privacy structures recursively (openadapt-privacy#12)
+
+- **release**: Enforce source policy on archives (openadapt-privacy#11)
+
+
+## v1.0.1 (2026-07-28)
+
+### Bug Fixes
+
+- Stop reporting a failed scrub as a successful one (openadapt-privacy#10)
+
+### Chores
+
+- Add MIT LICENSE file (openadapt-privacy#7)
+
+- Declare privacy release line
+
+- Gitignore .private/ (openadapt-privacy#9)
+
+### Documentation
+
+- Refresh README to shared OpenAdapt house style (openadapt-privacy#8)
+
+
+## v1.0.0 (2026-07-15)
+
+### Bug Fixes
+
+- Remove vulnerable transformer dependency (openadapt-privacy#4)
+
+- Remove vulnerable transformer dependency from Presidio scrubber (openadapt-privacy#4)
+
+- **ci**: Release through protected main (openadapt-privacy#5)
+
+- **ci**: Use v9 branch config for python-semantic-release (openadapt-privacy#3)
+
+### Continuous Integration
+
+- Pin privacy test and release toolchain (openadapt-privacy#4)
+
+### Testing
+
+- Support Python 3.10 dependency checks (openadapt-privacy#4)
+
+
+
 ## v0.1.1 (2026-01-29)
 
 ### Bug Fixes

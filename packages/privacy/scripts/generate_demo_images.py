@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Generate demo images showing before/after PII scrubbing."""
 
-from PIL import Image, ImageDraw, ImageFont
 import sys
 from pathlib import Path
+
+from PIL import Image, ImageDraw, ImageFont
 
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -18,11 +19,9 @@ def create_pii_screenshot(width: int = 600, height: int = 400) -> Image.Image:
     try:
         font_large = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 24)
         font_medium = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 18)
-        font_small = ImageFont.truetype("/System/Library/Fonts/Helvetica.ttc", 14)
     except (OSError, IOError):
         font_large = ImageFont.load_default()
         font_medium = font_large
-        font_small = font_large
 
     # Header
     draw.rectangle([0, 0, width, 50], fill=(51, 51, 51))

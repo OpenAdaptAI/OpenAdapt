@@ -1,6 +1,6 @@
 # openadapt-privacy
 
-[![Build Status](https://github.com/OpenAdaptAI/openadapt-privacy/actions/workflows/test.yml/badge.svg?branch=main)](https://github.com/OpenAdaptAI/openadapt-privacy/actions)
+[![Build Status](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg?branch=main)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml)
 [![PyPI version](https://img.shields.io/pypi/v/openadapt-privacy.svg)](https://pypi.org/project/openadapt-privacy/)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
@@ -99,7 +99,7 @@ filled with solid red. `scripts/generate_demo_images.py` produced this output:
 
 | Before | After |
 | --- | --- |
-| ![Synthetic profile form with a name, email address, phone number, SSN, and card number](https://raw.githubusercontent.com/OpenAdaptAI/openadapt-privacy/main/assets/screenshot_original.png) | ![The same form with the email address, phone number, SSN, card number, and two field labels covered in red; the name in the dark title bar is still visible](https://raw.githubusercontent.com/OpenAdaptAI/openadapt-privacy/main/assets/screenshot_scrubbed.png) |
+| ![Synthetic profile form with a name, email address, phone number, SSN, and card number](https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/packages/privacy/assets/screenshot_original.png) | ![The same form with the email address, phone number, SSN, card number, and two field labels covered in red; the name in the dark title bar is still visible](https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/packages/privacy/assets/screenshot_scrubbed.png) |
 
 The name in the dark title bar is still visible because Tesseract did not read
 light text on a dark background. See [Limits](#limits).
@@ -220,15 +220,15 @@ this package.
   clinical validation.
 
 If you deploy this where recordings can hold protected health information, read
-[docs/COMPLIANCE.md](https://github.com/OpenAdaptAI/openadapt-privacy/blob/main/docs/COMPLIANCE.md)
+[docs/COMPLIANCE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/privacy/docs/COMPLIANCE.md)
 for the fail-closed behavior, the provenance record each scrub writes, and the
 review steps around it.
 
 ## Development
 
 ```bash
-git clone https://github.com/OpenAdaptAI/openadapt-privacy
-cd openadapt-privacy
+git clone https://github.com/OpenAdaptAI/OpenAdapt
+cd OpenAdapt/packages/privacy
 uv sync --extra dev --extra presidio
 uv pip install pip    # spacy download installs the model with pip
 uv run python -m spacy download en_core_web_sm
@@ -237,6 +237,6 @@ uv run pytest
 
 ## License
 
-[MIT](https://github.com/OpenAdaptAI/openadapt-privacy/blob/main/LICENSE).
+[MIT](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/privacy/LICENSE).
 openadapt-privacy is part of [OpenAdapt](https://github.com/OpenAdaptAI/OpenAdapt)
 and works without it.

@@ -95,9 +95,20 @@ scrubbed = scrub_dict(action, scrubber)
 uv run pytest tests/ -v
 ```
 
+## Releasing
+
+This package lives in the OpenAdapt monorepo at `packages/privacy`. CI runs
+from the root `.github/workflows/packages.yml`. To release, open a PR that bumps
+`version` in `pyproject.toml` and adds a `## vX.Y.Z (YYYY-MM-DD)` section at the
+top of `CHANGELOG.md`. After it merges, run the root `Release package` workflow
+(`release-package.yml`) from `main` with `package: privacy`. It publishes
+`openadapt-privacy` to PyPI through the `pypi-privacy` environment and tags
+`openadapt-privacy-vX.Y.Z`. Tags through `v1.1.3` live in the archived
+OpenAdaptAI/openadapt-privacy repository.
+
 ## Related Projects
 
-- [openadapt-capture](https://github.com/OpenAdaptAI/openadapt-capture) - GUI interaction capture
+- [openadapt-capture](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/capture) - GUI interaction capture
 - [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) - Train models on captures
 - [openadapt-viewer](https://github.com/OpenAdaptAI/openadapt-viewer) - Visualization components
 - [Presidio](https://github.com/microsoft/presidio) - PII detection and redaction

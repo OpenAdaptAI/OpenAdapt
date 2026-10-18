@@ -4,8 +4,6 @@ import json
 import tempfile
 from pathlib import Path
 
-import pytest
-
 from openadapt_privacy.base import ScrubbingProvider
 from openadapt_privacy.loaders import (
     Action,

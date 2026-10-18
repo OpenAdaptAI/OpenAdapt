@@ -9,12 +9,12 @@ Participation in this project is governed by the
 
 `OpenAdaptAI/OpenAdapt` is a monorepo. The root holds the `openadapt`
 launcher, and `packages/` holds the engine (`packages/flow`), the MCP server
-(`packages/agent`), the shared contracts (`packages/types`) and the recorder
-(`packages/capture`). New engine, replay, repair, policy, and backend work
-belongs in `packages/flow`.
+(`packages/agent`), the shared contracts (`packages/types`), the recorder
+(`packages/capture`) and privacy scrubbing (`packages/privacy`). New engine,
+replay, repair, policy, and backend work belongs in `packages/flow`.
 
-Privacy scrubbing and OpenAdapt Desktop are moving into `packages/` as well.
-Open new issues and pull requests here.
+OpenAdapt Desktop is moving into `packages/` as well. Open new issues and pull
+requests here.
 
 The [signed Production record](https://docs.openadapt.ai/production-lifecycle.json)
 provides the current admission state. Do not infer a lifecycle state from
