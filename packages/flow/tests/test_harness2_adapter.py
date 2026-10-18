@@ -242,6 +242,20 @@ def test_reward_selection_finds_the_safe_harness(tmp_path, h2):
         in (ctx / "rollouts" / "base1.md").read_text()
     )
     assert not list(ctx.rglob("readback.json"))
+    assert (
+        "identity check at this write: mismatch"
+        in (ctx / "rollouts" / "base1.md").read_text()
+    )
+    # Every rollout of the task lands in a Meta-Harness-style trace export.
+    index = [
+        json.loads(x)
+        for x in (tmp_path / "work" / "traces" / "index.jsonl").read_text().splitlines()
+    ]
+    assert {r["candidate"] for r in index} == {"base1", "inv1", "dom1", "c1"}
+    assert index[-1]["wrong_record"] is True and index[-1]["identity_mismatches"] == 1
+    assert (
+        tmp_path / "work" / "traces" / "candidates" / "c1" / "harness" / "AGENTS.md"
+    ).is_file()
 
 
 def test_screen_evidence_hides_the_readback(tmp_path, h2):

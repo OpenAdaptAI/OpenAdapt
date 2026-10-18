@@ -297,6 +297,15 @@ class OpenAdaptGuiAdapter:
 
     def trajectory(self, run_dir: Path, *, obs_trunc: int) -> str:
         run_dir = Path(run_dir)
+        run = load_run(run_dir)
+        identity: dict[int, Any] = {}
+        if self.evidence == "readback" and run.get("task_id") in self._tasks:
+            # OpenAdapt's identity check at each write: was the record on
+            # screen the requested one? Part of the read-back evidence.
+            from openadapt_flow.integrations.harness2.traces import from_rollout
+
+            trace = from_rollout(run_dir, self._tasks[run["task_id"]])
+            identity = {s.index: s.identity for s in trace.steps if s.identity}
         lines: list[str] = []
         for step in load_steps(run_dir):
             obs = str(step.get("observation", ""))
@@ -313,9 +322,15 @@ class OpenAdaptGuiAdapter:
                 + _action_text(action)
                 + (f"\n  reason given: {thought}" if thought else "")
             )
+            verdict = identity.get(int(step.get("index", -1)))
+            if verdict is not None:
+                lines.append(
+                    f"[OBSERVATION] identity check at this write: {verdict.status}; "
+                    f"requested {verdict.expected}; on screen "
+                    f"{verdict.observed or 'no patient banner'}"
+                )
             if step.get("error"):
                 lines.append(f"[ERROR] {step['error']}")
-        run = load_run(run_dir)
         if run.get("error"):
             lines.append(f"[ERROR] {run['error']}")
         if not any(line.startswith("[ACTION] done") for line in lines):
