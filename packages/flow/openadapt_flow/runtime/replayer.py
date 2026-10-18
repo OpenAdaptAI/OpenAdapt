@@ -556,21 +556,43 @@ def _scroll_target_positioned(
     return True
 
 
+def _identity_tokens(text: Any) -> set[str]:
+    return {t for t in re.split(r"[^0-9a-z]+", str(text or "").lower()) if t}
+
+
+def identity_read_contradicts(check: Any) -> bool:
+    """A ``mismatch`` read that saw text the expected identity doesn't have.
+
+    "mismatch" also covers a read that is merely incomplete (columns cut
+    off). Only a read that shows a token the expected record lacks (another
+    MRN, a different spelling or date) is evidence of a different record.
+    """
+
+    if getattr(check, "status", None) != "mismatch":
+        return False
+    expected = _identity_tokens(getattr(check, "expected", None))
+    observed = _identity_tokens(getattr(check, "observed", None))
+    if not expected or not observed:
+        return True  # nothing to compare: keep the refusal
+    return not observed <= expected
+
+
 def better_identity_read(first: Any, retry: Any) -> Any:
     """The identity read to keep from a first read and its upscaled re-read.
 
-    An affirmative ``mismatch`` on either read is final: the record on screen
-    was read as a different one, and a second read of the same screen must
-    never turn that into ``verified``. Otherwise ``verified`` beats the two
-    "cannot certify" outcomes, ``abstain`` beats a blank ``unreadable``, and a
-    tie goes to the read that covered more of the expected identity.
+    A read that contradicts the expected record (:func:`identity_read_contradicts`)
+    is final: a second read of the same screen must never turn it into
+    ``verified``. A mismatch that is only incomplete can be rescued by a
+    re-read that verifies. Otherwise ``verified`` beats the "cannot certify"
+    outcomes, then a mismatch, then ``abstain``, then a blank ``unreadable``;
+    a tie goes to the read that covered more of the expected identity.
     """
 
-    if first.status == "mismatch":
+    if identity_read_contradicts(first):
         return first
-    if retry.status == "mismatch":
+    if identity_read_contradicts(retry):
         return retry
-    rank = {"unreadable": 0, "abstain": 1, "verified": 3}
+    rank = {"unreadable": 0, "abstain": 1, "mismatch": 2, "verified": 3}
     if (rank[retry.status], retry.coverage) > (rank[first.status], first.coverage):
         return retry
     return first
@@ -12913,7 +12935,7 @@ class Replayer:
             scoped_identifier=identifier_region is not None,
             identifier_filter=identifier_region,
         )
-        if check.status in ("verified", "mismatch"):
+        if check.status == "verified" or identity_read_contradicts(check):
             # A read that names a different record is final: a later read of
             # the same screen must never overrule it into "verified".
             return check
