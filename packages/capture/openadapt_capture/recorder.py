@@ -35,13 +35,12 @@ import uuid
 from collections import deque, namedtuple
 from dataclasses import dataclass
 from functools import partial
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
 import fire
 import numpy as np
 import psutil
 from loguru import logger
-from pympler import tracker
 from tqdm import tqdm
 
 from openadapt_capture import platform, utils, video, window
@@ -94,6 +93,9 @@ from openadapt_capture.window_capture import (
     build_window_scope,
     prepare_macos_window_capture_runtime,
 )
+
+if TYPE_CHECKING:
+    from pympler.tracker import SummaryTracker
 
 CoordinateScope = WindowCaptureScope | DesktopCaptureScope
 
@@ -876,13 +878,13 @@ def collect_stats(performance_snapshots: list[tracemalloc.Snapshot]) -> None:
 
 
 def log_memory_usage(
-    tracker: tracker.SummaryTracker,
+    tracker: "SummaryTracker",
     performance_snapshots: list[tracemalloc.Snapshot],
 ) -> None:
     """Logs memory usage stats and allocation trace based on snapshots.
 
     Args:
-        tracker (tracker.SummaryTracker): The tracker to use.
+        tracker (pympler.tracker.SummaryTracker): The tracker to use.
         performance_snapshots (list[tracemalloc.Snapshot]): The list of snapshots.
     """
     assert len(performance_snapshots) == 2, performance_snapshots
@@ -2659,12 +2661,16 @@ def record_audio(
         terminate_processing: An event to signal the termination of the process.
         started_event: Event to set once started.
     """
-    from openadapt_capture.audio import require_local_transcription_backend
+    from openadapt_capture.audio import (
+        require_audio_dependencies,
+        require_local_transcription_backend,
+    )
 
     # Fail closed BEFORE anything else, and in particular before the microphone
     # is opened. Previously the stream was opened, the whole session was
     # captured, and only then did the missing backend surface -- recording the
     # operator for nothing and failing the capture at the end.
+    require_audio_dependencies()
     backend = require_local_transcription_backend()
 
     utils.set_start_time(recording.timestamp)
@@ -3326,7 +3332,14 @@ def record(
 
         if log_memory:
             performance_snapshots = []
-            _tracker = tracker.SummaryTracker()
+            try:
+                from pympler.tracker import SummaryTracker
+            except ImportError as exc:
+                raise ImportError(
+                    "log_memory needs Pympler. Install it with: "
+                    "pip install 'openadapt-capture[profile]'"
+                ) from exc
+            _tracker = SummaryTracker()
             tracemalloc.start()
             collect_stats(performance_snapshots)
 
@@ -3452,17 +3465,26 @@ def record(
             desktop_scope.assert_current(force=True)
 
         if config.PLOT_PERFORMANCE and startup_ready:
-            from openadapt_capture import plotting
-
-            session = get_session_for_path(db_path)
             try:
-                plotting.plot_performance(
-                    session,
-                    recording,
-                    save_dir=capture_dir,
+                from openadapt_capture import plotting
+            except ImportError:
+                # The plot is a diagnostic. Its absence must not fail a capture.
+                logger.warning(
+                    "PLOT_PERFORMANCE is on but Matplotlib is not installed; "
+                    "skipping the plot. Install it with: "
+                    "pip install 'openadapt-capture[plot]'"
                 )
-            finally:
-                close_capture_session(session)
+                plotting = None
+            if plotting is not None:
+                session = get_session_for_path(db_path)
+                try:
+                    plotting.plot_performance(
+                        session,
+                        recording,
+                        save_dir=capture_dir,
+                    )
+                finally:
+                    close_capture_session(session)
 
         logger.info(f"Saved {recording_timestamp=}")
 

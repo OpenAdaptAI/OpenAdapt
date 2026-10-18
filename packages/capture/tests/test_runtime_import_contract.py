@@ -25,9 +25,15 @@ def _runtime_dependency_names() -> set[str]:
     }
 
 
-def test_recorder_import_dependencies_are_in_the_default_install() -> None:
-    """The default package API must not rely on development-only packages."""
-    assert "matplotlib" in _runtime_dependency_names()
+#: Opt-in stacks. A plain record and read must work without any of them.
+OPTIONAL_MODULES = ("matplotlib", "pympler", "sounddevice", "soundfile", "alembic")
+
+
+def test_opt_in_stacks_are_not_in_the_default_install() -> None:
+    """Plots, narration, profiling and migrations are extras, not core."""
+    runtime_dependencies = _runtime_dependency_names()
+    for name in OPTIONAL_MODULES:
+        assert name not in runtime_dependencies, name
 
 
 def test_macos_accessibility_uses_permissive_runtime_dependencies() -> None:
@@ -75,31 +81,40 @@ def test_performance_plotting_is_opt_in() -> None:
     assert Settings(_env_file=None).PLOT_PERFORMANCE is False
 
 
-def test_default_install_exposes_recorder() -> None:
-    """Recorder import never fails because a runtime dependency is undeclared."""
+def test_default_install_exposes_recorder_without_opt_in_stacks() -> None:
+    """The package API, Recorder and CaptureSession import with the extras blocked."""
+    script = f"""
+import importlib.abc
+import sys
+
+BLOCKED = {OPTIONAL_MODULES!r}
+
+class BlockOptional(importlib.abc.MetaPathFinder):
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname.split(".")[0] in BLOCKED:
+            raise ModuleNotFoundError(f"blocked optional {{fullname}}", name=fullname)
+        return None
+
+sys.meta_path.insert(0, BlockOptional())
+import openadapt_capture
+from openadapt_capture import CaptureSession, Recorder
+from openadapt_capture import cli, recorder
+assert Recorder is recorder.Recorder and CaptureSession is not None
+leaked = sorted(m for m in sys.modules if m.split(".")[0] in BLOCKED)
+assert not leaked, leaked
+print("CORE_IMPORT_OK")
+"""
     result = subprocess.run(
-        [
-            sys.executable,
-            "-c",
-            (
-                "import importlib; "
-                "\ntry:\n"
-                "    module = importlib.import_module('openadapt_capture.recorder')\n"
-                "except ImportError as exc:\n"
-                "    assert exc.name != 'matplotlib' and "
-                "'matplotlib' not in str(exc), exc\n"
-                "else:\n"
-                "    assert module.Recorder is not None\n"
-            ),
-        ],
+        [sys.executable, "-c", script],
         cwd=ROOT,
         capture_output=True,
         text=True,
     )
     assert result.returncode == 0, (
-        "Recorder depended on an undeclared default-runtime package.\n"
+        "The default package API needed an opt-in extra.\n"
         f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}"
     )
+    assert "CORE_IMPORT_OK" in result.stdout
 
 
 def test_default_package_import_and_recorder_construction_do_not_import_av() -> None:

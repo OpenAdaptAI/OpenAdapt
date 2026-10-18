@@ -92,10 +92,16 @@ def record(
         # the OS recording indicator.
         from openadapt_capture.audio import (
             NoLocalTranscriptionBackend,
+            require_audio_dependencies,
             require_local_transcription_backend,
         )
         from openadapt_capture.config import settings
 
+        try:
+            require_audio_dependencies()
+        except ImportError as exc:
+            print(str(exc))
+            raise SystemExit(1) from exc
         try:
             audio_backend = require_local_transcription_backend()
         except NoLocalTranscriptionBackend as exc:
