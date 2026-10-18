@@ -170,8 +170,15 @@ def _deferred_only(result: StepResult) -> bool:
     uncertainty = result.delivery_uncertainty
     if uncertainty is not None and not uncertainty.resolved_by_contract:
         return False
+    # Every declared effect must have its own evidence: the replayer stops at
+    # the first unconfirmed effect, so an effect declared after the deferred
+    # one was never checked and must not ride along to VERIFIED later.
+    if not _effect_evidence_has_exact_coverage(result):
+        return False
     waiting = False
     for evidence in result.effect_evidence:
+        if evidence.reconciliation_actions or evidence.reconciliation_completed:
+            return False
         if evidence.final_verdict == "confirmed":
             continue
         if evidence.final_verdict != "indeterminate" or not evidence.deferred_check:
@@ -188,9 +195,14 @@ def _awaiting_report_only(report: RunReport) -> bool:
     what happened. Anything more falls back to RECONCILIATION_REQUIRED.
     """
 
-    deferred = [r for r in report.results if _deferred_only(r)]
-    if not deferred:
+    if report.execution_outcome != "HALTED":
+        # A failed, canceled or otherwise odd run is not "waiting".
         return False
+    ran = [r for r in report.results if not r.skipped]
+    if not ran or not _deferred_only(ran[-1]):
+        # The run must have stopped at the deferred save itself.
+        return False
+    deferred = [r for r in report.results if _deferred_only(r)]
     deferred_ids = {r.step_id for r in deferred}
     return all(
         step_id in deferred_ids for step_id in steps_requiring_reconciliation(report)

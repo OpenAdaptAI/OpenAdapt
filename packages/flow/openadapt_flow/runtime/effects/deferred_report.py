@@ -37,11 +37,13 @@ from __future__ import annotations
 import hashlib
 import hmac
 import os
+import re
 import secrets
+from contextlib import contextmanager
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
-from typing import Any, Literal, Mapping, Optional
+from typing import Any, Iterator, Literal, Mapping, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -51,6 +53,7 @@ from openadapt_flow.reports.parse import (
     ReportFormat,
     ReportRow,
     parse_report,
+    x12_issued_at,
 )
 from openadapt_flow.runtime.effects.adapter import ConnectionProbe, VerifierAdapterBase
 from openadapt_flow.runtime.effects.effect import (
@@ -65,6 +68,7 @@ from openadapt_flow.verification import VerificationTier
 SUBSTRATE = "deferred-report"
 PENDING_SCHEMA: Literal["openadapt.deferred-check/v1"] = "openadapt.deferred-check/v1"
 _SALT_FILE = ".salt"
+_LOCK_FILE = ".lock"
 
 EntryState = Literal["waiting", "verified", "reconciliation_required"]
 
@@ -106,6 +110,9 @@ class PendingCheck(BaseModel):
     key_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     effect_contract_hash: str
     report_format: str
+    #: SHA-256 of the exact report format (columns, accept and reject values,
+    #: pattern): only a report read the same way can settle the entry.
+    report_format_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
     describe: str
     state: EntryState = "waiting"
     settled_at: Optional[str] = None
@@ -132,27 +139,64 @@ def _iso(moment: datetime) -> str:
     return moment.astimezone(timezone.utc).isoformat()
 
 
+def format_digest(fmt: ReportFormat) -> str:
+    return hashlib.sha256(fmt.model_dump_json().encode("utf-8")).hexdigest()
+
+
+#: X12 dates carry no time zone; a report time is compared with this slack.
+_X12_CLOCK_SLACK = timedelta(hours=14)
+
+
 class PendingLedger:
-    """A directory of pending checks, one JSON file each (mode 0600)."""
+    """A directory of pending checks, one JSON file each (mode 0600).
+
+    Every change happens under an exclusive lock on the ledger, and an entry
+    only ever moves out of ``waiting``, never back or sideways.
+    """
 
     def __init__(self, directory: str | Path) -> None:
         self.directory = Path(directory)
 
     # -- storage ------------------------------------------------------------------
     def _ensure(self) -> None:
-        self.directory.mkdir(parents=True, exist_ok=True)
-        os.chmod(self.directory, 0o700)
+        if not self.directory.exists():
+            self.directory.mkdir(parents=True, mode=0o700)
+
+    @contextmanager
+    def _locked(self) -> Iterator[None]:
+        import fcntl
+
+        self._ensure()
+        fd = os.open(self.directory / _LOCK_FILE, os.O_RDWR | os.O_CREAT, 0o600)
+        try:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            yield
+        finally:
+            fcntl.flock(fd, fcntl.LOCK_UN)
+            os.close(fd)
 
     def _salt(self) -> bytes:
         self._ensure()
         path = self.directory / _SALT_FILE
-        try:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        except FileExistsError:
-            return bytes.fromhex(path.read_text().strip())
-        with os.fdopen(fd, "w") as handle:
-            handle.write(secrets.token_hex(32))
-        return bytes.fromhex(path.read_text().strip())
+        if not path.exists():
+            # Written in full to a temporary file, then linked into place, so
+            # no reader ever sees a partial salt.
+            tmp = self.directory / f".salt.{secrets.token_hex(8)}"
+            fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+            with os.fdopen(fd, "w") as handle:
+                handle.write(secrets.token_hex(32))
+                handle.flush()
+                os.fsync(handle.fileno())
+            try:
+                os.link(tmp, path)
+            except FileExistsError:
+                pass
+            finally:
+                os.unlink(tmp)
+        salt = bytes.fromhex(path.read_text().strip())
+        if len(salt) != 32:
+            raise ValueError("the ledger salt is damaged")
+        return salt
 
     def key_digest(self, key: str) -> str:
         return hmac.new(
@@ -172,6 +216,8 @@ class PendingLedger:
         os.replace(tmp, path)
 
     def get(self, entry_id: str) -> Optional[PendingCheck]:
+        if not re.fullmatch(r"deferred:[0-9a-f]{32}", entry_id or ""):
+            return None
         path = self._path(entry_id)
         if not path.is_file():
             return None
@@ -191,22 +237,24 @@ class PendingLedger:
         *,
         key: str,
         effect_contract_hash: str,
-        report_format: str,
+        fmt: ReportFormat,
         describe: str,
         deadline_hours: float,
         now: Optional[datetime] = None,
     ) -> PendingCheck:
         moment = now or _now()
-        entry = PendingCheck(
-            id=f"deferred:{secrets.token_hex(16)}",
-            created_at=_iso(moment),
-            deadline=_iso(moment + timedelta(hours=deadline_hours)),
-            key_digest=self.key_digest(key),
-            effect_contract_hash=effect_contract_hash,
-            report_format=report_format,
-            describe=describe,
-        )
-        self._write(entry)
+        with self._locked():
+            entry = PendingCheck(
+                id=f"deferred:{secrets.token_hex(16)}",
+                created_at=_iso(moment),
+                deadline=_iso(moment + timedelta(hours=deadline_hours)),
+                key_digest=self.key_digest(key),
+                effect_contract_hash=effect_contract_hash,
+                report_format=fmt.format,
+                report_format_digest=format_digest(fmt),
+                describe=describe,
+            )
+            self._write(entry)
         return entry
 
     # -- the settle side --------------------------------------------------------------
@@ -215,11 +263,17 @@ class PendingLedger:
         report_text: Optional[str],
         fmt: Optional[ReportFormat],
         *,
+        issued_at: Optional[datetime] = None,
         now: Optional[datetime] = None,
     ) -> list[Settlement]:
-        """Settle waiting entries against one report, then expire the rest.
+        """Expire overdue entries, then settle waiting ones against a report.
 
-        ``report_text`` None only expires entries past their deadline.
+        An entry past its deadline settles RECONCILIATION_REQUIRED first, so a
+        report that arrives late never promotes it. A report settles only
+        entries created before it was issued (``issued_at``: the X12 header,
+        or the caller's report time for a CSV or text report), and only
+        entries waiting on that exact report format. ``report_text`` None only
+        expires entries.
         """
 
         moment = now or _now()
@@ -228,74 +282,107 @@ class PendingLedger:
             if report_text is not None
             else None
         )
-        rows: dict[str, ReportRow] = {}
-        if report_text is not None and fmt is not None:
+        settled: list[Settlement] = []
+        with self._locked():
+            waiting = [e for e in self.entries() if e.state == "waiting"]
+            still: list[PendingCheck] = []
+            for entry in waiting:
+                if datetime.fromisoformat(entry.deadline) <= moment:
+                    reason = f"no matching row in {entry.describe} by the deadline"
+                    self._write(
+                        entry.model_copy(
+                            update={
+                                "state": "reconciliation_required",
+                                "settled_at": _iso(moment),
+                                "code": "deadline",
+                                "reason": reason,
+                            }
+                        )
+                    )
+                    settled.append(
+                        Settlement(
+                            entry.id, "reconciliation_required", "deadline", reason
+                        )
+                    )
+                else:
+                    still.append(entry)
+            if report_text is None or fmt is None:
+                return settled
+            stamp = issued_at
+            if stamp is None and fmt.format in ("x12-999", "x12-277ca"):
+                stamp = x12_issued_at(report_text)
+            if stamp is None:
+                raise ReportError(
+                    "the report's issue time is unknown; give it (--report-time) so "
+                    "an older report can't settle a newer save"
+                )
+            rows: dict[str, ReportRow] = {}
             for key, parsed in parse_report(report_text, fmt).items():
                 rows[self.key_digest(key)] = parsed
-        waiting = [e for e in self.entries() if e.state == "waiting"]
-        if fmt is not None:
-            same_format = [e for e in waiting if e.report_format == fmt.format]
-        else:
-            same_format = []
-        by_digest: dict[str, list[PendingCheck]] = {}
-        for entry in same_format:
-            by_digest.setdefault(entry.key_digest, []).append(entry)
-        settled: list[Settlement] = []
-        done: set[str] = set()
-        for digest, entries in by_digest.items():
-            row = rows.get(digest)
-            if row is None or row.status == "pending":
-                continue
-            if len(entries) > 1:
-                state: EntryState = "reconciliation_required"
-                reason = (
-                    f"{len(entries)} saves wait on the same report key; the report "
-                    "can't say which one it means"
-                )
-            elif row.status == "accepted":
-                state, reason = "verified", "the report accepted it"
-            elif row.status == "rejected":
-                state, reason = "reconciliation_required", "the report rejected it"
-            else:
-                state = "reconciliation_required"
-                reason = "the report says two different things about it"
-            for entry in entries:
-                updated = entry.model_copy(
-                    update={
-                        "state": state,
-                        "settled_at": _iso(moment),
-                        "settled_by": report_sha,
-                        "code": row.code[:32],
-                        "reason": reason,
-                    }
-                )
-                self._write(updated)
-                settled.append(Settlement(entry.id, state, updated.code or "", reason))
-                done.add(entry.id)
-        for entry in waiting:
-            if entry.id in done:
-                continue
-            if datetime.fromisoformat(entry.deadline) <= moment:
-                updated = entry.model_copy(
-                    update={
-                        "state": "reconciliation_required",
-                        "settled_at": _iso(moment),
-                        "code": "deadline",
-                        "reason": (
-                            f"no matching row in {entry.describe} by the deadline"
-                        ),
-                    }
-                )
-                self._write(updated)
-                settled.append(
-                    Settlement(
-                        entry.id,
-                        "reconciliation_required",
-                        "deadline",
-                        updated.reason or "",
+            wanted = format_digest(fmt)
+            by_digest: dict[str, list[PendingCheck]] = {}
+            for entry in still:
+                if entry.report_format_digest != wanted:
+                    continue
+                created = datetime.fromisoformat(entry.created_at)
+                if not _issued_after(stamp, created):
+                    continue  # this report predates the save
+                by_digest.setdefault(entry.key_digest, []).append(entry)
+            for digest, entries in by_digest.items():
+                row = rows.get(digest)
+                if row is None or row.status == "pending":
+                    continue
+                if len(entries) > 1:
+                    state: EntryState = "reconciliation_required"
+                    reason = (
+                        f"{len(entries)} saves wait on the same report key; the "
+                        "report can't say which one it means"
                     )
-                )
+                elif row.status == "accepted":
+                    state, reason = "verified", "the report accepted it"
+                elif row.status == "rejected":
+                    state, reason = "reconciliation_required", "the report rejected it"
+                else:
+                    state = "reconciliation_required"
+                    reason = "the report says two different things about it"
+                code = _safe_code(row.code, fmt)
+                for entry in entries:
+                    current = self.get(entry.id)
+                    if current is None or current.state != "waiting":
+                        continue
+                    self._write(
+                        current.model_copy(
+                            update={
+                                "state": state,
+                                "settled_at": _iso(moment),
+                                "settled_by": report_sha,
+                                "code": code,
+                                "reason": reason,
+                            }
+                        )
+                    )
+                    settled.append(Settlement(entry.id, state, code, reason))
         return settled
+
+
+def _issued_after(stamp: datetime, created: datetime) -> bool:
+    """Whether a report issued at ``stamp`` can speak about a save made at
+    ``created``. A report time without a zone (X12) gets the clock slack."""
+
+    if stamp.tzinfo is None:
+        naive_created = created.astimezone(timezone.utc).replace(tzinfo=None)
+        return stamp >= naive_created - _X12_CLOCK_SLACK
+    return stamp >= created
+
+
+def _safe_code(code: str, fmt: ReportFormat) -> str:
+    """The status code to keep: X12 codes as given, a CSV or text status only
+    when it is one of the declared accept or reject values (no free cell)."""
+
+    if fmt.format in ("x12-999", "x12-277ca"):
+        return code[:8]
+    known = {v.strip().casefold() for v in [*fmt.accept, *fmt.reject]}
+    return code.strip()[:32] if code.strip().casefold() in known else "other"
 
 
 def settled_outcome(
@@ -312,19 +399,21 @@ def settled_outcome(
     outcome = getattr(report, "transaction_outcome", None)
     if outcome != "SAVED_AWAITING_CHECK":
         return str(outcome)
-    ids = [
-        evidence.deferred_check
+    pairs = [
+        (evidence.deferred_check, evidence.effect_contract_hash)
         for result in report.results
         for evidence in result.effect_evidence
         if evidence.deferred_check
     ]
-    if not ids:
+    if not pairs:
         return "RECONCILIATION_REQUIRED"
     moment = now or _now()
     states = []
-    for entry_id in ids:
+    for entry_id, contract_hash in pairs:
         entry = ledger.get(entry_id)
-        if entry is None:
+        if entry is None or entry.effect_contract_hash != contract_hash:
+            # A missing entry, or one written for another effect, settles
+            # nothing about this run.
             return "RECONCILIATION_REQUIRED"
         if (
             entry.state == "waiting"
@@ -383,7 +472,7 @@ class DeferredReportVerifier(VerifierAdapterBase):
             entry = self.ledger.add(
                 key=self._key,
                 effect_contract_hash=expected.contract_hash(),
-                report_format=self.spec.report.format,
+                fmt=self.spec.report,
                 describe=self.spec.describe,
                 deadline_hours=self.spec.deadline_hours,
             )
@@ -427,10 +516,17 @@ def build_deferred_report_verifier(
 
 
 def settle_report_file(
-    ledger: PendingLedger, report_path: str | Path, fmt: ReportFormat
+    ledger: PendingLedger,
+    report_path: str | Path,
+    fmt: ReportFormat,
+    *,
+    issued_at: Optional[datetime] = None,
 ) -> list[Settlement]:
+    """Settle against a report file. A CSV or text report needs its issue
+    time (``issued_at``); an X12 report carries its own."""
+
     text = Path(report_path).read_text(encoding="utf-8", errors="strict")
-    return ledger.settle(text, fmt)
+    return ledger.settle(text, fmt, issued_at=issued_at)
 
 
 __all__ = [

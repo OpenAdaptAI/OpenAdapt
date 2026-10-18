@@ -727,19 +727,30 @@ When the report arrives:
 
 ```bash
 openadapt-flow deferred settle --config deployment.yaml --report ack.277
+openadapt-flow deferred settle --config export.yaml --report orders.csv \
+    --report-time 2026-10-18T23:00:00-04:00
 openadapt-flow deferred status runs/claim-0412 --config deployment.yaml
 ```
 
 | The report says, for the item's key | The run becomes |
 |---|---|
-| accepted (999 `IK5` `A` or `E`; 277CA `STC` `A2`; a CSV or text status you list under `accept`) | `VERIFIED`, billable |
+| accepted (277CA `STC` `A2`; a CSV or text status you list under `accept`) | `VERIFIED`, billable |
 | rejected (999 `R`, `M`, `W`, `X`; 277CA `A3`, `A4`, `A6`, `A7`, `A8`; your `reject` values), or two rows that disagree | `RECONCILIATION_REQUIRED` |
-| still pending (277CA `A1`, received; any other status) | still `SAVED_AWAITING_CHECK` |
-| nothing by the deadline | `RECONCILIATION_REQUIRED` (`deferred settle` with no `--report` expires overdue entries) |
+| still pending (999 `A` or `E`: the file passed syntax checks, which is not acceptance; 277CA `A1`, received; any other status) | still `SAVED_AWAITING_CHECK` |
+| nothing by the deadline | `RECONCILIATION_REQUIRED`. Overdue entries expire before any report is matched, so a report that arrives late never promotes one (`deferred settle` with no `--report` only expires) |
 | two waiting saves with the same key | `RECONCILIATION_REQUIRED` for both: the report can't say which one it means |
 
-Formats: `x12-999` (key: the transaction set control number, `AK2-02`),
-`x12-277ca` (key: the claim-level `TRN-02`), `csv` (`key_column`,
+A report settles only saves made before it was issued: an X12 report's time
+comes from its `BHT` (or `ISA`) header, allowing 14 hours for the missing time
+zone; a CSV or text report needs `--report-time`. It settles only entries
+waiting on the exact same report format (columns, accept and reject values,
+pattern), and `deferred status` only counts an entry written for the run's
+own effect. Ledger changes happen under a file lock, and an entry only ever
+moves out of "waiting". `verify-run` refuses a deferred check.
+
+Formats: `x12-999` (key: `AK1-02:AK2-02`, the group and transaction set
+control numbers), `x12-277ca` (key: `TRN-02` with `TRN-01` `2` under a
+patient-level `HL`), `csv` (`key_column`,
 `status_column`, `accept`, `reject`), and `text` for a saved status page (a
 regular expression with named groups `key` and `status`).
 
@@ -757,8 +768,11 @@ application's screens.
 
 **Where it isn't settled yet.** The hosted runner and the Execute v1 and
 production-receipt wire formats have no such outcome; they carry the run as
-`RECONCILIATION_REQUIRED`. Put the deferred save last in the workflow: the run
-stops there.
+`RECONCILIATION_REQUIRED`. Put the deferred save last in the workflow and give
+its step no other effect: the run stops there, and a step with an effect that
+was never checked is `RECONCILIATION_REQUIRED`. A run that failed or was
+canceled is never waiting. `deferred status` reads `report.json` as given; it
+doesn't check a seal over it.
 
 ## Configuration reference (`deployment.yaml` → `effects:`)
 

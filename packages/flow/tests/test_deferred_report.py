@@ -82,17 +82,27 @@ ACK_999 = _isa(
     "AK9*P*2*2*1~SE*8*0001~GE*1*1~IEA*1*000000001~"
 )
 
-ACK_277CA = _isa(
-    "GS*HN*PAYER*SUBMITTER*20261018*1200*1*X*005010X214~"
-    "ST*277*0001*005010X214~BHT*0085*08*1*20261018*1200*TH~"
-    "HL*1**20*1~NM1*PR*2*PAYER~"
-    "HL*2*1*21*1~NM1*41*2*CLINIC~"
-    "HL*3*2*19*1~NM1*85*2*CLINIC~"
-    "HL*4*3*PT~NM1*QC*1*DOE*JANE~TRN*2*CLM-1001~STC*A2:20*20261018*WQ*120~"
-    "HL*5*3*PT~NM1*QC*1*ROE*RICH~TRN*2*CLM-1002~STC*A7:562*20261018*U*80~"
-    "HL*6*3*PT~NM1*QC*1*POE*PAT~TRN*2*CLM-1003~STC*A1:19*20261018*WQ*60~"
-    "SE*20*0001~GE*1*1~IEA*1*000000001~"
-)
+
+def ack_277ca(when: datetime) -> str:
+    stamp = when.strftime("%Y%m%d*%H%M")
+    return _isa(
+        "GS*HN*PAYER*SUBMITTER*20261018*1200*1*X*005010X214~"
+        f"ST*277*0001*005010X214~BHT*0085*08*1*{stamp}*TH~"
+        "HL*1**20*1~NM1*PR*2*PAYER~"
+        "HL*2*1*21*1~NM1*41*2*CLINIC~"
+        "HL*3*2*19*1~NM1*85*2*CLINIC~TRN*1*CLM-9~STC*A2:20*20261018*WQ*1~"
+        "HL*4*3*PT~NM1*QC*1*DOE*JANE~TRN*2*CLM-1001~STC*A2:20*20261018*WQ*120~"
+        "HL*5*3*PT~NM1*QC*1*ROE*RICH~TRN*2*CLM-1002~STC*A7:562*20261018*U*80~"
+        "HL*6*3*PT~NM1*QC*1*POE*PAT~TRN*2*CLM-1003~STC*A1:19*20261018*WQ*60~"
+        "SE*20*0001~GE*1*1~IEA*1*000000001~"
+    )
+
+
+#: The save happened at T0; the payer's acknowledgment came out at T1.
+T0 = datetime(2026, 10, 18, 6, tzinfo=timezone.utc)
+T1 = datetime(2026, 10, 18, 12)
+ACK_277CA = ack_277ca(T1)
+SETTLE_AT = datetime(2026, 10, 18, 13, tzinfo=timezone.utc)
 
 FMT_277 = ReportFormat(format="x12-277ca")
 
@@ -100,13 +110,15 @@ FMT_277 = ReportFormat(format="x12-277ca")
 # -- reading reports ------------------------------------------------------------
 
 
-def test_999_accepts_and_rejects_by_transaction_set() -> None:
+def test_a_999_can_only_reject() -> None:
+    # A 999 says the file passed syntax checks, not that a claim was accepted.
     rows = {row.key: row for row in parse_999(ACK_999)}
-    assert rows["0001"].status == "accepted"
-    assert rows["0002"].status == "rejected"
+    assert rows["17:0001"].status == "pending"
+    assert rows["17:0002"].status == "rejected"
 
 
 def test_277ca_reads_claim_status_categories() -> None:
+    # The provider-level TRN*1*CLM-9 is not a claim and is ignored.
     rows = {row.key: (row.status, row.code) for row in parse_277ca(ACK_277CA)}
     assert rows == {
         "CLM-1001": ("accepted", "A2"),
@@ -156,11 +168,11 @@ def _ledger(tmp_path: Path) -> PendingLedger:
     return PendingLedger(tmp_path / "ledger")
 
 
-def _add(ledger: PendingLedger, key: str, *, hours: float = 48.0, now=None):
+def _add(ledger: PendingLedger, key: str, *, hours: float = 48.0, now=T0):
     return ledger.add(
         key=key,
         effect_contract_hash=HASH,
-        report_format="x12-277ca",
+        fmt=FMT_277,
         describe="payer 277CA",
         deadline_hours=hours,
         now=now,
@@ -183,7 +195,7 @@ def test_a_report_settles_accepted_rejected_and_pending_rows(tmp_path: Path) -> 
     rejected = _add(ledger, "CLM-1002")
     pending = _add(ledger, "CLM-1003")
     unmentioned = _add(ledger, "CLM-9999")
-    settled = {s.id: s.state for s in ledger.settle(ACK_277CA, FMT_277)}
+    settled = {s.id: s.state for s in ledger.settle(ACK_277CA, FMT_277, now=SETTLE_AT)}
     assert settled == {
         accepted.id: "verified",
         rejected.id: "reconciliation_required",
@@ -192,7 +204,15 @@ def test_a_report_settles_accepted_rejected_and_pending_rows(tmp_path: Path) -> 
     assert ledger.get(unmentioned.id).state == "waiting"
     # A report in another format never settles a 277CA check.
     other = ReportFormat(format="csv", key_column="k", status_column="s", accept=["ok"])
-    assert ledger.settle("k,s\nCLM-1003,ok\n", other) == []
+    assert (
+        ledger.settle(
+            "k,s\nCLM-1003,ok\n",
+            other,
+            issued_at=SETTLE_AT,
+            now=SETTLE_AT,
+        )
+        == []
+    )
 
 
 def test_unmatched_at_the_deadline_needs_reconciliation(tmp_path: Path) -> None:
@@ -210,7 +230,7 @@ def test_two_saves_on_one_key_are_never_settled_verified(tmp_path: Path) -> None
     ledger = _ledger(tmp_path)
     first = _add(ledger, "CLM-1001")
     second = _add(ledger, "CLM-1001")
-    states = {s.id: s.state for s in ledger.settle(ACK_277CA, FMT_277)}
+    states = {s.id: s.state for s in ledger.settle(ACK_277CA, FMT_277, now=SETTLE_AT)}
     assert states == {
         first.id: "reconciliation_required",
         second.id: "reconciliation_required",
@@ -336,8 +356,8 @@ def test_a_matching_report_row_settles_the_run(tmp_path: Path) -> None:
     report = _report(_save([_evidence(deferred_check=entry.id)]))
     report.transaction_outcome = classify_transaction_outcome(report).value
     assert settled_outcome(report, ledger) == "SAVED_AWAITING_CHECK"
-    ledger.settle(ACK_277CA, FMT_277)
-    assert settled_outcome(report, ledger) == "VERIFIED"
+    ledger.settle(ACK_277CA, FMT_277, now=SETTLE_AT)
+    assert settled_outcome(report, ledger, now=SETTLE_AT) == "VERIFIED"
 
 
 def test_a_rejected_or_overdue_report_needs_reconciliation(tmp_path: Path) -> None:
@@ -345,12 +365,12 @@ def test_a_rejected_or_overdue_report_needs_reconciliation(tmp_path: Path) -> No
     rejected = _add(ledger, "CLM-1002")
     report = _report(_save([_evidence(deferred_check=rejected.id)]))
     report.transaction_outcome = "SAVED_AWAITING_CHECK"
-    ledger.settle(ACK_277CA, FMT_277)
+    ledger.settle(ACK_277CA, FMT_277, now=SETTLE_AT)
     assert settled_outcome(report, ledger) == "RECONCILIATION_REQUIRED"
     late = _add(ledger, "CLM-7777", hours=1)
     report = _report(_save([_evidence(deferred_check=late.id)]))
     report.transaction_outcome = "SAVED_AWAITING_CHECK"
-    later = datetime.now(timezone.utc) + timedelta(hours=2)
+    later = T0 + timedelta(hours=2)
     assert settled_outcome(report, ledger, now=later) == "RECONCILIATION_REQUIRED"
 
 
@@ -394,7 +414,7 @@ def test_through_the_replayer_and_the_cli(tmp_path: Path, capsys) -> None:
     assert saved["transaction_outcome"] == "SAVED_AWAITING_CHECK"
 
     ack = tmp_path / "ack.277"
-    ack.write_text(ACK_277CA)
+    ack.write_text(ack_277ca(datetime.now(timezone.utc).replace(tzinfo=None)))
     ledger_dir = str(tmp_path / "ledger")
     parser = build_parser()
     status = parser.parse_args(
@@ -419,3 +439,113 @@ def test_through_the_replayer_and_the_cli(tmp_path: Path, capsys) -> None:
     assert "now VERIFIED (billable)" in out
     # The run's own report is never rewritten.
     assert json.loads((run_dir / "report.json").read_text()) == saved
+
+
+# -- review findings, pinned -------------------------------------------------------
+
+
+def test_a_report_after_the_deadline_never_promotes(tmp_path: Path) -> None:
+    ledger = _ledger(tmp_path)
+    entry = _add(ledger, "CLM-1001", hours=1)  # due at T0 + 1h
+    # The acknowledgment arrives after the deadline: the entry expires first.
+    settled = ledger.settle(ACK_277CA, FMT_277, now=SETTLE_AT)
+    assert [(s.id, s.state, s.code) for s in settled] == [
+        (entry.id, "reconciliation_required", "deadline")
+    ]
+    assert ledger.get(entry.id).state == "reconciliation_required"
+
+
+def test_a_report_older_than_the_save_settles_nothing(tmp_path: Path) -> None:
+    ledger = _ledger(tmp_path)
+    entry = _add(ledger, "CLM-1001", now=datetime(2026, 10, 20, tzinfo=timezone.utc))
+    assert (
+        ledger.settle(
+            ACK_277CA, FMT_277, now=datetime(2026, 10, 20, 1, tzinfo=timezone.utc)
+        )
+        == []
+    )
+    assert ledger.get(entry.id).state == "waiting"
+
+
+def test_csv_and_text_reports_need_their_issue_time(tmp_path: Path) -> None:
+    fmt = ReportFormat(
+        format="csv", key_column="k", status_column="s", accept=["Posted"]
+    )
+    ledger = _ledger(tmp_path)
+    entry = ledger.add(
+        key="ORD-1",
+        effect_contract_hash=HASH,
+        fmt=fmt,
+        describe="nightly export",
+        deadline_hours=48,
+        now=T0,
+    )
+    with pytest.raises(ReportError, match="issue time"):
+        ledger.settle("k,s\nORD-1,Posted\n", fmt, now=SETTLE_AT)
+    # Another CSV read differently (other accept values) settles nothing.
+    other = ReportFormat(
+        format="csv", key_column="k", status_column="s", accept=["Posted", "Queued"]
+    )
+    assert (
+        ledger.settle("k,s\nORD-1,Posted\n", other, issued_at=SETTLE_AT, now=SETTLE_AT)
+        == []
+    )
+    [done] = ledger.settle(
+        "k,s\nORD-1,Posted\n", fmt, issued_at=SETTLE_AT, now=SETTLE_AT
+    )
+    assert (done.id, done.state) == (entry.id, "verified")
+
+
+def test_an_unchecked_second_effect_is_never_awaiting() -> None:
+    # The step declared two effects; only the deferred one has evidence.
+    step = _save([_evidence(deferred_check="deferred:" + "1" * 32)])
+    step.effect_contract_hashes = [HASH, "sha256:" + "b" * 64]
+    assert classify_transaction_outcome(_report(step)) is (
+        TransactionOutcome.RECONCILIATION_REQUIRED
+    )
+
+
+def test_a_failed_run_is_never_awaiting() -> None:
+    report = _report(_save([_evidence(deferred_check="deferred:" + "1" * 32)]))
+    report.execution_outcome = "FAILED"
+    assert classify_transaction_outcome(report) is (
+        TransactionOutcome.RECONCILIATION_REQUIRED
+    )
+
+
+def test_an_entry_for_another_effect_settles_nothing(tmp_path: Path) -> None:
+    ledger = _ledger(tmp_path)
+    entry = _add(ledger, "CLM-1001")
+    ledger.settle(ACK_277CA, FMT_277, now=SETTLE_AT)
+    other = "sha256:" + "c" * 64
+    report = _report(
+        _save(
+            [
+                _evidence(deferred_check=entry.id).model_copy(
+                    update={"effect_contract_hash": other}
+                )
+            ]
+        )
+    )
+    report.results[0].effect_contract_hashes = [other]
+    report.transaction_outcome = "SAVED_AWAITING_CHECK"
+    assert settled_outcome(report, ledger, now=SETTLE_AT) == "RECONCILIATION_REQUIRED"
+
+
+def test_verify_run_refuses_a_deferred_check(tmp_path: Path) -> None:
+    from openadapt_flow.verify_run import VerifyRunError, load_verify_config
+
+    config = tmp_path / "verify.yaml"
+    config.write_text(
+        json.dumps(
+            {
+                "verifier": {
+                    "kind": "deferred_report",
+                    "deferred_report": _spec(tmp_path).model_dump(mode="json"),
+                },
+                "effects": [_claim_effect().model_dump(mode="json")],
+            }
+        )
+    )
+    with pytest.raises(VerifyRunError, match="settled later"):
+        load_verify_config(config)

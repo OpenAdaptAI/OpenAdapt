@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional
 
@@ -54,6 +55,12 @@ def register_deferred_parser(sub: argparse._SubParsersAction) -> None:
     settle.add_argument("--accept", action="append", default=[])
     settle.add_argument("--reject", action="append", default=[])
     settle.add_argument("--pattern", default=None)
+    settle.add_argument(
+        "--report-time",
+        default=None,
+        help="When the report was produced (ISO 8601 with a time zone). "
+        "Required for csv and text reports; X12 reports carry their own",
+    )
     settle.set_defaults(func=cmd_deferred_settle)
 
     status = verbs.add_parser(
@@ -114,7 +121,14 @@ def cmd_deferred_settle(args: argparse.Namespace) -> int:
         if args.report:
             if fmt is None:
                 raise ValueError("name the report format with --format or --config")
-            settled = settle_report_file(ledger, Path(args.report), fmt)
+            issued_at = None
+            if args.report_time:
+                issued_at = datetime.fromisoformat(args.report_time)
+                if issued_at.tzinfo is None:
+                    raise ValueError("--report-time needs a time zone")
+            settled = settle_report_file(
+                ledger, Path(args.report), fmt, issued_at=issued_at
+            )
         else:
             settled = ledger.settle(None, None)
     except (OSError, ValueError, ReportError) as exc:

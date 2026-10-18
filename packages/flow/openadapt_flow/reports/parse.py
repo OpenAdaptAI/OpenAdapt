@@ -12,12 +12,15 @@ Formats:
   column. The deployment names the columns and which status values accept or
   reject.
 - ``x12-999``: the implementation acknowledgment for an X12 transaction set.
-  The key is the transaction set control number (``AK2-02``); ``IK5-01`` ``A``
-  or ``E`` accepts, ``R``, ``M``, ``W`` or ``X`` rejects.
+  The key is the group control number and the transaction set control number
+  (``AK1-02:AK2-02``). A 999 says the file passed syntax checks, not that a
+  claim was accepted, so it can only reject: ``IK5-01`` ``R``, ``M``, ``W`` or
+  ``X`` rejects, and ``A`` or ``E`` stays pending.
 - ``x12-277ca``: the claim acknowledgment. The key is the claim's patient
-  control number (``TRN-02`` at the claim level); ``STC-01-1`` ``A2`` accepts
-  (accepted into adjudication), ``A3``, ``A4``, ``A6``, ``A7`` or ``A8``
-  rejects, and anything else (``A1``, received) is pending.
+  control number (``TRN-02`` with ``TRN-01`` ``2``, under a patient-level
+  ``HL``); ``STC-01-1`` ``A2`` accepts (accepted into adjudication), ``A3``,
+  ``A4``, ``A6``, ``A7`` or ``A8`` rejects, and anything else (``A1``,
+  received) is pending.
 - ``text``: a status page saved as text. A regular expression with named
   groups ``key`` and ``status`` finds the rows.
 
@@ -32,6 +35,7 @@ import csv
 import io
 import re
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Iterable, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -134,17 +138,21 @@ def parse_999(text: str) -> list[ReportRow]:
     if not any(s[0] == "ST" and len(s) > 1 and s[1] == "999" for s in segments):
         raise ReportError("not a 999 acknowledgment (no ST*999)")
     rows: list[ReportRow] = []
+    group: Optional[str] = None
     current: Optional[str] = None
     for seg in segments:
         tag = seg[0]
-        if tag == "AK2":
+        if tag == "AK1":
+            group = seg[2].strip() if len(seg) > 2 else None
+        elif tag == "AK2":
             current = seg[2].strip() if len(seg) > 2 else None
-        elif tag == "IK5" and current:
+        elif tag == "IK5" and current and group:
             code = seg[1].strip() if len(seg) > 1 else ""
+            # A or E: the set passed syntax checks; that is not acceptance.
             rows.append(
                 ReportRow(
-                    key=current,
-                    status=_classify(code, ("A", "E"), ("R", "M", "W", "X")),
+                    key=f"{group}:{current}",
+                    status=_classify(code, (), ("R", "M", "W", "X")),
                     code=code,
                 )
             )
@@ -168,10 +176,13 @@ def parse_277ca(text: str) -> list[ReportRow]:
     for seg in segments:
         tag = seg[0]
         if tag == "HL":
-            # HL*id*parent*code: code PT (patient) and the claim under it.
+            # HL*id*parent*code: code PT is the patient (claim) level.
             level = seg[3].strip() if len(seg) > 3 else None
             key = None
-        elif tag == "TRN" and len(seg) > 2 and level in ("PT", "19"):
+        elif tag == "SVC":
+            # Service-line status follows; it isn't the claim's status.
+            key = None
+        elif tag == "TRN" and len(seg) > 2 and level == "PT" and seg[1].strip() == "2":
             # The claim-level trace (TRN*2*<patient control number>).
             key = seg[2].strip() or None
         elif tag == "STC" and key and len(seg) > 1:
@@ -223,6 +234,31 @@ def parse_text(text: str, fmt: ReportFormat) -> list[ReportRow]:
     return rows
 
 
+def x12_issued_at(text: str) -> Optional[datetime]:
+    """When an X12 report was produced: BHT date and time if present, else
+    the interchange date and time (ISA-09, ISA-10). No time zone (X12 has
+    none); the caller allows for that."""
+
+    try:
+        segments = _segments(text)
+    except ReportError:
+        return None
+    for seg in segments:
+        if seg[0] == "BHT" and len(seg) > 5 and seg[4].strip():
+            stamp = seg[4].strip() + (seg[5].strip()[:4] or "0000")
+            try:
+                return datetime.strptime(stamp[:12], "%Y%m%d%H%M")
+            except ValueError:
+                break
+    isa = segments[0]
+    if len(isa) > 10:
+        try:
+            return datetime.strptime(isa[9].strip() + isa[10].strip(), "%y%m%d%H%M")
+        except ValueError:
+            return None
+    return None
+
+
 def parse_report(text: str, fmt: ReportFormat) -> dict[str, ReportRow]:
     """Rows by key. Rows for one key that disagree become ``conflicting``."""
 
@@ -258,4 +294,5 @@ __all__ = [
     "parse_csv",
     "parse_report",
     "parse_text",
+    "x12_issued_at",
 ]
