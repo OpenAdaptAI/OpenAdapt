@@ -225,7 +225,7 @@ def _record(grade: str, needs_review: bool = False) -> RecordRead:
     )
 
 
-def test_default_single_read_is_unconfirmed_without_seal() -> None:
+def test_default_single_read_is_unchecked_without_seal() -> None:
     record = _record("unchecked")
     assert record.grade == "unchecked"
     assert record.fields[0].seal is None
@@ -319,3 +319,16 @@ def test_write_gate_accepts_either_export_kind_per_floor() -> None:
     strict.check(saved)
     with pytest.raises(GradeTooLow, match="same_screen"):
         strict.check(live)
+
+
+def test_read_grades_are_check_levels_in_ladder_order() -> None:
+    from openadapt_flow.check_level import CheckLevel
+
+    levels = [CheckLevel.from_label(grade) for grade in READ_GRADES]
+    assert levels == sorted(levels)
+    assert levels == [
+        CheckLevel.UNCHECKED,
+        CheckLevel.SAME_SCREEN,
+        CheckLevel.REOPENED,
+        CheckLevel.SYSTEM_OF_RECORD,
+    ]
