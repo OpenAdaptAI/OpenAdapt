@@ -25,21 +25,19 @@ def test_demo_end_to_end(tmp_path, capsys) -> None:
     demo = _load("records_demo", EXAMPLE / "demo.py")
     assert demo.main(["--out", str(tmp_path), "--simulated-ocr"]) == 0
     printed = capsys.readouterr().out
-    assert "AC-1042: grade=verified review=False" in printed
-    assert "AC-3307: grade=unconfirmed review=True" in printed
+    assert "AC-1042: grade=system_of_record review=False" in printed
+    assert "AC-3307: grade=unchecked review=True" in printed
     assert "review queue: 1 open item(s)" in printed
     assert "write gate: AC-1042 may be written" in printed
-    assert (
-        "write gate: halt: record AC-3307: below committed_record_readback" in printed
-    )
+    assert "write gate: halt: record AC-3307: below reopened" in printed
     rows = {
         r["_record_key"]: r for r in csv.DictReader((tmp_path / "accounts.csv").open())
     }
-    assert rows["AC-1042"]["_grade"] == "verified"
+    assert rows["AC-1042"]["_grade"] == "system_of_record"
     assert (
         rows["AC-3307"]["balance"] == "7905.25"
     )  # settled from the export, not the screen
-    assert rows["AC-3307"]["_grade"] == "unconfirmed"
+    assert rows["AC-3307"]["_grade"] == "unchecked"
     with sqlite3.connect(tmp_path / "accounts.db") as conn:
         assert conn.execute("SELECT count(*) FROM accounts").fetchone() == (3,)
 
@@ -51,7 +49,7 @@ def test_omop_template(tmp_path) -> None:
             "_record_key": "R-1",
             "read_date": "2026-10-01",
             "score": "12.5",
-            "_grade": "verified",
+            "_grade": "system_of_record",
             "_receipt_sha256": "c" * 64,
         },
         {"_record_key": "R-unmapped", "read_date": "2026-10-01", "score": "3"},
@@ -68,7 +66,7 @@ def test_omop_template(tmp_path) -> None:
     assert len(out) == 1
     assert out[0]["person_id"] == 7
     assert out[0]["value_as_number"] == "12.5"
-    assert out[0]["openadapt_grade"] == "verified"
+    assert out[0]["openadapt_grade"] == "system_of_record"
     assert set(out[0]) == set(omop.MEASUREMENT_COLUMNS)
 
 

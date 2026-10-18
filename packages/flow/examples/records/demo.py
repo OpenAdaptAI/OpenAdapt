@@ -46,7 +46,7 @@ SCHEMA = RecordSchema(
     ),
     identity_fields=("account_number",),
     # Proof is opt-in. This demo turns all of it on; without this line each
-    # field is read once, through the clipboard, as unconfirmed.
+    # field is read once, through the clipboard, as unchecked.
     proof=ReadProof(double_read=True, committed_readback=True, seal=True),
 )
 RUN_ID = "demo-run-1"
@@ -86,7 +86,7 @@ def read_record(
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--out", type=Path, default=Path("records-demo"))
-    parser.add_argument("--min-grade", default="committed_record_readback")
+    parser.add_argument("--min-grade", default="reopened")
     parser.add_argument(
         "--simulated-ocr",
         action="store_true",
@@ -172,8 +172,8 @@ def main(argv: list[str] | None = None) -> int:
                     update={"fields": tuple(f for f in fields if f)}
                 )
 
-    # 5. A write step that needs committed_record_readback halts below it.
-    gate = GradeGate(min_grade="committed_record_readback", fields=("balance",))
+    # 5. A write step that needs reopened halts below it.
+    gate = GradeGate(min_grade="reopened", fields=("balance",))
     for record in records:
         try:
             gate.check(record)
