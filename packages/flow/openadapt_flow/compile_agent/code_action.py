@@ -175,7 +175,8 @@ class Element:
     automation_id: Optional[str] = None
     #: A desktop tree node the authoring session remembers.
     node_id: Optional[str] = None
-    #: A drop-down whose change submits its form (an ``onchange`` handler).
+    #: A drop-down whose change submits its form: an ``onchange`` handler that
+    #: calls ``submit``. Handlers added from script can't be seen.
     submits: bool = False
 
     def identity(self) -> dict[str, Any]:
@@ -304,8 +305,8 @@ _DOM_JS = (
         scopeText.set(scope, (clean(scope.innerText) + ' ' + values.join(' ')).slice(0, 6000));
       }
       out.push({kind: 'control', tag: tag, role: roleOf(el), name: nameOf(el),
-        submits: !!(el.getAttribute('onchange') ||
-          (el.form && el.form.getAttribute('onchange'))),
+        submits: /submit/i.test(el.getAttribute('onchange') || '') ||
+          /submit/i.test((el.form && el.form.getAttribute('onchange')) || ''),
         value: value, options: options,
         focused: document.activeElement === el,
         checked: !!el.checked || el.getAttribute('aria-checked') === 'true' ||

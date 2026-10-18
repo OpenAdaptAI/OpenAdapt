@@ -237,6 +237,27 @@ def test_the_gate_sees_a_save_inside_an_iframe(frame_site: Any, tmp_path: Path) 
         close()
 
 
+def test_only_a_drop_down_that_submits_is_gated(tmp_path: Path) -> None:
+    from openadapt_flow.compile_agent.observe import focused_element
+
+    page_html = (
+        '<form><select id=a onchange="this.form.submit()"><option>x</option>'
+        '</select><select id=b onchange="capitalize(this)"><option>y</option>'
+        "</select></form>"
+    )
+    from playwright.sync_api import sync_playwright
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        page = browser.new_page()
+        page.set_content(page_html)
+        page.focus("#a")
+        assert focused_element(page)["submits"] is True
+        page.focus("#b")
+        assert focused_element(page)["submits"] is False
+        browser.close()
+
+
 def test_the_code_tool_fills_and_saves_inside_an_iframe(
     frame_site: Any, tmp_path: Path
 ) -> None:
