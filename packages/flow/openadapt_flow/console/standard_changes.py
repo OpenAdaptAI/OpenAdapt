@@ -51,6 +51,7 @@ def list_standard_changes(store_root: Path) -> list[dict[str, Any]]:
     rows = []
     for row in reversed(Ledger(store_root).applied()):
         reverted = row.get("reverted")
+        state: str
         try:
             state = store.load_candidate(row["candidate_id"]).state
         except RepairLifecycleError:
