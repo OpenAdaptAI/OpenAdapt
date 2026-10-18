@@ -230,6 +230,38 @@ Frappe Lending reference matrix (`benchmark/frappe_lending/fixture.py`, PR
 every other audited table by exactly 0. This is a harness-level companion to
 the verifier (it brackets a whole run, not one step).
 
+## Record checks proposed while recording (`record --verify`)
+
+`openadapt-flow record --verify verify.yaml ...` reads the records named by the
+file's `verifier:` section once before the demonstration and once after it.
+The read goes through the same read-only adapter `verify-run` and `qualify`
+use, not through the UI, so it works the same for a browser, a desktop app or
+a remote display. Only verifiers that read the system of record (tier 1:
+`rest`, `sql`, `fhir`, `graphql`, `file`, and plugins that declare tier 1) are
+accepted. While recording there are no run parameters, so the read must name
+its records with literals.
+
+From the difference Flow writes `verify.proposed.yaml` beside the recording:
+
+- a new record becomes a `record_written` effect with `count_new_only`. Its
+  `match` holds the record's observed fields; a field equal to a recorded
+  parameter value becomes `{param: NAME}`;
+- a changed field on a record that already existed becomes a `field_equals`
+  effect on that record's `id`. Records without a unique `id` are compared
+  whole, so an update shows as one record removed and one added;
+- a removed record, a cleared field and a nested field are reported, not
+  proposed.
+
+Every proposed effect carries `needs_operator_confirmation: true`, which
+`verify-run` refuses and `qualify` reports as a problem. Review each effect,
+drop match fields that change on every save (timestamps, versions), and
+delete that line. The confirmed file is a normal `verify.yaml`, so
+`verify-run` grades it `independent_readback`.
+
+Both reads are kept in `sor_snapshots.json` (mode 0600, raw records). The
+proposed file is also mode 0600 and copies `verifier:` as written, with
+`${NAME}` references unexpanded. Without `--verify`, `record` is unchanged.
+
 ## A read-back taught by demonstration ("Now show how you'd check it saved")
 
 For an application with no API, database or export (a legacy desktop app,
