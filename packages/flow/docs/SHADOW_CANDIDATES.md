@@ -169,7 +169,11 @@ The rules are the same for every decider:
 Accepting admits the workflow to the `problems_only` approval mode. Its runs
 no longer wait before every save. They stop only when a check fails, the
 screen changed, or a step falls outside what was qualified, and then a person
-decides. `openadapt-flow run` reads this from `admission-decision.json` in the
+decides. Read-back is still required: a save counts as done without a person
+only when OpenAdapt read the saved record back from your system's data and it
+matched. Per-save approval (`each_item`, with one-tap approval from a phone
+paired to the Desktop decision portal) stays available as the strictest
+setting. `openadapt-flow run` reads this from `admission-decision.json` in the
 bundle and prints who admitted it. Four things keep it narrow:
 
 - A `--approval-mode` flag or the deployment's `runtime.approval_mode` still
