@@ -14,16 +14,19 @@ it, :class:`SelfRepair` does this, in order:
 2. **Propose.** A computer-use agent (any action dialect
    :mod:`openadapt_flow.jit.adapters` understands) is shown the halted step's
    intent, the recorded evidence (the target crop, its label, its place) and
-   the live screen. It proposes one corrected action. Its model calls and
-   their cost are recorded. An agent that calls a model runs only with the
-   customer's own key.
-3. **Patch.** The proposal becomes a patched anchor for the same step, built
-   from the live screen at the proposed point with the heal machinery: a new
-   template crop, the DOM locator under the point, the label read there.
-   Identity evidence is copied unchanged. A proposal is refused when the new
-   target reads as a different kind of action (a read step pointed at a
-   ``Submit`` button, a save pointed at ``Consult``), or when it is a control
-   another step already uses.
+   the live screen. It proposes one corrected action, or a bridge of up to
+   three when the vendor added a required dialog or moved a control into a
+   menu. Its model calls and their cost are recorded. An agent that calls a
+   model runs only with the customer's own key.
+3. **Patch.** In ``replace`` mode (the target is gone) the last action
+   becomes the halted step's new target, built from the live screen with the
+   heal machinery; identity evidence is copied unchanged. In ``after`` mode (a
+   click acted but a new dialog appeared) the actions become new steps after
+   it. Every new click gets a template, its DOM locator, a postcondition and
+   an identity check that must name a record the recording verified. A
+   proposal is refused when a new step would save, has no readable label,
+   types a value that is neither a parameter nor on the screen, or when the
+   re-targeted control reads as a different kind of action.
 4. **Probe.** The patched bundle replays in a fresh session behind a gate
    that stops at the last point before the first save, after the target and
    the right-record check resolved. Nothing is written. The probe passes only
@@ -73,6 +76,8 @@ from openadapt_flow.approval_mode.model import ItemDecisionKind
 from openadapt_flow.approval_mode.post import ItemDecision
 from openadapt_flow.ir import (
     ActionKind,
+    Postcondition,
+    PostconditionKind,
     Resolution,
     RunReport,
     SelfRepairEvidence,
@@ -88,6 +93,8 @@ from openadapt_flow.repair.candidate import (
     RepairProvenance,
     ScreenScrubEvidence,
     ScreenShareMode,
+    TaughtStep,
+    sha256_hex,
 )
 
 if TYPE_CHECKING:
@@ -111,6 +118,8 @@ __all__ = [
 #: Rungs the deterministic ladder trusts for a probe: the target was found
 #: by the DOM locator, a template, or its label, never by geometry or a model.
 TRUSTED_RUNGS = frozenset({"structural", "template", "template_global", "ocr"})
+#: The most actions a bridge may have.
+MAX_BRIDGE = 3
 #: The automation identity that records campaign results. Never a reviewer.
 AUTOMATION = Actor(kind="automation", id="openadapt-self-repair")
 _POINTER_KINDS = {
@@ -121,6 +130,8 @@ _STOP_REASON = "self_repair_probe"
 #: The replayer's own wording for its two target-resolution refusals.
 _NOT_FOUND = "Could not resolve target for step"
 _BELOW_RUNG = "only resolved via the"
+#: The replayer's wording when a step acted but its expected screen never came.
+_EXPECTED_SCREEN = "Postconditions failed for step"
 _UNTRUSTED_RUNGS = frozenset({"geometry", "grounder"})
 
 
@@ -138,6 +149,15 @@ class RepairRequest:
     ``live_png`` and ``recorded_crop_png`` are scrubbed first unless an
     operator set ``allow_unscrubbed``. Coordinates in the proposal are in the
     live screen's pixels.
+
+    ``mode`` says what the bridge does:
+
+    - ``replace``: the step's target is gone. The bridge's last action is the
+      step's new target; any actions before it are new steps that run first
+      (for example opening a menu).
+    - ``after``: the step acted but its expected screen never came (a new
+      dialog appeared). The bridge's actions are new steps after it, and the
+      last one must reach ``expected_texts``.
     """
 
     step_id: str
@@ -156,23 +176,46 @@ class RepairRequest:
     previous_refusals: tuple[str, ...] = ()
     #: The customer's key for the agent's model client. Never an OpenAdapt key.
     model_key: Optional["CustomerModelKey"] = field(default=None, repr=False)
+    mode: str = "replace"
+    #: The most actions a bridge may have.
+    max_actions: int = 1
+    #: Text the step's expected screen shows (``after`` mode).
+    expected_texts: tuple[str, ...] = ()
+    #: The recorded crop of the step's expected screen, when the bundle has one.
+    expected_png: Optional[bytes] = None
+    #: The item's parameters a bridge may type, by name. Secrets are left out.
+    param_values: Mapping[str, str] = field(default_factory=dict, repr=False)
 
 
 @dataclass(frozen=True)
 class RepairProposal:
-    """One corrected action, in the agent's own dialect.
+    """A fix in the agent's own dialect: one action, or a short bridge.
 
     ``action`` is a single native action (for example
     ``{"action": "left_click", "coordinate": [846, 457]}`` for ``anthropic``
-    or ``{"kind": "click", "x": 846, "y": 457}`` for ``generic``). The agent
-    reports the model calls it made for this proposal and their cost; Flow
-    records them and can't measure them itself.
+    or ``{"kind": "click", "x": 846, "y": 457}`` for ``generic``).
+    ``actions`` is a bridge of up to ``request.max_actions`` such actions,
+    in order; give one or the other. Clicks may name a point or, where the
+    dialect allows, a CSS selector. A bridge may type only a parameter's
+    value or text the screen shows at that moment. The agent reports the
+    model calls it made and their cost; Flow records them and can't measure
+    them itself.
     """
 
-    action: Mapping[str, Any]
+    action: Optional[Mapping[str, Any]] = None
     model_calls: int = 0
     cost_usd: float = 0.0
     note: str = ""
+    actions: Sequence[Mapping[str, Any]] = ()
+
+    def bridge(self) -> list[Mapping[str, Any]]:
+        """The proposal's actions, in order."""
+
+        if self.actions and self.action is not None:
+            raise SelfRepairRefused("give one action or a bridge of actions, not both")
+        if self.actions:
+            return list(self.actions)
+        return [self.action] if self.action is not None else []
 
 
 class RepairAgent(Protocol):
@@ -379,6 +422,10 @@ class ProbeOutcome:
         )
 
     def failure(self) -> str:
+        if not self.reached_save and self.checks:
+            return "the probe could not run: " + "; ".join(
+                f"{code} ({detail})" for code, _, detail in self.checks
+            )
         if not self.reached_save:
             halt = self.report.halt if self.report is not None else None
             where = f" at {halt.state_id}" if halt is not None and halt.state_id else ""
@@ -489,12 +536,19 @@ class SelfRepairResult:
 @dataclass
 class _Patch:
     attempt: int
+    #: The step whose target the person is shown: the replaced step, or the
+    #: halted step a bridge follows.
     step: Step
     workflow: Workflow
     bundle_dir: Path
     evidence_dir: Path
     candidate: RepairCandidate
     target_region: tuple[int, int, int, int]
+    #: Every step the patch added or re-targeted; each must resolve on the
+    #: deterministic ladder in the probe.
+    checked_step_ids: tuple[str, ...] = ()
+    #: One line for the person: what the patch adds and changes.
+    summary: str = ""
 
 
 # -- the loop ------------------------------------------------------------------
@@ -512,6 +566,7 @@ class SelfRepair:
         model_key: The customer's key, required unless the agent sets
             ``requires_model_key = False``.
         max_attempts: Proposals tried for one halt before giving up.
+        max_bridge: The most actions one proposal may have (at most 3).
         fault_probes: Fault names passed to ``target.open(fault=...)``. Each
             must stop before the save. Required when the step's identity is
             checked from the DOM rather than from pixels.
@@ -533,6 +588,7 @@ class SelfRepair:
         screen_access: ScreenAccess,
         model_key: Optional["CustomerModelKey"] = None,
         max_attempts: int = 3,
+        max_bridge: int = MAX_BRIDGE,
         fault_probes: Sequence[str] = (),
         approval_wait_s: float = 900.0,
         approval_poll_s: float = 0.5,
@@ -573,6 +629,9 @@ class SelfRepair:
         self.screen_access = screen_access
         self.model_key = model_key
         self.max_attempts = int(max_attempts)
+        if not 1 <= int(max_bridge) <= MAX_BRIDGE:
+            raise SelfRepairRefused(f"max_bridge must be between 1 and {MAX_BRIDGE}")
+        self.max_bridge = int(max_bridge)
         self.fault_probes = tuple(fault_probes)
         self.approval_wait_s = max(0.0, float(approval_wait_s))
         self.approval_poll_s = max(0.01, float(approval_poll_s))
@@ -638,13 +697,13 @@ class SelfRepair:
                 return self._finish(
                     "not_repairable", found, evidence, report, run_dir, work
                 )
-            step, step_index, halted = found
+            step, mode, halted = found
             evidence.halted_step_id = step.id
             evidence.steps.append(
                 SelfRepairStepRecord(
                     stage="halt",
                     passed=True,
-                    detail=f"{step.id} halted before any effect: "
+                    detail=f"{step.id} halted before any effect ({mode}): "
                     f"{(halted.error or '')[:300]}",
                 )
             )
@@ -655,7 +714,7 @@ class SelfRepair:
                     workflow,
                     bundle_dir,
                     step,
-                    step_index,
+                    mode,
                     halted,
                     session,
                     live_png,
@@ -736,7 +795,7 @@ class SelfRepair:
         workflow: Workflow,
         bundle_dir: Path,
         step: Step,
-        step_index: int,
+        mode: str,
         halted: Any,
         session: AppSession,
         live_png: bytes,
@@ -747,123 +806,188 @@ class SelfRepair:
         shown_live, scrub_evidence = self._shown(live_png)
         crop = _recorded_crop(workflow, bundle_dir, step)
         shown_crop = self._shown(crop)[0] if crop is not None else None
+        expected_png = _expected_crop(workflow, bundle_dir, step)
+        if expected_png is not None:
+            expected_png = self._shown(expected_png)[0]
         assert step.anchor is not None  # _repairable checked it
         refusals: list[str] = []
-        for attempt in range(1, self.max_attempts + 1):
-            request = RepairRequest(
-                step_id=step.id,
-                intent=step.intent or "",
-                action=_POINTER_KINDS[step.action],
-                halt_reason=(halted.error or "")[:1000],
-                live_png=shown_live,
-                viewport=_png_size(live_png),
-                recorded_label=step.anchor.ocr_text
-                or (step.anchor.structural.name if step.anchor.structural else None),
-                recorded_region=tuple(step.anchor.region),  # type: ignore[arg-type]
-                recorded_click_point=tuple(step.anchor.click_point),  # type: ignore[arg-type]
-                recorded_crop_png=shown_crop,
-                dialect=self.agent.dialect,
-                attempt=attempt,
-                previous_refusals=tuple(refusals),
-                model_key=self.model_key,
-            )
-            evidence.attempts = attempt
-            try:
-                proposal = self.agent.propose(request)
-            except Exception as exc:  # noqa: BLE001 - an agent failure is a refusal
-                proposal = None
-                detail = f"the agent raised {type(exc).__name__}"
-            else:
-                detail = "the agent gave up" if proposal is None else ""
-            calls = int(getattr(proposal, "model_calls", 0) or 0)
-            cost = float(getattr(proposal, "cost_usd", 0.0) or 0.0)
-            evidence.model_calls += max(calls, 0)
-            evidence.est_model_cost_usd = round(
-                evidence.est_model_cost_usd + max(cost, 0.0), 6
-            )
-            if proposal is None:
+        current: Optional[AppSession] = session
+        try:
+            for attempt in range(1, self.max_attempts + 1):
+                attempt_dir = work / f"attempt-{attempt}"
+                if current is None:
+                    # The last attempt changed the halted page (a bridge acts as
+                    # it is captured). Reach the same halt again, behind the
+                    # probe gate, so this proposal starts from the real halt.
+                    current = self._reproduce_halt(
+                        workflow, bundle_dir, step, attempt_dir / "halt"
+                    )
+                request = RepairRequest(
+                    step_id=step.id,
+                    intent=step.intent or "",
+                    action=_POINTER_KINDS[step.action],
+                    halt_reason=(halted.error or "")[:1000],
+                    live_png=shown_live,
+                    viewport=_png_size(live_png),
+                    recorded_label=step.anchor.ocr_text
+                    or (
+                        step.anchor.structural.name if step.anchor.structural else None
+                    ),
+                    recorded_region=tuple(step.anchor.region),  # type: ignore[arg-type]
+                    recorded_click_point=tuple(step.anchor.click_point),  # type: ignore[arg-type]
+                    recorded_crop_png=shown_crop,
+                    dialect=self.agent.dialect,
+                    attempt=attempt,
+                    previous_refusals=tuple(refusals),
+                    model_key=self.model_key,
+                    mode=mode,
+                    max_actions=self.max_bridge,
+                    expected_texts=tuple(
+                        e.text for e in step.expect if e.text and mode == "after"
+                    ),
+                    expected_png=expected_png if mode == "after" else None,
+                    param_values=_typable_params(workflow, self._params()),
+                )
+                evidence.attempts = attempt
+                try:
+                    proposal = self.agent.propose(request)
+                except Exception as exc:  # noqa: BLE001 - an agent failure is a refusal
+                    proposal = None
+                    detail = f"the agent raised {type(exc).__name__}"
+                else:
+                    detail = "the agent gave up" if proposal is None else ""
+                calls = max(int(getattr(proposal, "model_calls", 0) or 0), 0)
+                cost = max(float(getattr(proposal, "cost_usd", 0.0) or 0.0), 0.0)
+                evidence.model_calls += calls
+                evidence.est_model_cost_usd = round(
+                    evidence.est_model_cost_usd + cost, 6
+                )
+                if proposal is None:
+                    evidence.steps.append(
+                        SelfRepairStepRecord(
+                            stage="propose",
+                            passed=False,
+                            detail=detail,
+                            attempt=attempt,
+                            model_calls=calls,
+                            est_model_cost_usd=cost,
+                        )
+                    )
+                    return None, None
+                try:
+                    shown = json.dumps(
+                        [dict(a) for a in proposal.bridge()], sort_keys=True
+                    )
+                except SelfRepairRefused as exc:
+                    shown = str(exc)
                 evidence.steps.append(
                     SelfRepairStepRecord(
                         stage="propose",
-                        passed=False,
-                        detail=detail,
+                        passed=True,
+                        detail=shown[:500],
                         attempt=attempt,
-                        model_calls=max(calls, 0),
-                        est_model_cost_usd=max(cost, 0.0),
+                        model_calls=calls,
+                        est_model_cost_usd=cost,
                     )
                 )
-                return None, None
-            evidence.steps.append(
-                SelfRepairStepRecord(
-                    stage="propose",
-                    passed=True,
-                    detail=json.dumps(dict(proposal.action), sort_keys=True)[:500],
-                    attempt=attempt,
-                    model_calls=max(calls, 0),
-                    est_model_cost_usd=max(cost, 0.0),
-                )
-            )
-            attempt_dir = work / f"attempt-{attempt}"
-            try:
-                patch = self._patch(
-                    workflow,
-                    bundle_dir,
-                    step,
-                    proposal,
-                    session,
-                    live_png,
-                    halted,
-                    attempt,
-                    attempt_dir,
-                    scrub_evidence,
-                )
-            except Exception as exc:  # noqa: BLE001 - a bad proposal is a refusal
-                detail = (
-                    str(exc)
-                    if isinstance(exc, SelfRepairRefused)
-                    else f"the proposal could not be applied ({type(exc).__name__})"
-                )
-                refusals.append(detail)
+                touched = [False]
+                try:
+                    patch = self._patch(
+                        workflow,
+                        bundle_dir,
+                        step,
+                        mode,
+                        proposal,
+                        current,
+                        live_png,
+                        attempt,
+                        attempt_dir,
+                        scrub_evidence,
+                        touched,
+                        _before_frame(work.parent, halted),
+                    )
+                except Exception as exc:  # noqa: BLE001 - a bad proposal is a refusal
+                    detail = (
+                        str(exc)
+                        if isinstance(exc, SelfRepairRefused)
+                        else f"the proposal could not be applied ({type(exc).__name__})"
+                    )
+                    refusals.append(detail)
+                    evidence.steps.append(
+                        SelfRepairStepRecord(
+                            stage="patch", passed=False, detail=detail, attempt=attempt
+                        )
+                    )
+                    if touched[0]:
+                        _close(current)
+                        current = None
+                    continue
+                if touched[0]:
+                    _close(current)
+                    current = None
                 evidence.steps.append(
                     SelfRepairStepRecord(
-                        stage="patch", passed=False, detail=detail, attempt=attempt
+                        stage="patch",
+                        passed=True,
+                        detail=f"{patch.summary}; bundle "
+                        f"{patch.candidate.proposed_content_digest[:16]}"[:1024],
+                        attempt=attempt,
                     )
                 )
-                continue
-            evidence.steps.append(
-                SelfRepairStepRecord(
-                    stage="patch",
-                    passed=True,
-                    detail=f"patched {step.id}; bundle "
-                    f"{patch.candidate.proposed_content_digest[:16]}",
-                    attempt=attempt,
+                probe = self._probe(
+                    patch,
+                    attempt_dir / "probe",
+                    halted_step_id=step.id,
+                    halted_form=halted_form,
                 )
-            )
-            probe = self._probe(
-                patch,
-                attempt_dir / "probe",
-                halted_step_id=step.id,
-                halted_form=halted_form,
-            )
-            if probe.passed:
+                if probe.passed:
+                    evidence.steps.append(
+                        SelfRepairStepRecord(
+                            stage="probe",
+                            passed=True,
+                            detail="stopped before the save; "
+                            + ", ".join(code for code, _, _ in probe.checks),
+                            attempt=attempt,
+                        )
+                    )
+                    return patch, probe
+                reason = probe.failure()
+                refusals.append(reason)
                 evidence.steps.append(
                     SelfRepairStepRecord(
                         stage="probe",
-                        passed=True,
-                        detail="stopped before the save; "
-                        + ", ".join(code for code, _, _ in probe.checks),
+                        passed=False,
+                        detail=reason[:1000],
                         attempt=attempt,
                     )
                 )
-                return patch, probe
-            reason = probe.failure()
-            refusals.append(reason)
-            evidence.steps.append(
-                SelfRepairStepRecord(
-                    stage="probe", passed=False, detail=reason[:1000], attempt=attempt
-                )
+            return None, None
+        finally:
+            if current is not session:
+                _close(current)
+
+    def _reproduce_halt(
+        self, workflow: Workflow, bundle_dir: Path, step: Step, run_dir: Path
+    ) -> AppSession:
+        """A fresh session halted at ``step`` again, behind the probe gate."""
+
+        def never(ctx: SaveContext) -> ProbeOutcome:
+            return ProbeOutcome(reached_save=True, step_id=ctx.step.id)
+
+        session = self.target.open()
+        try:
+            report = self.target.execute(
+                workflow, bundle_dir, session, run_dir, approval_gate=_ProbeGate(never)
             )
-        return None, None
+        except BaseException:
+            _close(session)
+            raise
+        if report.halt is None or report.halt.state_id != step.id:
+            _close(session)
+            raise SelfRepairRefused(
+                f"the halt at {step.id} did not happen again in a fresh session"
+            )
+        return session
 
     def _shown(self, png: bytes) -> tuple[bytes, Optional[ScreenScrubEvidence]]:
         """The image the agent may see under the screen-access mode."""
@@ -895,105 +1019,198 @@ class SelfRepair:
         workflow: Workflow,
         bundle_dir: Path,
         step: Step,
+        mode: str,
         proposal: RepairProposal,
         session: AppSession,
         live_png: bytes,
-        halted: Any,
         attempt: int,
         attempt_dir: Path,
         scrub_evidence: Optional[ScreenScrubEvidence],
+        touched: list[bool],
+        halted_before: Optional[bytes] = None,
     ) -> _Patch:
-        from openadapt_flow.compiler.compile import _landmarks_for
+        """Build the patched bundle from the proposal, on the halted page.
+
+        Every action before the last (and, in ``after`` mode, the last too)
+        becomes a new step: it is checked, captured from the live screen and
+        then performed, so the next action sees the screen it will act on. A
+        new step may never save, and may type only a parameter's value or
+        text the screen shows. In ``replace`` mode the last action is never
+        performed; it becomes the halted step's new target.
+        """
+
+        from openadapt_flow.compiler.compile import _postconditions
         from openadapt_flow.repair.registration import build_candidate
-        from openadapt_flow.risk import is_meaningful_label, is_write_shaped
         from openadapt_flow.run_gate import is_consequential
-        from openadapt_flow.runtime.heal import (
-            _reocr_text,
-            build_heal_event,
-            persist_heal,
-        )
+        from openadapt_flow.runtime.heal import persist_heal
 
         assert step.anchor is not None
-        point = self._proposed_point(step, proposal, session)
-        width, height = _png_size(live_png)
-        if not (0 <= point[0] < width and 0 <= point[1] < height):
-            raise SelfRepairRefused(f"the proposed point {point} is off the screen")
-        structural = None
-        locate = getattr(session.backend, "structural_locator_at", None)
-        if callable(locate):
-            try:
-                structural = locate(int(point[0]), int(point[1]))
-            except Exception:  # noqa: BLE001 - no DOM locator, visual anchor only
-                structural = None
-        region = _centered_region(
-            point, (step.anchor.region[2], step.anchor.region[3]), (width, height)
-        )
-        event, crop = build_heal_event(
-            step,
-            Resolution(rung="grounder", point=point, confidence=1.0, elapsed_ms=0.0),
-            region,
-            live_png,
-            self.vision,
-        )
-        # What the control at the point is called now: its accessible name,
-        # else what OCR reads there. Never the recorded label, which the heal
-        # event keeps when OCR finds nothing.
-        read = _reocr_text(self.vision, live_png, region, click_y=point[1])
-        label = (structural.name if structural is not None else None) or read
-        writes = is_consequential(step, workflow)
-        if writes:
-            if not is_meaningful_label(label) or not is_write_shaped(label or ""):
-                raise SelfRepairRefused(
-                    f"{step.id} saves, but the proposed control "
-                    f"{label!r} does not read as a save; refusing a patch that "
-                    "would point a save at another kind of control"
-                )
-        elif label and is_write_shaped(label):
+        natives = proposal.bridge()
+        if not natives:
+            raise SelfRepairRefused("the proposal has no action")
+        if len(natives) > self.max_bridge:
             raise SelfRepairRefused(
-                f"{step.id} does not save, but the proposed control {label!r} "
-                "reads as a save; a patch may not turn a read step into a write"
+                f"a bridge is at most {self.max_bridge} action(s); this one has "
+                f"{len(natives)}"
             )
-        if structural is not None and structural.selector:
-            for other in workflow.steps:
-                other_locator = other.anchor.structural if other.anchor else None
-                if (
-                    other.id != step.id
-                    and other_locator is not None
-                    and other_locator.selector == structural.selector
+        ops = [self._one_op(native) for native in natives]
+        if len(ops) > 1 or mode == "after":
+            if workflow.program is not None or workflow.subflows:
+                raise SelfRepairRefused(
+                    "a bridge can only be added to a linear workflow for now"
+                )
+        if mode == "replace" and ops[-1].kind != _POINTER_KINDS[step.action]:
+            raise SelfRepairRefused(
+                f"{step.id} is a {_POINTER_KINDS[step.action]}; the bridge's last "
+                f"action is a {ops[-1].kind}"
+            )
+        params = _typable_params(workflow, self._params())
+        others = {
+            s.anchor.structural.selector: s.id
+            for s in workflow.steps
+            if s.id != step.id
+            and s.anchor is not None
+            and s.anchor.structural is not None
+            and s.anchor.structural.selector
+        }
+        evidence_dir = attempt_dir / "evidence"
+        new_steps: list[Step] = []
+        crops: dict[str, bytes] = {}
+        described: list[str] = []
+        screen = live_png
+        replaced: Optional[Step] = None
+        target_region = tuple(step.anchor.region)
+        for index, op in enumerate(ops):
+            is_target = mode == "replace" and index == len(ops) - 1
+            if op.kind == "type":
+                text = op.text or ""
+                param = next((n for n, v in params.items() if v == text and v), None)
+                if param is None and not _shows(
+                    session.backend, self.vision, screen, text
                 ):
                     raise SelfRepairRefused(
-                        f"the proposed control is the one {other.id} already "
-                        "uses; refusing a patch that reuses another step's target"
+                        f"the bridge types {text!r}, which is neither a parameter's "
+                        "value nor text on the screen; refusing an invented value"
                     )
-        typed = tuple(
-            str(value)
-            for value in _typed_values(workflow, self._params()).values()
-            if value
-        )
-        try:
-            landmarks = _landmarks_for(
-                self.vision.ocr(live_png), region, point, exclude_texts=typed
+                new_id = f"{step.id}_bridge_{index + 1}"
+                new_steps.append(
+                    Step(
+                        id=new_id,
+                        intent=f"type <{param}>" if param else f"type {text!r}",
+                        action=ActionKind.TYPE,
+                        param=param,
+                        text=None if param else text,
+                        risk="reversible",
+                    )
+                )
+                described.append(f"types <{param}>" if param else f"types {text!r}")
+                touched[0] = True
+                session.backend.type_text(text)
+                screen = self._settled(session)
+                continue
+            point = self._point_for(op, session, screen)
+            locate = getattr(session.backend, "structural_locator_at", None)
+            structural = None
+            if callable(locate):
+                try:
+                    structural = locate(int(point[0]), int(point[1]))
+                except Exception:  # noqa: BLE001 - no DOM locator, visual anchor only
+                    structural = None
+            if structural is not None and structural.selector in others:
+                raise SelfRepairRefused(
+                    f"the proposed control is the one {others[structural.selector]} "
+                    "already uses; refusing a patch that reuses another step's target"
+                )
+            if is_target:
+                replaced, crop, region, label, event = self._retarget(
+                    workflow, step, point, structural, screen
+                )
+                crops[step.id] = crop
+                target_region = region
+                described.append(f"{step.id} now uses {label!r}")
+                persist_heal(event, crop, screen, evidence_dir)
+                continue
+            new_id = f"{step.id}_bridge_{index + 1}"
+            new_step, crop, label = self._new_click(
+                workflow,
+                new_id,
+                op,
+                point,
+                structural,
+                screen,
+                step.anchor.region,
+                session,
             )
-        except Exception:  # noqa: BLE001 - landmarks are optional aids
-            landmarks = []
-        template = f"templates/{step.id}_repair.png"
-        new_anchor = event.new_anchor.model_copy(
-            update={
-                "template": template,
-                "structural": structural,
-                "ocr_text": read,
-                "landmarks": landmarks,
-            }
-        )
-        event.new_anchor = new_anchor
+            crops[new_id] = crop
+            described.append(f"clicks {label!r}")
+            frame_dir = evidence_dir / "heals" / new_id
+            frame_dir.mkdir(parents=True, exist_ok=True)
+            (frame_dir / "screen.png").write_bytes(screen)
+            touched[0] = True
+            session.backend.click(
+                int(point[0]), int(point[1]), double=op.kind == "double_click"
+            )
+            after = self._settled(session)
+            # What the click changed on screen is the new step's postcondition,
+            # derived the way the compiler derives a recorded step's.
+            staging = evidence_dir / "expect"
+            (staging / "templates").mkdir(parents=True, exist_ok=True)
+            new_step.expect = _postconditions(
+                screen,
+                after,
+                exclude_texts=tuple(params.values()),
+                bundle=staging,
+                step_id=new_id,
+                click_point=point,
+            )
+            new_steps.append(new_step)
+            screen = after
+
         patched = workflow.model_copy(deep=True)
-        replaced = False
-        for candidate_step in patched.steps:
-            if candidate_step.id == step.id:
-                candidate_step.anchor = new_anchor
-                replaced = True
-        if not replaced:
-            raise SelfRepairRefused(f"{step.id} is not a linear step of this bundle")
+        steps = list(patched.steps)
+        at = next(i for i, s in enumerate(steps) if s.id == step.id)
+        if mode == "replace":
+            assert replaced is not None
+            steps[at] = replaced
+            steps[at:at] = new_steps
+            shown_step = replaced
+            summary = (
+                f"before {step.id}: " + ", ".join(described[:-1]) + "; "
+                if len(described) > 1
+                else ""
+            ) + described[-1]
+        else:
+            # The halted step's expected screen now comes after the bridge.
+            # The halted step now leads to the new screen it reached; that
+            # screen is its postcondition, derived like a recorded step's.
+            leads_to = _postconditions(
+                halted_before,
+                live_png,
+                exclude_texts=tuple(params.values()),
+                bundle=evidence_dir / "expect",
+                step_id=step.id + "_now",
+                click_point=step.anchor.click_point,
+            )
+            if not leads_to:
+                leads_to = [
+                    Postcondition(
+                        kind=PostconditionKind.TEXT_PRESENT,
+                        text=new_steps[0].intent.removeprefix("click ").strip("'\""),
+                    )
+                ]
+            halted = steps[at].model_copy(update={"expect": leads_to})
+            last = new_steps[-1].model_copy(update={"expect": list(step.expect)})
+            steps[at] = halted
+            steps[at + 1 : at + 1] = [*new_steps[:-1], last]
+            new_steps[-1] = last
+            shown_step = halted
+            summary = f"after {step.id}: " + ", ".join(described)
+        if any(is_consequential(s, patched) for s in new_steps):
+            raise SelfRepairRefused(
+                "a new step of the bridge would save; a bridge may only lead to "
+                "the recorded save"
+            )
+        patched.steps = steps
         bundle_out = attempt_dir / "bundle"
         if bundle_out.exists():
             shutil.rmtree(bundle_out)
@@ -1002,13 +1219,20 @@ class SelfRepair:
             bundle_out,
             ignore=shutil.ignore_patterns("repair", "manifest.json"),
         )
-        (bundle_out / template).parent.mkdir(parents=True, exist_ok=True)
-        (bundle_out / template).write_bytes(crop)
+        staged = evidence_dir / "expect" / "templates"
+        if staged.is_dir():
+            for path in staged.iterdir():
+                shutil.copy2(path, bundle_out / "templates" / path.name)
+        for step_id, crop in crops.items():
+            target = next(s for s in steps if s.id == step_id)
+            assert target.anchor is not None
+            path = bundle_out / target.anchor.template
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(crop)
         patched.save(bundle_out, encrypt=bool(workflow.encrypted))
-        evidence_dir = attempt_dir / "evidence"
-        persist_heal(event, crop, live_png, evidence_dir)
         run_dir = attempt_dir.parent.parent
         halted_report = run_dir / "report.json"
+        evidence_dir.mkdir(parents=True, exist_ok=True)
         if halted_report.is_file():
             shutil.copy2(halted_report, evidence_dir / "report.json")
         candidate = build_candidate(
@@ -1022,6 +1246,16 @@ class SelfRepair:
             raise SelfRepairRefused(
                 candidate.rejection_reason or "the patch weakens the contract"
             )
+        candidate.taught_steps = [
+            TaughtStep(
+                step_id=s.id,
+                frame_sha256=sha256_hex(
+                    (evidence_dir / "heals" / s.id / "screen.png").read_bytes()
+                ),
+            )
+            for s in new_steps
+            if s.anchor is not None
+        ]
         candidate.provenance = RepairProvenance(
             repaired_by="self_repair",
             agent_id=self.agent.agent_id,
@@ -1034,36 +1268,183 @@ class SelfRepair:
             screens_scrubbed=self.screen_access.mode != "allow_unscrubbed",
             scrub_evidence=scrub_evidence,
         )
+        checked = tuple(s.id for s in new_steps if s.anchor is not None) + (
+            (step.id,) if mode == "replace" else ()
+        )
         return _Patch(
             attempt=attempt,
-            step=next(s for s in patched.steps if s.id == step.id),
+            step=shown_step,
             workflow=Workflow.load(bundle_out),
             bundle_dir=bundle_out,
             evidence_dir=evidence_dir,
             candidate=candidate,
-            target_region=region,
+            target_region=target_region,  # type: ignore[arg-type]
+            checked_step_ids=checked,
+            summary=summary,
         )
 
-    def _proposed_point(
-        self, step: Step, proposal: RepairProposal, session: AppSession
-    ) -> tuple[int, int]:
+    def _retarget(
+        self,
+        workflow: Workflow,
+        step: Step,
+        point: tuple[int, int],
+        structural: Any,
+        screen: bytes,
+    ) -> tuple[Step, bytes, tuple[int, int, int, int], Optional[str], Any]:
+        """The halted step with a new target at ``point`` on ``screen``."""
+
+        from openadapt_flow.compiler.compile import _landmarks_for
+        from openadapt_flow.risk import is_meaningful_label, is_write_shaped
+        from openadapt_flow.run_gate import is_consequential
+        from openadapt_flow.runtime.heal import _reocr_text, build_heal_event
+
+        assert step.anchor is not None
+        size = _png_size(screen)
+        region = _centered_region(
+            point, (step.anchor.region[2], step.anchor.region[3]), size
+        )
+        event, crop = build_heal_event(
+            step,
+            Resolution(rung="grounder", point=point, confidence=1.0, elapsed_ms=0.0),
+            region,
+            screen,
+            self.vision,
+        )
+        # What the control at the point is called now: its accessible name,
+        # else what OCR reads there. Never the recorded label, which the heal
+        # event keeps when OCR finds nothing.
+        read = _reocr_text(self.vision, screen, region, click_y=point[1])
+        label = (structural.name if structural is not None else None) or read
+        if is_consequential(step, workflow):
+            if not is_meaningful_label(label) or not is_write_shaped(label or ""):
+                raise SelfRepairRefused(
+                    f"{step.id} saves, but the proposed control "
+                    f"{label!r} does not read as a save; refusing a patch that "
+                    "would point a save at another kind of control"
+                )
+        elif label and is_write_shaped(label):
+            raise SelfRepairRefused(
+                f"{step.id} does not save, but the proposed control {label!r} "
+                "reads as a save; a patch may not turn a read step into a write"
+            )
+        landmarks = self._landmarks(_landmarks_for, workflow, screen, region, point)
+        anchor = event.new_anchor.model_copy(
+            update={
+                "template": f"templates/{step.id}_repair.png",
+                "structural": structural,
+                "ocr_text": read,
+                "landmarks": landmarks,
+            }
+        )
+        event.new_anchor = anchor
+        return step.model_copy(update={"anchor": anchor}), crop, region, label, event
+
+    def _new_click(
+        self,
+        workflow: Workflow,
+        step_id: str,
+        op: Any,
+        point: tuple[int, int],
+        structural: Any,
+        screen: bytes,
+        size_like: tuple[int, int, int, int],
+        session: AppSession,
+    ) -> tuple[Step, bytes, str]:
+        """A new bridge click: a readable control in the recorded record.
+
+        The control must not read as a save, and the record identity the DOM
+        shows under it must be one the recording already verified (the same
+        salted hash), so the new step carries an identity check of its own.
+        """
+
+        from openadapt_flow.ir import Anchor
+        from openadapt_flow.risk import is_meaningful_label, is_write_shaped
+        from openadapt_flow.runtime.heal import _crop_png, _reocr_text
+
+        region = _centered_region(
+            point, (size_like[2], size_like[3]), _png_size(screen)
+        )
+        read = _reocr_text(self.vision, screen, region, click_y=point[1])
+        label = (structural.name if structural is not None else None) or read
+        if not is_meaningful_label(label):
+            raise SelfRepairRefused(
+                f"a bridge click needs a readable control; {label!r} is not one "
+                "(an unlabeled control may save)"
+            )
+        assert label is not None
+        if is_write_shaped(label):
+            raise SelfRepairRefused(
+                f"the bridge clicks {label!r}, which reads as a save; a bridge may "
+                "only lead to the recorded save"
+            )
+        anchor = Anchor(
+            template=f"templates/{step_id}.png",
+            structural=structural,
+            region=region,
+            click_point=point,
+            ocr_text=read,
+            identity_template=_recorded_identity(workflow, session.backend, point),
+        )
+        step = Step(
+            id=step_id,
+            intent=f"click {label!r}",
+            action=ActionKind.DOUBLE_CLICK
+            if op.kind == "double_click"
+            else ActionKind.CLICK,
+            anchor=anchor,
+            risk="reversible",
+        )
+        return step, _crop_png(screen, region), label
+
+    def _landmarks(
+        self,
+        landmarks_for: Callable[..., Any],
+        workflow: Workflow,
+        screen: bytes,
+        region: tuple[int, int, int, int],
+        point: tuple[int, int],
+    ) -> list[Any]:
+        typed = tuple(v for v in _typed_values(workflow, self._params()).values() if v)
+        try:
+            return list(
+                landmarks_for(
+                    self.vision.ocr(screen), region, point, exclude_texts=typed
+                )
+            )
+        except Exception:  # noqa: BLE001 - landmarks are optional aids
+            return []
+
+    def _settled(self, session: AppSession) -> bytes:
+        try:
+            frame = self.vision.wait_settled(session.backend)
+        except Exception:  # noqa: BLE001 - fall back to a plain screenshot
+            frame = None
+        return frame or session.backend.screenshot()
+
+    def _one_op(self, native: Mapping[str, Any]) -> Any:
+        """The single acting step one native action maps to."""
+
         from openadapt_flow.jit.adapters import UnsupportedAction, translate
 
         try:
-            ops = translate(self.agent.dialect, proposal.action)
+            ops = translate(self.agent.dialect, native)
         except (UnsupportedAction, ValueError, TypeError) as exc:
             raise SelfRepairRefused(f"the proposal is not one action: {exc}") from exc
         acting = [op for op in ops if op.kind not in ("observe", "wait")]
         if len(acting) != 1:
             raise SelfRepairRefused(
-                f"a repair is exactly one action; the proposal has {len(acting)}"
+                f"each repair action is exactly one step; one has {len(acting)}"
             )
         op = acting[0]
-        expected = _POINTER_KINDS[step.action]
-        if op.kind != expected:
-            raise SelfRepairRefused(
-                f"{step.id} is a {expected}; the proposal is a {op.kind}"
-            )
+        if op.kind not in ("click", "double_click", "type"):
+            raise SelfRepairRefused(f"a repair action may not be a {op.kind}")
+        if op.kind == "type" and (op.target is not None or op.fill):
+            raise SelfRepairRefused("click the field first, then type into it")
+        return op
+
+    def _point_for(
+        self, op: Any, session: AppSession, screen: bytes
+    ) -> tuple[int, int]:
         if op.target is not None:
             page = getattr(session.backend, "page", None)
             if page is None:
@@ -1082,10 +1463,18 @@ class SelfRepair:
                 )
             if box is None:
                 raise SelfRepairRefused("the proposed element is not visible")
-            return int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2)
-        if op.x is None or op.y is None:
+            point = (
+                int(box["x"] + box["width"] / 2),
+                int(box["y"] + box["height"] / 2),
+            )
+        elif op.x is None or op.y is None:
             raise SelfRepairRefused("the proposal names no point or element")
-        return int(op.x), int(op.y)
+        else:
+            point = (int(op.x), int(op.y))
+        width, height = _png_size(screen)
+        if not (0 <= point[0] < width and 0 <= point[1] < height):
+            raise SelfRepairRefused(f"the proposed point {point} is off the screen")
+        return point
 
     def _params(self) -> Mapping[str, Any]:
         return dict(getattr(self.target, "params", None) or {})
@@ -1112,7 +1501,7 @@ class SelfRepair:
                 ctx,
                 workflow,
                 params,
-                patched_step_id=patch.step.id,
+                checked_step_ids=patch.checked_step_ids or (patch.step.id,),
                 halted_step_id=halted_step_id,
                 halted_form=halted_form,
                 backend=session.backend,
@@ -1396,7 +1785,11 @@ class SelfRepair:
         anchor = patch.step.anchor
         assert anchor is not None
         template = anchor.identity_template
-        pixel_readable = bool(
+        added = any(step_id != patch.step.id for step_id in patch.checked_step_ids)
+        # Frame campaigns judge one changed binding against its identity band.
+        # They can't judge a step whose identity is read from the DOM, or a new
+        # step with no identity of its own: those get the live campaigns.
+        pixel_readable = not added and bool(
             anchor.context_text or (template is not None and template.tokens)
         )
         live_case = CampaignCaseResult(
@@ -1523,9 +1916,8 @@ class SelfRepair:
                 0,
             ),
             step_intent=(
-                f"Accept a repair: {patch.step.intent or patch.step.id} now uses "
-                f"{label!r}. Approving saves this item. Candidate "
-                f"{candidate.candidate_id}."
+                f"Accept a repair: {patch.summary or label}. Approving saves "
+                f"this item. Candidate {candidate.candidate_id}."
             ),
             mode=ApprovalMode.EACH_ITEM,
             bundle_content_digest=candidate.proposed_content_digest,
@@ -1709,8 +2101,14 @@ def _recorded_crop(workflow: Workflow, bundle_dir: Path, step: Step) -> Optional
     return path.read_bytes() if path.is_file() else None
 
 
-def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, int, Any] | str":
-    """The halted step when self-repair may handle this halt, else why not."""
+def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, str, Any] | str":
+    """``(step, mode, result)`` when self-repair may handle this halt, else why not.
+
+    ``replace``: the step never acted because the ladder could not find its
+    target (or found it only by geometry and refused). ``after``: a step that
+    does not save acted on the target the ladder found, but its expected
+    screen never came, as when a new dialog appears.
+    """
 
     from openadapt_flow.run_gate import is_consequential
 
@@ -1730,9 +2128,7 @@ def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, int, Any]
     )
     if halted is None or halted.step_id not in steps:
         return "the halt is not at a step of this bundle"
-    index, step = steps[halted.step_id]
-    if halted.delivery_attempted is not False:
-        return f"input may have reached {step.id}; only a step that never acted is repaired"
+    _, step = steps[halted.step_id]
     if halted.identity is not None and halted.identity.status != "verified":
         return (
             f"{step.id} stopped on the record check ({halted.identity.status}); a "
@@ -1740,22 +2136,34 @@ def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, int, Any]
         )
     if step.action not in _POINTER_KINDS or step.anchor is None:
         return f"{step.id} is not a click on an on-screen target"
-    # Only the ladder's own two refusals count as "the screen changed": it
+    # Only the ladder's own two refusals count as "the target changed": it
     # found nothing, or it found the target only by geometry (or a model) and
     # refused to act on that. Any other stop before resolution, such as a
     # person declining the save at the approval gate, is never repaired.
     error = halted.error or ""
-    if halted.resolution is None:
-        if not error.startswith(_NOT_FOUND):
+    rung = halted.resolution.rung if halted.resolution is not None else None
+    if halted.delivery_attempted is False:
+        mode = "replace"
+        if rung is None and not error.startswith(_NOT_FOUND):
             return (
                 f"{step.id} stopped before resolving its target for another "
                 "reason; only a target the ladder could not find is repaired"
             )
-    elif halted.resolution.rung not in _UNTRUSTED_RUNGS or _BELOW_RUNG not in error:
-        return (
-            f"{step.id} found its target ({halted.resolution.rung}) and stopped for "
-            "another reason"
-        )
+        if rung is not None and (
+            rung not in _UNTRUSTED_RUNGS or _BELOW_RUNG not in error
+        ):
+            return f"{step.id} found its target ({rung}) and stopped for another reason"
+    elif (
+        halted.delivery_attempted is True
+        and rung in TRUSTED_RUNGS
+        and error.startswith(_EXPECTED_SCREEN)
+        and not is_consequential(step, workflow)
+    ):
+        # A step that does not save clicked the target the ladder found, and
+        # the screen it expected never came: a new step appeared after it.
+        mode = "after"
+    else:
+        return f"input may have reached {step.id}; only a step that never acted is repaired"
     approval = report.approval
     if approval is not None and approval.decision is ItemDecisionKind.DECLINED:
         return "a person declined this item; it is never repaired"
@@ -1767,7 +2175,108 @@ def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, int, Any]
         )
     if not report.halt or report.halt.state_id != step.id:
         return "the report's halt does not name the failed step"
-    return step, index, halted
+    return step, mode, halted
+
+
+def _before_frame(run_dir: Path, result: Any) -> Optional[bytes]:
+    """The frame a halted step acted on, from its run directory."""
+
+    rel = getattr(result, "before_png", None)
+    if not rel:
+        return None
+    path = run_dir / rel
+    try:
+        return path.read_bytes()
+    except OSError:
+        return None
+
+
+def _recorded_identity(workflow: Workflow, backend: Any, point: tuple[int, int]) -> Any:
+    """The new click's identity template, when it names a recorded record.
+
+    Reads the DOM identity under ``point`` and hashes it with the bundle's
+    own salt. Refuses when the backend can't read it, or when no recorded
+    step verified that same identity.
+    """
+
+    from openadapt_flow.runtime.identity_template import build_identity_template
+
+    recorded = [
+        s.anchor.identity_template
+        for s in workflow.steps
+        if s.anchor is not None
+        and s.anchor.identity_template is not None
+        and s.anchor.identity_template.structured
+    ]
+    getter = getattr(backend, "structured_text_at", None)
+    text = None
+    if callable(getter):
+        try:
+            text = getter(int(point[0]), int(point[1]))
+        except Exception:  # noqa: BLE001 - unreadable identity is refused
+            text = None
+    if not recorded or not text:
+        raise SelfRepairRefused(
+            "a new bridge step needs a record identity the page shows under it; "
+            "none could be read"
+        )
+    template = build_identity_template(
+        None,
+        structured_identity=text,
+        param_examples=dict(workflow.params),
+        salt_hex=recorded[0].salt,
+    )
+    if template is None or template.structured not in {t.structured for t in recorded}:
+        raise SelfRepairRefused(
+            "the control is not inside a record the recording verified; a bridge "
+            "may only act on the recorded record"
+        )
+    return template
+
+
+def _expected_crop(workflow: Workflow, bundle_dir: Path, step: Step) -> Optional[bytes]:
+    """The recorded crop of the step's expected screen, when there is one."""
+
+    for expect in step.expect:
+        if expect.template:
+            crop = workflow.decrypted_template(expect.template)
+            if crop is not None:
+                return crop
+            path = bundle_dir / expect.template
+            if path.is_file():
+                return path.read_bytes()
+    return None
+
+
+def _typable_params(workflow: Workflow, params: Mapping[str, Any]) -> dict[str, str]:
+    """The item's parameter values a bridge may type, secrets left out."""
+
+    secret = set(getattr(workflow, "secret_params", None) or [])
+    secret |= {s.param for s in workflow.steps if s.secret and s.param}
+    merged = {**workflow.params, **dict(params)}
+    return {
+        str(name): str(value)
+        for name, value in merged.items()
+        if name not in secret and value is not None and str(value)
+    }
+
+
+def _shows(backend: Any, vision: Any, screen: bytes, text: str) -> bool:
+    """Whether ``text`` is on the screen now: in the page, or read by OCR."""
+
+    wanted = " ".join(text.split()).casefold()
+    if not wanted:
+        return False
+    page = getattr(backend, "page", None)
+    if page is not None:
+        try:
+            body = str(page.locator("body").inner_text())
+        except Exception:  # noqa: BLE001 - fall back to OCR
+            body = ""
+        if wanted in " ".join(body.split()).casefold():
+            return True
+    words = _screen_words(vision, screen)
+    return words is not None and set(_words(text)) <= words
 
 
 def _typed_values(workflow: Workflow, params: Mapping[str, Any]) -> dict[str, str]:
@@ -1825,7 +2334,7 @@ def _pre_save_checks(
     workflow: Workflow,
     params: Mapping[str, Any],
     *,
-    patched_step_id: str,
+    checked_step_ids: Sequence[str],
     halted_step_id: str,
     halted_form: Optional[tuple[str, str]],
     backend: Any,
@@ -1860,26 +2369,32 @@ def _pre_save_checks(
         )
     )
 
-    # The patched step's target was found by the deterministic ladder.
-    patched = next((r for r in results if r.step_id == patched_step_id), None)
-    rung = (
-        patched.resolution.rung
-        if patched is not None and patched.resolution is not None
-        else None
-    )
+    # Every new or re-targeted step ran, and the deterministic ladder (not
+    # the agent) found its target.
+    found: list[str] = []
+    missing: list[str] = []
+    for step_id in checked_step_ids:
+        result = next((r for r in results if r.step_id == step_id), None)
+        rung = result.resolution.rung if result and result.resolution else None
+        if (
+            result is not None
+            and rung in TRUSTED_RUNGS
+            and (result is ctx.result or result.ok)
+        ):
+            found.append(f"{step_id}:{rung}")
+        else:
+            missing.append(f"{step_id}:{rung or 'not resolved'}")
     checks.append(
         (
             "target_found",
-            rung in TRUSTED_RUNGS,
-            f"{patched_step_id} resolved by {rung or 'nothing'}",
+            not missing,
+            ", ".join(found) if not missing else "not found: " + ", ".join(missing),
         )
     )
-    if patched is ctx.result and ctx.result.resolution is not None:
+    if ctx.result.resolution is not None and ctx.step.anchor is not None:
         point = ctx.result.resolution.point
-        anchor = ctx.step.anchor
-        if anchor is not None:
-            w, h = anchor.region[2], anchor.region[3]
-            outcome.resolved_region = (point[0] - w // 2, point[1] - h // 2, w, h)
+        w, h = ctx.step.anchor.region[2], ctx.step.anchor.region[3]
+        outcome.resolved_region = (point[0] - w // 2, point[1] - h // 2, w, h)
 
     # Every record check verified, including the save's own when it has one.
     bad = [
