@@ -391,11 +391,12 @@ def main() -> int:
 
     fixture = qualify_hooks.fixture()
     demo = _demo()
-    meta: dict[str, Any] = {"started_at": common.now()}
-    if args.reset:
-        meta["baseline_sha256"] = fixture.reset()
+    meta: dict[str, Any] = {"started_at": common.now(), "blocks": []}
+
+    def reset() -> dict[str, Any]:
         existing = SyntheticPatientSpec(**EXISTING, **COMMON_FIELDS)
-        meta["seeded_existing_chart_status"] = (
+        done = {"baseline_sha256": fixture.reset(), "at": common.now()}
+        done["seeded_existing_chart_status"] = (
             fixture.token_session("actor")
             .post(
                 fixture.api_base_url + "/apis/default/api/patient",
@@ -403,20 +404,25 @@ def main() -> int:
             )
             .status_code
         )
+        return done
+
     work_root = Path(tempfile.mkdtemp(prefix="code-action-openemr-"))
     rows_path = args.out / "runs.jsonl"
     try:
+        # A block is one agent over the referrals from a reset fixture, as in
+        # the referral protocol: each referral can be registered only once.
         for round_ in range(1, args.rounds + 1):
-            for i, key in enumerate(keys):
-                # Alternate which arm goes first, so drift hits both.
-                order = arms if (i + round_) % 2 == 0 else list(reversed(arms))
-                for arm in order:
+            shift = (round_ - 1) % len(arms)
+            for arm in arms[shift:] + arms[:shift]:
+                block = {"round": round_, "arm": arm}
+                if args.reset:
+                    block.update(reset())
+                meta["blocks"].append(block)
+                k = (round_ - 1) % len(keys)
+                for key in keys[k:] + keys[:k]:
                     if key not in MISMATCH and sql_patients(
                         fixture, f"email={_q(REFERRALS[key]['email'])}"
                     ):
-                        # The other arm already registered this referral; a
-                        # second save would be a duplicate. Remove nothing:
-                        # skip it and say so.
                         print(f"{key} {arm}: skipped (chart exists)", flush=True)
                         continue
                     stopped = common.may_start(args.max_run_usd)
@@ -435,8 +441,9 @@ def main() -> int:
                         f"{key} {arm}: correct={row['correct']} new={row['new_charts']} "
                         f"fields={row['fields_matched']}/{row['fields_total']} "
                         f"{row['model_calls']} calls {row['actions']} actions "
-                        f"{row['prompt_tokens']} prompt tokens ${float(row['cost_usd'] or 0):.4f} "
-                        f"{row['run_seconds']} s load {row['host_load_1m']} err={row['error']} "
+                        f"{row['prompt_tokens']} prompt tokens "
+                        f"${float(row['cost_usd'] or 0):.4f} {row['run_seconds']} s "
+                        f"load {row['host_load_1m']} err={row['error']} "
                         f"(total ${total:.2f})",
                         flush=True,
                     )
