@@ -207,3 +207,43 @@ The queue enforces these rules:
 - A corrected value must be valid for the field's kind.
 - A decision settles the value but keeps its grade. A person's choice is not a
   read, so it never makes a value `verified`.
+
+## Export
+
+`openadapt_flow.records.export.export()` writes settled records to a sink.
+
+```python
+import sqlite3
+from openadapt_flow.records.export import CsvSink, DbApiSink, WebhookSink, export
+
+result = export(records, schema, CsvSink("accounts.csv"))
+export(records, schema, DbApiSink(sqlite3.connect("accounts.db"), "accounts"))
+export(records, schema, WebhookSink("http://127.0.0.1:8080/records"))
+for skipped in result.skipped:
+    print(skipped.record_key, skipped.reason)
+```
+
+Each row has one column per field, typed by kind (`integer` as a number,
+`boolean` as true or false, amounts as exact decimal strings), and these
+provenance columns:
+
+| Column | Meaning |
+|---|---|
+| `_record_key` | Identity field values. The database sink upserts on it. |
+| `_run_id`, `_read_at` | The run that read the record, and when. |
+| `_grade` | The weakest field grade. |
+| `_receipt_sha256` | The Seal that covers the record, once sealed. |
+| `_provenance` | JSON: per field, the grade, channels, confidence, screenshot hash, region, crop hash and review decision. |
+
+A record is exported only when no field still needs review and each field is
+at least `min_grade` (default `screen_readback`) or was settled by a signed
+review decision. Pass `min_grade="verified"` to export only values confirmed
+by an independent channel. Skipped records are returned with the reason.
+
+`DbApiSink` takes any DB-API 2.0 connection. For Postgres, pass a `psycopg`
+connection and `paramstyle="format"`. `WebhookSink` refuses a URL that is not
+on this machine unless you pass `allow_remote=True`.
+
+A `ColumnMapping` renames fields and adds fixed columns for a layout you
+define. Standard target models are templates outside the core; see
+`examples/records/`.
