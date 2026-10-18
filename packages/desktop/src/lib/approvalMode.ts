@@ -290,7 +290,7 @@ export function approverSentence(approver: ItemApprover): string {
   const verb = approver.decision === "approved" ? "Approved" : "Declined";
   if (approver.kind === "person") {
     const where =
-      approver.route === "cloud_phone"
+      approver.route === "decision_portal"
         ? "on their phone"
         : approver.route === "desktop_run_it"
           ? "in Run it"

@@ -609,8 +609,8 @@ UNCONFIRMED_REASONS = frozenset(
 
 
 #: How an answer reached the run: a person in Desktop's Run it or on their
-#: phone (a Cloud-signed decision), or a delegate by its own route.
-PERSON_ROUTES = frozenset({"desktop_run_it", "cloud_phone"})
+#: phone (the runner's decision portal), or a delegate by its own route.
+PERSON_ROUTES = frozenset({"desktop_run_it", "decision_portal"})
 DELEGATE_ROUTES = frozenset({"local_cli", "webhook", "mcp"})
 DELEGATE_KINDS = frozenset({"rule", "agent", "system"})
 
@@ -673,10 +673,7 @@ def approvers(raw: Any) -> list[dict[str, Any]]:
                 if isinstance(approver_id, str) and _OPAQUE_ID.fullmatch(approver_id)
                 else None
             )
-            entry["verified"] = route in PERSON_ROUTES and (
-                route != "cloud_phone"
-                or (entry["signed_in"] and row.get("auth_method") == "cloud_aal2")
-            )
+            entry["verified"] = route in PERSON_ROUTES
         else:
             continue
         out.append(entry)

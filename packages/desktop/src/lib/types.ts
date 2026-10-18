@@ -228,7 +228,7 @@ export interface ItemApproval {
 /** One answer to a save: a person, or a delegate a person named in a signed grant. */
 export interface ItemApprover {
   decision: "approved" | "declined";
-  route: "desktop_run_it" | "cloud_phone" | "local_cli" | "webhook" | "mcp" | "unknown";
+  route: "desktop_run_it" | "decision_portal" | "local_cli" | "webhook" | "mcp" | "unknown";
   kind: "person" | "agent" | "rule" | "system" | "unknown";
   /** A Cloud user id for a signed-in person, or the delegate's opaque id. */
   id: string | null;

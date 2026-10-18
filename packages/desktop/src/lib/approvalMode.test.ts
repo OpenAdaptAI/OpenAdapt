@@ -170,7 +170,7 @@ describe("who decided each save", () => {
 
   it("names a person in Run it or on their phone", () => {
     expect(approverSentence(person)).toBe("Approved by a signed-in person in Run it");
-    expect(approverSentence({ ...person, route: "cloud_phone" })).toBe(
+    expect(approverSentence({ ...person, route: "decision_portal" })).toBe(
       "Approved by a signed-in person on their phone",
     );
     expect(approverSentence({ ...person, decision: "declined", signed_in: false })).toBe(

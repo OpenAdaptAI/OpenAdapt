@@ -51,7 +51,12 @@ def test_the_record_names_who_decided_each_save() -> None:
     rows = approvers(
         [
             _row(),
-            _row(route="cloud_phone"),
+            _row(
+                route="decision_portal",
+                approver_kind="unauthenticated",
+                approver_id=None,
+                auth_method="none",
+            ),
             _row(**_DELEGATE),
             _row(
                 decision="declined",
@@ -64,7 +69,7 @@ def test_the_record_names_who_decided_each_save() -> None:
     )
     assert [r["route"] for r in rows] == [
         "desktop_run_it",
-        "cloud_phone",
+        "decision_portal",
         "local_cli",
         "desktop_run_it",
     ]
@@ -88,8 +93,8 @@ def test_the_record_names_who_decided_each_save() -> None:
 def test_a_delegate_without_a_signed_grant_or_on_a_persons_route_is_not_verified() -> None:
     no_grant = dict(_DELEGATE, approver=dict(_DELEGATE["approver"], policy_ref=None))
     on_person_route = dict(_DELEGATE, route="desktop_run_it")
-    phone_without_aal2 = _row(route="cloud_phone", auth_method="cloud_aal1")
-    rows = approvers([_row(**no_grant), _row(**on_person_route), phone_without_aal2])
+    unknown_route = _row(route="cloud_phone")
+    rows = approvers([_row(**no_grant), _row(**on_person_route), unknown_route])
     assert [r["verified"] for r in rows] == [False, False, False]
     # Rows that aren't answers at all are left out, never shown as a person.
     assert approvers([{"decision": "maybe"}, "x", _row(decided_by="software")]) == []
