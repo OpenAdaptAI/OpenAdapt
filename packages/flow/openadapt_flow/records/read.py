@@ -62,6 +62,7 @@ __all__ = [
     "ClipboardReader",
     "SystemClipboard",
     "add_read",
+    "canonical_value",
     "channel_read",
     "combine_reads",
     "normalize_for",
@@ -113,6 +114,22 @@ def normalize_for(spec: FieldSpec, raw: Optional[str]) -> Optional[str]:
         if not re.fullmatch(spec.pattern, value):
             return None
     return value
+
+
+def canonical_value(spec: FieldSpec, raw: Optional[str]) -> Optional[str]:
+    """The value to report and export for ``raw``, or None if it does not parse.
+
+    Text and code keep the application's characters, with runs of whitespace
+    collapsed, so ``AC-1042`` stays ``AC-1042``. Other kinds use their
+    normalized form (an ISO date, a plain decimal amount).
+    """
+
+    normalized = normalize_for(spec, raw)
+    if normalized is None or raw is None:
+        return None
+    if spec.kind in ("text", "code"):
+        return " ".join(raw.split())
+    return normalized
 
 
 def channel_read(
@@ -231,7 +248,7 @@ def combine_reads(
     grade = grade_for(tuple(parsed), agreement)
     value = None
     if agreement in ("agree", "single") and parsed:
-        value = _preferred(parsed).normalized
+        value = canonical_value(spec, _preferred(parsed).raw)
     reasons = []
     if not parsed:
         reasons.append("no channel read a valid value")

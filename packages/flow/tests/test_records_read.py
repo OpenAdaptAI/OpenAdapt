@@ -43,7 +43,7 @@ def test_clipboard_and_ocr_agree() -> None:
     ]
     field = combine_reads(CODE, reads)
     assert field.agreement == "agree"
-    assert field.value == "ac1042"
+    assert field.value == "AC-1042"
     assert field.grade == "screen_readback"
     assert field.confidence == pytest.approx(0.995)
     assert not field.needs_review
@@ -79,7 +79,7 @@ def test_single_read_is_unconfirmed_and_reviewed() -> None:
         CODE, [channel_read(CODE, "ocr", "AC-1042", engine_confidence=1.0)]
     )
     assert field.agreement == "single"
-    assert field.value == "ac1042"
+    assert field.value == "AC-1042"
     assert field.grade == "unconfirmed"
     assert field.confidence == pytest.approx(0.6)
     assert field.needs_review
@@ -110,7 +110,7 @@ def test_grade_ladder_with_add_read() -> None:
     assert reopened.grade == "committed_record_readback"
     verified = add_read(CODE, reopened, channel_read(CODE, "database", "AC1042"))
     assert verified.grade == "verified"
-    assert verified.value == "ac1042"
+    assert verified.value == "AC1042"  # the database read is preferred
 
 
 def test_disagreeing_independent_read_demotes_to_review() -> None:
