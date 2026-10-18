@@ -52,12 +52,12 @@ from typing import Any, Callable, Optional, Protocol, Sequence
 from openadapt_flow.records.schema import (
     Agreement,
     ChannelRead,
-    SourceKind,
     FieldRead,
     FieldSpec,
     ReadChannel,
     ReadProof,
     SealRef,
+    SourceKind,
     SourceRegion,
     grade_for,
 )
