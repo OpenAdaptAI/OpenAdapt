@@ -12,7 +12,7 @@ the wrapper itself, see [JIT.md](JIT.md).
 
 | Mode | Who admits | A person's part | Needs a step review |
 | --- | --- | --- | --- |
-| Agent under policy | a registered agent, with its own key | signs an admission policy once | no; the policy's scope and canaries stand in for it |
+| Agent under policy | a registered agent, with its own key; the recording agent itself when the policy sets `allow_self_admission` | signs an admission policy once | no; the policy's scope and canaries stand in for it |
 | Admitter key | a CI job or script, with an admitter key | creates and registers the key | no |
 | Person | a named person at an interactive terminal | everything | yes |
 
@@ -52,9 +52,15 @@ policy-signer key:
   "required_readback": "independent_readback",
   "min_clean_canaries": 3,
   "agent_principals": ["agent:admitter"],
-  "flow_policies": ["clinical-write"]
+  "flow_policies": ["clinical-write"],
+  "allow_self_admission": true
 }
 ```
+
+`allow_self_admission` lets an agent the policy names admit a draft it
+recorded itself, so one agent can record, run its canaries and admit without
+a second agent. Leave it out (or set it to `false`) to require a different
+agent, an admitter key or a person.
 
 ```bash
 openadapt-flow jit sign-policy policy.json --key dana.pem --out signed-policy.json
@@ -106,8 +112,9 @@ an expired or unsigned policy, or an unregistered key is refused outright.
 
 The manifest records the agent principal (`admitted_by_principal_id`), the
 policy's id, digest, signer and expiry, the signed policy itself, the number
-of clean canaries, and the agent's signature over the manifest
-(`admitter_signature`).
+of clean canaries, the agent's signature over the manifest
+(`admitter_signature`), and `"self_admitted": true` when the agent admitted a
+draft it recorded.
 
 ## A CI job with an admitter key
 
@@ -153,10 +160,16 @@ or agent could make it. The steps are in the table under
   attend, admit or reject. An agent acts only through a registered key and
   under a policy a person signed. The admission decision is made by Flow's
   checks, not by the agent or a model.
-- **A run can't approve its own contract.** The identity that made the
-  recording (`recorded_by`, the dialect, or the agent's `principal_id`)
-  can't attend a canary or admit. This holds even when it is a registered
-  agent named in the policy. Verification checks it again. Flow reads that
+- **A run approves its own contract only if the policy says so.** The
+  identity that made the recording (`recorded_by`, the dialect, or the
+  agent's `principal_id`) can't attend a canary or admit, unless it is a
+  registered agent acting under a signed policy with `allow_self_admission`.
+  Then only the agent the signed recorder block names passes, and the same
+  checks decide: the policy's scope, its clean canaries, and a tier 1
+  read-back on every write step. The manifest marks it `"self_admitted":
+  true`, and verification checks that mark against the recorder and the
+  signed policy again. Adding the flag to a policy after it was signed breaks
+  its signature. Flow reads that
   identity from the draft's `recorder` block, which it signs with the local
   admission key together with the bundle digest when it writes the draft
   (and again when `confirm_params` recompiles it). A `candidate.json` or a
