@@ -59,23 +59,27 @@ Each value carries its evidence:
 | Member | Meaning |
 |---|---|
 | `name` | Lowercase snake case, unique in the exchange. |
-| `type` | `string`, `integer`, `decimal`, `boolean`, `date`, `datetime`, `enum` or `identifier`. Decimals are strings (`"1249.50"`) so no precision is lost. Dates are ISO 8601. |
+| `type` | `text`, `code`, `date`, `currency`, `integer`, `decimal`, `boolean` or `enum`, the same kinds as the reading step's record schema. Decimals and currency amounts are strings (`"1249.50"`) so no precision is lost. Dates are ISO 8601. |
 | `value`, `unit` | The value, and an optional unit such as a currency code. |
 | `confidence` | 0 to 1, from the producer. |
 | `status` | `proposed`, `confirmed`, `corrected` or `rejected`. `confirmed` and `corrected` need `confirmed_by`, a person. |
 | `grade` | How well the value was checked in the target application (below). |
-| `reads` | Each observation: `channel`, observed `value`, `artifact_id`, `locator` (page, line, byte span, screen, region, frame and crop sha256), time and run id. |
+| `reads` | Each observation: `channel`, observed `value`, `artifact_id`, `session` (`acting`, `reopened` or `independent`), `locator` (page, line, byte span, screen, and a `region` with `bbox`, frame sha256 and crop sha256), time and run id. |
+| `needs_review`, `review_reason` | Set when the value goes to a review queue. A reason is required. |
+| `seal` | Optional per-value Seal pointer: `run_id`, `receipt_sha256`, `field_commitment`. |
+
+Channels: `clipboard`, `ocr`, `structure` and `accessibility` read the target application through its screens. `export`, `database` and `api` do not. `document_parse` and `human` are the document side.
 
 Read grades, weakest first:
 
 | Grade | Meaning | Rule |
 |---|---|---|
-| `unchecked` | Not read back. | None. |
-| `screen_readback` | Read from the screen in the session that wrote it. | Needs a read through `screen_ocr`, `screen_structured` or `clipboard`. |
-| `committed_readback` | The record was closed, reopened by id and read again. | Same as above. |
+| `unconfirmed` | Not read back, one channel only, or the channels disagreed. | None. |
+| `screen_readback` | Read from the screen in the session that wrote it. | Needs a read through a screen channel. |
+| `committed_record_readback` | The record was closed, reopened by id and read again. | Needs a screen read with `session` set to `reopened`. |
 | `verified` | Read through a channel that does not use the application's screens. | Needs a read through `export`, `database` or `api`. |
 
-The field record and grades are provisional. The legacy-records reading step owns the canonical record and field schema. When it lands, this module will import it and keep these wire names.
+The grade, channel and kind names match `openadapt_flow.records.schema`, the record and field schema owned by the reading step. Until that module is on main they are spelled out in `interchange/model.py`; after it merges they are imported from it, and the wire names do not change.
 
 ### Identities
 
@@ -125,6 +129,8 @@ A document conforms when it matches the JSON Schema and has no violation from th
 | `IX025` | A value does not match its declared type. |
 | `IX030` | Verified grade without a read through an independent channel. |
 | `IX031` | Read-back grade without any read of the target application. |
+| `IX033` | Committed-record grade without a read of the reopened record. |
+| `IX034` | A value that needs review has no reason. |
 | `IX032` | Confirmed or corrected value without a person who confirmed it. |
 | `IX040` | A decision was made by something other than a person. |
 | `IX041` | The producer approved its own work. |

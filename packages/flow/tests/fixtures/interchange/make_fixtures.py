@@ -39,7 +39,19 @@ def prov(producer: dict) -> dict:
     }
 
 
+def sessions(doc: dict) -> None:
+    """Mark which session each application read came from."""
+    for f in doc["fields"]:
+        for r in f.get("reads", []):
+            if r["channel"] in ("export", "database", "api"):
+                r["session"] = "independent"
+            elif r["channel"] in ("clipboard", "ocr", "structure", "accessibility"):
+                reopened = f.get("grade") == "committed_record_readback"
+                r["session"] = "reopened" if reopened else "acting"
+
+
 def seal(doc: dict) -> dict:
+    sessions(doc)
     doc = with_checksum(doc)
     doc["seals"] = [
         {
@@ -77,7 +89,7 @@ invoice = {
     "fields": [
         {
             "name": "vendor_id",
-            "type": "identifier",
+            "type": "code",
             "value": "V-0042",
             "confidence": 0.97,
             "reads": [
@@ -91,7 +103,7 @@ invoice = {
         },
         {
             "name": "invoice_number",
-            "type": "identifier",
+            "type": "code",
             "value": "INV-20417",
             "confidence": 0.95,
             "reads": [
@@ -192,21 +204,23 @@ invoice_result = {
     "fields": [
         {
             "name": "bill_id",
-            "type": "identifier",
+            "type": "code",
             "value": "B-000318",
             "confidence": 0.99,
-            "grade": "committed_readback",
+            "grade": "committed_record_readback",
             "reads": [
                 {"channel": "clipboard", "value": "B-000318", "artifact_id": "r1"},
                 {
-                    "channel": "screen_ocr",
+                    "channel": "ocr",
                     "value": "B-000318",
                     "artifact_id": "r1",
                     "locator": {
                         "screen": "Bill detail",
-                        "region": {"x": 120, "y": 64, "width": 140, "height": 22},
-                        "frame_sha256": sha(b"frame-1"),
-                        "crop_sha256": sha(b"crop-1"),
+                        "region": {
+                            "bbox": [120, 64, 140, 22],
+                            "frame_sha256": sha(b"frame-1"),
+                            "crop_sha256": sha(b"crop-1"),
+                        },
                     },
                 },
             ],
@@ -219,7 +233,7 @@ invoice_result = {
             "confidence": 0.99,
             "grade": "verified",
             "reads": [
-                {"channel": "screen_ocr", "value": "1249.50", "artifact_id": "r1"},
+                {"channel": "ocr", "value": "1249.50", "artifact_id": "r1"},
                 {"channel": "export", "value": "1249.50"},
             ],
         },
@@ -268,7 +282,7 @@ referral = {
     "fields": [
         {
             "name": "subject_name",
-            "type": "string",
+            "type": "text",
             "value": "TESTPATIENT, ALPHA",
             "confidence": 0.94,
             "reads": [
@@ -295,7 +309,7 @@ referral = {
         },
         {
             "name": "subject_id",
-            "type": "identifier",
+            "type": "code",
             "value": "TEST-0000-0007",
             "confidence": 0.71,
             "status": "confirmed",
@@ -379,15 +393,15 @@ referral_result = {
     "fields": [
         {
             "name": "record_id",
-            "type": "identifier",
-            "value": "MRN-100045",
+            "type": "code",
+            "value": "REC-100045",
             "confidence": 0.99,
-            "grade": "committed_readback",
+            "grade": "committed_record_readback",
             "reads": [
-                {"channel": "clipboard", "value": "MRN-100045", "artifact_id": "chart"},
+                {"channel": "clipboard", "value": "REC-100045", "artifact_id": "chart"},
                 {
-                    "channel": "screen_ocr",
-                    "value": "MRN-100045",
+                    "channel": "ocr",
+                    "value": "REC-100045",
                     "artifact_id": "chart",
                 },
             ],
@@ -397,7 +411,7 @@ referral_result = {
             "type": "enum",
             "value": "urgent",
             "confidence": 0.99,
-            "grade": "committed_readback",
+            "grade": "committed_record_readback",
             "reads": [
                 {"channel": "clipboard", "value": "urgent", "artifact_id": "chart"}
             ],
@@ -410,7 +424,7 @@ referral_result = {
             "fields": ["record_id"],
             "match": {
                 "status": "new",
-                "record_ref": "MRN-100045",
+                "record_ref": "REC-100045",
                 "candidates": 0,
                 "checked_by": EXECUTOR,
             },
@@ -433,7 +447,7 @@ halted["identities"][0]["fields"] = ["subject_id_echo"]
 halted["fields"] = [
     {
         "name": "subject_id_echo",
-        "type": "identifier",
+        "type": "code",
         "value": "TEST-0000-0008",
         "confidence": 1.0,
     }
@@ -483,6 +497,17 @@ invalid = {
     "invalid/readback_without_screen_read.json": (
         mutate(referral_result, _set(["fields", 1, "reads"], [])),
         ["IX031"],
+    ),
+    "invalid/committed_without_reopen.json": (
+        mutate(
+            referral_result,
+            lambda d: [r.update(session="acting") for r in d["fields"][0]["reads"]],
+        ),
+        ["IX033"],
+    ),
+    "invalid/review_without_reason.json": (
+        mutate(referral_result, _set(["fields", 1, "needs_review"], True)),
+        ["IX034"],
     ),
     "invalid/model_decided.json": (
         mutate(

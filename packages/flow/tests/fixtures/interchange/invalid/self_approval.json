@@ -23,7 +23,7 @@
   "fields": [
     {
       "name": "subject_name",
-      "type": "string",
+      "type": "text",
       "value": "TESTPATIENT, ALPHA",
       "confidence": 0.94,
       "reads": [
@@ -53,7 +53,7 @@
     },
     {
       "name": "subject_id",
-      "type": "identifier",
+      "type": "code",
       "value": "TEST-0000-0007",
       "confidence": 0.71,
       "status": "confirmed",
@@ -144,7 +144,7 @@
       "id": "document-side@site"
     },
     "captured_at": "2026-10-29T14:00:00+00:00",
-    "checksum": "sha256:5452c81e98f0ed8fcfcac3b674f0bb65ec6059ec33aaf6a1738f20b61f5b0bde"
+    "checksum": "sha256:e8c08b3e00e3062805ab47f19ecb9dbb66f04f3f351598e0398a22dce7f61ec9"
   },
   "extensions": {
     "org.openadapt.example.referral": {

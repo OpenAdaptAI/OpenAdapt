@@ -23,7 +23,7 @@
   "fields": [
     {
       "name": "vendor_id",
-      "type": "identifier",
+      "type": "code",
       "value": "V-0042",
       "confidence": 0.97,
       "reads": [
@@ -40,7 +40,7 @@
     },
     {
       "name": "invoice_number",
-      "type": "identifier",
+      "type": "code",
       "value": "INV-20417",
       "confidence": 0.95,
       "reads": [
@@ -154,6 +154,6 @@
       "id": "document-side@site"
     },
     "captured_at": "2026-10-29T14:00:00+00:00",
-    "checksum": "sha256:cab55beb96114e86f07539bcaaeb573fdcfc9eebb87431eb2c9d8f9c44f21065"
+    "checksum": "sha256:5c9f5d224d805e7ea5fb43fcd8b2801bda9708b8c44c39a8c8ce0b771ee42b45"
   }
 }

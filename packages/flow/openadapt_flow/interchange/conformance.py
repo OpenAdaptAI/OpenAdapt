@@ -15,7 +15,7 @@ import json
 import re
 import tempfile
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Optional
 
@@ -24,11 +24,9 @@ from pydantic import ValidationError
 from openadapt_flow.interchange.model import (
     EXTENSION_KEY,
     INDEPENDENT_CHANNELS,
+    SCREEN_CHANNELS,
     Exchange,
 )
-
-#: Channels that read the target application through its own screens.
-SCREEN_CHANNELS = frozenset({"screen_ocr", "screen_structured", "clipboard"})
 
 CODES: dict[str, str] = {
     "IX001": "does not match the schema",
@@ -43,6 +41,8 @@ CODES: dict[str, str] = {
     "IX025": "a value does not match its declared type",
     "IX030": "verified grade without a read through an independent channel",
     "IX031": "read-back grade without any read of the target application",
+    "IX033": "committed-record grade without a read of the reopened record",
+    "IX034": "a value that needs review has no reason",
     "IX032": "confirmed or corrected value without a person who confirmed it",
     "IX040": "a decision was made by something other than a person",
     "IX041": "the producer approved its own work",
@@ -115,7 +115,7 @@ def _type_ok(kind: str, value: object) -> bool:
         return isinstance(value, bool)
     if not isinstance(value, str):
         return False
-    if kind == "decimal":
+    if kind in ("decimal", "currency"):
         return bool(_DECIMAL.match(value))
     if kind == "date":
         try:
@@ -123,12 +123,6 @@ def _type_ok(kind: str, value: object) -> bool:
         except ValueError:
             return False
         return bool(_DATE.match(value))
-    if kind == "datetime":
-        try:
-            datetime.fromisoformat(value)
-        except ValueError:
-            return False
-        return True
     return True
 
 
@@ -187,10 +181,16 @@ def check(doc: dict[str, Any], *, base_dir: Optional[Path] = None) -> list[Viola
         channels = {r.channel for r in f.reads}
         if f.grade == "verified" and not channels & INDEPENDENT_CHANNELS:
             add("IX030", where)
-        if f.grade in ("screen_readback", "committed_readback") and not (
+        if f.grade in ("screen_readback", "committed_record_readback") and not (
             channels & (SCREEN_CHANNELS | INDEPENDENT_CHANNELS)
         ):
             add("IX031", where)
+        elif f.grade == "committed_record_readback" and not any(
+            r.session == "reopened" for r in f.reads
+        ):
+            add("IX033", where)
+        if f.needs_review and not (f.review_reason or "").strip():
+            add("IX034", where)
         if f.status in ("confirmed", "corrected") and (
             f.confirmed_by is None or f.confirmed_by.kind != "human"
         ):

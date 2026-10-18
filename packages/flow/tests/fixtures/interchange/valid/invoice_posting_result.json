@@ -21,31 +21,35 @@
   "fields": [
     {
       "name": "bill_id",
-      "type": "identifier",
+      "type": "code",
       "value": "B-000318",
       "confidence": 0.99,
-      "grade": "committed_readback",
+      "grade": "committed_record_readback",
       "reads": [
         {
           "channel": "clipboard",
           "value": "B-000318",
-          "artifact_id": "r1"
+          "artifact_id": "r1",
+          "session": "reopened"
         },
         {
-          "channel": "screen_ocr",
+          "channel": "ocr",
           "value": "B-000318",
           "artifact_id": "r1",
           "locator": {
             "screen": "Bill detail",
             "region": {
-              "x": 120,
-              "y": 64,
-              "width": 140,
-              "height": 22
-            },
-            "frame_sha256": "0e13daeeced75fbfad26d8265b0d826ded004bbfc75276a93cdd6c66e3fd72b8",
-            "crop_sha256": "49fda4a821d84436e76f96df2e7cf14a27da2010dd9c78b9f26729b99a326905"
-          }
+              "bbox": [
+                120,
+                64,
+                140,
+                22
+              ],
+              "frame_sha256": "0e13daeeced75fbfad26d8265b0d826ded004bbfc75276a93cdd6c66e3fd72b8",
+              "crop_sha256": "49fda4a821d84436e76f96df2e7cf14a27da2010dd9c78b9f26729b99a326905"
+            }
+          },
+          "session": "reopened"
         }
       ]
     },
@@ -58,13 +62,15 @@
       "grade": "verified",
       "reads": [
         {
-          "channel": "screen_ocr",
+          "channel": "ocr",
           "value": "1249.50",
-          "artifact_id": "r1"
+          "artifact_id": "r1",
+          "session": "acting"
         },
         {
           "channel": "export",
-          "value": "1249.50"
+          "value": "1249.50",
+          "session": "independent"
         }
       ]
     }
@@ -96,12 +102,12 @@
       "id": "openadapt-flow@site-runner-1"
     },
     "captured_at": "2026-10-29T14:00:00+00:00",
-    "checksum": "sha256:2c1e46a482b836c4e89904c587e8548b1eadcf87774a58ffc78866524ac9c53f"
+    "checksum": "sha256:f8fd8612d336be710f7ffa65ec87eb813ad1fdf84f57bbdf021235caeda5381f"
   },
   "seals": [
     {
       "kind": "openadapt.seal/offline-ed25519",
-      "covers": "sha256:2c1e46a482b836c4e89904c587e8548b1eadcf87774a58ffc78866524ac9c53f",
+      "covers": "sha256:f8fd8612d336be710f7ffa65ec87eb813ad1fdf84f57bbdf021235caeda5381f",
       "key_id": "site-key-1",
       "uri": "seals/run-0001.seal.json"
     }

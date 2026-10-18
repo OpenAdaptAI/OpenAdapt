@@ -53,6 +53,18 @@
       ]
     },
     {
+      "file": "invalid/committed_without_reopen.json",
+      "expect": [
+        "IX033"
+      ]
+    },
+    {
+      "file": "invalid/review_without_reason.json",
+      "expect": [
+        "IX034"
+      ]
+    },
+    {
       "file": "invalid/model_decided.json",
       "expect": [
         "IX040"

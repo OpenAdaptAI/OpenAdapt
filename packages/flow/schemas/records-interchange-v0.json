@@ -179,6 +179,49 @@
       "title": "Decision",
       "type": "object"
     },
+    "FieldSeal": {
+      "additionalProperties": false,
+      "description": "The reading step's per-value Seal pointer.",
+      "properties": {
+        "run_id": {
+          "maxLength": 200,
+          "minLength": 1,
+          "title": "Run Id",
+          "type": "string"
+        },
+        "receipt_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Receipt Sha256"
+        },
+        "field_commitment": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Field Commitment"
+        }
+      },
+      "required": [
+        "run_id"
+      ],
+      "title": "FieldSeal",
+      "type": "object"
+    },
     "FieldValue": {
       "additionalProperties": false,
       "description": "A typed value, with where it came from and how well it was checked.",
@@ -190,14 +233,14 @@
         },
         "type": {
           "enum": [
-            "string",
+            "text",
+            "code",
+            "date",
+            "currency",
             "integer",
             "decimal",
             "boolean",
-            "date",
-            "datetime",
-            "enum",
-            "identifier"
+            "enum"
           ],
           "title": "Type",
           "type": "string"
@@ -264,11 +307,11 @@
           "default": null
         },
         "grade": {
-          "default": "unchecked",
+          "default": "unconfirmed",
           "enum": [
-            "unchecked",
+            "unconfirmed",
             "screen_readback",
-            "committed_readback",
+            "committed_record_readback",
             "verified"
           ],
           "title": "Grade",
@@ -280,6 +323,35 @@
           },
           "title": "Reads",
           "type": "array"
+        },
+        "needs_review": {
+          "default": false,
+          "title": "Needs Review",
+          "type": "boolean"
+        },
+        "review_reason": {
+          "anyOf": [
+            {
+              "maxLength": 2000,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Review Reason"
+        },
+        "seal": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/FieldSeal"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         }
       },
       "required": [
@@ -454,32 +526,6 @@
             }
           ],
           "default": null
-        },
-        "frame_sha256": {
-          "anyOf": [
-            {
-              "pattern": "^[0-9a-f]{64}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Frame Sha256"
-        },
-        "crop_sha256": {
-          "anyOf": [
-            {
-              "pattern": "^[0-9a-f]{64}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "title": "Crop Sha256"
         }
       },
       "title": "Locator",
@@ -622,13 +668,14 @@
       "properties": {
         "channel": {
           "enum": [
-            "document_parse",
-            "screen_ocr",
-            "screen_structured",
             "clipboard",
+            "ocr",
+            "structure",
+            "accessibility",
             "export",
             "database",
             "api",
+            "document_parse",
             "human"
           ],
           "title": "Channel",
@@ -678,6 +725,24 @@
           ],
           "default": null
         },
+        "session": {
+          "anyOf": [
+            {
+              "enum": [
+                "acting",
+                "reopened",
+                "independent"
+              ],
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "For application reads: the acting session, the record reopened by id, or an independent channel",
+          "title": "Session"
+        },
         "observed_at": {
           "anyOf": [
             {
@@ -712,34 +777,85 @@
     },
     "Region": {
       "additionalProperties": false,
-      "description": "A rectangle on a captured frame, in frame pixels.",
+      "description": "Where on which screen a value was read (the reading step's\n``SourceRegion``). ``bbox`` is x, y, width, height in frame pixels.",
       "properties": {
-        "x": {
-          "minimum": 0,
-          "title": "X",
-          "type": "integer"
+        "frame_sha256": {
+          "pattern": "^[0-9a-f]{64}$",
+          "title": "Frame Sha256",
+          "type": "string"
         },
-        "y": {
-          "minimum": 0,
-          "title": "Y",
-          "type": "integer"
+        "bbox": {
+          "maxItems": 4,
+          "minItems": 4,
+          "prefixItems": [
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            },
+            {
+              "type": "integer"
+            }
+          ],
+          "title": "Bbox",
+          "type": "array"
         },
-        "width": {
-          "exclusiveMinimum": 0,
-          "title": "Width",
-          "type": "integer"
+        "crop_sha256": {
+          "anyOf": [
+            {
+              "pattern": "^[0-9a-f]{64}$",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Crop Sha256"
         },
-        "height": {
-          "exclusiveMinimum": 0,
-          "title": "Height",
-          "type": "integer"
+        "frame_size": {
+          "anyOf": [
+            {
+              "maxItems": 2,
+              "minItems": 2,
+              "prefixItems": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "integer"
+                }
+              ],
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Frame Size"
+        },
+        "step_id": {
+          "anyOf": [
+            {
+              "maxLength": 200,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Step Id"
         }
       },
       "required": [
-        "x",
-        "y",
-        "width",
-        "height"
+        "frame_sha256",
+        "bbox"
       ],
       "title": "Region",
       "type": "object"

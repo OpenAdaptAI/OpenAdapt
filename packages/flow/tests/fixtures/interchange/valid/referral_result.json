@@ -18,20 +18,22 @@
   "fields": [
     {
       "name": "record_id",
-      "type": "identifier",
-      "value": "MRN-100045",
+      "type": "code",
+      "value": "REC-100045",
       "confidence": 0.99,
-      "grade": "committed_readback",
+      "grade": "committed_record_readback",
       "reads": [
         {
           "channel": "clipboard",
-          "value": "MRN-100045",
-          "artifact_id": "chart"
+          "value": "REC-100045",
+          "artifact_id": "chart",
+          "session": "reopened"
         },
         {
-          "channel": "screen_ocr",
-          "value": "MRN-100045",
-          "artifact_id": "chart"
+          "channel": "ocr",
+          "value": "REC-100045",
+          "artifact_id": "chart",
+          "session": "reopened"
         }
       ]
     },
@@ -40,12 +42,13 @@
       "type": "enum",
       "value": "urgent",
       "confidence": 0.99,
-      "grade": "committed_readback",
+      "grade": "committed_record_readback",
       "reads": [
         {
           "channel": "clipboard",
           "value": "urgent",
-          "artifact_id": "chart"
+          "artifact_id": "chart",
+          "session": "reopened"
         }
       ]
     }
@@ -59,7 +62,7 @@
       ],
       "match": {
         "status": "new",
-        "record_ref": "MRN-100045",
+        "record_ref": "REC-100045",
         "candidates": 0,
         "checked_by": {
           "kind": "executor",
@@ -77,12 +80,12 @@
       "id": "openadapt-flow@site-runner-1"
     },
     "captured_at": "2026-10-29T14:00:00+00:00",
-    "checksum": "sha256:0b36e87f118bba1150692022bc77fdb8cdeb694dae8d398bf5a6dadc907ccc0e"
+    "checksum": "sha256:285316843e9601c36a1e12053ccb571656d97e650862753168ee307bbb334047"
   },
   "seals": [
     {
       "kind": "openadapt.seal/offline-ed25519",
-      "covers": "sha256:0b36e87f118bba1150692022bc77fdb8cdeb694dae8d398bf5a6dadc907ccc0e",
+      "covers": "sha256:285316843e9601c36a1e12053ccb571656d97e650862753168ee307bbb334047",
       "key_id": "site-key-1",
       "uri": "seals/run-0001.seal.json"
     }

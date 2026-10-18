@@ -18,7 +18,7 @@
   "fields": [
     {
       "name": "subject_id_echo",
-      "type": "identifier",
+      "type": "code",
       "value": "TEST-0000-0008",
       "confidence": 1.0
     }
@@ -49,13 +49,13 @@
       "id": "openadapt-flow@site-runner-1"
     },
     "captured_at": "2026-10-29T14:00:00+00:00",
-    "checksum": "sha256:fbfa0a523a9a2d1df64cbc4d3d8c6a2a2ffb5af2cc3ec6136fb7d58166349bb1"
+    "checksum": "sha256:ea9345a27c58f1cc1b23a484234fe03fa40ea7b5b3ecdfb3a7fce0e0441cd548"
   },
   "halt_reason": " ",
   "seals": [
     {
       "kind": "openadapt.seal/offline-ed25519",
-      "covers": "sha256:fbfa0a523a9a2d1df64cbc4d3d8c6a2a2ffb5af2cc3ec6136fb7d58166349bb1",
+      "covers": "sha256:ea9345a27c58f1cc1b23a484234fe03fa40ea7b5b3ecdfb3a7fce0e0441cd548",
       "key_id": "site-key-1",
       "uri": "seals/run-0001.seal.json"
     }

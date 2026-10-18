@@ -21,31 +21,35 @@
   "fields": [
     {
       "name": "bill_id",
-      "type": "identifier",
+      "type": "code",
       "value": "B-000318",
       "confidence": 0.99,
-      "grade": "committed_readback",
+      "grade": "committed_record_readback",
       "reads": [
         {
           "channel": "clipboard",
           "value": "B-000318",
-          "artifact_id": "r1"
+          "artifact_id": "r1",
+          "session": "reopened"
         },
         {
-          "channel": "screen_ocr",
+          "channel": "ocr",
           "value": "B-000318",
           "artifact_id": "r1",
           "locator": {
             "screen": "Bill detail",
             "region": {
-              "x": 120,
-              "y": 64,
-              "width": 140,
-              "height": 22
-            },
-            "frame_sha256": "0e13daeeced75fbfad26d8265b0d826ded004bbfc75276a93cdd6c66e3fd72b8",
-            "crop_sha256": "49fda4a821d84436e76f96df2e7cf14a27da2010dd9c78b9f26729b99a326905"
-          }
+              "bbox": [
+                120,
+                64,
+                140,
+                22
+              ],
+              "frame_sha256": "0e13daeeced75fbfad26d8265b0d826ded004bbfc75276a93cdd6c66e3fd72b8",
+              "crop_sha256": "49fda4a821d84436e76f96df2e7cf14a27da2010dd9c78b9f26729b99a326905"
+            }
+          },
+          "session": "reopened"
         }
       ]
     },
@@ -58,9 +62,10 @@
       "grade": "verified",
       "reads": [
         {
-          "channel": "screen_ocr",
+          "channel": "ocr",
           "value": "1249.50",
-          "artifact_id": "r1"
+          "artifact_id": "r1",
+          "session": "acting"
         }
       ]
     }
@@ -92,12 +97,12 @@
       "id": "openadapt-flow@site-runner-1"
     },
     "captured_at": "2026-10-29T14:00:00+00:00",
-    "checksum": "sha256:dcb2cd464db6101353f73fd76ce342c87e5bf613b938b49149e4467e935c5dcc"
+    "checksum": "sha256:0052f9f3d49f04c6a093a5e0327970d358e5fe30846b59d0a3678a5456239ad2"
   },
   "seals": [
     {
       "kind": "openadapt.seal/offline-ed25519",
-      "covers": "sha256:dcb2cd464db6101353f73fd76ce342c87e5bf613b938b49149e4467e935c5dcc",
+      "covers": "sha256:0052f9f3d49f04c6a093a5e0327970d358e5fe30846b59d0a3678a5456239ad2",
       "key_id": "site-key-1",
       "uri": "seals/run-0001.seal.json"
     }

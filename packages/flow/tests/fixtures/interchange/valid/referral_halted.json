@@ -18,7 +18,7 @@
   "fields": [
     {
       "name": "subject_id_echo",
-      "type": "identifier",
+      "type": "code",
       "value": "TEST-0000-0008",
       "confidence": 1.0
     }
@@ -49,13 +49,13 @@
       "id": "openadapt-flow@site-runner-1"
     },
     "captured_at": "2026-10-29T14:00:00+00:00",
-    "checksum": "sha256:49011821e278c45d56453d062f69ac9e1b885594d8812b674ef4360dbaad0e47"
+    "checksum": "sha256:4bb809651c60a0303912a6aeec8cdce6e02d7d9510e8db124ddfa50bfa58c82b"
   },
   "halt_reason": "two charts matched the name and date of birth; stopped before writing",
   "seals": [
     {
       "kind": "openadapt.seal/offline-ed25519",
-      "covers": "sha256:49011821e278c45d56453d062f69ac9e1b885594d8812b674ef4360dbaad0e47",
+      "covers": "sha256:4bb809651c60a0303912a6aeec8cdce6e02d7d9510e8db124ddfa50bfa58c82b",
       "key_id": "site-key-1",
       "uri": "seals/run-0001.seal.json"
     }

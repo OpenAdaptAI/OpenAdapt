@@ -18,20 +18,22 @@
   "fields": [
     {
       "name": "record_id",
-      "type": "identifier",
-      "value": "MRN-100045",
+      "type": "code",
+      "value": "REC-100045",
       "confidence": 0.99,
-      "grade": "committed_readback",
+      "grade": "committed_record_readback",
       "reads": [
         {
           "channel": "clipboard",
-          "value": "MRN-100045",
-          "artifact_id": "chart"
+          "value": "REC-100045",
+          "artifact_id": "chart",
+          "session": "reopened"
         },
         {
-          "channel": "screen_ocr",
-          "value": "MRN-100045",
-          "artifact_id": "chart"
+          "channel": "ocr",
+          "value": "REC-100045",
+          "artifact_id": "chart",
+          "session": "reopened"
         }
       ]
     },
@@ -40,7 +42,7 @@
       "type": "enum",
       "value": "urgent",
       "confidence": 0.99,
-      "grade": "committed_readback",
+      "grade": "committed_record_readback",
       "reads": []
     }
   ],
@@ -53,7 +55,7 @@
       ],
       "match": {
         "status": "new",
-        "record_ref": "MRN-100045",
+        "record_ref": "REC-100045",
         "candidates": 0,
         "checked_by": {
           "kind": "executor",
@@ -71,12 +73,12 @@
       "id": "openadapt-flow@site-runner-1"
     },
     "captured_at": "2026-10-29T14:00:00+00:00",
-    "checksum": "sha256:61ebfd98c45cd9cdfb29a3449cc4580ad5787a84ede6a75a91b293ed16d6f04e"
+    "checksum": "sha256:dcb0ee466f09e3f3382e706a5ed665ca665d059647f00f0db126dbde6bb91813"
   },
   "seals": [
     {
       "kind": "openadapt.seal/offline-ed25519",
-      "covers": "sha256:61ebfd98c45cd9cdfb29a3449cc4580ad5787a84ede6a75a91b293ed16d6f04e",
+      "covers": "sha256:dcb0ee466f09e3f3382e706a5ed665ca665d059647f00f0db126dbde6bb91813",
       "key_id": "site-key-1",
       "uri": "seals/run-0001.seal.json"
     }

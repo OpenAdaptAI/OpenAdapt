@@ -33,41 +33,45 @@ SCHEMA_VERSION: Literal["openadapt.records-interchange/v0"] = (
     "openadapt.records-interchange/v0"
 )
 
+# The grade, channel and kind vocabularies below match
+# ``openadapt_flow.records.schema`` (the record and field schema of the
+# reading step) value for value. They are spelled out here until that module
+# is on main; then they are imported from it.
+
 #: Read grades, weakest first. ``verified`` needs a read through a channel
-#: independent of the screen that did the work (see INDEPENDENT_CHANNELS).
-ReadGrade = Literal["unchecked", "screen_readback", "committed_readback", "verified"]
+#: independent of the application's screens (see INDEPENDENT_CHANNELS).
+ReadGrade = Literal[
+    "unconfirmed", "screen_readback", "committed_record_readback", "verified"
+]
 READ_GRADES: tuple[str, ...] = (
-    "unchecked",
+    "unconfirmed",
     "screen_readback",
-    "committed_readback",
+    "committed_record_readback",
     "verified",
 )
 
-#: How a value was obtained.
+#: How a value was obtained. The first group reads the target application
+#: through its screens, the second does not, the third is the document side.
 Channel = Literal[
-    "document_parse",  # parsed from a source document by the document side
-    "screen_ocr",  # OCR of an application screen region
-    "screen_structured",  # accessibility tree / DOM text of a screen element
-    "clipboard",  # the application's own text copied through the clipboard
-    "export",  # a report or file the application exported
-    "database",  # a read-only database or replica
-    "api",  # an API of the system of record
-    "human",  # typed or confirmed by a person
+    "clipboard",
+    "ocr",
+    "structure",
+    "accessibility",
+    "export",
+    "database",
+    "api",
+    "document_parse",
+    "human",
 ]
-
+SCREEN_CHANNELS: frozenset[str] = frozenset(
+    {"clipboard", "ocr", "structure", "accessibility"}
+)
 #: Channels that do not go through the application's screens. A ``verified``
 #: grade requires at least one read through one of them.
 INDEPENDENT_CHANNELS: frozenset[str] = frozenset({"export", "database", "api"})
 
 ValueType = Literal[
-    "string",
-    "integer",
-    "decimal",
-    "boolean",
-    "date",
-    "datetime",
-    "enum",
-    "identifier",
+    "text", "code", "date", "currency", "integer", "decimal", "boolean", "enum"
 ]
 
 _NAME = r"^[a-z][a-z0-9_]{0,63}$"
@@ -81,12 +85,14 @@ class _Strict(BaseModel):
 
 
 class Region(_Strict):
-    """A rectangle on a captured frame, in frame pixels."""
+    """Where on which screen a value was read (the reading step's
+    ``SourceRegion``). ``bbox`` is x, y, width, height in frame pixels."""
 
-    x: int = Field(ge=0)
-    y: int = Field(ge=0)
-    width: int = Field(gt=0)
-    height: int = Field(gt=0)
+    frame_sha256: str = Field(pattern=_SHA256)
+    bbox: tuple[int, int, int, int]
+    crop_sha256: Optional[str] = Field(default=None, pattern=_SHA256)
+    frame_size: Optional[tuple[int, int]] = None
+    step_id: Optional[str] = Field(default=None, max_length=200)
 
 
 class Locator(_Strict):
@@ -100,8 +106,6 @@ class Locator(_Strict):
     )
     screen: Optional[str] = Field(default=None, max_length=200)
     region: Optional[Region] = None
-    frame_sha256: Optional[str] = Field(default=None, pattern=_SHA256)
-    crop_sha256: Optional[str] = Field(default=None, pattern=_SHA256)
 
 
 class Read(_Strict):
@@ -113,6 +117,11 @@ class Read(_Strict):
         default=None, description="Artifact the read came from, if any"
     )
     locator: Optional[Locator] = None
+    session: Optional[Literal["acting", "reopened", "independent"]] = Field(
+        default=None,
+        description="For application reads: the acting session, the record "
+        "reopened by id, or an independent channel",
+    )
     observed_at: Optional[str] = None
     run_id: Optional[str] = None
 
@@ -135,8 +144,19 @@ class FieldValue(_Strict):
     confidence: float = Field(ge=0.0, le=1.0)
     status: Literal["proposed", "confirmed", "corrected", "rejected"] = "proposed"
     confirmed_by: Optional[Principal] = None
-    grade: ReadGrade = "unchecked"
+    grade: ReadGrade = "unconfirmed"
     reads: list[Read] = Field(default_factory=list)
+    needs_review: bool = False
+    review_reason: Optional[str] = Field(default=None, max_length=2000)
+    seal: Optional["FieldSeal"] = None
+
+
+class FieldSeal(_Strict):
+    """The reading step's per-value Seal pointer."""
+
+    run_id: str = Field(min_length=1, max_length=200)
+    receipt_sha256: Optional[str] = Field(default=None, pattern=_SHA256)
+    field_commitment: Optional[str] = Field(default=None, max_length=200)
 
 
 class IdentityMatch(_Strict):
