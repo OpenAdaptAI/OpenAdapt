@@ -43,9 +43,72 @@ non-person only when the policy pins the customer's opt-in digest. Under
 the `clinical-write` and `regulated` policies every save is a clinical
 write.
 
-The run writes its policy once into `item-approval/approver-policy.json`.
-Every reader (the gate, the CLI, a resume) applies that file. An unreadable
-policy means person-only.
+### A person signs the grant
+
+A policy on its own is unsigned JSON, so it never lets an agent or system
+answer. A delegate answers only under an **approver grant**
+(`openadapt-flow/approver-grant/v1`) that a person signed, with the same
+signing as program admission (`openadapt_flow.jit.authority`):
+
+```json
+{
+  "grant": {
+    "schema": "openadapt-flow/approver-grant/v1",
+    "grant_id": "intake-reviewer-2026",
+    "signer": "person-0001",
+    "signed_at": "2026-10-17T12:00:00Z",
+    "expires_at": "2026-11-16T12:00:00Z",
+    "approver_policy": {
+      "allowed": {
+        "read_only": ["person"],
+        "reversible": ["person"],
+        "consequential": ["person", "agent"],
+        "irreversible": ["person"],
+        "clinical_write": ["person"]
+      }
+    },
+    "delegates": ["agent:approver-bot"],
+    "workflows": ["referral-intake"]
+  },
+  "signer_public_key": "<hex>",
+  "signature": "<ed25519>"
+}
+```
+
+- The signer's key is registered as a `policy_signer` in `principals.json`
+  in the key directory (`$OPENADAPT_JIT_KEY_DIR`, default
+  `~/.openadapt/jit`): `openadapt-flow jit keygen`, then
+  `openadapt-flow jit register --role policy_signer`. A key registered as an
+  agent can't also sign, and a signer name that names an agent or model is
+  refused. Keep the key directory away from the agents it governs.
+- `openadapt-flow approver-grant sign GRANT.json --key KEY --out SIGNED.json`
+  signs. It needs a person at an interactive terminal and a typed `yes`, and
+  the key is always encrypted. `approver-grant verify SIGNED.json` checks one.
+- `openadapt-flow run --approver-policy SIGNED.json` uses it. The grant
+  lasts at most 366 days, names its delegates (any other id is refused),
+  and can be limited to named workflows. The person who signs can't be one
+  of its delegates, and a grant that lets only a person answer is refused.
+- An unsigned policy that admits a delegate, a grant whose signature, signer
+  or key doesn't verify, or one that expired gives no authority: the run is
+  person-only and prints why (`approver_policy_unsigned`,
+  `approver_grant_signature_invalid`, `approver_grant_expired`, ...).
+
+The run writes the grant and its policy once into `item-approval/`
+(`approver-grant.json`, `approver-policy.json`). Every reader (the gate, the
+CLI, a resume) re-verifies the grant against the registry each time it reads
+an answer, so a grant that expired mid-run, or a file swapped in the run
+directory, stops working. An unreadable file means person-only.
+
+### Nobody approves their own work
+
+The run records who started it, once, in `item-approval/run-initiator.json`
+(`run --started-by ID`; openadapt-agent passes the calling agent's id). A
+delegate can't answer a run it started, or answer on behalf of whoever
+started it (`self_approval`). A run an agent started without an id
+(`agent:unidentified`) takes no delegate answers at all, and neither does a
+run that never recorded its initiator. A file planted before the run with
+another value refuses the run. There is no tool or flag through which an
+agent changes the approval mode, signs a grant, or names itself a delegate.
 
 A delegated approver answers by one of three routes:
 
@@ -59,11 +122,52 @@ A delegated approver answers by one of three routes:
   say `approve`, `decline` with a closed reason, or `pending`. Any failure
   leaves the save to a person; a person can always answer in Desktop.
 
-The run re-checks every answer: the policy must allow the approver's kind
-for the step class, a person answers only from Desktop, and a delegate
-never fills in the person fields. The report's `ItemApprovalRef` records
-`decided_by: automation`, the route and the approver. Only a person's
-decision becomes a training label. Triage never approves anything.
+The run re-checks every answer: the grant must verify, name the delegate
+and cover the workflow, its policy must allow the approver's kind for the
+step class, the delegate can't have started the run, a person answers only
+from Desktop or the decision portal on their phone (below), and a delegate
+never fills in the person fields. The report's `ItemApprovalRef` records `decided_by:
+automation`, the route and the approver, whose `policy_ref` is the grant's
+digest. `item-approval show` prints each request's `decided_by`: a person
+(Cloud user id, or none, and route) or the delegate's id and the grant
+digest, which Desktop and Cloud show on the run. Only a person's decision becomes a
+training label. Triage never approves anything.
+
+### A person approves from their phone
+
+A save waiting for a person also shows on the decision portal, the phone
+page Desktop serves from this runner (see Desktop's `docs/DECISION_PORTAL.md`
+for pairing and network setup). Nothing new leaves the runner: the phone
+talks to the runner's own console, as it already does for paused runs, and a
+local-only or no-outbound install works the same way.
+
+The console lists waiting saves at `GET /api/save-approvals`. Each one is a
+signed `openadapt.human-decision-task/v1` task with `task_kind:
+save_approval` and question `approve_save`. The task is PHI-free like every
+decision task: opaque digests and closed codes, no value, no name, no
+workflow name. Its `capability_digest` is the request digest, which binds
+the run, the save step, the screenshot and the form's field state. Next to
+the task, the console returns a local-only presentation block with the
+step's wording and the route of the exact screenshot the request was opened
+with (`GET /api/save-approvals/ID/frame`, checked against its digest), so the
+person sees exactly what will be saved.
+
+The phone answers with `POST /api/save-approvals/ID/actions/verify_and_resume`
+(approve) or `.../actions/reject` with one closed `decline_reason`, echoing
+the task's digest and signature. Only the attended console the portal relays
+to takes an answer. A task that changed, or belongs to another save, is
+refused. The answer is written once, as a person on the `decision_portal`
+route, so a second tap or a replay has nothing to answer, and a Desktop
+answer that lands first wins. A paired phone proves a device, not who held
+it, so the answer records an unauthenticated person, like a signed-out
+Desktop answer. The receipt says `accepted_pending_runner`: then the run
+re-checks the form before the save, as for a Desktop approval, and stops if
+anything changed while it waited.
+
+The hosted lane (Cloud's Needs attention page) does not carry save
+approvals. Cloud never receives the screenshot, and a person must see
+exactly what will be saved before approving it.
+
 
 ## How a save is checked
 
@@ -125,7 +229,6 @@ with a Desktop key kept in the keychain would close that later.
 
 ## Not built
 
-- Desktop and Cloud don't show delegated approvers yet.
 - Eligibility isn't yet one of the `problems_only` requirements; a person
   reads it before turning the switch on.
 - The Desktop admission path above.
