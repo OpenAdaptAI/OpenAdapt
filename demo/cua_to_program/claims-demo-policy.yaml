@@ -1,0 +1,39 @@
+# Run policy for the launch demo (openIMIS claim entry).
+#
+# It is the bundled clinical-write policy minus the rules that only a full
+# qualification campaign can satisfy for openIMIS's icon-only claim Save (no
+# text, accessible name or tooltip):
+#
+#   - prohibit_unarmed_clicks and require_identity_for: write. The Save has no
+#     label to check. The compiler's submit binding ties the click to the
+#     fields this run typed into instead (docs/LIMITS.md).
+#   - require_idempotency_key_for: write. openIMIS exposes no idempotency key.
+#     The record check catches a duplicate: it requires exactly one claim
+#     with this run's claim number.
+#   - require_human_approval_below_confidence. A named reviewer reviews every
+#     step of the draft before its canary (JIT admission).
+#
+# What stays: every write must be read back from the system of record, effect
+# bindings must be confirmed, no step may pass vacuously, entity navigation
+# needs identity, and nothing may be left unverified.
+name: claims-demo
+description: >-
+  clinical-write without the icon-only-Save rules that need a qualification
+  campaign; every write still read back from the system of record.
+
+prohibit_vacuous_postconditions: true
+require_identity_for:
+  - entity_navigation
+require_system_effects_for:
+  - write
+prohibit_unconfirmed_effect_bindings: true
+require_screen_postconditions_for:
+  - write
+  - save
+  - submit
+  - create
+  - update
+  - delete
+  - confirm
+  - send
+max_unverified_steps: 0

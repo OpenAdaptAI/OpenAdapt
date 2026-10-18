@@ -37,6 +37,7 @@ from openadapt_flow.ir import (
 from openadapt_flow.runtime.effects import (
     EffectKind,
     RestRecordVerifier,
+    ValueExpr,
     Verdict,
 )
 from openadapt_flow.runtime.replayer import Replayer
@@ -529,8 +530,46 @@ def test_field_equals_reads_back_the_parameter_when_bound():
     field = next(e for e in bound.effects if e.kind is EffectKind.FIELD_EQUALS)
     assert lit_field.value.literal == NOTE and lit_field.value.param is None
     assert field.value.param == "note" and field.value.literal is None
-    # The identity selector does not change.
-    assert bound.effects[0].match == literal.effects[0].match
+    # The selector keeps the demonstration's constant fields and also matches
+    # the bound field, so it names the record this run writes.
+    assert bound.effects[0].match == {
+        **literal.effects[0].match,
+        "note": ValueExpr(param="note"),
+    }
+
+
+def test_bound_selector_finds_this_runs_record_among_earlier_ones():
+    """On a table that already holds a record with the same constant fields,
+    the confirmed contract reads back the run's record and no other."""
+
+    from openadapt_flow.runtime.effects._common import judge_records
+    from openadapt_flow.runtime.effects.effect import EffectState
+
+    event = {
+        "i": 0,
+        "kind": "key",
+        "key": "Enter",
+        SOR_BEFORE_KEY: [],
+        SOR_AFTER_KEY: [_record()],
+    }
+    literal = mine_step_effects(event, _key_step(), exclude_texts=(NOTE,))
+    bound = mine_step_effects(
+        event, _key_step(), exclude_texts=(NOTE,), param_bindings={NOTE: "note"}
+    )
+    earlier = _record(id=7, note="an earlier visit")
+    before = EffectState(substrate="rest", reachable=True, records=[earlier])
+    current = [earlier, _record(id=8, note="this run's note")]
+    params = {"note": "this run's note"}
+
+    def verdicts(mined):
+        return [
+            judge_records(e.resolve(params), before, current, substrate="rest").verdict
+            for e in mined.effects
+        ]
+
+    assert set(verdicts(bound)) == {Verdict.CONFIRMED}
+    # Without the binding the constant-field selector matches both records.
+    assert Verdict.REFUTED in verdicts(literal)
 
 
 def test_compile_binds_effect_params_only_when_asked(tmp_path):

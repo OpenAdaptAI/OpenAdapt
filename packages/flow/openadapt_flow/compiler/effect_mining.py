@@ -232,9 +232,22 @@ def _mine_from_sor_delta(
 
     effects: list[Effect] = []
 
+    # After a person confirms the parameters, a field holding a confirmed
+    # parameter's value names the record THIS run writes (a claim number, an
+    # order id). Match on it too, bound to the parameter: otherwise the
+    # selector is only the demonstration's constant fields, and on a table
+    # that already holds such records it matches every earlier one.
+    bindings = dict(param_bindings or {})
+    bound = {
+        fname: ValueExpr(param=bindings[fval])
+        for fname, fval in payload.items()
+        if fval in bindings
+    }
+    match = {**_vemap(selector), **bound}
+
     written = Effect(
         kind=EffectKind.RECORD_WRITTEN,
-        match=_vemap(selector),
+        match=match,
         expected_count=1,
         risk=step.risk,
         probe=(
@@ -256,21 +269,20 @@ def _mine_from_sor_delta(
     # partial-save catch). Value is the DEMONSTRATED example (as the
     # hand-authored effects already bake ``value=NOTE``); per-run parameter
     # substitution of effect values is a separate runtime item.
-    bindings = dict(param_bindings or {})
     for fname, fval in payload.items():
-        bound = bindings.get(fval)
+        param = bindings.get(fval)
         effects.append(
             Effect(
                 kind=EffectKind.FIELD_EQUALS,
-                match=_vemap(selector),
+                match=dict(match),
                 field=fname,
-                value=ValueExpr(param=bound) if bound else _ve(fval),
+                value=ValueExpr(param=param) if param else _ve(fval),
                 risk=step.risk,
                 probe=(
                     f"field {fname!r} of the written record equals the run's "
-                    f"{bound!r} parameter (mined; the demonstration typed that "
+                    f"{param!r} parameter (mined; the demonstration typed that "
                     "parameter's value into this field)"
-                    if bound
+                    if param
                     else f"field {fname!r} of the written record equals the "
                     "demonstrated value (mined; the value is the recorded "
                     "example — substitute the run's parameter if this field "

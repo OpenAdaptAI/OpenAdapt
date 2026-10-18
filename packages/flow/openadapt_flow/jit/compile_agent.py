@@ -88,12 +88,46 @@ class WebApp:
         reset: Called before every capture and every run. For demo and test
             apps only.
         headless: Run the browser headless.
+        setup: Called with the Playwright page right after the browser opens
+            at ``url``, before every capture and every run: unmeasured setup
+            such as signing in with a test account and opening a blank form.
+            Nothing it does is recorded or replayed. It must leave the page
+            at ``url``, where the program starts.
+        record_video_dir: OPT-IN. Each capture and run records a WebM of its
+            browser page into this directory (for demo media). ``None``
+            records nothing.
+        new_record_form: The task fills a form for a record that does not
+            exist yet, so its fields sit in no record row. Guarded input
+            then admits a uniquely identified form field in place of the row
+            (``PlaywrightBackend.keyboard_admits_form_fields``); the field's
+            identity is still checked.
     """
 
     url: str
     record_reader: Optional[Callable[[], Optional[list[dict[str, Any]]]]] = None
     reset: Optional[Callable[[], None]] = None
     headless: bool = True
+    setup: Optional[Callable[[Any], None]] = None
+    record_video_dir: Optional[str] = None
+    new_record_form: bool = False
+
+    def launch(self) -> tuple[Any, Callable[[], None]]:
+        """Open the browser at ``url`` and run :attr:`setup`."""
+
+        from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+        backend, close = PlaywrightBackend.launch(
+            self.url, headless=self.headless, record_video_dir=self.record_video_dir
+        )
+        if self.new_record_form:
+            backend.keyboard_admits_form_fields = True
+        if self.setup is not None:
+            try:
+                self.setup(backend.page)
+            except BaseException:
+                close()
+                raise
+        return backend, close
 
     @property
     def origin(self) -> str:
@@ -188,7 +222,6 @@ class Recording:
 
     def __enter__(self) -> "Recording":
         from openadapt_flow.authoring import AuthoringSession
-        from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 
         owner = self._owner
         if owner.admitted or owner.candidate() is not None:
@@ -212,9 +245,7 @@ class Recording:
         )
         if owner.app.reset is not None:
             owner.app.reset()
-        backend, self._close = PlaywrightBackend.launch(
-            owner.app.url, headless=owner.app.headless
-        )
+        backend, self._close = owner.app.launch()
         try:
             self._session = AuthoringSession(
                 backend,
@@ -764,7 +795,6 @@ class CompiledAgent:
         the person attending its canary.
         """
 
-        from openadapt_flow.backends.playwright_backend import PlaywrightBackend
         from openadapt_flow.deployment import DeploymentConfig, PolicySection
         from openadapt_flow.execution_profiles import (
             ExecutionProfile,
@@ -806,9 +836,7 @@ class CompiledAgent:
         )
         if self.app.reset is not None:
             self.app.reset()
-        backend, close = PlaywrightBackend.launch(
-            self.app.url, headless=self.app.headless
-        )
+        backend, close = self.app.launch()
         try:
             report = Replayer(
                 backend,
