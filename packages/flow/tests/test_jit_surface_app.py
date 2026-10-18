@@ -59,10 +59,10 @@ SECTIONS: dict[str, dict[str, Any]] = {
 }
 ORIGINS = {
     "windows": "windows://127.0.0.1:5001",
-    "macos": "macos://TextEdit",
+    "macos": "macos://textedit",
     "linux": "linux://patient-notes",
     "rdp": "rdp://10.0.0.5",
-    "citrix": "citrix://Citrix Viewer",
+    "citrix": "citrix://citrix viewer",
 }
 
 
@@ -78,7 +78,8 @@ def test_a_section_names_its_surface_without_window_titles(kind: str) -> None:
     assert app.origin == ORIGINS[kind]
     # A window title can carry a patient or document name; it is never part
     # of the origin a canary, an admission policy or a report records.
-    assert "Jane" not in app.origin
+    if "Jane" in str(SECTIONS[kind]):
+        assert "jane" not in app.origin
     assert app.run_refusal() is None
 
 
@@ -86,7 +87,7 @@ def test_a_deployment_file_names_the_app(tmp_path: Path) -> None:
     deploy = tmp_path / "deploy.yaml"
     deploy.write_text("name: notes\nbackend:\n  kind: macos\n  macos_app: TextEdit\n")
     app = SurfaceApp.from_deployment(deploy)
-    assert app.kind == "macos" and app.origin == "macos://TextEdit"
+    assert app.kind == "macos" and app.origin == "macos://textedit"
     assert isinstance(app.backend, BackendConfig)
 
 
@@ -104,6 +105,10 @@ def test_a_deployment_file_names_the_app(tmp_path: Path) -> None:
         ),
         ({"kind": "citrix", "rdp_host": "h"}, "local Workspace window"),
         ({"kind": "vnc"}, "unknown backend.kind"),
+        (
+            {"kind": "windows", "agent_url": "https://u:secret@vm.example:5001/"},
+            "must not carry credentials",
+        ),
     ],
 )
 def test_a_section_without_its_target_is_refused(section: dict, reason: str) -> None:
@@ -193,3 +198,142 @@ def test_a_draft_still_needs_a_person_on_a_surface(tmp_path: Path) -> None:
     jit = _rerun(_jit(tmp_path), app=SurfaceApp(SECTIONS["windows"]))
     with pytest.raises(AdmissionError, match="review the draft"):
         jit.canary(principal_id="op:someone-else")
+
+
+def test_the_same_kind_on_another_target_is_another_origin() -> None:
+    a = SurfaceApp(SECTIONS["rdp"])
+    b = SurfaceApp(dict(SECTIONS["rdp"], rdp_host="10.0.0.6"))
+    c = SurfaceApp(dict(SECTIONS["rdp"], rdp_port=3390))
+    assert len({a.origin, b.origin, c.origin}) == 3
+
+
+def test_an_admission_policy_names_a_surface_with_its_kind() -> None:
+    from types import SimpleNamespace
+
+    from openadapt_flow.jit.authority import scope_problems
+
+    def policy(*hosts: str) -> Any:
+        return SimpleNamespace(
+            allowed_hosts=hosts,
+            allowed_actions=(),
+            allowed_effects=(),
+            flow_policies=(),
+        )
+
+    empty = SimpleNamespace(steps=[])
+    rdp = SurfaceApp(SECTIONS["rdp"]).origin
+    # A web host entry never covers the RDP desktop on the same address.
+    assert scope_problems(policy("10.0.0.5"), empty, {}, rdp)
+    assert scope_problems(policy("rdp://10.0.0.5"), empty, {}, rdp) == []
+    # Nor does a surface entry cover the web app on that host.
+    assert scope_problems(policy("rdp://10.0.0.5"), empty, {}, "http://10.0.0.5")
+    assert scope_problems(policy("10.0.0.5"), empty, {}, "http://10.0.0.5") == []
+    # The kind is part of the name: a Citrix window is not a macOS app.
+    citrix = SurfaceApp(SECTIONS["citrix"]).origin
+    assert scope_problems(policy("macos://citrix viewer"), empty, {}, citrix)
+
+
+@pytest.mark.parametrize("kind", sorted(SECTIONS))
+def test_a_canary_and_a_run_drive_the_surface_through_the_replayer(
+    tmp_path: Path, monkeypatch, kind: str
+) -> None:
+    """Everything but the gate and the replay itself is the real path."""
+
+    from types import SimpleNamespace
+
+    import openadapt_flow.run_gate as run_gate
+    import openadapt_flow.runtime as runtime
+
+    opened: list = []
+    closed: list = []
+    runs: list[dict[str, Any]] = []
+
+    class Backend:
+        def close(self) -> None:
+            closed.append(kind)
+
+    def open_backend(cfg: BackendConfig) -> Backend:
+        opened.append(cfg.kind)
+        return Backend()
+
+    class Replayer:
+        def __init__(self, backend: Any, **kwargs: Any) -> None:
+            assert isinstance(backend, Backend)
+            self.kwargs = kwargs
+
+        def run(self, workflow: Any, **kwargs: Any) -> Any:
+            runs.append({**kwargs, "replayer": self.kwargs})
+            return _report()
+
+    monkeypatch.setattr(
+        run_gate,
+        "evaluate_run_gate",
+        lambda *a, **k: SimpleNamespace(passed=True, render=lambda: ""),
+    )
+    monkeypatch.setattr(run_gate, "build_runtime_authorization", lambda *a, **k: "auth")
+    monkeypatch.setattr(runtime, "Replayer", Replayer)
+
+    app = SurfaceApp(SECTIONS[kind], open_backend=open_backend)
+    jit = _rerun(_jit(tmp_path), app=app)
+    _review(jit)
+    assert jit.canary(principal_id=REVIEWER).status == "VERIFIED"
+    jit.admit_with_key(_ci(jit, monkeypatch))
+    assert jit.run().status == "VERIFIED"
+
+    assert opened == closed == [kind, kind]
+    for run in runs:
+        assert run["execution_target_kind"] == kind
+        assert run["execution_origin"] is None and run["execution_entry_url"] is None
+        assert run["execution_target_origin"] == ORIGINS[kind]
+        assert run["replayer"]["deployment_surface"] is None
+    assert runs[0]["replayer"]["attended_draft_by"] == REVIEWER
+
+
+def test_the_replayer_matches_an_admitted_surface_program_by_its_origin(
+    tmp_path: Path, monkeypatch
+) -> None:
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.jit.lifecycle import DraftNotAdmitted, ensure_runnable
+    from openadapt_flow.runtime.replayer import Replayer
+    from tests.test_replayer import FakeBackend
+
+    app = SurfaceApp(SECTIONS["macos"])
+    jit = _rerun(_jit(tmp_path), app=app)
+    _review(jit)
+    _stub_runs(jit, monkeypatch, _report())
+    jit.canary(principal_id=REVIEWER)
+    jit.admit_with_key(_ci(jit, monkeypatch))
+    workflow = Workflow.load(jit.bundle_dir)
+
+    backend = FakeBackend()
+    with pytest.raises(DraftNotAdmitted, match="this run is on linux://patient-notes"):
+        Replayer(
+            backend, effect_verifier=IndependentVerifier(), draft_key_dir=jit.key_dir
+        ).run(
+            workflow,
+            bundle_dir=jit.bundle_dir,
+            run_dir=tmp_path / "other",
+            execution_target_kind="linux",
+            execution_target_origin=ORIGINS["linux"],
+        )
+    assert backend.actions == []
+    ensure_runnable(
+        jit.bundle_dir,
+        workflow=workflow,
+        key_dir=jit.key_dir,
+        execution_origin=ORIGINS["macos"],
+        effect_verifier=IndependentVerifier(),
+        at_run=True,
+    )
+
+
+def test_the_cli_names_a_desktop_run_for_the_admission_match() -> None:
+    from openadapt_flow.__main__ import _surface_target_origin_or_none
+
+    assert _surface_target_origin_or_none(BackendConfig(kind="web")) is None
+    assert (
+        _surface_target_origin_or_none(BackendConfig(**SECTIONS["macos"]))
+        == ORIGINS["macos"]
+    )
+    leaky = BackendConfig(kind="windows", agent_url="https://u:p@vm:5001")
+    assert _surface_target_origin_or_none(leaky) is None

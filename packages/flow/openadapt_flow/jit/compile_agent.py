@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
-from urllib.parse import quote, urlsplit
+from urllib.parse import urlsplit
 
 from openadapt_flow.jit import lifecycle
 from openadapt_flow.jit.adapters import CaptureComputer, UnsupportedAction, dialects
@@ -151,7 +151,8 @@ class SurfaceApp:
     ============  =======================================================
     ``windows``   ``agent_url`` (the in-guest agent; UI Automation)
     ``macos``     ``macos_app`` (Accessibility; ``macos_window_title``)
-    ``linux``     ``linux_app`` and ``linux_window_title`` (AT-SPI)
+    ``linux``     ``linux_app`` and ``linux_window_title`` (AT-SPI);
+                  agent clicks need ``linux_allow_physical_input``
     ``rdp``       ``rdp_host`` (network RDP) or ``rdp_window`` (local client)
     ``citrix``    nothing (the host's Citrix Workspace window), or
                   ``rdp_window``; runs need ``rdp_readiness_text``
@@ -210,6 +211,7 @@ class SurfaceApp:
         }[kind]
         if missing:
             raise ValueError(f"backend.kind {kind!r} needs {missing}")
+        self.origin  # noqa: B018 - refuses a credential in agent_url now
 
     @classmethod
     def from_deployment(cls, path: Path | str, **kwargs: Any) -> "SurfaceApp":
@@ -232,29 +234,18 @@ class SurfaceApp:
         return None
 
     @property
-    def target(self) -> str:
-        """The app this section names, without window titles (they can carry
-        a document or patient name)."""
-
-        cfg = self.backend
-        if self.kind == "windows":
-            return urlsplit(str(cfg.agent_url)).netloc or str(cfg.agent_url)
-        if self.kind == "macos":
-            return str(cfg.macos_app)
-        if self.kind == "linux":
-            return str(cfg.linux_app)
-        if self.kind == "rdp" and cfg.rdp_host:
-            port = int(cfg.rdp_port or 3389)
-            return str(cfg.rdp_host) + ("" if port == 3389 else f":{port}")
-        return str(cfg.rdp_window or "workspace")
-
-    @property
     def origin(self) -> str:
-        """``<kind>://<target>``. A canary admits the program on this origin
-        only, and an admission policy's ``allowed_hosts`` names the target
-        (lower case), as it names a web host."""
+        """``<kind>://<target>``, from
+        :func:`~openadapt_flow.surface_selection.surface_target_origin`. A
+        canary admits the program on this origin only. An admission policy
+        names it in ``allowed_hosts`` the same way (``macos://textedit``); a
+        bare host there names a web app only."""
 
-        return f"{self.kind}://{quote(self.target, safe='.:-_ ')}"
+        from openadapt_flow.surface_selection import surface_target_origin
+
+        origin = surface_target_origin(self.backend)
+        assert origin is not None
+        return origin
 
     @property
     def backend_hints(self) -> Optional[dict[str, Any]]:
@@ -1024,8 +1015,11 @@ class CompiledAgent:
                 bundle_dir=self.bundle_dir,
                 run_dir=run_dir,
                 execution_target_kind=self.app.kind,
-                execution_origin=self.app.origin,
+                execution_origin=self.app.origin if self.app.kind == "web" else None,
                 execution_entry_url=self.app.entry_url,
+                execution_target_origin=(
+                    None if self.app.kind == "web" else self.app.origin
+                ),
             )
         finally:
             close()

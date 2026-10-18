@@ -42,12 +42,18 @@ TASK = TaskSignature(
 )
 TITLE = "MockMed kiosk"
 SECTIONS = {
-    "rdp": {"kind": "rdp", "rdp_window": "mstsc", "rdp_window_title": TITLE},
+    "rdp": {
+        "kind": "rdp",
+        "rdp_window": "mstsc",
+        "rdp_window_title": TITLE,
+        "rdp_max_frame_age_s": 30.0,
+    },
     "citrix": {
         "kind": "citrix",
         "rdp_window": "Citrix Viewer",
         "rdp_window_title": TITLE,
         "rdp_readiness_text": "MockMed",
+        "rdp_max_frame_age_s": 30.0,
     },
 }
 
@@ -75,8 +81,10 @@ def browser() -> Iterator[Any]:
 
 
 def _opener(browser: Any, base: str, clients: list[PageWindowClient]):
-    from openadapt_flow.backends.citrix_workspace import CitrixWorkspaceBackend
-    from openadapt_flow.backends.remote_display import RemoteDisplayBackend
+    """Build each backend through the factory, as ``SurfaceApp.open`` does,
+    with the page injected as the client window."""
+
+    from openadapt_flow.backends.factory import build_backend
 
     def open_backend(cfg: Any) -> Any:
         page = browser.new_page(
@@ -86,21 +94,7 @@ def _opener(browser: Any, base: str, clients: list[PageWindowClient]):
         page.wait_for_timeout(300)
         client = PageWindowClient(page, owner=cfg.rdp_window, title=TITLE)
         clients.append(client)
-        if cfg.kind == "citrix":
-            backend = CitrixWorkspaceBackend(
-                client,
-                owner_substr=cfg.rdp_window,
-                window_title=cfg.rdp_window_title,
-                readiness_text=cfg.rdp_readiness_text,
-                max_frame_age_s=30.0,
-            )
-        else:
-            backend = RemoteDisplayBackend(
-                client,
-                owner_substr=cfg.rdp_window,
-                title_substr=cfg.rdp_window_title,
-                max_frame_age_s=30.0,
-            )
+        backend = build_backend(cfg, window_client=client)
         backend.close = page.close  # type: ignore[attr-defined]
         return backend
 
@@ -113,11 +107,18 @@ def test_an_agent_run_on_a_remote_window_compiles_and_fails_closed(
     mockmed: str, browser: Any, tmp_path: Path, kind: str
 ) -> None:
     clients: list[PageWindowClient] = []
+    built: list[Any] = []
+    opener = _opener(browser, mockmed, clients)
+
+    def open_backend(cfg: Any) -> Any:
+        built.append(opener(cfg))
+        return built[-1]
+
     app = SurfaceApp(
         SECTIONS[kind],
         record_reader=lambda: _records(mockmed),
         reset=lambda: _http_json(f"{mockmed}/api/reset", method="POST", body={}),
-        open_backend=_opener(browser, mockmed, clients),
+        open_backend=open_backend,
     )
     agent = RecordedTrajectoryAgent.from_file(FIXTURES / "anthropic_add_note.json")
     jit = compile_agent(
@@ -140,6 +141,11 @@ def test_an_agent_run_on_a_remote_window_compiles_and_fails_closed(
     miss = jit.run(note="Synthetic follow-up in two weeks")
     assert miss.status == "needs_human_admit", miss.detail
     assert agent.calls == 1 and len(clients) == 1 and clients[0].inputs > 0
+    from openadapt_flow.backends.citrix_workspace import CitrixWorkspaceBackend
+    from openadapt_flow.backends.remote_display import RemoteDisplayBackend
+
+    expected = CitrixWorkspaceBackend if kind == "citrix" else RemoteDisplayBackend
+    assert type(built[0]) is expected
     candidate = miss.candidate
     assert candidate is not None
     assert [p["name"] for p in candidate["params"]["lifted"]] == ["note"]

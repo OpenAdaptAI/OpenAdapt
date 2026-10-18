@@ -205,3 +205,41 @@ def store_last_surface(surface: ExecutionTargetKind) -> None:
         path.write_text(json.dumps(existing, indent=2) + "\n")
     except OSError:
         return
+
+
+def surface_target_origin(backend: object) -> Optional[str]:
+    """The app a non-web backend section names, as ``<kind>://<target>``.
+
+    ``backend`` is a :class:`~openadapt_flow.deployment.BackendConfig`. The
+    target is the Windows agent's host and port, the macOS or Linux app name,
+    the RDP host (and a non-default port) or the local client window's owner.
+    Window titles and credentials are left out: a title can carry a patient
+    or document name, and a URL's userinfo is a secret. ``None`` for ``web``,
+    which is named by its browser origin instead.
+    """
+    from urllib.parse import quote, urlsplit
+
+    kind = str(getattr(backend, "kind", None) or "web").strip().lower()
+    kind = kind.replace("_", "-")
+    kind = "rdp" if kind == "remote-display" else kind
+    if kind == "web":
+        return None
+    if kind == "windows":
+        parts = urlsplit(str(getattr(backend, "agent_url", "") or ""))
+        if parts.username or parts.password:
+            raise ValueError(
+                "backend.agent_url must not carry credentials; use agent_token"
+            )
+        target = parts.hostname or ""
+        if parts.port:
+            target += f":{parts.port}"
+    elif kind == "macos":
+        target = str(getattr(backend, "macos_app", "") or "")
+    elif kind == "linux":
+        target = str(getattr(backend, "linux_app", "") or "")
+    elif kind == "rdp" and getattr(backend, "rdp_host", None):
+        port = int(getattr(backend, "rdp_port", None) or 3389)
+        target = str(backend.rdp_host) + ("" if port == 3389 else f":{port}")  # type: ignore[attr-defined]
+    else:
+        target = str(getattr(backend, "rdp_window", None) or "workspace")
+    return f"{kind}://{quote(target.lower(), safe='.:-_ ')}"

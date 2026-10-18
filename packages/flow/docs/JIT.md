@@ -67,17 +67,28 @@ app = SurfaceApp({"kind": "windows", "agent_url": "http://127.0.0.1:5001"})
 | --- | --- | --- |
 | `windows` | `agent_url` (the in-guest agent) | screenshots; clicks keep the UI Automation locator |
 | `macos` | `macos_app`, optionally `macos_window_title` | screenshots; clicks keep the Accessibility locator |
-| `linux` | `linux_app` and `linux_window_title` | screenshots; clicks keep the AT-SPI locator |
+| `linux` | `linux_app`, `linux_window_title`, and `linux_allow_physical_input: true` (see below) | screenshots; clicks keep the AT-SPI locator |
 | `rdp` | `rdp_host`, or `rdp_window` for a local client window | pixels only |
 | `citrix` | nothing (the Citrix Workspace window) or `rdp_window`; runs need `rdp_readiness_text` | pixels only |
 
+An agent clicks at window coordinates. The Linux backend refuses
+coordinate input unless the section sets `linux_allow_physical_input: true`,
+which allows window-bound X11 input; without it the capture ends
+`capture_failed` with "coordinate input is disabled for native Linux".
+
 The agent drives the app through the same `AuthoringSession` and
 `CaptureComputer` the MCP recording tools use. Every canary and run opens a
-fresh backend from the same section. The app's origin is `<kind>://<target>`,
-for example `macos://TextEdit`; window titles are left out because they can
-carry a patient or document name. A program admitted on one origin is
-refused on any other. An admission policy's `allowed_hosts` names the
-target in lower case (`textedit`), as it names a web host.
+fresh backend from the same section. The app's origin is `<kind>://<target>`
+in lower case, for example `macos://textedit` or `rdp://10.0.0.5`. Window
+titles and credentials are left out: a title can carry a patient or document
+name. A program admitted on one origin is refused on any other, by the JIT
+wrapper and by `openadapt-flow run --config` alike. An admission policy names
+a desktop or remote app in `allowed_hosts` with its kind
+(`rdp://10.0.0.5`); a bare host there names a web app only, so it never
+covers the remote desktop on the same address.
+
+The Windows origin is the agent's host and port. Two VMs reached through the
+same tunnel port share it, so use a separate cache directory per environment.
 
 ## What each run does
 
