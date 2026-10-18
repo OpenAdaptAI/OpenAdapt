@@ -156,17 +156,14 @@ def export_rows(
             )
             continue
         grade = record.grade
+        # A review decision settles a value but is not a read, so it does not
+        # lift a field over min_grade.
         weak = [
-            r.field
-            for r in record.fields
-            if not grade_at_least(r.grade, min_grade) and r.review_decision is None
+            r.field for r in record.fields if not grade_at_least(r.grade, min_grade)
         ]
         if weak:
             result.skipped.append(
-                Skipped(
-                    record.record_key,
-                    f"below {min_grade} and not settled by review: {', '.join(weak)}",
-                )
+                Skipped(record.record_key, f"below {min_grade}: {', '.join(weak)}")
             )
             continue
         values = {read.field: read.value for read in record.fields}
@@ -190,6 +187,26 @@ def export_rows(
     return result
 
 
+_FORMULA_START = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _csv_cell(value: Any) -> Any:
+    """A cell value that a spreadsheet will not run as a formula.
+
+    Text read off a screen can start with ``=`` or ``@``. Such cells get a
+    leading apostrophe. Numbers, including negative amounts, are left as is.
+    """
+
+    if value is None:
+        return ""
+    if isinstance(value, str) and value.startswith(_FORMULA_START):
+        try:
+            float(value)
+        except ValueError:
+            return "'" + value
+    return value
+
+
 class CsvSink:
     """Write rows to one CSV file (overwrites)."""
 
@@ -202,7 +219,7 @@ class CsvSink:
             writer = csv.DictWriter(handle, fieldnames=list(columns))
             writer.writeheader()
             for row in rows:
-                writer.writerow({k: ("" if v is None else v) for k, v in row.items()})
+                writer.writerow({k: _csv_cell(v) for k, v in row.items()})
         return len(rows)
 
 
@@ -277,7 +294,9 @@ class WebhookSink:
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=self.timeout) as response:  # noqa: S310
+        # No proxy: a loopback URL must not be sent through HTTP(S)_PROXY.
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+        with opener.open(request, timeout=self.timeout) as response:
             if response.status >= 300:
                 raise RuntimeError(f"webhook returned HTTP {response.status}")
         return len(rows)
