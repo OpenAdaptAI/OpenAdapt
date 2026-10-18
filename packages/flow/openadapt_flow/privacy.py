@@ -39,7 +39,10 @@ from __future__ import annotations
 
 import io
 import os
-from typing import Optional, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Optional, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 __all__ = [
     "PrivacyNotAvailable",
@@ -55,6 +58,15 @@ __all__ = [
     "set_text_scrubber",
     "set_image_scrubber",
     "reset_scrubbers",
+    "OUTBOUND_OPT_OUT_ENV",
+    "outbound_opt_out",
+    "require_outbound_scrubber",
+    "scrub_outbound_text",
+    "scrub_outbound_tree",
+    "scrub_outbound_image",
+    "opt_out_ledger_path",
+    "prepare_outbound",
+    "prepare_outbound_image",
 ]
 
 
@@ -299,6 +311,142 @@ def scrub_image_bytes(png: bytes, *, force: bool = False) -> bytes:
         if force:
             raise
         return png
+
+
+# -- outbound: anything that leaves the machine ------------------------------
+#
+# The local posture above (``OPENADAPT_FLOW_SCRUB``) decides what is written to
+# THIS machine. Anything sent elsewhere (a model API, an agent endpoint, a
+# share) follows a stricter rule that ignores that posture: it is scrubbed, and
+# when the privacy extra is missing it is not sent. The only way around that is
+# an explicit opt-out with a reason, which is written to a local ledger each
+# time it is used.
+
+OUTBOUND_OPT_OUT_ENV = "OPENADAPT_FLOW_SEND_UNSCRUBBED"
+OPT_OUT_LEDGER_NAME = "unscrubbed-sends.jsonl"
+
+
+def opt_out_ledger_path() -> "Path":
+    """Local ledger of every unscrubbed send (``~/.openadapt/unscrubbed-sends.jsonl``).
+
+    The root follows ``OPENADAPT_HOME`` like the rest of the engine config.
+    """
+    from pathlib import Path
+
+    root = os.environ.get("OPENADAPT_HOME")
+    base = Path(root) if root else Path.home() / ".openadapt"
+    return base / OPT_OUT_LEDGER_NAME
+
+
+def outbound_opt_out(purpose: str, reason: Optional[str] = None) -> Optional[str]:
+    """Return the opt-out reason for an unscrubbed send, recording it, or None.
+
+    ``reason`` is an explicit per-call opt-out (for example a CLI flag). When it
+    is not given, ``OPENADAPT_FLOW_SEND_UNSCRUBBED`` is read; its value is the
+    reason. An empty or whitespace reason is not an opt-out. Every opt-out that
+    is used appends one line to :func:`opt_out_ledger_path` before anything is
+    sent, so the record exists even when the send then fails.
+    """
+    import json
+    import time
+
+    chosen = reason if reason is not None else os.environ.get(OUTBOUND_OPT_OUT_ENV)
+    chosen = (chosen or "").strip()
+    if not chosen:
+        return None
+    ledger = opt_out_ledger_path()
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    with ledger.open("a", encoding="utf-8") as handle:
+        handle.write(
+            json.dumps(
+                {
+                    "schema": "openadapt.flow.unscrubbed-send/v1",
+                    "recorded_at": time.time(),
+                    "purpose": purpose,
+                    "reason": chosen,
+                },
+                sort_keys=True,
+            )
+            + "\n"
+        )
+    return chosen
+
+
+def require_outbound_scrubber(purpose: str) -> Scrubber:
+    """Return the scrubbing provider for an outbound send, or raise.
+
+    Ignores ``OPENADAPT_FLOW_SCRUB``: ``off`` and ``auto`` relax what is written
+    locally, never what is sent.
+
+    Raises:
+        PrivacyNotAvailable: the privacy extra is missing, so nothing may be sent.
+    """
+    scrubber = get_scrubber()
+    if scrubber is None:
+        raise PrivacyNotAvailable(
+            f"Not sending {purpose}: it can contain patient data and "
+            "openadapt-privacy is not installed to scrub it. Install it with "
+            "pip install 'openadapt-flow[privacy]' and python -m spacy download "
+            f"en_core_web_sm, or set {OUTBOUND_OPT_OUT_ENV}='<reason>' to send "
+            "it unscrubbed (recorded)."
+        )
+    return scrubber
+
+
+def scrub_outbound_text(text: Optional[str], scrubber: Scrubber) -> Optional[str]:
+    """Scrub one outbound string. Errors propagate so the send is aborted."""
+    if not text:
+        return text
+    return scrubber.scrub_text(text)
+
+
+def scrub_outbound_tree(value: object, scrubber: Scrubber) -> object:
+    """Scrub every string in a JSON-like value (dict keys included)."""
+    if isinstance(value, str):
+        return scrub_outbound_text(value, scrubber)
+    if isinstance(value, list):
+        return [scrub_outbound_tree(item, scrubber) for item in value]
+    if isinstance(value, tuple):
+        return tuple(scrub_outbound_tree(item, scrubber) for item in value)
+    if isinstance(value, dict):
+        return {
+            scrub_outbound_tree(k, scrubber): scrub_outbound_tree(v, scrubber)
+            for k, v in value.items()
+        }
+    return value
+
+
+def scrub_outbound_image(png: bytes, scrubber: Scrubber) -> bytes:
+    """Redact one outbound PNG. Errors propagate so the send is aborted."""
+    if not png:
+        return png
+    from PIL import Image
+
+    image = Image.open(io.BytesIO(png)).convert("RGB")
+    redacted = scrubber.scrub_image(image)
+    out = io.BytesIO()
+    redacted.save(out, format="PNG")
+    return out.getvalue()
+
+
+def prepare_outbound(value: object, purpose: str) -> object:
+    """Return ``value`` ready to leave the machine: scrubbed, or opted out.
+
+    With an opt-out (``OPENADAPT_FLOW_SEND_UNSCRUBBED``) the value is returned
+    unchanged and the opt-out is recorded. Otherwise every string in it is
+    scrubbed; with no scrubber this raises :class:`PrivacyNotAvailable` and the
+    caller must not send.
+    """
+    if outbound_opt_out(purpose) is not None:
+        return value
+    return scrub_outbound_tree(value, require_outbound_scrubber(purpose))
+
+
+def prepare_outbound_image(png: bytes, purpose: str) -> bytes:
+    """Return a PNG ready to leave the machine: redacted, or opted out."""
+    if outbound_opt_out(purpose) is not None:
+        return png
+    return scrub_outbound_image(png, require_outbound_scrubber(purpose))
 
 
 # -- test / embedding hooks --------------------------------------------------
