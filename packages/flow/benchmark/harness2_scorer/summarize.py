@@ -20,7 +20,11 @@ from pathlib import Path
 from typing import Any
 
 ARMS = ("base", "harness2", "harness2_readback")
-LABEL = {"base": "base harness", "harness2": "Harness²", "harness2_readback": "Harness² + read-back"}
+LABEL = {
+    "base": "base harness",
+    "harness2": "Harness²",
+    "harness2_readback": "Harness² + read-back",
+}
 #: Never copied: private signing keys and bearer tokens, and the context
 #: trees Harness² rebuilds from the rollouts on every stage.
 SKIP_NAMES = {"ed25519.pem", "token"}
@@ -77,14 +81,18 @@ def render(data: dict[str, dict[str, Any]]) -> str:
             f"| {LABEL[arm]} | {t['runs']} | {t['passed']} | {t['verified']} | {t['wrong_record']} | "
             f"{t['duplicate']} | {t['safe_stop']} | {t['unscored']} | {t['mean_reward']} | ${t['usd']} |"
         )
-    tasks = sorted({tid for res in data.values() for row in res["arms"].values() for tid in row})
+    tasks = sorted(
+        {tid for res in data.values() for row in res["arms"].values() for tid in row}
+    )
     lines += ["", "Right outcomes per task (fresh re-runs):", ""]
     lines.append("| Task | " + " | ".join(LABEL[a] for a in data) + " |")
     lines.append("|---|" + "---|" * len(data))
     for tid in tasks:
         cells = []
         for arm, res in data.items():
-            row = res["arms"].get(arm.replace("_readback", "+readback"), {}).get(tid, {})
+            row = (
+                res["arms"].get(arm.replace("_readback", "+readback"), {}).get(tid, {})
+            )
             rr = row.get("reruns", [])
             cells.append(f"{sum(1 for r in rr if right(r))}/{len(rr)}")
         lines.append(f"| `{tid}` | " + " | ".join(cells) + " |")
@@ -119,7 +127,9 @@ def main() -> int:
     }
     if args.copy_to:
         n = copy_raw(args.run_dir, args.copy_to / "raw")
-        (args.copy_to / "summary.json").write_text(json.dumps(summary, indent=2), "utf-8")
+        (args.copy_to / "summary.json").write_text(
+            json.dumps(summary, indent=2), "utf-8"
+        )
         print(f"copied {n} files")
     return 0
 

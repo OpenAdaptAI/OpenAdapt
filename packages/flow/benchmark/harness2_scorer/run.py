@@ -35,7 +35,10 @@ from harness2.core.spec import ChannelSpec
 from harness2.core.tree import write_tree
 
 from openadapt_flow import privacy
-from openadapt_flow.integrations.harness2.adapter import GUI_SURFACE, OpenAdaptGuiAdapter
+from openadapt_flow.integrations.harness2.adapter import (
+    GUI_SURFACE,
+    OpenAdaptGuiAdapter,
+)
 from openadapt_flow.integrations.harness2.agent import ModelGuiAgent
 from openadapt_flow.integrations.harness2.llm import (
     BudgetExceeded,
@@ -57,7 +60,12 @@ DEFAULT_MODELS = {
     "anthropic": ("claude-haiku-4-5", Price(1.00, 5.00)),
     "google": ("gemini-2.5-flash", Price(0.30, 2.50)),
 }
-KEY_ENV = {"openai": "OPENAI_API_KEY", "openai-nano": "OPENAI_API_KEY", "anthropic": "ANTHROPIC_API_KEY", "google": "GOOGLE_API_KEY"}
+KEY_ENV = {
+    "openai": "OPENAI_API_KEY",
+    "openai-nano": "OPENAI_API_KEY",
+    "anthropic": "ANTHROPIC_API_KEY",
+    "google": "GOOGLE_API_KEY",
+}
 
 
 def load_env_file(path: Path) -> None:
@@ -104,7 +112,9 @@ def rerun(
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--env-file", type=Path)
-    ap.add_argument("--provider", default="auto", choices=["auto", "openai", "anthropic", "google"])
+    ap.add_argument(
+        "--provider", default="auto", choices=["auto", "openai", "anthropic", "google"]
+    )
     ap.add_argument("--model", help="proposer and selector model")
     ap.add_argument(
         "--agent-model",
@@ -145,7 +155,10 @@ def main() -> int:
     variants = tuple(v for v in args.variants.split(",") if v) or None
     tasks = mockmed_tasks(variants)
     arms = [a for a in args.arms.split(",") if a]
-    print(f"provider={provider} model={model_id} agent={agent_model.name} cap=${args.cap} tasks={len(tasks)} arms={arms}", flush=True)
+    print(
+        f"provider={provider} model={model_id} agent={agent_model.name} cap=${args.cap} tasks={len(tasks)} arms={arms}",
+        flush=True,
+    )
 
     out = args.out
     out.mkdir(parents=True, exist_ok=True)
@@ -154,7 +167,10 @@ def main() -> int:
         "provider": provider,
         "model": model_id,
         "agent_model": agent_model.name,
-        "price_per_mtok": {"input": price.input_per_mtok, "output": price.output_per_mtok},
+        "price_per_mtok": {
+            "input": price.input_per_mtok,
+            "output": price.output_per_mtok,
+        },
         "cap_usd": args.cap,
         "k": args.k,
         "mode": args.mode,
@@ -174,14 +190,18 @@ def main() -> int:
     def save() -> None:
         results["spent_usd"] = round(ledger.spent_usd, 4)
         results["model_calls"] = ledger.calls
-        (out / "results.json").write_text(json.dumps(results, indent=2, default=str), "utf-8")
+        (out / "results.json").write_text(
+            json.dumps(results, indent=2, default=str), "utf-8"
+        )
 
     agent = ModelGuiAgent(agent_model, max_steps=args.max_steps)
     try:
         for arm in arms:
             evidence = "readback" if arm == "harness2+readback" else "screen"
             root = out / arm.replace("+", "_")
-            adapter = OpenAdaptGuiAdapter(tasks, agent, root / "runs", evidence=evidence)
+            adapter = OpenAdaptGuiAdapter(
+                tasks, agent, root / "runs", evidence=evidence
+            )
             prop = ModelProposer(
                 ChannelSpec("claude_cli", model_id.replace("/", "_")),
                 model=model,
@@ -204,9 +224,13 @@ def main() -> int:
                         arm.replace("+", "_"),
                         start=done + 1,
                     )
-                    row["usd"] = round(row.get("usd", 0.0) + ledger.spent_usd - spent0, 4)
+                    row["usd"] = round(
+                        row.get("usd", 0.0) + ledger.spent_usd - spent0, 4
+                    )
                     outcomes = [r.get("outcome") for r in row["reruns"]]
-                    print(f"[{arm}] {task.task_id}: more reruns -> {outcomes}", flush=True)
+                    print(
+                        f"[{arm}] {task.task_id}: more reruns -> {outcomes}", flush=True
+                    )
                     save()
                     continue
                 spent0 = ledger.spent_usd
@@ -232,13 +256,21 @@ def main() -> int:
                         chosen_tree=tree,
                     )
                 row["reruns"] = rerun(
-                    adapter, task.task_id, tree, root / "reruns" / task.task_id.replace("/", "-"), args.rerun, arm.replace("+", "_")
+                    adapter,
+                    task.task_id,
+                    tree,
+                    root / "reruns" / task.task_id.replace("/", "-"),
+                    args.rerun,
+                    arm.replace("+", "_"),
                 )
                 row["usd"] = round(ledger.spent_usd - spent0, 4)
                 row["wall_s"] = round(time.time() - t0, 1)
                 arm_rows[task.task_id] = row
                 outcomes = [r.get("outcome") for r in row["reruns"]]
-                print(f"[{arm}] {task.task_id}: chosen={row.get('chosen')} reruns={outcomes} ${row['usd']} total=${ledger.spent_usd:.3f}", flush=True)
+                print(
+                    f"[{arm}] {task.task_id}: chosen={row.get('chosen')} reruns={outcomes} ${row['usd']} total=${ledger.spent_usd:.3f}",
+                    flush=True,
+                )
                 save()
     except BudgetExceeded as exc:
         results["stopped"] = f"budget: {exc}"

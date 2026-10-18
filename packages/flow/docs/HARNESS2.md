@@ -64,6 +64,7 @@ changes underneath.
 | `mockmed/typelabel` | the encounter-type buttons swapped order | `verified` |
 | `mockmed/timeout` | the save lands, then the client times out and shows an error | `verified` or `reconciliation_required` |
 | `mockmed/missing` | her referral is gone | `halted_before_effect` |
+| `mockmed/slow` | every screen change takes four seconds, so the form stays up after a save that already landed | `verified` |
 
 The instruction never says which variant is running or what the right
 outcome is.
@@ -128,6 +129,17 @@ export still says which write hit the wrong patient.
 
 In `readback` mode the same identity verdict also appears in the trajectory
 Harness² proposers read, as an observation after each write.
+
+## Measured run
+
+[benchmark/harness2_scorer/RESULTS.md](../benchmark/harness2_scorer/RESULTS.md)
+compares the base harness, Harness² as published, and Harness² with the
+read-back, on the seven MockMed tasks with a `gpt-4.1-nano` agent. At that
+scale the read-back did not change the result (40 vs 41 right outcomes of
+70). Both searches removed every wrong-patient write. The write-up names the
+two causes: proposers given the read-back wrote rules the agent cannot follow
+(it has no read-back of its own), and Harness² ranks each candidate on one
+rollout. The raw data is committed beside it.
 
 ## Install
 
