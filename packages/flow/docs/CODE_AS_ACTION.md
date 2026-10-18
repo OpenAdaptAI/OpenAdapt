@@ -175,11 +175,18 @@ Nothing here loosens what run 1 may do.
 - **Privacy.** Everything the tool returns is scrubbed with the same scrubber
   as the structural listing, except the task's own values.
 
-Two gate fixes came with this work and apply to every compile-agent agent: the
-harness now reads a click inside an iframe through the backend's hit-tested
-frame chain (it used to see only the frame, so a Save inside a frame was not
-gated), and a click on a text field is not treated as a save even when its
-label holds a commit word ("Postal code" starts with "post").
+Four gate fixes came with this work and apply to every compile-agent agent.
+Each one wrongly refused, or failed to gate, a step on OpenEMR:
+
+- a click inside an iframe is read through the backend's hit-tested frame
+  chain (before, the harness saw only the frame, so a Save inside a frame was
+  not gated);
+- Enter with focus inside an iframe reads the frame that has focus;
+- a click on a text field is not a save even when its label holds a commit
+  word ("Postal code" starts with "post");
+- Enter on a native drop-down is not a save (it picks an option), and a table
+  row with more than 8 controls is page layout, so the gate's scope is the
+  form or section around it, not that row.
 
 ## Measured
 
@@ -189,7 +196,42 @@ The host's 1-minute load was far above its 12 cores for every run (other
 sessions' work), so every timing below was taken under load and is labelled
 that way in the data; tokens, calls, actions and cost do not depend on load.
 
-RESULTS_TABLES
+**MockMed**, a five-step note task, 5 trials per arm (correct = the record
+check passed):
+
+| median per run | code | structure first | screenshot loop |
+| --- | ---: | ---: | ---: |
+| Correct (read back) | 5 / 5 | 5 / 5 | 5 / 5 |
+| Model calls | 6 | 5 | 5 |
+| Actions | 6 | 6 | 13 |
+| Prompt tokens | 12,738 | 10,332 | 73,303 |
+| Cost | $0.012 | $0.014 | $0.075 |
+| Screenshots sent | 0 | 1 | 14 |
+
+On a task this short, code as action and the structural listing are about
+the same. The program compiled from a code run was admitted and replayed
+twice: VERIFIED, 0 model calls.
+
+**OpenEMR referral**, register a made-up referred patient from 12 fields in a
+form inside an iframe, without creating a duplicate; 8 referrals per arm,
+correct = SQL read-back (one new chart, 12 of 12 fields; for the
+possible-duplicate referral, no new chart):
+
+| median per run | code | screenshot loop |
+| --- | ---: | ---: |
+| Correct (read back) | 8 / 8 | 6 / 8 |
+| Model calls | 12 | 14 |
+| Actions | 36 | 56 |
+| Prompt tokens | 90,777 | 619,498 |
+| Cost | $0.055 | $0.332 |
+| Model time | 18.5 s | 48.6 s |
+| Run time (under load) | 45.4 s | 75.2 s |
+| Screenshots sent | 2 | 56 |
+
+The screenshot loop's two misses were stopped by the save gate before any
+save (Enter on a form `<button>`, and a Ctrl+End shortcut). Neither arm wrote
+a wrong or duplicate chart. Details, caveats and the runs set aside while
+fixing gate bugs: [benchmark/code_as_action/README.md](../benchmark/code_as_action/README.md).
 
 ## Limits
 

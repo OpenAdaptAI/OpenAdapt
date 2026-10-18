@@ -189,8 +189,18 @@
       "label": "openemr every_turn r8",
       "usd": 0.342196,
       "at": "2026-10-18T20:38:15Z"
+    },
+    {
+      "label": "openemr code r4",
+      "usd": 0.148079,
+      "at": "2026-10-18T20:44:13Z"
+    },
+    {
+      "label": "openemr code r7",
+      "usd": 0.047129,
+      "at": "2026-10-18T20:45:36Z"
     }
   ],
-  "total_usd": 3.860689,
+  "total_usd": 4.055897,
   "cap_usd": 15.0
 }

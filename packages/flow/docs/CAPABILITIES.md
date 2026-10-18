@@ -112,6 +112,13 @@ that opens the wrong patient is refused at the save, and nothing is compiled.
 See [`COMPILE_AGENT.md`](COMPILE_AGENT.md), which also has the measured token and
 time cost of structure-first observation against a screenshot every turn.
 
+With `--vision code` the agent acts through code: one `run` tool that takes a
+script (query the DOM or accessibility tree, click, fill and select by role
+and name, read back, a read-only sandboxed shell), screenshots only on
+request. On the OpenEMR referral it was correct 8 of 8 at $0.055 a run,
+against 6 of 8 at $0.33 for the screenshot loop. See
+[`CODE_AS_ACTION.md`](CODE_AS_ACTION.md).
+
 ## Answer a halt from a phone
 
 An attended run can project one signed operational-halt task to an

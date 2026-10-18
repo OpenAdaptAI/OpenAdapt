@@ -108,6 +108,12 @@ find the right row.
 `--vision every_turn` is the baseline for comparison: Claude's computer
 toolset (`computer_toolset_20260801`) with a screenshot after every action.
 
+`--vision code` gives the agent one terminal-style tool instead: it writes
+short scripts that read the structure, act by role and name, read back, and
+keep notes in a sandboxed working directory, with a screenshot only when it
+asks. Every action becomes a structured step that is checked against the
+compiled program. See [CODE_AS_ACTION.md](CODE_AS_ACTION.md).
+
 ### The save gate
 
 Every action that can commit a write is gated unless it plainly does not:
