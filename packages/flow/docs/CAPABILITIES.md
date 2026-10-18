@@ -47,6 +47,8 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   program` emits a program when the traces agree, and a `record-next:`
   worklist of missing demonstrations when a consequential branch or loop stays
   underdetermined. The healthy replay path still makes no model call.
+  [`LEARN_FROM_MANY_RUNS.md`](LEARN_FROM_MANY_RUNS.md) covers `induce`,
+  `teach-branch` and shadow mining together, with each one's status.
 - **Effect verification against the system of record.** The read-back checks
   our own work: a wrong field, a wrong record, a duplicate submit, or a partial
   save can all look like success on screen. A step
