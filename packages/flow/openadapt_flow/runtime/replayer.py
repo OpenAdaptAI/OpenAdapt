@@ -4920,7 +4920,7 @@ class Replayer:
         if nonrelative:
             verification_step = step.model_copy(update={"expect": nonrelative})
             post_ok, frame, failed = self._check_postconditions(
-                verification_step, frame, bundle_dir, {}, result
+                verification_step, frame, bundle_dir, {}, result, workflow=workflow
             )
             result.postconditions_ok = post_ok
             if not post_ok:
@@ -6734,7 +6734,12 @@ class Replayer:
                             last_frame,
                             failed,
                         ) = self._check_postconditions(
-                            step, after_png, bundle_dir, start_state, result
+                            step,
+                            after_png,
+                            bundle_dir,
+                            start_state,
+                            result,
+                            workflow=workflow,
                         )
                     else:
                         postconditions_ok = False
@@ -6776,7 +6781,13 @@ class Replayer:
                                 f"({step.intent}): expected screen state not reached "
                                 f"(semantic drift) — failed: {detail} — run aborted"
                             )
-                        if self.governed_authorization is not None:
+                        if (
+                            self.governed_authorization is not None
+                            or self._postcondition_confirms_a_write(step, workflow)
+                        ):
+                            # A write the screen did not confirm is never an
+                            # ordinary failure a program exception edge may
+                            # route past.
                             result.safety_halt = True
                 except Exception as exc:
                     if not delivery_uncertain:
@@ -7572,6 +7583,7 @@ class Replayer:
                     bundle_dir,
                     start_state,
                     result,
+                    workflow=workflow,
                 )
                 result.postconditions_ok = postconditions_ok
                 if not postconditions_ok:
@@ -13851,6 +13863,8 @@ class Replayer:
         bundle_dir: Path,
         start_state: dict[str, Any],
         result: Optional[StepResult] = None,
+        *,
+        workflow: Optional[Workflow] = None,
     ) -> tuple[bool, bytes, list[str]]:
         """Poll postconditions until each passes or times out.
 
@@ -13858,7 +13872,11 @@ class Replayer:
         ``timeout_s``. If any fails, the screen is re-settled once and all
         postconditions are re-checked a single time. If a VLM state-verifier
         is configured, a render-drift-sensitive postcondition that still failed
-        gets one last drift-oracle pass (see :meth:`_drift_oracle_rescue`).
+        gets one last drift-oracle pass (see :meth:`_drift_oracle_rescue`),
+        but never on a step that can leave a business effect behind (see
+        :meth:`_postcondition_confirms_a_write`). ``workflow`` lets a qualified
+        operator risk decision count; without it the classification is the
+        stricter step-only one.
 
         Returns:
             (ok, last_frame, failed) — the frame the final verdict was based
@@ -13877,10 +13895,45 @@ class Replayer:
             for pc in step.expect
             if not self._postcondition_passes(pc, frame_png, bundle_dir, start_state)
         ]
-        if failed_pcs and self.state_verifier is not None:
+        if (
+            failed_pcs
+            and self.state_verifier is not None
+            and not self._postcondition_confirms_a_write(step, workflow)
+        ):
             failed_pcs = self._drift_oracle_rescue(failed_pcs, frame_png, result)
         failed = [self._describe_postcondition(pc) for pc in failed_pcs]
         return not failed_pcs, frame_png, failed
+
+    @staticmethod
+    def _postcondition_confirms_a_write(
+        step: Step, workflow: Optional[Workflow]
+    ) -> bool:
+        """Whether ``step``'s postcondition is the screen's check on a write.
+
+        True for any step that can leave a business effect behind: the shared
+        fail-closed classifier :func:`run_gate.is_consequential` (the compiled
+        ``risk`` label, the write-shaped heuristic, and any declared
+        system-of-record effect), plus an unresolved risk review, which the
+        transaction outcome also treats as consequential.
+
+        On such a step a failed postcondition is final:
+
+        * The drift oracle is never asked. A model "yes" is not evidence that
+          a write did what was intended.
+        * The failure is a safety halt, so a program exception edge cannot
+          route past it.
+
+        The action was already delivered and nothing has proven the write
+        absent, so :func:`transaction.classify_transaction_outcome` reports
+        ``RECONCILIATION_REQUIRED``.
+
+        Read-only and navigation steps keep the drift-oracle rescue. A wrong
+        "yes" there lets the run reach the next step, which still runs its own
+        identity, risk, and postcondition checks before it acts.
+        """
+        if step.risk_review_required:
+            return True
+        return is_consequential(step, workflow)
 
     def _drift_oracle_rescue(
         self,
@@ -13893,6 +13946,8 @@ class Replayer:
 
         VETO-SAFE by construction:
 
+        * The caller never invokes this on an irreversible or effect-bearing
+          step (see :meth:`_postcondition_confirms_a_write`).
         * Only ``text_present`` and ``region_stable`` are eligible — the kinds
           a theme/scale/font re-render can legitimately break. Structural
           postconditions (``url_changed`` etc.) and ``text_absent`` are NEVER

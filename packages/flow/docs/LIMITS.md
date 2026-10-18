@@ -364,6 +364,16 @@ target and a state verifier can re-evaluate some failed visual postconditions.
 Only an affirmative answer is eligible to rescue the supported state checks;
 uncertainty or service failure keeps the halt.
 
+The state verifier never re-evaluates a step that can change a record: a step
+marked irreversible, a step that reads as a write (Save, Submit), a step that
+declares a system-of-record effect, or a step still waiting for risk review.
+On those steps the screen check is the only on-screen confirmation of the
+write, so a failed check stops the run. The action was already sent, so the
+transaction outcome is `RECONCILIATION_REQUIRED`: a person checks the record
+before anything is retried. Navigation and read-only steps can still be
+rescued. A wrong answer there lets the run go on to the next step, which still
+runs its own identity, risk, and screen checks before it acts.
+
 The model still reads the screen, can be wrong, and cannot prove a hidden
 transactional effect. A model-assisted run is counted in the report and no
 longer qualifies as a zero-model run. Dense lists, small identifiers, unusual
