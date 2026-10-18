@@ -171,8 +171,12 @@ class AgentBridge:
         mode: Optional[str] = None,
         store: Optional[RunStore] = None,
         repair_desk: Optional[Any] = None,
+        admission_desk: Optional[Any] = None,
     ):
         self.repair_desk = repair_desk
+        #: ``openadapt_flow.agent.admission.AdmissionDesk`` when the operator
+        #: started the server with ``--admissions DIR``.
+        self.admission_desk = admission_desk
         self.bundles_dir = Path(bundles_dir) if bundles_dir is not None else None
         self.sandbox = sandbox
         self.allow_run = allow_run or sandbox is not None
@@ -353,7 +357,42 @@ class AgentBridge:
         )
         specs.extend(self._repair_specs())
         specs.extend(self._approval_specs())
+        specs.extend(self._admission_specs())
         return specs
+
+    def _admission_specs(self) -> list[ToolSpec]:
+        """Listed only when the operator passed ``--admissions DIR``."""
+        if self.admission_desk is None:
+            return []
+        return [
+            ToolSpec(
+                name=raw["name"],
+                description=raw["description"],
+                input_schema=raw["input_schema"],
+                annotations=raw["annotations"],
+            )
+            for raw in self.admission_desk.specs()
+        ]
+
+    def dispatch_admission(
+        self, name: str, arguments: dict, *, human_confirmed: bool = False
+    ) -> dict:
+        """Run one admission tool. ``human_confirmed`` only from the MCP form."""
+        from openadapt_flow.agent.admission import AdmissionToolError
+
+        desk = self.admission_desk
+        if desk is None:
+            raise BridgeError("admission tools are off on this server")
+        try:
+            if name == "prepare_admission":
+                return desk.prepare(arguments)
+            if name == "list_admissions":
+                return desk.list()
+            if name == "decide_admission":
+                return desk.decide(arguments, human_confirmed=human_confirmed)
+        except AdmissionToolError as exc:
+            raise BridgeError(str(exc)) from exc
+        raise BridgeError("unknown tool name")
 
     def _delegate_id(self) -> Optional[str]:
         if not self.allow_run or self.sandbox is not None:
@@ -687,6 +726,10 @@ class AgentBridge:
             if not any(spec.name == name for spec in self._approval_specs()):
                 raise BridgeError("unknown tool name")
             return self._approval_dispatch(name, arguments)
+        if name in ("prepare_admission", "list_admissions", "decide_admission"):
+            # decide_admission from here is the delegated-agent path only; the
+            # person path comes through dispatch_admission after the MCP form.
+            return self.dispatch_admission(name, arguments)
         if name in ("get_repair_screen", "teach_repair"):
             if not self._repair_tools_enabled():
                 raise BridgeError("repair tools are off on this server")

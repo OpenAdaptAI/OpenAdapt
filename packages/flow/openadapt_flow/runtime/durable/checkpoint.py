@@ -47,7 +47,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Iterator, Literal, Optional
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, model_serializer, model_validator
 
 from openadapt_flow.ir import (
     ActionDeliveryReceipt,
@@ -61,6 +61,7 @@ from openadapt_flow.ir import (
     ProgramExceptionEvidence,
     ProgramTransitionEvidence,
     Resolution,
+    SurfaceObservation,
 )
 from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
@@ -251,7 +252,26 @@ class RunCheckpoint(BaseModel):
         default_factory=list
     )
     attended_reconciliation_at: Optional[str] = None
+    #: Multi-surface runs only (docs/MULTI_SURFACE.md): the surface this step
+    #: ran on, the surface active after it, and each surface's last-seen
+    #: identity observation. Never a live handle: a resume re-binds every
+    #: surface by identity. Omitted when unset, so a single-surface checkpoint
+    #: serializes exactly as before.
+    surface: Optional[str] = None
+    active_surface: Optional[str] = None
+    surface_observations: dict[str, SurfaceObservation] = Field(default_factory=dict)
     created_at: str = Field(default_factory=_now)
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler):  # type: ignore[no-untyped-def]
+        data = handler(self)
+        if isinstance(data, dict):
+            for key in ("surface", "active_surface"):
+                if data.get(key) is None:
+                    data.pop(key, None)
+            if not data.get("surface_observations"):
+                data.pop("surface_observations", None)
+        return data
 
 
 class PendingEscalation(BaseModel):

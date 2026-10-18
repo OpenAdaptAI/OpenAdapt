@@ -184,8 +184,8 @@ class RunnerConfig:
     allow_url_override: bool = False
     extra_run_args: tuple[str, ...] = ()
     #: ``--approval-mode`` for every run, chosen by the operator at server
-    #: start. None passes nothing, so Flow's default applies (a person
-    #: approves each save under the Standard and Regulated profiles).
+    #: start. None passes nothing, so Flow's default applies (each save
+    #: waits for approval, under every profile).
     approval_mode: Optional[str] = None
     #: The calling agent's opaque id when the operator lets it answer
     #: waiting saves (``serve --delegate-approvals ID``). None: it can't.

@@ -152,6 +152,18 @@ step's wording and the route of the exact screenshot the request was opened
 with (`GET /api/save-approvals/ID/frame`, checked against its digest), so the
 person sees exactly what will be saved.
 
+When the run recorded the values the save writes, the presentation block also
+carries `fields`: a list of up to 24 `{label, before, after}` rows. The phone
+shows those values first and keeps the screenshot behind a tap. Without them
+it shows the screenshot. The rows are part of the request, so they are inside
+the request digest and therefore bound by the signed task: a value changed
+after the phone showed it makes the answer stale (`task_changed`). A request
+without rows keeps the digest it had before rows existed. Like the screenshot,
+the rows stay on the runner. The detail is served `no-store`, and the rows
+never reach the signed task, a notification (which carries a count), a
+delegated approver's facts, the run report, or Cloud. The gate takes them from
+`StepContext.save_fields`, which returns none until a backend supplies them.
+
 The phone answers with `POST /api/save-approvals/ID/actions/verify_and_resume`
 (approve) or `.../actions/reject` with one closed `decline_reason`, echoing
 the task's digest and signature. Only the attended console the portal relays
@@ -207,6 +219,12 @@ there is a miss; the exact one-sided Clopper-Pearson bound on the miss rate
 must be under the target (5% at 90% by default). With no artifact or no
 audit labels it raises `EligibilityUnavailable` and the workflow stays per
 item. `openadapt-flow triage eligibility` prints the result.
+
+An accepted `openadapt-flow admit` sets `problems_only` as the admitted
+bundle's default approval mode (see `docs/SHADOW_CANDIDATES.md`). An agent
+admits only under a person-signed grant that lets an agent approve
+consequential saves. The gates above still apply: an admitted workflow sends
+every save to a person until it has earned the switch.
 
 ## Admitting a demonstrated read-back (planned)
 
