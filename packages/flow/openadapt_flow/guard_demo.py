@@ -18,15 +18,18 @@ Cases:
 
 from __future__ import annotations
 
+import http.cookiejar
+import json
 import struct
 import sys
 import tempfile
+import urllib.error
+import urllib.parse
+import urllib.request
 import zlib
 from html.parser import HTMLParser
 from pathlib import Path
 from typing import Any, Optional
-
-import requests
 
 from openadapt_flow.guard import GuardedSave, GuardRefused, GuardTask
 from openadapt_flow.mockmed.chart_pages import READER_PASSWORD, READER_USERNAME
@@ -103,32 +106,47 @@ def tiny_png(rgb: tuple[int, int, int] = (240, 240, 240)) -> bytes:
 
 
 class FakeAgent:
-    """Stands in for a computer-use agent: opens a chart, clicks Save."""
+    """Stands in for a computer-use agent: opens a chart, clicks Save.
+
+    Uses only the standard library, so the demo runs on a plain install.
+    """
 
     def __init__(self, base_url: str) -> None:
         self.base = base_url.rstrip("/")
-        self.http = requests.Session()
-        self.http.post(
-            f"{self.base}/chart/signin",
-            data={"username": READER_USERNAME, "password": READER_PASSWORD},
-            timeout=5,
+        self.http = urllib.request.build_opener(
+            urllib.request.HTTPCookieProcessor(http.cookiejar.CookieJar())
         )
+        form = urllib.parse.urlencode(
+            {"username": READER_USERNAME, "password": READER_PASSWORD}
+        ).encode()
+        self._send(
+            f"{self.base}/chart/signin", form, "application/x-www-form-urlencoded"
+        )
+
+    def _send(
+        self, url: str, body: Optional[bytes] = None, content_type: str = ""
+    ) -> str:
+        request = urllib.request.Request(url, data=body)
+        if content_type:
+            request.add_header("Content-Type", content_type)
+        try:
+            with self.http.open(request, timeout=5) as response:
+                return response.read().decode("utf-8", "replace")
+        except urllib.error.HTTPError as exc:
+            # An app error page is still what the agent sees.
+            return exc.read().decode("utf-8", "replace")
 
     def open_chart(self, patient_id: str) -> str:
         """Open a chart page and return its text, as the harness reads it."""
 
-        page = self.http.get(f"{self.base}/chart/patient/{patient_id}", timeout=5)
         parser = _Text()
-        parser.feed(page.text)
+        parser.feed(self._send(f"{self.base}/chart/patient/{patient_id}"))
         return " ".join(" ".join(parser.parts).split())
 
     def click_save(self, patient_id: str, note: str, *, fault: str = "") -> None:
         url = f"{self.base}/api/encounter" + (f"?fault={fault}" if fault else "")
-        self.http.post(
-            url,
-            json={"patient_id": patient_id, "type": "Referral", "note": note},
-            timeout=5,
-        )
+        body = {"patient_id": patient_id, "type": "Referral", "note": note}
+        self._send(url, json.dumps(body).encode(), "application/json")
 
 
 def person_approves(run_dir: str, request_id: str, request_sha256: str) -> None:
