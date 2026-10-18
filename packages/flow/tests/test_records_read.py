@@ -134,7 +134,7 @@ def test_disagreeing_independent_read_demotes_to_review() -> None:
     later = add_read(
         CODE,
         first,
-        channel_read(CODE, "export", "AC-1043", export_source="committed_data"),
+        channel_read(CODE, "export", "AC-1043", source_kind="committed_store"),
     )
     assert later.grade == "unconfirmed"
     assert later.needs_review
@@ -268,17 +268,17 @@ def test_export_reads_grade_by_source() -> None:
     live = add_read(
         CODE,
         first,
-        channel_read(CODE, "export", "AC-1042", export_source="live_session"),
+        channel_read(CODE, "export", "AC-1042", source_kind="live_session"),
     )
     assert live.reads[-1].session == "acting"
     assert live.grade == "screen_readback"
     saved = add_read(
         CODE,
         first,
-        channel_read(CODE, "export", "AC1042", export_source="committed_data"),
+        channel_read(CODE, "export", "AC1042", source_kind="committed_store"),
     )
     assert saved.reads[-1].session == "independent"
     assert saved.grade == "verified"
     assert saved.value == "AC1042"  # the independent read is reported
-    with pytest.raises(ValueError, match="needs export_source"):
+    with pytest.raises(ValueError, match="needs source_kind"):
         channel_read(CODE, "export", "AC-1042")

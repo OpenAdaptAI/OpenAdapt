@@ -18,7 +18,7 @@ does the live read on a backend and then calls it. :func:`add_read` adds a
 later read (the reopened record, or an export, database or API read) and
 upgrades the grade only when that read agrees. An export read states its
 source: a ``live_session`` export counts as a screen read, a
-``committed_data`` export as an independent one.
+``committed_store`` export as an independent one.
 
 Comparison reuses :mod:`openadapt_flow.runtime.effects.readback_values`, so
 look-alike characters (O and 0, l and 1) in OCR make a read *ambiguous*,
@@ -52,7 +52,7 @@ from typing import Any, Callable, Optional, Protocol, Sequence
 from openadapt_flow.records.schema import (
     Agreement,
     ChannelRead,
-    ExportSource,
+    SourceKind,
     FieldRead,
     FieldSpec,
     ReadChannel,
@@ -147,18 +147,18 @@ def channel_read(
     *,
     engine_confidence: Optional[float] = None,
     session: Optional[str] = None,
-    export_source: Optional[ExportSource] = None,
+    source_kind: Optional[SourceKind] = None,
 ) -> ChannelRead:
     """One channel's read of ``spec``, normalized for its kind.
 
-    An ``export`` read needs ``export_source``. ``session`` defaults from the
-    channel: ``independent`` for database, API and committed-data export
+    An ``export`` read needs ``source_kind``. ``session`` defaults from the
+    channel: ``independent`` for database, API and committed-store export
     reads, ``acting`` for everything else.
     """
 
     if session is None:
         independent = channel in ("database", "api") or (
-            channel == "export" and export_source == "committed_data"
+            channel == "export" and source_kind == "committed_store"
         )
         session = "independent" if independent else "acting"
     return ChannelRead(
@@ -167,7 +167,7 @@ def channel_read(
         normalized=normalize_for(spec, raw),
         engine_confidence=engine_confidence,
         session=session,  # type: ignore[arg-type]
-        export_source=export_source,
+        source_kind=source_kind,
     )
 
 
