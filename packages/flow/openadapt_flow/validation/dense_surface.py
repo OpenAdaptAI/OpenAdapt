@@ -876,7 +876,7 @@ def run_trials(
     """
     replay_conditions = replay_conditions or REPLAY_CONDITIONS
     trials: list[dict[str, Any]] = []
-    # Every MRN in each seed's synthetic table: the complete known-ID list a
+    # Every record ID in each seed's synthetic table: the complete known-ID list a
     # cross-check may use (runtime.known_ids).
     known_ids_by_seed: dict[str, list[str]] = {}
     fresh_identical: dict[str, bool] = {}

@@ -17,7 +17,7 @@ Denominators are stated per number. A false stop is an armed click on the
 CORRECT row that does not verify. A false accept is an armed click on the
 adjacent SIBLING row that verifies. Five collision classes put the only
 difference between target and sibling in a look-alike identifier
-(``id_*``); there the sibling's MRN is in the list, so the cross-check must
+(``id_*``); there the sibling's record ID is in the list, so the cross-check must
 keep stopping.
 
 Run:
