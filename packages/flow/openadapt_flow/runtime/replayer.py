@@ -197,6 +197,7 @@ from openadapt_flow.runtime.resolver import (
     visual_resolution_anchor_contract_sha256,
     visual_resolution_evaluator_contract_sha256,
 )
+from openadapt_flow.runtime.step_timing import timed_span
 from openadapt_flow.runtime.surfaces import SurfaceRouter
 from openadapt_flow.verification import (
     EffectContractMutationError,
@@ -6397,6 +6398,7 @@ class Replayer:
             return f"{exc}; refusing to run"
         return None
 
+    @timed_span("identity")
     def _surface_identity_check(self, backend: Any, step: Step) -> Optional[bool]:
         """Vision-first identity check of one live target for ``step``.
 
@@ -6566,7 +6568,21 @@ class Replayer:
             error=error,
         )
 
-    def _run_step(
+    def _run_step(self, step: Step, **kwargs: Any) -> StepResult:
+        """Execute one step and record where its time went (``timings``)."""
+        from openadapt_flow.runtime import step_timing
+
+        timer, previous = step_timing.start_step()
+        result: Optional[StepResult] = None
+        try:
+            result = self._run_step_timed(step, **kwargs)
+            return result
+        finally:
+            step_timing.end_step(previous)
+            if result is not None:
+                result.timings = timer.result_ms(result.elapsed_ms or None)
+
+    def _run_step_timed(
         self,
         step: Step,
         *,
@@ -8929,6 +8945,7 @@ class Replayer:
             self._readback_verifier = verifier
         return verifier
 
+    @timed_span("readback")
     def _verify_effects(
         self,
         step: Step,
@@ -9842,6 +9859,7 @@ class Replayer:
             ).guarded_keyboard_frame
         return None
 
+    @timed_span("identity")
     def _revalidate_consequential_actuation(
         self,
         step: Step,
@@ -10199,6 +10217,7 @@ class Replayer:
         self._active_delivery_region = fresh_region
         return fresh_resolution, fresh_region, fresh_png, error
 
+    @timed_span("resolve")
     def _resolve_step(
         self,
         step: Step,
@@ -10288,6 +10307,7 @@ class Replayer:
             )
         return resolution, matched_region, None
 
+    @timed_span("resolve")
     def _resolve_drag_end(
         self,
         step: Step,
@@ -10323,6 +10343,7 @@ class Replayer:
         )
         return resolution, region, error
 
+    @timed_span("settle")
     def _settle_seeded(self) -> bytes:
         """``vision.wait_settled`` that can extend the last settled run.
 
@@ -11172,6 +11193,7 @@ class Replayer:
                 needs_person=True,
             )
 
+    @timed_span("actuate")
     def _act(
         self,
         step: Step,
@@ -11232,6 +11254,7 @@ class Replayer:
         else:
             arm(dialog.response, dialog.message)
 
+    @timed_span("postcondition")
     def _wait_for_dialog(self, take: Callable[..., Any], dialog: Any) -> list[Any]:
         """Wait briefly for an armed dialog that opens after the input edge."""
 
@@ -12248,6 +12271,7 @@ class Replayer:
             )
         return None
 
+    @timed_span("settle")
     def _wait_starting_state_settled(
         self, before_png: bytes
     ) -> tuple[bytes, Optional[str], Optional[bool]]:
@@ -12604,6 +12628,7 @@ class Replayer:
             )
         return frame, None
 
+    @timed_span("postcondition")
     def _handle_interstitials(
         self,
         step: Step,
@@ -13544,6 +13569,7 @@ class Replayer:
             parameter_names,
         )
 
+    @timed_span("identity")
     def _verify_identity(
         self,
         step: Step,
@@ -14260,6 +14286,7 @@ class Replayer:
         )
         return landed, changed
 
+    @timed_span("postcondition")
     def _verify_typed_input(
         self,
         step: Step,
@@ -14470,6 +14497,7 @@ class Replayer:
             "a non-input target (focus lost); run aborted"
         )
 
+    @timed_span("postcondition")
     def _verify_selected_option(
         self,
         step: Step,
@@ -14651,6 +14679,7 @@ class Replayer:
 
     # -- closed-loop scroll ------------------------------------------------------
 
+    @timed_span("resolve")
     def _implicit_scroll_target_ready(
         self,
         step: Step,
@@ -14915,6 +14944,7 @@ class Replayer:
             f"{target_desc} resolving — target never came into view; run aborted"
         )
 
+    @timed_span("settle")
     def _wait_for_scroll_transition_and_settle(self, baseline_png: bytes) -> bytes:
         """Wait for a delivered scroll to change the frame, then settle it.
 
@@ -15030,6 +15060,7 @@ class Replayer:
             return None
         return current != start
 
+    @timed_span("postcondition")
     def _check_postconditions(
         self,
         step: Step,
@@ -15174,6 +15205,7 @@ class Replayer:
             return f"{kind} (vs. the step's start state)"
         return f"{kind} region={tuple(pc.region) if pc.region else None}"
 
+    @timed_span("postcondition")
     def _poll_postconditions(
         self,
         step: Step,
@@ -15530,6 +15562,7 @@ class Replayer:
         return candidate
 
     @staticmethod
+    @timed_span("artifact_write")
     def _save_step_png(run_dir: Path, step_id: str, suffix: str, png: bytes) -> str:
         """Save a per-step screenshot; return its run-dir-relative path.
 

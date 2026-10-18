@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from openadapt_flow.backend import Backend
+from openadapt_flow.runtime.step_timing import timed_span
 from openadapt_flow.vision.hashing import phash_distance, phash_png
 
 logger = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ class SettleResult:
     mode: str = "pixel"
 
 
+@timed_span("settle")
 def wait_settled_result(
     backend: Backend,
     *,
@@ -267,6 +269,7 @@ def _page_settled(
         time.sleep(PAGE_POLL_S)
 
 
+@timed_span("settle")
 def wait_settled_seeded(
     backend: Backend,
     seed: SettleSeed | None,
@@ -307,6 +310,7 @@ def wait_settled_seeded(
     return result
 
 
+@timed_span("settle")
 def wait_settled(
     backend: Backend,
     *,

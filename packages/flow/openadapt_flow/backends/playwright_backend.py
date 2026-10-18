@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
 from urllib.parse import urlsplit
 
 from openadapt_flow.backends._page_quiescence import PageQuiescence
+from openadapt_flow.runtime.step_timing import timed_span
 
 if TYPE_CHECKING:  # pragma: no cover
     from playwright.sync_api import Page
@@ -2944,6 +2945,7 @@ class PlaywrightBackend:
                 pass
             time.sleep(_MASKED_SCREENSHOT_RETRY_SLEEP_S)
 
+    @timed_span("screenshot")
     def screenshot(self) -> bytes:
         """Return a stable current full-viewport frame as PNG bytes."""
         if self._closed_page_frame and self._page_is_closed():

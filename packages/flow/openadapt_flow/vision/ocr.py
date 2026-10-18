@@ -20,6 +20,7 @@ import numpy as np
 from pydantic import BaseModel
 
 from openadapt_flow.ir import Region
+from openadapt_flow.runtime.step_timing import timed_span
 from openadapt_flow.vision import imgops
 from openadapt_flow.vision.match import Match, _clamp_region
 
@@ -101,6 +102,7 @@ def clear_ocr_memo() -> None:
         _ocr_memo.clear()
 
 
+@timed_span("ocr")
 def ocr(screen_png: bytes, *, region: Region | None = None) -> list[OcrLine]:
     """Run OCR on a screenshot (optionally restricted to a region).
 
