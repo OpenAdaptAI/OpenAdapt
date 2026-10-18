@@ -422,6 +422,9 @@ The full list, capability by capability: [docs/LIMITS.md](docs/LIMITS.md).
   session, the Windows agent server, and the token.
 - [docs/BENCHMARKS.md](docs/BENCHMARKS.md): every benchmark, with method and
   caveats.
+- [Fleet drift patches](docs/FLEET_DRIFT_PATCHES.md): opted-in installs that
+  automate the same application share signed repairs for the same UI change.
+  Each tenant tests a patch on its own cases before it is used.
 - [docs/REWARD_WORKER.md](docs/REWARD_WORKER.md): `serve-reward` scores a
   model's training episode by reading the record after it ends.
 - [docs.openadapt.ai](https://docs.openadapt.ai): the full documentation set.
