@@ -1,10 +1,10 @@
-# On-prem compliance posture (PHIPA / HIPAA-adjacent)
+# On-prem compliance posture
 
 **Not legal advice, and not a compliance guarantee.** This note describes the
-technical substrate openadapt-flow provides for a regulated clinic to run
-compiled automations on-premise. Whether a given deployment satisfies PHIPA
-(Ontario), PIPEDA, HIPAA, or another regime is a determination for the clinic's
-privacy officer and counsel, against their own risk assessment, agreements, and
+technical substrate openadapt-flow provides for a regulated organization to
+run compiled automations on-premise. Whether a given deployment satisfies
+HIPAA, PIPEDA, a provincial or state health-privacy law, or another regime is a
+determination for the organization's privacy officer and counsel, against their own risk assessment, agreements, and
 safeguards. **We provide the software substrate; we do not sign a BAA, and no
 part of this repository is a certification.**
 
@@ -29,7 +29,7 @@ sent off the clinic network** — no telemetry, no cloud model, no auto-update.
   │             ┌────────────┘                    │ drives GUI              │
   │             ▼                                  ▼                         │
   │      audit/audit.log                 Citrix / RDP / Windows session      │
-  │      (append-only, PHI-FREE,          (Accuro etc.) on the LAN          │
+  │      (append-only, PHI-FREE,          (records application) on the LAN  │
   │       hash-chained)                          │                          │
   │                          ┌───────────────────┤                          │
   │                          ▼                    ▼                          │

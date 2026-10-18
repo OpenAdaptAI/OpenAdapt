@@ -30,11 +30,13 @@ SKILL_HONESTY = OUTCOME_RULES
 SKILL_NAME = "openadapt-gui-write"
 
 #: The first command once this version is on PyPI: the zero-flag sandbox.
-FIRST_COMMAND = "claude mcp add openadapt -- uvx --python 3.12 openadapt-agent serve"
+FIRST_COMMAND = (
+    "claude mcp add --scope user openadapt -- uvx --python 3.12 openadapt-agent serve"
+)
 #: The same command from the monorepo source, for use before the release.
 #: Flow comes from source too, because the agent code now lives in it.
 PREVIEW_COMMAND = (
-    "claude mcp add openadapt -- uvx --python 3.12 --with "
+    "claude mcp add --scope user openadapt -- uvx --python 3.12 --with "
     "'openadapt-flow @ git+https://github.com/OpenAdaptAI/OpenAdapt"
     "#subdirectory=packages/flow' --from "
     "'git+https://github.com/OpenAdaptAI/OpenAdapt#subdirectory=packages/agent' "

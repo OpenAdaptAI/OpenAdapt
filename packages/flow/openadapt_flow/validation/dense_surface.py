@@ -51,7 +51,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import Any, Optional
@@ -668,6 +668,9 @@ class ReplayObservation:
     band_lines: list[tuple[str, Region]]  # raw band lines (post exclude/vol)
     row_filtered_lines: list[tuple[str, Region]]  # lines kept by lines_near_point
     used_upscale: bool
+    # Every OCR read taken (native frame, then the 2x retry when it ran), in
+    # order, for the known-ID cross-check (runtime.known_ids).
+    reads: list[Any] = field(default_factory=list)
 
 
 def _band_attempt(
@@ -736,6 +739,7 @@ def replay_observe(
         context_text,
     )
     used_upscale = False
+    reads = [check]
     if check.status != "verified":
         upscaled = identity_mod.upscale_crop(frame.png, band)
         if upscaled is not None:
@@ -751,6 +755,7 @@ def replay_observe(
                 ),
                 context_text,
             )
+            reads.append(retry)
             rank = {"unreadable": 0, "abstain": 1, "mismatch": 2, "verified": 3}
             if (rank[retry.status], retry.coverage) > (
                 rank[check.status],
@@ -787,6 +792,37 @@ def replay_observe(
         band_lines=band_lines,
         row_filtered_lines=near_lines,
         used_upscale=used_upscale,
+        reads=reads,
+    )
+
+
+def native_read(
+    frame: RenderedFrame,
+    resolved_point: Point,
+    recorded_click: Point,
+    crop_region: Region,
+    context_text: str,
+) -> Any:
+    """The native-frame OCR verdict alone (no 2x retry), as
+    ``Replayer._verify_identity`` takes it from a fresh screenshot for the
+    known-ID cross-check's second read."""
+    band = band_region(resolved_point, crop_region[3], frame.viewport)
+    exclude = (
+        resolved_point[0] + (crop_region[0] - recorded_click[0]),
+        resolved_point[1] + (crop_region[1] - recorded_click[1]),
+        crop_region[2],
+        crop_region[3],
+    )
+    return _band_attempt(frame.png, band, resolved_point[1], exclude, context_text)[0]
+
+
+def _needs_fresh_read(obs: ReplayObservation) -> bool:
+    first = obs.reads[0] if obs.reads else None
+    return (
+        obs.check.status != "verified"
+        and first is not None
+        and first.status == "abstain"
+        and first.abstain_reason == "glyph_confusable_identifier"
     )
 
 
@@ -812,6 +848,19 @@ def _surname_readable(surname: str, band_text: str) -> bool:
 CLICK_CONFIGS = ("click_name", "click_action")
 
 
+def _reads_record(reads: list[Any]) -> list[dict[str, Any]]:
+    """The per-read verdicts a known-ID cross-check needs, JSON-safe."""
+    return [
+        {
+            "status": r.status,
+            "abstain_reason": r.abstain_reason,
+            "coverage": r.coverage,
+            "observed": r.observed,
+        }
+        for r in reads
+    ]
+
+
 def run_trials(
     seeds: list[int],
     *,
@@ -827,8 +876,13 @@ def run_trials(
     """
     replay_conditions = replay_conditions or REPLAY_CONDITIONS
     trials: list[dict[str, Any]] = []
+    # Every record ID in each seed's synthetic table: the complete known-ID list a
+    # cross-check may use (runtime.known_ids).
+    known_ids_by_seed: dict[str, list[str]] = {}
+    fresh_identical: dict[str, bool] = {}
     for seed in seeds:
         table = build_dense_table(seed, n_rows=n_rows)
+        known_ids_by_seed[str(seed)] = [r.mrn for r in table.rows]
         rec = render_frame(table, RECORD_CONDITION, top_offset_px=0)
         rec_lines = ocr(rec.png)  # cached full-frame record OCR
         # Pre-render every replay condition once (a small vertical offset per
@@ -837,6 +891,22 @@ def run_trials(
             cond.name: render_frame(table, cond, top_offset_px=4 + k * 3)
             for k, cond in enumerate(replay_conditions)
         }
+        # A second, independent capture of each replay screen (same content,
+        # same position): the fresh screenshot the known-ID cross-check reads
+        # a second time. Rendered lazily, once per condition.
+        fresh_replays: dict[str, RenderedFrame] = {}
+        offsets = {cond.name: 4 + k * 3 for k, cond in enumerate(replay_conditions)}
+
+        def fresh_frame(cond: Any) -> RenderedFrame:
+            if cond.name not in fresh_replays:
+                fresh_replays[cond.name] = render_frame(
+                    table, cond, top_offset_px=offsets[cond.name]
+                )
+                fresh_identical[f"{seed}:{cond.name}"] = (
+                    fresh_replays[cond.name].png == replays[cond.name].png
+                )
+            return fresh_replays[cond.name]
+
         idx = {id(r): i for i, r in enumerate(table.rows)}
         for pair in table.pairs:
             ti = idx[id(pair.target)]
@@ -858,6 +928,28 @@ def run_trials(
                     ac_point = rep.points[si][pi]
                     ac = replay_observe(
                         rep, ac_point, rec_click, crop, context_text or ""
+                    )
+                    fa_fresh = (
+                        native_read(
+                            fresh_frame(cond),
+                            fa_point,
+                            rec_click,
+                            crop,
+                            context_text or "",
+                        )
+                        if armed and _needs_fresh_read(fa)
+                        else None
+                    )
+                    ac_fresh = (
+                        native_read(
+                            fresh_frame(cond),
+                            ac_point,
+                            rec_click,
+                            crop,
+                            context_text or "",
+                        )
+                        if armed and _needs_fresh_read(ac)
+                        else None
                     )
                     # --- Structured-text (DOM) identity path ---------------
                     # The headline: identity verified against the DOM row text
@@ -924,6 +1016,10 @@ def run_trials(
                             "is_false_abort": bool(
                                 armed and fa.check.status != "verified"
                             ),
+                            "fa_reads": _reads_record(fa.reads),
+                            "fa_fresh_read": (
+                                _reads_record([fa_fresh])[0] if fa_fresh else None
+                            ),
                             # False-accept trial
                             "acc_status": ac.check.status,
                             "acc_coverage": ac.check.coverage,
@@ -932,6 +1028,10 @@ def run_trials(
                             "acc_used_upscale": ac.used_upscale,
                             "is_false_accept": bool(
                                 armed and ac.check.status == "verified"
+                            ),
+                            "acc_reads": _reads_record(ac.reads),
+                            "acc_fresh_read": (
+                                _reads_record([ac_fresh])[0] if ac_fresh else None
                             ),
                             # Structured-text (DOM) identity path -- both verdicts
                             "structured_armed": struct_armed,
@@ -965,6 +1065,8 @@ def run_trials(
             "replay_conditions": [c.name for c in replay_conditions],
             "record_condition": RECORD_CONDITION.name,
             "click_configs": list(CLICK_CONFIGS),
+            "known_ids_by_seed": known_ids_by_seed,
+            "fresh_capture_identical": fresh_identical,
             "operating_point": {
                 "coverage_threshold": identity_mod.COVERAGE_THRESHOLD,
                 "uncovered_run_cap": identity_mod.UNCOVERED_RUN_CAP,

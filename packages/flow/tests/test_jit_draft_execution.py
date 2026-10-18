@@ -65,7 +65,7 @@ def test_an_attended_or_admitted_draft_passes_the_check(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     jit = _jit(tmp_path)
-    ensure_runnable(jit.bundle_dir, attended_by=REVIEWER)
+    ensure_runnable(jit.bundle_dir, attended_by=REVIEWER, key_dir=jit.key_dir)
     admitted = _admitted(tmp_path / "ok", monkeypatch)
     ensure_runnable(admitted.bundle_dir, key_dir=admitted.key_dir)
     # Checked against another admission key, the same bundle is refused.

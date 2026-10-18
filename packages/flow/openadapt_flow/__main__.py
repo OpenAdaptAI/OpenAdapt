@@ -718,6 +718,7 @@ def _configured_replayer(
     checkpoint_key: Optional[str] = None,
     approval_gate=None,
     qualification_fault_driver=None,
+    deployment_surface: Optional[str] = None,
 ):
     """Wire the grounding, verification, and actuation layers into a Replayer.
 
@@ -758,6 +759,7 @@ def _configured_replayer(
         checkpoint_key=checkpoint_key,
         approval_gate=approval_gate,
         qualification_fault_driver=qualification_fault_driver,
+        deployment_surface=deployment_surface,
     )
 
 
@@ -792,6 +794,7 @@ def _build_and_run_replayer(
     run_id: Optional[str] = None,
     approval_gate=None,
     qualification_fault_driver=None,
+    deployment_surface: Optional[str] = None,
 ):
     """Build the shared Replayer configuration and execute one workflow."""
     return _configured_replayer(
@@ -812,6 +815,7 @@ def _build_and_run_replayer(
         runtime_config=runtime_config,
         approval_gate=approval_gate,
         qualification_fault_driver=qualification_fault_driver,
+        deployment_surface=deployment_surface,
     ).run(
         workflow,
         params=params,
@@ -1024,6 +1028,7 @@ def _replay_desktop(
             run_id=run_id,
             approval_gate=approval_gate,
             qualification_fault_driver=qualification_fault_driver,
+            deployment_surface=backend_cfg.deployment_surface,
         )
     finally:
         close = getattr(backend, "close", None)
@@ -1049,11 +1054,32 @@ def _record_until_stop(args: argparse.Namespace):
 def _cmd_record(args: argparse.Namespace) -> int:
     """Record, then (with ``--with-check``) ask for the demonstrated check."""
     with_check = bool(getattr(args, "with_check", False))
+    observation = None
+    verify_path = getattr(args, "verify", None)
+    if verify_path:
+        from openadapt_flow.record_sor import RecordingObservation, RecordSorError
+
+        try:
+            observation = RecordingObservation.start(verify_path)
+        except RecordSorError as exc:
+            print(f"record --verify: {exc}. Nothing was recorded.", file=sys.stderr)
+            return 2
+        print(
+            f"Read {len(observation.before)} record(s) through the "
+            f"{observation.observer.kind} verifier. Flow reads them again when "
+            "the recording ends."
+        )
     if with_check:
         from openadapt_flow.cli_check import RECORD_GUIDANCE
 
         print(RECORD_GUIDANCE)
     code = _cmd_record_capture(args)
+    if observation is not None and code == 0:
+        from openadapt_flow.record_sor import summary_lines
+
+        contract, proposal, diff = observation.finish(Path(args.out))
+        for line in summary_lines(contract, proposal, diff):
+            print(line)
     if code == 0 and with_check:
         from openadapt_flow.cli_check import guided_check
         from openadapt_flow.cli_hints import command
@@ -1487,7 +1513,7 @@ def _cmd_tutorial(args: argparse.Namespace) -> int:
         _print_break_it_narrative(result.break_it)
     elif result.execution_outcome == "VERIFIED":
         print(
-            "\nNext: rerun this same bundle against a backend that lies -- and "
+            "\nNext: rerun this same bundle with the save set to fail -- and "
             f"watch the engine halt:\n  {command('tutorial --break-it')}\n"
             "Or see both runs side by side on one page:\n"
             f"  {command('demo')}"
@@ -1509,16 +1535,15 @@ def _print_break_it_narrative(broken: "BreakItResult") -> None:
     fault server's ground-truth store by ``run_tutorial``; nothing is scripted.
     """
     claim = (
-        "every on-screen check passed -- the app painted its success banner"
+        "every on-screen check passed, including the saved message"
         if broken.screen_claimed_success
-        else "the app's success banner did not appear"
+        else "the saved message did not appear"
     )
     if broken.screen_claim_text:
         claim += f'\n                       (observed on screen: "{broken.screen_claim_text}")'
-    print("\n--- break-it: the same certified bundle, against a backend that lies ---")
+    print("\n--- break-it: the same certified bundle, with the save set to fail ---")
     print(f"\n  Injected fault:      {broken.fault!r} -- the server rejects the write")
-    print("                       AFTER the app reports success")
-    print(f"  The screen claimed:  {claim}")
+    print(f"  On screen:           {claim}")
     print(
         "  The verifier found:  "
         f"{broken.effects_refuted}/{broken.effects_required} declared effect(s) "
@@ -1537,8 +1562,8 @@ def _print_break_it_narrative(broken: "BreakItResult") -> None:
     plain = plain_result(broken.transaction_outcome, broken.execution_outcome)
     print(f"  Result:              {plain.label}. {plain.meaning}")
     print(
-        "\n  The screen said success. The system of record said otherwise. "
-        "The engine\n  believed the system of record."
+        "\n  The screen looked the same as a good save. The record check found "
+        "no new note,\n  so the engine stopped instead of reporting done."
     )
     print(f"\n  Engine's own words:  {broken.halt_reason}")
     print(
@@ -1576,7 +1601,7 @@ def _demo_progress() -> Optional[Callable[[str], None]]:
         if match:
             text = f"Run 1, step {match.group(1)} of 5: {match.group(2)}"
         elif message.startswith("[break-it]"):
-            text = "Run 2: the same task against an app that lies"
+            text = "Run 2: the same task, with the save set to fail"
         else:
             return
         sys.stdout.write("\r\033[K" + text[:100])
@@ -1592,7 +1617,7 @@ def _clear_progress_line() -> None:
 
 
 def _cmd_demo(args: argparse.Namespace) -> int:
-    """Run the checked run and the lying-app run, then write one proof page.
+    """Run the checked run and the failed-save run, then write one proof page.
 
     Composes the unchanged tutorial path (``run_tutorial(..., break_it=True)``):
     the same record, compile, certify, and Standard-profile run, then the same
@@ -2147,6 +2172,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             run_id=getattr(args, "_qualification_run_id", None),
             approval_gate=approval_gate,
             qualification_fault_driver=fault_driver,
+            deployment_surface=backend_cfg.deployment_surface,
         )
 
     if backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url:
@@ -3345,6 +3371,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             approval_gate=_resume_approval_gate(
                 args, resume_mode, run_dir, policy_name=cfg.policy.policy
             ),
+            deployment_surface=backend_cfg.deployment_surface,
         )
         return resume(
             run_dir,
@@ -3738,63 +3765,14 @@ def _cmd_approver_grant(args: argparse.Namespace) -> int:
 def _answer_durable_item_pause(run_dir: Path, request, answer) -> bool:
     """Carry an answer to a durable pause the run left after waiting.
 
-    A run that stopped waiting (no answer in time) left a durable
-    ``item_approval`` pause. An approval then authorizes exactly one resume of
-    that pause; a decline ends it. Returns True when ``resume`` must follow.
+    See :func:`openadapt_flow.approval_mode.durable_carry.carry_answer_to_durable_pause`.
+    Returns True when ``resume`` must follow.
     """
-    from openadapt_flow import crypto
-    from openadapt_flow.runtime.durable.approval import (
-        ResumeRefused,
-        issue_resume_approval,
+    from openadapt_flow.approval_mode.durable_carry import (
+        carry_answer_to_durable_pause,
     )
-    from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
-    from openadapt_flow.runtime.durable.program_checkpoint import bundle_version
 
-    try:
-        store = CheckpointStore(run_dir, key=crypto.resolve_key(None))
-        pending = store.read_pending()
-        manifest = store.read_manifest()
-    except Exception:  # noqa: BLE001 - no durable pause to carry the answer to
-        return False
-    if (
-        pending is None
-        or manifest is None
-        or pending.category != "item_approval"
-        or pending.status != "pending"
-        or pending.step_id != request.step_id
-        or pending.step_index != request.step_index
-        or manifest.run_id != request.run_id
-    ):
-        return False
-    if answer.decision == "decline":
-        store.cas_pending(
-            store.model_digest(pending),
-            pending.model_copy(update={"status": "rejected"}),
-        )
-        return False
-    approver = (
-        f"desktop:{answer.approver_id}"
-        if answer.approver_id is not None
-        else "desktop:unauthenticated"
-    )
-    try:
-        approval = issue_resume_approval(
-            pending,
-            approver=approver,
-            resolution="approve_item",
-            bundle_version=bundle_version(manifest.bundle_dir),
-            workflow_name=pending.workflow_name,
-            run_id=manifest.run_id,
-            run_dir=run_dir,
-        )
-        store.commit_approval_transition(
-            expected_pending=pending,
-            approval=approval,
-            target_status="approved",
-        )
-    except (ResumeRefused, OSError):
-        return False
-    return True
+    return carry_answer_to_durable_pause(run_dir, request, answer)
 
 
 def _cmd_bench(args: argparse.Namespace) -> int:
@@ -6813,6 +6791,17 @@ def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
     print(
         f"\nqualify {verdict}: {len(result.rows)} trial(s) in {result.timing['campaign_wall_s']} s"
     )
+    if result.lookup is not None:
+        pixels = result.lookup.pixels_only
+        print(
+            f"Surface: {result.lookup.surface}; lookups used: "
+            f"{', '.join(result.lookup.capabilities_used)}. Pixels-only pass "
+            f"({'gate' if pixels.role == 'gate' else 'informational'}): "
+            f"{pixels.rate_text()}."
+        )
+        common = pixels.common_failure()
+        if common:
+            print(f"Most common pixels-only failure: {common}")
     if result.certified:
         print(f"Certified under {result.policy}. Bundle: {result.bundle_dir}")
     elif certify is None:
@@ -6850,13 +6839,13 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "demo",
         help=(
-            "See the proof in one command: a checked run and a run where the "
-            "app lies, side by side on one page (fake clinic data, no AI calls)"
+            "See the proof in one command: a checked run and a run whose save "
+            "fails, side by side on one page (fake clinic data, no AI calls)"
         ),
         description=(
-            "Run the bundled tutorial twice on a fake clinic app: once against "
-            "an honest app, and once against an app that shows its success "
-            "message and then drops the save. Writes one self-contained HTML "
+            "Run the bundled tutorial twice on a fake clinic app: once with a "
+            "normal save, and once with the save set to fail on the server. "
+            "Writes one self-contained HTML "
             "page with both final screens, the record check for each run, and "
             "what a person sees when a run stops, and opens it when a display "
             "is available. Exit 0 when the first run is Done and checked and "
@@ -7039,6 +7028,18 @@ def build_parser() -> argparse.ArgumentParser:
             "After the save, also show how you'd check it saved (reload or "
             "search again, open the record). Flow then asks which fields show "
             "the values you typed and writes check.json"
+        ),
+    )
+    p.add_argument(
+        "--verify",
+        default=None,
+        metavar="VERIFY_YAML",
+        help=(
+            "Read the system of record through the verifier: section of this "
+            "file (rest, sql, fhir, graphql or file) before and after the "
+            "recording, and propose the checks for what changed in "
+            "verify.proposed.yaml. Both reads go to sor_snapshots.json "
+            "(mode 0600)"
         ),
     )
     _add_backend_flags(p)
@@ -7717,6 +7718,18 @@ def build_parser() -> argparse.ArgumentParser:
     )
     sa.set_defaults(func=_cmd_attach_seal)
 
+    from openadapt_flow.cli_local_seal import register as _register_local_seal
+
+    _register_local_seal(sub)
+
+    from openadapt_flow.cli_no_outbound import register as _register_no_outbound
+
+    _register_no_outbound(sub)
+
+    from openadapt_flow.cli_service import register as _register_service
+
+    _register_service(sub)
+
     p = sub.add_parser(
         "verify-run",
         help=(
@@ -8205,6 +8218,10 @@ def build_parser() -> argparse.ArgumentParser:
     from openadapt_flow.countersign.cli import add_countersign_parser
 
     add_countersign_parser(sub)
+
+    from openadapt_flow.cli_known_ids import register as _register_known_ids
+
+    _register_known_ids(sub)
 
     p = sub.add_parser(
         "bind-record-checks",
@@ -9957,6 +9974,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_jit_parser(sub)
 
+    from openadapt_flow.cli_fleet import register_fleet_parser
+
+    register_fleet_parser(sub)
+
     return parser
 
 
@@ -10365,10 +10386,15 @@ def _qualify_default_form(argv: list[str]) -> list[str]:
     return argv
 
 
+# Flags that print and exit before any work, so loading OCR would only slow
+# the exit down.
+_PREWARM_SKIP_FLAGS = frozenset({"-h", "--help", "--version"})
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point. Returns a process exit code."""
     raw = list(sys.argv[1:] if argv is None else argv)
-    if raw[:1] in (["demo"], ["tutorial"]):
+    if raw[:1] in (["demo"], ["tutorial"]) and not _PREWARM_SKIP_FLAGS & set(raw):
         # Building the parser imports for a second or two on a new install;
         # start loading OCR and checking the browser driver meanwhile.
         from openadapt_flow import _prewarm
@@ -10382,13 +10408,39 @@ def main(argv: Sequence[str] | None = None) -> int:
     from openadapt_flow.cli_admit import admit_default_form
 
     argv = admit_default_form(argv)
+    # Strict no-outbound mode (OPENADAPT_NO_OUTBOUND=1) is installed before
+    # any command runs, so no code path can open a connection off the machine.
+    from openadapt_flow import no_outbound
+
+    no_outbound.enforce_from_env()
     args = build_parser().parse_args(argv)
     try:
-        return args.func(args)
+        code = args.func(args)
+        if getattr(args, "command", None) in ("run", "replay"):
+            # Offline Seal by default (OPENADAPT_LOCAL_SEAL=off disables). It
+            # never changes the run's exit code.
+            from openadapt_flow.offline_seal import seal_after_run
+
+            run_dir = getattr(args, "run_dir", None)
+            note = seal_after_run(Path(run_dir) if run_dir else None)
+            if note:
+                print(note, file=sys.stderr)
+        return code
     except BrowserSupportMissing as exc:
         # Missing optional browser support is a setup decision, not a crash.
         print(f"Browser setup required:\n{exc}", file=sys.stderr)
         return 2
+    except Exception as exc:
+        from openadapt_flow.runtime.known_ids import KnownIdAdmissionHalt
+
+        if not isinstance(exc, KnownIdAdmissionHalt):
+            raise
+        # The configured known-ID list may not be used: halt before any step
+        # runs, with the named reason.
+        print(
+            f"replay halted before start: {exc.reason}: {exc.detail}", file=sys.stderr
+        )
+        return 3
 
 
 if __name__ == "__main__":
