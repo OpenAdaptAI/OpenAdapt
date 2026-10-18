@@ -10087,6 +10087,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     _add_jit_parser(sub)
 
+    from openadapt_flow.compile_agent.cli import add_parser as _add_compile_agent_parser
+
+    _add_compile_agent_parser(sub)
+
     from openadapt_flow.cli_fleet import register_fleet_parser
 
     register_fleet_parser(sub)

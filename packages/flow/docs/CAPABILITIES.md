@@ -97,6 +97,28 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
 Compiled workflows can also be emitted as Agent Skills or MCP servers
 (`emit-skill` / `emit-mcp`), so other agents can invoke them.
 
+## From a prompt to a program
+
+`openadapt-flow compile-agent "<prompt>"` lets a computer-use agent (Claude, on
+your own key) do the task once in a harness that gives it the page's structure
+first and a screenshot only when it asks or after a save, and that checks the
+right record is on screen before every save. If the system of record shows
+exactly the record the task named, the run is compiled, a person confirms the
+proposed record checks, and the program is admitted under the JIT lifecycle
+(by a key, by a registered agent under a signed policy, or by a person). The
+command also emits an Agent Skill, an MCP tool and a one-line CLI command.
+Every later run makes no model calls and gets a `verify-run` receipt. An agent
+that opens the wrong patient is refused at the save, and nothing is compiled.
+See [`COMPILE_AGENT.md`](COMPILE_AGENT.md), which also has the measured token and
+time cost of structure-first observation against a screenshot every turn.
+
+With `--vision code` the agent acts through code: one `run` tool that takes a
+script (query the DOM or accessibility tree, click, fill and select by role
+and name, read back, a read-only sandboxed shell), screenshots only on
+request. On the OpenEMR referral it was correct 8 of 8 at $0.055 a run,
+against 6 of 8 at $0.33 for the screenshot loop. See
+[`CODE_AS_ACTION.md`](CODE_AS_ACTION.md).
+
 ## Answer a halt from a phone
 
 An attended run can project one signed operational-halt task to an
