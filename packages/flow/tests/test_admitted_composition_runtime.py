@@ -437,8 +437,8 @@ def test_digest_mismatch_halts_before_execute(tmp_path: Path) -> None:
 
 
 def _fake_execute_client(*, outcome: str = "verified", model_used: bool = False):
-    pytest.importorskip("openadapt_flow.contracts")
-    from openadapt_flow.contracts.execute import (
+    pytest.importorskip("openadapt_types")
+    from openadapt_types.execute import (
         EffectStrengthV1,
         ExecuteAcceptedV1,
         ExecuteEvidenceContractV1,
