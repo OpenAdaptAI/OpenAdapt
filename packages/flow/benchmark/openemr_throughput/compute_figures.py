@@ -32,6 +32,7 @@ ARMS = {
     "serial": "1 worker",
     "n4": "4 workers",
     "n8": "8 workers",
+    "n8q50": "8 workers, 50 ms page-quiet window",
     "n4w1": "4 workers, read-back window 1",
 }
 
@@ -127,6 +128,7 @@ def figures() -> dict[str, Any]:
             "saved_correct": correct,
             "not_saved": ran - correct,
             "wrong_or_extra_charts": sum(r["wrong_or_extra_charts"] for r in mine),
+            "halted_nothing_saved": sum(r.get("not_saved", 0) for r in mine),
             "stopped_runs": sum(1 for r in mine if r["stop"]),
             "wall_s_total": round(wall, 1),
             "entries_per_hour": round(correct * 3600 / wall, 1) if wall else None,

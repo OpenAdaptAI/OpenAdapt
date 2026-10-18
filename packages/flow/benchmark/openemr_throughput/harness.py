@@ -229,8 +229,9 @@ def _demo_module() -> Any:
     return demo
 
 
-def run(a: argparse.Namespace) -> dict[str, Any]:
-    from openadapt_flow._browser_setup import ensure_chromium_installed
+def build_worker(user: str, opts: dict[str, Any]) -> Any:
+    """One worker signed in as ``user``. Module-level so a child process can
+    build it (``ProcessWorker``); ``opts`` holds only plain values."""
     from openadapt_flow.benchmark.openemr_local import (
         OpenEMRPatientOracle,
         SyntheticPatientSpec,
@@ -238,53 +239,27 @@ def run(a: argparse.Namespace) -> dict[str, Any]:
     from openadapt_flow.cli_worklist_pool import WebPoolWorker
     from openadapt_flow.ir import Workflow
     from openadapt_flow.runtime import Replayer
-    from openadapt_flow.runtime.worklist_pool import PoolPolicy, run_worklist_pool
 
-    if a.profile and a.workers != 1:
-        raise SystemExit("--profile needs --workers 1")
-    if a.page_quiet_ms is not None:
+    os.environ.setdefault("OPENADAPT_FLOW_BROWSER", "bundled")
+    os.environ["THROUGHPUT_UI_PORT"] = opts["ui_port"]
+    os.environ["THROUGHPUT_API_PORT"] = opts["api_port"]
+    if opts.get("ocr_threads") is not None:
+        os.environ["OPENADAPT_FLOW_OCR_THREADS"] = str(opts["ocr_threads"])
+    if opts.get("page_quiet_ms") is not None:
         from openadapt_flow.vision import settle as settle_mod
 
-        settle_mod.PAGE_QUIET_WINDOW_S = a.page_quiet_ms / 1000.0
-    os.environ.setdefault("OPENADAPT_FLOW_BROWSER", "bundled")
-    demo = _demo_module()
-    out = Path(a.out) / a.tag
-    out.mkdir(parents=True, exist_ok=False)
-    fixture = make_fixture(Path(a.fixture_state))
-    t = time.time()
-    digest = fixture.reset()
-    clerks = add_clerks(fixture)
-    seed = fixture.token_session("actor").post(
-        fixture.api_base_url + "/apis/default/api/patient",
-        json=dict(SyntheticPatientSpec(**EXISTING_ROSA).fields),
-    ).status_code
-    rows = synthetic_referrals(a.items)
-    if a.halt_at is not None:
-        rows[a.halt_at] = dict(POSSIBLE_DUPLICATE)
-    before_ids = {r["id"] for r in sql_patients(fixture)}
-    bundle = Path(a.bundle)
+        settle_mod.PAGE_QUIET_WINDOW_S = opts["page_quiet_ms"] / 1000.0
+    demo = sys.modules.get("openemr_local_demo") or _demo_module()
+    fixture = make_fixture(Path(opts["fixture_state"]))
+    bundle = Path(opts["bundle"])
     workflow = Workflow.load(bundle)
-    engine_sha = os.popen(f"git -C {FLOW} rev-parse HEAD").read().strip()
-    meta = {
-        "tag": a.tag, "workers": a.workers, "items": a.items, "window": a.window,
-        "halt_at": a.halt_at, "profile": a.profile, "engine_sha": engine_sha,
-        "page_quiet_ms": a.page_quiet_ms or 100,
-        "engine_dirty": bool(os.popen(f"git -C {FLOW} status --porcelain -- openadapt_flow").read().strip()),
-        "bundle_digest": getattr(workflow.manifest, "content_digest", None),
-        "baseline": digest[:12], "seed_status": seed, "setup_s": round(time.time() - t, 2),
-        "started": time.strftime("%Y-%m-%d %H:%M:%S"),
-    }
-    ensure_chromium_installed()
-    importlib.import_module("openadapt_flow.vision.ocr")._get_engine()  # load the OCR model before the clock, as a warm worker would
     values = fixture._runtime_values()
 
     class _Clerk:
-        def __init__(self, user: str) -> None:
-            self.user = user
-            self.ui_base_url = fixture.ui_base_url
+        ui_base_url = fixture.ui_base_url
 
         def _runtime_values(self) -> dict[str, str]:
-            return {**values, "OPENEMR_ACTOR_USER": self.user}
+            return {**values, "OPENEMR_ACTOR_USER": user}
 
     class _PageOnly:
         def __init__(self, page: Any) -> None:
@@ -315,47 +290,112 @@ def run(a: argparse.Namespace) -> dict[str, Any]:
         if frame.locator("#form_fname").input_value() != "":
             raise RuntimeError("the New Patient form was not blank")
 
-    sessions: dict[str, Any] = {}
+    session: list[Any] = []
 
-    def run_item(user: str):
-        def _run(page: Any, idx: int, row: dict[str, Any], item_dir: Path, pipeline: Any) -> Any:
-            spec = SyntheticPatientSpec(**row)
-            if user not in sessions:
-                sessions[user] = fixture.token_session("oracle")
-            oracle = OpenEMRPatientOracle(fixture.api_base_url, sessions[user], spec)
-            backend = demo._BasePlaywrightBackend(page)
-            prof = None
-            if a.profile:
-                from benchmark.openemr_throughput.profiler import RunProfiler
+    def run_item(page: Any, idx: int, row: dict[str, Any], item_dir: Path, pipeline: Any) -> Any:
+        spec = SyntheticPatientSpec(**row)
+        if not session:
+            session.append(fixture.token_session("oracle"))
+        oracle = OpenEMRPatientOracle(fixture.api_base_url, session[0], spec)
+        backend = demo._BasePlaywrightBackend(page)
+        prof = None
+        if opts.get("profile"):
+            from benchmark.openemr_throughput.profiler import RunProfiler
 
-                prof = RunProfiler()
-                prof.install(backend)
-            try:
-                with (prof.span("task") if prof else _null()):
-                    rep = Replayer(
-                        backend, effect_verifier=oracle.verifier, readback_pipeline=pipeline
-                    ).run(workflow, params=spec.params(), bundle_dir=bundle, run_dir=item_dir)
-            finally:
-                if prof:
-                    prof.uninstall()
+            prof = RunProfiler()
+            prof.install(backend)
+        try:
+            with (prof.span("task") if prof else _null()):
+                rep = Replayer(
+                    backend, effect_verifier=oracle.verifier, readback_pipeline=pipeline
+                ).run(workflow, params=spec.params(), bundle_dir=bundle, run_dir=item_dir)
+        finally:
             if prof:
-                (item_dir / "profile.json").write_text(json.dumps(
-                    {"buckets": prof.buckets(), "calls": prof.summary(),
-                     "parents": prof.parents(), "steps": prof.step_buckets()}, indent=1))
-            if not a.keep_pngs:
-                for png in (item_dir / "steps").glob("*.png"):
-                    png.unlink()
-            return rep
-        return _run
+                prof.uninstall()
+        if prof:
+            (item_dir / "profile.json").write_text(json.dumps(
+                {"buckets": prof.buckets(), "calls": prof.summary(),
+                 "parents": prof.parents(), "steps": prof.step_buckets()}, indent=1))
+        if not opts.get("keep_pngs"):
+            for png in (item_dir / "steps").glob("*.png"):
+                png.unlink()
+        return rep
 
-    workers = [
-        WebPoolWorker(
-            name=user, entry_url=fixture.ui_base_url, run_item_on_page=run_item(user),
-            sign_in=(lambda page, user=user: demo._preauthenticate_browser(_PageOnly(page), _Clerk(user))),
-            open_entry=open_form, readback_window=a.window,
-        )
-        for user in clerks[: a.workers]
-    ]
+    worker = WebPoolWorker(
+        name=user, entry_url=fixture.ui_base_url, run_item_on_page=run_item,
+        sign_in=lambda page: demo._preauthenticate_browser(_PageOnly(page), _Clerk()),
+        open_entry=open_form, readback_window=opts.get("window", 0),
+    )
+    importlib.import_module("openadapt_flow.vision.ocr")._get_engine()
+    return worker
+
+
+def run(a: argparse.Namespace) -> dict[str, Any]:
+    from openadapt_flow._browser_setup import ensure_chromium_installed
+    from openadapt_flow.benchmark.openemr_local import (
+        SyntheticPatientSpec,
+    )
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.runtime.worklist_pool import PoolPolicy, run_worklist_pool
+
+    if a.profile and a.workers != 1:
+        raise SystemExit("--profile needs --workers 1")
+    if a.ocr_threads is not None:
+        os.environ["OPENADAPT_FLOW_OCR_THREADS"] = str(a.ocr_threads)
+    if a.page_quiet_ms is not None:
+        from openadapt_flow.vision import settle as settle_mod
+
+        settle_mod.PAGE_QUIET_WINDOW_S = a.page_quiet_ms / 1000.0
+    os.environ.setdefault("OPENADAPT_FLOW_BROWSER", "bundled")
+    _demo_module()  # registers the module for build_worker in this process
+    out = Path(a.out) / a.tag
+    out.mkdir(parents=True, exist_ok=False)
+    fixture = make_fixture(Path(a.fixture_state))
+    t = time.time()
+    digest = fixture.reset()
+    clerks = add_clerks(fixture)
+    seed = fixture.token_session("actor").post(
+        fixture.api_base_url + "/apis/default/api/patient",
+        json=dict(SyntheticPatientSpec(**EXISTING_ROSA).fields),
+    ).status_code
+    rows = synthetic_referrals(a.items)
+    if a.halt_at is not None:
+        rows[a.halt_at] = dict(POSSIBLE_DUPLICATE)
+    before_ids = {r["id"] for r in sql_patients(fixture)}
+    bundle = Path(a.bundle)
+    workflow = Workflow.load(bundle)
+    engine_sha = os.popen(f"git -C {FLOW} rev-parse HEAD").read().strip()
+    meta = {
+        "tag": a.tag, "workers": a.workers, "items": a.items, "window": a.window,
+        "halt_at": a.halt_at, "profile": a.profile, "engine_sha": engine_sha,
+        "page_quiet_ms": a.page_quiet_ms or 100,
+        "ocr_threads": a.ocr_threads,
+        "engine_dirty": bool(os.popen(f"git -C {FLOW} status --porcelain -- openadapt_flow").read().strip()),
+        "bundle_digest": getattr(workflow.manifest, "content_digest", None),
+        "baseline": digest[:12], "seed_status": seed, "setup_s": round(time.time() - t, 2),
+        "started": time.strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    ensure_chromium_installed()
+    opts = {
+        "fixture_state": str(a.fixture_state), "bundle": str(a.bundle),
+        "ui_port": os.environ.get("THROUGHPUT_UI_PORT", "9911"),
+        "api_port": os.environ.get("THROUGHPUT_API_PORT", "9910"),
+        "window": a.window, "profile": a.profile, "keep_pngs": a.keep_pngs,
+        "page_quiet_ms": a.page_quiet_ms, "ocr_threads": a.ocr_threads,
+    }
+    if a.processes:
+        from openadapt_flow.runtime.worklist_pool import ProcessWorker
+
+        workers = [
+            ProcessWorker(user, "benchmark.openemr_throughput.harness:build_worker",
+                          {"user": user, "opts": opts})
+            for user in clerks[: a.workers]
+        ]
+    else:
+        # Load the OCR model before the clock, as a warm worker would.
+        importlib.import_module("openadapt_flow.vision.ocr")._get_engine()
+        workers = [build_worker(user, opts) for user in clerks[: a.workers]]
+    meta["processes"] = bool(a.processes)
     policy = PoolPolicy(workers=a.workers, readback_window=a.window,
                         items_independent=True, max_workers=8)
     free_gb = shutil.disk_usage(str(out)).free / 1e9
@@ -398,8 +438,14 @@ def run(a: argparse.Namespace) -> dict[str, Any]:
         "sign_in_s": {w.name: round(w.open_s, 2) for w in report.per_worker},
         "counts": report.counts(), "stop": report.stop, "items_run": len(ran),
         "saved_correct": len(saved),
-        "wrong_or_extra_charts": sum(1 for i in items if not i["correct"] and i["state"] != "pending")
-        + sum(1 for i in items if i["state"] == "pending" and i["new_charts"]),
+        # A wrong write: a chart that doesn't match its item, a second chart,
+        # or a chart for an item that never ran. A halt that saved nothing is
+        # not one of these; it is in not_saved.
+        "wrong_or_extra_charts": sum(
+            1 for i in items
+            if (i["new_charts"] >= 1 and not i["correct"]) or i["new_charts"] > 1
+        ),
+        "not_saved": sum(1 for i in ran if i["new_charts"] == 0 and not i["duplicate_case"]),
         "new_charts_total": len(new_rows),
         "entries_per_hour": round(len(saved) * 3600 / wall, 1),
         "written_after_failed_readback": report.written_after_failed_readback,
@@ -433,9 +479,13 @@ def main() -> None:
     r.add_argument("--window", type=int, default=0)
     r.add_argument("--halt-at", type=int, default=None)
     r.add_argument("--profile", action="store_true")
+    r.add_argument("--ocr-threads", type=int, default=None,
+                   help="OCR engine threads (OPENADAPT_FLOW_OCR_THREADS); default all cores")
     r.add_argument("--page-quiet-ms", type=int, default=None,
                    help="page-quiet settle window (runtime.page_quiet_ms); default 100")
     r.add_argument("--keep-pngs", action="store_true")
+    r.add_argument("--processes", action="store_true",
+                   help="run each worker in its own process (ProcessWorker)")
     r.add_argument("--gate-load", type=float, default=16.0)
     r.add_argument("--gate-max-wait-s", type=float, default=7200.0)
     r.add_argument("--results", default=str(HERE / "results" / "runs.jsonl"))

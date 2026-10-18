@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import queue
 import sqlite3
 import threading
 import time
@@ -756,3 +757,156 @@ def cookie_fingerprint(cookies: Iterable[Mapping[str, Any]]) -> Optional[str]:
     if not parts:
         return None
     return hashlib.sha256("\n".join(parts).encode()).hexdigest()
+
+
+# -- process-isolated workers ------------------------------------------------
+#
+# Workers in one Python process share one interpreter lock. Browser automation
+# makes many small calls per step, so above a few workers they wait on each
+# other. A ProcessWorker runs the real worker in its own process; the pool, the
+# queue and the stop flag are unchanged (the queue is SQLite, which is safe
+# across processes).
+
+
+def _child_main(conn: Any, factory: str, kwargs: dict[str, Any]) -> None:
+    import importlib
+    import uuid
+
+    module, _, attr = factory.partition(":")
+    lock = threading.Lock()
+
+    def send(msg: tuple[Any, ...]) -> None:
+        with lock:
+            conn.send(msg)
+
+    worker = None
+    try:
+        worker = getattr(importlib.import_module(module), attr)(**kwargs)
+        while True:
+            cmd = conn.recv()
+            try:
+                if cmd[0] == "open":
+                    worker.open()
+                    send(("ok", worker.session_fingerprint()))
+                elif cmd[0] == "run":
+                    _, idx, row, item_dir = cmd
+                    out = worker.run_item(idx, row, Path(item_dir))
+                    token = None
+                    if out.pending_readback is not None:
+                        token = uuid.uuid4().hex
+
+                        def _settled(fut: Future, token: str = token) -> None:
+                            try:
+                                state, detail = fut.result()
+                                send(("settled", token, state, detail, None))
+                            except Exception as exc:  # noqa: BLE001
+                                send(("settled", token, None, None, repr(exc)[:300]))
+
+                        out.pending_readback.add_done_callback(_settled)
+                    send(("ok", out.state, out.detail, token))
+                elif cmd[0] == "close":
+                    worker.close()
+                    send(("ok",))
+                    return
+            except Exception as exc:  # noqa: BLE001 - reported to the parent
+                send(("error", f"{type(exc).__name__}: {exc}"[:500]))
+    except (EOFError, OSError):
+        return
+    finally:
+        conn.close()
+
+
+class ProcessWorker:
+    """A :class:`PoolWorker` whose real worker runs in a child process.
+
+    ``factory`` is ``"module:function"``; the child imports it and calls it
+    with ``kwargs`` (which must pickle) to build the real worker. Each call
+    the pool makes is forwarded and waited for; a pipelined read-back settles
+    when the child reports it.
+    """
+
+    def __init__(self, name: str, factory: str, kwargs: Mapping[str, Any]) -> None:
+        self.name = name
+        self._factory = factory
+        self._kwargs = dict(kwargs)
+        self._replies: "queue.Queue[tuple[Any, ...]]" = queue.Queue()
+        self._pending: dict[str, Future] = {}
+        self._lock = threading.Lock()
+        self._fingerprint: Optional[str] = None
+        self._proc: Any = None
+        self._conn: Any = None
+
+    def _read(self) -> None:
+        while True:
+            try:
+                msg = self._conn.recv()
+            except (EOFError, OSError):
+                with self._lock:
+                    pending, self._pending = self._pending, {}
+                for fut in pending.values():
+                    if not fut.done():
+                        fut.set_exception(RuntimeError("worker process exited"))
+                self._replies.put(("error", "worker process exited"))
+                return
+            if msg[0] == "settled":
+                _, token, state, detail, error = msg
+                with self._lock:
+                    fut = self._pending.pop(token, None)
+                if fut is None:
+                    continue
+                if error is not None:
+                    fut.set_exception(RuntimeError(error))
+                else:
+                    fut.set_result((state, detail))
+            elif msg[0] == "ok" and len(msg) == 4 and msg[3] is not None:
+                # A run reply with a pending read-back: register its future
+                # here, before the child can report the settlement.
+                fut = Future()
+                with self._lock:
+                    self._pending[msg[3]] = fut
+                self._replies.put((*msg, fut))
+            else:
+                self._replies.put(msg)
+
+    def _call(self, *cmd: Any) -> tuple[Any, ...]:
+        self._conn.send(cmd)
+        reply = self._replies.get()
+        if reply[0] == "error":
+            raise RuntimeError(f"worker {self.name}: {reply[1]}")
+        return reply
+
+    def open(self) -> None:
+        import multiprocessing
+
+        ctx = multiprocessing.get_context("spawn")
+        self._conn, child = ctx.Pipe()
+        self._proc = ctx.Process(
+            target=_child_main,
+            args=(child, self._factory, self._kwargs),
+            name=f"worklist-{self.name}",
+            daemon=True,
+        )
+        self._proc.start()
+        child.close()
+        threading.Thread(target=self._read, daemon=True).start()
+        self._fingerprint = self._call("open")[1]
+
+    def session_fingerprint(self) -> Optional[str]:
+        return self._fingerprint
+
+    def run_item(self, idx: int, row: dict[str, Any], item_dir: Path) -> ItemRun:
+        reply = self._call("run", idx, row, str(item_dir))
+        state, detail = reply[1], reply[2]
+        pending = reply[4] if len(reply) > 4 else None
+        return ItemRun(state=state, detail=detail, pending_readback=pending)
+
+    def close(self) -> None:
+        if self._proc is None:
+            return
+        try:
+            if self._proc.is_alive():
+                self._call("close")
+        finally:
+            self._proc.join(timeout=60)
+            if self._proc.is_alive():
+                self._proc.kill()

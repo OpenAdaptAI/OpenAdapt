@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import difflib
 import hashlib
+import os
 import threading
 from collections import OrderedDict
 from typing import Any
@@ -62,7 +63,15 @@ def _get_engine() -> Any:
                 else:
                     from rapidocr_onnxruntime import RapidOCR
 
-                    _engine = RapidOCR()
+                    # Parallel worklist workers share this engine; capping its
+                    # threads stops N concurrent calls from each claiming
+                    # every core. Unset keeps onnxruntime's default.
+                    threads = os.environ.get("OPENADAPT_FLOW_OCR_THREADS")
+                    _engine = (
+                        RapidOCR(intra_op_num_threads=int(threads))
+                        if threads
+                        else RapidOCR()
+                    )
     return _engine
 
 

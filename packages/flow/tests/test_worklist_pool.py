@@ -353,3 +353,79 @@ def test_cookie_fingerprint_tells_sessions_apart() -> None:
     assert cookie_fingerprint(a) != cookie_fingerprint(b)
     assert cookie_fingerprint(a) == cookie_fingerprint(list(a))
     assert cookie_fingerprint([]) is None
+
+
+def make_process_fake(name: str, fail_idx: int = -1, pipelined: bool = False) -> Any:
+    """Factory the child process imports (see ProcessWorker)."""
+
+    class _W(FakeWorker):
+        def open(self) -> None:
+            self.thread = threading.get_ident()
+
+        def run_item(self, idx: int, row: dict[str, Any], item_dir: Path) -> ItemRun:
+            item_dir.mkdir(parents=True, exist_ok=True)
+            (item_dir / "ran_in_pid").write_text(str(__import__("os").getpid()))
+            if not pipelined:
+                state = HALTED if idx == fail_idx else VERIFIED
+                return ItemRun(
+                    state=state, detail={"halt_reason": "x"} if state == HALTED else {}
+                )
+            fut: Future = Future()
+
+            def later() -> None:
+                time.sleep(0.05)
+                fut.set_result(
+                    (RECONCILIATION_REQUIRED, {"halt_reason": "differs"})
+                    if idx == fail_idx
+                    else (VERIFIED, {})
+                )
+
+            threading.Thread(target=later, daemon=True).start()
+            return ItemRun(state=VERIFIED, pending_readback=fut)
+
+    return _W(name, fingerprint=f"fp-{name}")
+
+
+def test_process_workers_run_in_their_own_processes(tmp_path: Path) -> None:
+    import os
+
+    from openadapt_flow.runtime.worklist_pool import ProcessWorker
+
+    workers = [
+        ProcessWorker(
+            f"p{i}", "tests.test_worklist_pool:make_process_fake", {"name": f"p{i}"}
+        )
+        for i in range(3)
+    ]
+    report = run_worklist_pool(_rows(12), workers, run_dir=tmp_path, policy=_policy(3))
+    assert report.success and report.counts() == {VERIFIED: 12}
+    pids = {(d / "ran_in_pid").read_text() for d in (tmp_path / "items").iterdir()}
+    assert str(os.getpid()) not in pids and len(pids) == 3
+
+
+def test_process_worker_halt_and_pipelined_failure(tmp_path: Path) -> None:
+    from openadapt_flow.runtime.worklist_pool import ProcessWorker
+
+    halt = [
+        ProcessWorker(
+            "h",
+            "tests.test_worklist_pool:make_process_fake",
+            {"name": "h", "fail_idx": 2},
+        )
+    ]
+    report = run_worklist_pool(
+        _rows(8), halt, run_dir=tmp_path / "a", policy=_policy(1)
+    )
+    assert report.stop is not None and report.stop["idx"] == 2
+    piped = [
+        ProcessWorker(
+            "q",
+            "tests.test_worklist_pool:make_process_fake",
+            {"name": "q", "fail_idx": 3, "pipelined": True},
+        )
+    ]
+    report = run_worklist_pool(
+        _rows(10), piped, run_dir=tmp_path / "b", policy=_policy(1, readback_window=1)
+    )
+    assert report.stop is not None and report.stop["idx"] == 3
+    assert report.written_after_failed_readback["3"] == [4]
