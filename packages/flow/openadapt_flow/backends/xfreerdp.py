@@ -160,6 +160,67 @@ class RdpTarget:
     ignore_certificate: bool = False
 
 
+#: Schema tag of a saved session file.
+SESSION_SCHEMA = "openadapt.freerdp-session/v1"
+
+
+@dataclass(frozen=True)
+class RdpGateway:
+    """An RD Gateway the client connects through. Holds no secret."""
+
+    host: str
+    port: int = 443
+
+
+def save_session(
+    path: Path,
+    target: RdpTarget,
+    profile: Optional[SessionProfile] = None,
+    gateway: Optional[RdpGateway] = None,
+) -> Path:
+    """Write a session file: where to connect and the fixed display profile.
+
+    The file holds no password. The on-prem installer reads its ``target``
+    and ``gateway`` hosts to build the no-outbound allow list.
+    """
+    profile = profile or SessionProfile()
+    body = {
+        "schema": SESSION_SCHEMA,
+        "target": asdict(target),
+        "profile": asdict(profile),
+        "profile_sha256": profile.sha256,
+        "gateway": asdict(gateway) if gateway is not None else None,
+    }
+    path = Path(path)
+    path.write_text(json.dumps(body, indent=2, sort_keys=True) + "\n")
+    return path
+
+
+def load_session(
+    path: Path,
+) -> tuple[RdpTarget, SessionProfile, Optional[RdpGateway]]:
+    """Read a file written by :func:`save_session`.
+
+    Raises:
+        ValueError: The file is not a session file, has unknown fields, or
+            its profile no longer matches the recorded digest.
+    """
+    data = json.loads(Path(path).read_text())
+    if not isinstance(data, dict) or data.get("schema") != SESSION_SCHEMA:
+        raise ValueError(f"{path}: not a {SESSION_SCHEMA} file")
+    try:
+        target = RdpTarget(**data["target"])
+        profile = SessionProfile(**(data.get("profile") or {}))
+        raw_gateway = data.get("gateway")
+        gateway = RdpGateway(**raw_gateway) if raw_gateway else None
+    except (KeyError, TypeError) as exc:
+        raise ValueError(f"{path}: {exc}") from exc
+    recorded = data.get("profile_sha256")
+    if recorded is not None and recorded != profile.sha256:
+        raise ValueError(f"{path}: profile does not match profile_sha256")
+    return target, profile, gateway
+
+
 def _require(tool: str) -> str:
     path = shutil.which(tool)
     if path is None:

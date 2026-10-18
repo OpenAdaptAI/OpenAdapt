@@ -185,3 +185,44 @@ def test_live_round_trip_through_backend():
     jobs = sorted(data)[:3]
     out = bench.run_size(1, jobs, data)
     assert out["ok"] >= 2
+
+
+def test_session_file_round_trip(tmp_path):
+    from openadapt_flow.backends.xfreerdp import (
+        RdpGateway,
+        RdpTarget,
+        SessionProfile,
+        load_session,
+        save_session,
+    )
+
+    target = RdpTarget(host="10.20.0.15", port=3390, username="svc-replay")
+    profile = SessionProfile(width=1440, height=900)
+    gateway = RdpGateway(host="rdgw.internal.example")
+    path = save_session(tmp_path / "s.json", target, profile, gateway)
+    body = path.read_text()
+    assert "password" not in body
+    assert load_session(path) == (target, profile, gateway)
+
+
+def test_session_file_rejects_edited_profile(tmp_path):
+    import json
+
+    import pytest
+
+    from openadapt_flow.backends.xfreerdp import (
+        RdpTarget,
+        load_session,
+        save_session,
+    )
+
+    path = save_session(tmp_path / "s.json", RdpTarget(host="10.20.0.15"))
+    data = json.loads(path.read_text())
+    data["profile"]["lossless"] = False
+    path.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="profile_sha256"):
+        load_session(path)
+    data["schema"] = "other"
+    path.write_text(json.dumps(data))
+    with pytest.raises(ValueError, match="not a"):
+        load_session(path)

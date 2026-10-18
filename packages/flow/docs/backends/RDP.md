@@ -180,6 +180,20 @@ transport = XFreeRDPTransport(
 backend = FreeRDPBackend(transport)
 ```
 
+A session can be saved to a file and loaded back. The file holds the
+target, the profile and its digest, and an optional RD Gateway, but no
+password. The on-prem installer reads its target and gateway hosts to build
+the no-outbound allow list (`install-macos.sh --session-profile FILE`).
+
+```python
+from openadapt_flow.backends.xfreerdp import load_session, save_session
+
+save_session("session.json", RdpTarget("10.0.0.5"), SessionProfile())
+target, profile, gateway = load_session("session.json")
+```
+
+`load_session` refuses a file whose profile was edited after it was saved.
+
 `SessionPool` runs several sessions in parallel. All sessions in a pool must
 share one profile. `pool.run(jobs, work)` leases one session per job and
 returns per-job timing and errors.
