@@ -103,12 +103,13 @@ def test_each_item_is_claimed_exactly_once(tmp_path: Path) -> None:
 def test_forced_halt_on_one_worker_stops_the_others(tmp_path: Path) -> None:
     """A halt on worker w1 stops new claims on every worker; in-flight items finish."""
 
-    halted = threading.Event()
-    in_flight_finished: list[int] = []
+    halted_idx: list[int] = []
+    w1_items: list[int] = []
 
     def halting(idx: int) -> ItemRun:
-        if idx == 5:
-            halted.set()
+        w1_items.append(idx)
+        if len(w1_items) == 2:  # w1's second item halts, whatever its index
+            halted_idx.append(idx)
             return ItemRun(
                 state=HALTED,
                 detail={
@@ -118,36 +119,30 @@ def test_forced_halt_on_one_worker_stops_the_others(tmp_path: Path) -> None:
             )
         return ItemRun(state=VERIFIED)
 
-    def slow_peer(idx: int) -> ItemRun:
-        # A peer item that is mid-flight when the halt lands still finishes
-        # and records its own result.
-        if halted.is_set():
-            in_flight_finished.append(idx)
-        return ItemRun(state=VERIFIED)
-
     w1 = FakeWorker("w1", halting, delay_s=0.01)
-    peers = [FakeWorker(f"w{i}", slow_peer, delay_s=0.03) for i in (2, 3, 4)]
+    peers = [FakeWorker(f"w{i}", delay_s=0.03) for i in (2, 3, 4)]
     report = run_worklist_pool(
         _rows(100), [w1, *peers], run_dir=tmp_path, policy=_policy(4)
     )
 
     assert not report.success
     assert report.stop is not None
-    assert report.stop["worker"] == "w1" and report.stop["idx"] == 5
+    assert report.stop["worker"] == "w1" and report.stop["idx"] == halted_idx[0]
     assert "identity check failed" in report.stop["reason"]
     states = {item["idx"]: item["state"] for item in report.items}
-    assert states[5] == HALTED
+    assert states[halted_idx[0]] == HALTED
     # Far fewer than 100 items ran: claims stopped everywhere.
     ran = [idx for w in (w1, *peers) for idx in w.ran]
     assert len(ran) < 40
-    # Every item that ran has a final result; nothing is left "claimed".
+    # Every item that ran, including peers' in-flight ones, has a final
+    # result; nothing is left "claimed".
     for idx in ran:
         assert states[idx] in {VERIFIED, HALTED}
     assert "pending" in states.values()
     # No worker claimed anything after the stop flag was set.
     stop_at = report.stop["at"]
     for item in report.items:
-        if item["claimed_at"] is not None and item["idx"] != 5:
+        if item["claimed_at"] is not None:
             assert item["claimed_at"] <= stop_at + 0.001
 
 

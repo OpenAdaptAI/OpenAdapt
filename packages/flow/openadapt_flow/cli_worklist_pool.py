@@ -175,6 +175,8 @@ class WebPoolWorker:
     entry_url: str
     run_item_on_page: RunItem
     sign_in: Optional[Callable[[Any], None]] = None
+    #: How to reach the item's start page; default ``page.goto(entry_url)``.
+    open_entry: Optional[Callable[[Any], None]] = None
     cdp_endpoint: Optional[str] = None
     headed: bool = False
     readback_window: int = 0
@@ -217,7 +219,10 @@ class WebPoolWorker:
         return cookie_fingerprint(self._context.cookies())
 
     def run_item(self, idx: int, row: dict[str, Any], item_dir: Path) -> ItemRun:
-        self._page.goto(self.entry_url)
+        if self.open_entry is not None:
+            self.open_entry(self._page)
+        else:
+            self._page.goto(self.entry_url)
         report = self.run_item_on_page(self._page, idx, row, item_dir, self._pipeline)
         return _item_run(report, self._pipeline)
 

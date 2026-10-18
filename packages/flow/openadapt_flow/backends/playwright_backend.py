@@ -548,7 +548,9 @@ _FIELD_GROUP_IDENTITY_JS = r"""(hit) => {
 # hit-tests every candidate through the real frame chain (occlusion, clipping
 # by the parent frame) before believing it.
 _VISIBLE_TEXT_CANDIDATES_JS = r"""(target) => {
-    const norm = (v) => (v || '').replace(/\s+/g, '').toLowerCase();
+    // Letters and digits only: recorded texts come from OCR, which drops
+    // spaces and misreads punctuation ("October-2026-" for "October 2026").
+    const norm = (v) => (v || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
     const want = norm(target);
     if (!want || !document.body) return [];
     const out = [];
@@ -591,7 +593,9 @@ _VISIBLE_TEXT_CANDIDATES_JS = r"""(target) => {
 # At a hit-tested point: is the topmost element (or an ancestor) the one whose
 # rendered text contains the target? Proves the text is not covered.
 _TEXT_AT_POINT_JS = r"""([px, py, target]) => {
-    const norm = (v) => (v || '').replace(/\s+/g, '').toLowerCase();
+    // Letters and digits only: recorded texts come from OCR, which drops
+    // spaces and misreads punctuation ("October-2026-" for "October 2026").
+    const norm = (v) => (v || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
     const want = norm(target);
     // The topmost element at the point, or one of its ancestors, must be a
     // DEEPEST holder of the text (no child holds it too). Climbing to a big
@@ -2830,9 +2834,10 @@ class PlaywrightBackend:
         """Is ``text`` rendered visibly in the viewport, per the DOM?
 
         Returns ``True`` only when some element's rendered text (``innerText``)
-        contains ``text`` as an exact case-insensitive substring once all
-        whitespace is removed (the OCR tier's squash; recorded OCR texts often
-        lose spaces), and
+        contains ``text`` as an exact case-insensitive substring once
+        everything but letters and digits is removed (recorded OCR texts often
+        lose spaces and misread punctuation; the OCR tier itself accepts an
+        80% contiguous match, so this is still the stricter check), and
         that element is not hidden or transparent, intersects its document's
         viewport, AND a hit test through the real frame chain at that point
         lands on it (so text under a dialog, clipped by its frame, or scrolled
