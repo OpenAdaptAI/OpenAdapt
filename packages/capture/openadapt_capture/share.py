@@ -1,7 +1,12 @@
 """Share recordings between computers using Magic Wormhole.
 
+``send`` scrubs a copy of the recording first and sends only the copy (see
+:mod:`openadapt_capture.share_scrub`). Sending the raw recording needs
+``--unscrubbed --reason ...``, and that choice is recorded.
+
 Usage:
     capture share send ./my_recording
+    capture share send ./my_recording --unscrubbed --reason "synthetic demo"
     capture share receive 7-guitarist-revenge
 """
 
@@ -79,15 +84,82 @@ def _ensure_wormhole() -> str | None:
     return _install_wormhole()
 
 
-def send(recording_dir: str) -> str | None:
+OPT_OUT_LEDGER = "share-unscrubbed.jsonl"
+OPT_OUT_MARKER = "UNSCRUBBED_SHARE.json"
+
+
+def opt_out_ledger_path() -> Path:
+    """Local file where every unscrubbed share is recorded."""
+    from openadapt_capture.ffmpeg_runtime import data_root
+
+    return data_root() / OPT_OUT_LEDGER
+
+
+def _record_opt_out(recording_path: Path, reason: str) -> dict:
+    """Append an unscrubbed-share record to the local ledger and return it."""
+    import getpass
+    import json
+    import time
+
+    files = [f for f in recording_path.rglob("*") if f.is_file()]
+    try:
+        user = getpass.getuser()
+    except Exception:  # noqa: BLE001 - no login name in some sandboxes
+        user = None
+    record = {
+        "schema": "openadapt.capture.share-unscrubbed/v1",
+        "recorded_at": time.time(),
+        "user": user,
+        "recording": str(recording_path.resolve()),
+        "file_count": len(files),
+        "size_bytes": sum(f.stat().st_size for f in files),
+        "reason": reason,
+    }
+    ledger = opt_out_ledger_path()
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    with ledger.open("a", encoding="utf-8") as handle:
+        handle.write(json.dumps(record, sort_keys=True) + "\n")
+    return record
+
+
+def _zip_folder(folder: Path, zip_path: Path, extra: dict | None = None) -> None:
+    import json
+
+    with ZipFile(zip_path, "w", ZIP_DEFLATED, compresslevel=6) as zf:
+        for file in folder.rglob("*"):
+            if file.is_file() and not file.is_symlink():
+                zf.write(file, file.relative_to(folder.parent))
+        if extra is not None:
+            zf.writestr(
+                f"{folder.name}/{OPT_OUT_MARKER}",
+                json.dumps(extra, indent=2, sort_keys=True),
+            )
+
+
+def send(
+    recording_dir: str,
+    unscrubbed: bool = False,
+    reason: str | None = None,
+) -> str | None:
     """Send a recording via Magic Wormhole.
+
+    By default the recording is scrubbed first: a scrubbed copy is built in a
+    temporary folder and only that copy is sent. Scrubbing needs the
+    ``privacy`` extra; without it nothing is sent.
 
     Args:
         recording_dir: Path to the recording directory.
+        unscrubbed: Send the raw recording without scrubbing. Requires
+            ``reason``. The choice is written to the local ledger and to an
+            ``UNSCRUBBED_SHARE.json`` file inside the archive.
+        reason: Why the raw recording must be sent (required with
+            ``unscrubbed``).
 
     Returns:
-        The wormhole code if successful, None otherwise.
+        ``"sent"`` if the transfer finished, None otherwise.
     """
+    from openadapt_capture.share_scrub import ShareScrubError, scrub_recording
+
     recording_path = Path(recording_dir)
 
     if not recording_path.exists():
@@ -98,22 +170,37 @@ def send(recording_dir: str) -> str | None:
         print(f"✗ Not a directory: {recording_path}")
         return None
 
-    wormhole_path = _ensure_wormhole()
-    if not wormhole_path:
+    if unscrubbed and not (reason and str(reason).strip()):
+        print("✗ --unscrubbed needs --reason explaining why the raw recording")
+        print("  must leave this computer. The reason is recorded.")
         return None
 
-    # Create a temporary zip file
-    zip_name = f"{recording_path.name}.zip"
-
     with tempfile.TemporaryDirectory() as tmpdir:
-        zip_path = Path(tmpdir) / zip_name
+        tmp = Path(tmpdir)
+        opt_out: dict | None = None
+        if unscrubbed:
+            folder = recording_path
+            opt_out = _record_opt_out(recording_path, str(reason).strip())
+            print("! Sending the RAW recording without scrubbing.")
+            print(f"  Recorded in {opt_out_ledger_path()}")
+        else:
+            print(f"Scrubbing a copy of {recording_path.name}...")
+            try:
+                folder = scrub_recording(recording_path, tmp / "scrubbed")
+            except ShareScrubError as exc:
+                print(f"✗ {exc}")
+                print("  Nothing was sent. To send the raw recording anyway, run")
+                print("  capture share send PATH --unscrubbed --reason '...'")
+                return None
+            _print_scrub_summary(folder)
 
-        print(f"Compressing {recording_path.name}...")
-        with ZipFile(zip_path, "w", ZIP_DEFLATED, compresslevel=6) as zf:
-            for file in recording_path.rglob("*"):
-                if file.is_file():
-                    arcname = file.relative_to(recording_path.parent)
-                    zf.write(file, arcname)
+        wormhole_path = _ensure_wormhole()
+        if not wormhole_path:
+            return None
+
+        zip_path = tmp / f"{folder.name}.zip"
+        print(f"Compressing {folder.name}...")
+        _zip_folder(folder, zip_path, extra=opt_out)
 
         size_mb = zip_path.stat().st_size / (1024 * 1024)
         print(f"Compressed to {size_mb:.1f} MB")
@@ -138,6 +225,22 @@ def send(recording_dir: str) -> str | None:
         except KeyboardInterrupt:
             print("\nCancelled")
             return None
+
+
+def _print_scrub_summary(folder: Path) -> None:
+    import json
+
+    from openadapt_capture.share_scrub import MANIFEST_NAME
+
+    manifest = json.loads((folder / MANIFEST_NAME).read_text(encoding="utf-8"))
+    counts = manifest["counts"]
+    print(
+        f"Scrubbed {counts['text_values']} text values and "
+        f"{counts['images']} images."
+    )
+    for item in manifest["withheld"]:
+        print(f"  withheld {item['path']} ({item['reason']})")
+    print("Scrubbing is automatic and can miss data. Review before sharing further.")
 
 
 def receive(code: str, output_dir: str = ".") -> Path | None:
