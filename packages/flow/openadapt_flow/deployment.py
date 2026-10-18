@@ -601,6 +601,24 @@ class RuntimeSection(BaseModel):
     #: :func:`openadapt_flow.runtime.identity.verify_pixel_identity` and
     #: docs/LIMITS.md.
     pixel_verify_enabled: bool = False
+    #: Path to an export of the system of record that lists every identifier
+    #: in the namespace (CSV, JSON or one per line). When set, an OCR identity
+    #: check that abstained only on a look-alike identifier (O/0, l/1, B/8) is
+    #: lifted to verified if a second read from a fresh screenshot agrees and
+    #: exactly one listed ID is in that look-alike class. An operator must
+    #: first confirm the export's source and completeness
+    #: (``openadapt-flow known-ids confirm``); replay refuses to start, and a
+    #: step that needs the list halts, when that confirmation is missing, the
+    #: export's hash changed, or the export is older than
+    #: ``known_ids_max_age_hours``. See :mod:`openadapt_flow.runtime.known_ids`.
+    #: None (default) keeps the halt.
+    known_ids_path: Optional[str] = None
+    #: Identifier column when ``known_ids_path`` is a CSV/TSV export.
+    known_ids_column: Optional[str] = None
+    #: Confirmation record; default ``<known_ids_path>.confirmation.json``.
+    known_ids_confirmation_path: Optional[str] = None
+    #: Oldest export (by its export time) replay will use.
+    known_ids_max_age_hours: float = Field(default=24.0, gt=0)
     #: Font/layout drift check before each recorded click step
     #: (:mod:`openadapt_flow.runtime.layout_drift`). None (default) turns it on
     #: for remote-desktop replays (``rdp``/``citrix``) and off elsewhere;
@@ -1120,6 +1138,19 @@ def build_replayer(
         qualification_environment_observer = BackendQualificationEnvironmentObserver(
             backend
         )
+    known_ids = None
+    if runtime_config is not None and runtime_config.known_ids_path:
+        from openadapt_flow.runtime.known_ids import KnownIdAdmission
+
+        # Raises KnownIdAdmissionHalt (named reason) when the export is not
+        # confirmed, changed since confirmation, or too old: replay does not
+        # start on an unusable list.
+        known_ids = KnownIdAdmission.load(
+            runtime_config.known_ids_path,
+            column=runtime_config.known_ids_column,
+            confirmation_path=runtime_config.known_ids_confirmation_path,
+            max_age_s=runtime_config.known_ids_max_age_hours * 3600.0,
+        )
     return Replayer(
         backend,
         layout_drift=(
@@ -1127,6 +1158,7 @@ def build_replayer(
         ),
         grounder=grounder,
         identity_vlm=appliance.identity_vlm if appliance else None,
+        known_ids=known_ids,
         state_verifier=(appliance.state_verifier if appliance else None),
         allow_model_grounding=allow_egress,
         effect_verifier=effect_verifier,
