@@ -108,6 +108,8 @@ def _step_call(step: Step) -> str:
         return f"    flow.wait(timeout_s={step.timeout_s!r})"
     if step.action is ActionKind.SCROLL:
         return f"    flow.scroll({step.scroll_dx or 0!r}, {step.scroll_dy or 0!r})"
+    if step.action is ActionKind.SWITCH_SURFACE:
+        return f"    flow.switch_surface({step.surface!r})"
     raise ValueError(f"unknown action {step.action!r}")
 
 
