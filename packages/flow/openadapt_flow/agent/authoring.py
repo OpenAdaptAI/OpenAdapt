@@ -61,12 +61,12 @@ __all__ = [
 
 OBSERVE_SCHEMA_VERSION = "openadapt.authoring.observe/v1"
 try:
-    from openadapt_flow.contracts.authoring import (
+    from openadapt_types.authoring import (
         AUTHORING_OBSERVE_SCHEMA as _TYPES_OBSERVE,
     )
 except ImportError:
     try:
-        from openadapt_flow.contracts.authoring import (
+        from openadapt_types.authoring import (
             OBSERVE_SCHEMA_VERSION as _TYPES_OBSERVE,
         )
     except ImportError:
@@ -982,7 +982,7 @@ def _trim_observe(payload: dict[str, Any]) -> dict[str, Any]:
 
 def _validate_observe_types(payload: dict[str, Any]) -> dict[str, Any]:
     try:
-        from openadapt_flow.contracts.authoring import AuthoringObserveV1
+        from openadapt_types.authoring import AuthoringObserveV1
     except ImportError:
         return payload
     try:

@@ -99,6 +99,9 @@ ALLOWED_FIELDS = {
     "receipt_builder_version",
     "external_network_calls",
     "bundle_digest",
+    # Variant-router digests (ReceiptVariant): set and variant digests plus the
+    # variant's admission id. No variant or set name.
+    "variant",
     "receipt_digest",
     "generated_at",
 }

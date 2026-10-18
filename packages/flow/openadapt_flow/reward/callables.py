@@ -29,7 +29,8 @@ from __future__ import annotations
 
 from typing import Any, Mapping, Optional, Protocol
 
-from openadapt_flow.contracts.reward import RewardEvidenceReceiptV1
+from openadapt_types.reward import RewardEvidenceReceiptV1
+
 from openadapt_flow.reward.models import EpisodeDescriptorV1
 
 REWARDS_ROUTE = "/v1/rewards"
