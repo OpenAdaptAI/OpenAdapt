@@ -55,6 +55,14 @@ class ScaffoldRefused(SystemExit):
     """The input has nothing to scaffold from; refuse with a clear message."""
 
 
+NO_WRITE_REFUSAL = (
+    "scaffold-verifier REFUSED: the demonstration has no consequential "
+    "(write-shaped) step to verify. An effect oracle asserts that a "
+    "WRITE landed in a system of record; this input shows only "
+    "read/navigation actions, so there is nothing to scaffold."
+)
+
+
 # ---------------------------------------------------------------------------
 # Target inspection (recording dir vs bundle dir)
 # ---------------------------------------------------------------------------
@@ -451,12 +459,7 @@ def write_draft(source: Path, out_dir: Optional[Path] = None) -> tuple[Path, int
         candidates = candidates_from_recording(source)
 
     if not candidates:
-        raise ScaffoldRefused(
-            "scaffold-verifier REFUSED: the demonstration has no consequential "
-            "(write-shaped) step to verify. An effect oracle asserts that a "
-            "WRITE landed in a system of record; this input shows only "
-            "read/navigation actions, so there is nothing to scaffold."
-        )
+        raise ScaffoldRefused(NO_WRITE_REFUSAL)
 
     text = render_draft_yaml(
         source=source,
@@ -514,6 +517,13 @@ def build_record_check(
     bundle_dir = source if kind == "bundle" else bundle
     if recording_dir is None:
         return None
+    writes = (
+        candidates_from_bundle(bundle_dir)
+        if kind == "bundle" and bundle_dir is not None
+        else candidates_from_recording(recording_dir)
+    )
+    if not writes:
+        raise ScaffoldRefused(NO_WRITE_REFUSAL)
     section = None
     if verifier is not None:
         import yaml

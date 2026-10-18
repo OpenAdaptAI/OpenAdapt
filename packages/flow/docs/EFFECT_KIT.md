@@ -309,8 +309,17 @@ The command looks for a read that returns a record holding them:
   same name (`type: Triage`). `forbid_collateral_loss` stops the run if a
   record that was there before is gone.
 - Recorded values in the read's URL become placeholders (`path_params`,
-  FHIR `search_param_exprs`), so the read is scoped to the run's record.
-- For each other table (database path only): a no-new-rows guard.
+  FHIR `search_param_exprs`), so the read is scoped to the run's record. A
+  path segment that looks like one record's id (an MRN, a number, a UUID)
+  and is not a recorded value keeps the check a draft: it would read the
+  demonstration's record every run. Such segments show as `*` in names and
+  messages.
+- For each other table (database path only): a guard that no row is added.
+- A read whose records carry an `id` gets a second read, `<name>.content`,
+  with `records_drop_fields: [id]`. The first read counts new records by id,
+  so a stray row identical to an existing one still counts. The content read
+  compares records by their fields, so a save that changes or deletes another
+  record (same id, new content) stops the run.
 
 ### Proving it before review
 
@@ -320,7 +329,12 @@ Two tests, both written to `record_check.proof.json`:
    `benchmark/effect_e2e` are applied to the records the recording saw:
    nothing saved, a field dropped, saved twice, saved on another record,
    another record of the same subject destroyed, and a stray row in another
-   table. The check must stop each one and pass the clean save.
+   table, plus another record changed or deleted. The check must stop each
+   one and pass the clean save. A fault the check can't be tested on counts
+   as a miss: if every checked field identifies the subject, another record
+   of the same subject looks like the saved one, so "destroyed" is a miss.
+   Every generated read is built, and each `--db` read is run and compared
+   with the scan, so a read that can't work is a miss too.
 2. **End to end** (`--prove mockmed` or `--prove effect-e2e`). On a fixture
    that injects bad writes at the persistence boundary, each fault runs
    through the real replayer and API actuator with the proposed check as the
@@ -330,7 +344,14 @@ Two tests, both written to `record_check.proof.json`:
 
 A check that misses any fault, or stops the clean save, is written as a
 draft: the file starts with `# DRAFT`, lists each `MISS:`, and the command
-exits 1. A working check exits 0.
+exits 1. So does a check with a write request no read covers, or a table
+`--db` couldn't read (an irregular name, more than 20,000 rows). A working
+check exits 0.
+
+The save is timed from its own write request. The recorder stamps a step
+after the screen settles, so the save's request and the app's read-back come
+before the Save step's time. Reads before the first save request are the
+baseline; reads after the last one are candidates.
 
 On the effect_e2e service, a check built from one REST read (`/api/records`)
 misses the stray billing write, the same blind spot as the REST arm in
@@ -381,6 +402,10 @@ applied to the bundle.
 - The fault classes are a hand-written taxonomy. Passing them is coverage of
   that taxonomy, not a field rate.
 - No model calls. The only network read is the `--verifier` read you name.
+- The end-to-end proof changes free-text values on every run, but keeps
+  identifiers (the fixture's patient must exist). Recorded identifiers are
+  always bound as `{param: ...}`, never written as literals.
+- A demonstration with no write step is refused, as before.
 
 ## A read-back taught by demonstration ("Now show how you'd check it saved")
 
@@ -702,15 +727,20 @@ Per-kind required fields:
 |---|---|---|
 | `onscreen` | (none — auto-derived from the demo) | `readback_region`, `readback_min_ratio` (hand-config fallback) |
 | `ui_readback` | `ui_readback` section: `record_url`, `sign_in` (env-var names for the read-back account), `ready_selector`, `row_selector`, `fields`, `identity` | `url_params`, `empty_selector`, `not_found_selector`, `read_post_paths`, per-field `attribute` / `date_format` / `casefold`, `truncation_markers`, `navigation_timeout_s` |
-| `rest` | `base_url` | `records_path` (may contain `{placeholder}`s), `records_key`, `path_params`, `auth` |
+| `rest` | `base_url` | `records_path` (may contain `{placeholder}`s), `records_key`, `path_params`, `auth`, `records_drop_fields` |
 | `graphql` | `base_url` + `graphql_query` | `graphql_variables` (`{param: ...}` entity binding), `graphql_records_path`, `graphql_freshness_field` + `graphql_freshness_window_s`, `auth` |
-| `fhir` | `base_url` | `resource_type`, `search_params`, `search_param_exprs`, `field_paths`, `access_token_env` or `smart_backend`, `verify_tls` |
-| `sql` | `sql_query` + (`sqlite_database` or `sql_driver`) | `sql_query_params`, `sql_connect_args`, `sql_password_env` |
+| `fhir` | `base_url` | `resource_type`, `search_params`, `search_param_exprs`, `field_paths`, `access_token_env` or `smart_backend`, `verify_tls`, `records_drop_fields` |
+| `sql` | `sql_query` + (`sqlite_database` or `sql_driver`) | `sql_query_params`, `sql_connect_args`, `sql_password_env`, `records_drop_fields` |
 | `file` | `root` | `file_pattern`, `file_min_size`, `file_mtime_window_s`, `file_content_probe` |
 | `email` | `root` | `mail_pattern`, `file_mtime_window_s` (freshness), `file_content_probe` (body regex) |
 | `document` | `root` | `file_pattern`, `document_format` (`json` \| `text`), `document_field_paths`, `document_text_pattern`, `file_mtime_window_s` |
 | `document-hash` | `root` | `glob` |
 | `surfaces` | `surfaces`: name -> one plain verifier config (any kind above) | each effect's `probe` names its surface (`surface=<name>`); an effect naming none, or an unknown one, halts |
+
+`records_drop_fields` (`rest`, `sql`, `fhir`) removes fields from every record
+before judging. `[id]` compares records by content: a record whose id stayed
+the same but whose fields changed reads as one record removed and one added,
+so `forbid_collateral_loss` catches it.
 
 Any kind additionally accepts the evidence-minimization fields
 `evidence_redact_fields` / `evidence_keep_fields` (see "Evidence minimization"

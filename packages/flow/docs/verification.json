@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-18T13:20:41-04:00 (git HEAD commit date)",
+  "generated_at": "2026-10-18T14:11:13-04:00 (git HEAD commit date)",
   "green_check_run": false,
   "green_check_job": null,
   "green_check_scope": [],
@@ -487,7 +487,7 @@
     },
     {
       "id": "record-check-from-app-reads",
-      "claim": "scaffold-verifier builds a record check from the reads the app made after the save (the recording's network capture, a SQLite database read path, or a reviewed verifier section), binds the recorded values to run parameters, guards every other table with a no-new-rows check when a database path is given, and tests the check against injected bad writes before anyone reviews it. A check that misses one is written as a draft with the misses listed. Every effect stays unconfirmed until a person removes the flag.",
+      "claim": "scaffold-verifier builds a record check from the reads the app made after the save (the recording's network capture, a SQLite database read path, or a reviewed verifier section), binds the recorded values to run parameters, guards every other table when a database path is given (no row added, changed or removed), and tests the check against injected bad writes before anyone reviews it. A check that misses one is written as a draft with the misses listed. Every effect stays unconfirmed until a person removes the flag.",
       "tier": "supported",
       "reproducibility": null,
       "surfaces": [
@@ -546,6 +546,18 @@
           "ci_job": "test",
           "junit_status": null,
           "proves": "On the OpenEMR-shaped FHIR R4 fake, the check found from the Observation search refutes partial, duplicate, phantom, wrong-patient and lost-update faults and confirms the clean save."
+        },
+        {
+          "path": "tests/test_record_check_synthesis.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": "test_guards_catch_a_changed_or_deleted_row_through_the_real_read",
+          "node_found": true,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "The generated SQL reads, run against a real SQLite file, refute a save that also changed or deleted a row in another table."
         },
         {
           "path": "tests/test_record_check_synthesis.py",

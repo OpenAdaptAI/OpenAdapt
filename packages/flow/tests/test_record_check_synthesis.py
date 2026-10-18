@@ -93,7 +93,11 @@ def test_rest_read_found_by_recorded_values_and_values_bound(tmp_path, e2e_servi
     assert surface.config["records_key"] == "records"
     # The banner read also returns the saved values; the persisted row wins.
     assert any("/api/ui/last-save" in note for note in proposal.search.notes)
-    [effect] = proposal.effects
+    effect, content = proposal.effects
+    assert content.probe.startswith("surface=api_records.content")
+    assert proposal.verifier["surfaces"]["api_records.content"][
+        "records_drop_fields"
+    ] == ["id"]
     assert effect.match["note"].param == "note"
     assert effect.match["patient_id"].param == "patient_id"
     # The save sent type=Triage as a fixed value: it tells this record apart.
@@ -381,12 +385,17 @@ def test_openemr_patient_list_matches_the_hand_written_check(tmp_path):
     assert surface.config["records_path"] == "/apis/default/api/patient?_limit=1000"
     assert surface.config["records_key"] == "data"
     assert surface.before_recorded
-    [effect] = proposal.effects
+    effect = proposal.effects[0]
     assert {k: v.param for k, v in effect.match.items()} == {k: k for k in params}
     # The form save answered with a redirect; its sent value is read back.
     assert len(proposal.search.write_requests) == 1
     assert proposal.search.uncovered == []
-    assert all(f.ok for f in proposal.faults if f.fault != "collateral_unaudited")
+    # Every checked field identifies the patient, so a lost update to another
+    # chart of the same patient can't be told apart: reported, not credited.
+    missed = {f.fault for f in proposal.faults if not f.ok}
+    assert missed == {"stale", "collateral_unaudited"}
+    results = _results(proposal)
+    assert set(results["changed"]) == set(results["deleted"]) == {"caught"}
 
 
 def test_session_token_reads_and_nested_fields_are_reported(tmp_path):
@@ -452,7 +461,8 @@ def test_verify_run_refuses_until_a_person_removes_the_flags(tmp_path, e2e_servi
     cfg = parse_verify_config(doc)
     verifier = build_effect_verifier(cfg.verifier, proposal.params)
     assert isinstance(verifier, SurfaceRoutedVerifier)
-    assert set(verifier.surfaces) == {s.name for s in proposal.search.surfaces}
+    assert set(verifier.surfaces) == set(proposal.verifier["surfaces"])
+    assert {s.name for s in proposal.search.surfaces} <= set(verifier.surfaces)
 
     from openadapt_flow.verify_run import _tag_reads
 
@@ -692,3 +702,285 @@ def test_cli_falls_back_to_the_todo_draft_without_reads(tmp_path, capsys):
     assert code == 0
     assert "TODO draft" in out
     assert (rec / "effect_contract.yaml").is_file()
+
+
+# ---------------------------------------------------------------------------
+# Review findings: each would have let a broken check be called working
+# ---------------------------------------------------------------------------
+
+
+def _capture(rec: Path, lines: list[dict]) -> None:
+    with (rec / "network.jsonl").open("w") as fh:
+        fh.write(json.dumps({"schema": "openadapt.network-capture/1"}) + "\n")
+        for line in lines:
+            fh.write(json.dumps(line) + "\n")
+
+
+def _db(path: Path, rows: dict[str, list[tuple]]) -> Path:
+    import sqlite3
+
+    conn = sqlite3.connect(path)
+    conn.execute(
+        "CREATE TABLE encounters (id INTEGER PRIMARY KEY, patient_id TEXT, note TEXT)"
+    )
+    conn.execute(
+        "CREATE TABLE billing (id INTEGER PRIMARY KEY, patient_id TEXT, amount TEXT)"
+    )
+    for table, values in rows.items():
+        for value in values:
+            marks = ",".join("?" * len(value))
+            conn.execute(f"INSERT INTO {table} VALUES ({marks})", value)
+    conn.commit()
+    conn.close()
+    return path
+
+
+def test_a_table_too_big_to_scan_keeps_the_check_a_draft(tmp_path, monkeypatch):
+    import openadapt_flow.record_check_synthesis as rcs
+
+    db = _db(
+        tmp_path / "app.db",
+        {
+            "encounters": [(1, "p1", NOTE)],
+            "billing": [(i, "p9", "1.00") for i in range(1, 6)],
+        },
+    )
+    monkeypatch.setattr(rcs, "MAX_SCAN_ROWS", 3)
+    rec = write_recording(tmp_path / "rec", {"patient_id": "p1", "note": NOTE})
+    proposal = synthesize(rec, db_path=db)
+    assert proposal.search.closed_world_basis is None
+    assert any("billing" in item for item in proposal.search.uncovered)
+    assert not proposal.working
+
+
+def test_stale_is_a_miss_when_no_field_tells_records_apart(tmp_path):
+    db = _db(tmp_path / "app.db", {"encounters": [(1, "p1", None)]})
+    rec = write_recording(tmp_path / "rec", {"patient_id": "p1"})
+    proposal = synthesize(rec, db_path=db)
+    stale = [f for f in proposal.faults if f.fault == "stale"]
+    assert stale and all(f.as_dict()["result"] == "MISSED" for f in stale)
+    assert not proposal.working
+
+
+def test_guards_catch_a_changed_or_deleted_row_through_the_real_read(tmp_path):
+    import sqlite3
+
+    db = _db(
+        tmp_path / "app.db",
+        {"encounters": [(1, "p1", NOTE)], "billing": [(1, "p2", "10.00")]},
+    )
+    rec = write_recording(tmp_path / "rec", {"patient_id": "p1", "note": NOTE})
+    proposal = synthesize(rec, db_path=db)
+    results = _results(proposal)
+    assert set(results["changed"]) == {"caught"}
+    assert set(results["deleted"]) == {"caught"}
+    assert proposal.working, proposal.misses
+
+    effects = [
+        e.model_copy(update={"needs_operator_confirmation": False, "timeout_s": 0.05})
+        for e in proposal.effects
+    ]
+
+    def verdicts(mutate) -> set[Verdict]:
+        verifier = build_effect_verifier(
+            EffectsConfig.model_validate(proposal.verifier), proposal.params
+        )
+        conn = sqlite3.connect(db)
+        conn.execute("DELETE FROM encounters")
+        conn.commit()
+        before = verifier.capture_pre_state()
+        conn.execute("INSERT INTO encounters VALUES (7, 'p1', ?)", (NOTE,))
+        mutate(conn)
+        conn.commit()
+        conn.close()
+        return {
+            verifier.verify(e.resolve(proposal.params), before).verdict for e in effects
+        }
+
+    assert verdicts(lambda c: None) == {Verdict.CONFIRMED}
+    changed = verdicts(lambda c: c.execute("UPDATE billing SET amount = '99.00'"))
+    assert Verdict.REFUTED in changed
+    deleted = verdicts(lambda c: c.execute("DELETE FROM billing"))
+    assert Verdict.REFUTED in deleted
+
+
+def test_names_are_unique_across_sources(tmp_path):
+    db = _db(tmp_path / "app.db", {"encounters": [(1, "p1", NOTE)]})
+    rec = write_recording(tmp_path / "rec", {"patient_id": "p1", "note": NOTE})
+    _capture(
+        rec,
+        [
+            {"method": "POST", "url": "http://app.test/save", "status": 200, "t": 2.1},
+            {
+                "method": "GET",
+                "url": "http://app.test/encounters",
+                "status": 200,
+                "t": 2.5,
+                "response_text": json.dumps(
+                    {"records": [{"id": 1, "patient_id": "p1", "note": NOTE}]}
+                ),
+            },
+        ],
+    )
+    proposal = synthesize(rec, db_path=db)
+    names = [s.name for s in proposal.search.surfaces]
+    assert len(names) == len(set(names))
+    assert len(proposal.verifier["surfaces"]) == len(names) + sum(
+        s.has_ids for s in proposal.search.surfaces
+    )
+
+
+def test_the_save_is_timed_from_its_write_request(tmp_path):
+    """An event's t is stamped after the screen settles, so the save's POST
+    and the app's read-back come before the Save step's t."""
+
+    before = {"records": []}
+    after = {"records": [{"id": 1, "patient_id": "p1", "note": NOTE}]}
+    rec = write_recording(
+        tmp_path / "rec", {"patient_id": "p1", "note": NOTE}, save_t=3.0
+    )
+    _capture(
+        rec,
+        [
+            {
+                "method": "GET",
+                "url": "http://app.test/api/records",
+                "status": 200,
+                "t": 1.0,
+                "response_text": json.dumps(before),
+            },
+            {
+                "method": "POST",
+                "url": "http://app.test/api/encounter",
+                "status": 200,
+                "t": 2.1,
+                "body": json.dumps({"patient_id": "p1", "note": NOTE}),
+            },
+            {
+                "method": "GET",
+                "url": "http://app.test/api/records",
+                "status": 200,
+                "t": 2.5,
+                "response_text": json.dumps(after),
+            },
+            {
+                "method": "GET",
+                "url": "http://app.test/api/records",
+                "status": 200,
+                "t": 6.0,
+                "response_text": json.dumps(after),
+            },
+        ],
+    )
+    proposal = synthesize(rec, complete_read=True)
+    [surface] = proposal.search.surfaces
+    assert surface.before_recorded and surface.before == []
+    assert proposal.search.save_t == 2.1
+    assert _results(proposal)["ok"] == ["clean pass"]
+
+
+def test_record_ids_in_a_url_stay_out_of_names_and_block_working(tmp_path):
+    body = {"records": [{"id": 1, "patient_id": "p1", "note": NOTE}]}
+    rec = write_recording(tmp_path / "rec", {"note": NOTE})
+    _capture(
+        rec,
+        [
+            {"method": "POST", "url": "http://app.test/save", "status": 200, "t": 2.1},
+            {
+                "method": "GET",
+                "url": "http://app.test/api/patients/MRN4471/encounters",
+                "status": 200,
+                "t": 2.5,
+                "response_text": json.dumps(body),
+            },
+        ],
+    )
+    proposal = synthesize(rec, complete_read=True)
+    text = json.dumps(proposal.proof()) + render(proposal).split("schema_version")[0]
+    assert "MRN4471" not in json.dumps(proposal.proof())
+    assert all("MRN4471" not in s.name for s in proposal.search.surfaces)
+    assert any("fixed record" in p for p in proposal.search.problems)
+    assert not proposal.working
+    assert "MRN4471" not in text
+
+
+def test_generated_reads_are_built_and_run(tmp_path):
+    import sqlite3
+
+    path = tmp_path / "app.db"
+    conn = sqlite3.connect(path)
+    conn.execute(
+        'CREATE TABLE visits (id INTEGER PRIMARY KEY, "patient_id" TEXT, note TEXT)'
+    )
+    conn.execute("INSERT INTO visits VALUES (1, 'p1', ?)", (NOTE,))
+    conn.commit()
+    conn.close()
+    rec = write_recording(tmp_path / "rec", {"patient-id": "p1", "note": NOTE})
+    proposal = synthesize(rec, db_path=path)
+    config = proposal.verifier["surfaces"]["visits"]
+    assert config["sql_query_params"] == {"p0": {"param": "patient-id"}}
+    assert proposal.search.problems == []
+    assert proposal.working, proposal.misses
+
+
+def test_braces_in_a_literal_path_are_not_doubled(tmp_path):
+    body = {"records": [{"id": 1, "note": NOTE}]}
+    rec = write_recording(tmp_path / "rec", {"note": NOTE})
+    _capture(
+        rec,
+        [
+            {"method": "POST", "url": "http://app.test/save", "status": 200, "t": 2.1},
+            {
+                "method": "GET",
+                "url": "http://app.test/api/{v}/records",
+                "status": 200,
+                "t": 2.5,
+                "response_text": json.dumps(body),
+            },
+        ],
+    )
+    proposal = synthesize(rec)
+    [surface] = proposal.search.surfaces
+    assert surface.config["records_path"] == "/api/{v}/records"
+    assert "path_params" not in surface.config
+
+
+def test_a_truncated_capture_falls_back_to_the_todo_draft(tmp_path, capsys):
+    rec = write_recording(tmp_path / "rec", {"note": NOTE})
+    (rec / "network.jsonl").write_text(
+        '{"schema": "openadapt.network-capture/1"}\n{"meth'
+    )
+    code = main(["scaffold-verifier", str(rec)])
+    assert code == 0
+    assert "TODO draft" in capsys.readouterr().out
+
+
+def test_a_demonstration_with_no_write_is_refused(tmp_path, capsys):
+    rec = tmp_path / "rec"
+    rec.mkdir()
+    (rec / "events.jsonl").write_text(
+        json.dumps(
+            {
+                "kind": "click",
+                "t": 1.0,
+                "structural": {"role": "link", "name": "Open chart"},
+            }
+        )
+        + "\n"
+    )
+    (rec / "meta.json").write_text(json.dumps({"params": {"note": NOTE}}))
+    _capture(
+        rec,
+        [
+            {
+                "method": "GET",
+                "url": "http://app.test/api/records",
+                "status": 200,
+                "t": 2.0,
+                "response_text": json.dumps({"records": [{"id": 1, "note": NOTE}]}),
+            },
+        ],
+    )
+    with pytest.raises(SystemExit) as exc:
+        main(["scaffold-verifier", str(rec), "--complete-read"])
+    assert "REFUSED" in str(exc.value.code if exc.value.code is not None else exc.value)

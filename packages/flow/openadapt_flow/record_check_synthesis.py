@@ -13,20 +13,28 @@ recording already holds, then tries to break it before anyone reviews it.
    parameter values.
 2. **Fill in the check.** The check reads that path, expects exactly one new
    record with the recorded values (bound to run parameters, so each run is
-   checked against its own values), and must not lose a record that was there
-   before. With a database read path, every other table gets a "no new rows"
-   guard, so a write that lands somewhere the main read can't see is caught.
-   Write targets nothing covers are listed.
+   checked against its own values), and must not lose or change a record that
+   was there before. With a database read path, every other table gets a
+   guard: no row added, changed or removed. Write targets nothing covers, and
+   tables that could not be read, are listed and keep the check a draft.
 3. **Prove it.** The check is judged against the fault classes of
-   ``benchmark/effect_e2e`` applied to the recorded records: nothing saved, a
-   field dropped, saved twice, saved on the wrong record, another record
-   destroyed, and a stray write elsewhere. On a fixture (MockMed, the
-   effect_e2e record service) it also runs end to end through the replayer
-   (:mod:`openadapt_flow.record_check_proof`). A check that misses any fault,
-   or stops the clean save, is written as a draft with the misses listed.
+   ``benchmark/effect_e2e`` applied to the recorded records (nothing saved, a
+   field dropped, saved twice, saved on the wrong record, another record of
+   the same subject destroyed, a stray write elsewhere), plus another record
+   changed or deleted. Every generated read is built, and a database read is
+   run, so a read that can't work is caught too. On a fixture (MockMed, the
+   effect_e2e record service) the check also runs end to end through the
+   replayer (:mod:`openadapt_flow.record_check_proof`). A check that misses
+   any fault, or stops the clean save, is written as a draft with the misses
+   listed.
 4. **A person approves.** Every effect carries
    ``needs_operator_confirmation: true``; ``verify-run`` and ``qualify``
    refuse the file until a person removes those lines.
+
+Reads whose records carry an ``id`` get a second, content read
+(``<name>.content``, ``records_drop_fields: [id]``): the id read counts new
+records, so a stray row identical to an existing one still counts; the content
+read sees a record whose id stayed the same but whose fields changed.
 
 No model calls, nothing sent anywhere. The only network read is the optional
 ``--verifier`` read of the system of record the operator named.
@@ -37,6 +45,7 @@ from __future__ import annotations
 import json
 import re
 import sqlite3
+from collections import Counter
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable, Mapping, Optional
@@ -53,8 +62,9 @@ from openadapt_flow.runtime.effects.effect import (
 )
 from openadapt_flow.runtime.effects.surfaces import surface_probe
 
-#: The network capture ``record --capture-network`` writes (PR #1261). Read
-#: here without importing the recorder side, so the format has one owner.
+#: The network capture ``record --capture-network`` writes. Read here without
+#: importing the recorder side, so the format has one owner
+#: (``docs/NETWORK_CAPTURE.md``).
 NETWORK_FILE = "network.jsonl"
 NETWORK_SCHEMA = "openadapt.network-capture/1"
 
@@ -65,10 +75,19 @@ PROOF_SCHEMA = "openadapt.record-check-proof/v1"
 #: Largest table ``--db`` scans for the saved row.
 MAX_SCAN_ROWS = 20000
 
+#: The content twin of a read whose records carry an ``id``.
+CONTENT_SUFFIX = ".content"
+#: A selector no record matches: with ``forbid_collateral_loss`` it makes
+#: every record that was there before a record that must still be there.
+_NO_RECORD = {"_openadapt_no_such_field": ValueExpr(literal="-")}
+
 _WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
 _LIST_KEYS = ("records", "data", "items", "results", "entries", "rows")
 _SESSION_VALUE = re.compile(r"<session:[^>]*>|<secret>")
-_TABLE_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+_PLAIN_NAME = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,63}$")
+#: A URL path segment that looks like it names one record (an MRN, a numeric
+#: id, a UUID), as opposed to a resource or version name (``api``, ``R4``).
+_RECORD_SEGMENT = re.compile(r"\d{3,}|^[0-9a-fA-F]{8,}$|^[0-9a-fA-F-]{16,}$")
 
 
 class SynthesisError(ValueError):
@@ -86,12 +105,19 @@ def load_network(recording_dir: Path) -> list[dict[str, Any]]:
     path = Path(recording_dir) / NETWORK_FILE
     if not path.is_file():
         return []
-    rows = [
-        json.loads(line)
-        for line in path.read_text(encoding="utf-8").splitlines()
-        if line.strip()
-    ]
-    if not rows or rows[0].get("schema") != NETWORK_SCHEMA:
+    try:
+        rows = [
+            json.loads(line)
+            for line in path.read_text(encoding="utf-8").splitlines()
+            if line.strip()
+        ]
+    except (OSError, ValueError) as exc:
+        raise SynthesisError(f"{path} could not be read: {exc}") from exc
+    if (
+        not rows
+        or not isinstance(rows[0], dict)
+        or rows[0].get("schema") != NETWORK_SCHEMA
+    ):
         raise SynthesisError(f"{path} is not a {NETWORK_SCHEMA} capture")
     return [row for row in rows[1:] if isinstance(row, dict)]
 
@@ -134,6 +160,11 @@ def _identity_like(value: str) -> bool:
     return bool(value) and len(value) <= 64 and not any(ch.isspace() for ch in value)
 
 
+def _t(line: Mapping[str, Any]) -> float:
+    value = line.get("t")
+    return float(value) if isinstance(value, (int, float)) else 0.0
+
+
 # ---------------------------------------------------------------------------
 # The check being built
 # ---------------------------------------------------------------------------
@@ -152,7 +183,7 @@ class Surface:
     #: no read before the save was recorded.
     before: list[dict[str, Any]]
     before_recorded: bool
-    #: Where the read came from, for the person reviewing it.
+    #: Where the read came from, for the person reviewing it (no values).
     source: str
     #: The record the save wrote, when this surface holds it.
     target: Optional[dict[str, Any]] = None
@@ -168,6 +199,14 @@ class Surface:
     def is_target(self) -> bool:
         return self.target is not None
 
+    @property
+    def has_ids(self) -> bool:
+        return any("id" in record for record in self.after + self.before)
+
+    @property
+    def content_name(self) -> str:
+        return self.name + CONTENT_SUFFIX
+
 
 @dataclass
 class ReadSearch:
@@ -177,13 +216,18 @@ class ReadSearch:
     write_requests: list[dict[str, Any]] = field(default_factory=list)
     save_t: Optional[float] = None
     notes: list[str] = field(default_factory=list)
-    #: Write targets the check does not read (plain sentences).
+    #: Write targets and tables the check does not read (plain sentences).
+    #: Any entry keeps the check a draft.
     uncovered: list[str] = field(default_factory=list)
+    #: Reads that would not work as generated. Any entry keeps it a draft.
+    problems: list[str] = field(default_factory=list)
     #: True when every table the save could touch is read (a database path),
     #: or a person declared the read complete (``--complete-read``).
     closed_world: bool = False
     #: ``"database"`` (every table read) or ``"declared"`` (a person said so).
     closed_world_basis: Optional[str] = None
+    #: Surface names in use, across every source.
+    taken: set[str] = field(default_factory=set)
 
 
 # -- network capture ---------------------------------------------------------
@@ -280,6 +324,16 @@ def _bind_fields(
     return exact, reference
 
 
+def _unique_name(raw: str, taken: set[str]) -> str:
+    name = re.sub(r"[^A-Za-z0-9_]", "_", raw.replace(".", "_")).strip("_") or "records"
+    base, n = name, 2
+    while name in taken or name + CONTENT_SUFFIX in taken:
+        name, n = f"{base}_{n}", n + 1
+    taken.add(name)
+    taken.add(name + CONTENT_SUFFIX)
+    return name
+
+
 def _field_name(path: str, taken: set[str]) -> str:
     name = re.sub(r"[^A-Za-z0-9_]", "_", path.replace(".", "_")) or "field"
     base, n = name, 2
@@ -294,25 +348,42 @@ def _origin(url: str) -> str:
     return f"{parts.scheme}://{parts.netloc}"
 
 
-def _templated_path(
-    url: str, lookup: Mapping[str, str]
-) -> tuple[str, dict[str, str], list[tuple[str, str]], dict[str, str]]:
-    """``(path, path_params, literal_query, bound_query)`` for one GET URL.
+@dataclass
+class _Templated:
+    #: The path with recorded values as ``{param}`` placeholders, braces in
+    #: literal segments doubled only when a placeholder makes it a template.
+    path: str
+    path_params: list[str]
+    literal_query: list[tuple[str, str]]
+    bound_query: dict[str, str]
+    #: The path for names and messages: placeholders kept, any segment that
+    #: looks like a record id replaced by ``*``.
+    safe: str
+    #: Literal segments that look like one record's id (a frozen value).
+    pinned: int
 
-    Path segments and query values equal to a recorded value become
-    ``{param}`` placeholders, so the check reads the record each run writes.
-    """
 
+def _templated(url: str, lookup: Mapping[str, str]) -> _Templated:
     parts = urlsplit(url)
-    path_params: dict[str, str] = {}
-    segments = []
-    for segment in parts.path.split("/"):
-        name = lookup.get(segment)
-        if name and segment:
+    raw = parts.path.split("/")
+    bound = [lookup.get(segment) if segment else None for segment in raw]
+    templated = any(bound)
+    segments: list[str] = []
+    safe: list[str] = []
+    pinned = 0
+    for segment, name in zip(raw, bound):
+        if name:
             segments.append("{" + name + "}")
-            path_params[name] = name
+            safe.append("{" + name + "}")
+            continue
+        segments.append(
+            segment.replace("{", "{{").replace("}", "}}") if templated else segment
+        )
+        if _RECORD_SEGMENT.search(segment):
+            pinned += 1
+            safe.append("*")
         else:
-            segments.append(segment.replace("{", "{{").replace("}", "}}"))
+            safe.append(re.sub(r"[^A-Za-z0-9_.-]", "_", segment))
     literal_query: list[tuple[str, str]] = []
     bound_query: dict[str, str] = {}
     for key, value in parse_qsl(parts.query, keep_blank_values=True):
@@ -321,7 +392,14 @@ def _templated_path(
             bound_query[key] = name
         else:
             literal_query.append((key, value))
-    return "/".join(segments), path_params, literal_query, bound_query
+    return _Templated(
+        path="/".join(segments),
+        path_params=sorted({n for n in bound if n}),
+        literal_query=literal_query,
+        bound_query=bound_query,
+        safe="/".join(safe),
+        pinned=pinned,
+    )
 
 
 def _write_values(line: Mapping[str, Any]) -> dict[str, str]:
@@ -345,39 +423,37 @@ def _write_values(line: Mapping[str, Any]) -> dict[str, str]:
     return values
 
 
-def _save_time(recording_dir: Path, network: list[dict[str, Any]]) -> Optional[float]:
-    """When the save happened: the last write-shaped step, else the first write."""
+def _save_event_times(recording_dir: Path) -> tuple[Optional[float], Optional[float]]:
+    """``(save, previous)``: the last write-shaped step's ``t`` and the ``t``
+    of the event before it."""
 
     from openadapt_flow.scaffold_verifier import candidates_from_recording
 
     times: dict[int, float] = {}
     events_path = Path(recording_dir) / "events.jsonl"
-    if events_path.is_file():
-        for index, line in enumerate(events_path.read_text("utf-8").splitlines()):
-            try:
-                event = json.loads(line) if line.strip() else {}
-            except ValueError:
-                continue
-            if isinstance(event.get("t"), (int, float)):
-                times[index] = float(event["t"])
+    if not events_path.is_file():
+        return None, None
+    for index, line in enumerate(events_path.read_text("utf-8").splitlines()):
         try:
-            candidates = candidates_from_recording(Path(recording_dir))
-        except SystemExit:
-            candidates = []
-        stamped = [
-            times[int(c.step_id.split("_")[1])]
-            for c in candidates
-            if int(c.step_id.split("_")[1]) in times
-        ]
-        if stamped:
-            return max(stamped)
-    writes = [
-        float(line["t"])
-        for line in network
-        if str(line.get("method") or "").upper() in _WRITE_METHODS
-        and isinstance(line.get("t"), (int, float))
+            event = json.loads(line) if line.strip() else {}
+        except ValueError:
+            continue
+        if isinstance(event, dict) and isinstance(event.get("t"), (int, float)):
+            times[index] = float(event["t"])
+    try:
+        candidates = candidates_from_recording(Path(recording_dir))
+    except SystemExit:
+        candidates = []
+    indices = [
+        int(c.step_id.split("_")[1])
+        for c in candidates
+        if int(c.step_id.split("_")[1]) in times
     ]
-    return min(writes) if writes else None
+    if not indices:
+        return None, None
+    save = max(indices)
+    earlier = [times[i] for i in times if i < save]
+    return times[save], (max(earlier) if earlier else None)
 
 
 def _accepted(line: Mapping[str, Any]) -> bool:
@@ -392,6 +468,39 @@ def _ok(line: Mapping[str, Any]) -> bool:
     return isinstance(status, int) and 200 <= status < 300 and not line.get("failed")
 
 
+def save_window(
+    recording_dir: Path, network: list[dict[str, Any]]
+) -> tuple[Optional[float], Optional[float], list[dict[str, Any]]]:
+    """``(first, last, writes)``: the save's accepted write requests.
+
+    An event's ``t`` is stamped after the screen settles, so the save's own
+    requests come BEFORE the Save step's ``t``: the window runs from the
+    previous event to the Save step. A write stamped after the Save step (a
+    slow settle on the recorder's side) is taken when the window is empty.
+    With no write request, the Save step's ``t`` is the only time there is.
+    """
+
+    event_t, previous_t = _save_event_times(recording_dir)
+    writes = sorted(
+        (
+            line
+            for line in network
+            if str(line.get("method") or "").upper() in _WRITE_METHODS
+            and _accepted(line)
+        ),
+        key=_t,
+    )
+    if not writes:
+        return event_t, event_t, []
+    low = previous_t if previous_t is not None else float("-inf")
+    high = event_t if event_t is not None else float("inf")
+    chosen = [w for w in writes if low < _t(w) <= high]
+    if not chosen:
+        later = [w for w in writes if _t(w) > low]
+        chosen = later[:1] if later else writes[-1:]
+    return _t(chosen[0]), _t(chosen[-1]), chosen
+
+
 def _surface_from_listing(
     line: Mapping[str, Any],
     listing: _Listing,
@@ -403,9 +512,9 @@ def _surface_from_listing(
     """A surface for one listing that holds the saved record, or why not."""
 
     url = str(line.get("url") or "")
-    path, path_params, literal_query, bound_query = _templated_path(url, lookup)
+    tpl = _templated(url, lookup)
     if _SESSION_VALUE.search(url):
-        return None, f"GET {urlsplit(url).path}: the URL carries a session token"
+        return None, f"GET {tpl.safe}: the URL carries a session token"
 
     best: Optional[tuple[dict[str, Any], dict[str, str], dict[str, str]]] = None
     for resource in listing.resources:
@@ -417,22 +526,27 @@ def _surface_from_listing(
     if best is None:
         return None, None
     resource, exact, reference = best
-
     origin = _origin(url)
+    source = f"GET {tpl.safe} (t={line.get('t')})"
+
     if listing.kind == "fhir":
         resource_type = listing.resource_type or str(resource.get("resourceType") or "")
         marker = "/" + resource_type
-        raw_path = urlsplit(url).path
-        if not resource_type or marker not in raw_path:
-            return None, f"GET {raw_path}: FHIR resource type not in the URL"
-        base = origin + raw_path[: raw_path.rindex(marker)]
-        taken_names: set[str] = {"id"}
+        if not resource_type or marker not in tpl.path:
+            return None, f"GET {tpl.safe}: FHIR resource type not in the URL"
+        base = origin + tpl.path[: tpl.path.rindex(marker)]
+        if tpl.path_params:
+            return None, (
+                f"GET {tpl.safe}: the FHIR base path holds a recorded value; "
+                "the FHIR check takes a fixed base and search parameters"
+            )
         field_paths = {"id": "id"}
+        names: set[str] = {"id"}
         bound: dict[str, str] = {}
         for dotted, param in sorted(exact.items()):
             if dotted == "id":
                 continue
-            name = _field_name(dotted, taken_names)
+            name = _field_name(dotted, names)
             field_paths[name] = dotted
             bound[name] = param
         config: dict[str, Any] = {
@@ -441,79 +555,89 @@ def _surface_from_listing(
             "resource_type": resource_type,
             "field_paths": field_paths,
         }
-        literal = dict(literal_query)
-        if literal:
-            config["search_params"] = literal
-        if bound_query:
+        if tpl.literal_query:
+            config["search_params"] = dict(tpl.literal_query)
+        if tpl.bound_query:
             config["search_param_exprs"] = {
-                key: {"param": name} for key, name in bound_query.items()
+                key: {"param": name} for key, name in tpl.bound_query.items()
             }
         from openadapt_flow.runtime.effects.fhir import extract_path
 
         def shape(res: dict[str, Any]) -> dict[str, Any]:
-            flat = {key: extract_path(res, p) for key, p in field_paths.items()}
-            return flat
+            return {key: extract_path(res, p) for key, p in field_paths.items()}
 
         after = [shape(res) for res in listing.resources]
         target = shape(resource)
-        name = _field_name(f"fhir_{resource_type}", taken)
-        unscoped = sorted(
-            set(reference.values()) - set(bound_query.values()) - set(bound.values())
-        )
         before_records, recorded = _before_records(
             before_line, listing_kind="fhir", records_key=None, shape=shape
         )
         surface = Surface(
-            name=name,
+            name=_unique_name(f"fhir_{resource_type}", taken),
             config=config,
             after=after,
             before=before_records if recorded else _minus(after, target),
             before_recorded=recorded,
-            source=f"GET {raw_path} (t={line.get('t')})",
+            source=source,
             target=target,
             bound=bound,
+            scope=sorted(set(tpl.bound_query.values())),
         )
-        surface.scope = sorted(set(bound_query.values()) | set(path_params))
+        unscoped = sorted(
+            set(reference.values())
+            - set(tpl.bound_query.values())
+            - set(bound.values())
+        )
         if unscoped:
             surface.config["_unscoped_references"] = unscoped
+        if tpl.pinned:
+            surface.config["_pinned"] = tpl.pinned
         return surface, None
 
-    records_key = listing.records_key
     bound = {path_: param for path_, param in exact.items() if "." not in path_}
     if not bound:
         return None, (
-            f"GET {urlsplit(url).path}: the recorded values sit in nested fields; "
+            f"GET {tpl.safe}: the recorded values sit in nested fields; "
             "the REST check reads top-level fields only"
         )
-    records_path = path
-    if literal_query or bound_query:
-        query = [f"{quote(k, safe='')}={quote(v, safe='')}" for k, v in literal_query]
-        query += [f"{quote(k, safe='')}={{{name}}}" for k, name in bound_query.items()]
+    records_path = tpl.path
+    placeholders = set(tpl.path_params)
+    if tpl.literal_query or tpl.bound_query:
+        query = [
+            f"{quote(k, safe='')}={quote(v, safe='')}" for k, v in tpl.literal_query
+        ]
+        query += [
+            f"{quote(k, safe='')}={{{name}}}" for k, name in tpl.bound_query.items()
+        ]
+        if tpl.bound_query and not tpl.path_params:
+            # The query makes the path a template: double literal braces.
+            records_path = records_path.replace("{", "{{").replace("}", "}}")
         records_path += "?" + "&".join(query)
-        path_params.update({name: name for name in bound_query.values()})
+        placeholders.update(tpl.bound_query.values())
     config = {
         "kind": "rest",
         "base_url": origin,
         "records_path": records_path,
-        "records_key": records_key,
+        "records_key": listing.records_key,
     }
-    if path_params:
-        config["path_params"] = {key: {"param": key} for key in sorted(path_params)}
+    if placeholders:
+        config["path_params"] = {key: {"param": key} for key in sorted(placeholders)}
+    if tpl.pinned:
+        config["_pinned"] = tpl.pinned
     after = [dict(r) for r in listing.resources]
     target = dict(resource)
     before_records, recorded = _before_records(
-        before_line, listing_kind="rest", records_key=records_key, shape=dict
+        before_line, listing_kind="rest", records_key=listing.records_key, shape=dict
     )
     surface = Surface(
-        name=_field_name(urlsplit(url).path.strip("/") or "records", taken),
+        name=_unique_name(tpl.safe.replace("*", "x").strip("/") or "records", taken),
         config=config,
         after=after,
         before=before_records if recorded else _minus(after, target),
         before_recorded=recorded,
-        source=f"GET {urlsplit(url).path} (t={line.get('t')})",
+        source=source,
         target=target,
         bound=bound,
-        scope=sorted(path_params),
+        scope=sorted(placeholders),
     )
     return surface, None
 
@@ -527,17 +651,38 @@ def _before_records(
 ) -> tuple[list[dict[str, Any]], bool]:
     if line is None:
         return [], False
-    for listing in _listings(_json_body(line)):
-        if listing.kind == listing_kind and listing.records_key == records_key:
-            return [shape(r) for r in listing.resources], True
-    return [], False
+    body = _json_body(line)
+    records: Any = None
+    if listing_kind == "fhir":
+        if isinstance(body, dict) and body.get("resourceType") == "Bundle":
+            records = [
+                entry["resource"]
+                for entry in body.get("entry") or []
+                if isinstance(entry, dict) and isinstance(entry.get("resource"), dict)
+            ]
+    elif records_key is None:
+        records = body if isinstance(body, list) else None
+    elif isinstance(body, dict):
+        records = body.get(records_key)
+    if not isinstance(records, list):
+        return [], False
+    return [shape(r) for r in records if isinstance(r, dict)], True
 
 
 def _minus(
     records: list[dict[str, Any]], target: Mapping[str, Any]
 ) -> list[dict[str, Any]]:
+    """``records`` without one copy of ``target``."""
+
     key = stable_id(dict(target))
-    return [dict(r) for r in records if stable_id(dict(r)) != key]
+    out: list[dict[str, Any]] = []
+    removed = False
+    for record in records:
+        if not removed and stable_id(dict(record)) == key:
+            removed = True
+            continue
+        out.append(dict(record))
+    return out
 
 
 def reads_from_network(
@@ -549,41 +694,37 @@ def reads_from_network(
     if not network:
         return
     lookup, _ = param_lookup(params)
-    save_t = _save_time(recording_dir, network)
-    search.save_t = save_t
-    search.write_requests = [
-        line
-        for line in network
-        if str(line.get("method") or "").upper() in _WRITE_METHODS
-        and _accepted(line)
-        and (save_t is None or float(line.get("t", 0.0)) >= save_t - 2.0)
-    ]
+    first, last, writes = save_window(recording_dir, network)
+    search.save_t = last
+    search.write_requests = writes
+    if not writes:
+        search.notes.append(
+            "the capture holds no accepted write request; reads are taken after "
+            "the Save step's time"
+        )
     gets = [
         line
         for line in network
         if str(line.get("method") or "").upper() == "GET" and _ok(line)
     ]
-    after_gets = [
-        line for line in gets if save_t is None or float(line.get("t", 0.0)) > save_t
-    ]
-    taken: set[str] = set()
+    after_gets = [line for line in gets if last is None or _t(line) > last]
     candidates: list[tuple[tuple[Any, ...], Surface]] = []
     rejected: list[str] = []
     seen_urls: set[str] = set()
+    names: set[str] = set(search.taken)
     for line in after_gets:
         url = str(line.get("url") or "")
         if url in seen_urls:
             continue
         seen_urls.add(url)
         before_line = None
-        for earlier in gets:
-            if earlier.get("url") == url and (
-                save_t is not None and float(earlier.get("t", 0.0)) < save_t
-            ):
-                before_line = earlier
+        if first is not None:
+            for earlier in gets:
+                if earlier.get("url") == url and _t(earlier) < first:
+                    before_line = earlier
         for listing in _listings(_json_body(line)):
             surface, why = _surface_from_listing(
-                line, listing, lookup, before_line=before_line, taken=taken
+                line, listing, lookup, before_line=before_line, taken=names
             )
             if why:
                 rejected.append(why)
@@ -593,7 +734,7 @@ def reads_from_network(
                 len(surface.bound),
                 "id" in (surface.target or {}),
                 surface.before_recorded,
-                -float(line.get("t", 0.0)),
+                -_t(line),
             )
             candidates.append((rank, surface))
     if not candidates:
@@ -606,19 +747,21 @@ def reads_from_network(
         return
     candidates.sort(key=lambda item: item[0], reverse=True)
     chosen = candidates[0][1]
+    search.taken.update({chosen.name, chosen.content_name})
     search.surfaces.append(chosen)
-    for rank, other in candidates[1:]:
+    for _rank, other in candidates[1:]:
         search.notes.append(
             f"also returns the saved record: {other.source} (not used; the check "
             f"reads {chosen.source})"
         )
-    for line in search.write_requests:
+    read_back = {str((chosen.target or {}).get(fld)) for fld in chosen.bound}
+    for line in writes:
         sent = set(_write_values(line).values())
-        read_back = {str((chosen.target or {}).get(fld)) for fld in chosen.bound}
         if not sent & read_back:
+            tpl = _templated(str(line.get("url") or ""), lookup)
             search.uncovered.append(
-                f"{line.get('method')} {urlsplit(str(line.get('url') or '')).path}: "
-                "no read returns what this request sent"
+                f"{line.get('method')} {tpl.safe}: no read returns what this "
+                "request sent"
             )
 
 
@@ -628,7 +771,11 @@ def reads_from_network(
 def reads_from_sqlite(
     db_path: Path, params: Mapping[str, str], search: ReadSearch
 ) -> None:
-    """Every table: the ones holding the saved row are read, the rest guarded."""
+    """Every table: the ones holding the saved row are read, the rest guarded.
+
+    A table that can't be read (an irregular name or column, too many rows)
+    is listed in ``uncovered`` and the read is not complete.
+    """
 
     lookup, _ = param_lookup(params)
     uri = f"file:{Path(db_path).resolve()}?mode=ro"
@@ -636,6 +783,7 @@ def reads_from_sqlite(
         conn = sqlite3.connect(uri, uri=True)
     except sqlite3.Error as exc:
         raise SynthesisError(f"cannot open {db_path} read-only: {exc}") from exc
+    complete = True
     try:
         conn.row_factory = sqlite3.Row
         tables = [
@@ -646,16 +794,26 @@ def reads_from_sqlite(
             )
         ]
         for table in tables:
-            if not _TABLE_NAME.match(table):
+            if not _PLAIN_NAME.match(table):
                 search.uncovered.append(
-                    f"table {table!r}: not a plain name, so the check can't read it"
+                    "a table with an irregular name: the check can't read it"
                 )
+                complete = False
                 continue
             count = conn.execute(f'SELECT COUNT(*) FROM "{table}"').fetchone()[0]
             if count > MAX_SCAN_ROWS:
                 search.uncovered.append(
                     f"table {table}: {count} rows, too many to scan for the saved row"
                 )
+                complete = False
+                continue
+            columns = [row[1] for row in conn.execute(f'PRAGMA table_info("{table}")')]
+            if not all(_PLAIN_NAME.match(str(c)) for c in columns):
+                search.uncovered.append(
+                    f"table {table}: a column with an irregular name; the check "
+                    "can't read it"
+                )
+                complete = False
                 continue
             rows = [dict(r) for r in conn.execute(f'SELECT * FROM "{table}"')]
             best: Optional[tuple[dict[str, Any], dict[str, str]]] = None
@@ -671,15 +829,16 @@ def reads_from_sqlite(
                 "sqlite_database": str(db_path),
                 "sql_query": query,
             }
+            name = _unique_name(table, search.taken)
             if best is None:
                 search.surfaces.append(
                     Surface(
-                        name=table,
+                        name=name,
                         config=config,
                         after=rows,
                         before=list(rows),
                         before_recorded=False,
-                        source=f"table {table} (no row holds the recorded values)",
+                        source=f"table {table}",
                     )
                 )
                 continue
@@ -690,12 +849,17 @@ def reads_from_sqlite(
                 if _identity_like(params.get(param, ""))
             }
             if scope:
+                slots = {
+                    param: f"p{i}"
+                    for i, param in enumerate(sorted(set(scope.values())))
+                }
                 where = " AND ".join(
-                    f'"{column}" = :{param}' for column, param in sorted(scope.items())
+                    f'"{column}" = :{slots[param]}'
+                    for column, param in sorted(scope.items())
                 )
                 config["sql_query"] = f"{query} WHERE {where}"
                 config["sql_query_params"] = {
-                    param: {"param": param} for param in sorted(set(scope.values()))
+                    slot: {"param": param} for param, slot in sorted(slots.items())
                 }
                 visible = [
                     r
@@ -706,7 +870,7 @@ def reads_from_sqlite(
                 visible = rows
             search.surfaces.append(
                 Surface(
-                    name=table,
+                    name=name,
                     config=config,
                     after=visible,
                     before=_minus(visible, row),
@@ -719,8 +883,9 @@ def reads_from_sqlite(
             )
     finally:
         conn.close()
-    search.closed_world = True
-    search.closed_world_basis = "database"
+    if complete:
+        search.closed_world = True
+        search.closed_world_basis = "database"
 
 
 # -- an existing verifier section ----------------------------------------------
@@ -775,11 +940,10 @@ def reads_from_verifier(
             before = [r for r in prior if isinstance(r, dict)]
             recorded = True
     record, bound = best
-    config = dict(section)
     search.surfaces.append(
         Surface(
-            name=str(cfg.kind or "records"),
-            config=dict(config),
+            name=_unique_name(f"{cfg.kind or 'records'}_read", search.taken),
+            config=dict(section),
             after=list(state.records),
             before=before if recorded else _minus(list(state.records), record),
             before_recorded=recorded,
@@ -814,10 +978,31 @@ def _apply_sent_constants(search: ReadSearch, params: Mapping[str, str]) -> None
 # ---------------------------------------------------------------------------
 
 
+def _effect(
+    surface_name: str,
+    note: str,
+    *,
+    match: Mapping[str, ValueExpr],
+    expected_count: int,
+    forbid_collateral_loss: bool,
+    confirmed: bool,
+) -> Effect:
+    return Effect(
+        kind=EffectKind.RECORD_WRITTEN,
+        match=dict(match),
+        expected_count=expected_count,
+        count_new_only=True,
+        forbid_collateral_loss=forbid_collateral_loss,
+        risk="irreversible",
+        probe=surface_probe(surface_name, note),
+        needs_operator_confirmation=not confirmed,
+    )
+
+
 def effects_for(
     surfaces: Iterable[Surface], *, confirmed: bool = False
 ) -> list[Effect]:
-    """The effect contract for a set of surfaces (targets, then guards)."""
+    """The effect contract for a set of surfaces (each surface in turn)."""
 
     effects: list[Effect] = []
     for surface in surfaces:
@@ -832,47 +1017,122 @@ def effects_for(
                 }
             )
             effects.append(
-                Effect(
-                    kind=EffectKind.RECORD_WRITTEN,
+                _effect(
+                    surface.name,
+                    "exactly one new record with the run's values; no record "
+                    "that was there before may disappear",
                     match=match,
                     expected_count=1,
-                    count_new_only=True,
                     forbid_collateral_loss=True,
-                    risk="irreversible",
-                    probe=surface_probe(
-                        surface.name,
-                        "exactly one new record with the run's values; no "
-                        "record that was there before may disappear",
-                    ),
-                    needs_operator_confirmation=not confirmed,
+                    confirmed=confirmed,
                 )
             )
         else:
             effects.append(
-                Effect(
-                    kind=EffectKind.RECORD_WRITTEN,
+                _effect(
+                    surface.name,
+                    "the save adds no row here",
                     match={},
                     expected_count=0,
-                    count_new_only=True,
                     forbid_collateral_loss=False,
-                    risk="irreversible",
-                    probe=surface_probe(surface.name, "the save adds no row here"),
-                    needs_operator_confirmation=not confirmed,
+                    confirmed=confirmed,
+                )
+            )
+            if not surface.has_ids:
+                effects.append(
+                    _effect(
+                        surface.name,
+                        "no row here changes or disappears",
+                        match=_NO_RECORD,
+                        expected_count=0,
+                        forbid_collateral_loss=True,
+                        confirmed=confirmed,
+                    )
+                )
+        if surface.has_ids:
+            effects.append(
+                _effect(
+                    surface.content_name,
+                    "no record that was there before changes or disappears "
+                    "(records compared by content, not id)",
+                    match=_NO_RECORD,
+                    expected_count=0,
+                    forbid_collateral_loss=True,
+                    confirmed=confirmed,
                 )
             )
     return effects
 
 
+def _clean(config: Mapping[str, Any]) -> dict[str, Any]:
+    return {k: v for k, v in config.items() if not k.startswith("_")}
+
+
 def verifier_section(surfaces: list[Surface]) -> dict[str, Any]:
-    """The ``verifier:`` section: one read, or one read per surface."""
+    """The ``verifier:`` section: one read per surface, plus content twins."""
 
-    def clean(config: Mapping[str, Any]) -> dict[str, Any]:
-        return {k: v for k, v in config.items() if not k.startswith("_")}
+    out: dict[str, Any] = {}
+    for surface in surfaces:
+        names = [surface.name] + ([surface.content_name] if surface.has_ids else [])
+        for name in names:
+            if name in out:
+                raise SynthesisError(f"two reads share the name {name!r}")
+        out[surface.name] = _clean(surface.config)
+        if surface.has_ids:
+            twin = _clean(surface.config)
+            twin["records_drop_fields"] = ["id"]
+            out[surface.content_name] = twin
+    return {"kind": "surfaces", "surfaces": out}
 
-    return {
-        "kind": "surfaces",
-        "surfaces": {surface.name: clean(surface.config) for surface in surfaces},
-    }
+
+def _without_ids(records: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    return [{k: v for k, v in r.items() if k != "id"} for r in records]
+
+
+def _signature(records: list[dict[str, Any]]) -> Counter:
+    return Counter(json.dumps(r, sort_keys=True, default=str) for r in records)
+
+
+def check_reads(
+    surfaces: list[Surface], section: Mapping[str, Any], params: Mapping[str, str]
+) -> list[str]:
+    """Build every generated read; run each database read and compare it with
+    what the scan saw. Returns the problems (no record values)."""
+
+    from openadapt_flow.deployment import EffectsConfig, build_effect_verifier
+
+    problems: list[str] = []
+    configs = section.get("surfaces", {})
+    for surface in surfaces:
+        if surface.config.get("_pinned"):
+            problems.append(
+                f"{surface.name}: the read's path names one fixed record; bind it "
+                "to a run input or confirm it is not the demonstration's record"
+            )
+        for name in (surface.name, surface.content_name):
+            if name not in configs:
+                continue
+            try:
+                verifier = build_effect_verifier(
+                    EffectsConfig.model_validate(configs[name]), params
+                )
+            except Exception as exc:  # noqa: BLE001 - any build failure is a problem
+                problems.append(f"{name}: the generated read does not build ({exc})")
+                continue
+            if configs[name].get("kind") != "sql" or verifier is None:
+                continue
+            state = verifier.capture_pre_state()
+            expected = surface.after
+            if name == surface.content_name:
+                expected = _without_ids(surface.after)
+            if not state.reachable:
+                problems.append(f"{name}: the generated query does not run")
+            elif _signature(state.records) != _signature(expected):
+                problems.append(
+                    f"{name}: the generated query returns {len(state.records)} "
+                    f"row(s), the scan saw {len(expected)}"
+                )
+    return problems
 
 
 # ---------------------------------------------------------------------------
@@ -926,22 +1186,30 @@ def _fresh_id(records: list[dict[str, Any]]) -> Any:
     return "fault-" + str(len(records) + 1000)
 
 
+_State = tuple[list[dict[str, Any]], list[dict[str, Any]]]
+
+
 def _judge(
     effects: list[Effect],
     surfaces: list[Surface],
-    states: Mapping[str, tuple[list[dict[str, Any]], list[dict[str, Any]]]],
+    states: Mapping[str, _State],
     params: Mapping[str, str],
 ) -> tuple[bool, list[str]]:
     from openadapt_flow.runtime.effects.surfaces import surface_of
 
-    by_name = {surface.name: surface for surface in surfaces}
+    views: dict[str, _State] = {}
+    for surface in surfaces:
+        before, after = states[surface.name]
+        views[surface.name] = (before, after)
+        if surface.has_ids:
+            views[surface.content_name] = (_without_ids(before), _without_ids(after))
     reasons: list[str] = []
     for effect in effects:
         name = surface_of(effect) or ""
-        if name not in by_name:
+        if name not in views:
             reasons.append(f"effect routes to unknown surface {name!r}")
             continue
-        before, after = states[name]
+        before, after = views[name]
         verdict = judge_records(
             effect.resolve(params),
             EffectState(substrate="proof", reachable=True, records=before),
@@ -951,6 +1219,18 @@ def _judge(
         if verdict.verdict is not Verdict.CONFIRMED:
             reasons.append(f"{name}: {verdict.reason}")
     return not reasons, reasons
+
+
+def _changed(record: dict[str, Any]) -> dict[str, Any]:
+    """``record`` with one non-id field changed (or one added)."""
+
+    out = dict(record)
+    for key, value in out.items():
+        if key != "id" and isinstance(value, str):
+            out[key] = value + " (changed)"
+            return out
+    out["_changed"] = "1"
+    return out
 
 
 def prove_against_faults(
@@ -963,121 +1243,159 @@ def prove_against_faults(
     """Judge the check on the clean save and on each injected bad write.
 
     The bad writes are the persistence faults of ``benchmark/effect_e2e``,
-    built from the records the recording saw. Transport faults (a rejected
-    write, an expired session, a timeout) are handled by the actuator before
-    any check runs, so they are not repeated here.
+    built from the records the recording saw, plus another record changed or
+    deleted. Transport faults (a rejected write, an expired session, a
+    timeout) are handled by the actuator before any check runs, so they are
+    not repeated here.
     """
 
-    base = {s.name: (list(s.before), list(s.after)) for s in surfaces}
+    base: dict[str, _State] = {
+        s.name: (list(s.before), list(s.after)) for s in surfaces
+    }
     results: list[FaultResult] = []
 
     def run(
-        fault: str, detail: str, states: Mapping[str, Any], *, correct: bool = False
+        fault: str, detail: str, states: Mapping[str, _State], *, correct: bool = False
     ) -> None:
         passed, reasons = _judge(effects, surfaces, states, params)
         results.append(FaultResult(fault, detail, correct, passed, reasons))
 
+    def miss(fault: str, detail: str, reason: str) -> None:
+        results.append(FaultResult(fault, detail, False, True, [reason]))
+
+    def other_records(
+        surface: Surface,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any], bool]:
+        """A record that was there before (injected when there was none)."""
+
+        before, after = base[surface.name]
+        target_key = stable_id(surface.target) if surface.target else None
+        for record in before:
+            if stable_id(record) != target_key and record in after:
+                return before, record, False
+        seed = dict(surface.target or (after[-1] if after else {}))
+        for fld in list(surface.bound) + list(surface.constants):
+            seed[fld] = f"other {seed.get(fld)}"
+        if "id" in seed or surface.has_ids:
+            seed["id"] = _fresh_id(before + after)
+        else:
+            seed["_other"] = "1"
+        return before + [seed], seed, True
+
     run("ok", "the clean save as recorded", base, correct=True)
 
-    targets = [s for s in surfaces if s.is_target]
-    guards = [s for s in surfaces if not s.is_target]
-    for surface in targets:
-        target = surface.target or {}
+    for surface in surfaces:
         before, after = base[surface.name]
-        tid = stable_id(target)
-        without = [r for r in after if stable_id(r) != tid]
-
-        run(
-            "no_persist",
-            f"nothing saved in {surface.name}",
-            {**base, surface.name: (before, without)},
-        )
-
-        for fld in sorted(surface.bound):
-            dropped = dict(target, **{fld: ""})
+        if surface.is_target:
+            target = surface.target or {}
+            without = _minus(after, target)
             run(
-                "partial",
-                f"{surface.name}.{fld} dropped",
-                {**base, surface.name: (before, without + [dropped])},
-            )
-
-        copy = dict(target)
-        if "id" in copy:
-            copy["id"] = _fresh_id(after)
-        else:
-            copy["_duplicate"] = "1"
-        run(
-            "duplicate",
-            f"saved twice in {surface.name}",
-            {**base, surface.name: (before, after + [copy])},
-        )
-
-        identity = [
-            f for f, p in surface.bound.items() if _identity_like(params.get(p, ""))
-        ]
-        if not identity and not surface.scope:
-            results.append(
-                FaultResult(
-                    "wrong_record",
-                    f"{surface.name}: no identity field to move the save to another record",
-                    False,
-                    True,
-                    ["no recorded value identifies the record"],
-                    untestable=True,
-                )
-            )
-        for fld in sorted(identity):
-            moved = dict(target, **{fld: f"{target.get(fld)}-other"})
-            run(
-                "wrong_record",
-                f"{surface.name}: saved on another {fld}",
-                {**base, surface.name: (before, without + [moved])},
-            )
-        for param in sorted(set(surface.scope) - {surface.bound[f] for f in identity}):
-            run(
-                "wrong_record",
-                f"{surface.name}: saved under another {param}, which the read "
-                "is scoped by",
+                "no_persist",
+                f"nothing saved in {surface.name}",
                 {**base, surface.name: (before, without)},
             )
-
-        payload = [f for f in surface.bound if f not in identity]
-        concurrent = dict(target)
-        concurrent["id" if "id" in target else "_concurrent"] = _fresh_id(
-            after + before
-        )
-        for fld in payload or list(surface.bound):
-            concurrent[fld] = f"concurrent {concurrent.get(fld)}"
-        run(
-            "stale",
-            f"{surface.name}: the save destroyed another record of the same subject",
-            {**base, surface.name: (before + [concurrent], after)},
-        )
-
-    for surface in guards:
-        before, after = base[surface.name]
-        stray: dict[str, Any] = dict(after[-1]) if after else {}
-        stray["id"] = _fresh_id(after)
-        run(
-            "collateral_unaudited",
-            f"a stray row written to {surface.name}",
-            {**base, surface.name: (before, after + [stray])},
-        )
-    if not closed_world:
-        results.append(
-            FaultResult(
-                "collateral_unaudited",
-                "a stray row written to a table this check does not read",
-                False,
-                True,
-                [
-                    "the check reads only "
-                    + ", ".join(s.name for s in surfaces)
-                    + "; a write anywhere else passes it (give a database read "
-                    "path with --db, or more reads)"
-                ],
-                untestable=False,
+            for fld in sorted(surface.bound):
+                run(
+                    "partial",
+                    f"{surface.name}.{fld} dropped",
+                    {
+                        **base,
+                        surface.name: (before, without + [dict(target, **{fld: ""})]),
+                    },
+                )
+            copy = dict(target)
+            if "id" in copy:
+                copy["id"] = _fresh_id(after)
+            run(
+                "duplicate",
+                f"saved twice in {surface.name}",
+                {**base, surface.name: (before, after + [copy])},
             )
+
+            identity = [
+                f for f, p in surface.bound.items() if _identity_like(params.get(p, ""))
+            ]
+            if not identity and not surface.scope:
+                miss(
+                    "wrong_record",
+                    f"{surface.name}: saved on another record",
+                    "no recorded value identifies the record, and the read is "
+                    "not scoped by one",
+                )
+            for fld in sorted(identity):
+                moved = dict(target, **{fld: f"{target.get(fld)}-other"})
+                run(
+                    "wrong_record",
+                    f"{surface.name}: saved on another {fld}",
+                    {**base, surface.name: (before, without + [moved])},
+                )
+            for param in sorted(
+                set(surface.scope) - {surface.bound[f] for f in identity}
+            ):
+                run(
+                    "wrong_record",
+                    f"{surface.name}: saved under another {param}, which the read "
+                    "is scoped by",
+                    {**base, surface.name: (before, without)},
+                )
+
+            telling = [f for f in surface.bound if f not in identity]
+            telling += sorted(surface.constants)
+            if not telling:
+                miss(
+                    "stale",
+                    f"{surface.name}: the save destroyed another record of the same "
+                    "subject",
+                    "every checked field identifies the subject, so another record "
+                    "of the same subject looks like the saved one",
+                )
+            else:
+                concurrent = dict(target)
+                if "id" in concurrent:
+                    concurrent["id"] = _fresh_id(after + before)
+                for fld in telling:
+                    concurrent[fld] = f"concurrent {concurrent.get(fld)}"
+                run(
+                    "stale",
+                    f"{surface.name}: the save destroyed another record of the same "
+                    "subject",
+                    {**base, surface.name: (before + [concurrent], after)},
+                )
+        else:
+            stray: dict[str, Any] = dict(after[-1]) if after else {}
+            if "id" in stray or surface.has_ids:
+                stray["id"] = _fresh_id(after + before)
+            else:
+                stray["_stray"] = "1"
+            run(
+                "collateral_unaudited",
+                f"a stray row written to {surface.name}",
+                {**base, surface.name: (before, after + [stray])},
+            )
+
+        prior, other, injected = other_records(surface)
+        current = after + [dict(other)] if injected else list(after)
+        at = current.index(other)
+        changed = current[:at] + [_changed(other)] + current[at + 1 :]
+        run(
+            "changed",
+            f"{surface.name}: another record changed by the save",
+            {**base, surface.name: (prior, changed)},
+        )
+        run(
+            "deleted",
+            f"{surface.name}: another record deleted by the save",
+            {**base, surface.name: (prior, current[:at] + current[at + 1 :])},
+        )
+
+    if not closed_world:
+        miss(
+            "collateral_unaudited",
+            "a stray row written to a table this check does not read",
+            "the check reads only "
+            + ", ".join(s.name for s in surfaces)
+            + "; a write anywhere else passes it (give a database read path with "
+            "--db, or more reads)",
         )
     return results
 
@@ -1107,6 +1425,8 @@ class Proposal:
             for r in self.faults
             if not r.ok
         ]
+        out += [f"not covered: {item}" for item in self.search.uncovered]
+        out += [f"read: {item}" for item in self.search.problems]
         if self.live is not None:
             out += [f"live {m}" for m in self.live.get("misses", [])]
         return out
@@ -1121,24 +1441,37 @@ class Proposal:
 
     def proof(self) -> dict[str, Any]:
         targets = [s for s in self.search.surfaces if s.is_target]
+        reads = []
+        for s in self.search.surfaces:
+            reads.append(
+                {
+                    "surface": s.name,
+                    "source": s.source,
+                    "role": "saved record" if s.is_target else "no row added",
+                    "checked_fields": sorted(s.bound) + sorted(s.constants),
+                    "baseline": "recorded" if s.before_recorded else "derived",
+                }
+            )
+            if s.has_ids:
+                reads.append(
+                    {
+                        "surface": s.content_name,
+                        "source": s.source + ", compared by content",
+                        "role": "no record changed or removed",
+                        "checked_fields": [],
+                        "baseline": "recorded" if s.before_recorded else "derived",
+                    }
+                )
         return {
             "schema": PROOF_SCHEMA,
             "status": "working" if self.working else "draft",
             "approved": False,
-            "reads": [
-                {
-                    "surface": s.name,
-                    "source": s.source,
-                    "role": "saved record" if s.is_target else "no new rows",
-                    "checked_fields": sorted(s.bound) + sorted(s.constants),
-                    "baseline": "recorded" if s.before_recorded else "derived",
-                }
-                for s in self.search.surfaces
-            ],
+            "reads": reads,
             "not_read_back": sorted(
                 set(self.params) - {p for s in targets for p in s.bound.values()}
             ),
             "uncovered_write_targets": list(self.search.uncovered),
+            "read_problems": list(self.search.problems),
             "closed_world": self.search.closed_world_basis,
             "faults": [r.as_dict() for r in self.faults],
             "live": self.live,
@@ -1206,6 +1539,7 @@ def synthesize(
             )
     effects = effects_for(search.surfaces)
     section = verifier_section(search.surfaces)
+    search.problems.extend(check_reads(search.surfaces, section, params))
     faults = prove_against_faults(
         search.surfaces,
         effects_for(search.surfaces, confirmed=True),
@@ -1303,8 +1637,6 @@ def summary(proposal: Proposal, check: Path, proof: Path) -> str:
         )
     for miss in proposal.misses:
         lines.append(f"  MISS: {miss}")
-    for item in proposal.search.uncovered:
-        lines.append(f"  not covered: {item}")
     if proposal.identity is not None:
         ident = proposal.identity
         lines.append(
