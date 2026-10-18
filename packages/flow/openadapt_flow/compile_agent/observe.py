@@ -157,8 +157,8 @@ function oaDescribe(c, interactive, scopeSel) {
              !/^(button|submit|reset|checkbox|radio|image|file|range|color)$/i
                .test(c.type)),
           // A drop-down whose change submits the form: Enter on it is a save.
-          submits: !!(c.getAttribute('onchange') ||
-            (c.form && c.form.getAttribute('onchange'))),
+          submits: /submit/i.test(c.getAttribute('onchange') || '') ||
+            /submit/i.test((c.form && c.form.getAttribute('onchange')) || ''),
           context: oaRow(c), scope: String(scope.innerText || '')};
 }
 """

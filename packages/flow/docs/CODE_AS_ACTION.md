@@ -160,7 +160,9 @@ Nothing here loosens what run 1 may do.
   surface with no page, the tool's resolved element is the only reading: a
   click it did not resolve is gated and refused, and Enter and Space are
   always gated. A drop-down whose change submits its form (an `onchange`
-  handler) is gated like a save.
+  attribute that calls `submit`) is gated like a save. A handler added from
+  script can't be seen; the record check after the run still catches a write
+  it made.
 - **The customer's key.** The agent calls the model on the key the operator
   supplies; OpenAdapt holds none. The spend cap (`max_cost_usd`) holds as for
   any `ClaudeAgent`.
