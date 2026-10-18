@@ -628,6 +628,18 @@ def _template_identity_kind(t, canon) -> Optional[_id.IdentityKind]:
     return None
 
 
+def recorded_identifier_matches(tmpl: IdentityTemplate, member: str) -> bool:
+    """Whether ``member`` is, exactly, an identifier token of the recorded band.
+
+    ``member`` is a known-ID list entry in ``known_ids.id_core`` form. This
+    compares the raw-token hash, not the OCR-canonical one, so a look-alike of
+    the recorded identifier does not match.
+    """
+
+    digest = _hash(_salt_bytes(tmpl.salt), member)
+    return any(t.idsh and t.r == digest for t in tmpl.tokens)
+
+
 def verify_template_identity(
     tmpl: IdentityTemplate,
     observed_text: str,

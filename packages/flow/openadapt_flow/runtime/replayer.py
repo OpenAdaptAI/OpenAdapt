@@ -35,6 +35,7 @@ promote a new bundle.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import hmac
 import json
@@ -12943,7 +12944,14 @@ class Replayer:
             # complete known-ID list with exactly one member in that class
             # rules out a twin (runtime.known_ids), provided a second read
             # from a FRESH screenshot agrees with the first.
-            lifted = self._known_id_lift(check, native_attempt, params)
+            matches: Optional[Callable[[str], bool]] = None
+            if anchor.identity_template is not None and anchor.identity_template.tokens:
+                from openadapt_flow.runtime import identity_template as itmpl
+
+                matches = functools.partial(
+                    itmpl.recorded_identifier_matches, anchor.identity_template
+                )
+            lifted = self._known_id_lift(check, native_attempt, params, matches)
             if lifted is not None:
                 return lifted
         # verified beats everything; between the two "cannot certify"
@@ -12962,6 +12970,7 @@ class Replayer:
         first: IdentityCheck,
         read: Callable[[bytes], IdentityCheck],
         params: Optional[Mapping[str, RuntimeParamScalar]],
+        recorded_id_matches: Optional[Callable[[str], bool]] = None,
     ) -> Optional[IdentityCheck]:
         """Known-ID cross-check for a look-alike abstain.
 
@@ -12989,6 +12998,7 @@ class Replayer:
             [first, second],
             known,
             run_values=runtime_params_for_gui(params or {}),
+            recorded_id_matches=recorded_id_matches,
         )
         if lifted is None or lifted.known_id_evidence is None:
             return None

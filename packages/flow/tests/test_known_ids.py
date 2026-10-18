@@ -117,6 +117,7 @@ def test_every_identifier_token_must_resolve():
         IdentityCheck(
             status="abstain",
             abstain_reason="glyph_confusable_identifier",
+            expected=observed,
             observed=observed,
         )
     ] * 2
@@ -138,7 +139,38 @@ def test_template_path_sets_abstain_reason():
     check = T.verify_template_identity(tmpl, BAND)
     assert check.status == "abstain"
     assert check.abstain_reason == "glyph_confusable_identifier"
-    assert resolve_lookalike_abstain([check, check], _list("MG4408")) is not None
+    # The template holds no plaintext, so the caller says how to match the
+    # recorded identifier.
+    assert resolve_lookalike_abstain([check, check], _list("MG4408")) is None
+    lifted = resolve_lookalike_abstain(
+        [check, check],
+        _list("MG4408"),
+        recorded_id_matches=lambda m: T.recorded_identifier_matches(tmpl, m),
+    )
+    assert lifted is not None
+
+
+def test_stale_list_holding_only_a_lookalike_does_not_lift():
+    # The record MG4408 was added after the export. The list still claims to
+    # be complete and holds only a different record, MG44O8, in the same
+    # look-alike class. Resolving to it would verify the wrong record.
+    stale = _list("MG44O8", "RC79284")
+    assert resolve_lookalike_abstain(_reads(), stale) is None
+
+
+def test_stale_list_holding_only_a_lookalike_does_not_lift_from_template():
+    from openadapt_flow.runtime import identity_template as T
+
+    tmpl = T.build_identity_template(BAND)
+    check = T.verify_template_identity(tmpl, BAND)
+    assert not T.recorded_identifier_matches(tmpl, "mg44o8")
+    assert T.recorded_identifier_matches(tmpl, "mg4408")
+    lifted = resolve_lookalike_abstain(
+        [check, check],
+        _list("MG44O8"),
+        recorded_id_matches=lambda m: T.recorded_identifier_matches(tmpl, m),
+    )
+    assert lifted is None
 
 
 def test_load_requires_complete_and_source(tmp_path):

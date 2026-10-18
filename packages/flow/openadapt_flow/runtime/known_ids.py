@@ -29,7 +29,11 @@ Rules, all required:
   identifier-shaped tokens;
 - each of those classes has exactly one member in the list;
 - in parameter mode, a run value shaped like an identifier must be that
-  member.
+  member;
+- otherwise (recorded-identity mode) the recorded band must hold that exact
+  member. A stale list can hold only a look-alike of the recorded identifier
+  (the record was added after the export); resolving to that look-alike
+  would verify the wrong record.
 
 Anything else leaves the original verdict unchanged. This step can only turn
 ``abstain`` into ``verified``; it never touches ``mismatch`` or
@@ -46,7 +50,15 @@ import os
 from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Iterable, Literal, Mapping, Optional, Sequence
+from typing import (
+    Any,
+    Callable,
+    Iterable,
+    Literal,
+    Mapping,
+    Optional,
+    Sequence,
+)
 
 from openadapt_flow.ir import IdentityCheck, KnownIdEvidence
 from openadapt_flow.runtime import identity as identity_mod
@@ -149,6 +161,7 @@ def resolve_lookalike_abstain(
     known_ids: Optional[KnownIdList],
     *,
     run_values: Optional[Mapping[str, str]] = None,
+    recorded_id_matches: Optional[Callable[[str], bool]] = None,
     min_reads: int = MIN_READS,
 ) -> Optional[IdentityCheck]:
     """Lift a look-alike abstain to ``verified`` when the known-ID list allows.
@@ -158,6 +171,11 @@ def resolve_lookalike_abstain(
             live band, each produced by the normal OCR tier.
         known_ids: The complete known-ID list, or None.
         run_values: Run parameter values (parameter mode).
+        recorded_id_matches: Whether a resolved member (in :func:`id_core`
+            form) is an identifier of the recorded band. Needed when the
+            recorded band is a hashed template; by default the identifier
+            tokens of ``reads[0].expected`` are used. A member that no run
+            value names must match the recorded band.
         min_reads: Reads required; :data:`MIN_READS` in production.
 
     Returns:
@@ -189,12 +207,22 @@ def resolve_lookalike_abstain(
             return None
         resolved.append(members[0])
 
+    named_by_run: set[str] = set()
     for value in (run_values or {}).values():
         if not isinstance(value, str):
             continue
         for tok in _identifier_tokens(value):
-            if lookalike_class(tok) in class_sets[0] and id_core(tok) not in resolved:
-                return None
+            if lookalike_class(tok) in class_sets[0]:
+                if id_core(tok) not in resolved:
+                    return None
+                named_by_run.add(id_core(tok))
+
+    if recorded_id_matches is None:
+        recorded = {id_core(t) for t in _identifier_tokens(reads[0].expected)}
+        recorded_id_matches = recorded.__contains__
+    for member in resolved:
+        if member not in named_by_run and not recorded_id_matches(member):
+            return None
 
     base = reads[0]
     return base.model_copy(

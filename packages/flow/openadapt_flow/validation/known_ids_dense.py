@@ -38,11 +38,12 @@ from openadapt_flow.runtime.known_ids import KnownIdList, resolve_lookalike_abst
 TWIN_CLASS_PREFIX = "id_"
 
 
-def _check(r: dict[str, Any]) -> IdentityCheck:
+def _check(r: dict[str, Any], expected: str = "") -> IdentityCheck:
     return IdentityCheck(
         status=r["status"],
         abstain_reason=r.get("abstain_reason"),
         coverage=r.get("coverage", 0.0),
+        expected=expected,
         observed=r.get("observed", ""),
     )
 
@@ -57,9 +58,11 @@ def _final(checks: list[IdentityCheck]) -> IdentityCheck:
     )
 
 
-def _after_same_frame(reads: list[dict[str, Any]], ids: KnownIdList) -> str:
+def _after_same_frame(
+    reads: list[dict[str, Any]], ids: KnownIdList, recorded: str
+) -> str:
     """Earlier design: native read and 2x upscale of the SAME frame."""
-    checks = [_check(r) for r in reads]
+    checks = [_check(r, recorded) for r in reads]
     final = _final(checks)
     if final.status == "verified":
         return "verified"
@@ -68,17 +71,20 @@ def _after_same_frame(reads: list[dict[str, Any]], ids: KnownIdList) -> str:
 
 
 def _after_fresh(
-    reads: list[dict[str, Any]], fresh: Optional[dict[str, Any]], ids: KnownIdList
+    reads: list[dict[str, Any]],
+    fresh: Optional[dict[str, Any]],
+    ids: KnownIdList,
+    recorded: str,
 ) -> str:
     """Current design: native read of the first frame and a native read of a
     FRESH capture (``Replayer._known_id_lift``)."""
-    checks = [_check(r) for r in reads]
+    checks = [_check(r, recorded) for r in reads]
     final = _final(checks)
     if final.status == "verified":
         return "verified"
     if fresh is None:
         return final.status
-    lifted = resolve_lookalike_abstain([checks[0], _check(fresh)], ids)
+    lifted = resolve_lookalike_abstain([checks[0], _check(fresh, recorded)], ids)
     return "verified" if lifted is not None else final.status
 
 
@@ -105,19 +111,23 @@ def score(result: dict[str, Any]) -> dict[str, Any]:
         }
         for t in rows:
             ids = lists[str(t["seed"])]
+            # Both trials check against the target row's recorded band.
+            recorded = t.get("context_text") or ""
             out["false_stops_before"] += t["fa_status"] != "verified"
             out["false_stops_after_same_frame"] += (
-                _after_same_frame(t["fa_reads"], ids) != "verified"
+                _after_same_frame(t["fa_reads"], ids, recorded) != "verified"
             )
             out["false_stops_after"] += (
-                _after_fresh(t["fa_reads"], t.get("fa_fresh_read"), ids) != "verified"
+                _after_fresh(t["fa_reads"], t.get("fa_fresh_read"), ids, recorded)
+                != "verified"
             )
             out["false_accepts_before"] += t["acc_status"] == "verified"
             out["false_accepts_after_same_frame"] += (
-                _after_same_frame(t["acc_reads"], ids) == "verified"
+                _after_same_frame(t["acc_reads"], ids, recorded) == "verified"
             )
             out["false_accepts_after"] += (
-                _after_fresh(t["acc_reads"], t.get("acc_fresh_read"), ids) == "verified"
+                _after_fresh(t["acc_reads"], t.get("acc_fresh_read"), ids, recorded)
+                == "verified"
             )
         return out
 
