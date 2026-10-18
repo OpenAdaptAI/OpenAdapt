@@ -1,28 +1,43 @@
 {
   "protocol_version": "2026-10-18.1",
   "timed_load_max": 12.0,
-  "spend_usd": 1.378557,
+  "spend_usd": 3.172722,
   "tasks": {
     "mockmed": {
       "agent": {
         "label": "1. Agent alone (Claude Sonnet 5.5 computer use)",
-        "items": 13,
-        "attempts": 13,
+        "items": 41,
+        "attempts": 41,
         "runs": [
           "2026-10-18-a"
         ],
-        "normal_items": 13,
-        "correct": 13,
+        "normal_items": 39,
+        "correct": 39,
         "correct_rate": 1.0,
-        "silent_wrong": 0,
+        "silent_wrong": 2,
         "safe_stops_normal": 0,
-        "fault_items": 0,
-        "fault_items_by_kind": {},
+        "fault_items": 2,
+        "fault_items_by_kind": {
+          "optimistic": {
+            "correct": 0,
+            "silent_wrong": 1,
+            "safe_stop": 0,
+            "flagged_wrong": 0
+          },
+          "wrong_record": {
+            "correct": 0,
+            "silent_wrong": 1,
+            "safe_stop": 0,
+            "flagged_wrong": 0
+          }
+        },
+        "planned_items": 41,
+        "done_correctly_all_items": 39,
         "flagged_wrong": 0,
         "paused": 0,
         "model_calls_per_item": 5.0,
-        "tokens_per_item": 40631,
-        "cost_usd_total": 0.5022,
+        "tokens_per_item": 40629,
+        "cost_usd_total": 1.5828,
         "cost_usd_per_item": 0.0386,
         "approvals_asked": 0,
         "timed_correct_items": 0,
@@ -32,8 +47,8 @@
         "wall_s_p90": null,
         "items_per_hour": null,
         "host_load_1m": {
-          "min": 122.71,
-          "max": 332.1
+          "min": 86.49,
+          "max": 523.94
         },
         "sources": [
           {
@@ -60,6 +75,8 @@
         "safe_stops_normal": 0,
         "fault_items": 0,
         "fault_items_by_kind": {},
+        "planned_items": 1,
+        "done_correctly_all_items": 1,
         "flagged_wrong": 0,
         "paused": 0,
         "model_calls_per_item": 5.0,
@@ -90,8 +107,8 @@
       },
       "program": {
         "label": "3. Compiled program driving the UI",
-        "items": 49,
-        "attempts": 51,
+        "items": 100,
+        "attempts": 102,
         "runs": [
           "2026-10-18-a"
         ],
@@ -100,12 +117,18 @@
         "correct_rate": 1.0,
         "silent_wrong": 0,
         "safe_stops_normal": 0,
-        "fault_items": 2,
+        "fault_items": 53,
         "fault_items_by_kind": {
           "optimistic": {
             "correct": 0,
             "silent_wrong": 0,
             "safe_stop": 1,
+            "flagged_wrong": 0
+          },
+          "ui_change": {
+            "correct": 51,
+            "silent_wrong": 0,
+            "safe_stop": 0,
             "flagged_wrong": 0
           },
           "wrong_record": {
@@ -115,6 +138,8 @@
             "flagged_wrong": 1
           }
         },
+        "planned_items": 100,
+        "done_correctly_all_items": 98,
         "flagged_wrong": 1,
         "paused": 0,
         "model_calls_per_item": 0.0,
@@ -129,8 +154,8 @@
         "wall_s_p90": null,
         "items_per_hour": null,
         "host_load_1m": {
-          "min": 118.57,
-          "max": 419.46
+          "min": 82.45,
+          "max": 532.93
         },
         "sources": [
           {
@@ -165,6 +190,8 @@
             "flagged_wrong": 0
           }
         },
+        "planned_items": 72,
+        "done_correctly_all_items": 62,
         "flagged_wrong": 0,
         "paused": 0,
         "model_calls_per_item": 10.65,
@@ -215,6 +242,8 @@
             "flagged_wrong": 0
           }
         },
+        "planned_items": 72,
+        "done_correctly_all_items": 62,
         "flagged_wrong": 0,
         "paused": 0,
         "model_calls_per_item": 0.0,
@@ -248,24 +277,26 @@
     "openimis": {
       "agent": {
         "label": "1. Agent alone (Claude Sonnet 5.5 computer use)",
-        "items": 4,
-        "attempts": 4,
+        "items": 16,
+        "attempts": 16,
         "runs": [
           "2026-10-18-a"
         ],
-        "normal_items": 4,
-        "correct": 4,
+        "normal_items": 16,
+        "correct": 16,
         "correct_rate": 1.0,
         "silent_wrong": 0,
         "safe_stops_normal": 0,
         "fault_items": 0,
         "fault_items_by_kind": {},
+        "planned_items": 16,
+        "done_correctly_all_items": 16,
         "flagged_wrong": 0,
         "paused": 0,
-        "model_calls_per_item": 7.75,
-        "tokens_per_item": 82056,
-        "cost_usd_total": 0.2476,
-        "cost_usd_per_item": 0.0619,
+        "model_calls_per_item": 7.5,
+        "tokens_per_item": 78077,
+        "cost_usd_total": 0.9611,
+        "cost_usd_per_item": 0.0601,
         "approvals_asked": 0,
         "timed_correct_items": 0,
         "item_s_median": null,
@@ -274,8 +305,8 @@
         "wall_s_p90": null,
         "items_per_hour": null,
         "host_load_1m": {
-          "min": 118.57,
-          "max": 264.6
+          "min": 89.41,
+          "max": 498.31
         },
         "sources": [
           {
@@ -302,6 +333,8 @@
         "safe_stops_normal": 0,
         "fault_items": 0,
         "fault_items_by_kind": {},
+        "planned_items": 1,
+        "done_correctly_all_items": 1,
         "flagged_wrong": 0,
         "paused": 0,
         "model_calls_per_item": 8.0,
@@ -349,6 +382,8 @@
             "flagged_wrong": 0
           }
         },
+        "planned_items": 100,
+        "done_correctly_all_items": 49,
         "flagged_wrong": 0,
         "paused": 50,
         "model_calls_per_item": 0.0,

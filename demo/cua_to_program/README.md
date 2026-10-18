@@ -35,7 +35,8 @@ or under.
   Self-repair (#1265) would propose the fix for a one-tap approval, but it
   wasn't merged when this ran, so the video says "sent to a person".
 - **Correctness batch (`results/launch-4-c100/`):** 100 claims with no UI
-  change, same program and engine.
+  change, same program and engine. In progress while this was written: see
+  `batch.csv` for the rows done.
 - **Engine:** origin/main ccb0fe06 with #1293 merged in locally (commit
   a8cca993, recorded in `batch_meta.json`). #1293 makes the program look once
   more when a list re-renders under a slow lookup. On main without it, the
@@ -48,7 +49,7 @@ or under.
 ### Videos
 
 - `results/launch-4/cua-to-program-full.mp4`: 83.9 s, 1920x1080.
-- `results/launch-4/cua-to-program-social.mp4`: 19.6 s.
+- `results/launch-4/cua-to-program-social.mp4`: 19.5 s.
 
 Both are rendered by `render.py` from the screen recordings and the measured
 counters above. Stretches that are sped up are labelled with their speed.

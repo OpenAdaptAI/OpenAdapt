@@ -69,6 +69,15 @@ item has its own values (`tasks/*.py`).
 The UI change stays on from item 50 to the end of the batch, as a vendor
 release would.
 
+On openIMIS the UI change is a script injected into the one running app, so
+it affects every client. Runs on the same app must not overlap a UI-change
+run. Each openIMIS agent row records the state the app actually served
+(`ui_change_on=` in `detail`).
+
+The arms can use different models. openIMIS arm 2 was recorded with
+`claude-opus-5-5` for the launch demo, while arm 1 is Sonnet 5.5. The
+scoreboard's Model column says which model each row used.
+
 A program arm retries an item up to 3 times, but only when the read-back shows
 nothing was written. Every attempt is a row. If an item after the UI change
 stops on every attempt, the batch pauses for a person, and the remaining items
@@ -95,6 +104,13 @@ message does not say it was unable to finish (`run.FAILURE_WORDS`). A program
 reports success when its run ends `VERIFIED`, or, on the demo profile,
 `COMPLETED_UNVERIFIED` with every record check confirmed.
 
+Two things to check before quoting an agent's `silent_wrong` count:
+- The "reported success" rule is a word match, so review every agent row
+  that isn't `correct` by hand. Each item's ledger
+  (`raw/<task>/agent/<run>/ledgers/`) keeps the agent's full final message.
+- openIMIS also counts a claim saved under a different claim number as a
+  wrong save. The insuree's claim count is taken before and after the item.
+
 ## Metrics per arm
 
 Computed over the final attempt of each item. All are in `scoreboard.json`.
@@ -110,7 +126,10 @@ Computed over the final attempt of each item. All are in `scoreboard.json`.
 - Median and p90 of both, over correct items, from timed rows only.
 - Items per hour: correct timed items, divided by the wall time of all timed
   attempts.
-- People asked to approve.
+- People asked to approve. In arm 2's live MockMed runs, the parameter
+  confirmation, review and admission are scripted: a named test reviewer and
+  a registered throwaway admitter key do them. `approvals_asked` counts the
+  approvals the flow requires, not a person's time.
 
 ## Timing
 
@@ -151,3 +170,18 @@ the agent through the JIT wrapper, compiles the program, and runs the batch.
 imports) and, for agent arms, one ledger per item with every model call's
 tokens and cost. Screenshots and videos are not committed. Raw data is
 committed before any number is quoted.
+
+## Amendment 1 (2026-10-18, after a code review, before any figure was quoted)
+
+Arms 1 and 3 on MockMed and arm 1 on openIMIS were running when these changes
+were made:
+- The hand-review rule for an agent's `silent_wrong` and openIMIS's insuree
+  claim count, both in "Outcome of an item". The insuree count, and the
+  per-row record of the UI state the app actually served, apply to runs
+  started after this amendment. The openIMIS agent run `2026-10-18-a` had
+  already loaded the earlier code, so its non-correct rows get checked by
+  hand against the claims table.
+- The note that arm 2's approvals are scripted.
+- The note that the openIMIS UI change is global.
+- The Model column, and the "done correctly, all items" column (correct items
+  out of every planned item, paused ones included).

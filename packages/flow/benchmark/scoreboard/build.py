@@ -102,6 +102,8 @@ def summarize(rows: list[dict[str, Any]]) -> dict[str, Any]:
             }
             for k in sorted({r["fault"] for r in faulted})
         },
+        "planned_items": len(finals),
+        "done_correctly_all_items": count(finals, "correct"),
         "flagged_wrong": count(attempted, "flagged_wrong"),
         "paused": count(finals, "paused"),
         "model_calls_per_item": round(sum(_num(r["model_calls"]) for r in tried) / n, 2)
@@ -206,19 +208,25 @@ def markdown(sb: dict[str, Any]) -> str:
         lines += [
             f"## {task}",
             "",
-            "| Arm | Items | Correct (read back) | Silent wrong | Safe stops (normal / fault items) | Flagged wrong | Paused | Model calls / item | Cost / item | Task s, median / p90 | Wall s, median / p90 | Items / hour | Approvals | Host load |",
-            "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
+            "| Arm | Model | Items | Correct (read back) | Done correctly, all items | Silent wrong | Safe stops (normal / fault items) | Flagged wrong | Paused | Model calls / item | Cost / item | Task s, median / p90 | Wall s, median / p90 | Items / hour | Approvals | Host load |",
+            "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|",
         ]
         for arm, s in arms.items():
             fault_stops = sum(
                 v.get("safe_stop", 0) for v in s["fault_items_by_kind"].values()
+            )
+            models = (
+                ", ".join(sorted({m["model"] for m in s["sources"] if m.get("model")}))
+                or "none"
             )
             rate = (
                 f" ({s['correct_rate']:.0%})" if s["correct_rate"] is not None else ""
             )
             load = s["host_load_1m"]
             lines.append(
-                f"| {s['label']} | {s['items']} | {s['correct']} of {s['normal_items']}{rate} | "
+                f"| {s['label']} | {models} | {s['items']} | "
+                f"{s['correct']} of {s['normal_items']}{rate} | "
+                f"{s['done_correctly_all_items']} of {s['planned_items']} | "
                 f"{s['silent_wrong']} | {s['safe_stops_normal']} / {fault_stops} of {s['fault_items']} | "
                 f"{s['flagged_wrong']} | {s['paused']} | {_fmt(s['model_calls_per_item'])} | "
                 f"{_fmt(s['cost_usd_per_item'] if s['cost_usd_per_item'] is not None else None, '')} | "

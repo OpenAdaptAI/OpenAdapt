@@ -144,19 +144,36 @@ class Session:
         return self.task.claim_form_url()
 
     def before(self, it: Any) -> None:
+        self.observed = ""
         if self.server is not None:
             self.server.reset()
-        elif self.ui_change_at is not None:
-            # openIMIS: the UI change is a script injected into the running
-            # app (tasks/openimis.ui_change); it affects every client.
+            return
+        # openIMIS: count this insuree's claims first, so a claim saved under
+        # a mistyped claim number still reads back as a wrong save.
+        ins = it.values["insurance_no"]
+        self._insuree_claims = sum(
+            1 for r in self.task.read_claims() if r["insurance_no"] == ins
+        )
+        if self.ui_change_at is not None:
+            # The UI change is a script injected into the running app
+            # (tasks/openimis.ui_change); it affects every client.
             want = it.fault == "ui_change"
             if want != self.task.ui_change_is_on():
                 self.task.ui_change(want)
+        # Record what the app actually served for this item, not only what was
+        # intended: another run on the same app could have toggled it.
+        self.observed = f"ui_change_on={self.task.ui_change_is_on()}; "
 
     def readback(self, it: Any) -> str:
         if self.server is not None:
             return self.task.check(self.server.records(), it.values)
-        return self.task.check(it.values)
+        verdict = self.task.check(it.values)
+        if verdict == "missing":
+            ins = it.values["insurance_no"]
+            now = sum(1 for r in self.task.read_claims() if r["insurance_no"] == ins)
+            if now > getattr(self, "_insuree_claims", now):
+                return "wrong"  # a claim landed, under another claim number
+        return verdict
 
     def close(self) -> None:
         if self.server is not None:
@@ -248,7 +265,12 @@ def arm_agent(args: argparse.Namespace) -> int:
                 host_load_1m=load0,
                 timed=schema.timed(load0, schema.load_1m()),
                 detail=(
-                    f"{type(error).__name__}: {error}" if error else agent.final_text
+                    sess.observed
+                    + (
+                        f"{type(error).__name__}: {error}"
+                        if error
+                        else agent.final_text
+                    )
                 )[:300],
             )
             schema.append(out / "items.csv", row)

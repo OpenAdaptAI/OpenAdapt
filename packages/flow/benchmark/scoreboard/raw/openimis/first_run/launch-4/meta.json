@@ -17,5 +17,49 @@
     "agent_run.json": "7a312b24ce72a435f1ff7d69d002a82a623fac303122cbd8d3e855914a77c92a",
     "admission.json": "e7b18f3dd8ffba7134209c6018d1e8baa171456c67dfd0423fa637b99930df75"
   },
-  "note": "host load not sampled for this run; untimed"
+  "note": "host load not sampled for this run; untimed",
+  "sessions": [
+    {
+      "protocol_version": "2026-10-18.1",
+      "written_at": "2026-10-18T16:11:28-0400",
+      "machine": "arm64 Darwin 24.6.0",
+      "cpu_count": 12,
+      "python": "3.12.13",
+      "engine": {
+        "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+        "git_head": "0e6c4db2237ce6a0162fd787184b0331b17615de"
+      },
+      "benchmark_git_head": "0e6c4db2237ce6a0162fd787184b0331b17615de",
+      "task": "openimis",
+      "arm": "first_run",
+      "imported_from": "demo/cua_to_program/results/launch-4",
+      "source_sha256": {
+        "agent_ledger.json": "8ed0ac144fa24a5e3f6806adc89422bc84e059b71861f789288f27d38b2a1baf",
+        "agent_run.json": "7a312b24ce72a435f1ff7d69d002a82a623fac303122cbd8d3e855914a77c92a",
+        "admission.json": "e7b18f3dd8ffba7134209c6018d1e8baa171456c67dfd0423fa637b99930df75"
+      },
+      "note": "host load not sampled for this run; untimed"
+    },
+    {
+      "protocol_version": "2026-10-18.1",
+      "written_at": "2026-10-18T16:11:42-0400",
+      "machine": "arm64 Darwin 24.6.0",
+      "cpu_count": 12,
+      "python": "3.12.13",
+      "engine": {
+        "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+        "git_head": "0e6c4db2237ce6a0162fd787184b0331b17615de"
+      },
+      "benchmark_git_head": "0e6c4db2237ce6a0162fd787184b0331b17615de",
+      "task": "openimis",
+      "arm": "first_run",
+      "imported_from": "demo/cua_to_program/results/launch-4",
+      "source_sha256": {
+        "agent_ledger.json": "8ed0ac144fa24a5e3f6806adc89422bc84e059b71861f789288f27d38b2a1baf",
+        "agent_run.json": "7a312b24ce72a435f1ff7d69d002a82a623fac303122cbd8d3e855914a77c92a",
+        "admission.json": "e7b18f3dd8ffba7134209c6018d1e8baa171456c67dfd0423fa637b99930df75"
+      },
+      "note": "host load not sampled for this run; untimed"
+    }
+  ]
 }

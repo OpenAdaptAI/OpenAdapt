@@ -1,5 +1,5 @@
 {
-  "total_usd": 2.116362,
+  "total_usd": 3.172722,
   "entries": [
     {
       "usd": 0.577,
@@ -179,6 +179,126 @@
       "usd": 0.056236,
       "note": "openimis agent 2026-10-18-a item 10",
       "at": 1792353839.840456
+    },
+    {
+      "usd": 0.038688,
+      "note": "mockmed agent 2026-10-18-a item 24",
+      "at": 1792353855.3972638
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 25",
+      "at": 1792353884.151308
+    },
+    {
+      "usd": 0.056182,
+      "note": "openimis agent 2026-10-18-a item 11",
+      "at": 1792353906.391059
+    },
+    {
+      "usd": 0.038538,
+      "note": "mockmed agent 2026-10-18-a item 26",
+      "at": 1792353916.768128
+    },
+    {
+      "usd": 0.038568,
+      "note": "mockmed agent 2026-10-18-a item 27",
+      "at": 1792353936.743487
+    },
+    {
+      "usd": 0.064143,
+      "note": "openimis agent 2026-10-18-a item 12",
+      "at": 1792353958.776139
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 28",
+      "at": 1792353961.7313762
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 29",
+      "at": 1792353978.785076
+    },
+    {
+      "usd": 0.038568,
+      "note": "mockmed agent 2026-10-18-a item 30",
+      "at": 1792353997.7834601
+    },
+    {
+      "usd": 0.063873,
+      "note": "openimis agent 2026-10-18-a item 13",
+      "at": 1792354006.421816
+    },
+    {
+      "usd": 0.038658,
+      "note": "mockmed agent 2026-10-18-a item 31",
+      "at": 1792354016.134633
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 32",
+      "at": 1792354033.984477
+    },
+    {
+      "usd": 0.056521,
+      "note": "openimis agent 2026-10-18-a item 14",
+      "at": 1792354052.359502
+    },
+    {
+      "usd": 0.038618,
+      "note": "mockmed agent 2026-10-18-a item 33",
+      "at": 1792354053.6341178
+    },
+    {
+      "usd": 0.038568,
+      "note": "mockmed agent 2026-10-18-a item 34",
+      "at": 1792354072.492139
+    },
+    {
+      "usd": 0.038548,
+      "note": "mockmed agent 2026-10-18-a item 35",
+      "at": 1792354099.098669
+    },
+    {
+      "usd": 0.064494,
+      "note": "openimis agent 2026-10-18-a item 15",
+      "at": 1792354101.633112
+    },
+    {
+      "usd": 0.038538,
+      "note": "mockmed agent 2026-10-18-a item 36",
+      "at": 1792354118.723093
+    },
+    {
+      "usd": 0.038528,
+      "note": "mockmed agent 2026-10-18-a item 37",
+      "at": 1792354168.528851
+    },
+    {
+      "usd": 0.056583,
+      "note": "openimis agent 2026-10-18-a item 16",
+      "at": 1792354181.286175
+    },
+    {
+      "usd": 0.038688,
+      "note": "mockmed agent 2026-10-18-a item 38",
+      "at": 1792354198.745715
+    },
+    {
+      "usd": 0.038568,
+      "note": "mockmed agent 2026-10-18-a item 39",
+      "at": 1792354227.565841
+    },
+    {
+      "usd": 0.038568,
+      "note": "mockmed agent 2026-10-18-a item 40",
+      "at": 1792354273.6964228
+    },
+    {
+      "usd": 0.038688,
+      "note": "mockmed agent 2026-10-18-a item 41",
+      "at": 1792354307.547764
     }
   ]
 }

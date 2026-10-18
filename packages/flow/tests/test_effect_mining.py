@@ -570,6 +570,12 @@ def test_bound_selector_finds_this_runs_record_among_earlier_ones():
     assert set(verdicts(bound)) == {Verdict.CONFIRMED}
     # Without the binding the constant-field selector matches both records.
     assert Verdict.REFUTED in verdicts(literal)
+    # A run that saved a different value than its parameter is refuted.
+    wrong = [earlier, _record(id=8, note="a different note")]
+    assert {
+        judge_records(e.resolve(params), before, wrong, substrate="rest").verdict
+        for e in bound.effects
+    } == {Verdict.REFUTED}
 
 
 def test_compile_binds_effect_params_only_when_asked(tmp_path):

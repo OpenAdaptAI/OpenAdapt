@@ -167,10 +167,12 @@ def _new_records(before: list[dict], after: list[dict]) -> list[dict]:
 def _param_value_fields(record: dict, exclude_texts: tuple[str, ...]) -> dict[str, str]:
     """Fields of ``record`` whose value equals a demonstrated parameter value.
 
-    These are the write's PAYLOAD (the typed note), not its identity — each
-    becomes a ``field_equals`` read-back rather than part of the ``match``
-    selector. Comparison is on ``str()`` and exact (the value was typed
-    verbatim; unlike OCR text there is no glyph ambiguity to fuzz over).
+    These are the write's PAYLOAD (the typed note): each becomes a
+    ``field_equals`` read-back. They are left out of the constant selector;
+    once the parameters are confirmed, the ones bound to a parameter join the
+    ``match`` selector bound to it (see :func:`_mine_from_sor_delta`).
+    Comparison is on ``str()`` and exact (the value was typed verbatim;
+    unlike OCR text there is no glyph ambiguity to fuzz over).
     """
     wanted = {v for v in exclude_texts if v}
     out: dict[str, str] = {}
@@ -233,10 +235,12 @@ def _mine_from_sor_delta(
     effects: list[Effect] = []
 
     # After a person confirms the parameters, a field holding a confirmed
-    # parameter's value names the record THIS run writes (a claim number, an
-    # order id). Match on it too, bound to the parameter: otherwise the
-    # selector is only the demonstration's constant fields, and on a table
-    # that already holds such records it matches every earlier one.
+    # parameter's value narrows the selector to records carrying this run's
+    # value (a claim number, an order id). Match on it too, bound to the
+    # parameter: otherwise the selector is only the demonstration's constant
+    # fields, and on a table that already holds such records it matches every
+    # earlier one. This does not make the check count only new records: a
+    # record that already carried the same value would still match.
     bindings = dict(param_bindings or {})
     bound = {
         fname: ValueExpr(param=bindings[fval])
@@ -252,7 +256,10 @@ def _mine_from_sor_delta(
         risk=step.risk,
         probe=(
             "a record matching "
-            + ", ".join(f"{k}={v!r}" for k, v in selector.items())
+            + ", ".join(
+                [f"{k}={v!r}" for k, v in selector.items()]
+                + [f"{k}=<{bindings[v]}>" for k, v in payload.items() if v in bindings]
+            )
             + " exists exactly once (mined from the demonstration's "
             "system-of-record delta)"
         ),
