@@ -90,6 +90,7 @@ ALLOWLISTED_PATHS = (
     "packages/agent/source-policy.public.json",
     "packages/capture/source-policy.public.json",
     "packages/privacy/source-policy.public.json",
+    "packages/desktop/source-policy.public.json",
 )
 
 # Binary-ish extensions we skip for content scanning (path scan still applies).

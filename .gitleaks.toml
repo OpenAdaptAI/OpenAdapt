@@ -1,7 +1,25 @@
 # gitleaks configuration for OpenAdapt.
-# Extends the default gitleaks ruleset. No finding-specific allowlists: the one
-# historical finding (Noun Project keys on the stale branch contrib/logogenerator)
-# was remediated by deleting that branch (2026-07-20), so the credentials are no
-# longer reachable in this repository. Rotate the upstream key regardless.
+# Extends the default gitleaks ruleset. The only allowlists below are exact
+# public FFmpeg provenance values. The one historical finding (Noun Project
+# keys on the stale branch contrib/logogenerator) was remediated by deleting
+# that branch (2026-07-20), so the credentials are no longer reachable in this
+# repository. Rotate the upstream key regardless.
 [extend]
 useDefault = true
+
+# packages/desktop pins FFmpeg's release-signing key by its published
+# fingerprint and key-file SHA-256. Both are public provenance, not secrets;
+# the allowlists match only those exact values (same as openadapt-desktop's).
+[[allowlists]]
+description = "The published FFmpeg release-key fingerprint is public provenance, not a secret"
+regexTarget = "secret"
+regexes = [
+  '''^FCF986EA15E6E293A5644F10B4322F04D67658D8$''',
+]
+
+[[allowlists]]
+description = "The SHA-256 of FFmpeg's published signing key file is public provenance, not a secret"
+regexTarget = "secret"
+regexes = [
+  '''^397b3becedcd5a98769967ff1ff8501ddc89f8368b8f766e4701377d7dbaabe5$''',
+]

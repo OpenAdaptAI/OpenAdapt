@@ -31,6 +31,12 @@
 # Python 3.10, 3.11 and 3.12, the full suite with Presidio and the spaCy model
 # on 3.12, and lint plus the release contract (changelog matches the version,
 # `uv build`, archive boundary).
+#
+# OpenAdapt Desktop (packages/desktop) runs two reusable workflows:
+# desktop-test.yml (the Python engine on Linux for a PR, plus macOS and Windows
+# on main, and the bundled-Flow qualification contract) and desktop-build.yml
+# (frontend, Python distribution, frozen sidecar, and Tauri installers). Their
+# jobs are in packages-gate like every other package's.
 name: Packages
 
 on:
@@ -60,6 +66,7 @@ jobs:
       agent: ${{ steps.classify.outputs.agent }}
       capture: ${{ steps.classify.outputs.capture }}
       privacy: ${{ steps.classify.outputs.privacy }}
+      desktop: ${{ steps.classify.outputs.desktop }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -73,7 +80,7 @@ jobs:
         run: |
           set -euo pipefail
           all() {
-            for pkg in flow types agent capture privacy; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
+            for pkg in flow types agent capture privacy desktop; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
             exit 0
           }
           case "$EVENT_NAME" in
@@ -102,12 +109,14 @@ jobs:
           agent="$(hit "^packages/(agent|flow|types)/|$wf")"
           capture="$(hit "^packages/capture/|$wf")"
           privacy="$(hit "^packages/privacy/|$wf")"
+          desktop="$(hit "^packages/desktop/|^\.github/workflows/desktop-(test|build)\.yml$|$wf")"
           {
             echo "flow=$flow"
             echo "types=$types"
             echo "agent=$agent"
             echo "capture=$capture"
             echo "privacy=$privacy"
+            echo "desktop=$desktop"
           } | tee -a "$GITHUB_OUTPUT"
 
   types:
@@ -626,6 +635,18 @@ jobs:
       - name: Verify release archive boundaries
         run: uv run --no-sync python scripts/check_source_boundary.py --require-dist
 
+  desktop-test:
+    name: desktop test
+    needs: scope
+    if: needs.scope.outputs.desktop == 'true'
+    uses: ./.github/workflows/desktop-test.yml
+
+  desktop-build:
+    name: desktop build
+    needs: scope
+    if: needs.scope.outputs.desktop == 'true'
+    uses: ./.github/workflows/desktop-build.yml
+
   packages-gate:
     name: packages-gate
     needs:
@@ -642,6 +663,8 @@ jobs:
       - privacy
       - privacy-presidio
       - privacy-contract
+      - desktop-test
+      - desktop-build
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
