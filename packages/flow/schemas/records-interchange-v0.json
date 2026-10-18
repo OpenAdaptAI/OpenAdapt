@@ -307,12 +307,12 @@
           "default": null
         },
         "grade": {
-          "default": "unconfirmed",
+          "default": "unchecked",
           "enum": [
-            "unconfirmed",
-            "screen_readback",
-            "committed_record_readback",
-            "verified"
+            "unchecked",
+            "same_screen",
+            "reopened",
+            "system_of_record"
           ],
           "title": "Grade",
           "type": "string"
@@ -617,7 +617,7 @@
     },
     "Provenance": {
       "additionalProperties": false,
-      "description": "Who produced the exchange, and a checksum over its content.",
+      "description": "Who produced the exchange, and a checksum over its content. The\nchecksum is required, so every exchange can be checked for tampering and\na Seal always has something to sign.",
       "properties": {
         "tool_name": {
           "maxLength": 100,
@@ -639,25 +639,18 @@
           "type": "string"
         },
         "checksum": {
-          "anyOf": [
-            {
-              "pattern": "^sha256:[0-9a-f]{64}$",
-              "type": "string"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "default": null,
-          "description": "sha256 of the canonical JSON without checksum and seals",
-          "title": "Checksum"
+          "description": "Required. sha256 of the canonical JSON without checksum and seals",
+          "pattern": "^sha256:[0-9a-f]{64}$",
+          "title": "Checksum",
+          "type": "string"
         }
       },
       "required": [
         "tool_name",
         "tool_version",
         "producer",
-        "captured_at"
+        "captured_at",
+        "checksum"
       ],
       "title": "Provenance",
       "type": "object"

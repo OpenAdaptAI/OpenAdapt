@@ -65,7 +65,21 @@ def test_every_fixture_case_passes() -> None:
 def test_every_rule_has_an_invalid_fixture() -> None:
     cases = json.loads((FIXTURES / "cases.json").read_text())["cases"]
     covered = {c for case in cases for c in case["expect"]}
-    assert covered == set(CODES) - {"IX012"}
+    assert covered == set(CODES)
+
+
+def test_grades_are_check_level_names() -> None:
+    from openadapt_flow.check_level import CheckLevel
+
+    assert interchange.READ_GRADES == (
+        "unchecked",
+        "same_screen",
+        "reopened",
+        "system_of_record",
+    )
+    for grade in interchange.READ_GRADES:
+        assert CheckLevel.from_label(grade).label == grade
+    assert "verified" not in json.dumps(interchange.json_schema())
 
 
 @pytest.mark.parametrize(
@@ -89,10 +103,11 @@ def test_checksum_ignores_key_order_and_seals() -> None:
     assert compute_checksum(reordered) == doc["provenance"]["checksum"]
 
 
-def test_seal_without_checksum_is_refused() -> None:
-    doc = _load("valid/invoice_posting_result.json")
+def test_checksum_is_required() -> None:
+    doc = _load("valid/invoice_posting.json")
     doc["provenance"].pop("checksum")
-    assert [v.code for v in check(doc)] == ["IX012"]
+    assert [v.code for v in check(doc)] == ["IX001"]
+    assert "IX012" not in CODES
 
 
 def test_model_suggestion_is_allowed_only_as_advisory() -> None:
@@ -117,7 +132,8 @@ def test_emit_exchange_writes_l1_manifest_rows(tmp_path: Path) -> None:
 def test_emit_exchange_refuses_a_non_conforming_exchange(tmp_path: Path) -> None:
     with pytest.raises(ExchangeNotConforming, match="IX030"):
         emit_exchange(
-            FIXTURES / "invalid/verified_without_independent_read.json", tmp_path
+            FIXTURES / "invalid/system_of_record_without_independent_read.json",
+            tmp_path,
         )
     assert not (tmp_path / "manifest.csv").exists()
 
@@ -126,3 +142,94 @@ def test_cli(capsys: pytest.CaptureFixture[str]) -> None:
     assert main(["cases", str(FIXTURES)]) == 0
     assert main(["check", str(FIXTURES / "invalid/self_approval.json")]) == 1
     assert "IX041" in capsys.readouterr().out
+
+
+def _exchange_dir_with_payload(tmp_path: Path, payload: Path) -> Path:
+    """Copy the invoice fixture into its own directory with ``payload`` as
+    ``payloads/invoice-INV-20417.txt`` (a file or a symlink)."""
+    root = tmp_path / "exchange"
+    (root / "payloads").mkdir(parents=True)
+    target = root / "payloads" / "invoice-INV-20417.txt"
+    if payload.is_symlink():
+        target.symlink_to(payload.readlink())
+    else:
+        target.write_bytes(payload.read_bytes())
+    doc = _load("valid/invoice_posting.json")
+    (root / "ex.json").write_text(json.dumps(doc))
+    return root / "ex.json"
+
+
+def test_payload_symlink_out_of_the_exchange_dir_is_refused(tmp_path: Path) -> None:
+    outside = tmp_path / "outside.txt"
+    outside.write_bytes(
+        (FIXTURES / "valid/payloads/invoice-INV-20417.txt").read_bytes()
+    )
+    link = tmp_path / "link"
+    link.symlink_to(outside)
+    ex = _exchange_dir_with_payload(tmp_path, link)
+    assert [v.code for v in check_file(ex)] == ["IX071"]
+    with pytest.raises(ExchangeNotConforming, match="IX071"):
+        emit_exchange(ex, tmp_path / "extractions")
+    assert not (tmp_path / "extractions").exists()
+
+
+def test_payload_inside_the_exchange_dir_is_emitted(tmp_path: Path) -> None:
+    ex = _exchange_dir_with_payload(
+        tmp_path, FIXTURES / "valid/payloads/invoice-INV-20417.txt"
+    )
+    assert check_file(ex) == []
+    refs = emit_exchange(ex, tmp_path / "extractions")
+    assert [r.path.name for r in refs] == ["V-0042_2026-10-29_invoice.txt"]
+
+
+@pytest.mark.parametrize("raw", ["..\\..\\x", "a\\b.txt", "C:/x", "c:x", "/etc/x"])
+def test_payload_paths_that_are_not_relative_posix_are_refused(raw: str) -> None:
+    doc = _load("valid/invoice_posting.json")
+    doc["artifacts"][0]["payload"]["path"] = raw
+    doc = interchange.with_checksum(doc)
+    assert [v.code for v in check(doc)] == ["IX071"]
+
+
+def test_reopened_grade_follows_the_records_rule() -> None:
+    """The reading step's rule: an acting read and a reopened screen read."""
+    from openadapt_flow.interchange.conformance import supported_grade
+    from openadapt_flow.interchange.model import Read
+
+    def reads(*pairs: tuple[str, str | None, str | None]) -> list[Read]:
+        return [
+            Read(channel=c, value="X", session=s, source_kind=k) for c, s, k in pairs
+        ]
+
+    assert supported_grade(reads(("ocr", "reopened", None))) == "unchecked"
+    assert (
+        supported_grade(
+            reads(("ocr", "reopened", None), ("clipboard", "reopened", None))
+        )
+        == "same_screen"
+    )
+    assert (
+        supported_grade(reads(("ocr", "acting", None), ("ocr", "reopened", None)))
+        == "reopened"
+    )
+    assert (
+        supported_grade(reads(("ocr", "acting", None), ("ocr", "acting", None)))
+        == "unchecked"
+    )
+    assert (
+        supported_grade(
+            reads(("ocr", "acting", None), ("export", "independent", "committed_store"))
+        )
+        == "system_of_record"
+    )
+    assert (
+        supported_grade(
+            reads(("ocr", "acting", None), ("export", "acting", "live_session"))
+        )
+        == "same_screen"
+    )
+
+
+def test_spec_lists_every_code_in_order() -> None:
+    spec = (ROOT / "docs" / "INTERCHANGE.md").read_text()
+    listed = re.findall(r"^\| `(IX\d+)` \|", spec, re.M)
+    assert listed == list(CODES) == sorted(CODES)

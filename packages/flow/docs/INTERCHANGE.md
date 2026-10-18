@@ -28,14 +28,14 @@ An exchange is one JSON document. Payload files sit next to it and are addressed
 | `direction` | `to_executor` (work to do) or `from_executor` (what was done). |
 | `workflow` | Name of the workflow that handles it, such as `ap.post_invoice`. |
 | `session_id` | Optional id that groups exchanges from one batch or run. |
-| `in_reply_to` | On a `from_executor` exchange, the `exchange_id` it answers. |
+| `in_reply_to` | On a `from_executor` exchange, the `exchange_id` it answers. Required there. |
 | `artifacts` | Source documents and observations, in the `L1Artifact` envelope shape. |
 | `fields` | Typed values, each with its reads, confidence and grade. |
 | `identities` | The parties or records the exchange is about, and how each matched. |
 | `decisions` | Finite choices made by authorized people. |
-| `outcome` | `pending`, `committed` or `halted`. |
+| `outcome` | `pending`, `committed` or `halted`. Only a `from_executor` exchange can be `committed`, and it must carry at least one read of the target application. |
 | `halt_reason` | Required when `outcome` is `halted`. |
-| `provenance` | Producer, tool, time and checksum. |
+| `provenance` | Producer, tool, time and checksum (required). |
 | `seals` | References to Seals (signed receipts) over the checksum. |
 | `extensions` | Domain data under reverse-DNS keys. |
 
@@ -51,7 +51,7 @@ An artifact follows the `L1Artifact` envelope used by layered records platforms,
 | `kind` | `source_document` (a file to parse) or `structured_observation` (values read from a source). |
 | `source_type` | How it was acquired, such as `pdf_scan`, `fax_folder`, `rdp_screen` or `api_json`. |
 | `file_number`, `date`, `doctype` | The L1 naming keys: the file is emitted as `{file_number}_{date}_{doctype}`. |
-| `payload` | Optional `{path, sha256, mime, bytes}` for a file next to the exchange. |
+| `payload` | Optional `{path, sha256, mime, bytes}` for a file next to the exchange. `path` is a relative POSIX path: no leading `/`, no `..`, no backslash and no drive letter. After symlinks are followed it must still be inside the exchange's directory. |
 | `metadata` | Free-form source context. |
 
 ### Fields
@@ -64,7 +64,7 @@ Each value carries its evidence:
 | `type` | `text`, `code`, `date`, `currency`, `integer`, `decimal`, `boolean` or `enum`, the same kinds as the reading step's record schema. Decimals and currency amounts are strings (`"1249.50"`) so no precision is lost. Dates are ISO 8601. |
 | `value`, `unit` | The value, and an optional unit such as a currency code. |
 | `confidence` | 0 to 1, from the producer. |
-| `status` | `proposed`, `confirmed`, `corrected` or `rejected`. `confirmed` and `corrected` need `confirmed_by`, a person. |
+| `status` | `proposed`, `confirmed`, `corrected` or `rejected`. `confirmed` and `corrected` need `confirmed_by`, a person, who is not the producer of the exchange. |
 | `grade` | How well the value was checked in the target application (below). |
 | `reads` | Each observation: `channel`, observed `value`, `artifact_id`, `session` (`acting`, `reopened` or `independent`), `source_kind` on export reads (below), `locator` (page, line, byte span, screen, and a `region` with `bbox`, frame sha256 and crop sha256), time and run id. |
 | `needs_review`, `review_reason` | Set when the value goes to a review queue. A reason is required. |
@@ -79,14 +79,21 @@ An `export` read must say where the export came from in `source_kind`:
 
 The grade is derived from `source_kind`. A producer records where the export came from and does not assert a stronger grade.
 
-Read grades, weakest first:
+Read grades, weakest first. They are names from the check-level ladder (`openadapt_flow/check_level.py`), so a read grade and the check level of a write mean the same thing. A grade is derived from the reads; a person's confirmation or decision never raises it.
 
 | Grade | Meaning | Rule |
 |---|---|---|
-| `unconfirmed` | Not read back, one channel only, or the channels disagreed. | None. |
-| `screen_readback` | Read from the screen in the session that wrote it. | Needs a read through a screen channel. |
-| `committed_record_readback` | The record was closed, reopened by id and read again. | Needs a screen read with `session` set to `reopened`. |
-| `verified` | Read through a channel that does not use the application's screens. | Needs a read through `database` or `api`, or an `export` with `source_kind` set to `committed_store`. |
+| `unchecked` | Not cross-checked: one read only, or the reads disagreed. | None. |
+| `same_screen` | Two channels in the session that did the work agreed. | Two reads of the target application through different channels. |
+| `reopened` | The record was closed, reopened by its identity fields and read again, and the reads agreed. | A read with `session` set to `acting` and a screen read with `session` set to `reopened`. |
+| `system_of_record` | A channel that does not use the application's screens agreed. | A read through `database` or `api`, or an `export` with `source_kind` set to `committed_store`, plus one more read. |
+
+Every grade above `unchecked` also needs:
+
+- at least two reads of the target application from different (`channel`, `session`) pairs. Only reads with a value count; `document_parse` and `human` reads do not;
+- every such read to equal the field's `value`. A read that saw something else is a violation (IX036), not a weaker grade, so a disagreement cannot hide behind a strong grade.
+
+A producer may claim a weaker grade than its reads support, never a stronger one.
 
 The grade, channel and kind names match `openadapt_flow.records.schema`, the record and field schema owned by the reading step. Until that module is on main they are spelled out in `interchange/model.py`; after it merges they are imported from it, and the wire names do not change.
 
@@ -96,6 +103,8 @@ An identity names the fields that identify a party or record (`fields`) and says
 
 - `new`: no record exists; the executor creates one.
 - `existing`: one record matched; `record_ref` is required.
+
+When `record_ref` is set, it must equal the value of one of the identity's `fields`, so the reference and the values that identify the record cannot drift apart.
 - `ambiguous`: more than one candidate. An exchange sent to an executor may not contain one; the document side must resolve it first. An executor that finds an ambiguous match halts and reports it.
 - `not_checked`: not looked up yet. A `committed` exchange may not contain one.
 
@@ -103,18 +112,19 @@ An identity names the fields that identify a party or record (`fields`) and says
 
 A decision is a finite choice: `question`, `options`, `choice`, `authorized_roles` and `decided_by`. Rules:
 
+- A decision with a `choice` needs `decided_by`.
 - `decided_by.kind` must be `human`. A model's suggestion goes in `advisory` and never authorizes anything.
 - `decided_by.role` must be in `authorized_roles`.
 - `decided_by.id` must differ from `provenance.producer.id`: the system that produced the exchange cannot approve its own work.
-- `output_field`, when set, names the field that carries the choice.
+- `output_field`, when set, names the field that carries the choice, and that field's value must equal the choice.
 
 In Flow, a decision maps to a `BusinessDecisionSpec` and its signed receipt; `receipt_sha256` points at that receipt.
 
 ### Provenance, checksum and Seals
 
-`provenance.checksum` is `sha256:` followed by the hex digest of the canonical JSON of the exchange with `provenance.checksum` and `seals` removed. Canonical JSON means sorted keys, no whitespace (`","` and `":"` separators) and UTF-8 without escaping. `openadapt_flow.interchange.compute_checksum` implements it.
+`provenance.checksum` is required. It is `sha256:` followed by the hex digest of the canonical JSON of the exchange with `provenance.checksum` and `seals` removed. Canonical JSON means sorted keys, no whitespace (`","` and `":"` separators) and UTF-8 without escaping. `openadapt_flow.interchange.compute_checksum` implements it. This is not RFC 8785 (JSON Canonicalization Scheme): numbers are written as Python's `json` module writes them, so a producer in another language should write decimals as strings (as the format already requires) and avoid floats whose text form differs between languages.
 
-Each entry in `seals` points at a Seal and states the checksum it signs in `covers`. A Seal over a different checksum, or a Seal on an exchange without a checksum, fails the check.
+Each entry in `seals` points at a Seal and states the checksum it signs in `covers`. A Seal over a different checksum fails the check. The checksum is required even without a Seal: it is cheap, it catches accidental edits in transit, and a Seal can be added later without changing the document.
 
 ### Extensions
 
@@ -129,29 +139,38 @@ A document conforms when it matches the JSON Schema and has no violation from th
 | `IX001` | Does not match the schema. |
 | `IX010` | Checksum does not match the content. |
 | `IX011` | A Seal covers a different checksum than the exchange has. |
-| `IX012` | A Seal is present but the exchange has no checksum. |
 | `IX020` | A read names an artifact that is not in the exchange. |
 | `IX021` | An id or field name is used twice. |
 | `IX022` | An identity names a field that is not in the exchange. |
 | `IX023` | A decision choice is not one of its options. |
 | `IX024` | A decision output field is not in the exchange. |
 | `IX025` | A value does not match its declared type. |
-| `IX030` | Verified grade without a read through an independent channel. |
-| `IX031` | Read-back grade without any read of the target application. |
-| `IX033` | Committed-record grade without a read of the reopened record. |
+| `IX026` | An identity's `record_ref` is not the value of any of its fields. |
+| `IX030` | `system_of_record` grade without a read through an independent channel. |
+| `IX031` | Read-back grade without two reads of the target application from different channels or sessions. |
+| `IX032` | Confirmed or corrected value without a person who confirmed it. |
+| `IX033` | `reopened` grade without a read in the acting session and a screen read of the reopened record. |
 | `IX034` | A value that needs review has no reason. |
 | `IX035` | An export read does not say where the export came from. |
-| `IX032` | Confirmed or corrected value without a person who confirmed it. |
+| `IX036` | A read of the target application differs from the value it grades. |
 | `IX040` | A decision was made by something other than a person. |
 | `IX041` | The producer approved its own work. |
 | `IX042` | The decider's role is not authorized for the decision. |
+| `IX043` | A decision has a choice but no person who decided it. |
+| `IX044` | A decision choice differs from the value of its output field. |
+| `IX045` | The producer confirmed its own value. |
 | `IX050` | Extension key is not namespaced (use reverse-DNS, e.g. org.example.x). |
 | `IX060` | An exchange sent to an executor has an ambiguous identity. |
 | `IX061` | An existing identity match has no record reference. |
 | `IX062` | A halted exchange has no halt reason. |
 | `IX063` | A committed exchange has an identity that was not resolved. |
+| `IX064` | A committed exchange has no read of the target application. |
+| `IX065` | An exchange from an executor does not say which exchange it answers. |
+| `IX066` | An exchange sent to an executor claims a committed outcome. |
 | `IX070` | A payload file is missing or its sha256 does not match. |
-| `IX071` | A payload path is absolute or leaves the exchange directory. |
+| `IX071` | A payload path is absolute, uses a backslash or drive letter, or leaves the exchange directory (also through a symlink). |
+
+Retired: `IX012` (a Seal on an exchange without a checksum). The checksum is now required, so a missing one is `IX001`. Retired codes are not reused within v0.
 
 Run the checks:
 

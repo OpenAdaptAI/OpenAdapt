@@ -16,7 +16,7 @@ import json
 from pathlib import Path
 
 from openadapt_flow.emit.l1_artifact import L1ArtifactRef, emit_l1_artifact
-from openadapt_flow.interchange.conformance import check_file
+from openadapt_flow.interchange.conformance import check_file, resolve_payload
 from openadapt_flow.interchange.model import Exchange
 
 
@@ -37,7 +37,19 @@ def emit_exchange(
     for a in ex.artifacts:
         if a.kind == "source_document" and a.payload is None:
             continue
-        payload = path.parent / a.payload.path if a.payload is not None else path
+        if a.payload is None:
+            payload = path
+        else:
+            # check_file already refused a path outside the exchange
+            # directory; resolve again so a file swapped in since is not
+            # copied from outside it.
+            resolved = resolve_payload(path.parent, a.payload.path)
+            if resolved is None:
+                raise ExchangeNotConforming(
+                    f"IX071 artifacts[{a.artifact_id}].payload: the path "
+                    "resolves outside the exchange directory"
+                )
+            payload = resolved
         refs.append(
             emit_l1_artifact(
                 payload,
