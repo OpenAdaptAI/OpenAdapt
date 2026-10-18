@@ -10,6 +10,9 @@ from openadapt_flow.records.schema import (
     ChannelRead,
     FieldRead,
     FieldSpec,
+    GradeGate,
+    GradeTooLow,
+    ReadProof,
     RecordRead,
     RecordSchema,
     SealRef,
@@ -166,3 +169,70 @@ def test_region_validation() -> None:
         SourceRegion(frame_sha256="nothex", bbox=(0, 0, 1, 1))
     with pytest.raises(ValidationError, match="bbox"):
         SourceRegion(frame_sha256="a" * 64, bbox=(0, 0, 0, 1))
+
+
+def test_proof_is_off_by_default_and_overridable() -> None:
+    assert INVOICE.proof == ReadProof()
+    assert not INVOICE.proof_for("vendor").double_read
+    assert INVOICE.field("vendor").min_confidence is None
+    strict = INVOICE.model_copy(
+        update={"proof": ReadProof(double_read=True, seal=True)}
+    )
+    assert strict.proof_for("vendor").seal
+    per_field = RecordSchema(
+        name="x",
+        fields=(
+            FieldSpec(name="a", proof=ReadProof(committed_readback=True)),
+            FieldSpec(name="b"),
+        ),
+        identity_fields=("a",),
+    )
+    assert per_field.proof_for("a").committed_readback
+    assert not per_field.proof_for("b").committed_readback
+
+
+def _record(grade: str, needs_review: bool = False) -> RecordRead:
+    reads = (_read("clipboard", "1"),)
+    agreement = "single"
+    if grade != "unconfirmed":
+        reads = (_read("clipboard", "1"), _read("database", "1", "independent"))
+        agreement = "agree"
+    field = FieldRead(
+        field="invoice_number",
+        value="1",
+        reads=reads,
+        agreement=agreement,
+        confidence=0.7,
+        grade=grade,
+        needs_review=needs_review,
+        review_reason="x" if needs_review else None,
+    )
+    return RecordRead(
+        schema_name="vendor_invoice",
+        schema_version=1,
+        record_key="1",
+        run_id="r",
+        read_at="2026-10-17T21:00:00-04:00",
+        fields=(field,),
+    )
+
+
+def test_default_single_read_is_unconfirmed_without_seal() -> None:
+    record = _record("unconfirmed")
+    assert record.grade == "unconfirmed"
+    assert record.fields[0].seal is None
+
+
+def test_grade_gate_halts_below_floor() -> None:
+    gate = GradeGate(min_grade="committed_record_readback")
+    with pytest.raises(GradeTooLow, match="below committed_record_readback"):
+        gate.check(_record("unconfirmed"))
+    gate.check(_record("verified"))
+    with pytest.raises(GradeTooLow):
+        GradeGate(min_grade="unconfirmed").check(
+            _record("unconfirmed", needs_review=True)
+        )
+    with pytest.raises(GradeTooLow, match="vendor"):
+        GradeGate(min_grade="unconfirmed", fields=("vendor",)).check(
+            _record("verified")
+        )

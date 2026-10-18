@@ -1,19 +1,25 @@
-"""The record and field schema for reading values off an application's screens.
+"""Records read out of an application's screens, field by field, with optional
+proof of where each value came from.
 
 A *record schema* names the fields a workflow reads from one record (an
 invoice, an account, a customer) and gives each field a kind. A *field read*
 is one value read off the screen for one field: what each channel saw, whether
 the channels agreed, a confidence, where on the screen it came from, the read
-grade and a pointer to the Seal that covers it. A *record read* groups the
-field reads of one record.
+grade and, when sealing is on, a pointer to the Seal that covers it. A *record
+read* groups the field reads of one record.
+
+Proof is opt-in. By default a field is read through one channel, gets the
+grade ``unconfirmed`` and no Seal. :class:`ReadProof` turns on a double read,
+a committed-record read-back and Seals, for the whole schema or per field.
 
 This module only defines data. It makes no screen reads, no model calls and
 no network calls, so every build stream can import it.
 
-Read grades, weakest first:
+Read grades, weakest first. A grade only ever reflects what was proven:
 
-- ``unconfirmed``: one channel only, or the channels disagreed. The value
-  goes to the review queue and is never exported as checked.
+- ``unconfirmed``: nothing was cross-checked. This is the default for a
+  single-channel read. It is also the grade when channels disagreed, which
+  sends the value to the review queue.
 - ``screen_readback``: two channels in the same session agreed (for example
   the clipboard text and OCR of the same region).
 - ``committed_record_readback``: the record was closed, reopened by its
@@ -21,6 +27,10 @@ Read grades, weakest first:
 - ``verified``: a channel that does not go through the application's screens
   (an export file, a read-only database or an API) agreed. Only an
   independent channel can give this grade; :func:`grade_for` enforces it.
+
+A step that writes a value into a system of record can declare a minimum
+grade with :class:`GradeGate`; :meth:`GradeGate.check` raises
+:class:`GradeTooLow` so the run halts instead of writing a weaker value.
 
 The grade describes how a *read value* was checked. It is separate from
 :mod:`openadapt_flow.assurance`, which grades how a *write* was checked.
@@ -43,6 +53,9 @@ __all__ = [
     "FieldKind",
     "FieldRead",
     "FieldSpec",
+    "GradeGate",
+    "GradeTooLow",
+    "ReadProof",
     "ReadChannel",
     "ReadGrade",
     "RecordRead",
@@ -94,6 +107,21 @@ _NAME = re.compile(r"^[a-z][a-z0-9_]{0,63}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 
 
+class ReadProof(BaseModel):
+    """Which proof to collect for a read. Everything is off by default."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    double_read: bool = Field(
+        default=False, description="Read through two channels and compare."
+    )
+    committed_readback: bool = Field(
+        default=False,
+        description="Close, reopen by identity fields and read again.",
+    )
+    seal: bool = Field(default=False, description="Cover the value with a signed Seal.")
+
+
 class FieldSpec(BaseModel):
     """One field of a record: its name, kind and how strictly it is read."""
 
@@ -112,11 +140,14 @@ class FieldSpec(BaseModel):
     pattern: Optional[str] = Field(
         default=None, description="Regular expression the normalized value matches."
     )
-    min_confidence: float = Field(
-        default=0.9,
+    min_confidence: Optional[float] = Field(
+        default=None,
         ge=0.0,
         le=1.0,
-        description="Below this the value goes to the review queue.",
+        description="Below this the value goes to the review queue; unset means no confidence gate.",
+    )
+    proof: Optional[ReadProof] = Field(
+        default=None, description="Overrides the schema's proof for this field."
     )
 
     @field_validator("name")
@@ -159,6 +190,10 @@ class RecordSchema(BaseModel):
     identity_fields: tuple[str, ...] = Field(
         description="Fields that together identify a record; used to reopen it."
     )
+    proof: ReadProof = Field(
+        default_factory=ReadProof,
+        description="Proof collected for every field unless a field overrides it.",
+    )
 
     @field_validator("name")
     @classmethod
@@ -190,6 +225,11 @@ class RecordSchema(BaseModel):
             if spec.name == name:
                 return spec
         raise KeyError(name)
+
+    def proof_for(self, name: str) -> ReadProof:
+        """The proof settings for field ``name``: its own, else the schema's."""
+
+        return self.field(name).proof or self.proof
 
     def to_json_schema(self) -> dict[str, Any]:
         """A JSON Schema (draft 2020-12) for one exported row of this record."""
@@ -407,3 +447,41 @@ def weakest_grade(grades: list[ReadGrade]) -> ReadGrade:
     if not grades:
         return "unconfirmed"
     return min(grades, key=READ_GRADES.index)
+
+
+class GradeTooLow(Exception):
+    """A value is below the grade a write step requires. The run halts."""
+
+    def __init__(self, record_key: str, below: dict[str, ReadGrade], floor: ReadGrade):
+        self.record_key = record_key
+        self.below = below
+        self.floor = floor
+        listed = ", ".join(f"{name} ({grade})" for name, grade in below.items())
+        super().__init__(f"record {record_key}: below {floor}: {listed}")
+
+
+class GradeGate(BaseModel):
+    """The minimum read grade a write step accepts for the values it writes."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    min_grade: ReadGrade
+    fields: tuple[str, ...] = Field(
+        default=(), description="Fields the step writes; empty means every field."
+    )
+
+    def check(self, record: RecordRead) -> None:
+        """Raise :class:`GradeTooLow` if a gated field is below ``min_grade``,
+        is missing, or still needs review."""
+
+        reads = {read.field: read for read in record.fields}
+        names = self.fields or tuple(reads)
+        below: dict[str, ReadGrade] = {}
+        for name in names:
+            read = reads.get(name)
+            if read is None or read.needs_review:
+                below[name] = "unconfirmed"
+            elif not grade_at_least(read.grade, self.min_grade):
+                below[name] = read.grade
+        if below:
+            raise GradeTooLow(record.record_key, below, self.min_grade)
