@@ -406,6 +406,38 @@ class _GraphStepContext:
         self.has_exception_handler = has_exception_handler
 
 
+def _pipeline_safe_verifier(verifier: Any) -> bool:
+    """Whether a read-back may run on a side thread while the next item runs.
+
+    Only verifiers that read the system of record over the network and never
+    touch the screen: REST, FHIR, GraphQL and SQL. Anything that binds to a
+    backend (on-screen read-backs, and the redacting and candidate wrappers,
+    which forward ``bind_backend``) or any other kind verifies inline.
+    """
+
+    if (
+        verifier is None
+        or hasattr(verifier, "bind_backend")
+        or getattr(verifier, "backend", None) is not None
+        or getattr(verifier, "_backend", None) is not None
+    ):
+        return False
+    safe: list[type] = []
+    for module, name in (
+        ("openadapt_flow.runtime.effects.rest", "RestRecordVerifier"),
+        ("openadapt_flow.runtime.effects.fhir", "FhirEffectVerifier"),
+        ("openadapt_flow.runtime.effects.graphql", "GraphQLRecordVerifier"),
+        ("openadapt_flow.runtime.effects.sql", "SqlRecordVerifier"),
+    ):
+        try:
+            import importlib
+
+            safe.append(getattr(importlib.import_module(module), name))
+        except Exception:  # noqa: BLE001 - an unavailable kind is not safe
+            continue
+    return isinstance(verifier, tuple(safe))
+
+
 class _ProgramHalt(Exception):
     """Internal signal: an unrecoverable state was reached (an unhandled action
     failure, a dead-end with no matching transition, a bound exceeded, or a
@@ -2425,6 +2457,10 @@ class Replayer:
         if pending is not None:
             if persist and report.success and self.readback_pipeline is not None:
                 handed_off = True
+                # Until the read-back settles, the saved report must not say
+                # success: if the process dies first, it stays unsuccessful.
+                report.success = False
+                report.execution_completed = False
             else:
                 # The run ended some other way: settle the read-back inline
                 # before the report is written.
@@ -2494,15 +2530,12 @@ class Replayer:
         elif getattr(self, "_pipelined_readback", None) is not None:
             reason = "an earlier read-back in this item is still pending"
         else:
-            from openadapt_flow.runtime.effects.onscreen import (
-                OnScreenReadbackVerifier,
-            )
-
             target = verifier if verifier is not None else self.effect_verifier
-            if target is None or isinstance(target, OnScreenReadbackVerifier):
-                reason = "on-screen read-backs need the browser"
-            elif getattr(target, "backend", None) is not None:
-                reason = "the read-back uses the screen"
+            if not _pipeline_safe_verifier(target):
+                reason = (
+                    "only REST, FHIR, GraphQL and SQL read-backs run alongside "
+                    "the next item; this one verifies inline"
+                )
         pipeline.inline_reason = reason
         return reason is None
 
@@ -2620,10 +2653,10 @@ class Replayer:
         if error is not None:
             self._apply_pipelined_verdict(report, error, entry=entry)
         else:
-            # The first stamp saw an unconfirmed effect; re-derive from the
-            # completed execution now that it is confirmed.
-            if report.execution_completed:
-                report.success = True
+            # The execution completed; it was held unsuccessful only until the
+            # read-back confirmed. Re-derive the outcome from that evidence.
+            report.execution_completed = True
+            report.success = True
         self._stamp_execution_outcome(report, workflow, run_dir)
         self._stamp_approval(report)
         report.save(run_dir)

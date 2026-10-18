@@ -145,6 +145,16 @@ def check_accounts(policy: PoolPolicy, section: Any, backend_kind: str) -> list[
                 "its own"
             )
         seen[who] = account.name
+        if (
+            backend_kind == "web"
+            and not account.browser_cdp_endpoint
+            and not account.params_env
+        ):
+            raise PoolRefusal(
+                f"account {account.name} must name its user in params_env (for "
+                "example username: EMR_USER_1), so two accounts for the same "
+                "user can be told apart"
+            )
         if backend_kind == "web" and not (
             account.browser_cdp_endpoint or section.sign_in_bundle
         ):
@@ -331,9 +341,9 @@ def entry_with_bundle(
 ) -> None:
     """Go to the entry URL, then replay the recorded entry navigation."""
 
-    from openadapt_flow.runtime import Replayer
-
     from uuid import uuid4
+
+    from openadapt_flow.runtime import Replayer
 
     page.goto(url)
     report = Replayer(backend_factory(page)).run(

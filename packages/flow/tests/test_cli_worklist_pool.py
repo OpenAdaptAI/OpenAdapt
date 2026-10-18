@@ -326,3 +326,22 @@ def test_entry_bundle_with_a_save_is_refused(tmp_path, monkeypatch, capsys) -> N
     assert _replay(bundle, cfg, tmp_path / "run", "--workers", "2") == 2
     assert "may only navigate" in capsys.readouterr().out
     assert calls == []
+
+
+def test_bundle_accounts_must_name_their_user(tmp_path, monkeypatch, capsys) -> None:
+    bundle, _ = _for_each_bundle(tmp_path)
+    cfg = tmp_path / "d.yaml"
+    cfg.write_text(
+        "backend:\n  url: http://app.example/form\n"
+        "worklist:\n  max_workers: 2\n  items_independent: true\n"
+        "  sign_in_bundle: ./sign-in\n  accounts:\n"
+        "    - name: a\n      secrets_env: {password: P1}\n"
+        "    - name: b\n      secrets_env: {password: P2}\n"
+    )
+    monkeypatch.setenv("P1", "x")
+    monkeypatch.setenv("P2", "y")
+    calls: list = []
+    _install(monkeypatch, calls)
+    assert _replay(bundle, cfg, tmp_path / "run", "--workers", "2") == 2
+    assert "must name its user" in capsys.readouterr().out
+    assert calls == []

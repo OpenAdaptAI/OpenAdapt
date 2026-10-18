@@ -120,18 +120,69 @@ def test_without_a_pipeline_the_readback_stays_inline(dirs) -> None:
     assert save.effect_verified is True
 
 
-def test_screen_bound_verifier_is_never_deferred(dirs) -> None:
+@pytest.mark.parametrize("kind", ["screen_attr", "candidate", "redacting"])
+def test_screen_bound_or_wrapped_verifiers_are_never_deferred(dirs, kind) -> None:
+    from openadapt_flow.runtime.effects.adapter import (
+        CandidateEffectVerifier,
+        RedactingVerifier,
+    )
+
     class ScreenVerifier(RestRecordVerifier):
         backend = object()  # reads the screen: needs the browser
+
+    def factory(url):
+        if kind == "screen_attr":
+            return ScreenVerifier(url)
+        if kind == "candidate":
+            return CandidateEffectVerifier([RestRecordVerifier(url)])
+        return RedactingVerifier(RestRecordVerifier(url), policy=None)
 
     pipeline = ReadbackPipeline()
     report, settled, backend, _ = _run(
         [{"patient_id": "alice", "note": "alice triage"}],
         dirs,
         pipeline=pipeline,
-        verifier_factory=ScreenVerifier,
+        verifier_factory=factory,
     )
     assert settled is None
-    assert pipeline.inline_reason == "the read-back uses the screen"
+    assert pipeline.inline_reason is not None
     assert report.success is True
     pipeline.close()
+
+
+def test_pending_report_is_not_saved_as_success(dirs) -> None:
+    """Until the read-back settles, report.json must not say success."""
+
+    import threading
+
+    gate = threading.Event()
+
+    class SlowVerifier(RestRecordVerifier):
+        def verify(self, *a, **k):
+            gate.wait(10)
+            return super().verify(*a, **k)
+
+    pipeline = ReadbackPipeline()
+    bundle, run_dir = dirs
+    looped = author_data_driven_loop(
+        _encounter_body(), [{"patient_id": "alice", "note": "alice triage"}]
+    )
+    url, db, stop = fault_serve()
+    try:
+        report = Replayer(
+            _RowWritingBackend(url),
+            vision=_vision_confirms_saved(),
+            effect_verifier=SlowVerifier(url),
+            poll_interval_s=0.01,
+            readback_pipeline=pipeline,
+        ).run(looped, bundle_dir=bundle, run_dir=run_dir)
+        saved = json.loads((run_dir / "report.json").read_text())
+        assert saved["success"] is False  # pending
+        gate.set()
+        settled = pipeline.take().settled.result(timeout=30)
+        assert settled is report and report.success is True
+        assert json.loads((run_dir / "report.json").read_text())["success"] is True
+    finally:
+        gate.set()
+        stop()
+        pipeline.close()

@@ -169,3 +169,25 @@ def test_native_fill_is_off_unless_the_fast_profile_is_on(browser, monkeypatch) 
     finally:
         ctx.close()
         monkeypatch.delenv("OPENADAPT_FLOW_OCR_THREADS", raising=False)
+
+
+_NUMBERS = """<!doctype html><html><body style="margin:0">
+<p>Balance 1,000.00 due</p><p>Claim 12-345</p><p>Delta -5 units</p></body></html>"""
+
+
+def test_number_separators_still_count(browser) -> None:
+    from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+    ctx = browser.new_context(viewport={"width": 800, "height": 600})
+    page = ctx.new_page()
+    page.set_content(_NUMBERS)
+    try:
+        backend = PlaywrightBackend(page)
+        assert backend.visible_text_present("1,000.00") is True
+        assert backend.visible_text_present("100,000") is None
+        assert backend.visible_text_present("12-345") is True
+        assert backend.visible_text_present("123-45") is None
+        assert backend.visible_text_present("Delta -5") is True
+        assert backend.visible_text_present("Delta 5") is None
+    finally:
+        ctx.close()

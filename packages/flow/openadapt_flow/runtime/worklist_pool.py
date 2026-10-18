@@ -43,6 +43,9 @@ from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Optional, Protocol, Sequence
 
 QUEUE_FILENAME = "worklist_queue.sqlite3"
+#: How long a worker waits for one pipelined read-back before it treats the
+#: item as an error (whether the save landed is then unknown) and stops.
+READBACK_WAIT_S = 600.0
 POOL_REPORT_FILENAME = "worklist_pool.json"
 POOL_REPORT_MD = "WORKLIST.md"
 
@@ -237,6 +240,9 @@ class WorklistQueue:
 
         conn = self._connect()
         try:
+            # Take the write lock before the timestamp: every claim then either
+            # committed earlier (and claimed_at < at) or sees the stop.
+            conn.execute("BEGIN IMMEDIATE")
             conn.execute(
                 "INSERT OR IGNORE INTO meta (key, value) VALUES ('stop', ?)",
                 (
@@ -245,6 +251,7 @@ class WorklistQueue:
                     ),
                 ),
             )
+            conn.execute("COMMIT")
         finally:
             conn.close()
 
@@ -577,17 +584,18 @@ def run_worklist_pool(
     def finish(
         worker: PoolWorker, idx: int, state: str, detail: dict[str, Any]
     ) -> None:
-        queue.set_state(idx, worker.name, state, detail)
-        with lock:
-            s = summaries[worker.name]
-            s.states[state] = s.states.get(state, 0) + 1
-        say(f"{worker.name}: item {idx} {state}")
+        # Stop first, so no peer claims a new item between the two writes.
         if _stops_run(state, detail, policy.on_halt):
             stop(
                 detail.get("halt_reason") or f"item {idx} ended {state}",
                 worker.name,
                 idx,
             )
+        queue.set_state(idx, worker.name, state, detail)
+        with lock:
+            s = summaries[worker.name]
+            s.states[state] = s.states.get(state, 0) + 1
+        say(f"{worker.name}: item {idx} {state}")
 
     def worker_main(worker: PoolWorker) -> None:
         summary = summaries[worker.name]
@@ -609,11 +617,11 @@ def run_worklist_pool(
         def settle(entry: tuple[int, Future, list[int]]) -> None:
             idx, fut, after = entry
             try:
-                state, detail = fut.result()
-            except Exception as exc:  # noqa: BLE001
+                state, detail = fut.result(timeout=READBACK_WAIT_S)
+            except Exception as exc:  # noqa: BLE001 - includes the timeout
                 state, detail = (
                     ERROR,
-                    {"halt_reason": f"read-back raised {type(exc).__name__}"},
+                    {"halt_reason": f"read-back did not finish ({type(exc).__name__})"},
                 )
             if state not in SUCCESS_STATES:
                 with lock:
@@ -668,6 +676,23 @@ def run_worklist_pool(
                             dst.set_exception(exc)
 
                     out.pending_readback.add_done_callback(_chain)
+
+                    def _stop_early(f: Future, idx: int = idx) -> None:
+                        # A failed read-back stops new claims at once, not when
+                        # this worker next waits on its window.
+                        try:
+                            st, more = f.result()
+                        except Exception as exc:  # noqa: BLE001
+                            st, more = ERROR, {"halt_reason": repr(exc)[:200]}
+                        if _stops_run(st, more, policy.on_halt):
+                            stop(
+                                more.get("halt_reason")
+                                or f"read-back of item {idx} ended {st}",
+                                worker.name,
+                                idx,
+                            )
+
+                    fut.add_done_callback(_stop_early)
                     pending.append((idx, fut, []))
                 else:
                     finish(worker, idx, out.state, detail)
@@ -834,9 +859,11 @@ def _child_main(conn: Any, factory: str, kwargs: dict[str, Any]) -> None:
                 elif cmd[0] == "run":
                     _, idx, row, item_dir = cmd
                     out = worker.run_item(idx, row, Path(item_dir))
-                    token = None
+                    token = None if out.pending_readback is None else uuid.uuid4().hex
+                    # The reply goes out before the settlement can: a read-back
+                    # that is already done settles only after this send.
+                    send(("ok", out.state, out.detail, token))
                     if out.pending_readback is not None:
-                        token = uuid.uuid4().hex
 
                         def _settled(fut: Future, token: str = token) -> None:
                             try:
@@ -846,7 +873,6 @@ def _child_main(conn: Any, factory: str, kwargs: dict[str, Any]) -> None:
                                 send(("settled", token, None, None, repr(exc)[:300]))
 
                         out.pending_readback.add_done_callback(_settled)
-                    send(("ok", out.state, out.detail, token))
                 elif cmd[0] == "close":
                     worker.close()
                     send(("ok",))
@@ -857,6 +883,13 @@ def _child_main(conn: Any, factory: str, kwargs: dict[str, Any]) -> None:
         return
     finally:
         conn.close()
+
+
+def _resolve(fut: Future, state: Any, detail: Any, error: Any) -> None:
+    if error is not None:
+        fut.set_exception(RuntimeError(error))
+    else:
+        fut.set_result((state, detail))
 
 
 class ProcessWorker:
@@ -874,6 +907,9 @@ class ProcessWorker:
         self._kwargs = dict(kwargs)
         self._replies: "queue.Queue[tuple[Any, ...]]" = queue.Queue()
         self._pending: dict[str, Future] = {}
+        # Settlements whose run reply hasn't been seen yet (defensive: the
+        # child sends the reply first).
+        self._early: dict[str, tuple[Any, Any, Any]] = {}
         self._lock = threading.Lock()
         self._fingerprint: Optional[str] = None
         self._proc: Any = None
@@ -895,18 +931,20 @@ class ProcessWorker:
                 _, token, state, detail, error = msg
                 with self._lock:
                     fut = self._pending.pop(token, None)
-                if fut is None:
-                    continue
-                if error is not None:
-                    fut.set_exception(RuntimeError(error))
-                else:
-                    fut.set_result((state, detail))
+                    if fut is None:
+                        self._early[token] = (state, detail, error)
+                        continue
+                _resolve(fut, state, detail, error)
             elif msg[0] == "ok" and len(msg) == 4 and msg[3] is not None:
                 # A run reply with a pending read-back: register its future
                 # here, before the child can report the settlement.
                 fut = Future()
                 with self._lock:
-                    self._pending[msg[3]] = fut
+                    early = self._early.pop(msg[3], None)
+                    if early is None:
+                        self._pending[msg[3]] = fut
+                if early is not None:
+                    _resolve(fut, *early)
                 self._replies.put((*msg, fut))
             else:
                 self._replies.put(msg)

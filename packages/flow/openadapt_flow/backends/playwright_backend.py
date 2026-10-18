@@ -550,9 +550,22 @@ _FIELD_GROUP_IDENTITY_JS = r"""(hit) => {
 # hit-tests every candidate through the real frame chain (occlusion, clipping
 # by the parent frame) before believing it.
 _VISIBLE_TEXT_CANDIDATES_JS = r"""(target) => {
-    // Letters and digits only: recorded texts come from OCR, which drops
-    // spaces and misreads punctuation ("October-2026-" for "October 2026").
-    const norm = (v) => (v || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+    // Recorded texts come from OCR, which drops spaces and misreads
+    // punctuation ("October-2026-" for "October 2026"): keep letters and
+    // digits, and keep a separator (. , - / : +) only where it is part of a
+    // number (a digit follows and no letter precedes), so "1,000" never
+    // matches "100,0" and "-5" never matches "5".
+    const norm = (v) => {
+        const t = (v || '').toLowerCase();
+        let out = '';
+        for (let i = 0; i < t.length; i += 1) {
+            const c = t[i];
+            if (/[\p{L}\p{N}]/u.test(c)) { out += c; continue; }
+            if (/[.,\-\/:+]/.test(c) && /\p{N}/u.test(t[i + 1] || '')
+                && !/\p{L}/u.test(t[i - 1] || '')) out += c;
+        }
+        return out;
+    };
     const want = norm(target);
     if (!want || !document.body) return [];
     const out = [];
@@ -621,9 +634,22 @@ _FOCUSED_PLAIN_TEXT_JS = r"""() => {
 }"""
 
 _TEXT_AT_POINT_JS = r"""([px, py, target]) => {
-    // Letters and digits only: recorded texts come from OCR, which drops
-    // spaces and misreads punctuation ("October-2026-" for "October 2026").
-    const norm = (v) => (v || '').toLowerCase().replace(/[^\p{L}\p{N}]+/gu, '');
+    // Recorded texts come from OCR, which drops spaces and misreads
+    // punctuation ("October-2026-" for "October 2026"): keep letters and
+    // digits, and keep a separator (. , - / : +) only where it is part of a
+    // number (a digit follows and no letter precedes), so "1,000" never
+    // matches "100,0" and "-5" never matches "5".
+    const norm = (v) => {
+        const t = (v || '').toLowerCase();
+        let out = '';
+        for (let i = 0; i < t.length; i += 1) {
+            const c = t[i];
+            if (/[\p{L}\p{N}]/u.test(c)) { out += c; continue; }
+            if (/[.,\-\/:+]/.test(c) && /\p{N}/u.test(t[i + 1] || '')
+                && !/\p{L}/u.test(t[i - 1] || '')) out += c;
+        }
+        return out;
+    };
     const want = norm(target);
     // The topmost element at the point, or one of its ancestors, must be a
     // DEEPEST holder of the text (no child holds it too). Climbing to a big
