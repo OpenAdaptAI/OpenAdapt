@@ -120,8 +120,25 @@ def _git_head() -> str:
         return "unknown"
 
 
+def _engine() -> dict[str, str]:
+    import openadapt_flow
+
+    root = Path(openadapt_flow.__file__).resolve().parent
+    try:
+        head = subprocess.run(
+            ["git", "-C", str(root), "rev-parse", "HEAD"],
+            capture_output=True,
+            text=True,
+            check=True,
+        ).stdout.strip()
+    except Exception:  # noqa: BLE001
+        head = "unknown"
+    return {"path": str(root), "git_head": head}
+
+
 def _environment() -> dict[str, Any]:
     return {
+        "engine": _engine(),
         "machine": platform.machine(),
         "system": f"{platform.system()} {platform.release()}",
         "python": platform.python_version(),
@@ -504,7 +521,7 @@ def _run_record(
 def cmd_batch(args: argparse.Namespace) -> int:
     out = RESULTS / args.run_id
     out.mkdir(parents=True, exist_ok=True)
-    bundle = program_dir(args.run_id) / "bundle"
+    bundle = program_dir(args.program_run or args.run_id) / "bundle"
     if not bundle.is_dir():
         raise SystemExit("no program bundle; run `compile` first")
     video_dir = out / "video" / "batch"
@@ -608,6 +625,8 @@ def _write_batch_meta(args: argparse.Namespace, out: Path) -> None:
                 "change_at": args.change_at,
                 "ui_change": app.UI_CHANGE,
                 "tag": args.tag,
+                "program_run": args.program_run or args.run_id,
+                "max_attempts": args.max_attempts,
                 "profile": "demo (plain Replayer, SQL record check attached)",
                 "environment": _environment(),
             },
@@ -634,6 +653,11 @@ def main() -> int:
     sub.add_parser("compile").set_defaults(func=cmd_compile)
     p = sub.add_parser("batch")
     p.add_argument("--n", type=int, default=100)
+    p.add_argument(
+        "--program-run",
+        default=None,
+        help="run id whose compiled program to use (default: --run-id)",
+    )
     p.add_argument("--start", type=int, default=1)
     p.add_argument("--change-at", type=int, default=50)
     p.add_argument("--video-records", default="1,2,3,49,50,51,100")

@@ -111,8 +111,8 @@ class WebApp:
     record_video_dir: Optional[str] = None
     capture_settle_timeout_s: Optional[float] = None
 
-    def launch(self) -> tuple[Any, Callable[[], None]]:
-        """Open the browser at ``url`` and run :attr:`setup`."""
+    def open(self) -> tuple[Any, Callable[[], None]]:
+        """Open the browser at ``url`` and run :attr:`setup`; returns ``(backend, close)``."""
 
         from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 
@@ -243,7 +243,7 @@ class Recording:
         )
         if owner.app.reset is not None:
             owner.app.reset()
-        backend, self._close = owner.app.launch()
+        backend, self._close = owner.app.open()
         try:
             self._session = AuthoringSession(
                 backend,
@@ -839,7 +839,7 @@ class CompiledAgent:
         )
         if self.app.reset is not None:
             self.app.reset()
-        backend, close = self.app.launch()
+        backend, close = self.app.open()
         try:
             report = Replayer(
                 backend,

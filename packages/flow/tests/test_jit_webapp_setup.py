@@ -33,7 +33,7 @@ def test_setup_runs_on_the_new_page(monkeypatch: pytest.MonkeyPatch) -> None:
         setup=lambda page: calls.append(("setup", page)),
         record_video_dir="videos",
     )
-    backend, close = app.launch()
+    backend, close = app.open()
     assert calls == [
         ("launch", "http://app.test/form", True, "videos"),
         ("setup", "page-at:http://app.test/form"),
@@ -52,7 +52,7 @@ def test_a_failed_setup_closes_the_browser(monkeypatch: pytest.MonkeyPatch) -> N
         raise RuntimeError("sign-in failed")
 
     with pytest.raises(RuntimeError, match="sign-in failed"):
-        WebApp(url="http://app.test/form", setup=setup).launch()
+        WebApp(url="http://app.test/form", setup=setup).open()
     assert calls[-1] == ("close",)
 
 
@@ -61,7 +61,7 @@ def test_no_setup_just_opens_the_url(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
         playwright_backend.PlaywrightBackend, "launch", _fake_launch(calls)
     )
-    WebApp(url="http://app.test/").launch()
+    WebApp(url="http://app.test/").open()
     assert calls == [("launch", "http://app.test/", True, None)]
 
 
