@@ -1,10 +1,12 @@
 """How a write was checked, in three grades: the read-back assurance.
 
-``VerificationTier`` (``openadapt_flow.verification``) ranks evidence in four
-steps, and the Seal ladder (``openadapt_flow.contracts.oracle.OracleTier``) ranks it in
-four other steps. A reviewer usually needs one plainer answer: was the save
-read back independently of the session that typed it, read back on the same
-screen, or not checked at all? :func:`assurance_for` gives that answer:
+``VerificationTier`` (``openadapt_flow.verification``) and the Seal ladder
+(``openadapt_flow.contracts.oracle.OracleTier``) both map onto the check-level
+ladder in :mod:`openadapt_flow.check_level`. These three grades are the coarse
+rollup of that ladder that RFC-0002 publishes. A reviewer usually needs this
+plainer answer: was the save read back independently of the session that
+typed it, read back on the same screen, or not checked at all?
+:func:`assurance_for` gives that answer:
 
 - ``independent_readback``: a read of the system of record that does not go
   through the UI: an API, database, FHIR, GraphQL, file or email read
@@ -34,6 +36,7 @@ from __future__ import annotations
 
 from typing import Final, Literal, Optional
 
+from openadapt_flow.check_level import from_verification_tier, to_readback_label
 from openadapt_flow.verification import VerificationTier
 
 __all__ = [
@@ -73,15 +76,11 @@ def assurance_for(
     have persisted, whatever verifier ran.
     """
 
-    if not confirmed or tier is None:
-        return UNCHECKED
     try:
-        value = VerificationTier(int(tier))
+        level = from_verification_tier(tier, confirmed=confirmed)
     except ValueError:
         return UNCHECKED
-    if value is VerificationTier.INDEPENDENT_SYSTEM:
-        return INDEPENDENT_READBACK
-    return SCREEN_READBACK
+    return to_readback_label(level)
 
 
 def weakest_assurance(grades: list[Assurance]) -> Assurance:
