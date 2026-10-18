@@ -53,6 +53,7 @@ from openadapt_flow.approval_mode.item_approval import (
     ItemApprovalRefused,
     ItemApprovalRequest,
     ItemApprovalStore,
+    SaveField,
     wait_for_answer,
 )
 from openadapt_flow.approval_mode.model import (
@@ -167,6 +168,15 @@ def _no_form_state(_frame: Optional[bytes]) -> Optional[tuple[str, str]]:
     return None
 
 
+#: Returns the values the save writes, for the phone, or ``None`` when the
+#: run can't name them. The phone then shows the screenshot alone.
+SaveFieldsReader = Callable[[], Optional[Sequence[SaveField]]]
+
+
+def _no_save_fields() -> Optional[Sequence[SaveField]]:
+    return None
+
+
 @dataclass(frozen=True)
 class StepContext:
     """What the replayer knows when a save step starts, before it resolves."""
@@ -186,6 +196,9 @@ class StepContext:
     drill_fault_step: bool = False
     qualification_case_kind: Optional[str] = None
     runtime_inputs_digest: Optional[str] = None
+    #: The values the save writes, shown on the phone (see
+    #: :data:`SaveFieldsReader`). Bound into the request digest.
+    save_fields: SaveFieldsReader = _no_save_fields
 
 
 @dataclass(frozen=True)
@@ -617,6 +630,7 @@ class ApprovalGate:
                     form_state=form,
                     qualification_case_kind=ctx.qualification_case_kind,
                     step_class=step_class_for(ctx.step, policy_name=self._policy_name),
+                    fields=ctx.save_fields(),
                 )
             except (OSError, ValueError, ItemApprovalRefused):
                 return wait_refusal("approval_request_unwritable")

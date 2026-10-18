@@ -137,6 +137,30 @@ async def _confirm_attended_action(context: Any, name: str) -> None:
     )
 
 
+async def _confirm_admission_decision(
+    context: Any, bridge: AgentBridge, arguments: dict[str, Any]
+) -> None:
+    """A person decides an admission in the client's form (no delegate)."""
+    from openadapt_flow.agent.admission import AdmissionToolError
+
+    try:
+        message = bridge.admission_desk.confirmation_message(arguments)
+    except AdmissionToolError as exc:
+        raise BridgeError(str(exc)) from exc
+    await _confirm_with_person(
+        context,
+        message,
+        title="I am a person and I make this decision",
+        unsupported=(
+            "deciding an admission needs a person in an MCP client with form "
+            "elicitation, or a server started with --delegate-approvals; "
+            "nothing was decided. A person can also run `openadapt-flow admit "
+            "decide` at a terminal"
+        ),
+        declined="the person declined or cancelled; nothing was decided",
+    )
+
+
 async def _confirm_admit(context: Any, authoring: AuthoringBridge) -> None:
     """A person, not the calling agent, accepts a compiled draft."""
     await _confirm_with_person(
@@ -279,8 +303,17 @@ def build_server(
                     or "tool arguments do not match the input schema"
                 ) from None
             human_confirmed = False
+            admission_by_person = (
+                name == "decide_admission"
+                and bridge is not None
+                and bridge.admission_desk is not None
+                and bridge.admission_desk.needs_person()
+            )
             if name in ATTENDED_TOOLS:
                 await _confirm_attended_action(context, name)
+            elif admission_by_person:
+                assert bridge is not None
+                await _confirm_admission_decision(context, bridge, arguments or {})
             elif name == "admit" and authoring is not None and authoring.handles(name):
                 await _confirm_admit(context, authoring)
                 human_confirmed = True
@@ -295,6 +328,10 @@ def build_server(
                     return authoring.dispatch(name, payload)
                 if bridge is None:
                     raise BridgeError("unknown tool name")
+                if admission_by_person:
+                    return bridge.dispatch_admission(
+                        name, payload, human_confirmed=True
+                    )
                 return bridge.dispatch(name, payload)
 
             # CLI runs and filesystem projections are blocking. Live attended
