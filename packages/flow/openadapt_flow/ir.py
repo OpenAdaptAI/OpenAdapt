@@ -1049,7 +1049,7 @@ class ReadStepSpec(BaseModel):
 
     Proof is opt-in (:class:`~openadapt_flow.records.schema.ReadProof`): by
     default one channel is read (the clipboard when the runtime has one,
-    otherwise OCR), the value is ``unconfirmed`` and carries no Seal. OCR and
+    otherwise OCR), the value is ``unchecked`` and carries no Seal. OCR and
     the clipboard are deterministic channels; a READ step makes no model
     calls.
     """

@@ -10257,7 +10257,7 @@ class Replayer:
             gate.check(record)
             if missing:
                 raise GradeTooLow(
-                    "", {name: "unconfirmed" for name in missing}, gate.min_grade
+                    "", {name: "unchecked" for name in missing}, gate.min_grade
                 )
         except GradeTooLow as exc:
             result.safety_halt = True

@@ -248,7 +248,7 @@ the values read so far in the run and halts before the step acts:
 
 ```python
 Step(id="post", intent="post amount", action=ActionKind.CLICK, anchor=save,
-     read_gate=GradeGate(min_grade="screen_readback", fields=("amount_due",)))
+     read_gate=GradeGate(min_grade="same_screen", fields=("amount_due",)))
 ```
 
 These grades describe how a read value was checked. Write checks keep their

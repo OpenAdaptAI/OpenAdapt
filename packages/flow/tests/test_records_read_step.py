@@ -86,13 +86,13 @@ def test_old_bundles_load_unchanged_and_read_steps_round_trip(tmp_path) -> None:
     assert again.steps[0].read == new.steps[0].read
 
 
-def test_default_read_is_one_channel_unconfirmed_no_model_calls(tmp_path) -> None:
+def test_default_read_is_one_channel_unchecked_no_model_calls(tmp_path) -> None:
     report, backend = _run(tmp_path, [_read_step()], _vision("AC-1042"))
     assert report.success, [r.error for r in report.results]
     read = report.results[0].field_read
     assert read is not None
     assert read.value == "AC-1042"
-    assert read.grade == "unconfirmed"
+    assert read.grade == "unchecked"
     assert [r.channel for r in read.reads] == ["ocr"]
     assert read.seal is None
     assert read.region is not None and read.region.bbox == REGION
@@ -100,7 +100,7 @@ def test_default_read_is_one_channel_unconfirmed_no_model_calls(tmp_path) -> Non
     assert report.model_calls == 0
 
 
-def test_double_read_with_seal_reaches_screen_readback(tmp_path) -> None:
+def test_double_read_with_seal_reaches_same_screen(tmp_path) -> None:
     proof = ReadProof(double_read=True, seal=True)
     report, backend = _run(
         tmp_path,
@@ -110,7 +110,7 @@ def test_double_read_with_seal_reaches_screen_readback(tmp_path) -> None:
     )
     assert report.success, [r.error for r in report.results]
     read = report.results[0].field_read
-    assert read.grade == "screen_readback"
+    assert read.grade == "same_screen"
     assert [r.channel for r in read.reads] == ["clipboard", "ocr"]
     assert read.seal is not None and read.seal.run_id
     assert ("click", 200, 115, False) in backend.actions
@@ -161,17 +161,17 @@ def _write_step(floor: str) -> Step:
 
 def test_write_gate_halts_below_floor_before_acting(tmp_path) -> None:
     report, backend = _run(
-        tmp_path, [_read_step(), _write_step("screen_readback")], _vision("AC-1042")
+        tmp_path, [_read_step(), _write_step("same_screen")], _vision("AC-1042")
     )
     assert not report.success
-    assert "below it: account_number (unconfirmed)" in (report.results[-1].error or "")
+    assert "below it: account_number (unchecked)" in (report.results[-1].error or "")
     assert ("press", "Enter") not in backend.actions
 
 
 def test_write_gate_passes_at_floor(tmp_path) -> None:
     report, backend = _run(
         tmp_path,
-        [_read_step(ReadProof(double_read=True)), _write_step("screen_readback")],
+        [_read_step(ReadProof(double_read=True)), _write_step("same_screen")],
         _vision("AC-1042"),
         clipboard=lambda b: _Clipboard(b, "AC-1042"),
     )
@@ -180,7 +180,7 @@ def test_write_gate_passes_at_floor(tmp_path) -> None:
 
 
 def test_write_gate_halts_when_field_never_read(tmp_path) -> None:
-    report, _ = _run(tmp_path, [_write_step("unconfirmed")], _vision("x"))
+    report, _ = _run(tmp_path, [_write_step("unchecked")], _vision("x"))
     assert not report.success
     assert "account_number" in (report.results[-1].error or "")
 
@@ -225,7 +225,7 @@ def test_recorded_read_compiles_to_read_step_and_replays(tmp_path) -> None:
     assert report.success, [r.error for r in report.results]
     read = report.results[0].field_read
     assert read.region.bbox == (90, 120, 200, 30)
-    assert read.grade == "screen_readback"
+    assert read.grade == "same_screen"
     assert report.model_calls == 0
 
 

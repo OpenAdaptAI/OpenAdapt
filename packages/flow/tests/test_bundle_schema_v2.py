@@ -1011,7 +1011,9 @@ def test_a_read_spec_and_grade_floor_are_sealed_content(tmp_path):
     assert legacy == _synthetic_legacy_digest(wf, "linear", file_hashes)
 
     gated = wf.model_copy(deep=True)
-    gated.steps[0].read_gate = GradeGate(fields=("amount",), min_grade="verified")
+    gated.steps[0].read_gate = GradeGate(
+        fields=("amount",), min_grade="system_of_record"
+    )
     assert bv.compute_content_digest(gated, file_hashes) != legacy
 
     read = Workflow(
