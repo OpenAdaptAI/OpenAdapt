@@ -33,13 +33,39 @@ An exchange is one JSON document. Payload files sit next to it and are addressed
 | `fields` | Typed values, each with its reads, confidence and grade. |
 | `identities` | The parties or records the exchange is about, and how each matched. |
 | `decisions` | Finite choices made by authorized people. |
-| `outcome` | `pending`, `committed` or `halted`. Only a `from_executor` exchange can be `committed`, and it must carry at least one read of the target application. |
+| `outcome` | `pending`, `committed`, `halted` or `no_action` (see [Outcomes](#outcomes)). |
 | `halt_reason` | Required when `outcome` is `halted`. |
+| `no_action` | Required when `outcome` is `no_action`, and not allowed otherwise: who decided, why, and the read-back that shows nothing was written. |
 | `provenance` | Producer, tool, time and checksum (required). |
 | `seals` | References to Seals (signed receipts) over the checksum. |
 | `extensions` | Domain data under reverse-DNS keys. |
 
 Unknown top-level members are rejected. A producer that needs to add a field adds it under `extensions`.
+
+### Outcomes
+
+| Outcome | Meaning | Who sends it | Rules | Counts as a save | Billable |
+|---|---|---|---|---|---|
+| `pending` | Work to do, or not finished. | Either side | None. | No | No |
+| `committed` | The executor wrote the record and read it back. | Executor | At least one read of the target application (IX064). Every identity resolved (IX063). | Yes | Per the run's own billing policy |
+| `halted` | The executor stopped. Whatever it wrote before stopping is described by the fields. | Executor | `halt_reason` (IX062). | No | No |
+| `no_action` | A person decided the item, and nothing was meant to be written. | Executor | A `no_action` record with a person in `decided_by`, a `reason_code`, and read-back evidence that no record is new or changed, at the check level a commit needs (IX080 to IX084). | No, never | No, never |
+
+A `to_executor` exchange cannot claim `committed` (IX066) or `no_action` (IX084).
+
+#### `no_action`
+
+| Member | Meaning |
+|---|---|
+| `decided_by` | The person who decided. Must be `human` (IX081). |
+| `reason_code` | Why nothing was written, in lowercase snake case, such as `declined`, `held` or `rejected`. |
+| `decision_id`, `decided_at` | Optional pointer to the decision, in this exchange or the one it answers. |
+| `required_grade` | The check level a commit of the same workflow needs: the weakest grade its committed read-back carries, or its write step's minimum grade. It cannot be `unchecked`. |
+| `evidence` | Names of fields whose reads show the state did not change, such as a record's entry count read before the decision and again after reopening. At least one is required, and each must be graded at least `required_grade` (IX082). |
+
+The value of an evidence field is the state before the decision. A read of an evidence field that differs from that value means a record was created or changed, which is IX083.
+
+A `no_action` exchange is never a save and never billable. A counter of saves or billable items counts `committed` only. It does not go to a review queue unless the site's policy says decisions need review.
 
 ### Artifacts
 
@@ -169,6 +195,11 @@ A document conforms when it matches the JSON Schema and has no violation from th
 | `IX066` | An exchange sent to an executor claims a committed outcome. |
 | `IX070` | A payload file is missing or its sha256 does not match. |
 | `IX071` | A payload path is absolute, uses a backslash or drive letter, or leaves the exchange directory (also through a symlink). |
+| `IX080` | A `no_action` outcome has no `no_action` record, or a `no_action` record is on another outcome. |
+| `IX081` | A `no_action` was decided by something other than a person. |
+| `IX082` | A `no_action` has no read-back evidence at the check level a commit needs. |
+| `IX083` | The read-back evidence of a `no_action` shows a new or changed record. |
+| `IX084` | An exchange sent to an executor claims a `no_action` outcome. |
 
 Retired: `IX012` (a Seal on an exchange without a checksum). The checksum is now required, so a missing one is `IX001`. Retired codes are not reused within v0.
 

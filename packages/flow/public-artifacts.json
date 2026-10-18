@@ -6197,7 +6197,7 @@
     },
     {
       "path": "schemas/records-interchange-v0.json",
-      "sha256": "118a47d29b53b9b69ddb85c0ddbad365c113c280bbd052d7c565e9e52f45c910"
+      "sha256": "5d60d23214328b61bf6ed87068d395346e638b2a7c9a65b268bcfbef7b4b1cf8"
     },
     {
       "path": "schemas/runtime-validation-attestation-v1.json",
@@ -6233,7 +6233,7 @@
     },
     {
       "path": "tests/fixtures/interchange/cases.json",
-      "sha256": "fd712d56d908e6e16096d0a06ef1ebbbe57e0bc984b0c41f44899220980c778e"
+      "sha256": "f79e2386db6609815273924aa74c7c915fa76cb021f02c44885a04d95e2018d8"
     },
     {
       "path": "tests/fixtures/interchange/invalid/ambiguous_identity_to_executor.json",
@@ -6298,6 +6298,30 @@
     {
       "path": "tests/fixtures/interchange/invalid/model_decided.json",
       "sha256": "19d59cf6f2484d1416c7983db5bd2524e91f6e73ace0d4460a196607af93eb80"
+    },
+    {
+      "path": "tests/fixtures/interchange/invalid/no_action_below_commit_level.json",
+      "sha256": "cd2901f2356f6747b0731cbfddc54336c3142f132855e1f86cf6dd0a3b542876"
+    },
+    {
+      "path": "tests/fixtures/interchange/invalid/no_action_decided_by_model.json",
+      "sha256": "528dfe87bc9b94fc1403b5fe87d374eebba71a76eab2f903e5fe6a5d09446368"
+    },
+    {
+      "path": "tests/fixtures/interchange/invalid/no_action_to_executor.json",
+      "sha256": "b9b2cacec06917e0cfd22d44a050e114c031a45a6c1af4ce3f6a2afafe877341"
+    },
+    {
+      "path": "tests/fixtures/interchange/invalid/no_action_without_evidence.json",
+      "sha256": "224d9291f23877da9b42aa8255677c224c9251578c6bff7adc70e9b120777958"
+    },
+    {
+      "path": "tests/fixtures/interchange/invalid/no_action_without_record.json",
+      "sha256": "fa1eced5075480ae575bab86307529bba9efebe14f3dc98ab1a1d1443f24048b"
+    },
+    {
+      "path": "tests/fixtures/interchange/invalid/no_action_write_detected.json",
+      "sha256": "869c98286c7ea221db558d53d3de32bb0c738b848d10d4012d130c92d0163aca"
     },
     {
       "path": "tests/fixtures/interchange/invalid/payload_backslash_path.json",
@@ -6402,6 +6426,10 @@
     {
       "path": "tests/fixtures/interchange/valid/referral_intake.json",
       "sha256": "b1c3416bd1e4f362977bc5bfc3e56fd0489767efefcdb17e1de36c97066b8c4b"
+    },
+    {
+      "path": "tests/fixtures/interchange/valid/referral_no_action.json",
+      "sha256": "8d32ab74d8a9f19bb31ae2d9293117f92e344a612cfaaea614a849f082f7c07b"
     },
     {
       "path": "tests/fixtures/interchange/valid/referral_result.json",

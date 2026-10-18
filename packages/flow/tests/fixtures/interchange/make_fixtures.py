@@ -515,12 +515,102 @@ halted["identities"][0]["match"] = {
 halted.pop("seals")
 halted = seal(halted)
 
+# A declined referral: the physician decided, and nothing was meant to be
+# written. The chart's triage entry count is read before and after reopening
+# and has not changed.
+no_action = {
+    "schema_version": V,
+    "exchange_id": "ex-ref-0009-r",
+    "direction": "from_executor",
+    "workflow": "example.referral_triage",
+    "session_id": "fax-2026-10-29",
+    "in_reply_to": "ex-ref-0009",
+    "artifacts": [
+        {
+            "artifact_id": "chart",
+            "kind": "structured_observation",
+            "source_type": "rdp_screen",
+            "file_number": "TEST-0009",
+            "date": "2026-10-29",
+            "doctype": "triage-entry",
+        }
+    ],
+    "fields": [
+        {
+            "name": "chart_id",
+            "type": "code",
+            "value": "REC-100001",
+            "confidence": 1.0,
+            "reads": [
+                {
+                    "channel": "clipboard",
+                    "value": "REC-100001",
+                    "artifact_id": "chart",
+                    "session": "acting",
+                }
+            ],
+        },
+        {
+            "name": "triage_entries",
+            "type": "integer",
+            "value": 1,
+            "confidence": 1.0,
+            "grade": "reopened",
+            "reads": [
+                {
+                    "channel": "clipboard",
+                    "value": "1",
+                    "artifact_id": "chart",
+                    "session": "acting",
+                },
+                {
+                    "channel": "clipboard",
+                    "value": "1",
+                    "artifact_id": "chart",
+                    "session": "reopened",
+                },
+                {
+                    "channel": "ocr",
+                    "value": "1",
+                    "artifact_id": "chart",
+                    "session": "reopened",
+                },
+            ],
+        },
+    ],
+    "identities": [
+        {
+            "identity_id": "subject",
+            "role": "subject",
+            "fields": ["chart_id"],
+            "match": {
+                "status": "existing",
+                "record_ref": "REC-100001",
+                "candidates": 1,
+                "checked_by": EXECUTOR,
+            },
+        }
+    ],
+    "outcome": "no_action",
+    "no_action": {
+        "decided_by": {"kind": "human", "id": "physician:p-1", "role": "physician"},
+        "reason_code": "declined",
+        "decision_id": "triage",
+        "decided_at": "2026-10-29T14:12:00+00:00",
+        "required_grade": "same_screen",
+        "evidence": ["triage_entries"],
+    },
+    "provenance": prov(EXECUTOR),
+}
+no_action = seal(no_action)
+
 valid = {
     "valid/invoice_posting.json": invoice,
     "valid/invoice_posting_result.json": invoice_result,
     "valid/referral_intake.json": referral,
     "valid/referral_result.json": referral_result,
     "valid/referral_halted.json": halted,
+    "valid/referral_no_action.json": no_action,
 }
 
 
@@ -740,6 +830,36 @@ invalid = {
     "invalid/payload_hash_mismatch.json": (
         mutate(invoice, _set(["artifacts", 0, "payload", "sha256"], "f" * 64)),
         ["IX070"],
+    ),
+    "invalid/no_action_without_evidence.json": (
+        mutate(no_action, _set(["no_action", "evidence"], [])),
+        ["IX082"],
+    ),
+    "invalid/no_action_write_detected.json": (
+        mutate(no_action, _set(["fields", 1, "reads", 1, "value"], "2")),
+        ["IX083"],
+    ),
+    "invalid/no_action_below_commit_level.json": (
+        mutate(no_action, _set(["no_action", "required_grade"], "system_of_record")),
+        ["IX082"],
+    ),
+    "invalid/no_action_without_record.json": (
+        mutate(no_action, lambda d: d.pop("no_action")),
+        ["IX080"],
+    ),
+    "invalid/no_action_decided_by_model.json": (
+        mutate(
+            no_action,
+            _set(
+                ["no_action", "decided_by"],
+                {"kind": "model", "id": "local:qwen-small", "role": "physician"},
+            ),
+        ),
+        ["IX081"],
+    ),
+    "invalid/no_action_to_executor.json": (
+        mutate(no_action, _set(["direction"], "to_executor")),
+        ["IX084"],
     ),
     "invalid/payload_escapes_dir.json": (
         mutate(invoice, _set(["artifacts", 0, "payload", "path"], "../../etc/hosts")),

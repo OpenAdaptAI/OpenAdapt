@@ -233,3 +233,13 @@ def test_spec_lists_every_code_in_order() -> None:
     spec = (ROOT / "docs" / "INTERCHANGE.md").read_text()
     listed = re.findall(r"^\| `(IX\d+)` \|", spec, re.M)
     assert listed == list(CODES) == sorted(CODES)
+
+
+def test_no_action_needs_no_write_evidence() -> None:
+    assert check_file(FIXTURES / "valid/referral_no_action.json") == []
+    for rel, code in (
+        ("invalid/no_action_without_evidence.json", "IX082"),
+        ("invalid/no_action_write_detected.json", "IX083"),
+        ("invalid/no_action_below_commit_level.json", "IX082"),
+    ):
+        assert {v.code for v in check_file(FIXTURES / rel)} == {code}, rel

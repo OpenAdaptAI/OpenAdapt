@@ -531,6 +531,73 @@
       "title": "Locator",
       "type": "object"
     },
+    "NoAction": {
+      "additionalProperties": false,
+      "description": "Why an executor wrote nothing, who decided it, and the read-back that\nshows nothing was written.\n\nA ``no_action`` outcome is never a save and never billable.",
+      "properties": {
+        "decided_by": {
+          "$ref": "#/$defs/Principal"
+        },
+        "reason_code": {
+          "description": "Why nothing was written, e.g. declined, held",
+          "pattern": "^[a-z][a-z0-9_]{0,63}$",
+          "title": "Reason Code",
+          "type": "string"
+        },
+        "decision_id": {
+          "anyOf": [
+            {
+              "maxLength": 100,
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "The decision this follows, in this exchange or the one it answers",
+          "title": "Decision Id"
+        },
+        "decided_at": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Decided At"
+        },
+        "required_grade": {
+          "description": "The check level a commit of this workflow needs. Every evidence field must be graded at least this, and it cannot be unchecked",
+          "enum": [
+            "unchecked",
+            "same_screen",
+            "reopened",
+            "system_of_record"
+          ],
+          "title": "Required Grade",
+          "type": "string"
+        },
+        "evidence": {
+          "description": "Fields whose read-back shows no new or changed record",
+          "items": {
+            "type": "string"
+          },
+          "title": "Evidence",
+          "type": "array"
+        }
+      },
+      "required": [
+        "decided_by",
+        "reason_code",
+        "required_grade"
+      ],
+      "title": "NoAction",
+      "type": "object"
+    },
     "PayloadRef": {
       "additionalProperties": false,
       "description": "A file next to the exchange, addressed relative to it.",
@@ -1054,7 +1121,8 @@
           "enum": [
             "committed",
             "halted",
-            "pending"
+            "pending",
+            "no_action"
           ],
           "type": "string"
         },
@@ -1077,6 +1145,18 @@
       ],
       "default": null,
       "title": "Halt Reason"
+    },
+    "no_action": {
+      "anyOf": [
+        {
+          "$ref": "#/$defs/NoAction"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Required when outcome is no_action"
     },
     "provenance": {
       "$ref": "#/$defs/Provenance"

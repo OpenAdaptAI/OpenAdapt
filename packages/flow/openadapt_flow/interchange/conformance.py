@@ -68,6 +68,12 @@ CODES: dict[str, str] = {
     "IX066": "an exchange sent to an executor claims a committed outcome",
     "IX070": "a payload file is missing or its sha256 does not match",
     "IX071": "a payload path is absolute or leaves the exchange directory",
+    "IX080": "a no_action outcome has no no_action record, or a no_action "
+    "record is on another outcome",
+    "IX081": "a no_action was decided by something other than a person",
+    "IX082": "a no_action has no read-back evidence at the check level a commit needs",
+    "IX083": "the read-back evidence of a no_action shows a new or changed record",
+    "IX084": "an exchange sent to an executor claims a no_action outcome",
 }
 
 #: Codes used by earlier drafts of v0 and no longer emitted. They are not
@@ -267,6 +273,11 @@ def check(doc: dict[str, Any], *, base_dir: Optional[Path] = None) -> list[Viola
 
     producer = ex.provenance.producer
     values = {f.name: f.value for f in ex.fields}
+    evidence = (
+        set(ex.no_action.evidence)
+        if ex.outcome == "no_action" and ex.no_action is not None
+        else set()
+    )
     for f in ex.fields:
         where = f"fields[{f.name}]"
         for j, r in enumerate(f.reads):
@@ -287,7 +298,15 @@ def check(doc: dict[str, Any], *, base_dir: Optional[Path] = None) -> list[Viola
             if r.channel in APPLICATION_CHANNELS and r.value is not None
         ]
         differs = [j for j, r in app_reads if not _same(r.value, f.value)]
-        if f.grade != "unchecked" and differs:
+        if f.name in evidence and differs:
+            # The state read after the decision is not the state it records.
+            for j in differs:
+                add(
+                    "IX083",
+                    f"{where}.reads[{j}]",
+                    f"read {f.reads[j].value!r}, the unchanged state is {f.value!r}",
+                )
+        elif f.grade != "unchecked" and differs:
             for j in differs:
                 add(
                     "IX036",
@@ -378,6 +397,33 @@ def check(doc: dict[str, Any], *, base_dir: Optional[Path] = None) -> list[Viola
         add("IX065", "in_reply_to")
     if ex.direction == "to_executor" and ex.outcome == "committed":
         add("IX066", "outcome")
+
+    na = ex.no_action
+    if (ex.outcome == "no_action") != (na is not None):
+        add("IX080", "no_action")
+    if ex.outcome == "no_action" and ex.direction == "to_executor":
+        add("IX084", "outcome")
+    if ex.outcome == "no_action" and na is not None:
+        if na.decided_by.kind != "human":
+            add("IX081", "no_action.decided_by", f"decided by a {na.decided_by.kind}")
+        grades = {f.name: f.grade for f in ex.fields}
+        if na.required_grade == "unchecked":
+            add(
+                "IX082",
+                "no_action.required_grade",
+                "required_grade cannot be unchecked",
+            )
+        if not na.evidence:
+            add("IX082", "no_action.evidence", "no evidence fields")
+        for name in na.evidence:
+            if name not in grades:
+                add("IX082", "no_action.evidence", f"unknown field {name!r}")
+            elif _rank(grades[name]) < _rank(na.required_grade):
+                add(
+                    "IX082",
+                    f"fields[{name}]",
+                    f"graded {grades[name]}, a commit needs {na.required_grade}",
+                )
 
     for key in ex.extensions:
         if not EXTENSION_KEY.match(key):
