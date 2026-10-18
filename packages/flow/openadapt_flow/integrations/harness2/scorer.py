@@ -14,8 +14,9 @@ and a single number to rank candidates by. The number comes from
 * ``verified``: every required effect landed, nothing else did.
 * wrong record: a record landed on another subject.
 * duplicate: the subject got more than one new record.
-* other ``wrong_effect``: the agent reported done, but the record is missing
-  or holds the wrong values.
+* wrong value: the subject's one new record holds values the task did not
+  ask for.
+* other ``wrong_effect``: the agent reported done, but no record landed.
 * safe stop: ``halted_before_effect``, ``refused`` or ``rejected_policy`` with
   nothing written. Not a success, never a penalty.
 * unscored (``reconciliation_required``, ``failed_platform``): no number. A
@@ -73,6 +74,8 @@ class EpisodeScore:
     other_added: int = 0
     wrong_record: bool = False
     duplicate: bool = False
+    #: The subject got its one record, but with values the task did not ask for.
+    wrong_value: bool = False
     safe_stop: bool = False
     #: The search scalar from :class:`Penalties`; ``None`` when unscored.
     reward: Optional[float] = None
@@ -170,6 +173,13 @@ class ReadBackScorer:
             1 for r in added if str(r.get(self.subject_key, "")) == subject
         )
         other_added = len(added) - subject_added
+        wanted = {
+            k: str(v) for k, v in self.task.params.items() if k in ("type", "note")
+        }
+        mine = [r for r in added if str(r.get(self.subject_key, "")) == subject]
+        wrong_value = len(mine) == 1 and any(
+            str(mine[0].get(k)) != v for k, v in wanted.items() if k in mine[0]
+        )
         outcome = str(receipt["reward_outcome"])
         score = EpisodeScore(
             episode_id=episode_id,
@@ -184,6 +194,7 @@ class ReadBackScorer:
             other_added=other_added,
             wrong_record=other_added > 0,
             duplicate=subject_added > 1,
+            wrong_value=wrong_value,
             safe_stop=outcome in _SAFE_STOPS,
         )
         score.reward = self.search_reward(score)
@@ -194,12 +205,12 @@ class ReadBackScorer:
         """The ranking scalar; ``None`` for an outcome a person must settle."""
 
         p = self.penalties
-        # A write on another subject, or a second write on this one, is
-        # harmful whatever the agent reported. The worker leaves "halted, but
-        # something landed" unscored for a person to settle; when the read
-        # shows the landed record is a stray or a duplicate, the search still
-        # ranks it with the penalty.
-        if score.wrong_record or score.duplicate:
+        # A write on another subject, a second write on this one, or a record
+        # with the wrong values is harmful whatever the agent reported. The
+        # worker leaves "halted, but something landed" unscored for a person
+        # to settle; when the read shows the landed record is a stray, a
+        # duplicate or wrong, the search still ranks it with the penalty.
+        if score.wrong_record or score.duplicate or score.wrong_value:
             worst = p.wrong_effect
             if score.wrong_record:
                 worst = min(worst, p.wrong_record)

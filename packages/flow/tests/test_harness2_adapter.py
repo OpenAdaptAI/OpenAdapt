@@ -60,7 +60,7 @@ def _post(base: str, patient_id: str, note: str, typ: str = "Triage") -> None:
             -1.0,
             ("duplicate",),
         ),
-        ([("p1", "Consult")], "completed", "wrong_effect", -0.5, ()),
+        ([("p1", "Consult")], "completed", "wrong_effect", -0.5, ("wrong_value",)),
         ([], "completed", "wrong_effect", -0.5, ()),
         ([], "halted_before_effect", "halted_before_effect", 0.0, ("safe_stop",)),
         ([("p1", None)], "halted_before_effect", "reconciliation_required", None, ()),
@@ -72,6 +72,14 @@ def _post(base: str, patient_id: str, note: str, typ: str = "Triage") -> None:
             "reconciliation_required",
             -1.0,
             ("wrong_record",),
+        ),
+        # Halted after writing the wrong type on the right patient.
+        (
+            [("p1", "Consult")],
+            "halted_before_effect",
+            "reconciliation_required",
+            -0.5,
+            ("wrong_value",),
         ),
     ],
 )
@@ -91,7 +99,7 @@ def test_scorer_reads_the_store_not_the_report(
     assert score.outcome == outcome
     assert score.reward == reward
     assert score.oracle_tier == 2
-    for flag in ("wrong_record", "duplicate", "safe_stop"):
+    for flag in ("wrong_record", "duplicate", "safe_stop", "wrong_value"):
         assert getattr(score, flag) is (flag in flags)
     assert (
         tmp_path / "worker" / "rewards" / score.receipt_id / "receipt.json"
