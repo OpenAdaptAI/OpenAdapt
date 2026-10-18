@@ -1433,13 +1433,41 @@ def _watch(request: Any, harness: Harness) -> dict[str, str]:
 # -- the compiled program --------------------------------------------------------------
 
 
-def check_trace_against_ir(trace: Mapping[str, Any], workflow: Any) -> dict[str, Any]:
+def distilled_events(recording_dir: Optional[Path]) -> dict[int, str]:
+    """``{event index: rule}`` for the steps distill dropped from a recording
+    (its ``distill.json``), or an empty dict."""
+
+    import json
+
+    if recording_dir is None:
+        return {}
+    path = Path(recording_dir) / "distill.json"
+    if not path.is_file():
+        return {}
+    try:
+        report = json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
+    return {int(d["index"]): str(d["rule"]) for d in report.get("dropped") or []}
+
+
+def check_trace_against_ir(
+    trace: Mapping[str, Any],
+    workflow: Any,
+    *,
+    distilled: Optional[Mapping[int, str]] = None,
+) -> dict[str, Any]:
     """Does the compiled program carry the identity the agent acted on?
 
     For each step the agent took by structure, the recorder's locator for its
-    target must be on one of the program's steps, in order. Returns counts and
-    the steps that are missing.
+    target must be on one of the program's steps, in order. A step whose
+    recorded event distill dropped (``distilled``, from
+    :func:`distilled_events`: a click with no effect, a detour that ended
+    where it started) is reported as distilled, not missing. Returns counts
+    and the steps that are missing.
     """
+
+    distilled = dict(distilled or {})
 
     def key(locator: Mapping[str, Any]) -> tuple[Any, ...]:
         return (
@@ -1456,11 +1484,16 @@ def check_trace_against_ir(trace: Mapping[str, Any], workflow: Any) -> dict[str,
         structural = getattr(anchor, "structural", None) if anchor else None
         if structural is not None:
             program.append(key(structural.model_dump(exclude_none=True)))
-    wanted = [
-        (int(step["i"]), key(step["recorded"]))
-        for step in trace.get("steps", [])
-        if step.get("recorded")
-    ]
+    wanted = []
+    dropped: list[dict[str, Any]] = []
+    for step in trace.get("steps", []):
+        if not step.get("recorded"):
+            continue
+        events = [int(e) for e in step.get("events") or []]
+        if events and events[0] in distilled:
+            dropped.append({"step": int(step["i"]), "rule": distilled[events[0]]})
+            continue
+        wanted.append((int(step["i"]), key(step["recorded"])))
     missing: list[int] = []
     cursor = 0
     for index, locator in wanted:
@@ -1472,7 +1505,8 @@ def check_trace_against_ir(trace: Mapping[str, Any], workflow: Any) -> dict[str,
         else:
             cursor = found + 1
     return {
-        "trace_steps_with_locator": len(wanted),
+        "trace_steps_with_locator": len(wanted) + len(dropped),
+        "distilled_steps": dropped,
         "in_program": len(wanted) - len(missing),
         "missing_steps": missing,
         "program_structural_steps": len(program),

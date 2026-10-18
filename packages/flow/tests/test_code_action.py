@@ -472,6 +472,41 @@ def test_the_program_must_carry_every_locator_in_order() -> None:
     assert not swapped["passed"] and swapped["missing_steps"] == [1]
 
 
+def test_a_detour_distill_dropped_is_not_missing(tmp_path: Path) -> None:
+    import json
+
+    from openadapt_flow.compile_agent.code_action import distilled_events
+
+    trace = {
+        "steps": [
+            {"i": 0, "events": [0], "recorded": {"role": "button", "name": "Contact"}},
+            {"i": 1, "events": [1], "recorded": {"role": "button", "name": "Contact"}},
+            {"i": 2, "events": [2], "recorded": {"selector": "#save"}},
+        ]
+    }
+    (tmp_path / "distill.json").write_text(
+        json.dumps(
+            {
+                "dropped": [
+                    {"index": 0, "kind": "click", "rule": "dead_end"},
+                    {"index": 1, "kind": "click", "rule": "dead_end"},
+                ]
+            }
+        )
+    )
+    dropped = distilled_events(tmp_path)
+    assert dropped == {0: "dead_end", 1: "dead_end"}
+    program = _workflow({"selector": "#save"})
+    assert not check_trace_against_ir(trace, program)["passed"]
+    ok = check_trace_against_ir(trace, program, distilled=dropped)
+    assert ok["passed"] and ok["in_program"] == 1
+    assert ok["distilled_steps"] == [
+        {"step": 0, "rule": "dead_end"},
+        {"step": 1, "rule": "dead_end"},
+    ]
+    assert distilled_events(tmp_path / "none") == {}
+
+
 # -- the scripted agent and the Claude loop -----------------------------------------
 
 

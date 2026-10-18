@@ -114,8 +114,83 @@
       "label": "openemr every_turn r1",
       "usd": 0.426621,
       "at": "2026-10-18T20:08:39Z"
+    },
+    {
+      "label": "openemr code r1",
+      "usd": 0.065987,
+      "at": "2026-10-18T20:11:53Z"
+    },
+    {
+      "label": "openemr code r2",
+      "usd": 0.046911,
+      "at": "2026-10-18T20:13:59Z"
+    },
+    {
+      "label": "openemr code r3",
+      "usd": 0.045941,
+      "at": "2026-10-18T20:15:47Z"
+    },
+    {
+      "label": "openemr code r4",
+      "usd": 0.048208,
+      "at": "2026-10-18T20:18:14Z"
+    },
+    {
+      "label": "openemr code r5",
+      "usd": 0.061664,
+      "at": "2026-10-18T20:21:30Z"
+    },
+    {
+      "label": "openemr code r6",
+      "usd": 0.047633,
+      "at": "2026-10-18T20:24:20Z"
+    },
+    {
+      "label": "openemr code r7",
+      "usd": 0.065492,
+      "at": "2026-10-18T20:26:39Z"
+    },
+    {
+      "label": "openemr code r8",
+      "usd": 0.064428,
+      "at": "2026-10-18T20:28:46Z"
+    },
+    {
+      "label": "openemr every_turn r2",
+      "usd": 0.364369,
+      "at": "2026-10-18T20:30:26Z"
+    },
+    {
+      "label": "openemr every_turn r3",
+      "usd": 0.227369,
+      "at": "2026-10-18T20:31:27Z"
+    },
+    {
+      "label": "openemr every_turn r4",
+      "usd": 0.311481,
+      "at": "2026-10-18T20:32:47Z"
+    },
+    {
+      "label": "openemr every_turn r5",
+      "usd": 0.207888,
+      "at": "2026-10-18T20:33:48Z"
+    },
+    {
+      "label": "openemr every_turn r6",
+      "usd": 0.437405,
+      "at": "2026-10-18T20:35:34Z"
+    },
+    {
+      "label": "openemr every_turn r7",
+      "usd": 0.321476,
+      "at": "2026-10-18T20:36:53Z"
+    },
+    {
+      "label": "openemr every_turn r8",
+      "usd": 0.342196,
+      "at": "2026-10-18T20:38:15Z"
     }
   ],
-  "total_usd": 1.202241,
+  "total_usd": 3.860689,
   "cap_usd": 15.0
 }

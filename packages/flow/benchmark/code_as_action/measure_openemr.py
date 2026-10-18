@@ -299,6 +299,7 @@ def run_one(
             try:
                 from openadapt_flow.compile_agent.code_action import (
                     check_trace_against_ir,
+                    distilled_events,
                 )
                 from openadapt_flow.ir import Workflow
 
@@ -306,7 +307,9 @@ def run_one(
                     work / "bundle", name=f"openemr-referral-{key}", distill=True
                 )
                 program = check_trace_against_ir(
-                    trace.to_dict(), Workflow.load(work / "bundle")
+                    trace.to_dict(),
+                    Workflow.load(work / "bundle"),
+                    distilled=distilled_events(session.compiled_recording_dir),
                 )
             except Exception as exc:  # noqa: BLE001 - reported with the row
                 program = {

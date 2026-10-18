@@ -600,14 +600,22 @@ class FirstRunCompiler:
         """Whether the draft program carries the locator of every element
         the agent acted on by structure."""
 
-        from openadapt_flow.compile_agent.code_action import check_trace_against_ir
+        from openadapt_flow.compile_agent.code_action import (
+            check_trace_against_ir,
+            distilled_events,
+        )
         from openadapt_flow.ir import Workflow
 
         try:
             workflow = Workflow.load(jit.bundle_dir)
         except Exception as exc:  # noqa: BLE001 - reported, never admitted on
             return {"passed": False, "error": f"{type(exc).__name__}: {exc}"}
-        return check_trace_against_ir(trace, workflow)
+        recording = (jit.candidate() or {}).get("compiled_recording")
+        return check_trace_against_ir(
+            trace,
+            workflow,
+            distilled=distilled_events(Path(recording) if recording else None),
+        )
 
     def _set_aside(self, jit: CompiledAgent, status: str, reasons: list[str]) -> Path:
         program = jit.program_dir

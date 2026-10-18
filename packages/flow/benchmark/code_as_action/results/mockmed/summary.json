@@ -52,7 +52,7 @@
     "model": "claude-sonnet-5-5",
     "platform": "macOS-15.7.3-arm64-arm-64bit",
     "python": "3.12.7",
-    "spend_total_usd": 0.58633
+    "spend_total_usd": 3.860689
   },
   "replays": {
     "model_calls_total": 0,

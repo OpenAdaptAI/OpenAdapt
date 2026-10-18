@@ -1,0 +1,115 @@
+{
+  "arms": {
+    "code": {
+      "correct": 8,
+      "median_actions": 36.0,
+      "median_cost_usd": 0.055,
+      "median_model_calls": 12.5,
+      "median_model_seconds": 18.542,
+      "median_output_tokens": 1023.5,
+      "median_prompt_tokens": 90777.0,
+      "median_run_seconds": 45.395,
+      "median_screenshots_sent": 2.0,
+      "runs": 8,
+      "runs_under_load": 8,
+      "total_cost_usd": 0.4463
+    },
+    "every_turn": {
+      "correct": 6,
+      "median_actions": 55.5,
+      "median_cost_usd": 0.332,
+      "median_model_calls": 13.5,
+      "median_model_seconds": 48.555,
+      "median_output_tokens": 2028.5,
+      "median_prompt_tokens": 619498.5,
+      "median_run_seconds": 75.227,
+      "median_screenshots_sent": 56.5,
+      "runs": 8,
+      "runs_under_load": 8,
+      "total_cost_usd": 2.6388
+    }
+  },
+  "arms_by_case": {
+    "duplicate": {
+      "code": {
+        "correct": 1,
+        "median_actions": 35.0,
+        "median_cost_usd": 0.048,
+        "median_model_calls": 10.0,
+        "median_model_seconds": 17.401,
+        "median_output_tokens": 887.0,
+        "median_prompt_tokens": 68795.0,
+        "median_run_seconds": 45.673,
+        "median_screenshots_sent": 2.0,
+        "runs": 1,
+        "runs_under_load": 1,
+        "total_cost_usd": 0.0476
+      },
+      "every_turn": {
+        "correct": 1,
+        "median_actions": 66.0,
+        "median_cost_usd": 0.437,
+        "median_model_calls": 17.0,
+        "median_model_seconds": 67.919,
+        "median_output_tokens": 2549.0,
+        "median_prompt_tokens": 958113.0,
+        "median_run_seconds": 101.699,
+        "median_screenshots_sent": 67.0,
+        "runs": 1,
+        "runs_under_load": 1,
+        "total_cost_usd": 0.4374
+      }
+    },
+    "normal": {
+      "code": {
+        "correct": 7,
+        "median_actions": 36.0,
+        "median_cost_usd": 0.062,
+        "median_model_calls": 14.0,
+        "median_model_seconds": 18.551,
+        "median_output_tokens": 1099.0,
+        "median_prompt_tokens": 103679.0,
+        "median_run_seconds": 45.116,
+        "median_screenshots_sent": 2.0,
+        "runs": 7,
+        "runs_under_load": 7,
+        "total_cost_usd": 0.3986
+      },
+      "every_turn": {
+        "correct": 5,
+        "median_actions": 54.0,
+        "median_cost_usd": 0.321,
+        "median_model_calls": 13.0,
+        "median_model_seconds": 47.844,
+        "median_output_tokens": 1992.0,
+        "median_prompt_tokens": 601404.0,
+        "median_run_seconds": 74.238,
+        "median_screenshots_sent": 55.0,
+        "runs": 7,
+        "runs_under_load": 7,
+        "total_cost_usd": 2.2014
+      }
+    }
+  },
+  "environment": {
+    "app": "OpenEMR local fixture (pinned image), New Patient form, 1280x800, headless",
+    "blocks": [
+      {
+        "arm": "every_turn",
+        "at": "2026-10-18T20:28:52Z",
+        "baseline_sha256": "fdcab903921f0d2f518317e659ab79528a31c8b9639365dc1e3758376afc0d12",
+        "round": 1,
+        "seeded_existing_chart_status": 201
+      }
+    ],
+    "effort": "medium",
+    "engine_commit": "24313234",
+    "load_limit_1m": 12.0,
+    "measured_at": "2026-10-18T20:38:15Z",
+    "model": "claude-sonnet-5-5",
+    "platform": "macOS-15.7.3-arm64-arm-64bit",
+    "python": "3.12.7",
+    "spend_total_usd": 3.860689,
+    "started_at": "2026-10-18T20:28:47Z"
+  }
+}
