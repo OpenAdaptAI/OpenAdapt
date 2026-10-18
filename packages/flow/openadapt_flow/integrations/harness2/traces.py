@@ -52,8 +52,10 @@ SCHEMA = "openadapt.trace-export/v1"
 
 #: A step whose control label matches this is treated as a write.
 _WRITE_LABEL = re.compile(r"^\s*(save|submit|sign|confirm|finali[sz]e|post)\b", re.I)
+#: The patient banner, as the DOM shows it or as OCR reads it (spaces dropped).
 _BANNER = re.compile(
-    r"^(?P<name>[^\n—]+?) — MRN (?P<mrn>\S+) — DOB (?P<dob>[0-9-]+)", re.M
+    r"^(?P<name>[^\n—|]+?)\s*—\s*MRN\s*(?P<mrn>\S+?)\s*—\s*DOB\s*(?P<dob>[0-9-]+)",
+    re.M,
 )
 
 
@@ -132,12 +134,16 @@ def screen_identity(observation: str, task: GuiTask) -> IdentityVerdict:
     if not m:
         return IdentityVerdict("unreadable", "agent_screen", expected, "")
     observed = f"{m.group('name').strip()} — DOB {m.group('dob')}"
-    same = m.group("name").strip() == want_name and (
+    same = _squash(m.group("name")) == _squash(want_name) and (
         not want_dob or m.group("dob") == want_dob
     )
     return IdentityVerdict(
         "verified" if same else "mismatch", "agent_screen", expected, observed
     )
+
+
+def _squash(text: str) -> str:
+    return re.sub(r"\s+", "", text).lower()
 
 
 def _control_label(observation: str, element: Any) -> str:
