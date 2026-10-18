@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import json
 import re
+import shutil
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
@@ -41,6 +42,7 @@ from openadapt_flow.integrations.harness2.scorer import (
     Penalties,
     ReadBackScorer,
 )
+from openadapt_flow.integrations.harness2.rollout import drop_worker_secrets
 from openadapt_flow.integrations.harness2.tasks import GuiTask
 from openadapt_flow.ir import RunReport, Workflow
 from openadapt_flow.repair.self_repair import (
@@ -298,6 +300,9 @@ class StagingBridgeSearch:
             note=proposal.note,
         )
         cdir = self.work_dir / f"candidate-{index}"
+        # Each search starts clean: a store or episode left by an earlier
+        # search would refuse this one.
+        shutil.rmtree(cdir, ignore_errors=True)
         self.staging.reset()
         repair = SelfRepair(
             _OneProposal(proposal, self.proposer.dialect),
@@ -313,8 +318,17 @@ class StagingBridgeSearch:
         repaired = repair.run(self.bundle_dir, cdir / "halt")
         out.repair_status = repaired.status
         out.reason = repaired.evidence.reason or ""
-        if repaired.status != "awaiting_approval" or repaired.patched_bundle is None:
+        try:
+            if repaired.status != "awaiting_approval" or repaired.patched_bundle is None:
+                return out
+            self._full_run(out, repaired, cdir, index)
             return out
+        finally:
+            _withdraw(repaired, cdir)
+
+    def _full_run(
+        self, out: CandidateOutcome, repaired: Any, cdir: Path, index: int
+    ) -> None:
         # The probe stopped before the save. Run the patched bundle through
         # the save on a fresh copy, and read what it wrote.
         self.staging.reset()
@@ -325,6 +339,7 @@ class StagingBridgeSearch:
             instruction="",
             params={**dict(self.staging.record), **dict(self.staging.identity)},
             identity=dict(self.staging.identity),
+            record_fields=tuple(self.staging.record),
         )
         scorer = ReadBackScorer(
             task,
@@ -352,14 +367,41 @@ class StagingBridgeSearch:
         signal = _SIGNAL.get(out.runtime_outcome, "halted_before_effect")
         if report is not None and report.success and not report.execution_outcome:
             signal = "completed"
-        score: EpisodeScore = scorer.score(episode, signal)
+        try:
+            score: EpisodeScore = scorer.score(episode, signal)
+        finally:
+            drop_worker_secrets(cdir / "reward" / "worker")
         out.outcome = score.outcome
         out.reward = score.reward
         out.wrong_record = score.wrong_record
         out.duplicate = score.duplicate
         out.wrong_value = score.wrong_value
         out.receipt_id = score.receipt_id
-        return out
+
+
+def _withdraw(repaired: Any, cdir: Path) -> None:
+    """Close what the staging self-repair left open for a person.
+
+    Each staging candidate stops at an approval request. Nobody may answer
+    it: the request is removed and the staging candidate is rejected, so a
+    portal pointed at the search's directory has nothing to approve.
+    """
+
+    from openadapt_flow.repair.candidate import Actor
+    from openadapt_flow.repair.lifecycle import RepairLifecycleError, RepairStore
+
+    shutil.rmtree(cdir / "halt" / "item-approval", ignore_errors=True)
+    candidate_id = getattr(repaired.evidence, "candidate_id", None)
+    if not candidate_id:
+        return
+    try:
+        RepairStore(cdir / "store").reject(
+            candidate_id,
+            Actor(kind="automation", id="openadapt-staging-search"),
+            "staging-only candidate: scored on a staging copy, never for approval",
+        )
+    except (RepairLifecycleError, OSError, ValueError):
+        pass
 
 
 def request_step(repaired: Any) -> str:
