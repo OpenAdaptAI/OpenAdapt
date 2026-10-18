@@ -707,6 +707,12 @@ class Replayer:
             None uses ``$OPENADAPT_JIT_KEY_DIR`` or ``~/.openadapt/jit``.
     """
 
+    # Display-scale state (see __init__); class defaults keep partially
+    # constructed replayers, as some tests build them, on recorded geometry.
+    _render_scale_attempted: bool = False
+    _render_scale_inner: Optional[Backend] = None
+    _render_scale_evidence: Optional[dict[str, Any]] = None
+
     def __init__(
         self,
         backend: Backend,
