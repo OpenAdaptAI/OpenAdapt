@@ -14,13 +14,13 @@ being merged now.
 1. **Learns from any successful run, a person's or an agent's.** A person
    records a task, or a computer-use agent does it once and OpenAdapt compiles
    the verified run into a program (`openadapt_flow.jit`, released;
-   prompt-to-program `crystallize`, landing). Agents can drive the recording
+   prompt-to-program `compile-agent`, landing). Agents can drive the recording
    on web, native Windows, RDP and Citrix.
 2. **Compiles to the fastest layer the app allows.** Page structure first (DOM,
    Windows UI Automation, macOS Accessibility), direct API calls where the app's
    own traffic allows them (`ApiActuator`, released; compiled from captured
-   traffic in [#1261](https://github.com/OpenAdaptAI/OpenAdapt/pull/1261),
-   about 11x faster than the browser on the OpenEMR save), and pixels only
+   traffic in [#1261](https://github.com/OpenAdaptAI/OpenAdapt/pull/1261)),
+   and pixels only
    where nothing else exists, such as RDP and Citrix. It is not a pixel-macro
    recorder.
 3. **Builds branching programs, not one linear path.** One program from several
