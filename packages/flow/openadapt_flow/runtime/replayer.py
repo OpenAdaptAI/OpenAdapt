@@ -556,6 +556,26 @@ def _scroll_target_positioned(
     return True
 
 
+def better_identity_read(first: Any, retry: Any) -> Any:
+    """The identity read to keep from a first read and its upscaled re-read.
+
+    An affirmative ``mismatch`` on either read is final: the record on screen
+    was read as a different one, and a second read of the same screen must
+    never turn that into ``verified``. Otherwise ``verified`` beats the two
+    "cannot certify" outcomes, ``abstain`` beats a blank ``unreadable``, and a
+    tie goes to the read that covered more of the expected identity.
+    """
+
+    if first.status == "mismatch":
+        return first
+    if retry.status == "mismatch":
+        return retry
+    rank = {"unreadable": 0, "abstain": 1, "verified": 3}
+    if (rank[retry.status], retry.coverage) > (rank[first.status], first.coverage):
+        return retry
+    return first
+
+
 class Replayer:
     """Replays a Workflow against a Backend using injected vision.
 
@@ -12893,7 +12913,9 @@ class Replayer:
             scoped_identifier=identifier_region is not None,
             identifier_filter=identifier_region,
         )
-        if check.status == "verified":
+        if check.status in ("verified", "mismatch"):
+            # A read that names a different record is final: a later read of
+            # the same screen must never overrule it into "verified".
             return check
         upscaled = identity_mod.upscale_crop(before_png, live_region)
         if upscaled is None:
@@ -12913,16 +12935,7 @@ class Replayer:
             ),
             scoped_identifier=identifier_region is not None,
         )
-        # verified beats everything; between the two "cannot certify"
-        # outcomes an AFFIRMATIVE mismatch outranks an abstain, and abstain
-        # outranks a blank unreadable.
-        rank = {"unreadable": 0, "abstain": 1, "mismatch": 2, "verified": 3}
-        if (rank[retry.status], retry.coverage) > (
-            rank[check.status],
-            check.coverage,
-        ):
-            return retry
-        return check
+        return better_identity_read(check, retry)
 
     # -- typed-input verification -------------------------------------------------
 
