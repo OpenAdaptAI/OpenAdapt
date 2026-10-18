@@ -92,6 +92,12 @@ class ActionKind(str, Enum):
     HOTKEY = "hotkey"
     WAIT = "wait"
     SCROLL = "scroll"
+    # Move execution to another declared surface (a browser tab or popup this
+    # run opened, or another backend such as a native Windows app or an RDP
+    # window). It delivers no input. It is typed so an older runtime, which
+    # does not know the value, refuses the whole bundle instead of driving the
+    # wrong window (docs/MULTI_SURFACE.md).
+    SWITCH_SURFACE = "switch_surface"
 
 
 class Landmark(BaseModel):
@@ -1027,6 +1033,288 @@ class SubmitBinding(BaseModel):
     )
 
 
+# -- multi-surface workflows (docs/MULTI_SURFACE.md) ---------------------------
+#
+# A workflow can span browser tabs, popups, and backends. Every surface it uses
+# is declared once on ``Workflow.surfaces``; every step names the surface it
+# runs on (``Step.surface``); a step whose action opens tabs or popups lists
+# them in order (``Step.opens``); and execution only ever moves between
+# surfaces through an explicit SWITCH_SURFACE step with its own identity check.
+# A bundle with no declared surfaces is a single-surface bundle and replays
+# exactly as before.
+
+#: A surface id: short, lower-case, closed alphabet (it appears in run reports).
+SURFACE_ID_PATTERN = r"^[a-z][a-z0-9_]{0,31}$"
+#: The id of the surface a run starts on when a recording names none.
+PRIMARY_SURFACE_ID = "main"
+#: Most pages one step may open (a guard against a popup storm being recorded).
+MAX_PAGES_OPENED_PER_STEP = 8
+
+
+def _compiled_full_match(pattern: Optional[str], label: str) -> Optional[str]:
+    if pattern is None:
+        return None
+    try:
+        re.compile(pattern)
+    except re.error as exc:
+        raise ValueError(f"{label} is not a valid regular expression") from exc
+    return pattern
+
+
+class SurfaceSpec(BaseModel):
+    """One surface a multi-surface workflow runs on.
+
+    Three shapes, distinguished by their fields:
+
+    - the PRIMARY surface: the first entry, the backend the run is started
+      with (``opened_by_step`` is None);
+    - a PAGE surface: a browser tab or popup that a recorded step opened
+      (``opened_by_step`` names that step). At replay it is identified by the
+      step that opened it, its position among the pages that step opened, the
+      opener relation, its origin, and full-match URL/title patterns;
+    - a BACKEND surface: another backend the caller supplies by id (a native
+      app, an RDP/Citrix window, another browser). ``opened_by_step`` is None
+      and the runtime refuses to switch to it unless the supplied backend is of
+      the declared ``kind``.
+
+    The URL and title patterns can echo application content, so they live only
+    inside ``workflow.json`` (sealed with it when the bundle is encrypted) and
+    are never copied into a manifest, run report, or refusal message.
+    """
+
+    model_config = ConfigDict(
+        extra="forbid",
+        frozen=True,
+        hide_input_in_errors=True,
+    )
+
+    id: str = Field(pattern=SURFACE_ID_PATTERN)
+    kind: ExecutionTargetKind
+    opened_by_step: Optional[str] = Field(default=None, min_length=1, max_length=128)
+    opener: Optional[str] = Field(default=None, pattern=SURFACE_ID_PATTERN)
+    open_order: int = Field(default=0, ge=0, lt=MAX_PAGES_OPENED_PER_STEP)
+    opener_link: Optional[Literal["window_opener", "none"]] = Field(
+        default=None,
+        description=(
+            "PAGE surfaces: 'window_opener' when the recorded page's "
+            "window.opener was the opener surface's page (window.open, or a "
+            "link without noopener); 'none' when it had no opener (a "
+            "target=_blank link, which implies noopener). Replay requires the "
+            "same relation."
+        ),
+    )
+    origin: Optional[str] = Field(
+        default=None,
+        max_length=512,
+        description="PAGE surfaces: exact scheme://host[:port] at open time.",
+    )
+    url_pattern: Optional[str] = Field(
+        default=None,
+        max_length=2048,
+        description=(
+            "PAGE surfaces: regular expression the page URL must FULLY match "
+            "when it is claimed. Recorded parameter values are generalized."
+        ),
+    )
+    title_pattern: Optional[str] = Field(
+        default=None,
+        max_length=1024,
+        description="PAGE surfaces: optional full-match regex for the title.",
+    )
+
+    @field_validator("url_pattern")
+    @classmethod
+    def _valid_url_pattern(cls, value: Optional[str]) -> Optional[str]:
+        return _compiled_full_match(value, "url_pattern")
+
+    @field_validator("title_pattern")
+    @classmethod
+    def _valid_title_pattern(cls, value: Optional[str]) -> Optional[str]:
+        return _compiled_full_match(value, "title_pattern")
+
+    @property
+    def is_page(self) -> bool:
+        """True for a tab/popup that a recorded step opened."""
+
+        return self.opened_by_step is not None
+
+    @model_validator(mode="after")
+    def _validate_shape(self) -> "SurfaceSpec":
+        page_only = (
+            self.opener,
+            self.opener_link,
+            self.origin,
+            self.url_pattern,
+            self.title_pattern,
+        )
+        if self.opened_by_step is None:
+            if any(value is not None for value in page_only[:2]):
+                raise ValueError(
+                    "only a page surface (opened_by_step set) has an opener"
+                )
+            if self.open_order != 0:
+                raise ValueError("only a page surface has an open_order")
+            return self
+        if self.kind != "web":
+            raise ValueError("a page surface opened by a step must be kind 'web'")
+        if self.opener is None or self.opener_link is None:
+            raise ValueError("a page surface needs its opener and opener_link")
+        if self.opener == self.id:
+            raise ValueError("a page surface cannot open itself")
+        if self.origin is None or self.url_pattern is None:
+            raise ValueError("a page surface needs its origin and url_pattern")
+        return self
+
+
+def surface_contract_errors(workflow: "Workflow") -> list[str]:
+    """Structural errors in a workflow's multi-surface contract.
+
+    Empty for a valid contract, and always empty for a single-surface bundle
+    that uses none of the multi-surface fields. Checked when a workflow is
+    built or loaded, so a bundle whose surfaces do not line up never runs.
+    Linear bundles are also checked for continuity: a step runs on the surface
+    the previous SWITCH_SURFACE selected, and a page can be switched to only
+    after the step that opens it.
+    """
+
+    errors: list[str] = []
+    linear = list(workflow.steps)
+    graph_steps: list[Step] = []
+    for graph in [
+        *([workflow.program] if workflow.program is not None else []),
+        *workflow.subflows.values(),
+    ]:
+        for state in graph.states.values():
+            if state.step is not None:
+                graph_steps.append(state.step)
+    all_steps = [*linear, *graph_steps]
+    uses_fields = any(
+        step.surface is not None
+        or step.opens
+        or step.action is ActionKind.SWITCH_SURFACE
+        for step in all_steps
+    )
+    surfaces = workflow.surfaces
+    if not surfaces:
+        if uses_fields:
+            errors.append(
+                "steps name surfaces, open pages, or switch surface, but the "
+                "workflow declares no surfaces"
+            )
+        return errors
+
+    by_id: dict[str, SurfaceSpec] = {}
+    for spec in surfaces:
+        if spec.id in by_id:
+            errors.append(f"surface id {spec.id!r} is declared twice")
+        by_id[spec.id] = spec
+    primary = surfaces[0]
+    if primary.is_page:
+        errors.append("the first (primary) surface cannot be a page a step opened")
+    if workflow.surface is not None and primary.kind != workflow.surface:
+        errors.append("the primary surface kind contradicts Workflow.surface")
+
+    steps_by_id = {step.id: step for step in all_steps}
+    expected_opens: dict[str, list[tuple[int, str]]] = {}
+    for spec in surfaces:
+        if not spec.is_page:
+            continue
+        assert spec.opened_by_step is not None
+        if spec.opened_by_step not in steps_by_id:
+            errors.append(f"surface {spec.id!r} is opened by an unknown step")
+        if spec.opener not in by_id:
+            errors.append(f"surface {spec.id!r} names an undeclared opener")
+        elif by_id[spec.opener].kind != "web":
+            errors.append(f"surface {spec.id!r} has a non-browser opener")
+        expected_opens.setdefault(spec.opened_by_step, []).append(
+            (spec.open_order, spec.id)
+        )
+    for step in all_steps:
+        if step.surface is not None and step.surface not in by_id:
+            errors.append(f"step {step.id!r} names undeclared surface")
+        declared = [sid for _, sid in sorted(expected_opens.get(step.id, []))]
+        if list(step.opens) != declared:
+            errors.append(
+                f"step {step.id!r} opens {list(step.opens)!r} but the surfaces "
+                f"opened by it are {declared!r} (in open_order)"
+            )
+        for order, sid in enumerate(step.opens):
+            opened = by_id.get(sid)
+            if opened is not None and opened.open_order != order:
+                errors.append(f"surface {sid!r} open_order does not match step")
+            if opened is not None and step.action is not ActionKind.SWITCH_SURFACE:
+                if opened.opener != (step.surface or primary.id):
+                    errors.append(
+                        f"surface {sid!r} opener is not the surface step "
+                        f"{step.id!r} runs on"
+                    )
+
+    # Continuity of the linear path (the program interpreter enforces the
+    # same rule at run time, where the path is known).
+    active = primary.id
+    available = {spec.id for spec in surfaces if not spec.is_page}
+    for step in linear:
+        if step.action is ActionKind.SWITCH_SURFACE:
+            target = step.surface
+            if target not in available:
+                errors.append(
+                    f"step {step.id!r} switches to {target!r} before that "
+                    "surface exists"
+                )
+            elif target == active:
+                errors.append(f"step {step.id!r} switches to the active surface")
+            if target is not None:
+                active = target
+            continue
+        if (step.surface or primary.id) != active:
+            errors.append(
+                f"step {step.id!r} runs on {step.surface or primary.id!r} but "
+                f"the active surface is {active!r}; a surface change must be "
+                "an explicit switch_surface step"
+            )
+        available.update(step.opens)
+    return errors
+
+
+class DialogResponse(BaseModel):
+    """How a step answers the JavaScript dialog its action raises.
+
+    A browser ``alert``/``confirm``/``prompt``/``beforeunload`` dialog is not a
+    surface: it is a screen state of the page that raised it, and it blocks
+    that page until it is answered. On the browser backend the step's action
+    arms a one-shot answer before delivering input; the dialog's message is
+    its identity. A dialog that does not show exactly ``message`` is
+    dismissed, never accepted, and the step halts. On a screen-driven backend
+    (desktop, RDP, Citrix) a dialog is just pixels and is recorded as the
+    clicks that answer it, so this field is browser-only
+    (docs/MULTI_SURFACE.md, "Dialogs").
+
+    The identity is either the exact ``message`` or ``message_pattern``, a
+    full-match regex. The compiler writes the pattern whenever the recorded
+    message carried a demonstrated parameter value or digits (a record
+    number, a date), so the bundle never seals that value.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    response: Literal["accept", "dismiss"]
+    message: Optional[str] = Field(default=None, min_length=1, max_length=2000)
+    message_pattern: Optional[str] = Field(default=None, min_length=1, max_length=4000)
+
+    @model_validator(mode="after")
+    def _one_identity(self) -> "DialogResponse":
+        if (self.message is None) == (self.message_pattern is None):
+            raise ValueError(
+                "a dialog response carries exactly one of message and message_pattern"
+            )
+        if self.message_pattern is not None:
+            try:
+                re.compile(self.message_pattern)
+            except re.error as exc:
+                raise ValueError(f"message_pattern is not a valid regex: {exc}")
+        return self
+
+
 class Step(BaseModel):
     id: str
     intent: str = Field(description="Human-readable purpose of the step")
@@ -1146,6 +1434,79 @@ class Step(BaseModel):
     # ``guard``: a deterministic precondition evaluated on the entry frame.
     # Unmet => HALT (default) or SKIP the step (see Guard.on_unmet).
     guard: Optional[Guard] = None
+    # Multi-surface workflows (docs/MULTI_SURFACE.md). All three are None/empty
+    # on a single-surface bundle, which replays exactly as before.
+    surface: Optional[str] = Field(
+        default=None,
+        pattern=SURFACE_ID_PATTERN,
+        description=(
+            "Id of the declared surface (Workflow.surfaces) this step runs on;"
+            " for SWITCH_SURFACE, the surface it switches TO. None means the"
+            " primary surface."
+        ),
+    )
+    opens: list[str] = Field(
+        default_factory=list,
+        max_length=MAX_PAGES_OPENED_PER_STEP,
+        description=(
+            "Ids of the page surfaces this step's action opens (new tabs,"
+            " popups), in the order the browser created them. At replay the"
+            " step must open exactly these pages; any other new page halts."
+        ),
+    )
+    surface_origin: Optional[str] = Field(
+        default=None,
+        max_length=512,
+        description=(
+            "SWITCH_SURFACE to a browser surface: the exact scheme://host[:port]"
+            " the target page showed when the demonstration switched to it."
+        ),
+    )
+    dialog: Optional[DialogResponse] = Field(
+        default=None,
+        description=(
+            "Browser backend: the JavaScript dialog this step's action raises,"
+            " answered by the backend when its message matches exactly."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _validate_surface_contract(self) -> "Step":
+        if len(set(self.opens)) != len(self.opens):
+            raise ValueError("opens lists a surface twice")
+        for sid in self.opens:
+            if not re.fullmatch(SURFACE_ID_PATTERN, sid):
+                raise ValueError("opens holds an invalid surface id")
+        if self.action is not ActionKind.SWITCH_SURFACE:
+            if self.surface_origin is not None:
+                raise ValueError("surface_origin is valid only on SWITCH_SURFACE")
+            if self.dialog is not None and self.action is ActionKind.WAIT:
+                raise ValueError("a WAIT step delivers no input and raises no dialog")
+            return self
+        if self.surface is None:
+            raise ValueError("SWITCH_SURFACE names the surface it switches to")
+        carried = {
+            "anchor": self.anchor is not None,
+            "text": self.text is not None,
+            "param": self.param is not None,
+            "secret": self.secret,
+            "key": self.key is not None,
+            "drag_end_anchor": self.drag_end_anchor is not None,
+            "scroll": self.scroll_dx is not None or self.scroll_dy is not None,
+            "effects": bool(self.effects),
+            "api_binding": self.api_binding is not None,
+            "opens": bool(self.opens),
+            "dialog": self.dialog is not None,
+            "guard": self.guard is not None,
+            "wait_until": self.wait_until is not None,
+            "irreversible risk": self.risk == "irreversible",
+        }
+        present = sorted(name for name, value in carried.items() if value)
+        if present:
+            raise ValueError(
+                "SWITCH_SURFACE delivers no input and carries no " + ", ".join(present)
+            )
+        return self
 
     @model_validator(mode="after")
     def _validate_rich_action_contract(self) -> "Step":
@@ -2042,6 +2403,11 @@ class Workflow(BaseModel):
     # None for every pre-qualification bundle and omitted from its serialized
     # bytes by ``_serialize_compatible`` below.
     qualification: Optional["QualificationProject"] = None
+    # Multi-surface workflows (docs/MULTI_SURFACE.md): every browser tab,
+    # popup, and backend the workflow runs on, primary first. Empty (the
+    # default) for a single-surface bundle, and then omitted from serialized
+    # bytes by ``_serialize_compatible`` below so legacy bundles round-trip.
+    surfaces: list[SurfaceSpec] = Field(default_factory=list, max_length=32)
     # Where the program came from, when that limits how it may run.
     # ``"agent_run"``: compiled from a computer-use agent's run
     # (:mod:`openadapt_flow.jit`). Such a bundle is a draft and runs only with
@@ -2081,9 +2447,24 @@ class Workflow(BaseModel):
             data.pop("execution_mode", None)
         if self.qualification is None:
             data.pop("qualification", None)
+        if not self.surfaces:
+            data.pop("surfaces", None)
         if self.origin is None:
             data.pop("origin", None)
         return data
+
+    @model_validator(mode="after")
+    def _validate_surfaces(self) -> "Workflow":
+        errors = surface_contract_errors(self)
+        if errors:
+            raise ValueError("invalid multi-surface contract: " + "; ".join(errors))
+        return self
+
+    @property
+    def is_multi_surface(self) -> bool:
+        """True when this workflow declares more than its primary surface."""
+
+        return len(self.surfaces) > 1
 
     # -- bundle I/O ---------------------------------------------------------
 
@@ -3258,13 +3639,64 @@ class StepResult(BaseModel):
     before_png: Optional[str] = None  # run-dir-relative paths
     after_png: Optional[str] = None
     elapsed_ms: float = 0.0
+    #: Multi-surface runs only (docs/MULTI_SURFACE.md): the id of the surface
+    #: this step ran on (for a SWITCH_SURFACE step, the surface it made
+    #: active; for a refused switch, the surface the run stayed on). None on
+    #: every single-surface run, and then omitted from the serialized result.
+    surface: Optional[str] = None
 
     @model_serializer(mode="wrap")
-    def _omit_empty_field_checks(self, handler: Any) -> Any:
-        data = handler(self)
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Keep single-surface results byte-identical to older releases."""
+
+        data: dict[str, Any] = handler(self)
+        if self.surface is None:
+            data.pop("surface", None)
         if isinstance(data, dict) and not self.effect_field_checks:
             data.pop("effect_field_checks", None)
         return data
+
+
+class ObservedSurfaceEnvironment(BaseModel):
+    """PHI-free environment observation of one non-primary surface.
+
+    A multi-surface qualification case observes every surface it switches to
+    against that surface's qualified boundary
+    (``QualificationProject.surface_environments``). The same digests a
+    single-surface report keeps in its ``observed_*`` fields are kept here,
+    one entry per surface id.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    target_kind: str
+    application_sha256: str = Field(pattern="^[a-f0-9]{64}$")
+    application_version_sha256: str = Field(pattern="^[a-f0-9]{64}$")
+    session_sha256: str = Field(pattern="^[a-f0-9]{64}$")
+    environment_digest: str = Field(pattern="^[a-f0-9]{64}$")
+    observer_id: str
+    observer_contract_sha256: str = Field(pattern="^[a-f0-9]{64}$")
+    binding_sha256: str = Field(pattern="^[a-f0-9]{64}$")
+
+
+class SurfaceObservation(BaseModel):
+    """The last-seen identity observation of one surface (never a handle).
+
+    A surface is a name plus an identity check, not a live window. Durable
+    checkpoints keep this observation per surface so a resume can re-bind each
+    surface by identity (docs/MULTI_SURFACE.md, "Binding by identity"). It
+    holds no URL path, title, or screen text: the origin is the structured
+    attribute already declared in the bundle, and the screen is kept only as a
+    perceptual hash of the last frame Flow saw on that surface.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    surface: str = Field(pattern=SURFACE_ID_PATTERN)
+    kind: str = Field(min_length=1, max_length=32)
+    observed_after_step: Optional[str] = Field(default=None, max_length=128)
+    origin: Optional[str] = Field(default=None, max_length=512)
+    screen_phash: Optional[str] = Field(default=None, pattern="^[a-f0-9]{4,64}$")
 
 
 class UnarmedStep(BaseModel):
@@ -4094,6 +4526,13 @@ class RunReport(BaseModel):
     qualification_environment_observer_contract_sha256: Optional[str] = Field(
         default=None, pattern="^[a-f0-9]{64}$"
     )
+    #: Multi-surface qualification cases only: the environment observed on
+    #: each non-primary surface the run switched to, keyed by surface id. The
+    #: primary surface stays in the ``observed_*`` fields above. Empty (and
+    #: omitted from the serialized report) otherwise.
+    observed_surface_environments: dict[str, ObservedSurfaceEnvironment] = Field(
+        default_factory=dict
+    )
     governed_authorized_effect_contracts: dict[str, list[str]] = Field(
         default_factory=dict
     )
@@ -4188,6 +4627,15 @@ class RunReport(BaseModel):
         exclude_if=lambda value: value is None,
         description="The admitted variant the router chose for this run.",
     )
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Omit additive multi-surface evidence from single-surface reports."""
+
+        data: dict[str, Any] = handler(self)
+        if not self.observed_surface_environments:
+            data.pop("observed_surface_environments", None)
+        return data
 
     @model_validator(mode="after")
     def _validate_outcome_envelope_binding(self) -> "RunReport":
