@@ -221,6 +221,10 @@ if TYPE_CHECKING:
         QualificationCampaignGuard,
     )
     from openadapt_flow.runtime.control_overlay import RuntimeControlOverlayEmitter
+    from openadapt_flow.runtime.readback_pipeline import (
+        PipelinedReadback,
+        ReadbackPipeline,
+    )
     from openadapt_flow.transaction import IdempotencyLedger
 
 # REGION_STABLE template check: how far the expected content may shift from
@@ -751,7 +755,16 @@ class Replayer:
         layout_drift: Optional[bool] = None,
         layout_drift_tolerances: Optional[Any] = None,
         layout_drift_advisor: Optional[Callable[[Any], Optional[str]]] = None,
+        secret_env_overrides: Optional[Mapping[str, str]] = None,
+        readback_pipeline: Optional["ReadbackPipeline"] = None,
     ) -> None:
+        # Per-run secret sources (worklist workers): secret param name -> the
+        # NAME of the env var holding its value, so each worker signs in with
+        # its own account. Values are never stored here.
+        self.secret_env_overrides: dict[str, str] = dict(secret_env_overrides or {})
+        # Pipelined read-back (runtime/readback_pipeline.py); None = inline.
+        self.readback_pipeline = readback_pipeline
+        self._pipelined_readback: Optional["PipelinedReadback"] = None
         # A JIT draft (openadapt_flow.jit) runs only once admitted, or attended
         # by a named person (the canary). Checked in run().
         self._attended_draft_by = attended_draft_by
@@ -2406,6 +2419,16 @@ class Replayer:
     ) -> RunReport:
         """Persist exact evidence first, then project its terminal outcome."""
 
+        pending = getattr(self, "_pipelined_readback", None)
+        handed_off = False
+        if pending is not None:
+            if persist and report.success and self.readback_pipeline is not None:
+                handed_off = True
+            else:
+                # The run ended some other way: settle the read-back inline
+                # before the report is written.
+                self._apply_pipelined_verdict(report, self._join_pipelined_readback(keep=True))
+                self._pipelined_readback = None
         self._end_surfaces()
         if self._surface_environment_observations:
             report.observed_surface_environments = dict(
@@ -2441,6 +2464,168 @@ class Replayer:
             clear_guard(None)
         if project_terminal:
             self._emit_control_overlay_terminal(report.execution_outcome)
+        if handed_off:
+            assert pending is not None and self.readback_pipeline is not None
+            self._pipelined_readback = None
+            self.readback_pipeline.hand_off(
+                pending,
+                lambda error, entry=pending: self._settle_pipelined_readback(
+                    report, workflow, run_dir, entry, error
+                ),
+            )
+        return report
+
+    # -- pipelined read-back (runtime/readback_pipeline.py) ------------------
+
+    def _may_pipeline_readback(self, verifier: Any) -> bool:
+        """Whether this effect's read-back may run on the side thread."""
+
+        pipeline = getattr(self, "readback_pipeline", None)
+        if pipeline is None:
+            return False
+        reason = None
+        if self.durable or getattr(self, "_program_durable", None) is not None:
+            reason = "durable runs verify inline"
+        elif getattr(self, "idempotency_ledger", None) is not None:
+            reason = "idempotency-ledger runs verify inline"
+        elif getattr(self, "_pipelined_readback", None) is not None:
+            reason = "an earlier read-back in this item is still pending"
+        else:
+            from openadapt_flow.runtime.effects.onscreen import (
+                OnScreenReadbackVerifier,
+            )
+
+            target = verifier if verifier is not None else self.effect_verifier
+            if target is None or isinstance(target, OnScreenReadbackVerifier):
+                reason = "on-screen read-backs need the browser"
+            elif getattr(target, "backend", None) is not None:
+                reason = "the read-back uses the screen"
+        pipeline.inline_reason = reason
+        return reason is None
+
+    def _defer_readback(
+        self,
+        step: Step,
+        before: EffectState,
+        result: StepResult,
+        *,
+        effects: Optional[list["Effect"]],
+        verifier: Any,
+    ) -> None:
+        assert self.readback_pipeline is not None
+        scratch = StepResult(step_id=step.id, intent=step.intent, ok=True)
+
+        def verify() -> Optional[str]:
+            return self._verify_effects(
+                step, before, scratch, effects=effects, verifier=verifier
+            )
+
+        entry = self.readback_pipeline.submit(step.id, verify)
+        entry.scratch = scratch  # type: ignore[attr-defined]
+        entry.result = result  # type: ignore[attr-defined]
+        entry.intent = step.intent  # type: ignore[attr-defined]
+        result.effect_verified = None
+        result.effect_results.append(
+            "[pipelined] system-of-record read-back pending"
+        )
+        self._pipelined_readback = entry
+
+    def _join_pipelined_readback(self, *, keep: bool = False) -> Optional[str]:
+        """Wait for a pending read-back, apply it to its step, return its error."""
+
+        entry = getattr(self, "_pipelined_readback", None)
+        if entry is None:
+            return None
+        try:
+            error = entry.verdict.result()
+        except Exception as exc:  # noqa: BLE001 - a raising verifier fails closed
+            error = (
+                f"read-back raised {type(exc).__name__}; reconciliation is required"
+            )
+        self._copy_pipelined_evidence(entry, error)
+        if not keep:
+            self._pipelined_readback = None
+        return error
+
+    def _copy_pipelined_evidence(self, entry: Any, error: Optional[str]) -> None:
+        result: StepResult = entry.result
+        scratch: StepResult = entry.scratch
+        result.effect_results = [
+            r for r in result.effect_results if not r.startswith("[pipelined]")
+        ]
+        result.effect_results.extend(scratch.effect_results)
+        result.effect_evidence.extend(scratch.effect_evidence)
+        result.effect_field_checks.extend(scratch.effect_field_checks)
+        result.effect_verified = scratch.effect_verified
+        if scratch.failure_category is not None:
+            result.failure_category = scratch.failure_category
+        if error is not None:
+            result.ok = False
+            result.error = error
+            result.safety_halt = True
+            if result.failure_category is None:
+                result.failure_category = (
+                    "governed_refusal"
+                    if self.governed_authorization is not None
+                    else "safety_halt"
+                )
+        else:
+            result.safety_halt = result.safety_halt or scratch.safety_halt
+
+    def _apply_pipelined_verdict(
+        self,
+        report: RunReport,
+        error: Optional[str],
+        *,
+        entry: Optional["PipelinedReadback"] = None,
+    ) -> None:
+        if error is None:
+            return
+        report.success = False
+        report.execution_completed = False
+        report.terminal_outcome = "halt"
+        report.results.append(
+            StepResult(
+                step_id="<terminal>",
+                intent="program halt",
+                ok=False,
+                error=error,
+                safety_halt=True,
+            )
+        )
+        if entry is None:
+            entry = getattr(self, "_pipelined_readback", None)
+        report.halt = HaltObservation(
+            state_id=getattr(entry, "step_id", "") or "",
+            intent=getattr(entry, "intent", "") or "",
+            reason=error,
+            outcome="halt",
+            # The screen now belongs to the next item; nothing is probed.
+            observed_texts=[],
+            completed_intents=[r.intent for r in report.results if r.ok and not r.skipped],
+        )
+
+    def _settle_pipelined_readback(
+        self,
+        report: RunReport,
+        workflow: Workflow,
+        run_dir: Path,
+        entry: "PipelinedReadback",
+        error: Optional[str],
+    ) -> RunReport:
+        """Apply a finished deferred read-back to the saved item report."""
+
+        self._copy_pipelined_evidence(entry, error)
+        if error is not None:
+            self._apply_pipelined_verdict(report, error, entry=entry)
+        else:
+            # The first stamp saw an unconfirmed effect; re-derive from the
+            # completed execution now that it is confirmed.
+            if report.execution_completed:
+                report.success = True
+        self._stamp_execution_outcome(report, workflow, run_dir)
+        self._stamp_approval(report)
+        report.save(run_dir)
         return report
 
     def _project_idempotency_outcome_after_persist(
@@ -6403,6 +6588,19 @@ class Replayer:
         new page halts.
         """
 
+        pending_error = self._join_pipelined_readback()
+        if pending_error is not None:
+            # The previous action's deferred read-back failed: refuse to act
+            # further in this run, exactly as an inline failure would.
+            refused = StepResult(
+                step_id=step.id,
+                intent=step.intent,
+                ok=False,
+                error=pending_error,
+                safety_halt=True,
+                failure_category="safety_halt",
+            )
+            return refused
         router = self._surface_router
         if router is None:
             if step.action is ActionKind.SWITCH_SURFACE:
@@ -7554,7 +7752,24 @@ class Replayer:
             # save, a phantom optimistic-UI success, a duplicate write, or a
             # lost update -- the EffectVerifier reads the REAL record and HALTs
             # on any non-CONFIRMED verdict (docs/design/EFFECT_VERIFIER.md).
-            if (error is None or delivery_uncertain) and effect_pre_state is not None:
+            if (
+                error is None
+                and not delivery_uncertain
+                and effect_pre_state is not None
+                and self._may_pipeline_readback(active_verifier)
+            ):
+                # Pipelined read-back (runtime/readback_pipeline.py): the same
+                # check, run on the side thread. Any later step in this run
+                # waits for it first; the item's report is settled with the
+                # verdict when the check finishes.
+                self._defer_readback(
+                    step,
+                    effect_pre_state,
+                    result,
+                    effects=resolved_effects,
+                    verifier=active_verifier,
+                )
+            elif (error is None or delivery_uncertain) and effect_pre_state is not None:
                 effect_error = self._verify_effects(
                     step,
                     effect_pre_state,
@@ -11498,7 +11713,9 @@ class Replayer:
             if step.secret:
                 # Secret value is never in the bundle/params: inject it from
                 # the environment, failing fast with an actionable message.
-                env_var = secret_env_var(step.param or "")
+                env_var = getattr(self, "secret_env_overrides", {}).get(
+                    step.param or ""
+                ) or secret_env_var(step.param or "")
                 text = os.environ.get(env_var, "")
                 if not step.param:
                     return (
