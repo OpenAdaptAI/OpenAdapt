@@ -41,5 +41,5 @@ grounding or the OpenAdapt Cloud dashboard. See the
 
 ## Reporting a problem
 
-Report a signed binary that you believe is malicious or mis-signed to
+Report a signed binary that you believe is malicious or mis-signed through
 GitHub private vulnerability reporting ([SECURITY.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/SECURITY.md)) or to [hello@openadapt.ai](mailto:hello@openadapt.ai).
