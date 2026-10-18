@@ -112,10 +112,10 @@ def test_staging_search_picks_the_bridge_whose_record_verifies(
     assert consult.wrong_value and consult.reward == -0.5
     assert billing.outcome == "verified" and billing.reward == 1.0
     assert found.winner_index == 1
-    assert (tmp_path / "search" / "search.json").is_file()
+    assert (search.search_dir / "search.json").is_file()
     # Nothing on staging is left for a person to approve, and no secrets stay.
     for i in (0, 1):
-        cdir = tmp_path / "search" / f"candidate-{i}"
+        cdir = search.search_dir / f"candidate-{i}"
         assert not (cdir / "halt" / "item-approval").exists()
         [staged] = RepairStore(cdir / "store").list_candidates()
         assert staged.state == "rejected"
@@ -170,10 +170,12 @@ def test_no_verified_candidate_means_no_proposal(
     assert only.wrong_value and only.reward == -0.5
     # It proposes once; a second request gets nothing.
     assert agent.propose(request) is None
-    # A second search in the same directory starts clean.
+    # A second search under the same work_dir gets its own directory.
+    first = search.search_dir
     with _browser():
         again = search.search(request)
     assert again.candidates[0].reward == -0.5
+    assert search.search_dir != first
 
 
 def test_model_bridges_map_labels_to_screen_points(monkeypatch) -> None:

@@ -32,17 +32,18 @@ from __future__ import annotations
 import json
 import re
 import shutil
+import time
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
 
 from openadapt_flow.integrations.harness2 import traces
+from openadapt_flow.integrations.harness2.rollout import drop_worker_secrets
 from openadapt_flow.integrations.harness2.scorer import (
     EpisodeScore,
     Penalties,
     ReadBackScorer,
 )
-from openadapt_flow.integrations.harness2.rollout import drop_worker_secrets
 from openadapt_flow.integrations.harness2.tasks import GuiTask
 from openadapt_flow.ir import RunReport, Workflow
 from openadapt_flow.repair.self_repair import (
@@ -258,6 +259,8 @@ class StagingBridgeSearch:
         )
         self.max_candidates = max_candidates
         self.penalties = penalties
+        #: The directory of the latest search (``<work_dir>/search-<time>``).
+        self.search_dir = self.work_dir
 
     def history(self) -> str:
         """The halted trace, then the last verified ones, rendered in full."""
@@ -272,6 +275,10 @@ class StagingBridgeSearch:
         return "\n\n".join(parts)
 
     def search(self, request: RepairRequest) -> SearchResult:
+        # Every search gets its own directory: run paths, stores and episodes
+        # are single-use (the runtime refuses a run path it has run before).
+        stamp = time.strftime("%Y%m%dT%H%M%S")
+        self.search_dir = self.work_dir / f"search-{stamp}-{time.time_ns() % 10**6:06d}"
         proposals = self.proposer.bridges(request, self.history())[
             : self.max_candidates
         ]
@@ -287,8 +294,8 @@ class StagingBridgeSearch:
             best = max(verified, key=lambda c: (c.reward, -c.index))
             result.winner_index = best.index
             result.winner = proposals[best.index]
-        self.work_dir.mkdir(parents=True, exist_ok=True)
-        (self.work_dir / "search.json").write_text(
+        self.search_dir.mkdir(parents=True, exist_ok=True)
+        (self.search_dir / "search.json").write_text(
             json.dumps(result.to_dict(), indent=2, default=str), encoding="utf-8"
         )
         return result
@@ -299,10 +306,7 @@ class StagingBridgeSearch:
             actions=[dict(a) for a in proposal.bridge()],
             note=proposal.note,
         )
-        cdir = self.work_dir / f"candidate-{index}"
-        # Each search starts clean: a store or episode left by an earlier
-        # search would refuse this one.
-        shutil.rmtree(cdir, ignore_errors=True)
+        cdir = self.search_dir / f"candidate-{index}"
         self.staging.reset()
         repair = SelfRepair(
             _OneProposal(proposal, self.proposer.dialect),
@@ -319,7 +323,10 @@ class StagingBridgeSearch:
         out.repair_status = repaired.status
         out.reason = repaired.evidence.reason or ""
         try:
-            if repaired.status != "awaiting_approval" or repaired.patched_bundle is None:
+            if (
+                repaired.status != "awaiting_approval"
+                or repaired.patched_bundle is None
+            ):
                 return out
             self._full_run(out, repaired, cdir, index)
             return out
