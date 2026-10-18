@@ -25,7 +25,8 @@
 # `capture` extra installs the in-tree capture, so a capture change also
 # re-runs Flow.
 #
-# openadapt-privacy (packages/privacy) runs its suite without Presidio on
+# openadapt-privacy (packages/privacy) keeps its own uv.lock and runs
+# `uv sync --locked` against it: its suite without Presidio on
 # Python 3.10, 3.11 and 3.12, the full suite with Presidio and the spaCy model
 # on 3.12, and lint plus the release contract (changelog matches the version,
 # `uv build`, archive boundary).
@@ -576,7 +577,7 @@ jobs:
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
       - name: Install
-        run: uv sync --python ${{ matrix.python-version }} --extra dev
+        run: uv sync --locked --python ${{ matrix.python-version }} --extra dev
       - name: Test (without Presidio)
         run: uv run --no-sync pytest tests/ -v --ignore=tests/test_presidio.py
 
@@ -598,7 +599,7 @@ jobs:
         run: uv python install 3.12
       - name: Install with Presidio and the spaCy model
         run: |
-          uv sync --python 3.12 --extra dev --extra presidio
+          uv sync --locked --python 3.12 --extra dev --extra presidio
           uv pip install "pip>=25.3"
           uv run --no-sync python -m spacy download en_core_web_sm
       - name: Test
@@ -621,7 +622,7 @@ jobs:
       - name: Set up Python
         run: uv python install 3.12
       - name: Install
-        run: uv sync --python 3.12 --extra dev
+        run: uv sync --locked --python 3.12 --extra dev
       - name: Ruff
         run: uv run --no-sync ruff check openadapt_privacy tests scripts
       - name: Changelog matches the version and the release workflow

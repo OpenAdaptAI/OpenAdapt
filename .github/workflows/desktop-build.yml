@@ -44,14 +44,21 @@ jobs:
             if [ -z "${before}" ] || [ "${before}" = "0000000000000000000000000000000000000000" ]; then
               before="$(git rev-parse HEAD^)"
             fi
-            # Paths relative to packages/desktop, as the classifier expects.
-            git diff --relative --name-only "${before}" HEAD > "${changed_paths}"
-            # The workflows that build Desktop live at the monorepo root now.
-            # A change to them still demands the full native matrix.
-            if git diff --name-only "${before}" HEAD -- \
-                ../../.github/workflows/desktop-build.yml \
-                ../../.github/workflows/packages.yml | grep -q .; then
-              echo ".github/workflows/build.yml" >> "${changed_paths}"
+            if ! git cat-file -e "${before}^{commit}" 2>/dev/null; then
+              # A push of several commits leaves `before` outside this shallow
+              # clone. Without a diff, build everything.
+              echo "Push base ${before} is not fetched; selecting the full matrix."
+              echo ".github/workflows/build.yml" > "${changed_paths}"
+            else
+              # Paths relative to packages/desktop, as the classifier expects.
+              git diff --relative --name-only "${before}" HEAD > "${changed_paths}"
+              # The workflows that build Desktop live at the monorepo root now.
+              # A change to them still demands the full native matrix.
+              if git diff --name-only "${before}" HEAD -- \
+                  ../../.github/workflows/desktop-build.yml \
+                  ../../.github/workflows/packages.yml | grep -q .; then
+                echo ".github/workflows/build.yml" >> "${changed_paths}"
+              fi
             fi
           fi
           python scripts/classify_build_changes.py \

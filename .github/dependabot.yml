@@ -22,8 +22,8 @@ updates:
       # distros; 3.51+ needs newer GLib. See packages/capture/docs/DESIGN.md.
       - dependency-name: "pygobject"
         versions: [">=3.51"]
-  # packages/privacy has no lock file; pip reads its pyproject.toml.
-  - package-ecosystem: "pip"
+  # packages/privacy keeps its own uv.lock, like packages/capture.
+  - package-ecosystem: "uv"
     directory: "/packages/privacy"
     schedule:
       interval: "weekly"
