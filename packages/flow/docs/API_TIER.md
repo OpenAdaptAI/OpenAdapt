@@ -94,6 +94,8 @@ Each of these refusals means the save wasn't sent, so the GUI steps run.
 After the save request starts, the API tier's no-double-write rule
 applies: an error or a response without the recorded success signal stops
 the run. That save is never retried, and it's never redone through the GUI.
+A save whose response was lost ends as `transaction_outcome:
+RECONCILIATION_REQUIRED` unless the record check proves the effect.
 The record check (`effects`) then confirms the save with the same verifier
 a GUI save uses.
 
@@ -113,6 +115,9 @@ steps run instead, when:
 `Replayer(api_steps=False)` keeps a run on the GUI.
 
 ## What the capture keeps and withholds
+
+The file format is a stable, versioned contract:
+[NETWORK_CAPTURE.md](NETWORK_CAPTURE.md). In short:
 
 `network.jsonl` holds, for each page request except static assets: the
 method, the URL, the form or text body, the status, the content type, the

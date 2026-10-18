@@ -26,6 +26,7 @@ from __future__ import annotations
 import argparse
 import csv
 import json
+import os
 import subprocess
 import sys
 import time
@@ -151,9 +152,27 @@ def cmd_compile(a: argparse.Namespace) -> None:
     print(describe_api_step(next(s for s in wf.steps if s.id == step.id)))
 
 
+GATE_LOAD1 = float(os.environ.get("GATE_LOAD1", "12"))
+
+
+def _load1() -> float:
+    return float(subprocess.run(["sysctl", "-n", "vm.loadavg"], capture_output=True, text=True).stdout.split()[1])
+
+
+def wait_quiet(max_s: float = 1200.0) -> dict[str, Any]:
+    """Wait until the shared machine's 1-minute load is under GATE_LOAD1."""
+
+    t0 = time.time()
+    while _load1() >= GATE_LOAD1:
+        if time.time() - t0 > max_s:
+            return {"gate_waited_s": round(time.time() - t0, 1), "gate_gave_up": True}
+        time.sleep(5)
+    return {"gate_waited_s": round(time.time() - t0, 1), "gate_gave_up": False}
+
+
 COLS = ["arm", "block", "pos", "ref", "mismatch", "correct", "new_charts", "readback", "engine_success",
-        "outcome", "actuation", "api_fallback", "error", "wall_s", "setup_s", "engine_s", "readback_s",
-        "load1", "start_local", "engine_sha"]
+        "outcome", "transaction_outcome", "actuation", "api_fallback", "error", "wall_s", "setup_s", "engine_s", "readback_s",
+        "load1", "gate_waited_s", "gate_gave_up", "start_local", "engine_sha"]
 
 
 def run_one(env: dict[str, Any], arm: str, ref_idx: int, bundle: Path, out: Path) -> dict[str, Any]:
@@ -183,6 +202,7 @@ def run_one(env: dict[str, Any], arm: str, ref_idx: int, bundle: Path, out: Path
         raw = rep.model_dump(mode="json")
         last = raw["results"][-1] if raw["results"] else {}
         res.update(engine_success=raw.get("success"), outcome=str(raw.get("execution_outcome")),
+                   transaction_outcome=raw.get("transaction_outcome"),
                    actuation=last.get("actuation"),
                    api_fallback=next((r["api_fallback"] for r in raw["results"] if r.get("api_fallback")), None),
                    steps=len(raw["results"]),
@@ -229,11 +249,11 @@ def cmd_matrix(a: argparse.Namespace) -> None:
                 (out / f"block-{b + 1:02d}-{arm}.json").write_text(json.dumps(meta, indent=1))
                 for pos in range(a.per_block):
                     idx = ((b * a.per_block + pos) % len(REFERRALS)) + 1
+                    gate = wait_quiet()
                     start = time.strftime("%H:%M:%S")
                     res = run_one(env, arm, idx, bundle, out / f"b{b + 1:02d}-{arm}-{pos + 1}-{REFERRALS[idx - 1].key}")
-                    load1 = float(subprocess.run(["sysctl", "-n", "vm.loadavg"], capture_output=True, text=True).stdout.split()[1])
-                    row = {k: res.get(k) for k in COLS} | {"block": b + 1, "pos": pos + 1, "load1": load1,
-                                                           "start_local": start, "engine_sha": sha}
+                    row = {k: res.get(k) for k in COLS} | gate | {"block": b + 1, "pos": pos + 1, "load1": _load1(),
+                                                                  "start_local": start, "engine_sha": sha}
                     with open(csv_path, "a", newline="") as fh:
                         w = csv.DictWriter(fh, fieldnames=COLS)
                         if new:

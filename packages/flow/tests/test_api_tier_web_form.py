@@ -89,30 +89,30 @@ def test_redact_withholds_secrets_tokens_and_echoed_cookies():
         {
             "url": "http://app/login",
             "method": "POST",
-            "form": [["authUser", "nurse"], ["clearPass", "hunter2-pw"]],
+            "form": [["authUser", "nurse"], ["clearPass", "pppppppppp"]],
         },
         {
-            "url": "http://app/page?token_main=abcdef123456",
+            "url": "http://app/page?token_main=aaaaaaaaaaaa",
             "method": "GET",
-            "response_text": 'document.cookie="SID=cookievalue99"; csrf="tok-0123456789"; pw=hunter2-pw',
+            "response_text": 'document.cookie="SID=cccccccccccc"; csrf="tok-bbbbbbbbbb"; pw=pppppppppp',
         },
         {
             "url": "http://app/save",
             "method": "POST",
             "form": [
-                ["csrf_token_form", "tok-0123456789"],
+                ["csrf_token_form", "tok-bbbbbbbbbb"],
                 ["ssn", "123-45-6789"],
                 ["lname", "Marsh"],
             ],
         },
     ]
-    out = nc.redact(lines, secret_names=["ssn"], session_values=["cookievalue99"])
+    out = nc.redact(lines, secret_names=["ssn"], session_values=["cccccccccccc"])
     text = json.dumps(out)
     for leaked in (
-        "hunter2-pw",
-        "tok-0123456789",
-        "abcdef123456",
-        "cookievalue99",
+        "pppppppppp",
+        "tok-bbbbbbbbbb",
+        "aaaaaaaaaaaa",
+        "cccccccccccc",
         "123-45-6789",
     ):
         assert leaked not in text
@@ -142,7 +142,7 @@ class _FakeRequest:
         self.frame = type("F", (), {"url": url})()
 
     def all_headers(self):
-        return {**self.headers, "cookie": "SID=cookievalue99"}
+        return {**self.headers, "cookie": "SID=cccccccccccc"}
 
     def response(self):
         return _FakeResponse()
@@ -167,14 +167,14 @@ def test_capture_writes_and_loads_without_static_assets(tmp_path):
         _FakeRequest("http://app/a.png", resource_type="image")
     )
     ctx.handlers["requestfinished"](
-        _FakeRequest("http://app/save", "POST", b"lname=Marsh&csrf=tok-0123456789")
+        _FakeRequest("http://app/save", "POST", b"lname=Marsh&csrf=tok-bbbbbbbbbb")
     )
     cap.stop()
     cap.write(tmp_path, t0_monotonic=0.0)
     rows = nc.load(tmp_path)
     assert [r["url"] for r in rows] == ["http://app/form", "http://app/save"]
     assert rows[1]["form"] == [["lname", "Marsh"], ["csrf", "<session:csrf>"]]
-    assert "cookievalue99" not in (tmp_path / nc.NETWORK_FILE).read_text()
+    assert "cccccccccccc" not in (tmp_path / nc.NETWORK_FILE).read_text()
 
 
 # -- proposal --------------------------------------------------------------------
@@ -381,7 +381,7 @@ class FakeTransport:
 
     def __init__(
         self,
-        form=FORM_HTML.replace("<session:csrf_token_form>", "live-token-1"),
+        form=FORM_HTML.replace("<session:csrf_token_form>", "live-session-value"),
         dup="No matches were found.",
         save=None,
         raise_on_post=False,
@@ -420,7 +420,7 @@ def test_actuator_sends_run_values_and_the_live_token(tmp_path):
     ((path, body),) = t.posts
     assert path == "/app/save.php"
     assert (
-        "csrf_token_form=live-token-1" in body
+        "csrf_token_form=live-session-value" in body
         and "form_lname=Feld" in body
         and "form_state=CA" in body
     )
@@ -684,3 +684,51 @@ def test_only_an_ungated_run_uses_api_steps(mode, runs):
     assert (reason is None) is runs
     if not runs:
         assert "approval mode" in reason
+
+
+class LostResponseActuator(ScriptedActuator):
+    """The save request went out and its response was lost."""
+
+    def actuate(self, binding, params):
+        self.calls += 1
+        return ApiActuationResult(
+            status=ActuationStatus.HALT,
+            halt_kind=ApiHaltKind.DELIVERY_UNCERTAIN,
+            reason="the save request failed after it was sent; it is not retried",
+        )
+
+
+def test_an_uncertain_save_needs_reconciliation_and_is_never_redone(tmp_path):
+    url, db, stop = fault_serve()
+    url = url.rstrip("/")
+    try:
+        backend = EnterWritesBackend(url)
+        actuator = LostResponseActuator(url, ActuationStatus.HALT)
+        bundle = tmp_path / "bundle"
+        (bundle / "templates").mkdir(parents=True)
+        report = Replayer(
+            backend,
+            vision=FakeVision(),
+            effect_verifier=RestRecordVerifier(url),
+            web_form_actuator=actuator,
+            poll_interval_s=0.01,
+        ).run(_span_workflow(), bundle_dir=bundle, run_dir=tmp_path / "run")
+    finally:
+        stop()
+    assert actuator.calls == 1 and backend.actions == []
+    assert report.success is False
+    assert report.transaction_outcome == "RECONCILIATION_REQUIRED"
+    assert report.results[-1].actuation == "api"
+
+
+def test_the_fallback_reports_the_rung_that_ran(tmp_path):
+    report, backend, actuator, records = _run(
+        tmp_path, _span_workflow(), ActuationStatus.UNAVAILABLE
+    )
+    first, save = report.results
+    # The reason is on the first covered step; the save ran on the GUI path
+    # (a key step here, so it reports no resolution rung; a click reports
+    # the rung it resolved on, such as "dom").
+    assert "did not pass" in first.api_fallback
+    assert first.actuation != "api_folded" and save.actuation != "api"
+    assert ("press", "Enter") in [(a[0], a[1]) for a in backend.actions]
