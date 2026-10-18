@@ -2436,6 +2436,11 @@ def _replay_worklist_pool(
         relation = cwp.loop_relation(workflow)
         rows = cwp.pool_rows(workflow, worklists, relation)
         accounts = cwp.check_accounts(policy, cfg.worklist, kind)
+        entry_workflow = (
+            cwp.load_entry_bundle(Path(cfg.worklist.entry_bundle))
+            if cfg.worklist.entry_bundle and kind == "web"
+            else None
+        )
     except PoolRefusal as exc:
         print(f"REFUSED: {exc}. Nothing was executed.")
         return 2
@@ -2506,12 +2511,23 @@ def _replay_worklist_pool(
                     url=url,
                     run_dir=run_dir / "sign-in" / name,
                 )
+            open_entry = None
+            if entry_workflow is not None:
+                open_entry = partial(
+                    cwp.entry_with_bundle,
+                    url=entry_url,
+                    workflow=entry_workflow,
+                    bundle=Path(cfg.worklist.entry_bundle),
+                    backend_factory=lambda page: build_backend(backend_cfg, page=page),
+                    run_dir=run_dir / "entry" / name,
+                )
             workers.append(
                 cwp.WebPoolWorker(
                     name=name,
                     entry_url=entry_url,
                     run_item_on_page=partial(run_item, wirings[i], page_mode=True),
                     sign_in=sign_in,
+                    open_entry=open_entry,
                     cdp_endpoint=account.browser_cdp_endpoint if account else None,
                     headed=bool(args.headed or cfg.backend.headed),
                     readback_window=policy.readback_window,

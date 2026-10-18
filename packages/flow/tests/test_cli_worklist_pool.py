@@ -138,6 +138,12 @@ def _install(monkeypatch, calls: list, *, halt_note: str | None = None) -> None:
             self.kwargs = kwargs
 
         def run(self, workflow, **kwargs):
+            if "worklists" not in kwargs:  # the entry navigation, not an item
+                with lock:
+                    calls.append(
+                        {"entry": workflow.name, "endpoint": self.backend.ctx.endpoint}
+                    )
+                return _Report(success=True)
             note = next(iter(kwargs["worklists"].values()))[0]["note"]
             with lock:
                 calls.append(
@@ -264,4 +270,59 @@ def test_program_with_steps_outside_the_loop_is_refused(
     rc = _replay(bundle, _config(tmp_path), tmp_path / "run", "--workers", "2")
     assert rc == 2
     assert "one loop over a worklist" in capsys.readouterr().out
+    assert calls == []
+
+
+def _entry_bundle(tmp_path: Path, *, with_save: bool) -> Path:
+    from openadapt_flow.runtime.effects import Effect, EffectKind
+
+    step = Step(id="new_form", intent="click New", action=ActionKind.CLICK)
+    if with_save:
+        step = Step(
+            id="new_form",
+            intent="click Save",
+            action=ActionKind.CLICK,
+            effects=[Effect(kind=EffectKind.RECORD_WRITTEN, match={"x": "1"})],
+        )
+    wf = Workflow(name="entry", steps=[step])
+    path = tmp_path / ("entry-save" if with_save else "entry")
+    wf.save(path)
+    return path
+
+
+def test_entry_bundle_runs_before_every_item(tmp_path, monkeypatch) -> None:
+    bundle, _ = _for_each_bundle(tmp_path, n=4)
+    cfg = _config(tmp_path)
+    cfg.write_text(
+        cfg.read_text().replace(
+            "worklist:\n",
+            f"worklist:\n  entry_bundle: {_entry_bundle(tmp_path, with_save=False)}\n",
+        )
+    )
+    calls: list = []
+    _install(monkeypatch, calls)
+    assert _replay(bundle, cfg, tmp_path / "run", "--workers", "2") == 0
+    entries = [c for c in calls if "entry" in c]
+    items = [c for c in calls if "note" in c]
+    assert len(items) == 4 and len(entries) == 4
+    # Each worker navigated in its own session before each of its items.
+    for endpoint in {c["endpoint"] for c in items}:
+        assert sum(c["endpoint"] == endpoint for c in entries) == sum(
+            c["endpoint"] == endpoint for c in items
+        )
+
+
+def test_entry_bundle_with_a_save_is_refused(tmp_path, monkeypatch, capsys) -> None:
+    bundle, _ = _for_each_bundle(tmp_path, n=4)
+    cfg = _config(tmp_path)
+    cfg.write_text(
+        cfg.read_text().replace(
+            "worklist:\n",
+            f"worklist:\n  entry_bundle: {_entry_bundle(tmp_path, with_save=True)}\n",
+        )
+    )
+    calls: list = []
+    _install(monkeypatch, calls)
+    assert _replay(bundle, cfg, tmp_path / "run", "--workers", "2") == 2
+    assert "may only navigate" in capsys.readouterr().out
     assert calls == []

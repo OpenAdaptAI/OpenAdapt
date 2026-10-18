@@ -307,7 +307,7 @@ def sign_in_with_bundle(
     """Replay the recorded sign-in bundle with this account's credentials."""
 
     from openadapt_flow.ir import Workflow
-    from openadapt_flow.runtime.replayer import Replayer
+    from openadapt_flow.runtime import Replayer
 
     page.goto(url)
     workflow = Workflow.load(bundle)
@@ -318,6 +318,41 @@ def sign_in_with_bundle(
     ).run(workflow, params=params, bundle_dir=bundle, run_dir=run_dir)
     if not report.success:
         raise RuntimeError(f"sign-in bundle did not finish for {account.name}")
+
+
+def entry_with_bundle(
+    page: Any,
+    *,
+    url: str,
+    workflow: Any,
+    bundle: Path,
+    backend_factory: Callable[[Any], Any],
+    run_dir: Path,
+) -> None:
+    """Go to the entry URL, then replay the recorded entry navigation."""
+
+    from openadapt_flow.runtime import Replayer
+
+    from uuid import uuid4
+
+    page.goto(url)
+    report = Replayer(backend_factory(page)).run(
+        workflow, params={}, bundle_dir=bundle, run_dir=run_dir / uuid4().hex[:12]
+    )
+    if not report.success:
+        raise RuntimeError("the entry bundle did not reach the start page")
+
+
+def load_entry_bundle(path: Path) -> Any:
+    """Load the entry bundle; refuse one that declares any effect."""
+
+    from openadapt_flow.ir import Workflow
+    from openadapt_flow.traversal import iter_workflow_steps
+
+    workflow = Workflow.load(path)
+    if any(step.effects for step in iter_workflow_steps(workflow)):
+        raise PoolRefusal("worklist.entry_bundle declares a save; it may only navigate")
+    return workflow
 
 
 def print_pool_report(report: PoolReport, run_dir: Path) -> int:

@@ -830,6 +830,10 @@ class WorklistSection(BaseModel):
     sign_in_bundle: Optional[str] = None
     #: Page each item starts from (default: ``backend.url``).
     entry_url: Optional[str] = None
+    #: Recorded navigation replayed after ``entry_url`` before each item, for
+    #: apps that keep state between items (close the open chart, open a blank
+    #: form). It must not save anything; the run refuses one with effects.
+    entry_bundle: Optional[str] = None
     #: One account per worker. Workers never share a session.
     accounts: list[WorklistAccount] = Field(default_factory=list)
 
