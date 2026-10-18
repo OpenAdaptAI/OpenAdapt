@@ -111,3 +111,40 @@ def test_the_shell_renders_the_engines_action_set_without_adding_to_it() -> None
         "escalate",
         "reconcile",
     }
+
+
+CSS = (SHELL / "styles.css").read_text(encoding="utf-8")
+INDEX = (SHELL / "index.html").read_text(encoding="utf-8")
+
+
+def test_the_shell_writes_no_inline_style_attribute() -> None:
+    """The portal's CSP is ``style-src 'self'``, which blocks ``style="..."``.
+
+    Inline styles in generated markup would silently not apply on a phone.
+    Script may still set ``element.style`` through the CSSOM.
+    """
+    assert 'style="' not in APP
+    assert "style='" not in APP
+    assert 'style="' not in INDEX
+
+
+def test_the_shell_respects_reduced_motion() -> None:
+    assert "@media (prefers-reduced-motion: reduce)" in CSS
+    assert 'matchMedia("(prefers-reduced-motion: reduce)")' in APP
+
+
+def test_every_answer_control_is_at_least_44px() -> None:
+    """WCAG 2.5.8 asks for 24px; the shell keeps Apple's 44px for every answer."""
+    for selector in (".ans {", ".hold {", ".opt {", ".quiet {", ".toast button {", ".btn {"):
+        start = CSS.index(selector)
+        rule = CSS[start : CSS.index("}", start)]
+        heights = [int(value) for value in re.findall(r"min-height:\s*(\d+)px", rule)]
+        assert heights and min(heights) >= 44, f"{selector} needs a min-height of at least 44px"
+    more = CSS[CSS.index(".more {") : CSS.index("}", CSS.index(".more {"))]
+    assert "width: 48px" in more and "height: 48px" in more
+
+
+def test_dark_is_the_default_theme() -> None:
+    root = CSS[CSS.index(":root {") : CSS.index("}", CSS.index(":root {"))]
+    assert "color-scheme: dark" in root
+    assert "@media (prefers-color-scheme: light)" in CSS

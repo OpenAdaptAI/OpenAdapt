@@ -1,11 +1,11 @@
 {
   "schema_version": "openadapt.desktop-phone-capture-provenance/v1",
-  "generated_at": "2026-08-27",
+  "generated_at": "2026-10-18",
   "desktop": {
     "repository": "https://github.com/OpenAdaptAI/openadapt-desktop",
-    "commit": "b6599e728a67efcf79a7f8a1d5cbaa9c5858c6c5",
+    "commit": "6dd82926d7300bd47ff78cc97d4d24036d617af2",
     "generator": "scripts/capture_portal_scenarios.py",
-    "command": "uv run --extra build python scripts/capture_portal_scenarios.py --out /tmp/openadapt-desktop-phone-current --frame <public-openemr-poster>",
+    "command": "uv run --extra build python scripts/capture_portal_scenarios.py --out /tmp/openadapt-phone-states",
     "viewport": {
       "css_width": 390,
       "css_height": 844,
@@ -13,29 +13,42 @@
     }
   },
   "source_frame": {
-    "repository": "https://github.com/OpenAdaptAI/openadapt-web",
-    "commit": "36f643369c9b86c96b52ecdfe7f4a1c8b977cd08",
-    "path": "public/reference/openemr-patient-registration-standard-synthetic-v1/recording/openemr-source-recording.poster.png",
-    "sha256": "5d1f793fcbff2415a83ec894fecb45f6e129402731344b79216b2bba43b88b10",
-    "data_boundary": "Public synthetic OpenEMR reference data. No customer data."
+    "generator": "scripts/capture_portal_scenarios.py::_form_html",
+    "data_boundary": "A synthetic form rendered by the generator. Every name and number is made up. No customer data."
   },
   "captures": [
     {
-      "file": "request.png",
-      "source_output": "identity.png",
-      "state": "Identity decision request before an operator action",
+      "file": "save-dark.png",
+      "source_output": "save-dark.png",
+      "state": "A save waiting for approval, with its field values (dark)",
       "width": 780,
       "height": 1688,
-      "sha256": "1a4954f123104d7fb8aa4195a6363c75f838f5c05061d9aa871bac2b04f29d88"
+      "sha256": "2c4b7280a6f18c4fe586f0fd8243ab8fa67828432db4b9558e79f02ba0beb52a"
     },
     {
-      "file": "result-checks-passed.png",
-      "source_output": "identity-verify_and_resume-result.png",
-      "state": "Runner result after the permitted check-and-continue request",
+      "file": "save-light.png",
+      "source_output": "save-light.png",
+      "state": "The same save in the light theme",
       "width": 780,
       "height": 1688,
-      "sha256": "7899cbb28feda25162f139613ec57099bd31fbccf8cfc3a8c2accf6de164255a"
+      "sha256": "9407e0c920658a9e1f69d1c9e25a2e25f2e98f1037ae0ced687a8dc695ffd6a7"
+    },
+    {
+      "file": "run-dark.png",
+      "source_output": "run-dark.png",
+      "state": "A paused run with the retained screen labelled not live (dark)",
+      "width": 780,
+      "height": 1688,
+      "sha256": "4f23239155079a3b5417fd4a5380b4d66cc5cd9e3b0c9b1b5fb5a0232577b5d3"
+    },
+    {
+      "file": "save-irreversible-armed-dark.png",
+      "source_output": "save-irreversible-armed-dark.png",
+      "state": "A save that can't be undone, armed: match one fact, then hold (dark)",
+      "width": 780,
+      "height": 1688,
+      "sha256": "6d09661578c11f685248342efd1e3578670a095281c1c6aa3bc1dd120009a171"
     }
   ],
-  "semantic_scope": "Deterministic presentation fixture for the Desktop phone shell. It is not a customer run or a complete workflow effect-verification result."
+  "semantic_scope": "Deterministic presentation fixture for the Desktop phone shell, driven through a stubbed transport. It is not a customer run or a verified workflow result."
 }

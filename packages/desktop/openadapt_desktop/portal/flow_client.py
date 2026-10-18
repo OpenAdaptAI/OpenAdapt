@@ -51,6 +51,8 @@ ALLOWED_IMAGE_TYPES = frozenset({"image/png", "image/jpeg", "image/webp"})
 #: here too so the two boundaries cannot silently drift apart.
 _SAFE_RUN_ID = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
 _SAFE_ACTION_ID = re.compile(r"^[a-z][a-z_]{0,39}$")
+#: Flow's item-approval request ids are 32 lowercase hex characters.
+_SAFE_REQUEST_ID = re.compile(r"^[0-9a-f]{32}$")
 
 RouteMethod = Literal["GET", "POST"]
 
@@ -73,8 +75,10 @@ class FlowRoute:
 
 
 #: The complete set of upstream console routes the portal may reach.  This is
-#: the wire contract with ``openadapt-flow``; every entry exists on Flow
-#: ``origin/main`` today (``openadapt_flow/console/app.py``).
+#: the wire contract with ``openadapt-flow`` (``openadapt_flow/console/app.py``).
+#: The ``save_approval*`` routes are Flow's save-approval endpoints
+#: (``openadapt_flow/console/save_approvals.py``); against an older console
+#: they answer 404 and the portal relays that refusal unchanged.
 FLOW_ROUTES: dict[str, FlowRoute] = {
     "session": FlowRoute("GET", "/api/session", protected=False),
     "notification": FlowRoute("GET", "/api/attention/notification", protected=False),
@@ -85,6 +89,16 @@ FLOW_ROUTES: dict[str, FlowRoute] = {
     ),
     "task_evidence": FlowRoute(
         "GET", "/api/runs/{run_id}/artifact", protected=True
+    ),
+    "save_approvals": FlowRoute("GET", "/api/save-approvals", protected=True),
+    "save_approval_detail": FlowRoute(
+        "GET", "/api/save-approvals/{request_id}", protected=True
+    ),
+    "save_approval_frame": FlowRoute(
+        "GET", "/api/save-approvals/{request_id}/frame", protected=True
+    ),
+    "save_approval_action": FlowRoute(
+        "POST", "/api/save-approvals/{request_id}/actions/{action_id}", protected=True
     ),
 }
 
@@ -155,6 +169,7 @@ class FlowConsoleClient:
         *,
         run_id: str = "",
         action_id: str = "",
+        request_id: str = "",
         params: dict[str, str] | None = None,
         json_body: Any | None = None,
     ) -> FlowResponse:
@@ -177,6 +192,13 @@ class FlowConsoleClient:
                     "refusing an unexpected run identifier", reason="bad_identifier"
                 )
             path = path.replace("{run_id}", quote(str(run_id), safe=""))
+        if "{request_id}" in path:
+            if not _SAFE_REQUEST_ID.fullmatch(str(request_id)):
+                raise FlowConsoleUnavailable(
+                    "refusing an unexpected save approval identifier",
+                    reason="bad_identifier",
+                )
+            path = path.replace("{request_id}", str(request_id))
         if "{action_id}" in path:
             if not _SAFE_ACTION_ID.fullmatch(str(action_id)):
                 raise FlowConsoleUnavailable(

@@ -1,23 +1,29 @@
 #!/usr/bin/env python3
 # ruff: noqa: E501
-"""Capture deterministic, synthetic phone decision screens.
+"""Capture every phone state, in dark and light, at 390x844.
 
 This is a presentation-fixture generator. It starts no runner, reads no run
-directory, and never uses customer evidence. The generated PNG files stay in
-the caller-selected directory, outside the Desktop package by default.
+directory, and never uses customer evidence. The form in the save screenshots
+is a synthetic page rendered here, and every name and number on it is made
+up. The generated PNG files stay in the caller-selected directory.
+
+Each state is the real shell (``openadapt_desktop/portal/shell``) driven by a
+stubbed transport and then by real taps and drags, so a capture shows what
+the code does, not a mock-up of it.
 
 Example:
     uv run --extra build python scripts/capture_portal_scenarios.py \
-      --out /tmp/openadapt-desktop-phone-fixtures \
-      --frame /path/to/public-reference-run-frame.png
+      --out /tmp/openadapt-phone-states
 """
 
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import shutil
 import tempfile
+from collections.abc import Callable
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from threading import Thread
@@ -25,48 +31,105 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 SHELL = ROOT / "openadapt_desktop" / "portal" / "shell"
+VIEWPORT = {"width": 390, "height": 844}
+SCHEMES = ("dark", "light")
+
+SAVE_ID = "5" * 32
+SAVE_ID_2 = "6" * 32
+
+# A synthetic referral form. Nothing here is a real person or record.
+FORM_ROWS = [
+    ("Patient", "Sample, Alex"),
+    ("Refer to", "Cardiology"),
+    ("Clinician", "Dr. R. Example"),
+    ("Reason", "Chest pain on exertion, 3 wk"),
+    ("Priority", "Urgent"),
+]
+
+FIELDS = [
+    {"label": "Refer to", "before": None, "after": "Cardiology"},
+    {"label": "Clinician", "before": None, "after": "Dr. R. Example"},
+    {"label": "Reason", "before": None, "after": "Chest pain on exertion, 3 wk"},
+    {"label": "Priority", "before": "Routine", "after": "Urgent"},
+]
+
+CLAIM_FIELDS = [
+    {"label": "Claim", "before": None, "after": "CLM-00000"},
+    {"label": "Service", "before": None, "after": "99214 · Office visit"},
+    {"label": "Date", "before": None, "after": "2026-10-15"},
+    {"label": "Amount", "before": None, "after": "$142.00"},
+]
 
 
-def _task(*, kind: str, delivery: str, actions: list[str]) -> dict[str, Any]:
+def _form_html() -> str:
+    rows = "".join(f"<label><span>{name}</span><b>{value}</b></label>" for name, value in FORM_ROWS)
+    return f"""<!doctype html><meta charset="utf-8"><style>
+body{{margin:0;font:15px -apple-system,Segoe UI,sans-serif;background:#fff;color:#1b2333}}
+nav{{background:#eef2f7;padding:10px 18px;font-size:13px;color:#56627a;display:flex;gap:22px}}
+h1{{font-size:18px;margin:18px 18px 8px}} form{{padding:0 18px;display:grid;gap:10px}}
+label{{display:grid;grid-template-columns:110px 1fr;align-items:center;gap:10px}}
+label span{{color:#56627a;font-size:13px}} b{{font-weight:500;border:1px solid #c9d2df;border-radius:6px;padding:6px 8px}}
+.save{{margin:16px 18px;background:#2b5bd7;color:#fff;border-radius:6px;padding:8px 18px;display:inline-block}}
+</style><nav><span>Calendar</span><span>Patients</span><span>Referrals</span><span>Billing</span></nav>
+<h1>New referral</h1><form>{rows}</form><span class="save">Save</span>"""
+
+
+def _save_detail(
+    *,
+    risk: str,
+    fields: list[dict[str, Any]] | None,
+    sha: str,
+    step_index: int = 4,
+    intent: str = "Save the referral",
+    question: str = "Save this?",
+) -> dict[str, Any]:
+    presentation: dict[str, Any] = {
+        "question": question,
+        "step_intent": intent,
+        "step_index": step_index,
+        "step_class": risk,
+        "explanation": "Before it saves, OpenAdapt reads the form again. If anything changed, it stops and asks again.",
+        "screenshot_route": f"/api/save-approvals/{SAVE_ID}/frame",
+        "screenshot_sha256": sha,
+        "decline_reasons": ["wrong_values", "wrong_record", "screen_problem"],
+    }
+    if fields is not None:
+        presentation["fields"] = fields
     return {
-        "capability_digest": "sha256:" + "a" * 64,
-        "signature": "hmac-sha256:" + "b" * 64,
-        "delivery_state": delivery,
-        "task_kind": kind,
-        "risk_class": "consequential" if kind in {"effect", "delivery_uncertain"} else "unknown",
-        "created_at": "2026-07-29T12:00:00+00:00",
-        "expires_at": "2026-07-29T13:00:00+00:00",
-        "allowed_actions": actions,
-        "evidence": {
-            "identity_required_count": 2 if kind == "identity" else None,
-            "identity_confirmed_count": 1 if kind == "identity" else None,
-            "effect_required_count": 1 if kind in {"effect", "delivery_uncertain"} else None,
-            "effect_confirmed_count": 0 if kind in {"effect", "delivery_uncertain"} else None,
-            "minimum_effect_tier": 1 if kind in {"effect", "delivery_uncertain"} else None,
-            "observed_effect_tier": None,
-            "frame_available_locally": False,
-            "sensitive_evidence_local_only": True,
+        "task": {
+            "task_kind": "save_approval",
+            "risk_class": risk,
+            "capability_digest": "sha256:" + "a" * 64,
+            "signature": "hmac-sha256:" + "b" * 64,
+            "allowed_actions": ["verify_and_resume", "reject"],
+            "created_at": "@-14m",
+            "expires_at": "@+46m",
         },
+        "task_digest": "sha256:" + "c" * 64,
+        "presentation": presentation,
     }
 
 
-def _detail(
-    *,
-    title: str,
-    kind: str,
-    delivery: str = "not_delivered",
-    actions: list[str],
-    category: str,
-    question: str,
-) -> dict[str, Any]:
+def _run_detail(*, risk: str = "unknown") -> dict[str, Any]:
     return {
-        "task": _task(kind=kind, delivery=delivery, actions=actions),
+        "task": {
+            "task_kind": "identity",
+            "risk_class": risk,
+            "delivery_state": "not_delivered",
+            "capability_digest": "sha256:" + "a" * 64,
+            "signature": "hmac-sha256:" + "b" * 64,
+            "allowed_actions": ["verify_and_resume", "reject", "teach", "escalate"],
+            "created_at": "@-14m",
+            "expires_at": "@+38m",
+            "evidence": {"identity_required_count": 3, "identity_confirmed_count": 2},
+        },
         "task_digest": "sha256:" + "c" * 64,
         "presentation": {
-            "question": question,
-            "explanation": title,
+            "question": "Is the intended record open now?",
+            "explanation": "The record on screen didn't match the intended one.",
+            "after_artifact_id": "fixture-frame",
             "halt": {
-                "category": category,
+                "category": "identity",
                 "step_ordinal": 3,
                 "step_count": 6,
                 "action_kind": "click",
@@ -74,177 +137,165 @@ def _detail(
                 "target_label": "Save",
                 "resolution_ladder": [],
                 "will_recheck": [
-                    {
-                        "check": "delivery_reconciliation"
-                        if kind == "delivery_uncertain"
-                        else "record_identity",
-                        "count": None,
-                    }
+                    {"check": "record_identity", "count": 3},
+                    {"check": "postconditions", "count": 1},
                 ],
             },
         },
     }
 
 
-SCENARIOS: dict[str, dict[str, Any]] = {
-    "identity": _detail(
-        title="OpenAdapt could not confirm the intended record.",
-        kind="identity",
-        actions=["verify_and_resume", "reject", "teach", "escalate"],
-        category="identity",
-        question="Is the intended record now open in the live application?",
-    ),
-    "ambiguity": _detail(
-        title="More than one target matched, so OpenAdapt chose none.",
-        kind="ambiguity",
-        actions=["verify_and_resume", "reject", "teach", "escalate"],
-        category="disambiguation",
-        question="Can you leave one clear target ready in the live application?",
-    ),
-    "human-step": _detail(
-        title="The application needs a person before the workflow can continue.",
-        kind="human_step",
-        actions=["verify_and_resume", "escalate"],
-        category="human_required",
-        question="Complete the sign-in or challenge in the live application, then check again.",
-    ),
-    "effect": _detail(
-        title="The saved system-of-record result was not confirmed.",
-        kind="effect",
-        actions=["verify_and_resume", "reject", "teach", "escalate"],
-        category="effect_indeterminate",
-        question="Is the live destination ready for OpenAdapt to check the saved result again?",
-    ),
-    "delivery-uncertain": _detail(
-        title="The action may already have been delivered.",
-        kind="delivery_uncertain",
-        delivery="unknown",
-        actions=["reconcile", "teach", "escalate"],
-        category="effect_indeterminate",
-        question="Is the live destination ready for OpenAdapt to reconcile the uncertain action?",
-    ),
-    "optional-step": _detail(
-        title="This optional workflow step needs an operator decision.",
-        kind="halt",
-        actions=["skip", "reject", "teach", "escalate"],
-        category="halt",
-        question="Should OpenAdapt leave this declared optional step undone?",
-    ),
+ACCEPTED = {
+    "state": "accepted_pending_runner",
+    "reason_code": "pending_runner",
+    "action": "verify_and_resume",
+    "decision_digest": "sha256:" + "e" * 64,
+    "decided_at": "@0",
+}
+REJECTED = {
+    "state": "rejected",
+    "reason_code": "rejected_by_operator",
+    "action": "reject",
+    "decision_digest": "sha256:" + "f" * 64,
+    "decided_at": "@0",
 }
 
 
-RESULTS: dict[str, dict[str, Any]] = {
-    "verify_and_resume": {
-        "state": "completed",
-        "reason_code": "verified_and_resumed",
-        "action": "verify_and_resume",
-    },
-    "skip": {"state": "completed", "reason_code": "skipped_and_resumed", "action": "skip"},
-    "reject": {"state": "rejected", "reason_code": "rejected_by_operator", "action": "reject"},
-    "teach": {
-        "state": "demonstration_requested",
-        "reason_code": "demonstration_requested",
-        "action": "teach",
-    },
-    "escalate": {
-        "state": "escalated",
-        "reason_code": "escalation_recorded",
-        "action": "escalate",
-    },
-    "reconcile": {
-        "state": "completed",
-        "reason_code": "reconciled_and_resumed",
-        "action": "reconcile",
-        "report_success": True,
-        "transition_receipt_digest": "sha256:" + "d" * 64,
-    },
-    "accepted-pending-runner": {
-        "state": "accepted_pending_runner",
-        "reason_code": "pending_runner",
-        "action": "verify_and_resume",
-    },
-    "continuation-halted": {
-        "state": "halted",
-        "reason_code": "continuation_halted",
-        "action": "verify_and_resume",
-    },
-    "revalidation-refused": {
-        "state": "refused",
-        "reason_code": "revalidation_refused",
-        "action": "verify_and_resume",
-    },
-    "expired": {
-        "state": "expired",
-        "reason_code": "expired",
-        "action": "verify_and_resume",
-    },
-    "delivery-uncertain": {
-        "state": "delivery_uncertain",
-        "reason_code": "delivery_uncertain",
-        "action": "verify_and_resume",
-    },
-    "reconcile-refused": {
-        "state": "refused",
-        "reason_code": "revalidation_refused",
-        "action": "reconcile",
-    },
-    "reconcile-incomplete": {
-        "state": "completed",
-        "reason_code": "reconciled_and_resumed",
-        "action": "reconcile",
-        "report_success": False,
-        "transition_receipt_digest": None,
-    },
+def _fixtures(sha: str) -> dict[str, dict[str, Any]]:
+    """Each named state: what the stubbed computer answers."""
+    save = _save_detail(risk="consequential", fields=FIELDS, sha=sha)
+    return {
+        "unpaired": {"paired": False},
+        "save": {"saves": [SAVE_ID], "details": {SAVE_ID: save}, "reply": ACCEPTED},
+        "save-two-waiting": {
+            "saves": [SAVE_ID, SAVE_ID_2],
+            "runs": ["run1"],
+            "details": {SAVE_ID: save, "run1": _run_detail()},
+            "reply": ACCEPTED,
+        },
+        "save-screenshot-only": {
+            "saves": [SAVE_ID],
+            "details": {SAVE_ID: _save_detail(risk="consequential", fields=None, sha=sha)},
+        },
+        "save-no-picture": {
+            "saves": [SAVE_ID],
+            "details": {SAVE_ID: _save_detail(risk="consequential", fields=FIELDS, sha="0" * 64)},
+        },
+        "save-irreversible": {
+            "saves": [SAVE_ID],
+            "details": {
+                SAVE_ID: _save_detail(
+                    risk="irreversible",
+                    fields=CLAIM_FIELDS,
+                    sha=sha,
+                    step_index=5,
+                    intent="Submit the claim to the payer",
+                )
+            },
+            "reply": ACCEPTED,
+        },
+        "save-decline": {"saves": [SAVE_ID], "details": {SAVE_ID: save}, "reply": REJECTED},
+        "save-changed": {
+            "saves": [SAVE_ID],
+            "details": {SAVE_ID: save},
+            "reply": {"status": 409, "body": {"detail": "task_changed"}},
+        },
+        "save-gone": {
+            "saves": [SAVE_ID],
+            "details": {SAVE_ID: {"status": 404, "body": {"detail": "request_not_waiting"}}},
+        },
+        "save-not-attended": {
+            "saves": [SAVE_ID],
+            "details": {SAVE_ID: {"status": 404, "body": {"detail": "Not Found"}}},
+        },
+        "run": {"runs": ["run1"], "details": {"run1": _run_detail()}},
+        "run-halted": {
+            "runs": ["run1"],
+            "details": {"run1": _run_detail()},
+            "reply": {
+                "state": "halted",
+                "reason_code": "continuation_halted",
+                "action": "verify_and_resume",
+            },
+        },
+        "run-uncertain": {
+            "runs": ["run1"],
+            "details": {"run1": _run_detail()},
+            "reply": {"status": 503, "body": None},
+        },
+        "run-not-accepted": {
+            "runs": ["run1"],
+            "details": {"run1": _run_detail()},
+            "reply": {"status": 409, "body": {"detail": "the human decision task changed"}},
+        },
+        "offline": {"saves": [SAVE_ID], "details": {SAVE_ID: save}, "offline": True},
+        "all-clear": {},
+        "saves-not-attended": {"saves_status": 404},
+        "unreachable": {"unreachable": True},
+        "expired": {
+            "saves": [SAVE_ID],
+            "details": {SAVE_ID: {**save, "task": {**save["task"], "expires_at": "@+3s"}}},
+        },
+    }
+
+
+STUB = r"""
+const fx = window.__fx;
+const nativeFetch = window.fetch.bind(window);
+const now = Date.now();
+// "@-14m" / "@+46m" / "@+3s" / "@0": times relative to page load, so the
+// countdowns read the same on every run.
+function stamp(value) {
+  if (typeof value !== "string" || value[0] !== "@") return value;
+  const m = /^@([+-]?\d+)([smh]?)$/.exec(value);
+  const unit = { s: 1e3, m: 6e4, h: 36e5, "": 1e3 }[m[2]];
+  return new Date(now + Number(m[1]) * unit).toISOString();
 }
-
-RESULT_EXAMPLES: dict[str, tuple[str, str, str]] = {
-    "accepted-pending-runner": ("identity", "verify_and_resume", "accepted-pending-runner"),
-    "continuation-halted": ("identity", "verify_and_resume", "continuation-halted"),
-    "revalidation-refused": ("identity", "verify_and_resume", "revalidation-refused"),
-    "expired": ("identity", "verify_and_resume", "expired"),
-    "delivery-uncertain": ("identity", "verify_and_resume", "delivery-uncertain"),
-    "reconcile-refused": ("delivery-uncertain", "reconcile", "reconcile-refused"),
-    "reconcile-incomplete": ("delivery-uncertain", "reconcile", "reconcile-incomplete"),
+function walk(value) {
+  if (Array.isArray(value)) return value.map(walk);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, walk(v)]));
+  }
+  return stamp(value);
 }
+const state = walk(fx);
+if (state.offline) Object.defineProperty(navigator, "onLine", { get: () => false });
+if (state.paired !== false) {
+  sessionStorage.setItem("portal_token", "fixture-token");
+  sessionStorage.setItem("portal_csrf", "fixture-csrf");
+} else {
+  sessionStorage.clear();
+}
+const reply = (status, body) => ({ status, ok: status < 400, json: async () => body });
+window.fetch = async (url, options = {}) => {
+  url = String(url);
+  if (state.unreachable) throw new TypeError("Failed to fetch");
+  if (url === "/api/portal/session") return reply(200, { device_label: "Front-desk PC" });
+  if (url === "/api/portal/tasks") return reply(200, (state.runs || []).map((id) => ({ id })));
+  if (url === "/api/portal/save-approvals") {
+    if (state.saves_status) return reply(state.saves_status, { detail: "Not Found" });
+    return reply(200, (state.saves || []).map((request_id) => ({ request_id })));
+  }
+  if (url.endsWith("/frame") || url.includes("/evidence?")) return nativeFetch("/frame.png", options);
+  if (url.includes("/actions/")) {
+    const r = state.reply || {};
+    return "status" in r ? reply(r.status, r.body) : reply(200, r);
+  }
+  const id = url.split("/").pop();
+  const detail = (state.details || {})[id];
+  if (!detail) return reply(404, { detail: "Not Found" });
+  return "status" in detail ? reply(detail.status, detail.body) : reply(200, detail);
+};
+"""
 
 
-def _write_fixture_site(site: Path, frame: Path | None) -> None:
-    shutil.copy(SHELL / "app.js", site / "app.js")
-    shutil.copy(SHELL / "styles.css", site / "styles.css")
-    scenarios = json.loads(json.dumps(SCENARIOS))
-    frame_name = None
-    if frame is not None:
-        frame_name = f"evidence{frame.suffix.lower()}"
-        shutil.copy(frame, site / frame_name)
-        for detail in scenarios.values():
-            detail["task"]["evidence"]["frame_available_locally"] = True
-            detail["presentation"]["after_artifact_id"] = "openemr-retained-frame"
-    fixture = json.dumps({"scenarios": scenarios, "results": RESULTS}, separators=(",", ":"))
-    (site / "index.html").write_text(
-        """<!doctype html><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1,viewport-fit=cover\">
-<link rel=\"stylesheet\" href=\"/styles.css\"><body>
-<header class=\"bar\"><span class=\"brand\"><span aria-hidden=\"true\">OA</span> OpenAdapt</span><span id=\"device\" class=\"device\">Demo phone</span></header>
-<main id=\"main\" class=\"main\">Loading…</main><footer id=\"actions\" class=\"actions\" hidden></footer>
-<script>window.__fixtures__="""
-        + fixture
-        + """; window.__fixtureFrame="""
-        + json.dumps(frame_name)
-        + """;
-const params=new URLSearchParams(location.search); const scenario=params.get('scenario')||'identity';
-const result=params.get('result')||null; const detail=window.__fixtures__.scenarios[scenario];
-window.IntersectionObserver=undefined;
-sessionStorage.setItem('portal_token','fixture-token'); sessionStorage.setItem('portal_csrf','fixture-csrf');
-const nativeFetch=window.fetch.bind(window);
-window.fetch=async (url, options={})=>{let body=null,status=404;
- if(String(url).includes('/evidence?') && window.__fixtureFrame) return nativeFetch('/'+window.__fixtureFrame,options);
- else if(url==='/api/portal/session'){status=200;body={device_label:'Demo phone'}}
- else if(url==='/api/portal/tasks'){status=200;body=[{id:'fixture-run',headline:detail.presentation.explanation,category:detail.task.task_kind}]}
- else if(url==='/api/portal/tasks/fixture-run'){status=200;body=detail}
- else if(String(url).includes('/actions/')){status=200;body=window.__fixtures__.results[result||'verify_and_resume']}
- return {status,ok:status<400,json:async()=>body};};
-</script><script src=\"/app.js\"></script>""",
-        encoding="utf-8",
+def _write_site(site: Path, name: str, fixture: dict[str, Any]) -> None:
+    index = (SHELL / "index.html").read_text(encoding="utf-8")
+    stub = f"<script>window.__fx={json.dumps(fixture)};{STUB}</script>"
+    index = index.replace(
+        '<script src="/app.js" defer></script>', f'{stub}<script src="/app.js"></script>'
     )
+    (site / f"{name}.html").write_text(index, encoding="utf-8")
 
 
 class _QuietHandler(SimpleHTTPRequestHandler):
@@ -262,112 +313,153 @@ def _serve(directory: Path) -> tuple[ThreadingHTTPServer, Thread]:
     return server, thread
 
 
-def _capture(out: Path, frame: Path | None) -> None:
+def _click(page: Any, selector: str) -> None:
+    page.locator(selector).first.click()
+    page.wait_for_timeout(150)
+
+
+def _ready(page: Any) -> None:
+    # The picture is verified before Approve is offered; wait for that.
+    page.wait_for_function(
+        """() => !document.querySelector('#evidence-slot') ||
+                 !/Loading/.test(document.querySelector('#evidence-slot').textContent)"""
+    )
+    page.wait_for_timeout(300)
+
+
+def _approve_and_wait(page: Any) -> None:
+    _click(page, '#actions [data-answer="verify_and_resume"]')
+    page.wait_for_timeout(5600)
+
+
+def _armed(page: Any) -> None:
+    _click(page, '#actions [data-answer="verify_and_resume"]')
+
+
+def _matched(page: Any) -> None:
+    _armed(page)
+    page.locator("[data-opt]", has_text="2026-10-15").click()
+    page.wait_for_timeout(150)
+
+
+def _holding(page: Any) -> None:
+    _matched(page)
+    box = page.locator("#hold").bounding_box()
+    page.mouse.move(box["x"] + box["width"] / 2, box["y"] + box["height"] / 2)
+    page.mouse.down()
+    page.wait_for_timeout(650)
+
+
+def _drag(page: Any, dx: int) -> None:
+    box = page.locator("#card").bounding_box()
+    x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 3
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.mouse.move(x + dx / 2, y + 4, steps=4)
+    page.mouse.move(x + dx, y + 8, steps=4)
+    page.wait_for_timeout(100)
+
+
+def _receipt(page: Any) -> None:
+    _approve_and_wait(page)
+    page.wait_for_timeout(2800)
+
+
+# Each capture: (file stem, fixture name, steps after load).
+CAPTURES: list[tuple[str, str, Callable[[Any], None] | None]] = [
+    ("pairing", "unpaired", None),
+    ("save", "save", None),
+    ("save-queue", "save-two-waiting", None),
+    ("save-swipe-right", "save", lambda p: _drag(p, 90)),
+    ("save-swipe-left", "save", lambda p: _drag(p, -90)),
+    ("save-undo", "save", lambda p: _click(p, '#actions [data-answer="verify_and_resume"]')),
+    (
+        "save-decline-reasons",
+        "save-decline",
+        lambda p: _click(p, '#actions [data-answer="reject"]'),
+    ),
+    ("save-screenshot-only", "save-screenshot-only", None),
+    ("save-full-screen", "save", lambda p: _click(p, "#evidence")),
+    ("save-more", "save", lambda p: _click(p, "#more")),
+    ("save-no-picture", "save-no-picture", None),
+    ("save-irreversible", "save-irreversible", None),
+    ("save-irreversible-armed", "save-irreversible", _armed),
+    ("save-irreversible-matched", "save-irreversible", _matched),
+    ("save-irreversible-holding", "save-irreversible", _holding),
+    ("save-changed", "save-changed", _approve_and_wait),
+    ("save-gone", "save-gone", None),
+    ("save-not-attended", "save-not-attended", None),
+    ("run", "run", None),
+    ("run-more", "run", lambda p: _click(p, "#more")),
+    ("run-paused-again", "run-halted", _approve_and_wait),
+    ("run-uncertain", "run-uncertain", _approve_and_wait),
+    ("run-not-accepted", "run-not-accepted", _approve_and_wait),
+    ("offline", "offline", None),
+    ("expired", "expired", lambda p: p.wait_for_timeout(3600)),
+    ("all-clear", "all-clear", None),
+    ("all-clear-with-receipt", "save", _receipt),
+    ("saves-not-attended", "saves-not-attended", None),
+    ("unreachable", "unreachable", None),
+]
+
+
+def _capture(out: Path, only: set[str] | None) -> list[str]:
     from playwright.sync_api import sync_playwright
 
-    with tempfile.TemporaryDirectory(prefix="openadapt-portal-fixtures-") as temp:
+    written: list[str] = []
+    with tempfile.TemporaryDirectory(prefix="openadapt-phone-states-") as temp:
         site = Path(temp)
-        _write_fixture_site(site, frame)
+        for asset in ("app.js", "styles.css", "manifest.webmanifest"):
+            shutil.copy(SHELL / asset, site / asset)
         server, thread = _serve(site)
         try:
             origin = f"http://127.0.0.1:{server.server_port}"
             with sync_playwright() as playwright:
                 browser = playwright.chromium.launch()
-                page = browser.new_page(viewport={"width": 390, "height": 844}, device_scale_factor=2)
-                for name, detail in SCENARIOS.items():
-                    page.goto(f"{origin}/?scenario={name}", wait_until="networkidle")
-                    page.locator("[data-run='fixture-run']").click()
-                    page.wait_for_timeout(50)
-                    if frame is not None:
-                        page.wait_for_function(
-                            """() => {
-                              const frame = document.querySelector('#frame');
-                              return frame && frame.complete && frame.naturalWidth > 0;
-                            }"""
-                        )
-                    # A canonical phone image is the phone viewport. A
-                    # full-page capture repeats the sticky heading in the
-                    # middle of long decision cards and is not what a staff
-                    # member sees on a device.
-                    page.screenshot(path=str(out / f"{name}.png"))
-                    for action in detail["task"]["allowed_actions"]:
-                        page.goto(
-                            f"{origin}/?scenario={name}&result={action}", wait_until="networkidle"
-                        )
-                        page.locator("[data-run='fixture-run']").click()
-                        if frame is not None:
-                            page.wait_for_function(
-                                """() => {
-                                  const frame = document.querySelector('#frame');
-                                  return frame && frame.complete && frame.naturalWidth > 0;
-                                }"""
-                            )
-                        page.locator(f'[data-action="{action}"]').click()
-                        page.wait_for_timeout(100)
-                        page.evaluate(
-                            """() => {
-                              const target = document.querySelector('#outcome');
-                              if (!target) return;
-                              if (target.classList.contains('terminal')) {
-                                window.scrollTo(0, 0);
-                                return;
-                              }
-                              const top = target.getBoundingClientRect().top + window.scrollY;
-                              window.scrollTo(0, Math.max(0, top - 100));
-                            }"""
-                        )
-                        page.screenshot(path=str(out / f"{name}-{action}-result.png"))
-                for filename, (scenario, action, result) in RESULT_EXAMPLES.items():
-                    page.goto(
-                        f"{origin}/?scenario={scenario}&result={result}",
-                        wait_until="networkidle",
+                # The synthetic form, rendered once, is the exact screenshot.
+                form = browser.new_page(viewport={"width": 760, "height": 420})
+                form.set_content(_form_html())
+                frame = form.screenshot()
+                form.close()
+                (site / "frame.png").write_bytes(frame)
+                for name, fixture in _fixtures(hashlib.sha256(frame).hexdigest()).items():
+                    _write_site(site, name, fixture)
+                for scheme in SCHEMES:
+                    context = browser.new_context(
+                        viewport=VIEWPORT, device_scale_factor=2, color_scheme=scheme
                     )
-                    page.locator("[data-run='fixture-run']").click()
-                    if frame is not None:
-                        page.wait_for_function(
-                            """() => {
-                              const frame = document.querySelector('#frame');
-                              return frame && frame.complete && frame.naturalWidth > 0;
-                            }"""
-                        )
-                    page.locator(f'[data-action="{action}"]').click()
-                    page.wait_for_timeout(100)
-                    page.evaluate(
-                        """() => {
-                          const target = document.querySelector('#outcome');
-                          if (!target) return;
-                          if (target.classList.contains('terminal')) {
-                            window.scrollTo(0, 0);
-                            return;
-                          }
-                          const top = target.getBoundingClientRect().top + window.scrollY;
-                          window.scrollTo(0, Math.max(0, top - 100));
-                        }"""
-                    )
-                    page.screenshot(path=str(out / f"result-{filename}.png"))
+                    for stem, fixture_name, steps in CAPTURES:
+                        if only and stem not in only:
+                            continue
+                        page = context.new_page()
+                        page.goto(f"{origin}/{fixture_name}.html", wait_until="networkidle")
+                        _ready(page)
+                        if steps is not None:
+                            steps(page)
+                        # Result rings draw in for about 1.3 s; capture them finished.
+                        page.wait_for_timeout(1500)
+                        target = out / f"{stem}-{scheme}.png"
+                        page.screenshot(path=str(target))
+                        written.append(target.name)
+                        page.close()
+                    context.close()
                 browser.close()
         finally:
             server.shutdown()
             thread.join(timeout=5)
+    return written
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--out", type=Path, required=True, help="Output directory for generated PNG files.")
     parser.add_argument(
-        "--frame",
-        type=Path,
-        help="Optional retained PNG, JPEG, or WebP frame from a public reference run.",
+        "--out", type=Path, required=True, help="Output directory for the PNG files."
     )
+    parser.add_argument("--only", nargs="*", help="Capture only these states, by file stem.")
     args = parser.parse_args()
-    if args.frame is not None:
-        if not args.frame.is_file():
-            parser.error(f"--frame does not exist: {args.frame}")
-        if args.frame.suffix.lower() not in {".png", ".jpg", ".jpeg", ".webp"}:
-            parser.error("--frame must be PNG, JPEG, or WebP")
     args.out.mkdir(parents=True, exist_ok=True)
-    _capture(args.out, args.frame)
-    print(f"Wrote synthetic phone fixtures to {args.out}")
+    written = _capture(args.out, set(args.only) if args.only else None)
+    print(f"Wrote {len(written)} phone states to {args.out}")
 
 
 if __name__ == "__main__":
