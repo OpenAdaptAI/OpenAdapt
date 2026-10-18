@@ -1,0 +1,1842 @@
+"""Self-repair: an agent proposes a fix for a halted step, a person accepts it.
+
+A run halts before any effect when a vendor changes a screen: the save button
+has a new label, a new place, a new DOM id, and nothing on the recorded
+ladder finds it. Without self-repair the run stops and pages a person. With
+it, :class:`SelfRepair` does this, in order:
+
+1. **Halt.** The run halts as usual (``HALTED_BEFORE_EFFECT``; a run with
+   no named profile records no outcome word, and the same evidence decides).
+   Self-repair starts only when no input reached a consequential step, no
+   effect was observed, and the halted step is a click whose target the
+   deterministic ladder could not find (or found only by geometry). A
+   wrong-record halt (identity mismatch) is never repaired.
+2. **Propose.** A computer-use agent (any action dialect
+   :mod:`openadapt_flow.jit.adapters` understands) is shown the halted step's
+   intent, the recorded evidence (the target crop, its label, its place) and
+   the live screen. It proposes one corrected action. Its model calls and
+   their cost are recorded. An agent that calls a model runs only with the
+   customer's own key.
+3. **Patch.** The proposal becomes a patched anchor for the same step, built
+   from the live screen at the proposed point with the heal machinery: a new
+   template crop, the DOM locator under the point, the label read there.
+   Identity evidence is copied unchanged. A proposal is refused when the new
+   target reads as a different kind of action (a read step pointed at a
+   ``Submit`` button, a save pointed at ``Consult``), or when it is a control
+   another step already uses.
+4. **Probe.** The patched bundle replays in a fresh session behind a gate
+   that stops at the last point before the first save, after the target and
+   the right-record check resolved. Nothing is written. The probe passes only
+   when the deterministic ladder (not the agent) found the target, every
+   identity check verified, each typed value is in the form, and the form is
+   the same as when the run halted.
+5. **Campaigns.** A passing probe becomes an ordinary repair candidate
+   (source ``model_suggestion``, provenance ``self_repair``) in the
+   :class:`~openadapt_flow.repair.lifecycle.RepairStore`. The replay and
+   fault campaigns run before anyone is asked: the existing frame campaigns
+   when the step's identity is readable from pixels, otherwise the live probe
+   (healthy) and the operator's fault probes, each of which must stop before
+   the save.
+6. **Approve.** One person answers one request, on the phone (the decision
+   portal) or with ``openadapt-flow item-approval approve``. That answer
+   records the review and the approval in the store under that person's
+   name. The agent
+   can never approve its own patch, and no answer means nothing is saved.
+7. **Resume.** The approved bundle is staged, enters its canary window, and
+   re-runs the item from the start in a fresh session. At the save it checks
+   the pre-save state again and proceeds only if it matches what the person
+   approved. The record check runs as usual.
+
+Every stage is written to ``<run_dir>/self-repair/self-repair.json`` and to the
+``self_repair`` block of the final report. A healthy run records
+``status="not_needed"``, zero model calls and zero cost; the agent is never
+called.
+
+Re-running from the start is safe only because the halt came before any
+effect; :meth:`SelfRepair.run` refuses every other halt.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import io
+import json
+import secrets
+import shutil
+import time
+from dataclasses import dataclass, field
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional, Protocol, Sequence
+
+from openadapt_flow.approval_mode.gate import ApprovalGate, GateVerdict, SaveContext
+from openadapt_flow.approval_mode.model import ItemDecisionKind
+from openadapt_flow.approval_mode.post import ItemDecision
+from openadapt_flow.ir import (
+    ActionKind,
+    Resolution,
+    RunReport,
+    SelfRepairEvidence,
+    SelfRepairStepRecord,
+    Step,
+    Workflow,
+)
+from openadapt_flow.repair.candidate import (
+    Actor,
+    CampaignCaseResult,
+    CampaignResult,
+    RepairCandidate,
+    RepairProvenance,
+    ScreenScrubEvidence,
+    ScreenShareMode,
+)
+
+if TYPE_CHECKING:
+    from openadapt_flow.jit.keys import CustomerModelKey
+    from openadapt_flow.repair.lifecycle import RepairStore
+
+__all__ = [
+    "AppSession",
+    "ProbeOutcome",
+    "RepairAgent",
+    "RepairProposal",
+    "RepairRequest",
+    "ReplayTarget",
+    "ScreenAccess",
+    "SelfRepair",
+    "SelfRepairRefused",
+    "SelfRepairResult",
+    "SelfRepairTarget",
+]
+
+#: Rungs the deterministic ladder trusts for a probe: the target was found
+#: by the DOM locator, a template, or its label, never by geometry or a model.
+TRUSTED_RUNGS = frozenset({"structural", "template", "template_global", "ocr"})
+#: The automation identity that records campaign results. Never a reviewer.
+AUTOMATION = Actor(kind="automation", id="openadapt-self-repair")
+_POINTER_KINDS = {
+    ActionKind.CLICK: "click",
+    ActionKind.DOUBLE_CLICK: "double_click",
+}
+_STOP_REASON = "self_repair_probe"
+
+
+class SelfRepairRefused(RuntimeError):
+    """Self-repair can't start or a proposal was refused. Nothing was written."""
+
+
+# -- what the agent sees and returns -------------------------------------------
+
+
+@dataclass(frozen=True)
+class RepairRequest:
+    """Everything the repair agent is shown for one halted step.
+
+    ``live_png`` and ``recorded_crop_png`` are scrubbed first unless an
+    operator set ``allow_unscrubbed``. Coordinates in the proposal are in the
+    live screen's pixels.
+    """
+
+    step_id: str
+    intent: str
+    action: str
+    halt_reason: str
+    live_png: bytes
+    viewport: tuple[int, int]
+    recorded_label: Optional[str]
+    recorded_region: tuple[int, int, int, int]
+    recorded_click_point: tuple[int, int]
+    recorded_crop_png: Optional[bytes]
+    dialect: str
+    attempt: int
+    #: Why earlier proposals for this step were refused, oldest first.
+    previous_refusals: tuple[str, ...] = ()
+    #: The customer's key for the agent's model client. Never an OpenAdapt key.
+    model_key: Optional["CustomerModelKey"] = field(default=None, repr=False)
+
+
+@dataclass(frozen=True)
+class RepairProposal:
+    """One corrected action, in the agent's own dialect.
+
+    ``action`` is a single native action (for example
+    ``{"action": "left_click", "coordinate": [846, 457]}`` for ``anthropic``
+    or ``{"kind": "click", "x": 846, "y": 457}`` for ``generic``). The agent
+    reports the model calls it made for this proposal and their cost; Flow
+    records them and can't measure them itself.
+    """
+
+    action: Mapping[str, Any]
+    model_calls: int = 0
+    cost_usd: float = 0.0
+    note: str = ""
+
+
+class RepairAgent(Protocol):
+    """A computer-use agent that proposes one fix at a time.
+
+    ``dialect`` names its action format (see
+    :func:`openadapt_flow.jit.adapters.dialects`). ``agent_id`` is recorded on
+    the candidate and can never review or approve it. An agent that makes no
+    model calls sets ``requires_model_key = False``; any other agent runs only
+    with the customer's key. ``propose`` returns ``None`` to give up.
+    """
+
+    dialect: str
+    agent_id: str
+
+    def propose(self, request: RepairRequest) -> Optional[RepairProposal]: ...
+
+
+@dataclass(frozen=True)
+class ScreenAccess:
+    """Who let the agent see screens, and how.
+
+    ``mode`` is the same setting ``openadapt-agent repair access`` uses:
+    ``scrubbed_only`` (default; ``scrub`` must be given or openadapt-privacy
+    installed) or ``allow_unscrubbed``. ``ask_each_time`` is not available
+    for self-repair yet. ``scrub`` takes a PNG and returns the scrubbed PNG
+    and the scrubber's evidence (``provider``, ``package_version``,
+    ``policy_sha256``).
+    """
+
+    enabled_by: str
+    mode: ScreenShareMode = "scrubbed_only"
+    scrub: Optional[Callable[[bytes], tuple[bytes, Mapping[str, Any]]]] = None
+
+
+# -- how self-repair reaches the app -------------------------------------------
+
+
+@dataclass
+class AppSession:
+    """An open session of the app, at the item's entry point."""
+
+    backend: Any
+    close: Callable[[], None]
+
+
+class SelfRepairTarget(Protocol):
+    """Opens sessions of the app and runs the governed engine in them.
+
+    ``open(fault=None)`` opens a fresh session at the item's entry point; a
+    fault name opens a session that presents that fault (for the fault
+    probes). ``execute`` admits ``workflow`` through the run gate and runs it
+    with a fresh authorization; it must raise :class:`SelfRepairRefused` when
+    the gate refuses.
+    """
+
+    def open(self, fault: Optional[str] = None) -> AppSession: ...
+
+    def execute(
+        self,
+        workflow: Workflow,
+        bundle_dir: Path,
+        session: AppSession,
+        run_dir: Path,
+        *,
+        approval_gate: Optional[ApprovalGate] = None,
+    ) -> RunReport: ...
+
+
+class ReplayTarget:
+    """A :class:`SelfRepairTarget` over the shipped run gate and Replayer.
+
+    Each execution evaluates :func:`~openadapt_flow.run_gate.evaluate_run_gate`
+    for the exact bundle (the patched bundle has its own digest) and builds a
+    fresh single-use authorization, then runs the
+    :class:`~openadapt_flow.runtime.Replayer` durable, settled, with the
+    deployment's effect verifier, under the named profile.
+
+    Args:
+        open_session: ``open_session(fault)`` returns an :class:`AppSession`.
+        effect_verifier: The system-of-record verifier (the record check).
+        policy: The policy the bundle is certified against.
+        profile: The execution profile (default ``standard``).
+        params: The item's runtime parameters.
+        entry_url: Recorded on the report for web runs.
+        execution_origin: Recorded on the report for web runs.
+        replayer_kwargs: Extra keyword arguments for the Replayer.
+    """
+
+    def __init__(
+        self,
+        open_session: Callable[[Optional[str]], AppSession],
+        *,
+        effect_verifier: Any,
+        policy: Optional[str] = None,
+        profile: str = "standard",
+        params: Optional[Mapping[str, Any]] = None,
+        worklists: Optional[Mapping[str, list[dict[str, str]]]] = None,
+        entry_url: Optional[str] = None,
+        execution_origin: Optional[str] = None,
+        execution_target_kind: Optional[str] = "web",
+        replayer_kwargs: Optional[Mapping[str, Any]] = None,
+    ) -> None:
+        self._open = open_session
+        self.effect_verifier = effect_verifier
+        self.policy = policy
+        self.profile = profile
+        self.params = dict(params or {})
+        self.worklists = dict(worklists or {})
+        self.entry_url = entry_url
+        self.execution_origin = execution_origin
+        self.execution_target_kind = execution_target_kind
+        self.replayer_kwargs = dict(replayer_kwargs or {})
+
+    def open(self, fault: Optional[str] = None) -> AppSession:
+        return self._open(fault)
+
+    def execute(
+        self,
+        workflow: Workflow,
+        bundle_dir: Path,
+        session: AppSession,
+        run_dir: Path,
+        *,
+        approval_gate: Optional[ApprovalGate] = None,
+    ) -> RunReport:
+        from openadapt_flow.deployment import DeploymentConfig, PolicySection
+        from openadapt_flow.execution_profiles import (
+            execution_profile_contract,
+            resolve_execution_profile,
+        )
+        from openadapt_flow.run_gate import (
+            build_runtime_authorization,
+            evaluate_run_gate,
+        )
+        from openadapt_flow.runtime import Replayer
+
+        profile = resolve_execution_profile(self.profile)
+        gate = evaluate_run_gate(
+            workflow,
+            bundle_dir=bundle_dir,
+            deployment=DeploymentConfig(policy=PolicySection(policy=self.policy)),
+            effect_verifier=self.effect_verifier,
+            profile_contract=execution_profile_contract(profile),
+            effective_durable=True,
+            effective_require_settled=True,
+        )
+        if not gate.passed:
+            raise SelfRepairRefused(
+                "the run gate refused the bundle; nothing was executed:\n"
+                + gate.render()
+            )
+        authorization = build_runtime_authorization(
+            workflow,
+            gate,
+            approval_source="openadapt-flow-self-repair",
+            params=self.params,
+            worklists=self.worklists,
+        )
+        replayer = Replayer(
+            session.backend,
+            effect_verifier=self.effect_verifier,
+            governed_authorization=authorization,
+            durable=True,
+            require_settled=True,
+            approval_gate=approval_gate,
+            **self.replayer_kwargs,
+        )
+        return replayer.run(
+            workflow.model_copy(deep=True),
+            params=self.params,
+            worklists=self.worklists or None,
+            bundle_dir=bundle_dir,
+            run_dir=run_dir,
+            execution_target_kind=self.execution_target_kind,  # type: ignore[arg-type]
+            execution_origin=self.execution_origin,
+            execution_entry_url=self.entry_url,
+        )
+
+
+# -- the probe gate --------------------------------------------------------------
+
+
+@dataclass
+class ProbeOutcome:
+    """What a probe saw at the last point before the first save."""
+
+    reached_save: bool = False
+    step_id: Optional[str] = None
+    checks: list[tuple[str, bool, str]] = field(default_factory=list)
+    frame_png: Optional[bytes] = None
+    form_state: Optional[tuple[str, str]] = None
+    resolved_region: Optional[tuple[int, int, int, int]] = None
+    identity_modes: dict[str, str] = field(default_factory=dict)
+    report: Optional[RunReport] = None
+    run_dir: Optional[Path] = None
+
+    @property
+    def passed(self) -> bool:
+        return (
+            self.reached_save
+            and bool(self.checks)
+            and all(ok for _, ok, _ in self.checks)
+        )
+
+    def failure(self) -> str:
+        if not self.reached_save:
+            halt = self.report.halt if self.report is not None else None
+            where = f" at {halt.state_id}" if halt is not None and halt.state_id else ""
+            why = f": {halt.reason}" if halt is not None and halt.reason else ""
+            return f"the probe stopped before reaching the save{where}{why}"
+        failed = [f"{code} ({detail})" for code, ok, detail in self.checks if not ok]
+        return "pre-save check failed: " + "; ".join(failed)
+
+
+class _ProbeGate(ApprovalGate):
+    """Stops at the last point before the first save and checks the state.
+
+    In probe mode every save is refused. In resume mode the first save
+    proceeds only when the same checks pass and the form is exactly the one
+    the person approved; later saves of the approved bundle proceed.
+    """
+
+    def __init__(
+        self,
+        checks: Callable[[SaveContext], ProbeOutcome],
+        *,
+        resume_form_state: Optional[tuple[str, str]] = None,
+    ) -> None:
+        super().__init__("not_gated")
+        self._checks = checks
+        self._resume_form_state = resume_form_state
+        self.outcome: Optional[ProbeOutcome] = None
+        self._approved_result: Optional[int] = None
+
+    def before_step(self, ctx: Any) -> GateVerdict:
+        return GateVerdict(proceed=True, decision=None, checks=())
+
+    def before_save(self, ctx: SaveContext) -> GateVerdict:
+        if not self._is_save(ctx):
+            return GateVerdict(proceed=True, decision=None, checks=())
+        if self._approved_result is not None:
+            # Another input edge of the approved save, or a later save of the
+            # approved bundle.
+            return GateVerdict(proceed=True, decision=None, checks=())
+        if self.outcome is not None:
+            return self._stop()
+        try:
+            self.outcome = self._checks(ctx)
+        except Exception as exc:  # noqa: BLE001 - a broken check never saves
+            self.outcome = ProbeOutcome(
+                reached_save=True,
+                step_id=ctx.step.id,
+                checks=[("probe_error", False, type(exc).__name__)],
+            )
+        if (
+            self._resume_form_state is not None
+            and self.outcome.passed
+            and self.outcome.form_state == self._resume_form_state
+        ):
+            self._approved_result = id(ctx.result)
+            return GateVerdict(proceed=True, decision=None, checks=())
+        if self._resume_form_state is not None and self.outcome.passed:
+            self.outcome.checks.append(
+                ("same_as_approved", False, "form_changed_since_approval")
+            )
+        return self._stop()
+
+    @staticmethod
+    def _stop() -> GateVerdict:
+        decision = ItemDecision(
+            kind=ItemDecisionKind.STOP_BEFORE_SAVING,
+            reason=_STOP_REASON,
+            needs_person=True,
+            counts_toward_problems=False,
+            switch_off=None,
+        )
+        return GateVerdict(proceed=False, decision=decision, checks=())
+
+
+# -- results -----------------------------------------------------------------------
+
+
+@dataclass
+class SelfRepairResult:
+    """The outcome of :meth:`SelfRepair.run`.
+
+    ``status`` is one of ``not_needed`` (the run did not halt),
+    ``not_repairable`` (the halt is not one self-repair handles), ``no_fix``
+    (no proposal passed its probe), ``needs_fault_probes`` (the step's
+    identity can't be judged from pixels and no fault probe was given),
+    ``declined`` (the person declined), ``awaiting_approval`` (nobody
+    answered in time; the candidate waits in the store) or ``resumed`` (the
+    approved bundle re-ran; see ``report.execution_outcome``).
+    """
+
+    status: str
+    report: RunReport
+    run_dir: Path
+    evidence: SelfRepairEvidence
+    halted_report: Optional[RunReport] = None
+    candidate: Optional[RepairCandidate] = None
+    patched_bundle: Optional[Path] = None
+    approval_request_id: Optional[str] = None
+
+    @property
+    def verified(self) -> bool:
+        return self.report.execution_outcome == "VERIFIED"
+
+
+@dataclass
+class _Patch:
+    attempt: int
+    step: Step
+    workflow: Workflow
+    bundle_dir: Path
+    evidence_dir: Path
+    candidate: RepairCandidate
+    target_region: tuple[int, int, int, int]
+
+
+# -- the loop ------------------------------------------------------------------
+
+
+class SelfRepair:
+    """Run an item; when it halts on a changed screen, repair it under a person.
+
+    Args:
+        agent: The repair agent (see :class:`RepairAgent`).
+        target: How to open the app and run the engine
+            (:class:`ReplayTarget` or your own :class:`SelfRepairTarget`).
+        store: The repair store the candidate enters.
+        screen_access: Who allowed the agent to see screens, and how.
+        model_key: The customer's key, required unless the agent sets
+            ``requires_model_key = False``.
+        max_attempts: Proposals tried for one halt before giving up.
+        fault_probes: Fault names passed to ``target.open(fault=...)``. Each
+            must stop before the save. Required when the step's identity is
+            checked from the DOM rather than from pixels.
+        approval_wait_s: How long to wait for the person's answer. ``0``
+            asks and returns ``awaiting_approval`` at once.
+        canary_runs: The canary window the approved bundle enters.
+        on_approval_request: Called with ``(run_dir, request_id,
+            request_sha256)`` as soon as a person is asked, for example to
+            print the ``item-approval approve`` command or send a
+            notification.
+    """
+
+    def __init__(
+        self,
+        agent: RepairAgent,
+        target: SelfRepairTarget,
+        *,
+        store: "RepairStore | Path | str",
+        screen_access: ScreenAccess,
+        model_key: Optional["CustomerModelKey"] = None,
+        max_attempts: int = 3,
+        fault_probes: Sequence[str] = (),
+        approval_wait_s: float = 900.0,
+        approval_poll_s: float = 0.5,
+        canary_runs: int = 5,
+        on_approval_request: Optional[Callable[[Path, str, str], None]] = None,
+        vision: Any = None,
+        sleep: Callable[[float], None] = time.sleep,
+        monotonic: Callable[[], float] = time.monotonic,
+    ) -> None:
+        from openadapt_flow.jit.adapters import dialects
+        from openadapt_flow.repair.lifecycle import RepairStore
+
+        if agent.dialect not in dialects():
+            raise SelfRepairRefused(
+                f"unknown agent dialect {agent.dialect!r} (expected one of "
+                f"{dialects()})"
+            )
+        if not getattr(agent, "agent_id", None):
+            raise SelfRepairRefused("the repair agent needs an agent_id")
+        if getattr(agent, "requires_model_key", True) and model_key is None:
+            raise SelfRepairRefused(
+                "this repair agent calls a model, so it needs the customer's own "
+                "model key (openadapt_flow.jit.load_customer_model_key); there is "
+                "no OpenAdapt-held key to fall back to"
+            )
+        if not screen_access.enabled_by.strip():
+            raise SelfRepairRefused("screen access needs the name of who enabled it")
+        if screen_access.mode == "ask_each_time":
+            raise SelfRepairRefused(
+                "ask_each_time screen sharing is not available for self-repair; "
+                "use scrubbed_only or allow_unscrubbed"
+            )
+        if not 1 <= int(max_attempts) <= 10:
+            raise SelfRepairRefused("max_attempts must be between 1 and 10")
+        self.agent = agent
+        self.target = target
+        self.store = store if isinstance(store, RepairStore) else RepairStore(store)
+        self.screen_access = screen_access
+        self.model_key = model_key
+        self.max_attempts = int(max_attempts)
+        self.fault_probes = tuple(fault_probes)
+        self.approval_wait_s = max(0.0, float(approval_wait_s))
+        self.approval_poll_s = max(0.01, float(approval_poll_s))
+        self.canary_runs = int(canary_runs)
+        self.on_approval_request = on_approval_request
+        if vision is None:
+            import openadapt_flow.vision as vision
+        self.vision = vision
+        self._sleep = sleep
+        self._monotonic = monotonic
+        self._token = secrets.token_urlsafe(32)
+
+    # -- public entry point --------------------------------------------------
+
+    def run(self, bundle_dir: Path | str, run_dir: Path | str) -> SelfRepairResult:
+        """Run the item; on a repairable halt, repair it under a person.
+
+        ``run_dir`` holds the item's own run (``report.json``). Self-repair
+        work goes under ``run_dir/self-repair/``; the approval request goes in
+        ``run_dir/item-approval/`` so the decision portal lists it.
+        """
+
+        bundle_dir = Path(bundle_dir)
+        run_dir = Path(run_dir)
+        work = run_dir / "self-repair"
+        workflow = Workflow.load(bundle_dir)
+        evidence = SelfRepairEvidence(
+            status="not_needed",
+            agent_id=self.agent.agent_id,
+            agent_dialect=self.agent.dialect,
+            prior_bundle_digest=_digest_of(workflow),
+        )
+        session = self.target.open()
+        try:
+            report = self.target.execute(workflow, bundle_dir, session, run_dir)
+            if report.success or report.halt is None:
+                # Not a halt: a healthy run, or one that ended some other way.
+                # Self-repair has nothing to do; the agent is never called.
+                return self._finish(
+                    "not_needed" if report.success else "not_repairable",
+                    "" if report.success else "the run did not halt at a step",
+                    evidence,
+                    report,
+                    run_dir,
+                    work,
+                )
+            if report.transaction_outcome not in (None, "HALTED_BEFORE_EFFECT"):
+                return self._finish(
+                    "not_repairable",
+                    f"the run ended {report.transaction_outcome}; self-repair "
+                    "handles only a halt before any effect",
+                    evidence,
+                    report,
+                    run_dir,
+                    work,
+                )
+            evidence.halted_run_dir = str(run_dir)
+            found = _repairable(report, workflow)
+            if isinstance(found, str):
+                evidence.steps.append(
+                    SelfRepairStepRecord(stage="halt", passed=False, detail=found)
+                )
+                return self._finish(
+                    "not_repairable", found, evidence, report, run_dir, work
+                )
+            step, step_index, halted = found
+            evidence.halted_step_id = step.id
+            evidence.steps.append(
+                SelfRepairStepRecord(
+                    stage="halt",
+                    passed=True,
+                    detail=f"{step.id} halted before any effect: "
+                    f"{(halted.error or '')[:300]}",
+                )
+            )
+            live_png = session.backend.screenshot()
+            halted_form = _form_state(session.backend, self.vision, live_png)
+            try:
+                patch, probe = self._propose_until_probe_passes(
+                    workflow,
+                    bundle_dir,
+                    step,
+                    step_index,
+                    halted,
+                    session,
+                    live_png,
+                    halted_form,
+                    work,
+                    evidence,
+                )
+            except SelfRepairRefused as exc:
+                evidence.steps.append(
+                    SelfRepairStepRecord(stage="propose", passed=False, detail=str(exc))
+                )
+                patch, probe = None, None
+        finally:
+            _close(session)
+        if patch is None or probe is None:
+            return self._finish(
+                "no_fix",
+                evidence.steps[-1].detail if evidence.steps else "no proposal",
+                evidence,
+                report,
+                run_dir,
+                work,
+                halted_report=report,
+            )
+        return self._govern_and_resume(
+            workflow,
+            bundle_dir,
+            patch,
+            probe,
+            report,
+            run_dir,
+            work,
+            evidence,
+        )
+
+    # -- propose / patch / probe ----------------------------------------------
+
+    def _propose_until_probe_passes(
+        self,
+        workflow: Workflow,
+        bundle_dir: Path,
+        step: Step,
+        step_index: int,
+        halted: Any,
+        session: AppSession,
+        live_png: bytes,
+        halted_form: Optional[tuple[str, str]],
+        work: Path,
+        evidence: SelfRepairEvidence,
+    ) -> tuple[Optional[_Patch], Optional[ProbeOutcome]]:
+        shown_live, scrub_evidence = self._shown(live_png)
+        crop = _recorded_crop(workflow, bundle_dir, step)
+        shown_crop = self._shown(crop)[0] if crop is not None else None
+        assert step.anchor is not None  # _repairable checked it
+        refusals: list[str] = []
+        for attempt in range(1, self.max_attempts + 1):
+            request = RepairRequest(
+                step_id=step.id,
+                intent=step.intent or "",
+                action=_POINTER_KINDS[step.action],
+                halt_reason=(halted.error or "")[:1000],
+                live_png=shown_live,
+                viewport=_png_size(live_png),
+                recorded_label=step.anchor.ocr_text
+                or (step.anchor.structural.name if step.anchor.structural else None),
+                recorded_region=tuple(step.anchor.region),  # type: ignore[arg-type]
+                recorded_click_point=tuple(step.anchor.click_point),  # type: ignore[arg-type]
+                recorded_crop_png=shown_crop,
+                dialect=self.agent.dialect,
+                attempt=attempt,
+                previous_refusals=tuple(refusals),
+                model_key=self.model_key,
+            )
+            evidence.attempts = attempt
+            try:
+                proposal = self.agent.propose(request)
+            except Exception as exc:  # noqa: BLE001 - an agent failure is a refusal
+                proposal = None
+                detail = f"the agent raised {type(exc).__name__}"
+            else:
+                detail = "the agent gave up" if proposal is None else ""
+            calls = int(getattr(proposal, "model_calls", 0) or 0)
+            cost = float(getattr(proposal, "cost_usd", 0.0) or 0.0)
+            evidence.model_calls += max(calls, 0)
+            evidence.est_model_cost_usd = round(
+                evidence.est_model_cost_usd + max(cost, 0.0), 6
+            )
+            if proposal is None:
+                evidence.steps.append(
+                    SelfRepairStepRecord(
+                        stage="propose",
+                        passed=False,
+                        detail=detail,
+                        attempt=attempt,
+                        model_calls=max(calls, 0),
+                        est_model_cost_usd=max(cost, 0.0),
+                    )
+                )
+                return None, None
+            evidence.steps.append(
+                SelfRepairStepRecord(
+                    stage="propose",
+                    passed=True,
+                    detail=json.dumps(dict(proposal.action), sort_keys=True)[:500],
+                    attempt=attempt,
+                    model_calls=max(calls, 0),
+                    est_model_cost_usd=max(cost, 0.0),
+                )
+            )
+            attempt_dir = work / f"attempt-{attempt}"
+            try:
+                patch = self._patch(
+                    workflow,
+                    bundle_dir,
+                    step,
+                    proposal,
+                    session,
+                    live_png,
+                    halted,
+                    attempt,
+                    attempt_dir,
+                    scrub_evidence,
+                )
+            except SelfRepairRefused as exc:
+                refusals.append(str(exc))
+                evidence.steps.append(
+                    SelfRepairStepRecord(
+                        stage="patch", passed=False, detail=str(exc), attempt=attempt
+                    )
+                )
+                continue
+            evidence.steps.append(
+                SelfRepairStepRecord(
+                    stage="patch",
+                    passed=True,
+                    detail=f"patched {step.id}; bundle "
+                    f"{patch.candidate.proposed_content_digest[:16]}",
+                    attempt=attempt,
+                )
+            )
+            probe = self._probe(
+                patch,
+                attempt_dir / "probe",
+                halted_step_id=step.id,
+                halted_form=halted_form,
+            )
+            if probe.passed:
+                evidence.steps.append(
+                    SelfRepairStepRecord(
+                        stage="probe",
+                        passed=True,
+                        detail="stopped before the save; "
+                        + ", ".join(code for code, _, _ in probe.checks),
+                        attempt=attempt,
+                    )
+                )
+                return patch, probe
+            reason = probe.failure()
+            refusals.append(reason)
+            evidence.steps.append(
+                SelfRepairStepRecord(
+                    stage="probe", passed=False, detail=reason[:1000], attempt=attempt
+                )
+            )
+        return None, None
+
+    def _shown(self, png: bytes) -> tuple[bytes, Optional[ScreenScrubEvidence]]:
+        """The image the agent may see under the screen-access mode."""
+
+        if self.screen_access.mode == "allow_unscrubbed":
+            return png, None
+        scrub = self.screen_access.scrub
+        if scrub is None:
+            from openadapt_flow.agent.repair import default_scrubber, scrub_png
+
+            def scrub(data: bytes) -> tuple[bytes, Mapping[str, Any]]:
+                return scrub_png(data, default_scrubber)
+
+        try:
+            scrubbed, info = scrub(png)
+        except Exception as exc:  # noqa: BLE001 - no scrub, no screen
+            raise SelfRepairRefused(
+                f"the screen could not be scrubbed ({type(exc).__name__}); under "
+                "scrubbed_only no screen is shared"
+            ) from exc
+        return scrubbed, ScreenScrubEvidence(
+            provider=str(info.get("provider") or "unknown"),
+            package_version=str(info.get("package_version") or "unknown"),
+            policy_sha256=info.get("policy_sha256"),
+        )
+
+    def _patch(
+        self,
+        workflow: Workflow,
+        bundle_dir: Path,
+        step: Step,
+        proposal: RepairProposal,
+        session: AppSession,
+        live_png: bytes,
+        halted: Any,
+        attempt: int,
+        attempt_dir: Path,
+        scrub_evidence: Optional[ScreenScrubEvidence],
+    ) -> _Patch:
+        from openadapt_flow.compiler.compile import _landmarks_for
+        from openadapt_flow.repair.registration import build_candidate
+        from openadapt_flow.risk import is_meaningful_label, is_write_shaped
+        from openadapt_flow.run_gate import is_consequential
+        from openadapt_flow.runtime.heal import (
+            _reocr_text,
+            build_heal_event,
+            persist_heal,
+        )
+
+        assert step.anchor is not None
+        point = self._proposed_point(step, proposal, session)
+        width, height = _png_size(live_png)
+        if not (0 <= point[0] < width and 0 <= point[1] < height):
+            raise SelfRepairRefused(f"the proposed point {point} is off the screen")
+        structural = None
+        locate = getattr(session.backend, "structural_locator_at", None)
+        if callable(locate):
+            try:
+                structural = locate(int(point[0]), int(point[1]))
+            except Exception:  # noqa: BLE001 - no DOM locator, visual anchor only
+                structural = None
+        region = _centered_region(
+            point, (step.anchor.region[2], step.anchor.region[3]), (width, height)
+        )
+        event, crop = build_heal_event(
+            step,
+            Resolution(rung="grounder", point=point, confidence=1.0, elapsed_ms=0.0),
+            region,
+            live_png,
+            self.vision,
+        )
+        # What the control at the point is called now: its accessible name,
+        # else what OCR reads there. Never the recorded label, which the heal
+        # event keeps when OCR finds nothing.
+        read = _reocr_text(self.vision, live_png, region, click_y=point[1])
+        label = (structural.name if structural is not None else None) or read
+        writes = is_consequential(step, workflow)
+        if writes:
+            if not is_meaningful_label(label) or not is_write_shaped(label or ""):
+                raise SelfRepairRefused(
+                    f"{step.id} saves, but the proposed control "
+                    f"{label!r} does not read as a save; refusing a patch that "
+                    "would point a save at another kind of control"
+                )
+        elif label and is_write_shaped(label):
+            raise SelfRepairRefused(
+                f"{step.id} does not save, but the proposed control {label!r} "
+                "reads as a save; a patch may not turn a read step into a write"
+            )
+        if structural is not None and structural.selector:
+            for other in workflow.steps:
+                other_locator = other.anchor.structural if other.anchor else None
+                if (
+                    other.id != step.id
+                    and other_locator is not None
+                    and other_locator.selector == structural.selector
+                ):
+                    raise SelfRepairRefused(
+                        f"the proposed control is the one {other.id} already "
+                        "uses; refusing a patch that reuses another step's target"
+                    )
+        typed = tuple(
+            str(value)
+            for value in _typed_values(workflow, self._params()).values()
+            if value
+        )
+        try:
+            landmarks = _landmarks_for(
+                self.vision.ocr(live_png), region, point, exclude_texts=typed
+            )
+        except Exception:  # noqa: BLE001 - landmarks are optional aids
+            landmarks = []
+        template = f"templates/{step.id}_repair.png"
+        new_anchor = event.new_anchor.model_copy(
+            update={
+                "template": template,
+                "structural": structural,
+                "ocr_text": read,
+                "landmarks": landmarks,
+            }
+        )
+        event.new_anchor = new_anchor
+        patched = workflow.model_copy(deep=True)
+        replaced = False
+        for candidate_step in patched.steps:
+            if candidate_step.id == step.id:
+                candidate_step.anchor = new_anchor
+                replaced = True
+        if not replaced:
+            raise SelfRepairRefused(f"{step.id} is not a linear step of this bundle")
+        bundle_out = attempt_dir / "bundle"
+        if bundle_out.exists():
+            shutil.rmtree(bundle_out)
+        shutil.copytree(
+            bundle_dir,
+            bundle_out,
+            ignore=shutil.ignore_patterns("repair", "manifest.json"),
+        )
+        (bundle_out / template).parent.mkdir(parents=True, exist_ok=True)
+        (bundle_out / template).write_bytes(crop)
+        patched.save(bundle_out, encrypt=bool(workflow.encrypted))
+        evidence_dir = attempt_dir / "evidence"
+        persist_heal(event, crop, live_png, evidence_dir)
+        run_dir = attempt_dir.parent.parent
+        halted_report = run_dir / "report.json"
+        if halted_report.is_file():
+            shutil.copy2(halted_report, evidence_dir / "report.json")
+        candidate = build_candidate(
+            bundle_dir,
+            bundle_out,
+            source="model_suggestion",
+            evidence_run_dir=evidence_dir,
+        )
+        if candidate.state == "rejected":
+            shutil.rmtree(bundle_out, ignore_errors=True)
+            raise SelfRepairRefused(
+                candidate.rejection_reason or "the patch weakens the contract"
+            )
+        candidate.provenance = RepairProvenance(
+            repaired_by="self_repair",
+            agent_id=self.agent.agent_id,
+            halted_run_id=run_dir.name or "run",
+            halted_step_id=step.id,
+            repair_token_sha256=hashlib.sha256(self._token.encode()).hexdigest(),
+            screen_access_enabled_by=self.screen_access.enabled_by,
+            screen_share_mode=self.screen_access.mode,
+            screens_shared=1,
+            screens_scrubbed=self.screen_access.mode != "allow_unscrubbed",
+            scrub_evidence=scrub_evidence,
+        )
+        return _Patch(
+            attempt=attempt,
+            step=next(s for s in patched.steps if s.id == step.id),
+            workflow=Workflow.load(bundle_out),
+            bundle_dir=bundle_out,
+            evidence_dir=evidence_dir,
+            candidate=candidate,
+            target_region=region,
+        )
+
+    def _proposed_point(
+        self, step: Step, proposal: RepairProposal, session: AppSession
+    ) -> tuple[int, int]:
+        from openadapt_flow.jit.adapters import UnsupportedAction, translate
+
+        try:
+            ops = translate(self.agent.dialect, proposal.action)
+        except (UnsupportedAction, ValueError, TypeError) as exc:
+            raise SelfRepairRefused(f"the proposal is not one action: {exc}") from exc
+        acting = [op for op in ops if op.kind not in ("observe", "wait")]
+        if len(acting) != 1:
+            raise SelfRepairRefused(
+                f"a repair is exactly one action; the proposal has {len(acting)}"
+            )
+        op = acting[0]
+        expected = _POINTER_KINDS[step.action]
+        if op.kind != expected:
+            raise SelfRepairRefused(
+                f"{step.id} is a {expected}; the proposal is a {op.kind}"
+            )
+        if op.target is not None:
+            page = getattr(session.backend, "page", None)
+            if page is None:
+                raise SelfRepairRefused("no page to resolve the proposed selector")
+            locator = page.locator(op.target)
+            if locator.count() != 1:
+                raise SelfRepairRefused(
+                    f"the proposed selector matches {locator.count()} elements"
+                )
+            box = locator.bounding_box()
+            if box is None:
+                raise SelfRepairRefused("the proposed element is not visible")
+            return int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2)
+        if op.x is None or op.y is None:
+            raise SelfRepairRefused("the proposal names no point or element")
+        return int(op.x), int(op.y)
+
+    def _params(self) -> Mapping[str, Any]:
+        return dict(getattr(self.target, "params", None) or {})
+
+    def _probe(
+        self,
+        patch: _Patch,
+        run_dir: Path,
+        *,
+        halted_step_id: str,
+        halted_form: Optional[tuple[str, str]],
+        fault: Optional[str] = None,
+        resume_form_state: Optional[tuple[str, str]] = None,
+    ) -> ProbeOutcome:
+        """Run the patched bundle to the last point before the first save."""
+
+        params = self._params()
+        workflow = patch.workflow
+
+        def checks(ctx: SaveContext) -> ProbeOutcome:
+            return _pre_save_checks(
+                ctx,
+                workflow,
+                params,
+                patched_step_id=patch.step.id,
+                halted_step_id=halted_step_id,
+                halted_form=halted_form,
+                backend=session.backend,
+                vision=self.vision,
+            )
+
+        gate = _ProbeGate(checks, resume_form_state=resume_form_state)
+        session = self.target.open(fault)
+        try:
+            report = self.target.execute(
+                workflow, patch.bundle_dir, session, run_dir, approval_gate=gate
+            )
+        except SelfRepairRefused as exc:
+            outcome = ProbeOutcome(checks=[("run_gate", False, str(exc)[:300])])
+            outcome.run_dir = run_dir
+            return outcome
+        finally:
+            _close(session)
+        outcome = gate.outcome or ProbeOutcome()
+        outcome.report = report
+        outcome.run_dir = run_dir
+        if outcome.reached_save and report.model_calls:
+            outcome.checks.append(
+                ("zero_model_calls", False, f"{report.model_calls} model call(s)")
+            )
+        return outcome
+
+    # -- campaigns, approval, resume ------------------------------------------
+
+    def _govern_and_resume(
+        self,
+        workflow: Workflow,
+        bundle_dir: Path,
+        patch: _Patch,
+        probe: ProbeOutcome,
+        halted_report: RunReport,
+        run_dir: Path,
+        work: Path,
+        evidence: SelfRepairEvidence,
+    ) -> SelfRepairResult:
+        from openadapt_flow.repair.lifecycle import (
+            RepairLifecycleError,
+            observation_from_report,
+        )
+
+        candidate = self.store.add_candidate(patch.candidate)
+        evidence.candidate_id = candidate.candidate_id
+        evidence.patched_bundle_digest = candidate.proposed_content_digest
+        if candidate.state != "candidate":
+            # The store already holds this exact patch (same digests) further
+            # along or rejected; self-repair never moves it on its own.
+            return self._finish(
+                "no_fix",
+                f"this exact patch is already {candidate.state} in the repair store",
+                evidence,
+                halted_report,
+                run_dir,
+                work,
+                halted_report=halted_report,
+                candidate=candidate,
+                patched_bundle=patch.bundle_dir,
+            )
+        replay, fault = self._campaigns(patch, probe, work, evidence)
+        for result in (replay, fault):
+            if result is not None:
+                candidate = self.store.record_campaign(
+                    candidate.candidate_id, result, AUTOMATION
+                )
+        if replay is None or not replay.passed or fault is None or not fault.passed:
+            status = "needs_fault_probes" if fault is None else "no_fix"
+            reason = (
+                "the step's identity is checked from the DOM, which the frame "
+                "campaigns can't read; give fault probes so the fault campaign "
+                "can run"
+                if fault is None
+                else "a campaign failed: "
+                + "; ".join(
+                    r.summary()
+                    for r in (replay, fault)
+                    if r is not None and not r.passed
+                )
+            )
+            return self._finish(
+                status,
+                reason,
+                evidence,
+                halted_report,
+                run_dir,
+                work,
+                halted_report=halted_report,
+                candidate=candidate,
+                patched_bundle=patch.bundle_dir,
+            )
+        request_id, answer = self._ask_person(patch, probe, candidate, run_dir)
+        if answer is None:
+            evidence.steps.append(
+                SelfRepairStepRecord(
+                    stage="approval",
+                    passed=False,
+                    detail="nobody answered in time; the candidate waits in the "
+                    "repair store and nothing was saved",
+                )
+            )
+            return self._finish(
+                "awaiting_approval",
+                "waiting for a person",
+                evidence,
+                halted_report,
+                run_dir,
+                work,
+                halted_report=halted_report,
+                candidate=self.store.load_candidate(candidate.candidate_id),
+                patched_bundle=patch.bundle_dir,
+                approval_request_id=request_id,
+            )
+        decision, approver, route = answer
+        evidence.approval_route = route
+        if decision != "approve":
+            try:
+                candidate = self.store.reject(
+                    candidate.candidate_id,
+                    Actor(kind="human", id=approver),
+                    "declined by a person during self-repair",
+                )
+            except RepairLifecycleError:
+                pass
+            evidence.steps.append(
+                SelfRepairStepRecord(
+                    stage="approval",
+                    passed=False,
+                    detail=f"declined by {approver}; nothing was saved",
+                )
+            )
+            return self._finish(
+                "declined",
+                f"declined by {approver}",
+                evidence,
+                halted_report,
+                run_dir,
+                work,
+                halted_report=halted_report,
+                candidate=candidate,
+                patched_bundle=patch.bundle_dir,
+                approval_request_id=request_id,
+            )
+        person = Actor(kind="human", id=approver)
+        try:
+            candidate = self._approve(candidate.candidate_id, person, replay, fault)
+        except (RepairLifecycleError, SelfRepairRefused) as exc:
+            evidence.steps.append(
+                SelfRepairStepRecord(
+                    stage="approval",
+                    passed=False,
+                    detail=f"the repair store refused: {exc}"[:1024],
+                )
+            )
+            return self._finish(
+                "no_fix",
+                f"the repair store refused the approval: {exc}",
+                evidence,
+                halted_report,
+                run_dir,
+                work,
+                halted_report=halted_report,
+                candidate=self.store.load_candidate(candidate.candidate_id),
+                patched_bundle=patch.bundle_dir,
+                approval_request_id=request_id,
+            )
+        assert candidate.approval is not None
+        evidence.approved_by = candidate.approval.approved_by
+        evidence.steps.append(
+            SelfRepairStepRecord(
+                stage="approval",
+                passed=True,
+                detail=f"reviewed and approved by {candidate.approval.approved_by} "
+                f"({route})",
+            )
+        )
+        resume_dir = work / "resume"
+        resumed = self._probe(
+            patch,
+            resume_dir,
+            halted_step_id=patch.step.id,
+            halted_form=probe.form_state,
+            resume_form_state=probe.form_state,
+        )
+        report = resumed.report
+        if report is None:
+            raise SelfRepairRefused(resumed.failure())
+        candidate = self.store.record_canary_run(
+            candidate.candidate_id, observation_from_report(report)
+        )
+        evidence.steps.append(
+            SelfRepairStepRecord(
+                stage="resume",
+                passed=report.success
+                and report.execution_outcome in (None, "VERIFIED"),
+                detail=f"{report.execution_outcome} / {report.transaction_outcome}; "
+                f"{report.model_calls} model call(s) in the run",
+            )
+        )
+        return self._finish(
+            "resumed",
+            "",
+            evidence,
+            report,
+            resume_dir,
+            work,
+            halted_report=halted_report,
+            candidate=candidate,
+            patched_bundle=patch.bundle_dir,
+            approval_request_id=request_id,
+        )
+
+    def _approve(
+        self,
+        candidate_id: str,
+        person: Actor,
+        replay: CampaignResult,
+        fault: CampaignResult,
+    ) -> RepairCandidate:
+        """Review, campaigns, approval, staging and canary, in store order.
+
+        The person's one answer is both the review and the approval. The
+        campaign results computed before they were asked advance the state;
+        automation stages the bundles and starts the canary window.
+        """
+
+        candidate = self.store.review(candidate_id, person)
+        for result in (replay, fault):
+            candidate = self.store.record_campaign(candidate_id, result, AUTOMATION)
+        candidate = self.store.approve(candidate_id, person)
+        if candidate.state != "approved" or candidate.approval is None:
+            raise SelfRepairRefused(f"the candidate is {candidate.state}, not approved")
+        self.store.stage(candidate_id, AUTOMATION)
+        return self.store.start_canary(
+            candidate_id, AUTOMATION, max_runs=self.canary_runs
+        )
+
+    def _campaigns(
+        self,
+        patch: _Patch,
+        probe: ProbeOutcome,
+        work: Path,
+        evidence: SelfRepairEvidence,
+    ) -> tuple[Optional[CampaignResult], Optional[CampaignResult]]:
+        """The replay and fault campaigns for this candidate.
+
+        Frame campaigns when the step's identity is readable from pixels;
+        otherwise the live probe and the fault probes.
+        """
+
+        anchor = patch.step.anchor
+        assert anchor is not None
+        template = anchor.identity_template
+        pixel_readable = bool(
+            anchor.context_text or (template is not None and template.tokens)
+        )
+        live_case = CampaignCaseResult(
+            label=f"{patch.step.id}:live_probe",
+            kind="live_probe",
+            passed=probe.passed,
+            detail="stopped before the save with every pre-save check passing",
+        )
+        if pixel_readable:
+            replay = _frame_campaign(patch.candidate, "replay")
+            replay = replay.model_copy(
+                update={
+                    "cases": [*replay.cases, live_case],
+                    "total": replay.total + 1,
+                    "failed": replay.failed + (0 if probe.passed else 1),
+                    "passed": replay.passed and probe.passed,
+                }
+            )
+            fault: Optional[CampaignResult] = _frame_campaign(patch.candidate, "fault")
+        else:
+            replay = CampaignResult(
+                campaign="replay",
+                passed=probe.passed,
+                total=1,
+                failed=0 if probe.passed else 1,
+                cases=[live_case],
+            )
+            fault = (
+                self._fault_probes(patch, probe, work) if self.fault_probes else None
+            )
+        for result in (replay, fault):
+            if result is not None:
+                evidence.steps.append(
+                    SelfRepairStepRecord(
+                        stage="campaign", passed=result.passed, detail=result.summary()
+                    )
+                )
+        return replay, fault
+
+    def _fault_probes(
+        self, patch: _Patch, probe: ProbeOutcome, work: Path
+    ) -> CampaignResult:
+        cases: list[CampaignCaseResult] = []
+        for index, fault in enumerate(self.fault_probes, start=1):
+            outcome = self._probe(
+                patch,
+                work / f"fault-{index}",
+                halted_step_id=patch.step.id,
+                halted_form=probe.form_state,
+                fault=fault,
+            )
+            report = outcome.report
+            wrote = report is not None and any(
+                evidence.observed_effect == "present"
+                for result in report.results
+                for evidence in result.effect_evidence
+            )
+            refused = not outcome.passed and not wrote
+            cases.append(
+                CampaignCaseResult(
+                    label=f"fault-probe-{index}",
+                    kind="live_fault_probe",
+                    passed=refused,
+                    detail=(
+                        f"refused before the save ({outcome.failure()[:400]})"
+                        if refused
+                        else "reached the save with every check passing on a fault"
+                    ),
+                )
+            )
+        failed = sum(1 for case in cases if not case.passed)
+        return CampaignResult(
+            campaign="fault",
+            passed=bool(cases) and failed == 0,
+            total=len(cases),
+            failed=failed,
+            cases=cases,
+        )
+
+    def _ask_person(
+        self,
+        patch: _Patch,
+        probe: ProbeOutcome,
+        candidate: RepairCandidate,
+        run_dir: Path,
+    ) -> tuple[Optional[str], Optional[tuple[str, str, str]]]:
+        """Ask one person; return ``(request_id, (decision, approver, route))``.
+
+        The request goes in the halted run's ``item-approval/`` folder, where
+        the decision portal and ``openadapt-flow item-approval`` find it.
+        Rejecting the candidate in the store (``RepairStore.reject``) ends
+        the wait as a decline.
+        """
+
+        from openadapt_flow.approval_mode.approver import DEFAULT_APPROVER_POLICY
+        from openadapt_flow.approval_mode.item_approval import (
+            ItemApprovalRefused,
+            ItemApprovalStore,
+            answer_refusal,
+        )
+        from openadapt_flow.approval_mode.model import ApprovalMode
+
+        store = ItemApprovalStore(run_dir)
+        store.write_policy(DEFAULT_APPROVER_POLICY)
+        assert probe.frame_png is not None and probe.form_state is not None
+        label = (
+            patch.step.anchor.structural.name
+            if patch.step.anchor and patch.step.anchor.structural
+            else (patch.step.anchor.ocr_text if patch.step.anchor else None)
+        )
+        request = store.open_request(
+            run_id=run_dir.name or "run",
+            workflow_name=patch.workflow.name,
+            step_id=patch.step.id,
+            step_index=next(
+                (
+                    i
+                    for i, s in enumerate(patch.workflow.steps)
+                    if s.id == patch.step.id
+                ),
+                0,
+            ),
+            step_intent=(
+                f"Accept a repair: {patch.step.intent or patch.step.id} now uses "
+                f"{label!r}. Approving saves this item. Candidate "
+                f"{candidate.candidate_id}."
+            ),
+            mode=ApprovalMode.EACH_ITEM,
+            bundle_content_digest=candidate.proposed_content_digest,
+            runtime_inputs_digest=None,
+            frame_png=_outline(
+                probe.frame_png, probe.resolved_region or patch.target_region
+            ),
+            form_state=probe.form_state,
+        )
+        if self.on_approval_request is not None:
+            try:
+                self.on_approval_request(run_dir, request.request_id, request.digest())
+            except Exception:  # noqa: BLE001 - a notifier never decides anything
+                pass
+        if self.approval_wait_s <= 0:
+            return request.request_id, None
+        deadline = self._monotonic() + self.approval_wait_s
+        while True:
+            try:
+                answer = store.read_answer(request.request_id)
+            except ItemApprovalRefused:
+                answer = None
+            if answer is not None:
+                refusal = answer_refusal(request, answer, policy=store.context())
+                identity = answer.approver_identity()
+                if (
+                    refusal is not None
+                    or answer.decided_by != "human"
+                    or not (identity.is_person)
+                ):
+                    # Only a person's answer counts, and a refused answer is
+                    # final for this request: nothing is saved.
+                    return request.request_id, None
+                store.consume(request.request_id)
+                approver = answer.approver_id or f"{answer.route}:person"
+                return request.request_id, (answer.decision, approver, answer.route)
+            current = self.store.load_candidate(candidate.candidate_id)
+            if current.state == "rejected":
+                return request.request_id, (
+                    "decline",
+                    "repair_store:person",
+                    "repair_store",
+                )
+            if self._monotonic() >= deadline or request.expired():
+                return request.request_id, None
+            self._sleep(self.approval_poll_s)
+
+    # -- bookkeeping ---------------------------------------------------------
+
+    def _finish(
+        self,
+        status: str,
+        reason: str,
+        evidence: SelfRepairEvidence,
+        report: RunReport,
+        report_dir: Path,
+        work: Path,
+        *,
+        halted_report: Optional[RunReport] = None,
+        candidate: Optional[RepairCandidate] = None,
+        patched_bundle: Optional[Path] = None,
+        approval_request_id: Optional[str] = None,
+    ) -> SelfRepairResult:
+        evidence.status = status  # type: ignore[assignment]
+        evidence.reason = reason[:1024]
+        report.self_repair = evidence
+        report.save(report_dir)
+        if halted_report is not None and halted_report is not report:
+            # The halted run's own report says what happened to it, too.
+            halted_report.self_repair = evidence
+            halted_report.save(work.parent)
+        try:
+            from openadapt_flow.report import render_run_report
+
+            render_run_report(report_dir)
+        except Exception:  # noqa: BLE001 - REPORT.md is presentation only
+            pass
+        if status != "not_needed":
+            work.mkdir(parents=True, exist_ok=True)
+            (work / "self-repair.json").write_text(evidence.model_dump_json(indent=2))
+        return SelfRepairResult(
+            status=status,
+            report=report,
+            run_dir=report_dir,
+            evidence=evidence,
+            halted_report=halted_report,
+            candidate=candidate,
+            patched_bundle=patched_bundle,
+            approval_request_id=approval_request_id,
+        )
+
+
+# -- helpers ---------------------------------------------------------------------
+
+
+def _frame_campaign(candidate: RepairCandidate, kind: str) -> CampaignResult:
+    """The existing frame campaign; an error is a failed campaign."""
+
+    from openadapt_flow.repair.cli import _run_campaign
+    from openadapt_flow.repair.lifecycle import RepairLifecycleError
+
+    try:
+        return _run_campaign(candidate, kind)
+    except RepairLifecycleError as exc:
+        return CampaignResult(
+            campaign=kind,  # type: ignore[arg-type]
+            passed=False,
+            total=1,
+            failed=1,
+            cases=[
+                CampaignCaseResult(
+                    label=f"{kind}:setup",
+                    kind="setup",
+                    passed=False,
+                    detail=str(exc)[:512],
+                )
+            ],
+        )
+
+
+def _digest_of(workflow: Workflow) -> Optional[str]:
+    return workflow.manifest.content_digest if workflow.manifest else None
+
+
+def _close(session: Optional[AppSession]) -> None:
+    if session is None:
+        return
+    try:
+        session.close()
+    except Exception:  # noqa: BLE001 - closing a session never hides a result
+        pass
+
+
+def _png_size(png: bytes) -> tuple[int, int]:
+    from PIL import Image
+
+    with Image.open(io.BytesIO(png)) as image:
+        return image.size
+
+
+def _centered_region(
+    center: tuple[int, int], size: tuple[int, int], frame: tuple[int, int]
+) -> tuple[int, int, int, int]:
+    fw, fh = frame
+    w, h = min(size[0], fw), min(size[1], fh)
+    x = min(max(0, center[0] - w // 2), max(0, fw - w))
+    y = min(max(0, center[1] - h // 2), max(0, fh - h))
+    return (x, y, w, h)
+
+
+def _outline(png: bytes, region: tuple[int, int, int, int]) -> bytes:
+    """The screen the person is shown, with the repaired target outlined."""
+
+    from PIL import Image, ImageDraw
+
+    with Image.open(io.BytesIO(png)) as image:
+        canvas = image.convert("RGB")
+    x, y, w, h = region
+    draw = ImageDraw.Draw(canvas)
+    for inset in range(3):
+        draw.rectangle(
+            (x - inset, y - inset, x + w + inset, y + h + inset), outline=(220, 30, 30)
+        )
+    out = io.BytesIO()
+    canvas.save(out, format="PNG")
+    return out.getvalue()
+
+
+def _recorded_crop(workflow: Workflow, bundle_dir: Path, step: Step) -> Optional[bytes]:
+    if step.anchor is None:
+        return None
+    crop = workflow.decrypted_template(step.anchor.template)
+    if crop is not None:
+        return crop
+    path = bundle_dir / step.anchor.template
+    return path.read_bytes() if path.is_file() else None
+
+
+def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, int, Any] | str":
+    """The halted step when self-repair may handle this halt, else why not."""
+
+    from openadapt_flow.run_gate import is_consequential
+
+    steps = {step.id: (index, step) for index, step in enumerate(workflow.steps)}
+    for result in report.results:
+        found = steps.get(result.step_id)
+        if found is None:
+            continue
+        _, step = found
+        if result.delivery_attempted and is_consequential(step, workflow):
+            return f"input reached {step.id}, a step that saves; never repaired"
+        for item in result.effect_evidence:
+            if item.observed_effect not in (None, "absent"):
+                return f"{step.id} has an observed effect; never repaired"
+    halted = next(
+        (r for r in reversed(report.results) if not r.ok and not r.skipped), None
+    )
+    if halted is None or halted.step_id not in steps:
+        return "the halt is not at a step of this bundle"
+    index, step = steps[halted.step_id]
+    if halted.delivery_attempted is not False:
+        return f"input may have reached {step.id}; only a step that never acted is repaired"
+    if halted.identity is not None and halted.identity.status != "verified":
+        return (
+            f"{step.id} stopped on the record check ({halted.identity.status}); a "
+            "wrong-record halt is never repaired"
+        )
+    if step.action not in _POINTER_KINDS or step.anchor is None:
+        return f"{step.id} is not a click on an on-screen target"
+    if halted.resolution is not None and halted.resolution.rung in TRUSTED_RUNGS:
+        return (
+            f"{step.id} found its target ({halted.resolution.rung}) and stopped for "
+            "another reason"
+        )
+    if not report.halt or report.halt.state_id != step.id:
+        return "the report's halt does not name the failed step"
+    return step, index, halted
+
+
+def _typed_values(workflow: Workflow, params: Mapping[str, Any]) -> dict[str, str]:
+    """``step_id -> value`` for every typing step, secrets left out."""
+
+    values: dict[str, str] = {}
+    secrets_ = set(getattr(workflow, "secret_params", None) or [])
+    for step in workflow.steps:
+        if step.action != ActionKind.TYPE or step.secret:
+            continue
+        if step.param:
+            if step.param in secrets_:
+                continue
+            value = params.get(step.param, workflow.params.get(step.param))
+        else:
+            value = step.text
+        if value is not None:
+            values[step.id] = str(value)
+    return values
+
+
+def _form_state(
+    backend: Any, vision: Any, frame: Optional[bytes]
+) -> Optional[tuple[str, str]]:
+    from openadapt_flow.approval_mode.form_state import capture_form_state
+
+    try:
+        return capture_form_state(backend, vision, frame)
+    except Exception:  # noqa: BLE001 - unreadable is never "unchanged"
+        return None
+
+
+def _form_values(backend: Any) -> Optional[list[str]]:
+    """The non-empty values of the page's own text fields, or ``None``."""
+
+    from openadapt_flow.approval_mode.form_state import _DOM_FORM_STATE_JS
+
+    page = getattr(backend, "page", None)
+    if page is None:
+        return None
+    values: list[str] = []
+    for frame in list(getattr(page, "frames", None) or []):
+        try:
+            rows = frame.evaluate(_DOM_FORM_STATE_JS)
+        except Exception:  # noqa: BLE001
+            return None
+        for row in rows or []:
+            if len(row) >= 3 and row[1] in ("value", "editable") and row[2]:
+                values.append(str(row[2]))
+    return values
+
+
+def _pre_save_checks(
+    ctx: SaveContext,
+    workflow: Workflow,
+    params: Mapping[str, Any],
+    *,
+    patched_step_id: str,
+    halted_step_id: str,
+    halted_form: Optional[tuple[str, str]],
+    backend: Any,
+    vision: Any,
+) -> ProbeOutcome:
+    """The checks a probe makes at the last point before the first save."""
+
+    from openadapt_flow.run_gate import is_consequential
+
+    outcome = ProbeOutcome(reached_save=True, step_id=ctx.step.id)
+    checks = outcome.checks
+    results = [*ctx.prior_results, ctx.result]
+    by_id = {step.id: step for step in workflow.steps}
+
+    # Nothing has been written: no earlier step that saves received input.
+    early = [
+        r.step_id
+        for r in ctx.prior_results
+        if r.delivery_attempted
+        and r.step_id in by_id
+        and is_consequential(by_id[r.step_id], workflow)
+    ]
+    checks.append(
+        ("nothing_written", not early, "ok" if not early else ",".join(early))
+    )
+
+    # The patched step's target was found by the deterministic ladder.
+    patched = next((r for r in results if r.step_id == patched_step_id), None)
+    rung = (
+        patched.resolution.rung
+        if patched is not None and patched.resolution is not None
+        else None
+    )
+    checks.append(
+        (
+            "target_found",
+            rung in TRUSTED_RUNGS,
+            f"{patched_step_id} resolved by {rung or 'nothing'}",
+        )
+    )
+    if patched is ctx.result and ctx.result.resolution is not None:
+        point = ctx.result.resolution.point
+        anchor = ctx.step.anchor
+        if anchor is not None:
+            w, h = anchor.region[2], anchor.region[3]
+            outcome.resolved_region = (point[0] - w // 2, point[1] - h // 2, w, h)
+
+    # Every record check verified, including the save's own when it has one.
+    bad = [
+        f"{r.step_id}:{r.identity.status}"
+        for r in results
+        if r.identity is not None and r.identity.status != "verified"
+    ]
+    anchor = ctx.step.anchor
+    armed = anchor is not None and any(
+        getattr(anchor, tier, None)
+        for tier in (
+            "context_text",
+            "structured_identity",
+            "identity_template",
+            "identifier_crop",
+        )
+    )
+    if armed and ctx.result.identity is None:
+        bad.append(f"{ctx.step.id}:not_checked")
+    for r in results:
+        if r.identity is not None:
+            outcome.identity_modes[r.step_id] = str(r.identity.mode)
+    checks.append(("same_record", not bad, "verified" if not bad else ",".join(bad)))
+
+    # The typed values are in the form.
+    expected = [
+        value
+        for step_id, value in _typed_values(workflow, params).items()
+        if any(r.step_id == step_id and r.ok for r in ctx.prior_results)
+    ]
+    frame = ctx.frame()
+    outcome.frame_png = frame
+    if expected:
+        values = _form_values(backend)
+        if values is None:
+            words = _screen_words(vision, frame)
+            missing = [
+                v for v in expected if words is None or not set(_words(v)) <= words
+            ]
+        else:
+            pool = list(values)
+            missing = []
+            for value in expected:
+                if value in pool:
+                    pool.remove(value)
+                else:
+                    missing.append(value)
+        checks.append(
+            (
+                "same_fields",
+                not missing,
+                f"{len(expected) - len(missing)}/{len(expected)} typed value(s) "
+                "in the form",
+            )
+        )
+
+    # The form is the one the run halted on (when the halt was at this save).
+    outcome.form_state = ctx.form_state(frame)
+    if outcome.form_state is None:
+        checks.append(("form_readable", False, "form_state_unreadable"))
+    elif ctx.step.id == halted_step_id:
+        same = halted_form is not None and outcome.form_state == halted_form
+        checks.append(
+            ("same_form", same, "unchanged since the halt" if same else "changed")
+        )
+    return outcome
+
+
+def _words(text: str) -> list[str]:
+    import re
+
+    return [w.casefold() for w in re.findall(r"[0-9A-Za-zÀ-ɏ]+", text)]
+
+
+def _screen_words(vision: Any, frame: Optional[bytes]) -> Optional[set[str]]:
+    if not frame:
+        return None
+    try:
+        lines = vision.ocr(frame)
+    except Exception:  # noqa: BLE001
+        return None
+    return {w for line in lines or [] for w in _words(str(getattr(line, "text", "")))}

@@ -2981,6 +2981,45 @@ def _cmd_run(args: argparse.Namespace) -> int:
     # Admitted. A deployment run is not the drift-demo; force it off and delegate
     # to the shared replay executor (which reads all deployment wiring itself).
     args.drift = None
+    if getattr(args, "self_repair", False):
+        from openadapt_flow.cli_self_repair import cmd_run_self_repair
+
+        return cmd_run_self_repair(
+            args,
+            workflow=workflow,
+            bundle=bundle,
+            cfg=cfg,
+            backend_cfg=backend_cfg,
+            gate_kwargs={
+                "deployment": cfg,
+                "effect_verifier": effect_verifier,
+                "api_actuator": api_actuator,
+                "policy_source": policy_source,
+                "approval_available": bool(
+                    getattr(args, "approve_unverified_writes", False)
+                ),
+                "strict_templates": bool(getattr(args, "strict_templates", False)),
+                "require_encryption": not bool(
+                    getattr(args, "allow_unencrypted", False)
+                ),
+                "pinned_compiler_version": getattr(args, "pin_version", None),
+                "profile_contract": profile,
+                "effective_durable": effective_durable if profile is not None else None,
+                "effective_require_settled": (
+                    effective_require_settled if profile is not None else None
+                ),
+            },
+            params=runtime_params,
+            worklists=runtime_worklists,
+            effect_verifier=effect_verifier,
+            api_actuator=api_actuator,
+            durable=effective_durable,
+            allow_egress=bool(_egress),
+            run_replayer=_build_and_run_replayer,
+            approval_gate_for_run=_approval_gate_for_run,
+            finish=_finish_replay,
+            default_run_dir=_default_run_dir,
+        )
     exit_code = _cmd_replay(args)
     _attach_cloud_seal(args)
     return exit_code
@@ -7513,6 +7552,9 @@ def build_parser() -> argparse.ArgumentParser:
             "Max 1800."
         ),
     )
+    from openadapt_flow.cli_self_repair import add_self_repair_flags
+
+    add_self_repair_flags(p)
     _add_backend_flags(p)
     _add_browser_session_flags(p)
     _add_deployment_flags(p, worklist=True)

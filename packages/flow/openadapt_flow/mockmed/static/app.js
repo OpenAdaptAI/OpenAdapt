@@ -28,6 +28,12 @@ var SLOW_MS = DRIFT.has('slow')
   : 0;
 
 var LABEL_SAVE = DRIFT.has('rename') ? 'Submit Encounter' : 'Save Encounter';
+// "redesign" drift: a vendor release replaced the save control. The button
+// has a new label, a new DOM id, and sits on the other side of the form, so
+// neither its recorded selector, its accessible name, nor its pixels match.
+// The note field, the patient banner, and the write itself are unchanged.
+var SAVE_ID = DRIFT.has('redesign') ? 'submit-encounter' : 'save-encounter';
+if (DRIFT.has('redesign')) { LABEL_SAVE = 'Submit to chart'; }
 var LABEL_OPEN = DRIFT.has('rename') ? 'View' : 'Open';
 // "typelabel" drift: the Triage segment is relabeled (semantically findable
 // — an agent can still identify it) AND the segment order is swapped, so
@@ -371,9 +377,16 @@ function renderEncounter() {
     '<textarea id="note" rows="6"></textarea>' +
     acuityHtml +
     '<div id="save-error"></div>' +
-    '<div class="actions movable">' +
-    '<button id="save-encounter">' + LABEL_SAVE + '</button></div>' +
-    '</section>';
+    '<div class="actions movable' +
+    (DRIFT.has('redesign') ? ' redesigned' : '') + '">' +
+    '<button id="' + SAVE_ID + '">' + LABEL_SAVE + '</button></div>' +
+    '</section>' +
+    // The redesigned page also has a feedback control outside the record.
+    // It reads like a save but belongs to no patient.
+    (DRIFT.has('redesign')
+      ? '<div class="actions" id="feedback-bar">' +
+        '<button id="submit-feedback">Submit feedback</button></div>'
+      : '');
 
   if (DRIFT.has('reqfield')) {
     ['routine', 'urgent'].forEach(function (level) {
@@ -399,7 +412,7 @@ function renderEncounter() {
       });
   });
 
-  document.getElementById('save-encounter')
+  document.getElementById(SAVE_ID)
     .addEventListener('click', function () {
       var note = document.getElementById('note').value;
       // Flag-gated fault path: route the write through the backend so the

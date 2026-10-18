@@ -136,6 +136,10 @@ body.drift-move .actions.movable {
 /* Fixed widths so the "rename" drift keeps buttons in identical positions. */
 #new-encounter { width: 180px; }
 #save-encounter { width: 220px; }
+/* "redesign" drift: the replacement save control, right-aligned and styled
+   differently from the recorded one. */
+.actions.redesigned { justify-content: flex-end; }
+#submit-encounter { width: 180px; border-radius: 18px; background: #2f6f4e; }
 .open-btn { width: 90px; padding: 8px 0; }
 #signin { margin-top: 4px; width: 140px; }
 

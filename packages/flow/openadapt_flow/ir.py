@@ -3805,6 +3805,63 @@ class LoopIterationBinding(BaseModel):
     params: dict[str, Union[str, bool, int, float]] = Field(default_factory=dict)
 
 
+class SelfRepairStepRecord(BaseModel):
+    """One stage of a self-repair (:mod:`openadapt_flow.repair.self_repair`).
+
+    ``stage`` is a closed word (``halt``, ``propose``, ``patch``, ``probe``,
+    ``campaign``, ``approval``, ``resume``). ``model_calls`` and
+    ``est_model_cost_usd`` are what the repair agent reported for this stage;
+    every other stage is deterministic and records zero.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    stage: Literal[
+        "halt", "propose", "patch", "probe", "campaign", "approval", "resume"
+    ]
+    passed: bool
+    detail: str = Field(default="", max_length=1024)
+    attempt: Optional[int] = Field(default=None, ge=1)
+    model_calls: int = Field(default=0, ge=0)
+    est_model_cost_usd: float = Field(default=0.0, ge=0.0)
+
+
+class SelfRepairEvidence(BaseModel):
+    """What ``run --self-repair`` did for this item, step by step.
+
+    Present only on runs started with self-repair on. A healthy run records
+    ``status="not_needed"`` with zero model calls and zero cost. The run's own
+    ``model_calls`` stays the count for the deterministic run itself; the
+    repair agent's calls and their cost are counted here.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    status: Literal[
+        "not_needed",
+        "not_repairable",
+        "no_fix",
+        "needs_fault_probes",
+        "declined",
+        "awaiting_approval",
+        "resumed",
+    ]
+    reason: str = Field(default="", max_length=1024)
+    halted_run_dir: Optional[str] = None
+    halted_step_id: Optional[str] = None
+    agent_id: Optional[str] = Field(default=None, max_length=256)
+    agent_dialect: Optional[str] = Field(default=None, max_length=64)
+    attempts: int = Field(default=0, ge=0)
+    model_calls: int = Field(default=0, ge=0)
+    est_model_cost_usd: float = Field(default=0.0, ge=0.0)
+    candidate_id: Optional[str] = None
+    prior_bundle_digest: Optional[str] = Field(default=None, pattern="^[a-f0-9]{64}$")
+    patched_bundle_digest: Optional[str] = Field(default=None, pattern="^[a-f0-9]{64}$")
+    approved_by: Optional[str] = Field(default=None, max_length=256)
+    approval_route: Optional[str] = Field(default=None, max_length=64)
+    steps: list[SelfRepairStepRecord] = Field(default_factory=list)
+
+
 class RunReport(BaseModel):
     workflow_name: str
     started_at: str
@@ -4156,6 +4213,17 @@ class RunReport(BaseModel):
         description=(
             "PHI-free approval-mode evidence for this item. The engine's "
             "outcome words are unchanged by it."
+        ),
+    )
+    # Present only when the run was started with self-repair on
+    # (``run --self-repair``), so every other report serializes as before.
+    self_repair: Optional[SelfRepairEvidence] = Field(
+        default=None,
+        exclude_if=lambda value: value is None,
+        description=(
+            "What self-repair did for this item: each stage, the repair "
+            "agent's model calls and their cost, the candidate and who "
+            "approved it."
         ),
     )
 
