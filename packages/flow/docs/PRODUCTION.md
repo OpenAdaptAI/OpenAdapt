@@ -28,8 +28,8 @@ openadapt-flow run bundle --profile standard --config deploy.yaml
 Before a governed run reports `VERIFIED`, Flow confirms every declared effect
 through an independent system-of-record read. A pixel-only Citrix path with no
 such read cannot be `VERIFIED`: the run halts, or it ends
-`RECONCILIATION_REQUIRED`. When the screen says saved and the configured
-verifier finds no declared effect, the run stops.
+`RECONCILIATION_REQUIRED`. When the configured verifier finds no declared
+effect after a save, the run stops, whatever the screen shows.
 
 `run --profile standard` enforces the policy again. It still refuses the bundle
 if the standalone `certify` command failed. A new recording will usually fail
@@ -61,9 +61,10 @@ observed. `qualify accept` confirms every pin in one command. If a pin isn't
 there, Flow HALTs. It will not guess.
 
 `qualify accept` also runs that proposed oracle against a `--break-it` fault
-before it can succeed. MockMed is the default fixture: the banner says the
-row was saved, the store did not change. If the oracle would have accepted
-the lie, the proposal stays draft or halted. Actor bytes and oracle bytes
+before it can succeed. MockMed is the default fixture: the save is
+rejected and the store does not change, while the screen looks the same as a
+good save. If the oracle would have accepted that run, the proposal stays
+draft or halted. Actor bytes and oracle bytes
 must be disjoint. Re-reading the acting screen or the same-session banner
 HALTs and names the shared channel. An API, SQL, file, or second-session
 read is allowed; Flow will not invent an endpoint. No second read in the
@@ -87,10 +88,19 @@ windows belong to one synthetic fixture process, and the repository does not
 contain a completed campaign result. A real deployment needs its own
 qualification.
 
-The boundary is one backend per bundle. Worklists repeat that bundle over input
+A bundle that declares several surfaces ([MULTI_SURFACE.md](MULTI_SURFACE.md))
+runs governed, qualified, and durable under the same rules as one surface:
+the surface map is sealed in the authorized bundle digest, each step result
+records its surface, and qualification declares one environment boundary per
+surface. Resume re-binds each surface by identity (never by a stored
+handle) and still stops at "Check the record" first when a save may have gone
+through. Managed Cloud dispatch needs only the deployment config's `surfaces:`
+map, and it refuses to start while a backend surface is unbound. A program
+(graph) resume of such a bundle is still refused.
+Worklists repeat that bundle over input
 records, and subflows reuse steps inside it. Neither one switches backends.
-Browser recording owns one tab and refuses popups or new tabs. Browser attach
-mode stays on one origin. macOS and Linux bind one exact app and window, while a
+Browser recording follows popups and new tabs in a browser Flow launched and,
+in attach mode, only pages a followed page opened on the declared origin. macOS and Linux bind one exact app and window, while a
 governed Windows run binds its application identity.
 
 If a task crosses a browser and a native app, or otherwise changes backend,

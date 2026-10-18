@@ -387,6 +387,18 @@ target and a state verifier can re-evaluate some failed visual postconditions.
 Only an affirmative answer is eligible to rescue the supported state checks;
 uncertainty or service failure keeps the halt.
 
+The state verifier never re-evaluates a step that can change a record: a step
+marked irreversible, a step that reads as a write (Save, Submit), a step that
+declares a system-of-record effect, or a step still waiting for risk review.
+On those steps the screen check is the only on-screen confirmation of the
+write, so a failed check stays failed, exactly as it would with no state
+verifier, and the run stops unless the workflow has its own handler for that
+step. The action was already sent, so a stopped run's transaction outcome is
+`RECONCILIATION_REQUIRED`: a person checks the record before anything is
+retried. Navigation and read-only steps can still be
+rescued. A wrong answer there lets the run go on to the next step, which still
+runs its own identity, risk, and screen checks before it acts.
+
 The model still reads the screen, can be wrong, and cannot prove a hidden
 transactional effect. A model-assisted run is counted in the report and no
 longer qualifies as a zero-model run. Dense lists, small identifiers, unusual
@@ -451,7 +463,7 @@ and exposes independently verifiable outcomes.
 | --- | --- |
 | Zoom, DPI, font, layout, viewport, or monitor changes | Browser attach recording accepts a stable viewport or device-scale change between actions, starts a new exact geometry epoch, and refuses an action that overlaps the transition. Native offline conversion can normalize a stable source-window move, resize, monitor change, or scale change into one fixed output viewport when every timeline row carries valid mapping metadata. It refuses a malformed timeline or a changed output viewport. RDP and Citrix live backends can rebaseline geometry between actions and refuse a change during the exact-frame lease. Other rescale or reflow behavior remains workflow-specific. |
 | Native select menus, file choosers, permission prompts, and secure desktops | OS or browser chrome may not appear in the captured surface and may be unrecordable or undrivable. Prefer an application-level or keyboard/API path. |
-| New tabs and windows | Opening a tab can be observed structurally where the backend supports it; interaction inside additional windows and multi-window coordination are not a general supported path. |
+| New tabs and windows | A bundle recorded with `Recorder` can declare the popups and tabs a step opens, act in them after an explicit surface switch, and halt on any page it did not declare ([MULTI_SURFACE.md](MULTI_SURFACE.md)). Such bundles run governed, qualified, and durable. Resume re-binds surfaces by identity, and managed Cloud dispatch needs only the `surfaces:` map. A program (graph) resume is refused. `record --url` and attach mode (`--cdp`, only pages a followed page opened) capture popups and tabs, and `--surface NAME=KIND[:TARGET]` binds backend surfaces at replay. Native windows and JavaScript dialogs are screen states, not surfaces. A dialog is answered by the step that raises it (browser backend, scripted recorder), and a hidden native window is reached by an explicit focus step. |
 | Drag and drop or gesture-heavy controls | Not a general supported primitive. Use a structured/API alternative or validate a purpose-built workflow. |
 | Dates, locale-sensitive fields, and auto-formatting | The same keystrokes can produce different values across platforms or locales. Require an explicit read-back or system effect and test the deployment locale. |
 | Slow or asynchronous applications | A state that outlasts configured waits can halt. Increasing a timeout does not establish correctness. |

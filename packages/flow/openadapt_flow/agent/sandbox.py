@@ -108,8 +108,8 @@ CASES: dict[str, SandboxCase] = {
         SandboxCase(
             "false_saved_banner",
             "not_sure_if_saved",
-            "The app shows a saved message, but its record store rejected the note. "
-            "The record check doesn't find it.",
+            "The record store rejected the note on save, so the record check "
+            "doesn't find it.",
             "?fault=optimistic&idempotency=demo#tasks",
             "HALTED",
             "RECONCILIATION_REQUIRED",
@@ -145,7 +145,7 @@ def _card() -> WorkflowCard:
         ),
         done_means=(
             "The note is in the synthetic app's record store, confirmed by reading "
-            "the store directly instead of trusting the screen."
+            "the store directly after the save."
         ),
         inputs={
             "note": {

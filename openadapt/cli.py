@@ -108,7 +108,7 @@ def main():
 
     \b
     Give an MCP client your compiled workflows:
-        openadapt agent serve --bundles DIR --allow-run
+        openadapt agent serve --bundles DIR --mode production
     """
     pass
 
@@ -495,8 +495,8 @@ def _refuse_unknown_tutorial_options(args: list[str]) -> None:
     is_flag=True,
     help=(
         "After the verified run, rerun the same certified bundle against a "
-        "fault-injecting backend and watch the engine halt instead of "
-        "trusting the screen."
+        "fault-injecting backend and watch the engine halt when the save "
+        "doesn't reach the record."
     ),
 )
 @click.pass_context
@@ -582,7 +582,7 @@ def quickstart(
     if break_it:
         click.echo(
             "The rerun against the fault-injecting backend HALTED as designed: "
-            "the screen claimed success and the system of record disagreed."
+            "the form was submitted, but the system of record had no new note."
         )
         click.echo(f"Caught-fault evidence: {root / 'run-broken' / 'REPORT.md'}")
         click.echo(_halted_rerun_result(root / "run-broken"))
@@ -591,7 +591,7 @@ def quickstart(
     )
     if not break_it:
         click.echo(
-            "Watch it catch a lie: openadapt quickstart --break-it --out "
+            "Watch it catch a save that didn't land: openadapt quickstart --break-it --out "
             f"{_shell_quote(f'{root}-break-it')}"
         )
     # The tutorial bundle is recorded against MockMed's fault server, and

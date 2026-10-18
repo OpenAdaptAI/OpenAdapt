@@ -718,6 +718,8 @@ def _configured_replayer(
     checkpoint_key: Optional[str] = None,
     approval_gate=None,
     qualification_fault_driver=None,
+    surface_backends=None,
+    deployment_surface: Optional[str] = None,
 ):
     """Wire the grounding, verification, and actuation layers into a Replayer.
 
@@ -740,7 +742,7 @@ def _configured_replayer(
         ):
             checkpoint_key = crypto.require_key(None)
 
-    return build_replayer(
+    replayer = build_replayer(
         backend,
         allow_egress=allow_egress,
         effect_verifier=effect_verifier,
@@ -758,7 +760,13 @@ def _configured_replayer(
         checkpoint_key=checkpoint_key,
         approval_gate=approval_gate,
         qualification_fault_driver=qualification_fault_driver,
+        deployment_surface=deployment_surface,
     )
+    if surface_backends:
+        # Backend surfaces of a multi-surface bundle (docs/MULTI_SURFACE.md),
+        # bound by --surface / the config's surfaces: map.
+        replayer.surface_backends = dict(surface_backends)
+    return replayer
 
 
 def _build_and_run_replayer(
@@ -792,6 +800,8 @@ def _build_and_run_replayer(
     run_id: Optional[str] = None,
     approval_gate=None,
     qualification_fault_driver=None,
+    surface_backends=None,
+    deployment_surface: Optional[str] = None,
 ):
     """Build the shared Replayer configuration and execute one workflow."""
     return _configured_replayer(
@@ -812,6 +822,8 @@ def _build_and_run_replayer(
         runtime_config=runtime_config,
         approval_gate=approval_gate,
         qualification_fault_driver=qualification_fault_driver,
+        surface_backends=surface_backends,
+        deployment_surface=deployment_surface,
     ).run(
         workflow,
         params=params,
@@ -975,6 +987,7 @@ def _replay_desktop(
     run_id: Optional[str] = None,
     approval_gate=None,
     qualification_fault_driver=None,
+    surface_cfgs=None,
 ) -> int:
     """Replay against a non-browser native/remote backend built by the factory.
 
@@ -994,6 +1007,7 @@ def _replay_desktop(
         backend = build_backend(backend_cfg)
     except ValueError as e:
         raise SystemExit(str(e))
+    surface_backends = _build_surface_backends(surface_cfgs or {}, page=None)
 
     try:
         report = _build_and_run_replayer(
@@ -1024,11 +1038,14 @@ def _replay_desktop(
             run_id=run_id,
             approval_gate=approval_gate,
             qualification_fault_driver=qualification_fault_driver,
+            surface_backends=surface_backends,
+            deployment_surface=backend_cfg.deployment_surface,
         )
     finally:
-        close = getattr(backend, "close", None)
-        if callable(close):
-            close()  # RDP transports hold a live socket; browsers/agents don't
+        for owned in (backend, *surface_backends.values()):
+            close = getattr(owned, "close", None)
+            if callable(close):
+                close()  # RDP transports hold a live socket; browsers/agents don't
     return _finish_replay(
         run_dir, report, args, backend_kind=_report_backend_kind(backend_cfg.kind)
     )
@@ -1049,11 +1066,32 @@ def _record_until_stop(args: argparse.Namespace):
 def _cmd_record(args: argparse.Namespace) -> int:
     """Record, then (with ``--with-check``) ask for the demonstrated check."""
     with_check = bool(getattr(args, "with_check", False))
+    observation = None
+    verify_path = getattr(args, "verify", None)
+    if verify_path:
+        from openadapt_flow.record_sor import RecordingObservation, RecordSorError
+
+        try:
+            observation = RecordingObservation.start(verify_path)
+        except RecordSorError as exc:
+            print(f"record --verify: {exc}. Nothing was recorded.", file=sys.stderr)
+            return 2
+        print(
+            f"Read {len(observation.before)} record(s) through the "
+            f"{observation.observer.kind} verifier. Flow reads them again when "
+            "the recording ends."
+        )
     if with_check:
         from openadapt_flow.cli_check import RECORD_GUIDANCE
 
         print(RECORD_GUIDANCE)
     code = _cmd_record_capture(args)
+    if observation is not None and code == 0:
+        from openadapt_flow.record_sor import summary_lines
+
+        contract, proposal, diff = observation.finish(Path(args.out))
+        for line in summary_lines(contract, proposal, diff):
+            print(line)
     if code == 0 and with_check:
         from openadapt_flow.cli_check import guided_check
         from openadapt_flow.cli_hints import command
@@ -1487,7 +1525,7 @@ def _cmd_tutorial(args: argparse.Namespace) -> int:
         _print_break_it_narrative(result.break_it)
     elif result.execution_outcome == "VERIFIED":
         print(
-            "\nNext: rerun this same bundle against a backend that lies -- and "
+            "\nNext: rerun this same bundle with the save set to fail -- and "
             f"watch the engine halt:\n  {command('tutorial --break-it')}\n"
             "Or see both runs side by side on one page:\n"
             f"  {command('demo')}"
@@ -1509,16 +1547,15 @@ def _print_break_it_narrative(broken: "BreakItResult") -> None:
     fault server's ground-truth store by ``run_tutorial``; nothing is scripted.
     """
     claim = (
-        "every on-screen check passed -- the app painted its success banner"
+        "every on-screen check passed, including the saved message"
         if broken.screen_claimed_success
-        else "the app's success banner did not appear"
+        else "the saved message did not appear"
     )
     if broken.screen_claim_text:
         claim += f'\n                       (observed on screen: "{broken.screen_claim_text}")'
-    print("\n--- break-it: the same certified bundle, against a backend that lies ---")
+    print("\n--- break-it: the same certified bundle, with the save set to fail ---")
     print(f"\n  Injected fault:      {broken.fault!r} -- the server rejects the write")
-    print("                       AFTER the app reports success")
-    print(f"  The screen claimed:  {claim}")
+    print(f"  On screen:           {claim}")
     print(
         "  The verifier found:  "
         f"{broken.effects_refuted}/{broken.effects_required} declared effect(s) "
@@ -1537,8 +1574,8 @@ def _print_break_it_narrative(broken: "BreakItResult") -> None:
     plain = plain_result(broken.transaction_outcome, broken.execution_outcome)
     print(f"  Result:              {plain.label}. {plain.meaning}")
     print(
-        "\n  The screen said success. The system of record said otherwise. "
-        "The engine\n  believed the system of record."
+        "\n  The screen looked the same as a good save. The record check found "
+        "no new note,\n  so the engine stopped instead of reporting done."
     )
     print(f"\n  Engine's own words:  {broken.halt_reason}")
     print(
@@ -1576,7 +1613,7 @@ def _demo_progress() -> Optional[Callable[[str], None]]:
         if match:
             text = f"Run 1, step {match.group(1)} of 5: {match.group(2)}"
         elif message.startswith("[break-it]"):
-            text = "Run 2: the same task against an app that lies"
+            text = "Run 2: the same task, with the save set to fail"
         else:
             return
         sys.stdout.write("\r\033[K" + text[:100])
@@ -1592,7 +1629,7 @@ def _clear_progress_line() -> None:
 
 
 def _cmd_demo(args: argparse.Namespace) -> int:
-    """Run the checked run and the lying-app run, then write one proof page.
+    """Run the checked run and the failed-save run, then write one proof page.
 
     Composes the unchanged tutorial path (``run_tutorial(..., break_it=True)``):
     the same record, compile, certify, and Standard-profile run, then the same
@@ -1991,6 +2028,81 @@ def _default_run_dir() -> Path:
     return Path("runs") / f"replay-{stamp}"
 
 
+def _resolve_surface_bindings(args: argparse.Namespace, cfg, workflow) -> dict:
+    """Resolve ``--surface`` flags and ``surfaces:`` config for this bundle.
+
+    Refuses (before anything runs) a binding the bundle cannot use. Names
+    every backend surface left unbound; the run halts at the switch to it.
+    """
+
+    from openadapt_flow.surface_bindings import (
+        SurfaceBindingError,
+        resolve_surface_configs,
+        unbound_backend_surfaces,
+    )
+
+    flags = list(getattr(args, "surface", None) or [])
+    configured = dict(getattr(cfg, "surfaces", {}) or {})
+    if not getattr(workflow, "surfaces", None):
+        if flags or configured:
+            raise SystemExit(
+                "REFUSED: --surface / surfaces: were given, but this bundle "
+                "declares no surfaces. Nothing was executed."
+            )
+        return {}
+    try:
+        resolved = resolve_surface_configs(workflow, flags, configured)
+    except SurfaceBindingError as exc:
+        raise SystemExit(f"REFUSED: {exc}. Nothing was executed.")
+    unbound = unbound_backend_surfaces(workflow, resolved)
+    if unbound:
+        print(
+            "NOTE: no backend is bound for surface(s) "
+            + ", ".join(unbound)
+            + "; the run halts at the switch to it. Bind one with "
+            "--surface NAME=KIND[:TARGET] or the config's surfaces: map.",
+            file=sys.stderr,
+        )
+    return resolved
+
+
+def _build_surface_backends(surface_cfgs, *, page) -> dict:
+    """Build bound backend surfaces; a web one opens in the run's browser."""
+
+    from openadapt_flow.surface_bindings import (
+        SurfaceBindingError,
+        build_surface_backends,
+    )
+
+    new_page = None
+    if page is not None:
+
+        def new_page(url: str):
+            # A second app is its own browser page in the run's browser: a new
+            # page in the run's context when the context allows one, else a
+            # page of its own context (Playwright's browser.new_page()).
+            try:
+                opened = page.context.new_page()
+            except Exception:
+                browser = page.context.browser
+                if browser is None:
+                    raise
+                opened = browser.new_page(viewport=page.viewport_size)
+            opened.goto(url)
+            try:
+                opened.wait_for_load_state("load")
+            except Exception:
+                pass
+            # The run starts on the primary page.
+            page.bring_to_front()
+            return opened
+
+    try:
+        return build_surface_backends(surface_cfgs or {}, new_page=new_page)
+    except (SurfaceBindingError, ValueError) as exc:
+        raise SystemExit(f"REFUSED: {exc}. Nothing was executed.")
+
+
 def _cmd_replay(args: argparse.Namespace) -> int:
     from openadapt_flow.backends.factory import _normalize_kind, build_backend
     from openadapt_flow.cli_compose import refuse_replay_composition
@@ -2049,6 +2161,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     refused = _enforce_surface_binding(args, workflow, backend_cfg, operation=operation)
     if refused is not None:
         return refused
+    surface_cfgs = _resolve_surface_bindings(args, cfg, workflow)
     # Opt-in attest pre-state snapshot: the earliest point where the run is
     # ADMITTED (every gate above passed) and the run directory is final, but
     # NO actuation has begun on either the desktop or the web path below.
@@ -2089,6 +2202,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             run_id=getattr(args, "_qualification_run_id", None),
             approval_gate=approval_gate,
             qualification_fault_driver=fault_driver,
+            surface_cfgs=surface_cfgs,
         )
 
     headed = args.headed or cfg.backend.headed
@@ -2111,6 +2225,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         # is exercised instead of the structural rung resolving it.
         backend = build_backend(backend_cfg, page=page)
         held_backend.append(backend)
+        surface_backends = _build_surface_backends(surface_cfgs, page=page)
         return _build_and_run_replayer(
             backend,
             workflow=workflow,
@@ -2147,6 +2262,8 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             run_id=getattr(args, "_qualification_run_id", None),
             approval_gate=approval_gate,
             qualification_fault_driver=fault_driver,
+            surface_backends=surface_backends,
+            deployment_surface=backend_cfg.deployment_surface,
         )
 
     if backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url:
@@ -2278,7 +2395,39 @@ def _resolve_run_approval_mode(args: argparse.Namespace, cfg, profile_value):
     requested = getattr(args, "approval_mode", None)
     if requested is None:
         requested = getattr(getattr(cfg, "runtime", None), "approval_mode", None)
+    if requested is None:
+        requested = _admitted_approval_mode(args)
     return resolve_approval_mode(requested)
+
+
+def _admitted_approval_mode(args: argparse.Namespace) -> Optional[str]:
+    """The approval mode the bundle's admission gives it, or ``None``.
+
+    An accepted ``openadapt-flow admit`` sets ``problems_only`` for that exact
+    bundle. A flag or ``runtime.approval_mode`` still wins. A bundle changed
+    since admission, or an agent's admission whose person-signed grant no
+    longer verifies, falls back to the default (a person approves each save)
+    and says why.
+    """
+
+    bundle = getattr(args, "bundle", None)
+    if not bundle:
+        return None
+    from openadapt_flow.admit_pipeline import admitted_approval_mode
+
+    admitted = admitted_approval_mode(Path(bundle))
+    if admitted.refusal is not None:
+        print(
+            f"admission approval mode not used ({admitted.refusal}): a person "
+            "approves each save."
+        )
+        return None
+    if admitted.approval_mode is not None and admitted.admitted_by is not None:
+        print(
+            f"Admitted by {admitted.admitted_by.label()}: this workflow uses "
+            f"{admitted.approval_mode}."
+        )
+    return admitted.approval_mode
 
 
 def _approval_wait_seconds(args: argparse.Namespace) -> float:
@@ -3313,6 +3462,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             approval_gate=_resume_approval_gate(
                 args, resume_mode, run_dir, policy_name=cfg.policy.policy
             ),
+            deployment_surface=backend_cfg.deployment_surface,
         )
         return resume(
             run_dir,
@@ -6280,6 +6430,26 @@ def _add_browser_session_flags(p: argparse.ArgumentParser) -> None:
     )
 
 
+def _add_surface_flags(p: argparse.ArgumentParser) -> None:
+    """Add ``--surface NAME=KIND[:TARGET]`` (multi-surface bundles)."""
+
+    p.add_argument(
+        "--surface",
+        action="append",
+        default=None,
+        metavar="NAME=KIND[:TARGET]",
+        help=(
+            "Multi-surface bundles: bind a backend to the backend surface NAME "
+            "(repeatable). KIND defaults to the kind the bundle declares; "
+            "TARGET fills that kind's target (web: URL, windows: agent URL, "
+            "macos: app, linux: app, rdp: host, citrix: client window). "
+            "NAME=TARGET alone is accepted. Other fields go in the config's "
+            "surfaces: map. Browser tabs and popups need no binding. See "
+            "docs/MULTI_SURFACE.md."
+        ),
+    )
+
+
 def _add_backend_flags(p: argparse.ArgumentParser) -> None:
     """Add the backend-selector flags (``--backend`` + targets) to a subparser.
 
@@ -6732,6 +6902,17 @@ def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
     print(
         f"\nqualify {verdict}: {len(result.rows)} trial(s) in {result.timing['campaign_wall_s']} s"
     )
+    if result.lookup is not None:
+        pixels = result.lookup.pixels_only
+        print(
+            f"Surface: {result.lookup.surface}; lookups used: "
+            f"{', '.join(result.lookup.capabilities_used)}. Pixels-only pass "
+            f"({'gate' if pixels.role == 'gate' else 'informational'}): "
+            f"{pixels.rate_text()}."
+        )
+        common = pixels.common_failure()
+        if common:
+            print(f"Most common pixels-only failure: {common}")
     if result.certified:
         print(f"Certified under {result.policy}. Bundle: {result.bundle_dir}")
     elif certify is None:
@@ -6769,13 +6950,13 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "demo",
         help=(
-            "See the proof in one command: a checked run and a run where the "
-            "app lies, side by side on one page (fake clinic data, no AI calls)"
+            "See the proof in one command: a checked run and a run whose save "
+            "fails, side by side on one page (fake clinic data, no AI calls)"
         ),
         description=(
-            "Run the bundled tutorial twice on a fake clinic app: once against "
-            "an honest app, and once against an app that shows its success "
-            "message and then drops the save. Writes one self-contained HTML "
+            "Run the bundled tutorial twice on a fake clinic app: once with a "
+            "normal save, and once with the save set to fail on the server. "
+            "Writes one self-contained HTML "
             "page with both final screens, the record check for each run, and "
             "what a person sees when a run stops, and opens it when a display "
             "is available. Exit 0 when the first run is Done and checked and "
@@ -6958,6 +7139,18 @@ def build_parser() -> argparse.ArgumentParser:
             "After the save, also show how you'd check it saved (reload or "
             "search again, open the record). Flow then asks which fields show "
             "the values you typed and writes check.json"
+        ),
+    )
+    p.add_argument(
+        "--verify",
+        default=None,
+        metavar="VERIFY_YAML",
+        help=(
+            "Read the system of record through the verifier: section of this "
+            "file (rest, sql, fhir, graphql or file) before and after the "
+            "recording, and propose the checks for what changed in "
+            "verify.proposed.yaml. Both reads go to sor_snapshots.json "
+            "(mode 0600)"
         ),
     )
     _add_backend_flags(p)
@@ -7382,6 +7575,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     _add_backend_flags(p)
+    _add_surface_flags(p)
     _add_browser_session_flags(p)
     _add_deployment_flags(p, worklist=True)
     _add_attest_flags(p)
@@ -7464,6 +7658,7 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     _add_backend_flags(p)
+    _add_surface_flags(p)
     _add_browser_session_flags(p)
     _add_deployment_flags(p, worklist=True)
     _add_attest_flags(p)
@@ -10323,6 +10518,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     argv = list(sys.argv[1:] if argv is None else argv)
     argv = _qualify_default_form(argv)
+    from openadapt_flow.cli_admit import admit_default_form
+
+    argv = admit_default_form(argv)
     # Strict no-outbound mode (OPENADAPT_NO_OUTBOUND=1) is installed before
     # any command runs, so no code path can open a connection off the machine.
     from openadapt_flow import no_outbound

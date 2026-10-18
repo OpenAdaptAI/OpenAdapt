@@ -107,13 +107,13 @@ openadapt-agent installs from PyPI and requires openadapt-flow 2.1.0 or later, w
 
 ### See every outcome
 
-Ask for each case by adding `sandbox_case` to the inputs, with a new `request_id` each time. For example: "Now try the false_saved_banner case with request id demo-0002."
+Ask for each case by adding `sandbox_case` to the inputs, with a new `request_id` each time. For example: "Now try the duplicate_record case with request id demo-0002."
 
 | `sandbox_case` | `outcome` | What MockMed does |
 | --- | --- | --- |
 | `normal` (default) | `done` | Saves the note, and the record check finds it. |
 | `duplicate_record` | `needs_review` | Lists the same referral twice, so OpenAdapt can't tell which record to open. It stops before saving. |
-| `false_saved_banner` | `not_sure_if_saved` | Shows a saved message, but the note wasn't stored. |
+| `false_saved_banner` | `not_sure_if_saved` | Rejects the note on save, so it isn't stored. |
 | `timeout_after_save` | `not_sure_if_saved` | Saves the note, then times out with an error. |
 | `app_offline` | `did_not_run` | Doesn't answer, so nothing starts. |
 
@@ -280,8 +280,10 @@ Flow's [execution profiles](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/p
 | `--config YAML` | Flow's deployment config ([example](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/deployment.example.yaml)), which sets the profile and whether model grounding is allowed. |
 | `--policy NAME-OR-PATH` | The policy Flow certifies against, such as `clinical-write` or `permissive`. |
 | `--timeout SECONDS` | How long one run may work (default 600). Time a person spends approving a save doesn't count. A run stopped at the limit is `not_sure_if_saved`. |
-| `--approval-mode MODE` | Whether each save waits for approval. Without it, Flow decides: under `standard` and `regulated` a run stops before each save until it's approved (`each_item`). `not_gated` turns that off for every run this server starts; each result records it under `technical.approval_mode`. |
-| `--delegate-approvals AGENT_ID` | Lets your agent answer a waiting save as `AGENT_ID` (an opaque id such as `agent:intake-bot`), with `list_approval_requests` and `answer_approval_request`. Flow accepts the answer only where the run's approver policy allows an agent for that step, and records the agent as the approver. By default only a person may answer. Needs an openadapt-flow with delegated approvers (not released yet). |
+| `--approval-mode MODE` | Whether each save waits for approval. Without it, Flow decides, and a run stops before each save until it's approved (`each_item`). `not_gated` turns that off for every run this server starts; each result records it under `technical.approval_mode`. |
+| `--delegate-approvals AGENT_ID` | Lets your agent answer a waiting save as `AGENT_ID` (an opaque id such as `agent:intake-bot`), with `list_approval_requests` and `answer_approval_request`. Flow accepts the answer only where the run's approver policy allows an agent for that step, and records the agent as the approver. By default only a person may answer. Needs openadapt-flow 2.2.0 or later. |
+| `--admissions DIR` | Adds `prepare_admission`, `list_admissions` and `decide_admission`, the same steps as `openadapt-flow admit`, over recordings in `DIR/recordings` and shadow candidates in `DIR/shadow-candidates`. A person decides in your client's form. With `--delegate-approvals` and `--approver-grant`, your agent decides as that approver instead, under a grant a person signed that names it. It never decides an admission it prepared or one prepared on a server without `--delegate-approvals`, and never under the `regulated` policy pack. Accepting sets the workflow's runs to `problems_only`. The record names who decided, and for your agent the grant and who signed it. Not released yet. |
+| `--approver-grant FILE` | With `--admissions` and `--delegate-approvals`: the approver grant a person signed (`openadapt-flow approver-grant sign`) that lets your agent decide admissions. Flow checks it on every decision. Without it only a person decides. |
 | `--headed` | Shows the browser. A person needs it to continue or skip a stopped run in a web app. |
 | `--extra-run-arg ARG`, `--flow-cli CMD` | Change how Flow is called. Either one can relax Flow's checks, for example `--extra-run-arg=--allow-unencrypted`. |
 | `--allow-protected-export`, `--allow-synthetic-recorded-defaults`, `--allow-model-grounding` | Off by default. See [Security](#security). |
@@ -290,7 +292,7 @@ Callers can't change `--url`, `--config`, `--policy`, `--timeout`, or `--approva
 
 ### Runs that wait for a person's approval
 
-Under `standard` and `regulated`, Flow stops before each save and waits for a person to approve it (up to 15 minutes by default). While it waits, `run_workflow` and `get_run` return `needs_review` with reason `waiting_for_approval` and `record_changed: "unknown"`, because an earlier save in the same run may have gone through. The person sees the waiting save with `openadapt-flow item-approval show RUN_DIR`, where `RUN_DIR` is the `run_id` folder in the runs folder, and answers with `item-approval approve` or `decline`. If nobody answers in time, the run stops before saving and reads `needs_review` with reason `approval_needed`. This server has no tool that approves a save: a person does.
+Unless the operator names another `--approval-mode`, Flow stops before each save and waits for an answer (up to 15 minutes by default). While it waits, `run_workflow` and `get_run` return `needs_review` with reason `waiting_for_approval` and `record_changed: "unknown"`, because an earlier save in the same run may have gone through. The person sees the waiting save with `openadapt-flow item-approval show RUN_DIR`, where `RUN_DIR` is the `run_id` folder in the runs folder, and answers with `item-approval approve` or `decline`. If nobody answers in time, the run stops before saving and reads `needs_review` with reason `approval_needed`. `get_approval_mode` reports the mode and whether your agent may answer. With `--delegate-approvals`, your agent can list waiting saves with `list_approval_requests` and answer one with `answer_approval_request`, where the run's approver policy allows an agent for that step; otherwise a person answers.
 
 ### Use the other tools
 

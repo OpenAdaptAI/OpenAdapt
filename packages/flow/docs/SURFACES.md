@@ -213,3 +213,82 @@ time: `rdp` and `citrix` recordings are `external`; `web`, `windows`,
 `macos`, and `linux` recordings are `in_session`. Moving a workflow between
 modes means re-recording or re-qualifying it on the other surface (or an
 explicit, report-recorded `--allow-surface-override`).
+
+## Lookup capabilities: structure or pixels
+
+To find a step's target, Flow first looks it up in the page or
+accessibility structure (the browser DOM, macOS AX, Windows UIA, Linux
+AT-SPI) and falls back to pixels. Structure is much more reliable where it
+exists: on a desktop drift benchmark it found 21 of 21 targets where pixels
+alone found 6 of 21. It does not exist over an RDP or Citrix window viewed
+from outside the session; Flow sees only pixels there. A workflow qualified
+with structure lookups could pass qualification and then fail in
+production on that surface, so Flow checks for this.
+
+**Declare the surface.** Set `backend.deployment_surface` in
+`deployment.yaml`:
+
+| Value | Means | Structure lookups |
+|---|---|---|
+| `local` | Flow runs on the same machine as the application | Yes, where the backend reads structure |
+| `remote_in_session` | Flow is installed inside the remote or virtual desktop session | Yes |
+| `remote_display` | Flow is outside the session, looking at its client window | No, pixels only |
+| `unknown` | Not known | No: read as `remote_display` |
+
+If you leave it out, `rdp` and `citrix` are `remote_display` and every
+other backend is `local`. An `rdp` or `citrix` backend declared `local` or
+`remote_in_session` is refused, because those backends always view the
+session from outside. To get structure inside a Citrix or RDP session,
+install the Flow runtime in that session and use its own backend (for
+example `windows`).
+
+**What qualification records.** `openadapt-flow qualify` records which
+lookups the signed cases actually used (`structure`, `pixels`, or both) and
+the surface they ran for, in the bundle's qualification project
+(`workflow.json`, `qualification.lookup`) and in
+`qualification/lookup.json`. A certification binds that record, so it can't
+be edited afterwards without losing the certification. In `verify.yaml`,
+`app.surface` takes the same values as `deployment_surface` and defaults to
+`local`.
+
+**The pixels-only pass.** Every `qualify` also runs the cases with
+structure lookups turned off and reports how many trials still behaved as
+required:
+
+- When `app.surface` is `remote_display` (or `unknown`), the campaign runs
+  only with structure turned off. That pixels-only result is the
+  qualification: any trial that doesn't behave as required fails it, and the
+  bundle is recorded as qualified on pixels.
+- Otherwise the signed cases run with structure, and a second, unsigned pass
+  runs them again on pixels. Its pass rate is for information. A low rate
+  means the workflow depends on structure and will need its own
+  qualification before it can run on a remote display.
+
+The pixels-only pass turns off the structure step of the lookup only. On a
+browser test copy, the identity checks and the guarded clicks still read
+the page as they normally do, so the pass doesn't reproduce every difference
+a real remote display makes.
+
+On a browser today, the pass mostly fails. Under the Standard profile Flow
+delivers a browser click only through an action bound to the page element,
+and a click that pixels found has no such binding. On the MockMed demo the
+pixels-only pass ran 18 trials and passed 0, each stopping at the first
+click with "production action lacks a closed runtime actuation path". So a
+web workflow can't yet be qualified for a remote-display surface through
+the browser: with `app.surface: remote_display` the campaign refuses at the
+first trial. That needs a qualification campaign driven through the RDP or
+Citrix backend, which `qualify` doesn't run yet (see the limits in
+[Qualify a workflow](QUALIFY_A_WORKFLOW.md#limits)).
+
+**At run time.** Before the first action, a run compares the surface it is
+on with the qualified record. If the workflow was qualified with structure
+and this surface offers pixels only, the run halts with
+`HALTED_BEFORE_EFFECT`, writes nothing, and the report tells the operator to
+requalify the workflow for this surface (`app.surface: remote_display`) or
+run Flow inside the remote session. A workflow qualified on pixels runs on
+any surface. Bundles qualified before this record existed carry none and
+behave as before.
+
+The remote-display evidence for this check is synthetic so far: the tests
+simulate a pixel-only surface, and there is no counted run against a live
+Citrix deployment yet.
