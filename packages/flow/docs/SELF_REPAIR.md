@@ -138,6 +138,93 @@ Self-repair waits `approval_wait_s` seconds (default 900, the same as each
 item approval). When nobody answers in time, the run ends with status
 `awaiting_approval`. The candidate stays in the store, and nothing is saved.
 
+## Pre-approved repairs
+
+Some UI drift is routine: a link relabelled, a control moved, a known
+dialog. A person can approve such classes of change once, in advance, like an
+ITIL standard change. Matching repairs then apply without anyone being asked.
+
+The approval is the signed JIT admission policy
+([JIT_ADMISSION.md](JIT_ADMISSION.md)) with a `preapproved_repairs` block:
+
+```python
+from openadapt_flow.jit.authority import AdmissionPolicy, PreapprovedRepairs, sign_policy
+
+policy = AdmissionPolicy(
+    policy_id="ui-drift-standard-changes",
+    signer="ops-lead",                      # a registered policy signer
+    signed_at=..., expires_at=...,
+    allowed_hosts=("emr.example.internal",),
+    allowed_actions=("click", "type"),
+    agent_principals=("agent:repair",),     # the repair agent's agent_id
+    preapproved_repairs=PreapprovedRepairs(
+        relabel_or_move=True,               # one non-saving control re-targeted
+        dialog_patterns=(r"Ordering provider",),  # a new dialog, one click
+        menu_steps=2,                       # a non-saving control moved into a menu
+    ),
+)
+signed = sign_policy(policy, ops_lead_key)
+SelfRepair(agent, target, ..., repair_policy=signed, policy_registry=registry)
+```
+
+A repair applies without a person only when all of these hold:
+
+- the policy verifies (registered signer, not expired), names the agent, and
+  allows the app's host;
+- every step that saves, with its identity evidence and every record check,
+  is byte-identical to the admitted bundle, and no other step's identity
+  evidence changed (`preapproved_change_class`; the repair store re-derives
+  it from the two bundles);
+- the change fits an allowed class:
+
+  | Class | What changed |
+  | --- | --- |
+  | `relabel_or_move` | One control that does not save was re-targeted. |
+  | `menu_move` | One such control was re-targeted, with up to `menu_steps` new steps right before it. |
+  | `dismiss_dialog` | One new step after a non-saving click dismisses a dialog whose page text matches a declared pattern. |
+
+- the probe up to the save passed, and so did both campaigns.
+
+Anything else goes to a person, as before. The ledger says why: for
+example, "the save step step_005 changed", or "relabel_or_move is not a
+class the repair policy allows".
+
+An applied repair is staged and enters its canary window, like any approved
+repair. The run report's `self_repair` block records three fields:
+`applied_automatically: true`, the `change_class`, and the policy digest.
+The approval step's detail gives the undo command.
+
+`openadapt-flow repair digest` lists the last day's automatic repairs, each
+with its rollback command. `openadapt-flow repair rollback --candidate-id
+<id>` undoes one and puts the prior bundle back.
+
+## Worklists: pre-flight and one approval for many items
+
+`openadapt_flow.repair.queue.RepairQueue` runs a worklist through
+self-repair:
+
+```python
+from openadapt_flow.repair.queue import RepairQueue, WorkItem
+
+queue = RepairQueue(repair, test_item=WorkItem("TEST-001", {"patient": "TEST-001"}))
+result = queue.run("bundles/triage", [WorkItem("A-1", {...}), ...], "runs/today")
+```
+
+- **Pre-flight on a test record.** Before the first item, the program runs
+  once on the deployment's test record, with the full record check. A drifted
+  screen is caught there, before any real record. If the test run is
+  repaired, it runs again on the repaired bundle. The queue starts only after
+  a clean, verified test run (`result.started`). After any automatic repair
+  during the queue, the test record runs again before the next item.
+- **One approval releases the queue.** Items run without waiting for a
+  person. When an item's repair needs a person, its one request goes out.
+  Later items that halt at the same step for the same reason are `held`; the
+  agent is not asked again. After the pass, one answer on the phone card
+  settles them all:
+  - The item that asked resumes with the form the person saw.
+  - Each held item resumes with its own pre-save checks and record check.
+  - A decline or no answer saves nothing.
+
 ## Python API
 
 Four objects make up the API:
@@ -207,6 +294,7 @@ contains:
 | `awaiting_approval` | Nobody answered in time, or an answer was refused (for example, one not from a person). The candidate waits in the store. |
 | `resumed` | The approved bundle re-ran. Read `report.execution_outcome`. |
 | `resume_failed` | The approved bundle could not run, or an unexpected error stopped self-repair. Any canary was rolled back. |
+| `held` | In a worklist: the item halted the same way as an item whose repair waits for a person. `RepairQueue` resumes it after that one answer. |
 
 ### Writing a repair agent
 

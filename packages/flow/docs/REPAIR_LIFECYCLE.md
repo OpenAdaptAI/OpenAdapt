@@ -183,8 +183,8 @@ enforced in code and covered by tests
 (`test_model_actor_cannot_perform_any_transition`,
 `test_model_suggestion_source_still_requires_full_human_gate`).
 
-One exception to the human review and approval gates exists, and it is
-narrow: an imported fleet patch (source `fleet_patch`) can be reviewed and
+Two exceptions to the human review and approval gates exist, and both are
+narrow. The first: an imported fleet patch (source `fleet_patch`) can be reviewed and
 approved under a promotion policy that a named person approved in advance
 (`review_under_policy`, `approve_under_policy`). Both methods verify the
 policy signature themselves, and approval also reads fleet status itself and
@@ -193,6 +193,23 @@ other source, for any candidate that changes identity evidence or weakens the
 contract, and unless both campaigns passed on the tenant's own qualification
 cases. The approval record names the policy digest and the person who
 approved the policy. See [Fleet drift patches](#fleet-drift-patches).
+
+The second: a self-repair candidate (source `model_suggestion`, provenance
+`self_repair`) can be reviewed and approved under a repair policy a named
+person signed in advance (`approve_under_repair_policy`). The policy is the
+JIT admission policy with a `preapproved_repairs` block listing the change
+classes it allows. The store verifies the signature and expiry itself, and
+refuses unless:
+
+- the policy names the repair agent;
+- the candidate touches no identity evidence and weakens no contract;
+- both campaigns passed;
+- the change it derives from the two bundles on disk is the claimed class,
+  and that class is allowed. Every step that saves, its identity evidence,
+  and every record check must be byte-identical.
+
+The approval record names the policy digest and its signer. See
+[SELF_REPAIR.md](SELF_REPAIR.md#pre-approved-repairs).
 
 ## Sync and fingerprints
 
@@ -229,6 +246,7 @@ All commands accept `--store DIR` (default `repair-store/`).
 | `openadapt-flow repair canary-record <id> --run-dir <run>` | Record one canary run; auto-revert on regression; auto-complete to active after N verified runs. |
 | `openadapt-flow repair rollback [--candidate-id <id>] [--by <name>]` | One-command rollback to the prior hash. |
 | `openadapt-flow repair status` | Show the active pointer and its lineage. |
+| `openadapt-flow repair digest [--since-hours 24] [--json]` | List the repairs a repair policy applied without a person, each with the rollback command that undoes it. |
 
 ## Relationship to the in-run heal gate
 

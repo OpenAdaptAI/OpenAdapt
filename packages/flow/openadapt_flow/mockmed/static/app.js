@@ -230,12 +230,19 @@ function renderPatient(id) {
     '<div id="patient-banner">' + esc(p.name) + ' — MRN ' +
     esc(p.id.toUpperCase()) + ' — DOB ' + esc(p.dob) + '</div>' +
     bannerHtml +
-    '<div class="actions movable">' +
-    '<button id="new-encounter">New Encounter</button></div>' +
+    (DRIFT.has('relink')
+      // "relink" drift: the New Encounter button became a text link with a
+      // new label and id, at the other end of the same row. It does the same
+      // thing; the rest of the page is unchanged.
+      ? '<div class="actions link-row">' +
+        '<a href="#encounter" id="start-encounter" class="link-action">' +
+        'Start encounter</a></div>'
+      : '<div class="actions movable">' +
+        '<button id="new-encounter">New Encounter</button></div>') +
     '<h2>Encounters</h2>' + encHtml +
     '</section>';
 
-  document.getElementById('new-encounter')
+  document.getElementById(DRIFT.has('relink') ? 'start-encounter' : 'new-encounter')
     .addEventListener('click', function () {
       state.banner = null;
       location.hash = '#encounter';

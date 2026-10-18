@@ -56,6 +56,7 @@ __all__ = [
     "AdmissionPolicy",
     "AuthorityError",
     "KEY_PASSPHRASE_ENV",
+    "PreapprovedRepairs",
     "POLICY_SCHEMA",
     "PRINCIPALS_FILE",
     "Principal",
@@ -303,6 +304,54 @@ def register_principal(
 # -- admission policy ------------------------------------------------------------
 
 
+class PreapprovedRepairs(BaseModel):
+    """Repairs a person approves once, in advance (an ITIL standard change).
+
+    A self-repair (:mod:`openadapt_flow.repair.self_repair`) that fits one of
+    these classes applies without a person, and only when the save step, its
+    identity evidence and every record check are byte-identical to the
+    admitted bundle and the probe up to the save passed. Anything else still
+    goes to a person.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    #: A control that does not save, relabelled or moved: one re-targeted click.
+    relabel_or_move: bool = False
+    #: A new dialog dismissed with one click, when the screen it appeared on
+    #: matches one of these patterns (Python regular expressions, matched
+    #: case-insensitively against the page's text).
+    dialog_patterns: tuple[str, ...] = Field(default=(), max_length=16)
+    #: A control that does not save moved into a menu: up to this many new
+    #: steps before it.
+    menu_steps: int = Field(default=0, ge=0, le=2)
+
+    @field_validator("dialog_patterns")
+    @classmethod
+    def _patterns(cls, value: tuple[str, ...]) -> tuple[str, ...]:
+        for pattern in value:
+            if not pattern.strip():
+                raise ValueError("an empty dialog pattern would match any dialog")
+            try:
+                re.compile(pattern)
+            except re.error as exc:
+                raise ValueError(f"dialog pattern {pattern!r} is invalid: {exc}")
+        return value
+
+    def classes(self) -> tuple[str, ...]:
+        """The change classes this policy allows, by name."""
+
+        return tuple(
+            name
+            for name, on in (
+                ("relabel_or_move", self.relabel_or_move),
+                ("dismiss_dialog", bool(self.dialog_patterns)),
+                ("menu_move", self.menu_steps > 0),
+            )
+            if on
+        )
+
+
 class AdmissionPolicy(BaseModel):
     """What a person lets registered agents admit without them."""
 
@@ -335,12 +384,17 @@ class AdmissionPolicy(BaseModel):
     #: left out of the signed payload while off, so policies signed before
     #: this field existed keep their signatures.
     allow_self_admission: bool = False
+    #: Self-repairs the named agents may apply without a person. Left out of
+    #: the signed payload when unset, like ``allow_self_admission``.
+    preapproved_repairs: Optional[PreapprovedRepairs] = None
 
     @model_serializer(mode="wrap")
     def _serialize(self, handler: Any) -> dict[str, Any]:
         data = handler(self)
         if not self.allow_self_admission:
             data.pop("allow_self_admission", None)
+        if self.preapproved_repairs is None:
+            data.pop("preapproved_repairs", None)
         return data
 
     @field_validator("allowed_actions")

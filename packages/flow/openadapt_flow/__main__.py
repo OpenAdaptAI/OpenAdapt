@@ -9301,6 +9301,23 @@ def build_parser() -> argparse.ArgumentParser:
     _repair_store_flag(r)
     r.set_defaults(func=_cmd_repair)
 
+    r = rsub.add_parser(
+        "digest",
+        help=(
+            "List the repairs a repair policy applied without a person, with the "
+            "command that undoes each"
+        ),
+    )
+    r.add_argument(
+        "--since-hours",
+        type=float,
+        default=24.0,
+        help="How far back to look (default 24)",
+    )
+    r.add_argument("--json", action="store_true", help="Print JSON rows")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
     p = sub.add_parser(
         "connect",
         help=(

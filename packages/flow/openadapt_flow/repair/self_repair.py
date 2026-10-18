@@ -70,6 +70,7 @@ import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Mapping, Optional, Protocol, Sequence
+from urllib.parse import urlsplit
 
 from openadapt_flow.approval_mode.gate import ApprovalGate, GateVerdict, SaveContext
 from openadapt_flow.approval_mode.model import ItemDecisionKind
@@ -98,6 +99,11 @@ from openadapt_flow.repair.candidate import (
 )
 
 if TYPE_CHECKING:
+    from openadapt_flow.jit.authority import (
+        PreapprovedRepairs,
+        PrincipalRegistry,
+        SignedAdmissionPolicy,
+    )
     from openadapt_flow.jit.keys import CustomerModelKey
     from openadapt_flow.repair.lifecycle import RepairStore
 
@@ -130,6 +136,7 @@ _STOP_REASON = "self_repair_probe"
 #: The replayer's own wording for its two target-resolution refusals.
 _NOT_FOUND = "Could not resolve target for step"
 _BELOW_RUNG = "only resolved via the"
+_NOT_ACTIONABLE = "is not an identity-bearing actionable DOM element"
 #: The replayer's wording when a step acted but its expected screen never came.
 _EXPECTED_SCREEN = "Postconditions failed for step"
 _UNTRUSTED_RUNGS = frozenset({"geometry", "grounder"})
@@ -333,6 +340,15 @@ class ReplayTarget:
     def open(self, fault: Optional[str] = None) -> AppSession:
         return self._open(fault)
 
+    def with_params(self, params: Mapping[str, Any]) -> "ReplayTarget":
+        """The same target for another item's parameters."""
+
+        import copy
+
+        twin = copy.copy(self)
+        twin.params = dict(params)
+        return twin
+
     def execute(
         self,
         workflow: Workflow,
@@ -448,10 +464,12 @@ class _ProbeGate(ApprovalGate):
         checks: Callable[[SaveContext], ProbeOutcome],
         *,
         resume_form_state: Optional[tuple[str, str]] = None,
+        release: bool = False,
     ) -> None:
         super().__init__("not_gated")
         self._checks = checks
         self._resume_form_state = resume_form_state
+        self._release = release
         self.outcome: Optional[ProbeOutcome] = None
         self._approved_result: Optional[int] = None
 
@@ -475,6 +493,11 @@ class _ProbeGate(ApprovalGate):
                 step_id=ctx.step.id,
                 checks=[("probe_error", False, type(exc).__name__)],
             )
+        if self._release and self.outcome.passed:
+            # An item held behind another item's approval: the person approved
+            # the patch; this item's own pre-save checks passed.
+            self._approved_result = id(ctx.result)
+            return GateVerdict(proceed=True, decision=None, checks=())
         if (
             self._resume_form_state is not None
             and self.outcome.passed
@@ -527,6 +550,12 @@ class SelfRepairResult:
     candidate: Optional[RepairCandidate] = None
     patched_bundle: Optional[Path] = None
     approval_request_id: Optional[str] = None
+    #: Which halt this was: ``(step_id, mode, kind)``. Items with the same
+    #: fingerprint wait behind one repair (:class:`~openadapt_flow.repair.queue.RepairQueue`).
+    halt_fingerprint: Optional[tuple[str, str, str]] = None
+    #: The patch and probe behind an ``awaiting_approval`` result, for
+    #: :meth:`SelfRepair.release`.
+    pending: Optional[tuple[Any, Any]] = field(default=None, repr=False)
 
     @property
     def verified(self) -> bool:
@@ -549,6 +578,8 @@ class _Patch:
     checked_step_ids: tuple[str, ...] = ()
     #: One line for the person: what the patch adds and changes.
     summary: str = ""
+    #: The halted page's text, for matching a dialog against a policy.
+    halt_text: str = ""
 
 
 # -- the loop ------------------------------------------------------------------
@@ -577,6 +608,10 @@ class SelfRepair:
             request_sha256)`` as soon as a person is asked, for example to
             print the ``item-approval approve`` command or send a
             notification.
+        repair_policy: A person-signed admission policy whose
+            ``preapproved_repairs`` lists change classes that may apply
+            without a person (see :func:`preapproved_change_class`).
+        policy_registry: The registry that policy's signer is in.
     """
 
     def __init__(
@@ -594,6 +629,8 @@ class SelfRepair:
         approval_poll_s: float = 0.5,
         canary_runs: int = 5,
         on_approval_request: Optional[Callable[[Path, str, str], None]] = None,
+        repair_policy: Optional["SignedAdmissionPolicy"] = None,
+        policy_registry: Optional["PrincipalRegistry"] = None,
         vision: Any = None,
         sleep: Callable[[float], None] = time.sleep,
         monotonic: Callable[[], float] = time.monotonic,
@@ -637,6 +674,12 @@ class SelfRepair:
         self.approval_poll_s = max(0.01, float(approval_poll_s))
         self.canary_runs = int(canary_runs)
         self.on_approval_request = on_approval_request
+        if repair_policy is not None and policy_registry is None:
+            raise SelfRepairRefused(
+                "a repair policy needs the principal registry its signer is in"
+            )
+        self.repair_policy = repair_policy
+        self.policy_registry = policy_registry
         if vision is None:
             import openadapt_flow.vision as vision
         self.vision = vision
@@ -646,12 +689,22 @@ class SelfRepair:
 
     # -- public entry point --------------------------------------------------
 
-    def run(self, bundle_dir: Path | str, run_dir: Path | str) -> SelfRepairResult:
+    def run(
+        self,
+        bundle_dir: Path | str,
+        run_dir: Path | str,
+        *,
+        hold: Optional[Callable[[tuple[str, str, str]], bool]] = None,
+    ) -> SelfRepairResult:
         """Run the item; on a repairable halt, repair it under a person.
 
         ``run_dir`` holds the item's own run (``report.json``). Self-repair
         work goes under ``run_dir/self-repair/``; the approval request goes in
         ``run_dir/item-approval/`` so the decision portal lists it.
+
+        ``hold(fingerprint)`` is asked once the halt is known to be
+        repairable; when it returns True the agent is not called and the
+        result is ``held`` (another item's repair already covers this halt).
         """
 
         bundle_dir = Path(bundle_dir)
@@ -699,6 +752,27 @@ class SelfRepair:
                 )
             step, mode, halted = found
             evidence.halted_step_id = step.id
+            fingerprint = (step.id, mode, _halt_kind(halted.error or ""))
+            if hold is not None and hold(fingerprint):
+                evidence.steps.append(
+                    SelfRepairStepRecord(
+                        stage="halt",
+                        passed=True,
+                        detail=f"{step.id} halted the same way as an item whose "
+                        "repair waits for a person; held behind it",
+                    )
+                )
+                held = self._finish(
+                    "held",
+                    "held behind another item's repair",
+                    evidence,
+                    report,
+                    run_dir,
+                    work,
+                    halted_report=report,
+                )
+                held.halt_fingerprint = fingerprint
+                return held
             evidence.steps.append(
                 SelfRepairStepRecord(
                     stage="halt",
@@ -735,7 +809,7 @@ class SelfRepair:
         finally:
             _close(session)
         if patch is None or probe is None:
-            return self._finish(
+            result = self._finish(
                 "no_fix",
                 evidence.steps[-1].detail if evidence.steps else "no proposal",
                 evidence,
@@ -744,12 +818,115 @@ class SelfRepair:
                 work,
                 halted_report=report,
             )
-        try:
-            return self._govern_and_resume(
-                workflow, bundle_dir, patch, probe, report, run_dir, work, evidence
+        else:
+            try:
+                result = self._govern_and_resume(
+                    workflow, bundle_dir, patch, probe, report, run_dir, work, evidence
+                )
+            except Exception as exc:  # noqa: BLE001 - fail closed, never half-promoted
+                result = self._fail_closed(exc, evidence, report, run_dir, work, patch)
+        result.halt_fingerprint = fingerprint
+        return result
+
+    def with_target(self, target: SelfRepairTarget) -> "SelfRepair":
+        """The same self-repair (agent, store, policy, limits) on ``target``."""
+
+        import copy
+
+        twin = copy.copy(self)
+        twin.target = target
+        return twin
+
+    def release(
+        self,
+        pending: SelfRepairResult,
+        held: Sequence[tuple["SelfRepair", SelfRepairResult]] = (),
+    ) -> list[SelfRepairResult]:
+        """Wait for the one answer to ``pending``; resume it and every held item.
+
+        ``pending`` is an ``awaiting_approval`` result. ``held`` pairs each
+        item held behind it with a self-repair for that item's own target
+        (:meth:`with_target`). On approval the candidate is approved under
+        that person, staged and put in its canary window; ``pending`` resumes
+        with the form the person saw, and each held item resumes with its own
+        pre-save checks. On a decline or no answer nothing is saved and the
+        results say so. Returns the new results, ``pending`` first.
+        """
+
+        from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
+
+        if pending.status != "awaiting_approval" or pending.pending is None:
+            raise SelfRepairRefused("release needs an awaiting_approval result")
+        if pending.candidate is None or pending.approval_request_id is None:
+            raise SelfRepairRefused("the pending result has no candidate or request")
+        patch, probe = pending.pending
+        run_dir = pending.run_dir
+        work = run_dir / "self-repair"
+        store = ItemApprovalStore(run_dir)
+        request = store.read_request(pending.approval_request_id)
+        answer, why = self._wait_for(store, request, pending.candidate.candidate_id)
+        evidence = pending.evidence
+        halted = pending.halted_report or pending.report
+        if answer is None:
+            return [pending]
+        candidate = self.store.load_candidate(pending.candidate.candidate_id)
+        settled = self._settle_answer(
+            answer,
+            patch,
+            candidate,
+            evidence,
+            halted,
+            run_dir,
+            work,
+            request.request_id,
+        )
+        if isinstance(settled, SelfRepairResult):
+            outcome = [settled]
+            for item, result in held:
+                result.evidence.reason = f"{settled.status} for the item it waited on"
+                outcome.append(result)
+            return outcome
+        results = [
+            self._resume(
+                patch,
+                probe,
+                settled,
+                evidence,
+                halted,
+                run_dir,
+                work,
+                request.request_id,
             )
-        except Exception as exc:  # noqa: BLE001 - fail closed, never half-promoted
-            return self._fail_closed(exc, evidence, report, run_dir, work, patch)
+        ]
+        for item, result in held:
+            item_work = result.run_dir / "self-repair"
+            item_evidence = result.evidence
+            item_evidence.candidate_id = settled.candidate_id
+            item_evidence.patched_bundle_digest = settled.proposed_content_digest
+            item_evidence.approved_by = evidence.approved_by
+            item_evidence.approval_route = evidence.approval_route
+            item_evidence.steps.append(
+                SelfRepairStepRecord(
+                    stage="approval",
+                    passed=True,
+                    detail=f"released by the approval of {settled.candidate_id} for "
+                    f"{pending.run_dir.name}",
+                )
+            )
+            results.append(
+                item._resume(
+                    patch,
+                    probe,
+                    settled,
+                    item_evidence,
+                    result.halted_report or result.report,
+                    result.run_dir,
+                    item_work,
+                    request.request_id,
+                    release=True,
+                )
+            )
+        return results
 
     def _fail_closed(
         self,
@@ -1045,6 +1222,7 @@ class SelfRepair:
         from openadapt_flow.runtime.heal import persist_heal
 
         assert step.anchor is not None
+        halt_text = _page_text(session.backend, self.vision, live_png)
         natives = proposal.bridge()
         if not natives:
             raise SelfRepairRefused("the proposal has no action")
@@ -1281,6 +1459,7 @@ class SelfRepair:
             target_region=target_region,  # type: ignore[arg-type]
             checked_step_ids=checked,
             summary=summary,
+            halt_text=halt_text,
         )
 
     def _retarget(
@@ -1488,6 +1667,7 @@ class SelfRepair:
         halted_form: Optional[tuple[str, str]],
         fault: Optional[str] = None,
         resume_form_state: Optional[tuple[str, str]] = None,
+        release: bool = False,
     ) -> ProbeOutcome:
         """Run the patched bundle to the last point before the first save."""
 
@@ -1508,7 +1688,7 @@ class SelfRepair:
                 vision=self.vision,
             )
 
-        gate = _ProbeGate(checks, resume_form_state=resume_form_state)
+        gate = _ProbeGate(checks, resume_form_state=resume_form_state, release=release)
         session: Optional[AppSession] = None
         try:
             session = self.target.open(fault)
@@ -1544,10 +1724,6 @@ class SelfRepair:
         work: Path,
         evidence: SelfRepairEvidence,
     ) -> SelfRepairResult:
-        from openadapt_flow.repair.lifecycle import (
-            RepairLifecycleError,
-            observation_from_report,
-        )
 
         candidate = self.store.add_candidate(patch.candidate)
         evidence.candidate_id = candidate.candidate_id
@@ -1597,28 +1773,67 @@ class SelfRepair:
                 candidate=candidate,
                 patched_bundle=patch.bundle_dir,
             )
-        request_id, answer, why = self._ask_person(patch, probe, candidate, run_dir)
-        if answer is None:
-            evidence.steps.append(
-                SelfRepairStepRecord(
-                    stage="approval",
-                    passed=False,
-                    detail=f"{why}; the candidate waits in the repair store and "
-                    "nothing was saved",
+        request_id: Optional[str] = None
+        applied = self._apply_preapproved(patch, candidate, evidence)
+        if applied is not None:
+            candidate = applied
+        else:
+            request_id, answer, why = self._ask_person(patch, probe, candidate, run_dir)
+            if answer is None:
+                evidence.steps.append(
+                    SelfRepairStepRecord(
+                        stage="approval",
+                        passed=False,
+                        detail=f"{why}; the candidate waits in the repair store and "
+                        "nothing was saved",
+                    )
                 )
-            )
-            return self._finish(
-                "awaiting_approval",
-                why,
+                waiting = self._finish(
+                    "awaiting_approval",
+                    why,
+                    evidence,
+                    halted_report,
+                    run_dir,
+                    work,
+                    halted_report=halted_report,
+                    candidate=self.store.load_candidate(candidate.candidate_id),
+                    patched_bundle=patch.bundle_dir,
+                    approval_request_id=request_id,
+                )
+                waiting.pending = (patch, probe)
+                return waiting
+            settled = self._settle_answer(
+                answer,
+                patch,
+                candidate,
                 evidence,
                 halted_report,
                 run_dir,
                 work,
-                halted_report=halted_report,
-                candidate=self.store.load_candidate(candidate.candidate_id),
-                patched_bundle=patch.bundle_dir,
-                approval_request_id=request_id,
+                request_id,
             )
+            if isinstance(settled, SelfRepairResult):
+                return settled
+            candidate = settled
+        return self._resume(
+            patch, probe, candidate, evidence, halted_report, run_dir, work, request_id
+        )
+
+    def _settle_answer(
+        self,
+        answer: tuple[str, str, str],
+        patch: _Patch,
+        candidate: RepairCandidate,
+        evidence: SelfRepairEvidence,
+        halted_report: RunReport,
+        run_dir: Path,
+        work: Path,
+        request_id: Optional[str],
+    ) -> "RepairCandidate | SelfRepairResult":
+        """A person's answer: the approved, staged candidate, or a final result."""
+
+        from openadapt_flow.repair.lifecycle import RepairLifecycleError
+
         decision, approver, route = answer
         evidence.approval_route = route
         if decision != "approve":
@@ -1651,7 +1866,12 @@ class SelfRepair:
             )
         person = Actor(kind="human", id=approver)
         try:
-            candidate = self._approve(candidate.candidate_id, person, replay, fault)
+            candidate = self._approve(
+                candidate.candidate_id,
+                person,
+                candidate.replay_campaign,  # type: ignore[arg-type]
+                candidate.fault_campaign,  # type: ignore[arg-type]
+            )
         except (RepairLifecycleError, SelfRepairRefused) as exc:
             evidence.steps.append(
                 SelfRepairStepRecord(
@@ -1682,13 +1902,41 @@ class SelfRepair:
                 f"({route})",
             )
         )
+        return candidate
+
+    def _resume(
+        self,
+        patch: _Patch,
+        probe: ProbeOutcome,
+        candidate: RepairCandidate,
+        evidence: SelfRepairEvidence,
+        halted_report: RunReport,
+        run_dir: Path,
+        work: Path,
+        request_id: Optional[str],
+        *,
+        release: bool = False,
+    ) -> SelfRepairResult:
+        """Re-run the item with the approved bundle; the record check decides.
+
+        ``release`` is for an item held behind another item's approval: its
+        own pre-save checks must pass, but its form is its own, not the one
+        the person saw.
+        """
+
+        from openadapt_flow.repair.lifecycle import (
+            RepairLifecycleError,
+            observation_from_report,
+        )
+
         resume_dir = work / "resume"
         resumed = self._probe(
             patch,
             resume_dir,
-            halted_step_id=patch.step.id,
-            halted_form=probe.form_state,
-            resume_form_state=probe.form_state,
+            halted_step_id="" if release else patch.step.id,
+            halted_form=None if release else probe.form_state,
+            resume_form_state=None if release else probe.form_state,
+            release=release,
         )
         report = resumed.report
         if report is None:
@@ -1719,9 +1967,10 @@ class SelfRepair:
                 patched_bundle=patch.bundle_dir,
                 approval_request_id=request_id,
             )
-        candidate = self.store.record_canary_run(
-            candidate.candidate_id, observation_from_report(report)
-        )
+        if self.store.load_candidate(candidate.candidate_id).state == "canary":
+            candidate = self.store.record_canary_run(
+                candidate.candidate_id, observation_from_report(report)
+            )
         evidence.steps.append(
             SelfRepairStepRecord(
                 stage="resume",
@@ -1743,6 +1992,96 @@ class SelfRepair:
             patched_bundle=patch.bundle_dir,
             approval_request_id=request_id,
         )
+
+    def _apply_preapproved(
+        self,
+        patch: _Patch,
+        candidate: RepairCandidate,
+        evidence: SelfRepairEvidence,
+    ) -> Optional[RepairCandidate]:
+        """Apply the repair under the signed repair policy, or return ``None``.
+
+        ``None`` means a person decides, as without a policy. On success the
+        candidate is approved by the policy, staged, and in its canary window.
+        """
+
+        if self.repair_policy is None or self.policy_registry is None:
+            return None
+        from openadapt_flow.jit.authority import AuthorityError, verify_policy
+        from openadapt_flow.repair.lifecycle import RepairLifecycleError
+
+        def to_person(why: str) -> None:
+            evidence.steps.append(
+                SelfRepairStepRecord(
+                    stage="approval",
+                    passed=False,
+                    detail=f"not pre-approved ({why}); asking a person"[:1024],
+                )
+            )
+
+        try:
+            granted = verify_policy(self.repair_policy, self.policy_registry)
+        except AuthorityError as exc:
+            to_person(f"the repair policy is not usable: {exc}")
+            return None
+        allowed = granted.preapproved_repairs
+        if allowed is None:
+            to_person("the policy pre-approves no repairs")
+            return None
+        origin = getattr(self.target, "execution_origin", None)
+        host = (urlsplit(str(origin)).netloc or "").lower() if origin else ""
+        if not host or host not in granted.allowed_hosts:
+            to_person(
+                f"the app at {host or 'an unknown origin'!r} is not in the policy"
+            )
+            return None
+        assert candidate.prior_bundle_path is not None
+        change, why = preapproved_change_class(
+            Workflow.load(Path(candidate.prior_bundle_path)), patch.workflow, allowed
+        )
+        pattern = None
+        if change == "dismiss_dialog":
+            pattern = _matched_pattern(patch.halt_text, allowed.dialog_patterns)
+            if pattern is None:
+                change, why = None, "the dialog matches no pattern the policy declares"
+        if change is None:
+            to_person(why)
+            return None
+        try:
+            approved = self.store.approve_under_repair_policy(
+                candidate.candidate_id,
+                policy=self.repair_policy,
+                registry=self.policy_registry,
+                change_class=change,
+                dialog_pattern=pattern,
+            )
+            self.store.stage(approved.candidate_id, AUTOMATION)
+            approved = self.store.start_canary(
+                approved.candidate_id, AUTOMATION, max_runs=self.canary_runs
+            )
+        except RepairLifecycleError as exc:
+            to_person(str(exc))
+            return None
+        assert approved.approval is not None
+        digest = granted.digest()
+        evidence.applied_automatically = True
+        evidence.change_class = change
+        evidence.repair_policy_digest = digest
+        evidence.approved_by = approved.approval.approved_by
+        evidence.approval_route = "repair_policy"
+        evidence.steps.append(
+            SelfRepairStepRecord(
+                stage="approval",
+                passed=True,
+                detail=(
+                    f"applied automatically: {change} pre-approved by policy "
+                    f"{digest.removeprefix('sha256:')[:16]} signed by "
+                    f"{granted.signer}; undo with openadapt-flow repair rollback "
+                    f"--candidate-id {approved.candidate_id}"
+                )[:1024],
+            )
+        )
+        return approved
 
     def _approve(
         self,
@@ -1889,9 +2228,7 @@ class SelfRepair:
 
         from openadapt_flow.approval_mode.approver import DEFAULT_APPROVER_POLICY
         from openadapt_flow.approval_mode.item_approval import (
-            ItemApprovalRefused,
             ItemApprovalStore,
-            answer_refusal,
         )
         from openadapt_flow.approval_mode.model import ApprovalMode
 
@@ -1934,6 +2271,19 @@ class SelfRepair:
                 pass
         if self.approval_wait_s <= 0:
             return request.request_id, None, "no wait was configured"
+        answer, why = self._wait_for(store, request, candidate.candidate_id)
+        return request.request_id, answer, why
+
+    def _wait_for(
+        self, store: Any, request: Any, candidate_id: str
+    ) -> tuple[Optional[tuple[str, str, str]], str]:
+        """Wait for a person's answer to ``request``: ``(answer, why)``."""
+
+        from openadapt_flow.approval_mode.item_approval import (
+            ItemApprovalRefused,
+            answer_refusal,
+        )
+
         deadline = self._monotonic() + self.approval_wait_s
         while True:
             try:
@@ -1946,28 +2296,19 @@ class SelfRepair:
                 if (
                     refusal is not None
                     or answer.decided_by != "human"
-                    or not (identity.is_person)
+                    or not identity.is_person
                 ):
                     # Only a person's answer counts, and a refused answer is
                     # final for this request: nothing is saved.
-                    code = refusal or "not_a_person"
-                    return request.request_id, None, f"an answer was refused ({code})"
+                    return None, f"an answer was refused ({refusal or 'not_a_person'})"
                 store.consume(request.request_id)
                 approver = answer.approver_id or f"{answer.route}:person"
-                return (
-                    request.request_id,
-                    (answer.decision, approver, answer.route),
-                    "",
-                )
-            current = self.store.load_candidate(candidate.candidate_id)
+                return (answer.decision, approver, answer.route), ""
+            current = self.store.load_candidate(candidate_id)
             if current.state == "rejected":
-                return (
-                    request.request_id,
-                    ("decline", "repair_store:person", "repair_store"),
-                    "",
-                )
+                return ("decline", "repair_store:person", "repair_store"), ""
             if self._monotonic() >= deadline or request.expired():
-                return request.request_id, None, "nobody answered in time"
+                return None, "nobody answered in time"
             self._sleep(self.approval_poll_s)
 
     # -- bookkeeping ---------------------------------------------------------
@@ -2016,6 +2357,114 @@ class SelfRepair:
 
 
 # -- helpers ---------------------------------------------------------------------
+
+
+_IDENTITY_FIELDS = (
+    "context_text",
+    "structured_identity",
+    "identity_template",
+    "identifier_crop",
+    "identifier_region",
+)
+
+
+def preapproved_change_class(
+    prior: Workflow, patched: Workflow, allowed: "PreapprovedRepairs"
+) -> tuple[Optional[str], str]:
+    """The pre-approvable class of the change from ``prior`` to ``patched``.
+
+    Returns ``(class, "")`` when the change fits a class ``allowed`` names,
+    else ``(None, why)``. Read from the two bundles alone, so the repair store
+    re-derives it on its own:
+
+    - every step that saves, and every record check, is byte-identical;
+    - no recorded step lost or changed identity evidence, and none was
+      removed; nothing outside the steps changed;
+    - ``relabel_or_move``: one step that does not save was re-targeted;
+    - ``menu_move``: one such step was re-targeted, with up to
+      ``menu_steps`` new steps right before it;
+    - ``dismiss_dialog``: one new step after a step that does not save,
+      which now expects the dialog; the new step takes over its old
+      expected screen. (Whether the dialog matched a declared pattern is
+      checked where the screen was seen.)
+    """
+
+    from openadapt_flow.run_gate import is_consequential
+
+    old_steps = {s.id: s for s in prior.steps}
+    new_steps = {s.id: s for s in patched.steps}
+    if set(old_steps) - set(new_steps):
+        return None, "a recorded step was removed"
+    outside = {"steps", "manifest", "schema_version"}
+    if prior.model_dump(mode="json", exclude=outside) != patched.model_dump(
+        mode="json", exclude=outside
+    ):
+        return None, "something besides the steps changed"
+    retargeted: list[str] = []
+    expect_changed: list[str] = []
+    for step_id, old in old_steps.items():
+        new = new_steps[step_id]
+        if is_consequential(old, prior) or is_consequential(new, patched):
+            if old.model_dump(mode="json") != new.model_dump(mode="json"):
+                return None, f"the save step {step_id} changed"
+            continue
+        if [e.model_dump(mode="json") for e in old.effects] != [
+            e.model_dump(mode="json") for e in new.effects
+        ]:
+            return None, f"{step_id}'s record check changed"
+        for name in _IDENTITY_FIELDS:
+            if getattr(old.anchor, name, None) != getattr(new.anchor, name, None):
+                return None, f"{step_id}'s identity evidence changed"
+        rest = {"anchor", "expect"}
+        if old.model_dump(mode="json", exclude=rest) != new.model_dump(
+            mode="json", exclude=rest
+        ):
+            return None, f"{step_id} changed beyond its target"
+        if old.anchor != new.anchor:
+            retargeted.append(step_id)
+        if old.expect != new.expect:
+            expect_changed.append(step_id)
+    order = [s.id for s in patched.steps]
+    added = [s for s in patched.steps if s.id not in old_steps]
+    if any(is_consequential(s, patched) for s in added):
+        return None, "a new step saves"
+    if not added and len(retargeted) == 1 and not expect_changed:
+        change = "relabel_or_move"
+    elif added and len(retargeted) == 1 and not expect_changed:
+        at = order.index(retargeted[0])
+        if order[at - len(added) : at] != [s.id for s in added]:
+            return None, "the new steps are not right before the re-targeted step"
+        if len(added) > allowed.menu_steps:
+            return None, (
+                f"{len(added)} new step(s) exceed the policy's menu_steps "
+                f"({allowed.menu_steps})"
+            )
+        change = "menu_move"
+    elif len(added) == 1 and not retargeted and len(expect_changed) == 1:
+        halted = expect_changed[0]
+        at = order.index(halted)
+        if (
+            order[at + 1 : at + 2] != [added[0].id]
+            or added[0].expect != old_steps[halted].expect
+        ):
+            return None, "the new step does not take over the halted step's screen"
+        change = "dismiss_dialog"
+    else:
+        return None, "the change fits no pre-approvable class"
+    if change not in allowed.classes():
+        return None, f"{change} is not a class the repair policy allows"
+    return change, ""
+
+
+def _matched_pattern(text: str, patterns: Sequence[str]) -> Optional[str]:
+    """The first declared dialog pattern ``text`` matches, if any."""
+
+    import re
+
+    for pattern in patterns:
+        if re.search(pattern, text, flags=re.IGNORECASE):
+            return pattern
+    return None
 
 
 def _frame_campaign(candidate: RepairCandidate, kind: str) -> CampaignResult:
@@ -2150,7 +2599,8 @@ def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, str, Any]
                 "reason; only a target the ladder could not find is repaired"
             )
         if rung is not None and (
-            rung not in _UNTRUSTED_RUNGS or _BELOW_RUNG not in error
+            rung not in _UNTRUSTED_RUNGS
+            or (_BELOW_RUNG not in error and _NOT_ACTIONABLE not in error)
         ):
             return f"{step.id} found its target ({rung}) and stopped for another reason"
     elif (
@@ -2176,6 +2626,36 @@ def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, str, Any]
     if not report.halt or report.halt.state_id != step.id:
         return "the report's halt does not name the failed step"
     return step, mode, halted
+
+
+def _halt_kind(error: str) -> str:
+    """Which of the ladder's refusals (or a missed screen) a halt was."""
+
+    if error.startswith(_NOT_FOUND):
+        return "not_found"
+    if _BELOW_RUNG in error:
+        return "below_rung"
+    if _NOT_ACTIONABLE in error:
+        return "not_actionable"
+    if error.startswith(_EXPECTED_SCREEN):
+        return "expected_screen"
+    return "other"
+
+
+def _page_text(backend: Any, vision: Any, screen: bytes) -> str:
+    """The text the page shows now: the DOM's, else what OCR reads."""
+
+    page = getattr(backend, "page", None)
+    if page is not None:
+        try:
+            return " ".join(str(page.locator("body").inner_text()).split())
+        except Exception:  # noqa: BLE001 - fall back to OCR
+            pass
+    try:
+        lines = vision.ocr(screen)
+    except Exception:  # noqa: BLE001
+        return ""
+    return " ".join(str(getattr(line, "text", "")) for line in lines or [])
 
 
 def _before_frame(run_dir: Path, result: Any) -> Optional[bytes]:

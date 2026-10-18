@@ -400,6 +400,92 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def automatic_repairs(
+    store: RepairStore, *, since_hours: float = 24.0, now: Optional[str] = None
+) -> list[dict[str, str]]:
+    """Every repair a repair policy applied without a person, newest first.
+
+    One row per candidate approved under a repair policy within the last
+    ``since_hours``: what changed, when, under which policy and signer, its
+    state now, and the command that undoes it.
+    """
+
+    from datetime import datetime, timedelta, timezone
+
+    at = datetime.fromisoformat(now) if now else datetime.now(timezone.utc)
+    cutoff = at - timedelta(hours=since_hours)
+    rows: list[dict[str, str]] = []
+    for candidate in store.list_candidates():
+        approval = candidate.approval
+        if (
+            approval is None
+            or approval.pre_approval_policy_sha256 is None
+            or not approval.approved_by.startswith("repair-policy:")
+        ):
+            continue
+        applied = datetime.fromisoformat(approval.approved_at)
+        if applied.tzinfo is None:
+            applied = applied.replace(tzinfo=timezone.utc)
+        if applied < cutoff:
+            continue
+        change = next(
+            (
+                record.note
+                for record in candidate.history
+                if record.to_state == "approved"
+            ),
+            "",
+        )
+        rows.append(
+            {
+                "candidate_id": candidate.candidate_id,
+                "workflow": candidate.workflow_name,
+                "applied_at": approval.approved_at,
+                "change": change,
+                "policy": approval.pre_approval_policy_sha256[:16],
+                "signed_by": approval.pre_approved_by or "",
+                "state": candidate.state,
+                "undo": (
+                    f"openadapt-flow repair rollback --candidate-id "
+                    f"{candidate.candidate_id} --store {store.root}"
+                    if candidate.state in ("canary", "active")
+                    else ""
+                ),
+            }
+        )
+    rows.sort(key=lambda row: row["applied_at"], reverse=True)
+    return rows
+
+
+def cmd_digest(args: argparse.Namespace) -> int:
+    """Print the repairs applied without a person (the daily digest)."""
+    import json
+
+    store = _store(args)
+    rows = automatic_repairs(store, since_hours=float(args.since_hours))
+    if getattr(args, "json", False):
+        print(json.dumps(rows, indent=2))
+        return 0
+    if not rows:
+        print(
+            f"no repairs were applied automatically in the last "
+            f"{args.since_hours:g} hours ({store.root})"
+        )
+        return 0
+    print(
+        f"{len(rows)} repair(s) applied automatically in the last {args.since_hours:g} hours:"
+    )
+    for row in rows:
+        print(
+            f"- {row['applied_at']}  {row['workflow']}  {row['change']}\n"
+            f"  candidate {row['candidate_id']} [{row['state']}], policy "
+            f"{row['policy']} signed by {row['signed_by']}"
+        )
+        if row["undo"]:
+            print(f"  undo: {row['undo']}")
+    return 0
+
+
 _HANDLERS = {
     "register": cmd_register,
     "list": cmd_list,
@@ -412,6 +498,7 @@ _HANDLERS = {
     "canary-record": cmd_canary_record,
     "rollback": cmd_rollback,
     "status": cmd_status,
+    "digest": cmd_digest,
 }
 
 
@@ -424,4 +511,9 @@ def run_repair_command(args: argparse.Namespace) -> int:
     return handler(args)
 
 
-__all__ = ["run_repair_command", "build_candidate", "detached_candidate_path"]
+__all__ = [
+    "automatic_repairs",
+    "build_candidate",
+    "detached_candidate_path",
+    "run_repair_command",
+]

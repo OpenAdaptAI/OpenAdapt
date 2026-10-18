@@ -56,6 +56,7 @@ if TYPE_CHECKING:  # the fleet package imports this module at run time
     from openadapt_flow.fleet.policy import RoleRegistry, SignedPromotionPolicy
     from openadapt_flow.fleet.signing import FleetTrust
     from openadapt_flow.fleet.status import FleetStatusSource, StatusHighWater
+    from openadapt_flow.jit.authority import PrincipalRegistry, SignedAdmissionPolicy
 
 _ACTIVE_NAME = "ACTIVE.json"
 _CANDIDATES_DIR = "candidates"
@@ -471,6 +472,133 @@ class RepairStore:
             note=(
                 f"approved under policy {grant.policy_sha256[:16]} "
                 f"(policy approved by {grant.approved_by})"
+            ),
+        )
+
+    # -- pre-approved self-repairs (a person-signed repair policy) ----------
+
+    def approve_under_repair_policy(
+        self,
+        candidate_id: str,
+        *,
+        policy: "SignedAdmissionPolicy",
+        registry: "PrincipalRegistry",
+        change_class: str,
+        dialog_pattern: Optional[str] = None,
+        now: Optional[datetime] = None,
+    ) -> RepairCandidate:
+        """Review and approve a self-repair under a person-signed policy.
+
+        The second narrow exception to "a person reviews and approves". It
+        applies only to a self-repair candidate (source ``model_suggestion``,
+        provenance ``self_repair``) whose agent the policy names, that touches
+        no identity evidence and weakens no contract, and whose replay and
+        fault campaigns already passed. This method verifies the policy's
+        signature and expiry itself, then re-derives the change class from the
+        two bundles on disk (:func:`preapproved_change_class`) and refuses
+        unless it is the claimed class and the policy allows it. For a
+        dismissed dialog the caller states which policy pattern the dialog
+        matched; the store checks that the policy declares it.
+
+        On success the candidate moves candidate -> reviewed -> replay_passed
+        -> fault_passed -> approved, each step by the policy's automation
+        actor, and the approval names the policy digest and the person who
+        signed it.
+        """
+
+        from openadapt_flow.jit.authority import AuthorityError, verify_policy
+        from openadapt_flow.repair.self_repair import preapproved_change_class
+
+        try:
+            granted = verify_policy(policy, registry, now=now)
+        except AuthorityError as exc:
+            raise RepairLifecycleError(f"refused: repair policy: {exc}") from exc
+        allowed = granted.preapproved_repairs
+        if allowed is None or change_class not in allowed.classes():
+            raise RepairLifecycleError(
+                f"refused: the repair policy does not pre-approve {change_class!r}"
+            )
+        candidate = self.load_candidate(candidate_id)
+        provenance = candidate.provenance
+        if (
+            candidate.source != "model_suggestion"
+            or provenance is None
+            or provenance.repaired_by != "self_repair"
+        ):
+            raise RepairLifecycleError(
+                "refused: a repair policy applies only to self-repair candidates"
+            )
+        if provenance.agent_id not in granted.agent_principals:
+            raise RepairLifecycleError(
+                f"refused: the repair policy does not name agent "
+                f"{provenance.agent_id!r}"
+            )
+        if any(change.identity for change in candidate.binding_changes):
+            raise RepairLifecycleError(
+                "refused: the repair touches identity evidence; a person must "
+                "approve it"
+            )
+        if candidate.contract_weakenings:
+            raise RepairLifecycleError("refused: the repair weakens the contract")
+        if candidate.state != "candidate" or not candidate.campaigns_passed():
+            raise RepairLifecycleError(
+                "refused: policy approval needs a fresh candidate whose replay and "
+                "fault campaigns passed"
+            )
+        if change_class == "dismiss_dialog" and (
+            not dialog_pattern or dialog_pattern not in allowed.dialog_patterns
+        ):
+            raise RepairLifecycleError(
+                "refused: the dismissed dialog matched no pattern the policy declares"
+            )
+        prior_path = candidate.prior_bundle_path
+        proposed_path = candidate.proposed_bundle_path
+        if not prior_path or not proposed_path:
+            raise RepairLifecycleError("refused: the candidate names no bundles")
+        prior_wf = Workflow.load(Path(prior_path))
+        proposed_wf = Workflow.load(Path(proposed_path))
+        self._require_digest(prior_wf, candidate.prior_content_digest, "prior")
+        self._require_digest(proposed_wf, candidate.proposed_content_digest, "proposed")
+        derived, reason = preapproved_change_class(prior_wf, proposed_wf, allowed)
+        if derived != change_class:
+            raise RepairLifecycleError(
+                f"refused: the bundles show {derived or 'no pre-approvable change'}"
+                f", not {change_class!r}" + (f" ({reason})" if reason else "")
+            )
+        self._reverify_invariants(candidate)
+        digest = granted.digest().removeprefix("sha256:")
+        actor = Actor(kind="automation", id=f"repair-policy:{digest[:16]}")
+        candidate.reviewed_by = (
+            f"repair-policy:{digest[:16]} (signed by {granted.signer})"
+        )
+        candidate = self._transition(
+            candidate,
+            "reviewed",
+            actor,
+            note=f"{change_class} pre-approved by policy {digest[:16]}",
+        )
+        for result in (candidate.replay_campaign, candidate.fault_campaign):
+            assert result is not None
+            candidate = self.record_campaign(candidate_id, result, actor)
+        if candidate.state != "fault_passed":
+            raise RepairLifecycleError(
+                f"refused: the campaigns left the candidate {candidate.state}"
+            )
+        candidate.approval = ApprovalRecord(
+            approved_by=f"repair-policy:{digest[:16]}",
+            non_interactive=True,
+            prior_content_digest=candidate.prior_content_digest,
+            proposed_content_digest=candidate.proposed_content_digest,
+            pre_approval_policy_sha256=digest,
+            pre_approved_by=granted.signer,
+        )
+        return self._transition(
+            candidate,
+            "approved",
+            actor,
+            note=(
+                f"{change_class} applied under repair policy {digest[:16]} "
+                f"(signed by {granted.signer})"
             ),
         )
 

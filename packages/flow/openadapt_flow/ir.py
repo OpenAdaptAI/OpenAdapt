@@ -4278,6 +4278,7 @@ class SelfRepairEvidence(BaseModel):
         "awaiting_approval",
         "resumed",
         "resume_failed",
+        "held",
     ]
     reason: str = Field(default="", max_length=1024)
     halted_run_dir: Optional[str] = None
@@ -4292,6 +4293,11 @@ class SelfRepairEvidence(BaseModel):
     patched_bundle_digest: Optional[str] = Field(default=None, pattern="^[a-f0-9]{64}$")
     approved_by: Optional[str] = Field(default=None, max_length=256)
     approval_route: Optional[str] = Field(default=None, max_length=64)
+    #: True when a person-signed repair policy pre-approved the change, so no
+    #: person was asked. ``change_class`` names the class it fit.
+    applied_automatically: bool = False
+    change_class: Optional[str] = Field(default=None, max_length=64)
+    repair_policy_digest: Optional[str] = Field(default=None, max_length=80)
     steps: list[SelfRepairStepRecord] = Field(default_factory=list)
 
 
