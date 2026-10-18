@@ -29,6 +29,20 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   `--allow-halt` class you named). Handoffs copy effect-bound parameter
   values from the predecessor's confirmed effect receipt. Missing evidence
   HALTs. The launcher form is `openadapt flow compose`.
+- **Route between separately admitted variants.** When one workflow is
+  really several programs (one clinic's EMR has different custom fields,
+  Medicare claims take a different path, a dark-theme VDI renders
+  differently), a variant set keeps each variant as its own bundle with its
+  own admission. A deterministic pre-run router picks exactly one variant from
+  the item's inputs and a fingerprint of the first screen (luminance theme
+  class plus local OCR markers such as an app version or tenant banner), with
+  no model call. Conditions must be provably disjoint at authoring time. No
+  match, an ambiguous match, a missing frame, or a refused admission halts with
+  a named reason; the router never guesses or falls back. The run report and
+  receipt name the variant that ran, and `variants add --derived-from` promotes
+  an admitted repaired bundle to a new variant
+  (`openadapt-flow variants author`, `route`, `run`). See
+  [`VARIANTS.md`](VARIANTS.md).
 - **See what a demonstration compiled into.** `visualize` renders a
   program-graph view of a bundle before it runs: the ordered steps, the
   resolution ladder each step will try, where an identity gate is armed,
