@@ -571,7 +571,7 @@ def create_app(
     def attention_notification() -> dict[str, Any]:
         """PHI-free payload for a future desktop/tray OS notification."""
         return attention_mod.notification(
-            attention_mod.list_attention(runs)
+            attention_mod.list_attention(runs), _service_notice_count()
         ).model_dump()
 
     # -- save approvals (decision portal) -----------------------------------
@@ -621,6 +621,22 @@ def create_app(
         except save_approvals_mod.SaveApprovalRefused as exc:
             raise HTTPException(status_code=409, detail=exc.code) from exc
         return JSONResponse(content=receipt.model_dump(mode="json"))
+
+    def _service_notice_count() -> int:
+        from openadapt_flow import onprem_reboot
+
+        root = onprem_reboot.service_root_for(runs)
+        return onprem_reboot.open_notice_count(root) if root else 0
+
+    @app.get("/api/service/notices")
+    def service_notices() -> list[dict[str, Any]]:
+        """Open on-prem service notices (restart awaiting sign-in, ...)."""
+        from openadapt_flow import onprem_reboot
+
+        root = onprem_reboot.service_root_for(runs)
+        if root is None:
+            return []
+        return onprem_reboot.summarize(onprem_reboot.list_notices(root))
 
     @app.get("/api/attention/{run_id:path}")
     def attention_detail(run_id: str) -> dict[str, Any]:
