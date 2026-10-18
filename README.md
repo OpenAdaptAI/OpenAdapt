@@ -1,520 +1,200 @@
+<div align="center">
+
 # OpenAdapt
 
-[![CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml)
-[![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml)
-[![PyPI](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/)
-[![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE)
-[![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
+**A person or an agent shows a task in an application with no usable API. OpenAdapt compiles it into a program that makes the same entry every time, checks that it's the right record, and reads the save back.**
 
-**A person or an agent shows OpenAdapt a task in your EHR, portal, or desktop app. It becomes a program on your computer that repeats the same steps with new details, with no model calls.**
+[![CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml) [![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml) [![PyPI](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/) [![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE) [![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
-A person approves each workflow before it handles real work. Whether a run
-also waits for a person before each save is a setting of the run. Where your
-system allows a second read, OpenAdapt reads the saved record back. When
-something doesn't match, it stops and asks a person instead of guessing.
+[Documentation](https://docs.openadapt.ai) · [Quickstart](https://docs.openadapt.ai/tutorials/quickstart/) · [Live demo](https://app.openadapt.ai/demo) · [Website](https://openadapt.ai) · [Discord](https://discord.gg/yF527cQbDG)
 
-To watch it work first, open the [live demo](https://app.openadapt.ai/demo).
-It shows recorded runs that use synthetic data.
-
-**Status:** the engine is free, MIT-licensed, and installs from PyPI. Each
-workflow is tested on its own app and environment before it runs on real
-records.
-
-| Platform | How OpenAdapt drives it | Tested so far |
-|---|---|---|
-| Web apps | Playwright (Chromium) | Every change in CI; OpenEMR benchmark below |
-| Windows apps | UI Automation | 3 of 3 trials on an in-tree WinForms app |
-| macOS apps | Accessibility | 3 of 3 trials on TextEdit, one Mac |
-| Linux apps | AT-SPI on X11 | A GTK3 app in CI; Wayland needs a portal session |
-| Remote desktop (RDP) | Screen pixels, keyboard, mouse | 3 of 3 trials into Windows 11 over a real network |
-| Citrix | Screen pixels, keyboard, mouse | A stand-in without a live Citrix session |
-
-[What works today](https://docs.openadapt.ai/get-started/what-works-today/)
-has the details for each platform.
-
-## How it works
-
-```mermaid
-flowchart TD
-    D["One or more demonstrations:<br/>a person or an agent shows the task"] --> C["Compile an inspectable program"]
-    C --> CE["Certify: check it against a policy"]
-    CE --> Q["Qualify: test it on your system with your cases"]
-    Q --> I
-    subgraph RUN["Each run"]
-        direction LR
-        I["Identity check:<br/>right record?"] --> A["Act:<br/>enter the data"]
-        A --> E["Effect check:<br/>read the result back"]
-    end
-    E --> V(["VERIFIED"])
-    E --> R(["RECONCILIATION_REQUIRED"])
-    A --> R
-    I --> H(["HALTED"])
-    E --> H
-    V --> S["Receipt, or a signed Seal"]
-    H -.->|"a person resolves it<br/>and can show the fix"| C
-```
-
-`HALTED` means a check failed, so the run stopped and asked a person.
-`RECONCILIATION_REQUIRED` means a save may have gone through, so a person
-checks the record before anything is retried. A fix that a person shows after
-a halt becomes a new candidate program, and it must pass qualification again
-before it replaces the old one. [How a run ends](#how-a-run-ends) lists every
-outcome, and the [glossary](https://docs.openadapt.ai/reference/glossary/)
-defines each step.
-
-## One referral, three ways
-
-| | By hand | AI agent | OpenAdapt |
-|---|---|---|---|
-| Median time per referral | Not timed* | 36.5 s | 29.7 s |
-| Correct saves, all warm runs | Not scored | 69 of 70 | 103 of 105 |
-| Model fees per referral | None | about $0.08 (median) | $0 |
-| Screens sent to a model | None | 10 (median) | None |
-| Path | Up to the person | 48 actions (median), varies | Same 41 steps |
-
-*By hand: one baseline run of a test script at a person's pace (not timed across repeated runs). AI agent: Claude Sonnet 5.5, list price.
-
-Same test OpenEMR, same synthetic referrals, 14 and 15 Oct 2026. Times run from sign-in to a saved record that a separate database query read back, 12 of 12 fields. The medians are over 62 timed warm runs each (the first block of each arm is left out because another process shared the CPU then), so OpenAdapt was about 19% faster. The two OpenAdapt misses stopped without saving a chart; the agent miss finished without saving one. Engine certification was off in this benchmark, so these runs end "finished, not checked" by the engine's own label; the separate read-back is what scored them. [How we measured](https://openadapt.ai/compare/computer-use-agents).
-
-<!--
-  IMAGE PLACEHOLDER for the design wave. Replace this comment with the image.
-  File: media/before-after-referral.png, 1600x800, solid light background so it
-  reads in GitHub dark mode. Label it "Illustration".
-  Reference it by its absolute raw.githubusercontent.com URL. PyPI shows this
-  README too, and a relative image path doesn't render there.
-  Left column, "Today": a staff member keys a referral into a generic EMR
-  window and trusts the "Saved" banner.
-  Right column, "With OpenAdapt": the same screens, the saved record read back
-  and compared with the input, and a mismatch that stops the run and sends one
-  question to a person.
-  No vendor trade dress or logos. Alt text must describe both columns.
--->
-
-## What changes for your team
-
-Here's one example: a faxed referral that staff enter into the EMR.
-
-| | Today | With OpenAdapt |
-|---|---|---|
-| Entering it | A staff member keys each referral by hand. Two hospital time studies put one faxed referral at about 10 to 12 minutes of staff time. | OpenAdapt enters the approved fields in the same EMR screens your staff use. |
-| Knowing it saved | Someone sees "Saved" and moves on. | OpenAdapt reads the saved record back and compares it with what it entered. |
-| When something's off | It turns up later, at booking or billing. | The run stops before it guesses, and a person decides what happens next. |
-| Your staff's part | Type every referral. | Review the runs that OpenAdapt stops on. |
-| What you set up | Nothing new. | No EMR integration. The record check needs a second way to read the record, such as a report, an API, or a read-only login. |
-
-Sources for the "Today" times:
-[UCSF Pediatric Access Center, JAMIA Open 2020](https://pmc.ncbi.nlm.nih.gov/articles/PMC7660949/)
-(mean 719 seconds per faxed referral, including a call to the patient), and
-[Calderdale and Huddersfield NHS Foundation Trust, HFMA case study 2024](https://www.hfma.org.uk/system/files/2024-04/Using%20digital%20technologies%20to%20process%20admin%20tasks%20Case%20Study%20v7.pdf)
-(10 minutes per referral). Nobody has measured an "after" time with OpenAdapt
-yet, so the table doesn't claim a time saving.
-
-## What you see and control
-
-Every run ends with one of these results:
-
-| Result | What it means |
-|---|---|
-| Done and checked | It saved the entry and read the record back to confirm it. |
-| Stopped before saving | Something didn't match, so it stopped before it changed anything and asked a person. Nothing was written. <!-- vocab-allow: no-change-claim -- defines the result that only a proven no-effect outcome gets --> |
-| Blocked before saving | A rule, an approval, or the right-record check blocked the run before it saved anything. Nothing was written. <!-- vocab-allow: no-change-claim -- defines the result that only a proven no-effect outcome gets --> |
-| Check the record | A save may have gone through. A person checks the record before anything is retried. |
-| Finished, not checked | It did the steps but didn't confirm the saved result, as in a practice run. |
-| Didn't finish | It couldn't complete the task. Its run report says what's known about whether anything was written. |
-
-- You get a run report for every run. A run that's done and checked also
-  gets a receipt that shows what was checked and the result. The receipt
-  leaves out typed values and screenshots.
-- Before it types, it can confirm that it's in the right patient's chart.
-- When a screen changes, it finds the same field again or stops. A change to
-  the automation goes live only after a person approves it.
-- It runs on a computer you control, or on one we host. Recordings and screens
-  stay on that computer unless you approve sharing them.
-- A routine run makes no AI model calls.
-
-## Two ways to start
-
-### Have a workflow to hand off
-
-To hand off a task your team repeats, tell us about it at
-[openadapt.ai/contact](https://openadapt.ai/contact).
-
-1. A person or an agent shows the task on your own system.
-2. We build the automation and test it with your own cases before it goes
-   live.
-3. We keep it working. When a screen changes, we propose a fix and a person on
-   your team approves it.
-
-We scope services per workflow. Hosted plans are on the
-[pricing page](https://openadapt.ai/pricing). If your own AI product decides
-what to enter, OpenAdapt can make that final entry for it and return the
-result. See [OpenAdapt Execute](https://openadapt.ai/execute).
-
-### Run it yourself
-
-The engine is free and open source under the MIT license. Run it with one
-command on any operating system and any installed Python:
+</div>
 
 ```bash
 uvx --python 3.12 openadapt quickstart --break-it
 ```
 
-[uv](https://docs.astral.sh/uv/getting-started/installation/) fetches Python
-3.12 for the run. With Python 3.10, 3.11, or 3.12 already active,
-`python -m pip install --upgrade openadapt` followed by
-`openadapt quickstart --break-it` does the same.
+No account or API key. [uv](https://docs.astral.sh/uv/getting-started/installation/)
+fetches Python 3.12 if you need it; with Python 3.10 to 3.12 already installed,
+`python -m pip install --upgrade openadapt` then `openadapt quickstart --break-it`
+does the same.
 
-This runs a synthetic clinic task twice on your computer. The first run is
-done and checked. In the second run, the test server rejects the save after
-the app shows that it saved. The record check finds no saved record, so the
-run stops and leaves the record for a person to check.
+## What the quickstart shows
 
-To start from a packaged workflow instead of a recording, run
-`openadapt pull --list`, then for example `openadapt pull openemr/new-referral`.
-Registry bundles are labeled `example` until they pass certification.
+The command runs a synthetic clinic task twice on your computer. The first run
+saves an entry and confirms it through the app's read-only API. For the second
+run, the server is set to reject the write after the app shows its success
+banner. This is real output from `openadapt` 1.17.0:
 
-The [developer guide](#developer-guide) below covers authoring your own
-workflow, and [Evidence](#evidence) lists what we've measured so far.
-
-## Give your agent a program, not a mouse
-
-Your agent decides what to enter. Instead of sending screenshots to a model
-and clicking, it calls a taught workflow as one tool and gets back an outcome:
-done and checked, stopped before saving, check the record, or didn't run.
-
-```bash
-openadapt agent serve --mode production --bundles <bundle or directory of bundles>
-openadapt agent emit-skill <bundle> --out ~/.claude/skills
-```
-
-`serve` starts an MCP server over stdio; leave out `--mode production` to let
-the client list workflows without starting them. `emit-skill` writes an Agent
-Skill that tells the agent how to call the workflow. See
-[Give an agent the run tool](#give-an-agent-the-run-tool) and the
-[`openadapt-agent` README](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent).
-
----
-
-## Developer guide
-
-[Documentation](https://docs.openadapt.ai) ·
-[Start locally](https://openadapt.ai/start) ·
-[Walkthrough](https://docs.openadapt.ai/get-started/) ·
-[Desktop downloads](https://openadapt.ai/download) ·
-[Live demo](https://app.openadapt.ai/demo) ·
-[Website](https://openadapt.ai) ·
-[Discord](https://discord.gg/yF527cQbDG)
-
-A person, or a local agent that person watches, records a demonstration.
-OpenAdapt compiles it into a program that runs again without a
-generative-model API in the control loop. A named person admits that program
-before production use. Before a governed run reports `VERIFIED`, it checks
-every declared effect at the required evidence tier. A caller must report a
-halt as a halt, never as success.
-
-Computer-use agents can call OpenAdapt programs. They aren't the executor
-inside OpenAdapt. When an agent clicks during a demonstration, the person who
-admits the program watches.
-
-This repository holds the `openadapt` launcher and command, and under
-[`packages/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages) the engine, the MCP server and the shared
-contracts. Each package is published to PyPI under its own name. [Where the code is](#where-the-code-is)
-lists them.
-
-## Run the tutorial
-
-A solutions engineer gets `VERIFIED` on synthetic MockMed:
-
-```bash
-uvx --python 3.12 openadapt flow tutorial
-```
-
-uv fetches Python 3.12 for the run, whatever Python your system has. To keep
-`openadapt` on your PATH, install it with
-`uv tool install --python 3.12 openadapt`, or with
-`python -m pip install --upgrade openadapt` on Python 3.10, 3.11, or 3.12.
-Then run `openadapt doctor --backend web` and `openadapt flow tutorial`. The
-local tutorial needs no account or API key. The base install includes Playwright. On the first browser action,
-OpenAdapt asks Playwright to download its matching Chromium build. That
-download needs network access.
-
-Minimal Linux hosts can lack Chromium's shared libraries. `openadapt doctor`
-lists the missing libraries before any browser download. If it finds any, run:
-
-```bash
-python -m playwright install-deps chromium
-openadapt doctor --backend web
-```
-
-Playwright asks for administrator access when the package manager needs it.
-Use the interpreter-specific command from `doctor` if you installed OpenAdapt
-with an isolated tool runner.
-
-`openadapt flow tutorial` is the launcher spelling of `openadapt-flow tutorial`.
-Every `openadapt-flow <verb>` command works as `openadapt flow <verb>`, and
-that form also works after `uv tool install`, which puts only `openadapt` on
-your PATH. The tutorial records and compiles a task in MockMed, a synthetic
-practice-management fixture, certifies it against the shipped clinical-write
-policy, runs it under the Standard profile, then confirms the saved record
-through a read-only API that the screen doing the writing never touches:
-
-```
+```text
 [1/5] Record the demonstration against a real persistence boundary
 [2/5] Compile and propose a fixture-specific effect contract
-      2 system-of-record effect proposal(s) derived from the fixture's record delta on step_005; review is required for a real deployment
 [3/5] Certify against the clinical-write policy
 [4/5] Admit and execute under the standard profile
-      VERIFIED in 9.1s; 0 model calls; the system of record holds 1 record(s)
+      VERIFIED in 5.6s; 0 model calls; the system of record holds 1 record(s)
 [5/5] Emit the local run receipt
+...
+--- break-it: the same certified bundle, against a backend that lies ---
 
-VERIFIED: <out>/run/REPORT.md
-  transaction     VERIFIED
-  metering class  billable (this local tutorial was not reported or charged)
-  profile         standard
-  model calls     0
-  effects         2/2 confirmed by an independent system-of-record read (Seal Oracle tier 2)
-```
-
-That's real output from Flow 1.35.1 on macOS, 2026-10-08, with the run
-directory shortened and the bundle digest left out. The tutorial writes the
-recording, the compiled bundle, and the run receipt under its output directory
-(default `tutorials/tutorial-<UTC timestamp>`). `openadapt quickstart` is a
-wrapper around the same engine path.
-
-Then watch it refuse to trust the screen:
-
-```bash
-openadapt quickstart --break-it
-```
-
-Same certified bundle. This time the backend rejects the write after the app
-has already painted its success banner, so every on-screen check passes:
-
-```
+  Injected fault:      'optimistic' -- the server rejects the write
+                       AFTER the app reports success
   The screen claimed:  every on-screen check passed -- the app painted its success banner
   The verifier found:  1/2 declared effect(s) REFUTED by an independent
                        read of the system of record, which holds 0 record(s)
   The engine did:      HALTED at the consequential step instead of claiming
                        success (transaction: RECONCILIATION_REQUIRED, billable: no)
+  Result:              Check the record. A save may have gone through. A person checks the record before anything is retried.
 ```
 
-The independent read finds no saved record, so the run halts. Its transaction
-outcome is `RECONCILIATION_REQUIRED`, so nothing is retried until a person
-checks the record.
+The [quickstart tutorial](https://docs.openadapt.ai/tutorials/quickstart/) walks through every line.
 
-The bundled workflow is a tutorial. [Qualifying](https://docs.openadapt.ai/reference/glossary/#qualify) a real one means declaring its
-application boundary, its action risks, its identities, its effect verifiers,
-its fault cases, and its deployment policy. Start with the
-[five-minute walkthrough](https://docs.openadapt.ai/get-started/).
+## How it compares
 
-Tutorial `VERIFIED` is a local receipt on synthetic MockMed. It isn't a
-production Seal. When you qualify a real job, the same independent check is
-what a Seal attests. Public synthetic verify:
-[openadapt.ai/seals](https://openadapt.ai/seals). The Seal contract:
-[docs/commercial/seal.md](https://docs.openadapt.ai/commercial/seal/).
+| | Computer-use agent | Traditional RPA | OpenAdapt |
+|---|---|---|---|
+| How you define the task | A goal in plain language | A script or flow built in a designer | One or more demonstrations, by a person or an agent |
+| What runs each time | A model chooses each next step from the screen | The fixed script | A compiled program you can read |
+| Model calls per run | At least one per step | None | None with default settings |
+| When the screen changes | The model tries to adapt | A selector stops matching, or matches the wrong control | The run stops before saving; a person or an agent shows the fix |
+| Checking the save | The model judges from the screen | Whatever the developer scripted | The right-record check before each save and a record check after |
+| Strongest for | New or changing tasks | Stable processes with a team to maintain the scripts | The same entry many times, where a wrong save is costly |
 
-Inspect what compiled, and what it failed to cover:
+An agent and OpenAdapt also work together: the agent decides what to enter,
+and OpenAdapt makes the entry and checks it.
 
-```bash
-openadapt flow visualize <out>/bundle --out graph.html
-openadapt flow lint <out>/bundle
+## How it works
+
+```mermaid
+flowchart LR
+    S["Show the task"] --> C["Compile"] --> Q["Certify and qualify"] --> A["Admit"] --> R["Run with checks"]
+    R -.->|"stopped: show the fix"| C
 ```
 
-## Give an agent the run tool
+OpenAdapt works from the screen, so it runs where there's no usable API: web
+apps, native Windows, macOS and Linux apps, and RDP and Citrix windows. A
+person or an agent shows the task. The compiler turns one or more
+demonstrations into a program, and qualification runs it against your normal
+and fault cases before an admission lets that exact version run. At each save
+the program checks that the right record is on screen, makes the entry, and
+reads the record back.
 
-`openadapt-agent` serves compiled programs to an MCP client. `openadapt` 1.17.0
-and later installs it:
+## Run outcomes
+
+| You see | `transaction_outcome` | An agent gets | What happens next |
+|---|---|---|---|
+| Done and checked | `VERIFIED` | `done` | Nothing. Only this result gets a shareable receipt. |
+| Stopped before saving | `HALTED_BEFORE_EFFECT` | `needs_review` | Fix the cause, or show the program the fix, and run again. |
+| Check the record | `RECONCILIATION_REQUIRED` | `not_sure_if_saved` | A save may have gone through. A person checks the record before anything is retried. |
+| Finished, not checked | `COMPLETED_UNVERIFIED` | `not_sure_if_saved` | Fine for testing; not a production success. |
+| Didn't run | `REJECTED_POLICY`, `CANCELED`, `FAILED_PLATFORM` | `did_not_run` | Fix the gate or the environment and run again. |
+
+The console's last line can read `HALTED` for both the second and third rows.
+`transaction_outcome` in `report.json` tells them apart, so base every rerun on
+it. [Run outcomes](https://docs.openadapt.ai/reference/outcomes/) lists every value.
+
+## Automate your own workflow
 
 ```bash
 python -m pip install --upgrade openadapt
-openadapt-agent serve --bundles <bundle or directory of bundles> --allow-run
-```
-
-`uv tool install` and pipx put only `openadapt` on your PATH. There, run
-`openadapt agent serve ...` instead. It passes every argument to
-`openadapt-agent`.
-
-Leave out `--allow-run` when the client should inspect workflows but not start
-them. A halted or refused run comes back as a halt or a refusal, never as a
-success. Local unsigned success isn't a Seal; treat unsigned production success
-as failure. The
-[`openadapt-agent` README](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent) has
-the client setup.
-
-## Author a workflow
-
-Do not pass `--backend`. With no `--url`, record captures this OS. Pass
-`--url` when the surface is a browser.
-
-```bash
-openadapt flow record --out rec
 openadapt flow record --url https://staging.your-app.example --out rec
-openadapt flow compile rec --out bundle --name my-workflow
+openadapt flow compile rec --out bundle --name my-first-workflow
 openadapt flow replay bundle --url https://staging.your-app.example --run-dir run
 ```
 
-`replay` drives the real app at `--url` and performs every recorded action,
-including saves you can't undo. It doesn't ask first, it isn't a dry run, and
-it doesn't certify the bundle. Point `--url` at a test or staging copy of the
-app, never at production data.
+`replay` drives the app at `--url` and performs every recorded action,
+including saves you can't undo. It doesn't ask first and doesn't check the
+saved record. Point it at a test or staging copy, never at production data.
 
-One bundle uses one execution surface and does not switch between browser,
-native, RDP, or Citrix backends.
+A program that writes to a real system also needs record checks, a deployment
+file, certification, qualification, and an admission; then `openadapt flow run`
+runs it. The operator sets each run's approval mode: by default the run waits
+for a person to approve each save in OpenAdapt Desktop, and with `not_gated` it
+doesn't pause and the report says so. [Your first workflow](https://docs.openadapt.ai/tutorials/first-workflow/) walks through it.
 
-If the task crosses a browser and a native app, or otherwise changes backend,
-record one bundle per surface. `openadapt flow compose` sequences the compiled
-bundles:
+To record a desktop app, install the recorder and your operating system's
+adapter, for example `python -m pip install "openadapt[capture,windows]"`, or
+use [OpenAdapt Desktop](https://openadapt.ai/download). An agent can record
+too, through the MCP server's recording tools; on Windows, RDP and Citrix that
+support is on `main` and not yet released.
 
-```bash
-openadapt flow compose \
-  --child intake=./intake-bundle \
-  --child posting=./posting-bundle \
-  --handoff intake.patient_id=posting.patient_id \
-  --out composed
-openadapt flow certify composed --policy clinical-write
-openadapt flow run composed --config deploy.yaml
-```
-
-Child A has to end `VERIFIED` (or a halt class you named with `--allow-halt`)
-before child B starts. Handoffs copy parameter values that A's confirmed
-effect contract already bound. Missing evidence stops the run. Compose will
-not retarget one recording onto a second backend. The
-[multi-application guide](https://docs.openadapt.ai/guides/compose-multi-application/)
-has the full boundary.
-
-Native and remote workflows never start or download Chromium. Install only the
-capability you need:
+## Give a workflow to an AI agent
 
 ```bash
-python -m pip install "openadapt[capture]"          # local human demonstration
-python -m pip install "openadapt[capture,windows]"  # Windows UI Automation
-python -m pip install "openadapt[capture,macos]"    # macOS Accessibility
-python -m pip install "openadapt[capture,linux]"    # Linux AT-SPI
-python -m pip install "openadapt[capture,rdp]"      # RDP transport
-python -m pip install "openadapt[privacy]"          # PII/PHI scrubbing
+claude mcp add openadapt -- uvx --python 3.12 openadapt-agent serve
 ```
 
-For visual authoring and review, there's
-[OpenAdapt Desktop](https://openadapt.ai/download).
+With no bundles, the server offers a synthetic sandbox workflow that returns
+every outcome. To serve your own compiled workflows, run
+`openadapt agent serve --mode production --bundles ./bundles`; without
+`--mode production` the agent can list them but not run them. Each workflow is
+one tool call, and the agent gets an outcome back instead of driving the
+screen. [Connect an agent](https://docs.openadapt.ai/how-to/connect-an-agent/) covers other clients.
 
-## How a run ends
+## Measured so far
 
-A click landing is not evidence that a transaction committed. Every terminal
-run says what the runtime actually knows about the business effect, and these
-outcomes are not interchangeable:
+On a local OpenEMR 8.0.0.3 test copy with synthetic referrals (14 and
+15 October 2026), OpenAdapt and a Claude computer-use agent each entered
+referrals in 62 timed runs. Median time was 29.7 seconds for OpenAdapt and 36.5
+seconds for the agent. OpenAdapt made no model calls; the agent cost about
+$0.08 a run at list price. Both saved 62 of 63 normal referrals correctly,
+judged by the same database read-back, and the agent matched or beat OpenAdapt
+in three other tests. [Every result](https://openadapt.ai/compare/computer-use-agents)
+is published. OpenAdapt isn't affiliated with the OpenEMR project.
 
-| Outcome | Meaning |
-|---|---|
-| `VERIFIED` | Every declared effect and collateral-effect check passed at the required evidence tier. The only production success. |
-| `HALTED_BEFORE_EFFECT` | The run stopped, with positive evidence that no consequential effect occurred. |
-| `RECONCILIATION_REQUIRED` | Delivery or persistence is uncertain, conflicting, or temporarily unverifiable. Never blind-retried. |
-| `FAILED_PLATFORM` | An OpenAdapt failure before any possible business effect. |
-| `CANCELED` | Canceled before any business effect. |
-| `REJECTED_POLICY` | Authorization, identity, qualification, or environment policy refused execution before any effect. |
-| `COMPLETED_UNVERIFIED` | A Demo run finished without production-grade effect evidence. |
-| `ROLLED_BACK` | A duplicate or collateral write was compensated and re-verified. |
+In a fault test through the real replayer, 72 of 90 runs left a wrong record
+behind a success screen. A check of the success banner reported success on 54
+of those 72; a full read of the database caught all 72. [How a save is checked](https://docs.openadapt.ai/explanation/verification/) has the method.
 
-The plain results at the top of this page map to these outcomes:
+<details>
+<summary>Where it runs</summary>
 
-| Plain result | Transaction outcome |
-|---|---|
-| Done and checked | `VERIFIED` |
-| Stopped before saving | `HALTED_BEFORE_EFFECT`, `CANCELED` |
-| Blocked before saving | `REJECTED_POLICY` |
-| Check the record | `RECONCILIATION_REQUIRED`, `ROLLED_BACK`, and a `HALTED` run with no transaction outcome |
-| Finished, not checked | `COMPLETED_UNVERIFIED` |
-| Didn't finish | `FAILED_PLATFORM` |
-
-A surface derives the plain result from the transaction outcome, never from a
-coarse `HALTED` label alone. A value a surface doesn't recognize reads as
-Check the record.
-
-A resumed `RECONCILIATION_REQUIRED` run has to reacquire and reconcile the live
-state before it does anything else.
-
-Before a consequential action the runtime can check authorization, workflow
-state, record identity, target uniqueness, and a fresh view of the application.
-Afterwards it waits for state to settle and evaluates the declared effect. When
-it can't establish the contract, it returns the evidence and stops.
-
-When it stops, a halted run can send one signed question to the
-[phone view](https://app.openadapt.ai/demo/attention): which record, which of
-these two targets, did you complete the manual step. The phone shows only what
-the sealed pause capability permits. It never clicks the application and it
-never declares success. After an answer, the customer-controlled runner reads
-the live application again and rechecks pause, session, workflow state,
-identity, target, and effect before continuing. Screenshots stay on the runner.
-
-Repairs are versioned changes rather than permission to improvise. A candidate
-repair gets reviewed, tested against the workflow's qualification contract,
-promoted, and rolled back if it turns out wrong.
-
-## Surfaces
-
-Workflow intent stays portable; the bindings are environment-specific. Each
-qualification pins the exact surface, application, version, environment,
-identity contract, and effect verifier, so nothing inherits a blanket platform
-claim.
-
-| Substrate | Evidence available to a qualified workflow |
-| --- | --- |
-| Browser (web) | DOM, accessibility, visual, OCR, field geometry, source-time secret exclusion |
-| Native desktop (Windows, macOS, Linux) | Visual, OCR, local window scope, plus UI Automation, Accessibility, or AT-SPI where the adapter supplies it |
-| Remote display (RDP) | External pixels, OCR, anchors, keyboard, mouse, fresh-frame verification |
-| Citrix / VDI | External pixels, OCR, anchors, keyboard, mouse, deployment-bound verification |
-
-Remote execution drives the visible client from a customer-controlled runner.
-Nothing gets installed inside the remote session. See the
-[substrate model](https://docs.openadapt.ai/concepts/substrate-model/),
-[what works today](https://docs.openadapt.ai/get-started/what-works-today/), and
-the [CLI reference](https://docs.openadapt.ai/reference/cli/).
-
-## Where your data lives
-
-| Operating model | Best for | Where data and execution live |
+| Surface | What OpenAdapt reads | Tested so far |
 |---|---|---|
-| Local / self-hosted | Community use and local automation | Your machine |
-| Customer-controlled | Sensitive data, native apps, RDP, Citrix, private networks | Your declared boundary; Cloud coordinates approved metadata only |
-| Managed execution | Approved browser and non-sensitive workflows | OpenAdapt-managed runners |
+| Web apps | The screen, plus the page's DOM | Required CI on every build, plus runs against OpenEMR |
+| Windows apps | The screen, plus UI Automation | 3 of 3 saves in a WinForms test app |
+| macOS apps | The screen, plus Accessibility | 3 of 3 saves in TextEdit |
+| Linux apps (X11) | The screen, plus AT-SPI | A GTK3 app in CI |
+| Remote desktop (RDP) | The screen | 3 of 3 trials into Windows 11 over a real network |
+| Citrix | The screen | A stand-in app only; no run over a real Citrix session yet |
 
-Raw recordings and live observations stay local by default. An artifact crosses
-a boundary only through explicit sanitization and exact-byte approval. Read the
-[trust center](https://openadapt.ai/security) before you pick one.
+Each application on each surface needs its own qualification.
+[Surfaces](https://docs.openadapt.ai/explanation/surfaces/) and [Limits](https://docs.openadapt.ai/explanation/limits/)
+have the details.
 
-The launcher, compiler, runtime, Desktop app, substrate adapters, verification
-interfaces, and basic qualification tools are MIT. OpenAdapt Cloud is the
-commercial multi-tenant control plane for managed operation, fleet governance,
-billing, and enterprise integrations. Local safety-critical verification is not
-paywalled.
+</details>
 
-## Evidence
+## Packages
 
-| Evidence | Result |
-|---|---|
-| OpenEMR referral benchmark, 14 and 15 Oct 2026 | See [One referral, three ways](#one-referral-three-ways): median 29.7 s for OpenAdapt and 36.5 s for a Claude Sonnet agent over 62 warm runs each, with $0 model fees for OpenAdapt. Read-back matched 12 of 12 fields on each correct save; engine certification was off. |
-| Fault test on a local test record system, measured 2026-07-21 | 72 of 90 runs left the record wrong: missing, partial, duplicated, or on the wrong record. A check that trusted the success banner passed 54 of those 72. One separate read of the record passed 9 of the 72, all of one kind: a write to a billing table that the read didn't cover. Every check also stopped 9 of the 18 runs that had saved correctly, because the client never got the reply. We chose these faults and injected them on our own test server, so this is a coverage test over a fixed fault list, not a real-world error rate. |
+`pip install openadapt` installs the `openadapt` command, the engine, and the
+MCP server. The product packages live in this repository:
 
-Each result belongs to its named task and environment. Qualifying a new
-workflow is what decides what can be claimed about it. Sources:
-[how we measured the OpenEMR benchmark](https://openadapt.ai/compare/computer-use-agents),
-[fault test method and caveats](https://github.com/OpenAdaptAI/openadapt-flow/blob/aee094193b232f472f991be6fa9b33c3c4b3f9be/benchmark/effect_e2e/EFFECT_E2E.md),
-and the [comparison](https://openadapt.ai/compare).
-OpenAdapt isn't affiliated with the OpenEMR project.
+| Package (PyPI) | What it is | Source |
+|---|---|---|
+| [`openadapt`](https://pypi.org/project/openadapt/) | The `openadapt` command | [`openadapt/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/openadapt) |
+| [`openadapt-flow`](https://pypi.org/project/openadapt-flow/) | The engine: record, compile, check, qualify, run, repair | [`packages/flow/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow) |
+| [`openadapt-agent`](https://pypi.org/project/openadapt-agent/) | The MCP server and Agent Skills | [`packages/agent/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent) |
+| [`openadapt-types`](https://pypi.org/project/openadapt-types/) | Shared request, result, and receipt models | [`packages/types/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/types) |
+| [`openadapt-capture`](https://pypi.org/project/openadapt-capture/) | The desktop recorder: `openadapt[capture]` | [`packages/capture/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/capture) |
+| [`openadapt-privacy`](https://pypi.org/project/openadapt-privacy/) | Finds and redacts personal and health data: `openadapt[privacy]` | Moving into `packages/` |
+| [`openadapt-desktop`](https://pypi.org/project/openadapt-desktop/) | OpenAdapt Desktop ([download](https://openadapt.ai/download)) | Moving into `packages/` |
 
-## OpenAdapt Execute
+Research on GUI agents lives in separate repositories:
+[openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) (benchmarks)
+and [openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) (model
+training). The [packages map](https://docs.openadapt.ai/reference/packages/) has the full list.
 
-[OpenAdapt Execute](https://openadapt.ai/execute) is a private partner service
-for providers who need an authorized transaction completed inside an
-application they cannot integrate with. The partner sends structured input and
-business authorization; OpenAdapt runs the qualified workflow in the
-customer-controlled environment, verifies the declared effect, and returns an
-asynchronous receipt with `VERIFIED` or a precise non-success outcome. It
-starts with one named transaction in one qualified environment, and it isn't a
-self-service API. Partner contract and qualification process:
-[the Execute guide](https://docs.openadapt.ai/commercial/oem-brief/).
+## Security and procurement
 
-## Release status for IT reviewers
+Screens, typed values, and recordings stay on the computer or runner that runs
+OpenAdapt. The shareable receipt and the Cloud dashboard hold counts, digests,
+and closed values. A sanitized copy leaves only after a person approves it, and
+screenshots go to a model host only if you turn on model grounding.
+[Security & procurement](https://docs.openadapt.ai/security/) covers data handling, deployment
+boundaries, evidence, subprocessors, and release integrity. Plans are on the
+[pricing page](https://openadapt.ai/pricing).
+
+<details>
+<summary>Release status</summary>
 
 The block below is generated from the signed public lifecycle record.
 
@@ -529,74 +209,22 @@ exact compiled bundle, application, and environment.
 [Check the live signed Production record](https://docs.openadapt.ai/production-lifecycle.json).
 <!-- END PRODUCTION LIFECYCLE -->
 
-## Where the code is
-
-In this repository:
-
-| Path | PyPI package | What it is |
-|---|---|---|
-| [`openadapt/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/openadapt) | [`openadapt`](https://pypi.org/project/openadapt/) | The launcher and the `openadapt` command. Start here. |
-| [`packages/flow/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow) | [`openadapt-flow`](https://pypi.org/project/openadapt-flow/) | The engine: the compiler, the governed runtime, and the `openadapt-flow` command. |
-| [`packages/agent/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/agent) | [`openadapt-agent`](https://pypi.org/project/openadapt-agent/) | The MCP server that gives compiled programs to an agent. On `main`, its code is in `openadapt_flow.agent`. This package keeps the old import and command working. |
-| [`packages/types/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/types) | [`openadapt-types`](https://pypi.org/project/openadapt-types/) | Shared request, result and receipt models. On `main`, its code is in `openadapt_flow.contracts`. This package keeps the old import working. |
-
-The standalone `openadapt-flow`, `openadapt-agent` and `openadapt-types`
-repositories are frozen. Their issues and pull requests stay readable there;
-open new ones here.
-
-In their own repositories:
-
-| Repository | PyPI package | What it is | How you get it |
-|---|---|---|---|
-| [`openadapt-desktop`](https://github.com/OpenAdaptAI/openadapt-desktop) | [`openadapt-desktop`](https://pypi.org/project/openadapt-desktop/) | The Desktop app: record, inspect, qualify, run, and review. | Installer from [openadapt.ai/download](https://openadapt.ai/download) |
-| [`openadapt-capture`](https://github.com/OpenAdaptAI/openadapt-capture) | [`openadapt-capture`](https://pypi.org/project/openadapt-capture/) | Native screen, mouse, keyboard, timing, and window-scope capture. | `pip install "openadapt[capture]"` |
-| [`openadapt-privacy`](https://github.com/OpenAdaptAI/openadapt-privacy) | [`openadapt-privacy`](https://pypi.org/project/openadapt-privacy/) | Finds and redacts personal and health data before it is stored or sent. | `pip install "openadapt[privacy]"` |
-| [`openadapt-evals`](https://github.com/OpenAdaptAI/openadapt-evals) | [`openadapt-evals`](https://pypi.org/project/openadapt-evals/) | Research: benchmark evaluation for GUI agents. The compiler doesn't use it. | `pip install "openadapt[evals]"` |
-
-`pip install openadapt` installs the launcher, `openadapt-flow`, and
-`openadapt-agent`. The [Packages](https://docs.openadapt.ai/get-started/packages/)
-page in the docs has the same map.
-
-<details>
-<summary><strong>Research packages and the pre-1.0 monolith</strong></summary>
-
-None of this is required to record, compile, replay, or verify a workflow.
-
-A separate research line asks whether human demonstrations can improve the
-accuracy of general computer-use models. That's a different question from
-compiling one demonstration into a deterministic script, and it lives in
-[openadapt-ml](https://github.com/OpenAdaptAI/openadapt-ml) (training and
-inference for multimodal GUI-action models) and
-[openadapt-evals](https://github.com/OpenAdaptAI/openadapt-evals) (benchmark
-evaluation for GUI agents). Install with `pip install "openadapt[ml,evals]"`; the
-[research thesis](https://github.com/OpenAdaptAI/openadapt-ml/blob/main/docs/research_thesis.md)
-has the methodology, results, and limits.
-
-`openadapt-wright`, `openadapt-herald`, `openadapt-crier`,
-`openadapt-consilium`, `openadapt-telemetry`, and `openadapt-viewer` support
-development and operations. The runtime doesn't need any of them.
-
-The pre-1.0 monolith (v0.46.0) is frozen under [`legacy/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/legacy) and
-published on PyPI as `openadapt==0.46.0` for Python 3.10 and 3.11. A plain
-`pip install` of it fails today.
-[docs/LEGACY_FREEZE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/docs/LEGACY_FREEZE.md) has install steps that work and
-the migration guide. Early demonstrations are on
-[Twitter](https://twitter.com/abrichr/status/1784307190062342237) and
-[Loom](https://www.loom.com/share/9d77eb7028f34f7f87c6661fb758d1c0).
-
 </details>
+
+## Earlier versions
+
+The pre-1.0 version (v0.46.0) is frozen under
+[`legacy/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/legacy).
+[docs/LEGACY_FREEZE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/docs/LEGACY_FREEZE.md)
+explains how to install it and how to migrate.
 
 ## Contributing
 
-Launcher, packaging, CLI, engine, MCP server and contract changes all belong
-here. Engine changes (compiler, runtime, verification, repair and backends) go
-in [`packages/flow/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow). Terms such as qualify,
-certify and admission are defined in the [glossary](https://docs.openadapt.ai/reference/glossary/).
-
+Launcher, engine, MCP server, and contract changes all belong in this
+repository; engine changes go in [`packages/flow/`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow).
 [Contribution guide](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CONTRIBUTING.md) ·
 [Issues](https://github.com/OpenAdaptAI/OpenAdapt/issues) ·
 [Discussions](https://github.com/OpenAdaptAI/OpenAdapt/discussions) ·
-[Discord](https://discord.gg/yF527cQbDG) ·
 [Report a vulnerability](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/SECURITY.md)
 
 Maintained by [OpenAdaptAI](https://github.com/OpenAdaptAI) under the
