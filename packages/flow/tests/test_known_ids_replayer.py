@@ -98,9 +98,10 @@ def test_correct_row_verifies_with_complete_list_using_a_fresh_capture():
 
 def test_fresh_capture_showing_another_record_blocks_the_lift():
     # The screen changed between the two captures (a different row is now
-    # under the target): the reads disagree, so the abstain stands.
+    # under the target). The fresh read names another record, and a mismatch
+    # is final: nothing lifts it.
     check = _check("AC50061", "AC50061", _ids(), fresh_mrn="ZZ9999")
-    assert check.status == "abstain"
+    assert check.status == "mismatch"
     assert check.known_id_evidence is None
 
 

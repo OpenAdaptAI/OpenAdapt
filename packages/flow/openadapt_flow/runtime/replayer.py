@@ -557,6 +557,26 @@ def _scroll_target_positioned(
     return True
 
 
+def better_identity_read(first: Any, retry: Any) -> Any:
+    """The identity read to keep from a first read and its upscaled re-read.
+
+    An affirmative ``mismatch`` on either read is final: the record on screen
+    was read as a different one, and a second read of the same screen must
+    never turn that into ``verified``. Otherwise ``verified`` beats the two
+    "cannot certify" outcomes, ``abstain`` beats a blank ``unreadable``, and a
+    tie goes to the read that covered more of the expected identity.
+    """
+
+    if first.status == "mismatch":
+        return first
+    if retry.status == "mismatch":
+        return retry
+    rank = {"unreadable": 0, "abstain": 1, "verified": 3}
+    if (rank[retry.status], retry.coverage) > (rank[first.status], first.coverage):
+        return retry
+    return first
+
+
 class Replayer:
     """Replays a Workflow against a Backend using injected vision.
 
@@ -12921,7 +12941,9 @@ class Replayer:
             )
 
         check = native_attempt(before_png)
-        if check.status == "verified":
+        if check.status in ("verified", "mismatch"):
+            # A read that names a different record is final: a later read of
+            # the same screen must never overrule it into "verified".
             return check
         upscaled = identity_mod.upscale_crop(before_png, live_region)
         if upscaled is None:
@@ -12943,7 +12965,7 @@ class Replayer:
         )
         if (
             self.known_ids is not None
-            and retry.status != "verified"
+            and retry.status not in ("verified", "mismatch")
             and check.status == "abstain"
             and check.abstain_reason == "glyph_confusable_identifier"
         ):
@@ -12961,16 +12983,7 @@ class Replayer:
             lifted = self._known_id_lift(check, native_attempt, params, matches)
             if lifted is not None:
                 return lifted
-        # verified beats everything; between the two "cannot certify"
-        # outcomes an AFFIRMATIVE mismatch outranks an abstain, and abstain
-        # outranks a blank unreadable.
-        rank = {"unreadable": 0, "abstain": 1, "mismatch": 2, "verified": 3}
-        if (rank[retry.status], retry.coverage) > (
-            rank[check.status],
-            check.coverage,
-        ):
-            return retry
-        return check
+        return better_identity_read(check, retry)
 
     def _known_id_lift(
         self,
@@ -12982,8 +12995,9 @@ class Replayer:
         """Known-ID cross-check for a look-alike abstain.
 
         Returns a ``verified`` check, the abstain marked with a named
-        ``known_id_halt`` when the list may not be used now, or None (keep
-        the original verdict). The second read comes from a new screenshot,
+        ``known_id_halt`` when the list may not be used now, the fresh read
+        when it is a ``mismatch`` (final), or None (keep the original
+        verdict). The second read comes from a new screenshot,
         so a transient render state on one capture cannot satisfy both.
         """
         from openadapt_flow.runtime import known_ids as known_ids_mod
@@ -13001,6 +13015,9 @@ class Replayer:
         else:
             known = self.known_ids
         second = read(self.backend.screenshot())
+        if second.status == "mismatch":
+            # The fresh read names a different record; that is final.
+            return second
         lifted = known_ids_mod.resolve_lookalike_abstain(
             [first, second],
             known,
