@@ -29,6 +29,12 @@ non-Bundle body, or an unparseable entry all read as *unreadable* ->
 INDETERMINATE -> HALT. An expired OAuth token can NEVER be mistaken for
 "record absent"; it halts.
 
+Short-lived tokens: pass ``token_source`` (for example a
+:class:`~openadapt_flow.runtime.effects.smart_auth.SmartBackendTokenSource`)
+instead of ``access_token``. Each read asks it for a token; no token means the
+read is unreadable, and a 401 drops the cached token so the next poll gets a
+new one.
+
 LIVE vs contract-gated: point it at a real OpenEMR by setting
 ``OPENEMR_FHIR_BASE_URL`` (+ a bearer token); tests that need a live instance
 are skipped when it is absent. CI exercises it against an in-repo fake that
@@ -39,7 +45,7 @@ mirrors the real FHIR wire shape, never MockMed's screen.
 from __future__ import annotations
 
 import time
-from typing import Any, Optional
+from typing import Any, Optional, Protocol
 
 from openadapt_flow.runtime.effects._common import judge_records
 from openadapt_flow.runtime.effects.adapter import VerifierAdapterBase
@@ -59,6 +65,14 @@ DEFAULT_OBSERVATION_PATHS: dict[str, str] = {
     "note": "valueString",
     "code": "code.text",
 }
+
+
+class AccessTokenSource(Protocol):
+    """Supplies bearer tokens that can expire."""
+
+    def access_token(self) -> Optional[str]: ...
+
+    def invalidate(self) -> None: ...
 
 
 def extract_path(resource: dict[str, Any], dotted: str) -> Any:
@@ -94,6 +108,8 @@ class FhirEffectVerifier(VerifierAdapterBase):
         field_paths: Flat Effect key -> dotted FHIRPath-lite for flattening a
             resource into the dict :func:`judge_records` matches on.
         access_token: OAuth2 bearer token (``Authorization: Bearer ...``).
+        token_source: Gets a token per read instead of ``access_token``
+            (mutually exclusive with it).
         session: Optional ``requests``-style session (tests / custom auth).
         timeout_s: Per-request timeout.
         verify_tls: Passed through to the HTTP client's ``verify``.
@@ -111,6 +127,7 @@ class FhirEffectVerifier(VerifierAdapterBase):
         search_params: Optional[dict[str, str]] = None,
         field_paths: Optional[dict[str, str]] = None,
         access_token: Optional[str] = None,
+        token_source: Optional[AccessTokenSource] = None,
         session: Any = None,
         timeout_s: float = 5.0,
         verify_tls: bool = True,
@@ -120,7 +137,10 @@ class FhirEffectVerifier(VerifierAdapterBase):
         self.resource_type = resource_type
         self.search_params = dict(search_params or {})
         self.field_paths = dict(field_paths or DEFAULT_OBSERVATION_PATHS)
+        if access_token and token_source is not None:
+            raise ValueError("give access_token or token_source, not both")
         self.access_token = access_token
+        self.token_source = token_source
         self.timeout_s = timeout_s
         self.verify_tls = verify_tls
         self.poll_interval_s = poll_interval_s
@@ -161,10 +181,16 @@ class FhirEffectVerifier(VerifierAdapterBase):
                 self._session = requests.Session()
         return self._session
 
-    def _headers(self) -> dict[str, str]:
+    def _headers(self) -> Optional[dict[str, str]]:
+        """Request headers, or None when the token source has no token."""
         headers = {"Accept": "application/fhir+json"}
-        if self.access_token:
-            headers["Authorization"] = f"Bearer {self.access_token}"
+        token = self.access_token
+        if self.token_source is not None:
+            token = self.token_source.access_token()
+            if not token:
+                return None
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
         return headers
 
     def _flatten(self, resource: dict[str, Any]) -> dict[str, Any]:
@@ -184,6 +210,9 @@ class FhirEffectVerifier(VerifierAdapterBase):
         malformed entries. Never raises.
         """
         url = f"{self.base_url}/{self.resource_type}"
+        headers = self._headers()
+        if headers is None:
+            return None
         session = self._get_session()
         # ``verify`` is passed per request only for a ``requests``-style client;
         # the httpx fallback already bound it at construction (see
@@ -193,12 +222,14 @@ class FhirEffectVerifier(VerifierAdapterBase):
             resp = session.get(
                 url,
                 params=self.search_params,
-                headers=self._headers(),
+                headers=headers,
                 timeout=self.timeout_s,
                 **tls_kwargs,
             )
         except Exception:  # noqa: BLE001 - transport failure is unreadable
             return None
+        if resp.status_code == 401 and self.token_source is not None:
+            self.token_source.invalidate()
         if resp.status_code // 100 != 2:
             return None
         try:

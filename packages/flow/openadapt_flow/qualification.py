@@ -60,6 +60,7 @@ from openadapt_flow.judgment_cases import (
     JudgmentFactSchemaBindingV1,
     evaluate_judgment_cases,
 )
+from openadapt_flow.lookup_capabilities import QualifiedLookup
 from openadapt_flow.qualified_business_decisions import (
     QualifiedBusinessDecisionDelivery,
     qualified_business_decision_delivery_errors,
@@ -801,6 +802,19 @@ class QualificationCertification(BaseModel):
     )
     execution_profile: Literal["standard", "regulated"] = "standard"
     certified_at: str = Field(default_factory=_now)
+    #: Digest of the project's qualified-lookup record (the lookup
+    #: capabilities and surface the qualification ran with). None for a
+    #: certification made before that record existed.
+    lookup_sha256: Optional[str] = Field(default=None, pattern=r"^[a-f0-9]{64}$")
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Keep certifications made before the lookup record byte-stable."""
+
+        data: dict[str, Any] = handler(self)
+        if self.lookup_sha256 is None:
+            data.pop("lookup_sha256", None)
+        return data
 
 
 def _default_fault_cases() -> list[QualificationCase]:
@@ -928,6 +942,12 @@ class QualificationProject(BaseModel):
     )
     trusted_runner_keys: dict[str, str] = Field(default_factory=dict)
     trusted_fault_driver_keys: dict[str, str] = Field(default_factory=dict)
+    #: The lookup capabilities (structure, pixels) the signed cases actually
+    #: used, the deployment surface they ran for, and the pixels-only pass.
+    #: Written by ``openadapt-flow qualify`` after the cases run, so it is an
+    #: outcome rather than part of the contract digest; the certification
+    #: binds its digest. None on bundles qualified before it existed.
+    lookup: Optional[QualifiedLookup] = None
     last_certification: Optional[QualificationCertification] = None
 
     @model_validator(mode="after")
@@ -1006,6 +1026,8 @@ class QualificationProject(BaseModel):
             data.pop("judgment_cases", None)
         if not self.business_decision_deliveries:
             data.pop("business_decision_deliveries", None)
+        if self.lookup is None:
+            data.pop("lookup", None)
         return data
 
     def revision_digest(self) -> str:
@@ -1021,6 +1043,7 @@ class QualificationProject(BaseModel):
                 "created_at",
                 "updated_at",
                 "last_certification",
+                "lookup",
             },
         )
         for case in payload["cases"]:
@@ -1586,6 +1609,7 @@ def _touch(project: QualificationProject, previous_digest: str) -> None:
     project.revision += 1
     project.updated_at = _now()
     project.last_certification = None
+    project.lookup = None
 
 
 def init_project(
@@ -4452,6 +4476,27 @@ def record_case_results(
         case = cases[result.case_id]
         case.results.append(result)
     project.updated_at = _now()
+    # New case evidence makes an earlier lookup record stale; the campaign
+    # that produced these results writes a fresh one.
+    project.lookup = None
+    _invalidate_certification(workflow)
+    return project
+
+
+def set_qualified_lookup(
+    workflow: "Workflow", lookup: QualifiedLookup
+) -> QualificationProject:
+    """Record which lookups the recorded cases used and on which surface.
+
+    Call after the case results are recorded and before certifying, so the
+    certification binds this record's digest.
+    """
+
+    project = workflow.qualification
+    if project is None:
+        raise QualificationError("initialize qualification before recording lookups")
+    project.lookup = lookup.model_copy(deep=True)
+    project.updated_at = _now()
     _invalidate_certification(workflow)
     return project
 
@@ -5270,6 +5315,9 @@ def certify_project(
             report_sha256=report.report_sha256(),
             case_evidence_contract_sha256=_case_evidence_contract_sha256(project),
             execution_profile=execution_profile,
+            lookup_sha256=(
+                project.lookup.contract_sha256() if project.lookup is not None else None
+            ),
         )
     # A failed campaign must remove any template from an earlier accepted
     # campaign.  Manifest provenance is outside the bundle content digest, so
@@ -5489,6 +5537,8 @@ def current_certification_matches(
         and certification.environment_contract_sha256
         == project.environment.contract_sha256()
         and certification.report_sha256 == report.report_sha256()
+        and certification.lookup_sha256
+        == (project.lookup.contract_sha256() if project.lookup is not None else None)
     )
 
 
