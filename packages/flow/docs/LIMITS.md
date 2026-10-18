@@ -350,7 +350,8 @@ grade is `screen_readback`, never `independent_readback`.
 connector. That is still the same application in the same session: it is not a
 system-of-record read, and it shares the blind spots above. `R3` needs a
 system-of-record read (REST, FHIR, SQL, file; tier 1). The Regulated profile
-keeps its own floor: a separate signed-in session (`ui_readback`; tier 2) or a
+keeps its own floor: a separate signed-in session (`ui_readback` for web,
+`fresh_session` for desktop and RDP, tested on mocks only; tier 2) or a
 system-of-record read
 ([`EFFECT_KIT.md`](EFFECT_KIT.md#separate-session-ui-read-back-ui_readback)).
 A confirmed check below the minimum is `COMPLETED_UNVERIFIED`, and the agent

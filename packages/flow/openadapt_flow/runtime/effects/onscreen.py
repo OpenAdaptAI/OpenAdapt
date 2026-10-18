@@ -241,6 +241,9 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
         min_ratio: Fuzzy-match floor to accept the expected value.
         vision: Namespace exposing ``ocr(png, region=...)`` (injectable for
             tests); defaults to :mod:`openadapt_flow.vision`.
+        reference_value: A reference number read before this verifier runs
+            (by :mod:`~openadapt_flow.runtime.effects.fresh_session`, from the
+            acting session); skips reading it off this backend's screen.
     """
 
     substrate = "onscreen"
@@ -275,8 +278,12 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
         *,
         min_ratio: float = READBACK_MIN_RATIO,
         vision: Any = None,
+        reference_value: Optional[str] = None,
     ) -> None:
         self._backend = backend
+        #: A reference number already read elsewhere (the acting session, by
+        #: a fresh-session check); used instead of reading this screen.
+        self._reference_value = reference_value
         self._region = region
         self._min_ratio = min_ratio
         if vision is None:
@@ -611,7 +618,11 @@ class OnScreenReadbackVerifier(VerifierAdapterBase):
         # any navigation moves away from it.
         reference: Optional[str] = None
         if spec is not None and spec.reference is not None:
-            reference, why = self._capture_reference(spec.reference)
+            reference, why = (
+                (self._reference_value, "")
+                if self._reference_value
+                else self._capture_reference(spec.reference)
+            )
             if reference is None:
                 return EffectVerdict(
                     verdict=Verdict.INDETERMINATE,
