@@ -26,6 +26,25 @@ list box (role ``combobox``), and the Enter after it, is dropped when the
 next step types into the same list again. Only literal text is dropped this
 way, never a parameter.
 
+The last rule drops a dead end: a run of two or more steps that ends where it
+started. An agent opens the wrong menu and presses Escape, or clicks into a
+field and then clicks away. The run is dropped only when all of these hold:
+
+* the frame after its last step matches the frame before its first step,
+  apart from a caret and repaint noise of up to 2 levels per channel (a
+  focus glow redrawn one level off on an unchanged screen);
+* the URL, title, page count and system-of-record snapshot (when recorded)
+  are the same at both ends, and no step in the run changed the
+  system-of-record snapshot;
+* every step is a click, double-click, right-click, scroll, key or hotkey,
+  with no parameter, no ``submit_binding``, no Enter or Tab, and no target
+  whose label names a write (:func:`openadapt_flow.risk.is_write_shaped`);
+* the run does not end on a click that gives focus to the next step's typing.
+
+Typing never takes part in a dead end. The longest qualifying run from the
+earliest start wins, and the scan resumes after it, so the result does not
+depend on anything but the recording.
+
 "Visible effect" means at least one pixel changed outside a caret-sized
 column (width <= 2 px, height <= 40 px). A blinking caret is not an effect.
 """
@@ -47,9 +66,14 @@ __all__ = ["DistillReport", "DroppedStep", "distill_recording", "frames_unchange
 _DROPPABLE_KINDS = {"click", "double_click", "scroll", "key", "hotkey"}
 _ACTING_KEYS = {"enter", "return", "tab", "escape", "esc", "kp_enter"}
 _FOCUS_CONSUMERS = {"type", "key", "hotkey"}
-_STRUCTURAL_KEYS = ("url", "title", "pages")
+_STRUCTURAL_KEYS = ("url", "title", "pages", "sor")
+_DEAD_END_KINDS = {"click", "double_click", "right_click", "scroll", "key", "hotkey"}
+_DEAD_END_BLOCKING_KEYS = {"enter", "return", "kp_enter", "tab"}
 _CARET_MAX_W = 2
 _CARET_MAX_H = 40
+#: Per-channel difference a browser repaint leaves on an unchanged screen
+#: (a focus glow redrawn one level off). Used only to close a dead end.
+_REPAINT_NOISE = 2
 
 
 @dataclass
@@ -82,12 +106,24 @@ def _pixels(path: Path) -> Optional[np.ndarray]:
         return np.asarray(image.convert("RGB"))
 
 
-def frames_unchanged(before: Optional[np.ndarray], after: Optional[np.ndarray]) -> bool:
-    """True when the two frames differ by at most a caret-sized column."""
+def frames_unchanged(
+    before: Optional[np.ndarray],
+    after: Optional[np.ndarray],
+    *,
+    tolerance: int = 0,
+) -> bool:
+    """True when the two frames differ by at most a caret-sized column.
+
+    ``tolerance`` ignores per-channel differences up to that many levels.
+    """
 
     if before is None or after is None or before.shape != after.shape:
         return False
-    diff = np.any(before != after, axis=2)
+    if tolerance:
+        delta = np.abs(before.astype(np.int16) - after.astype(np.int16))
+        diff = np.any(delta > tolerance, axis=2)
+    else:
+        diff = np.any(before != after, axis=2)
     if not diff.any():
         return True
     ys, xs = np.nonzero(diff)
@@ -127,6 +163,39 @@ def _keeps_because(
     ):
         return "focus_for_next"
     return None
+
+
+def _target_labels(event: dict[str, Any]) -> list[str]:
+    structural = event.get("structural") or {}
+    labels = [structural.get("name"), structural.get("selector")]
+    labels.append(event.get("structured_identity"))
+    return [str(label) for label in labels if label]
+
+
+def _dead_end_member(event: dict[str, Any]) -> bool:
+    """True when ``event`` may sit inside a dead end (see the module doc)."""
+
+    from openadapt_flow.risk import is_write_shaped
+
+    if event.get("kind") not in _DEAD_END_KINDS:
+        return False
+    if event.get("param") or event.get("secret") or event.get("submit_binding"):
+        return False
+    if str(event.get("key", "")).lower() in _DEAD_END_BLOCKING_KEYS:
+        return False
+    if ("sor_before" in event or "sor_after" in event) and event.get(
+        "sor_before"
+    ) != event.get("sor_after"):
+        return False
+    return not any(is_write_shaped(label) for label in _target_labels(event))
+
+
+def _same_structure(first: dict[str, Any], last: dict[str, Any]) -> bool:
+    for key in _STRUCTURAL_KEYS:
+        b, a = f"{key}_before", f"{key}_after"
+        if (b in first or a in last) and first.get(b) != last.get(a):
+            return False
+    return True
 
 
 def _load(recording_dir: Path) -> list[dict[str, Any]]:
@@ -198,7 +267,46 @@ def distill_recording(recording_dir: Path | str, out_dir: Path | str) -> Distill
                 if enter is not None and not _structure_changed(events[enter]):
                     dropped[enter] = "selection_replaced"
 
-    # Rule 3: a step whose own frames show no effect.
+    # Rule 3: a dead end, a run of steps that ends where it started.
+    pos = 0
+    while pos < len(events):
+        if pos in dropped or not _dead_end_member(events[pos]):
+            pos += 1
+            continue
+        start = events[pos]
+        run = [pos]
+        end: Optional[int] = None
+        for j in range(pos + 1, len(events)):
+            if j in dropped:
+                continue
+            if not _dead_end_member(events[j]):
+                break
+            run.append(j)
+            nxt = next(
+                (events[k] for k in range(j + 1, len(events)) if k not in dropped),
+                None,
+            )
+            if (
+                events[j].get("kind") in ("click", "double_click")
+                and nxt is not None
+                and nxt.get("kind") in _FOCUS_CONSUMERS
+            ):
+                continue
+            if _same_structure(start, events[j]) and frames_unchanged(
+                frame(start["i"], "before"),
+                frame(events[j]["i"], "after"),
+                tolerance=_REPAINT_NOISE,
+            ):
+                end = j
+        if end is None:
+            pos += 1
+            continue
+        for j in run:
+            if j <= end:
+                dropped[j] = "dead_end"
+        pos = end + 1
+
+    # Rule 4: a step whose own frames show no effect.
     for pos, event in enumerate(events):
         if pos in dropped:
             continue

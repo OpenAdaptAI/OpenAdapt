@@ -2000,6 +2000,9 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     bundle = Path(args.bundle)
     refuse_replay_composition(bundle)
     refuse_replay_process(bundle)
+    from openadapt_flow.jit.lifecycle import refuse_unadmitted_draft
+
+    refuse_unadmitted_draft(bundle)
     run_dir = Path(args.run_dir) if args.run_dir else _default_run_dir()
     workflow = Workflow.load(bundle)
     qualification_case = getattr(args, "_qualification_case_execution", None)
@@ -9768,6 +9771,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     register_admit_parser(sub)
     register_check_parser(sub)
+
+    from openadapt_flow.jit.cli import add_parser as _add_jit_parser
+
+    _add_jit_parser(sub)
 
     return parser
 

@@ -1,0 +1,1211 @@
+"""DRAFT to ADMITTED: the states of a compiled CUA run, and what admission needs.
+
+A bundle compiled from a CUA run starts as a ``DRAFT``. A draft never runs
+unattended. :meth:`openadapt_flow.runtime.Replayer.run`, which every
+execution path goes through (``replay``, ``run``, ``serve-execute``, an
+emitted MCP server, :meth:`~openadapt_flow.jit.CompiledAgent.run`), refuses a
+bundle marked as a draft unless it carries a valid admission
+(:func:`ensure_runnable`). The only run a draft gets is an attended canary.
+
+A draft is admitted in one of three modes, all writing the same signed
+manifest: a registered agent under a signed admission policy, or a
+registered admitter key (:func:`admit_with_key`, see
+:mod:`openadapt_flow.jit.authority`), or a person (:func:`admit`). For a
+person, ``ADMITTED`` needs all of these for the same bundle digest, in this
+order:
+
+1. ``params``: a named person confirms the task's parameters
+   (:func:`confirm_params`). This recompiles the bundle, so it comes before
+   the review, and it can't run after one.
+2. ``reviewed``: a named person reviewed every step of that program
+   (:func:`record_review`).
+3. ``readback``: every write step has an independent read-back through the
+   verifier attached for the canary (:func:`readback_coverage`). Only a read
+   of the system of record (tier 1) is ``independent_readback``. A read
+   through the application's screens, in the acting session or a separate
+   one, is ``screen_readback`` and does not count.
+4. ``canary``: the bundle ran once on the target app, attended by a named
+   person, and ended ``VERIFIED`` with zero model calls
+   (:func:`record_canary`).
+5. ``signed``: :func:`admit` writes an admission manifest that records who
+   admitted it (``admitted_by_principal_id``) and when, signed with the
+   local Ed25519 admission key.
+
+A plain name is a person's name, checked by identity only: it can't be the
+identity that made the recording, or an ``agent:``, ``model:``, ``bot:`` or
+similar identity. Flow can't prove a person typed the name. The command line
+also requires an interactive terminal for a person. An agent or admitter key
+acts as a registered :class:`~openadapt_flow.jit.authority.Principal`, and
+it can't be the identity that made the recording either.
+
+``REJECTED`` is terminal: :func:`reject` moves the draft aside, and the next
+run records again.
+"""
+
+from __future__ import annotations
+
+import json
+import os
+import time
+from enum import Enum
+from pathlib import Path
+from typing import Any, Mapping, Optional, Sequence
+
+from openadapt_flow.assurance import INDEPENDENT_READBACK, SCREEN_READBACK
+
+__all__ = [
+    "ADMISSION_FILE",
+    "DRAFT_MARKER",
+    "ADMISSION_SCHEMA",
+    "TRANSITIONS",
+    "AdmissionError",
+    "BundleState",
+    "admission_status",
+    "admit",
+    "check_principal",
+    "confirm_params",
+    "default_key_dir",
+    "mark_draft",
+    "readback_coverage",
+    "record_canary",
+    "record_review",
+    "refuse_unadmitted_draft",
+    "DraftNotAdmitted",
+    "draft_label",
+    "ensure_runnable",
+    "reject",
+    "state_of",
+    "verify_admission",
+    "admit_with_key",
+    "is_not_a_person_name",
+    "needs_person_queue",
+]
+
+CANDIDATE_FILE = "candidate.json"
+REVIEW_FILE = "review.json"
+CANARY_FILE = "canary.json"
+PARAMS_FILE = "params.json"
+#: Written into a draft's bundle, so a copied bundle stays a draft.
+DRAFT_MARKER = "jit_draft.json"
+EVENTS_FILE = "lifecycle.jsonl"
+ADMISSION_FILE = "admission.json"
+#: Every canary run, one JSON object per line. ``canary.json`` is the latest.
+CANARIES_FILE = "canaries.jsonl"
+#: Written when a draft is outside an agent's admission policy.
+NEEDS_PERSON_FILE = "needs_person.json"
+ADMISSION_MODES = ("person", "admitter_key", "agent_policy")
+ADMISSION_SCHEMA = "openadapt-flow/jit-admission/v1"
+KEY_DIR_ENV = "OPENADAPT_JIT_KEY_DIR"
+
+
+_NOT_PRINCIPALS = frozenset(
+    {
+        "",
+        "agent",
+        "model",
+        "assistant",
+        "cua",
+        "llm",
+        "ai",
+        "bot",
+        "system",
+        "service",
+        "auto",
+        "automatic",
+    }
+)
+_NOT_PRINCIPAL_PREFIXES = (
+    "agent:",
+    "model:",
+    "cua:",
+    "llm:",
+    "ai:",
+    "bot:",
+    "service:",
+    "svc:",
+    "system:",
+)
+
+
+class AdmissionError(RuntimeError):
+    """The draft can't move to the requested state as it stands."""
+
+
+class BundleState(str, Enum):
+    DRAFT = "DRAFT"
+    ADMITTED = "ADMITTED"
+    REJECTED = "REJECTED"
+
+
+#: The only transitions there are. Nothing leaves ADMITTED or REJECTED; a
+#: changed program is a new recording and a new draft.
+TRANSITIONS: Mapping[BundleState, frozenset[BundleState]] = {
+    BundleState.DRAFT: frozenset({BundleState.ADMITTED, BundleState.REJECTED}),
+    BundleState.ADMITTED: frozenset(),
+    BundleState.REJECTED: frozenset(),
+}
+
+
+def _now() -> str:
+    return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+
+def _read(path: Path) -> Optional[dict[str, Any]]:
+    return json.loads(path.read_text()) if path.is_file() else None
+
+
+def _write(path: Path, data: Mapping[str, Any]) -> None:
+    path.write_text(json.dumps(data, indent=2, sort_keys=True) + "\n")
+
+
+def _event(program_dir: Path, kind: str, **detail: Any) -> None:
+    with (program_dir / EVENTS_FILE).open("a") as f:
+        f.write(json.dumps({"at": _now(), "event": kind, **detail}) + "\n")
+
+
+def _canonical(data: Mapping[str, Any]) -> bytes:
+    return json.dumps(data, sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
+def _sign_record(record: Mapping[str, Any], key_dir: Optional[Path]) -> str:
+    """Sign an evidence record with the local admission key, so evidence
+    written into the cache directory by anything else counts for nothing."""
+
+    from openadapt_flow.execute.keys import load_or_create_private_key, sign_bytes
+
+    keys = Path(key_dir) if key_dir is not None else default_key_dir()
+    body = {k: v for k, v in record.items() if k != "signature"}
+    return sign_bytes(load_or_create_private_key(keys), _canonical(body))
+
+
+def _record_signed(record: Mapping[str, Any], key_dir: Optional[Path]) -> bool:
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+    from openadapt_flow.execute.keys import verify_signature
+
+    keys = Path(key_dir) if key_dir is not None else default_key_dir()
+    pub_file = keys / "keys" / "ed25519.pub"
+    if not pub_file.is_file():
+        return False
+    public = Ed25519PublicKey.from_public_bytes(
+        bytes.fromhex(pub_file.read_text().strip())
+    )
+    body = {k: v for k, v in record.items() if k != "signature"}
+    return verify_signature(public, _canonical(body), str(record.get("signature", "")))
+
+
+def default_key_dir() -> Path:
+    """Where the admission signing key lives: ``$OPENADAPT_JIT_KEY_DIR`` or
+    ``~/.openadapt/jit``. It is kept out of the cache directory, so write
+    access to a bundle is not enough to re-sign it. Anyone who can write the
+    key directory can."""
+
+    return Path(os.environ.get(KEY_DIR_ENV) or Path.home() / ".openadapt" / "jit")
+
+
+def _load_workflow(bundle_dir: Path) -> Any:
+    from openadapt_flow.ir import Workflow
+
+    return Workflow.load(bundle_dir)
+
+
+def _digest(workflow: Any) -> str:
+    digest = workflow.manifest.content_digest if workflow.manifest else None
+    if not digest:
+        raise AdmissionError("the compiled bundle carries no content digest")
+    return str(digest)
+
+
+def _transition(program: Path, to: BundleState) -> None:
+    """Refuse a transition :data:`TRANSITIONS` does not allow."""
+
+    if (program / "rejected.json").is_file():
+        current = BundleState.REJECTED
+    elif (program / "bundle" / ADMISSION_FILE).is_file():
+        current = BundleState.ADMITTED
+    else:
+        current = BundleState.DRAFT
+    if to not in TRANSITIONS[current]:
+        raise AdmissionError(f"a {current.value} bundle can't become {to.value}")
+
+
+def mark_draft(bundle_dir: Path | str) -> None:
+    """Mark ``bundle_dir`` as a draft. The marker is not part of the content
+    digest, so it does not change what a review or an admission pins."""
+
+    _write(
+        Path(bundle_dir) / DRAFT_MARKER,
+        {
+            "state": BundleState.DRAFT.value,
+            "note": "compiled from a computer-use agent run; runs only after "
+            "admission (openadapt-flow jit)",
+        },
+    )
+
+
+class DraftNotAdmitted(AdmissionError):
+    """An execution path was asked to run a JIT draft that is not admitted."""
+
+
+def ensure_runnable(
+    bundle_dir: Path | str,
+    *,
+    attended_by: Any = None,
+    key_dir: Optional[Path] = None,
+) -> None:
+    """Refuse to execute a JIT draft that has no valid admission.
+
+    A bundle without the draft marker is not a JIT draft and passes. A draft
+    passes when :func:`verify_admission` accepts its admission, or when
+    ``attended_by`` is attending this run (the canary): a person's name, a
+    registered admitter key, or a registered agent under a valid signed
+    admission policy (:func:`resolve_actor`). ``attended_by`` is for the
+    in-process JIT API. No CLI or server path passes it.
+
+    Raises:
+        DraftNotAdmitted: the draft is not admitted, or ``attended_by`` is not
+            a human principal.
+    """
+
+    bundle = Path(bundle_dir)
+    if not (bundle / DRAFT_MARKER).is_file():
+        return
+    if attended_by is not None:
+        candidate = _read(bundle.parent / CANDIDATE_FILE) or {}
+        try:
+            resolve_actor(attended_by, candidate, key_dir=key_dir)
+        except AdmissionError as exc:
+            raise DraftNotAdmitted(f"{bundle}: {exc}") from None
+        return
+    try:
+        verify_admission(bundle, key_dir=key_dir)
+    except AdmissionError as exc:
+        raise DraftNotAdmitted(
+            f"refused: {bundle} is a DRAFT compiled from an agent run and is not "
+            f"admitted ({exc}). Review, canary and admit it first "
+            "(openadapt-flow jit status)."
+        ) from None
+
+
+def draft_label(
+    bundle_dir: Path | str, *, key_dir: Optional[Path] = None
+) -> Optional[str]:
+    """``"DRAFT"`` when ``bundle_dir`` is a JIT draft with no valid admission,
+    else None. For paths that describe a bundle without running it."""
+
+    try:
+        ensure_runnable(bundle_dir, key_dir=key_dir)
+    except DraftNotAdmitted:
+        return "DRAFT"
+    return None
+
+
+def refuse_unadmitted_draft(
+    bundle_dir: Path | str, *, key_dir: Optional[Path] = None
+) -> None:
+    """Raise ``SystemExit`` when ``bundle_dir`` is a JIT draft without a valid
+    admission. For the ``replay`` and ``run`` commands."""
+
+    try:
+        ensure_runnable(bundle_dir, key_dir=key_dir)
+    except DraftNotAdmitted as exc:
+        raise SystemExit(str(exc)) from None
+
+
+# -- principals ----------------------------------------------------------------
+
+
+def is_not_a_person_name(name: str) -> bool:
+    """True for a blank name or one that names an agent, a model or a service."""
+
+    lower = name.strip().lower()
+    return lower in _NOT_PRINCIPALS or lower.startswith(_NOT_PRINCIPAL_PREFIXES)
+
+
+def _self_check(name: str, candidate: Mapping[str, Any]) -> None:
+    recorded = {
+        str(v).strip().lower()
+        for v in (
+            candidate.get("recorded_by"),
+            candidate.get("agent_principal_id"),
+            candidate.get("dialect"),
+        )
+        if v
+    }
+    if name.strip().lower() in recorded:
+        raise AdmissionError(
+            f"{name!r} made the recording; a run can't approve its own contract"
+        )
+
+
+def resolve_actor(
+    actor: Any, candidate: Mapping[str, Any], *, key_dir: Optional[Path] = None
+) -> tuple[str, Optional[Any]]:
+    """Who is acting, as ``(principal_id, principal)``.
+
+    A plain string is a person's name (:func:`check_principal`). A
+    :class:`~openadapt_flow.jit.authority.Principal` is a registered admitter
+    key or agent; it is re-verified against the registry, and an agent's
+    policy against its signature and expiry. Neither can be the identity that
+    made the recording.
+    """
+
+    from openadapt_flow.jit import authority
+
+    if isinstance(actor, authority.Principal):
+        keys = Path(key_dir) if key_dir is not None else default_key_dir()
+        try:
+            authority.recheck(actor, keys)
+        except authority.AuthorityError as exc:
+            raise AdmissionError(str(exc)) from None
+        _self_check(actor.principal_id, candidate)
+        return actor.principal_id, actor
+    return check_principal(actor, candidate), None
+
+
+def check_principal(principal_id: Any, candidate: Mapping[str, Any]) -> str:
+    """Return ``principal_id`` if a person by that name can act on this draft.
+
+    A registered agent or admitter key acts as a
+    :class:`~openadapt_flow.jit.authority.Principal` instead
+    (:func:`resolve_actor`); its name alone gives it nothing.
+
+    Raises:
+        AdmissionError: no name, an unregistered agent or model identity, or
+            the identity that made the recording.
+    """
+
+    if not isinstance(principal_id, str) or not principal_id.strip():
+        raise AdmissionError("a named human principal is required")
+    name = principal_id.strip()
+    if is_not_a_person_name(name):
+        raise AdmissionError(
+            f"{name!r} is not a human principal; a model or agent never authorizes "
+            "on its name alone (register its key under a signed admission policy)"
+        )
+    _self_check(name, candidate)
+    return name
+
+
+# -- read-back coverage ----------------------------------------------------------
+
+
+def readback_coverage(workflow: Any, verifier: Any) -> list[dict[str, Any]]:
+    """For every write step, what reads its effects back.
+
+    A write step is any step :func:`openadapt_flow.run_gate.is_consequential`
+    flags (fail-closed). Each effect gets ``evidence``:
+
+    * ``independent_readback``: the contract is not an on-screen read, and the
+      attached verifier reads the system of record (tier 1).
+    * ``screen_readback``: the contract, or the verifier's read of it, goes
+      through the application's screens: the acting session, or a separate
+      signed-in session (tier 2). Runtime ``VERIFIED`` accepts tier 2
+      (``VERIFIED_EFFECT_TIER``); admission is stricter.
+    * ``placeholder``: no observed system-of-record delta was bound.
+    * ``unverified``: no verifier is attached, or it declares no tier.
+
+    A step is ``ok`` only when it has at least one effect and every effect is
+    ``independent_readback``.
+    """
+
+    from openadapt_flow.run_gate import is_consequential
+    from openadapt_flow.verification import (
+        declared_effect_is_independent_read,
+        verifier_effect_tier,
+    )
+
+    rows: list[dict[str, Any]] = []
+    for step in workflow.steps:
+        if not is_consequential(step, workflow):
+            continue
+        effects = []
+        for effect in step.effects:
+            tier = verifier_effect_tier(verifier, effect) if verifier else None
+            if effect.needs_operator_confirmation:
+                evidence = "placeholder"
+            elif not declared_effect_is_independent_read(effect):
+                evidence = SCREEN_READBACK
+            elif tier is None:
+                evidence = "unverified"
+            elif tier.reads_system_of_record():
+                evidence = INDEPENDENT_READBACK
+            else:
+                evidence = SCREEN_READBACK
+            effects.append(
+                {
+                    "kind": effect.kind.value,
+                    "evidence": evidence,
+                    "tier": tier.name if tier is not None else None,
+                }
+            )
+        rows.append(
+            {
+                "step_id": step.id,
+                "effects": effects,
+                "ok": bool(effects)
+                and all(e["evidence"] == INDEPENDENT_READBACK for e in effects),
+            }
+        )
+    return rows
+
+
+def _readback_problems(rows: Sequence[Mapping[str, Any]]) -> list[str]:
+    problems = []
+    for row in rows:
+        if row["ok"]:
+            continue
+        if not row["effects"]:
+            problems.append(f"{row['step_id']}: a write step with no read-back")
+        for e in row["effects"]:
+            if e["evidence"] != INDEPENDENT_READBACK:
+                problems.append(f"{row['step_id']}: {e['kind']} is {e['evidence']}")
+    return problems
+
+
+# -- state ---------------------------------------------------------------------
+
+
+def state_of(
+    program_dir: Path | str, *, key_dir: Optional[Path] = None
+) -> Optional[BundleState]:
+    """``ADMITTED`` when the bundle carries a manifest that verifies, ``DRAFT``
+    when a candidate waits, ``REJECTED`` for a rejected draft, else ``None``.
+
+    Raises:
+        AdmissionError: the bundle carries a manifest that does not verify.
+    """
+
+    program = Path(program_dir)
+    if (program / "rejected.json").is_file():
+        return BundleState.REJECTED
+    if (program / "bundle" / ADMISSION_FILE).is_file():
+        # A manifest that does not verify admits nothing, and the bundle is
+        # not a draft either: runs refuse it (see verify_admission).
+        verify_admission(program / "bundle", key_dir=key_dir)
+        return BundleState.ADMITTED
+    if (program / CANDIDATE_FILE).is_file():
+        return BundleState.DRAFT
+    return None
+
+
+def _evidence_at(path: Path, digest: str) -> Optional[dict[str, Any]]:
+    record = _read(path)
+    if record is None or record.get("digest") != digest:
+        return None
+    return record
+
+
+def admission_status(
+    program_dir: Path | str, *, key_dir: Optional[Path] = None
+) -> dict[str, Any]:
+    """What the draft has and what it still needs, pinned to its digest."""
+
+    program = Path(program_dir)
+    candidate = _read(program / CANDIDATE_FILE)
+    if candidate is None:
+        raise AdmissionError(f"no draft in {program}")
+    workflow = _load_workflow(program / "bundle")
+    digest = _digest(workflow)
+    review = _evidence_at(program / REVIEW_FILE, digest)
+    canary = _evidence_at(program / CANARY_FILE, digest)
+    params = _evidence_at(program / PARAMS_FILE, digest)
+    task_params = _task_params(candidate)
+    readback = (canary or {}).get("readback")
+    problems = _readback_problems(readback) if readback is not None else None
+    try:
+        state = (state_of(program, key_dir=key_dir) or BundleState.DRAFT).value
+    except AdmissionError as exc:
+        state = f"REFUSED: {exc}"
+    return {
+        "state": state,
+        "digest": digest,
+        "policy": candidate.get("policy"),
+        "steps": [
+            {"id": s.id, "action": s.action.value, "intent": s.intent}
+            for s in workflow.steps
+        ],
+        "requirements": {
+            "params": {
+                "met": not task_params or params is not None,
+                "task_params": task_params,
+                "by": (params or {}).get("principal_id"),
+            },
+            "reviewed": {
+                "met": review is not None,
+                "by": (review or {}).get("principal_id"),
+            },
+            "readback": {
+                "met": problems == [],
+                "problems": problems
+                if problems is not None
+                else ["checked at the canary; no canary for this digest yet"],
+            },
+            "canary": {
+                "met": bool(canary and canary.get("passed")),
+                "outcome": (canary or {}).get("outcome"),
+            },
+        },
+        "needs_person": _evidence_at(program / NEEDS_PERSON_FILE, digest),
+    }
+
+
+# -- transitions ---------------------------------------------------------------
+
+
+def _require_draft(program: Path) -> dict[str, Any]:
+    candidate = _read(program / CANDIDATE_FILE)
+    if candidate is None:
+        raise AdmissionError("no draft to act on")
+    if (program / "rejected.json").is_file():
+        raise AdmissionError("the draft was rejected")
+    if (program / "bundle" / ADMISSION_FILE).is_file():
+        raise AdmissionError("the bundle already carries an admission manifest")
+    return candidate
+
+
+def _task_params(candidate: Mapping[str, Any]) -> list[str]:
+    return sorted((candidate.get("task") or {}).get("params") or {})
+
+
+def _has_terminal() -> bool:
+    """True when stdin and stdout are an interactive terminal."""
+
+    import sys
+
+    return sys.stdin.isatty() and sys.stdout.isatty()
+
+
+def _confirm_ok(confirm: object) -> bool:
+    from openadapt_flow.authoring import _confirm_is_ok
+
+    return bool(_confirm_is_ok(confirm))
+
+
+def confirm_params(
+    program_dir: Path | str,
+    *,
+    principal_id: Any,
+    accept_params: Sequence[str],
+    confirm: object = None,
+    key_dir: Optional[Path] = None,
+) -> dict[str, Any]:
+    """A named person confirms which typed values become the task's parameters.
+
+    ``accept_params`` must be exactly the task's parameters. They are applied
+    by recompiling the recording
+    (:func:`~openadapt_flow.compiler.param_confirm.apply_decisions`), which can
+    renumber the steps. So this comes first: after it, :func:`admission_status`
+    lists the steps of the program that will run, and those are the steps
+    :func:`record_review` asks for. Once a review exists it refuses; reject the
+    draft to change the parameters.
+    """
+
+    from openadapt_flow.compiler.param_confirm import (
+        apply_decisions,
+        decisions_from_accept_list,
+        load_proposals,
+    )
+
+    program = Path(program_dir)
+    candidate = _require_draft(program)
+    name, _ = resolve_actor(principal_id, candidate, key_dir=key_dir)
+    if not _confirm_ok(confirm):
+        raise AdmissionError("confirm_params accepts confirm empty, ok, yes, or True")
+    task_params = _task_params(candidate)
+    if sorted(accept_params) != task_params:
+        raise AdmissionError(
+            f"accept_params {sorted(accept_params)} must be the task's "
+            f"parameters {task_params}"
+        )
+    if (program / REVIEW_FILE).is_file():
+        raise AdmissionError(
+            "the draft was already reviewed; parameters are confirmed before the "
+            "review. Reject the draft to change them"
+        )
+    bundle = program / "bundle"
+    if candidate.get("params_applied") is None:
+        try:
+            decisions = decisions_from_accept_list(
+                load_proposals(bundle), list(accept_params)
+            )
+        except ValueError as exc:
+            raise AdmissionError(str(exc)) from exc
+        if decisions:
+            apply_decisions(
+                candidate["compiled_recording"],
+                bundle,
+                name=candidate["task"]["task_id"],
+                decisions=decisions,
+                mine_effects=bool(candidate.get("mine_effects", True)),
+                bind_effect_params=True,
+            )
+            mark_draft(bundle)
+        candidate["params_applied"] = sorted(accept_params)
+        _write(program / CANDIDATE_FILE, candidate)
+    workflow = _load_workflow(bundle)
+    if sorted(workflow.params) != task_params:
+        raise AdmissionError(
+            f"the program's parameters {sorted(workflow.params)} do not match "
+            f"the task's {task_params}"
+        )
+    record = {
+        "principal_id": name,
+        "confirmed_at": _now(),
+        "digest": _digest(workflow),
+        "params": sorted(accept_params),
+        "steps": [s.id for s in workflow.steps],
+    }
+    _write(program / PARAMS_FILE, record)
+    _event(program, "params_confirmed", principal_id=name, digest=record["digest"])
+    return record
+
+
+def record_review(
+    program_dir: Path | str,
+    *,
+    principal_id: str,
+    reviewed_steps: Sequence[str],
+    confirm: object = None,
+) -> dict[str, Any]:
+    """A named person reviewed every step of the program that will run.
+
+    A task with parameters needs :func:`confirm_params` first.
+    ``reviewed_steps`` must be exactly the bundle's step ids, in order. The
+    review pins the bundle's digest; a canary or admission for any other
+    digest refuses.
+    """
+
+    program = Path(program_dir)
+    candidate = _require_draft(program)
+    name = check_principal(principal_id, candidate)
+    if not _confirm_ok(confirm):
+        raise AdmissionError("review accepts confirm empty, ok, yes, or True")
+    workflow = _load_workflow(program / "bundle")
+    digest = _digest(workflow)
+    task_params = _task_params(candidate)
+    params = _evidence_at(program / PARAMS_FILE, digest)
+    if task_params and params is None:
+        raise AdmissionError(
+            f"confirm the parameters {task_params} first (confirm_params); it "
+            "recompiles the program, and the review is of the result"
+        )
+    if sorted(workflow.params) != task_params:
+        raise AdmissionError(
+            f"the program's parameters {sorted(workflow.params)} do not match "
+            f"the task's {task_params}"
+        )
+    step_ids = [s.id for s in workflow.steps]
+    if list(reviewed_steps) != step_ids:
+        raise AdmissionError(
+            f"reviewed_steps must be every step of the program, in order: {step_ids}"
+        )
+    record = {
+        "principal_id": name,
+        "reviewed_at": _now(),
+        "digest": digest,
+        "steps": step_ids,
+        "params": task_params,
+    }
+    _write(program / REVIEW_FILE, record)
+    _event(program, "reviewed", principal_id=name, digest=digest)
+    return record
+
+
+def record_canary(
+    program_dir: Path | str,
+    *,
+    principal_id: Any,
+    digest: str,
+    report: Any,
+    readback: Sequence[Mapping[str, Any]],
+    target_origin: str,
+    run_dir: Optional[Path],
+    key_dir: Optional[Path] = None,
+) -> dict[str, Any]:
+    """Record an attended canary run. It passes only when it ended
+    ``VERIFIED`` with zero model calls and every write step had an
+    independent read-back. Every run is also appended to ``canaries.jsonl``,
+    which an admission policy's ``min_clean_canaries`` counts."""
+
+    program = Path(program_dir)
+    candidate = _require_draft(program)
+    name, principal = resolve_actor(principal_id, candidate, key_dir=key_dir)
+    outcome = str(report.execution_outcome) if report is not None else "refused"
+    model_calls = int(report.model_calls) if report is not None else None
+    problems = _readback_problems(readback)
+    record = {
+        "principal_id": name,
+        "principal_kind": principal.kind if principal is not None else "person",
+        "ran_at": _now(),
+        "digest": digest,
+        "target_origin": target_origin,
+        "outcome": outcome,
+        "model_calls": model_calls,
+        "run_dir": str(run_dir) if run_dir else None,
+        "readback": list(readback),
+        "passed": outcome == "VERIFIED" and model_calls == 0 and not problems,
+    }
+    record["signature"] = _sign_record(record, key_dir)
+    _write(program / CANARY_FILE, record)
+    with (program / CANARIES_FILE).open("a") as f:
+        f.write(json.dumps(record, sort_keys=True) + "\n")
+    _event(program, "canary", principal_id=name, digest=digest, passed=record["passed"])
+    return record
+
+
+def admit(
+    program_dir: Path | str,
+    *,
+    principal_id: str,
+    confirm: object = None,
+    key_dir: Optional[Path] = None,
+    require_distinct_reviewer_and_admitter: bool = False,
+) -> dict[str, Any]:
+    """A person admits a DRAFT and the signed admission manifest is written.
+
+    Needs an interactive terminal (stdin and stdout), the same as
+    ``jit admit --principal``: a name with no terminal behind it could come
+    from any script or agent. Headless callers use :func:`admit_with_key`.
+
+    Refuses unless the review, the read-back coverage and a passing canary
+    are all for the bundle's current digest, there are no placeholder
+    effects, and the program passes its policy. With
+    ``require_distinct_reviewer_and_admitter`` (or the same flag on the draft),
+    the admitting principal must not be the reviewer.
+    """
+
+    program = Path(program_dir)
+    candidate = _require_draft(program)
+    _transition(program, BundleState.ADMITTED)
+    name = check_principal(principal_id, candidate)
+    if not _confirm_ok(confirm):
+        raise AdmissionError("admit accepts confirm empty, ok, yes, or True")
+    if not _has_terminal():
+        # A name is only a claim. Without a terminal, any script or agent
+        # could make it, so a headless admission goes through a registered key.
+        raise AdmissionError(
+            f"admit() by name ({name!r}) is for a person at an interactive "
+            "terminal, and there is none. A script or agent admits with a "
+            "registered key: admit_with_key, with an admitter key (a CI job) or "
+            "as an agent under a signed admission policy"
+        )
+    distinct = bool(
+        require_distinct_reviewer_and_admitter
+        or candidate.get("require_distinct_reviewer_and_admitter")
+    )
+    bundle = program / "bundle"
+    workflow = _load_workflow(bundle)
+    digest = _digest(workflow)
+    review = _evidence_at(program / REVIEW_FILE, digest)
+    if review is None:
+        raise AdmissionError(
+            "no human review of this bundle; review it first (the digest changed "
+            "or there was no review)"
+        )
+    if distinct and review["principal_id"].strip().lower() == name.lower():
+        raise AdmissionError(
+            f"{name!r} reviewed this draft; the policy requires a different "
+            "principal to admit it"
+        )
+    canary = _evidence_gates(program, candidate, workflow, digest, key_dir)
+    assert canary is not None
+    return _write_manifest(
+        program,
+        candidate,
+        digest,
+        name=name,
+        mode="person",
+        review=review,
+        canary=canary,
+        key_dir=key_dir,
+        extra={"require_distinct_reviewer_and_admitter": distinct},
+    )
+
+
+def _evidence_gates(
+    program: Path,
+    candidate: Mapping[str, Any],
+    workflow: Any,
+    digest: str,
+    key_dir: Optional[Path] = None,
+) -> Optional[dict[str, Any]]:
+    """The checks every admission mode makes: parameters confirmed, a
+    passing canary for this digest, independent read-back on every write
+    step, no placeholder effect, and the Flow risk policy. Returns the canary.
+    """
+
+    from openadapt_flow.policy import evaluate_policy, load_policy
+
+    task_params = _task_params(candidate)
+    if task_params and _evidence_at(program / PARAMS_FILE, digest) is None:
+        raise AdmissionError(f"confirm the parameters {task_params} first")
+    canary = _evidence_at(program / CANARY_FILE, digest)
+    if canary is None or not canary.get("passed"):
+        raise AdmissionError("no passing canary on the target app for this bundle")
+    if not _record_signed(canary, key_dir):
+        raise AdmissionError(
+            "the canary record is not signed by the local admission key; it was "
+            "not written by a canary run"
+        )
+    problems = _readback_problems(canary.get("readback") or [])
+    if problems:
+        raise AdmissionError(
+            "a write step lacks an independent read-back: " + "; ".join(problems)
+        )
+    placeholders = sorted(
+        {
+            s.id
+            for s in workflow.steps
+            for e in s.effects
+            if e.needs_operator_confirmation
+        }
+    )
+    if placeholders:
+        raise AdmissionError(
+            f"placeholder effects on {placeholders}; nothing to verify"
+        )
+    policy = str(candidate.get("policy") or "")
+    if not policy:
+        raise AdmissionError("the draft names no policy")
+    report = evaluate_policy(
+        workflow, load_policy(policy), require_current_risk_certification=True
+    )
+    if not report.passed:
+        raise AdmissionError(f"not certified under {policy!r}:\n{report.render()}")
+    return canary
+
+
+def _write_manifest(
+    program: Path,
+    candidate: Mapping[str, Any],
+    digest: str,
+    *,
+    name: str,
+    mode: str,
+    review: Optional[Mapping[str, Any]],
+    canary: Mapping[str, Any],
+    key_dir: Optional[Path],
+    principal: Any = None,
+    extra: Optional[Mapping[str, Any]] = None,
+) -> dict[str, Any]:
+    from openadapt_flow.execute.keys import (
+        fingerprint_of,
+        load_or_create_private_key,
+        sign_bytes,
+    )
+
+    keys = Path(key_dir) if key_dir is not None else default_key_dir()
+    private = load_or_create_private_key(keys)
+    review = review or {}
+    body = {
+        "schema": ADMISSION_SCHEMA,
+        "admission_mode": mode,
+        "state": BundleState.ADMITTED.value,
+        "workflow_id": candidate.get("workflow_id"),
+        "digest": digest,
+        "task": candidate.get("task"),
+        "params": _task_params(candidate),
+        "policy": candidate.get("policy"),
+        "admitted_by_principal_id": name,
+        "admitted_at": _now(),
+        "reviewed_by_principal_id": review.get("principal_id"),
+        "reviewed_at": review.get("reviewed_at"),
+        "reviewed_steps": review.get("steps"),
+        "canary": {
+            k: canary[k]
+            for k in (
+                "principal_id",
+                "ran_at",
+                "target_origin",
+                "outcome",
+                "model_calls",
+            )
+        },
+        "readback": canary["readback"],
+        "recorded_by": candidate.get("recorded_by"),
+        "agent_principal_id": candidate.get("agent_principal_id"),
+        "model_key": candidate.get("model_key"),
+        "signing_key": fingerprint_of(private.public_key()),
+        **(extra or {}),
+    }
+    if principal is not None:
+        # The admitting key signs the body too, so the manifest names a key
+        # the registry holds, not just a name.
+        body["admitter_public_key"] = principal.public_key
+        body["admitter_signature"] = principal.sign(body)
+    manifest = {**body, "signature": sign_bytes(private, _canonical(body))}
+    _write(program / "bundle" / ADMISSION_FILE, manifest)
+    # The marker stays: the bundle remains a draft to anything that can't
+    # verify this manifest.
+    _event(program, "admitted", principal_id=name, digest=digest, mode=mode)
+    return manifest
+
+
+def admit_with_key(
+    program_dir: Path | str,
+    *,
+    principal: Any,
+    key_dir: Optional[Path] = None,
+    now: Optional[Any] = None,
+) -> dict[str, Any]:
+    """Admit without a person at a terminal. Returns ``{"outcome": ...}``.
+
+    ``principal`` is a :class:`~openadapt_flow.jit.authority.Principal` from
+    :func:`~openadapt_flow.jit.authority.principal_from_key`:
+
+    * an **admitter key** a person registered (a CI job). It admits when the
+      evidence every mode needs holds (:func:`_evidence_gates`); no step
+      review is required, because the person who provisioned the key stands
+      behind what it admits.
+    * an **agent** under a signed admission policy. Flow re-verifies the
+      policy's signature and expiry, that it names the agent, the draft's
+      scope (app host, actions, effects, Flow policy), the read-back, and at
+      least ``min_clean_canaries`` passing canaries for this digest with
+      none failing. A draft outside the policy, or with a failed canary, is
+      not admitted: it is written to the ``needs_person`` queue and the
+      outcome is ``needs_person``.
+
+    Either way the principal can't be the identity that made the recording.
+
+    Raises:
+        AdmissionError: an unregistered key, an invalid or expired policy,
+            self-admission, too few canaries, or missing evidence.
+    """
+
+    from openadapt_flow.jit import authority
+
+    program = Path(program_dir)
+    candidate = _require_draft(program)
+    _transition(program, BundleState.ADMITTED)
+    if not isinstance(principal, authority.Principal):
+        raise AdmissionError(
+            "admit_with_key takes a registered Principal (principal_from_key); a "
+            "name alone is a person, who admits with admit()"
+        )
+    keys = Path(key_dir) if key_dir is not None else default_key_dir()
+    name, _ = resolve_actor(principal, candidate, key_dir=keys)
+    workflow = _load_workflow(program / "bundle")
+    digest = _digest(workflow)
+    if principal.kind == "admitter_key":
+        canary = _evidence_gates(program, candidate, workflow, digest, keys)
+        assert canary is not None
+        manifest = _write_manifest(
+            program,
+            candidate,
+            digest,
+            name=name,
+            mode="admitter_key",
+            review=_evidence_at(program / REVIEW_FILE, digest),
+            canary=canary,
+            key_dir=keys,
+            principal=principal,
+        )
+        return {"outcome": "admitted", "manifest": manifest}
+
+    signed = principal.policy
+    assert signed is not None
+    registry = authority.PrincipalRegistry.load(keys)
+    try:
+        policy = authority.verify_policy(signed, registry, now=now)
+    except authority.AuthorityError as exc:
+        raise AdmissionError(str(exc)) from None
+    canary = _evidence_at(program / CANARY_FILE, digest)
+    # Only canary runs signed by the local admission key count; a line
+    # anything else appended to canaries.jsonl is ignored.
+    runs = [
+        r
+        for r in authority.canary_runs(program / CANARIES_FILE, digest)
+        if _record_signed(r, keys)
+    ]
+    clean = [r for r in runs if r.get("passed")]
+    failed = [r for r in runs if not r.get("passed")]
+    reasons = authority.scope_problems(
+        policy, workflow, candidate, (canary or {}).get("target_origin")
+    )
+    reasons += [
+        f"canary at {r.get('ran_at')} by {r.get('principal_id')} ended "
+        f"{r.get('outcome')}"
+        for r in failed
+    ]
+    reasons += [
+        f"{row}" for row in _readback_problems((canary or {}).get("readback") or [])
+    ]
+    other_hosts = sorted(
+        {
+            str(r.get("target_origin"))
+            for r in clean
+            if r.get("target_origin") != (canary or {}).get("target_origin")
+        }
+    )
+    if other_hosts:
+        reasons.append(f"canaries ran on more than one app: {other_hosts}")
+    if reasons:
+        record = {
+            "at": _now(),
+            "digest": digest,
+            "agent_principal_id": name,
+            "policy_id": policy.policy_id,
+            "policy_digest": policy.digest(),
+            "reasons": reasons,
+        }
+        _write(program / NEEDS_PERSON_FILE, record)
+        _event(program, "needs_person", principal_id=name, digest=digest)
+        return {"outcome": "needs_person", "reasons": reasons}
+    if len(clean) < policy.min_clean_canaries:
+        raise AdmissionError(
+            f"{len(clean)} clean canaries for this bundle; the policy needs "
+            f"{policy.min_clean_canaries}"
+        )
+    canary = _evidence_gates(program, candidate, workflow, digest, keys)
+    assert canary is not None
+    manifest = _write_manifest(
+        program,
+        candidate,
+        digest,
+        name=name,
+        mode="agent_policy",
+        review=_evidence_at(program / REVIEW_FILE, digest),
+        canary=canary,
+        key_dir=keys,
+        principal=principal,
+        extra={
+            "policy_id": policy.policy_id,
+            "policy_digest": policy.digest(),
+            "policy_signer": policy.signer,
+            "policy_expires_at": policy.expires_at,
+            "signed_policy": signed.model_dump(mode="json", by_alias=True),
+            "clean_canaries": len(clean),
+        },
+    )
+    (program / NEEDS_PERSON_FILE).unlink(missing_ok=True)
+    return {"outcome": "admitted", "manifest": manifest}
+
+
+def needs_person_queue(cache_dir: Path | str) -> list[dict[str, Any]]:
+    """Drafts an agent's policy did not cover, waiting for a person."""
+
+    queue = []
+    for path in sorted(Path(cache_dir).glob(f"**/{NEEDS_PERSON_FILE}")):
+        program = path.parent
+        if (program / "bundle" / ADMISSION_FILE).is_file():
+            continue
+        if (program / "rejected.json").is_file():
+            continue
+        queue.append({"program": str(program), **(_read(path) or {})})
+    return queue
+
+
+def verify_admission(
+    bundle_dir: Path | str, *, key_dir: Optional[Path] = None
+) -> dict[str, Any]:
+    """Return the admission manifest if it is signed by the local admission
+    key and pins the bundle's current digest.
+
+    Raises:
+        AdmissionError: no manifest, a bad signature, an unknown key, or a
+            bundle that changed after admission.
+    """
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+
+    from openadapt_flow.execute.keys import fingerprint_of, verify_signature
+
+    bundle = Path(bundle_dir)
+    manifest = _read(bundle / ADMISSION_FILE)
+    if manifest is None:
+        raise AdmissionError("no admission manifest")
+    if manifest.get("schema") != ADMISSION_SCHEMA:
+        raise AdmissionError("not a JIT admission manifest")
+    keys = Path(key_dir) if key_dir is not None else default_key_dir()
+    pub_file = keys / "keys" / "ed25519.pub"
+    if not pub_file.is_file():
+        raise AdmissionError(f"no trusted admission key at {pub_file}")
+    public = Ed25519PublicKey.from_public_bytes(
+        bytes.fromhex(pub_file.read_text().strip())
+    )
+    body = {k: v for k, v in manifest.items() if k != "signature"}
+    if body.get("signing_key") != fingerprint_of(public) or not verify_signature(
+        public, _canonical(body), str(manifest.get("signature", ""))
+    ):
+        raise AdmissionError("the admission manifest's signature does not verify")
+    if not body.get("admitted_by_principal_id"):
+        raise AdmissionError("the admission manifest names no principal")
+    if body.get("state") != BundleState.ADMITTED.value:
+        raise AdmissionError("the manifest does not admit the bundle")
+    _verify_mode(body, keys)
+    try:
+        digest = _digest(_load_workflow(bundle))
+    except Exception as exc:  # noqa: BLE001 - integrity failure is a refusal
+        raise AdmissionError(f"the bundle failed its integrity check: {exc}") from exc
+    if digest != body.get("digest"):
+        raise AdmissionError("the bundle is not the one that was admitted")
+    return manifest
+
+
+def _verify_mode(body: Mapping[str, Any], keys: Path) -> None:
+    """The checks a key or policy admission adds to the local signature."""
+
+    from openadapt_flow.jit import authority
+
+    mode = body.get("admission_mode", "person")
+    if mode not in ADMISSION_MODES:
+        raise AdmissionError(f"unknown admission mode {mode!r}")
+    name = str(body.get("admitted_by_principal_id") or "")
+    _self_check(name, body)
+    if mode == "person":
+        if is_not_a_person_name(name):
+            raise AdmissionError(f"{name!r} is not a person; a model never authorizes")
+        return
+    inner = {k: v for k, v in body.items() if k != "admitter_signature"}
+    try:
+        role, _ = authority.verify_admitter(
+            inner, str(body.get("admitter_signature") or ""), keys
+        )
+    except authority.AuthorityError as exc:
+        raise AdmissionError(str(exc)) from None
+    if mode == "admitter_key":
+        if role != "admitter_key":
+            raise AdmissionError("the admitter is not a registered admitter key")
+        return
+    if role != "agent":
+        raise AdmissionError("the admitter is not a registered agent")
+    try:
+        signed = authority.SignedAdmissionPolicy.model_validate(body["signed_policy"])
+        # Expiry was checked when it admitted; an admitted bundle keeps running
+        # after its policy expires. The signature must still verify.
+        policy = authority.verify_policy(
+            signed, authority.PrincipalRegistry.load(keys), check_expiry=False
+        )
+    except (KeyError, ValueError, authority.AuthorityError) as exc:
+        raise AdmissionError(f"the admission's policy does not verify: {exc}") from None
+    if policy.digest() != body.get("policy_digest") or name not in (
+        policy.agent_principals
+    ):
+        raise AdmissionError("the admission does not match the policy it names")
+
+
+def reject(
+    program_dir: Path | str,
+    *,
+    principal_id: Any,
+    reason: str = "",
+    key_dir: Optional[Path] = None,
+) -> Path:
+    """Move a DRAFT to REJECTED. The draft is kept, renamed, for the record."""
+
+    program = Path(program_dir)
+    candidate = _require_draft(program)
+    _transition(program, BundleState.REJECTED)
+    name, _ = resolve_actor(principal_id, candidate, key_dir=key_dir)
+    _write(
+        program / "rejected.json",
+        {"principal_id": name, "reason": reason, "rejected_at": _now()},
+    )
+    _event(program, "rejected", principal_id=name)
+    stamp = (
+        time.strftime("%Y%m%dT%H%M%S", time.gmtime()) + f"{time.time_ns() % 10**9:09d}"
+    )
+    kept = program.parent / f"rejected-{stamp}"
+    program.rename(kept)
+    return kept

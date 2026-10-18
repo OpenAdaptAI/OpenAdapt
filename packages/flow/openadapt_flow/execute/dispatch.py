@@ -122,6 +122,7 @@ def live_replay(
         )
 
     from openadapt_flow.ir import Workflow
+    from openadapt_flow.jit.lifecycle import DraftNotAdmitted, ensure_runnable
     from openadapt_flow.mockmed.fault_server import serve as serve_mockmed
     from openadapt_flow.tutorial import (
         TUTORIAL_BREAK_ENTRY_QUERY,
@@ -129,6 +130,12 @@ def live_replay(
         run_tutorial_workflow,
     )
 
+    try:
+        # A JIT draft is refused before anything runs. Replayer.run checks
+        # again; this check reports the refusal as pre-effect.
+        ensure_runnable(bundle)
+    except DraftNotAdmitted as exc:
+        raise DispatchError(str(exc), pre_effect=True) from None
     try:
         workflow = Workflow.load(bundle)
         run_dir.mkdir(parents=True, exist_ok=True)
