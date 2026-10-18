@@ -615,3 +615,22 @@ def test_static_token_and_token_source_are_exclusive(rsa_key):
     )
     with pytest.raises(ValueError, match="not both"):
         FhirEffectVerifier("https://x.test/fhir", access_token="t", token_source=source)
+
+
+@pytest.mark.parametrize(
+    "token_url, allowed",
+    [
+        ("https://ehr.example.org/token", False),
+        ("https://127.0.0.1:8443/token", True),
+        ("http://localhost:8080/token", True),
+    ],
+)
+def test_tls_verification_can_be_off_only_on_loopback(token_url, allowed):
+    """With certificate checks off, anyone on the path could take a signed
+    assertion and redeem it for a token that reads patient records."""
+    raw = _smart(token_url=token_url, verify_tls=False)
+    if allowed:
+        assert SmartBackendConfig.model_validate(raw).verify_tls is False
+    else:
+        with pytest.raises(ValueError, match="verify_tls can be false only"):
+            SmartBackendConfig.model_validate(raw)

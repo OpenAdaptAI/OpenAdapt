@@ -89,6 +89,22 @@ def _require_tls(url: str, what: str) -> None:
     raise ValueError(f"{what} must be https (plain http only on loopback)")
 
 
+def _require_verified_tls(url: Optional[str], verify_tls: bool, what: str) -> None:
+    """Refuse ``verify_tls: false`` for anything but a loopback host.
+
+    Without certificate checks, anyone on the path can take a signed client
+    assertion and redeem it for a token that reads patient records.
+    """
+
+    if verify_tls or url is None:
+        return
+    if not _is_loopback(urlparse(url).hostname):
+        raise ValueError(
+            f"verify_tls can be false only for a loopback {what}; refused for "
+            f"{urlparse(url).hostname or 'an unknown host'}"
+        )
+
+
 class SmartBackendConfig(BaseModel):
     """``effects.smart_backend`` in ``deployment.yaml`` or ``verify.yaml``.
 
@@ -142,6 +158,7 @@ class SmartBackendConfig(BaseModel):
             )
         if self.token_url is not None:
             _require_tls(self.token_url, "smart_backend.token_url")
+        _require_verified_tls(self.token_url, self.verify_tls, "token_url")
         if self.jku is not None and urlparse(self.jku).scheme != "https":
             raise ValueError("smart_backend.jku must be https")
         return self
@@ -281,6 +298,8 @@ class SmartBackendTokenSource:
     ) -> None:
         if token_url is None and fhir_base_url is None:
             raise ValueError("smart_backend needs token_url or a FHIR base URL")
+        _require_verified_tls(token_url, verify_tls, "token_url")
+        _require_verified_tls(fhir_base_url, verify_tls, "FHIR base URL")
         self.client_id = client_id
         self.scope = scope
         self.kid = kid
@@ -448,6 +467,9 @@ class SmartBackendTokenSource:
             raise SmartTokenError("smart-configuration has no token_endpoint")
         try:
             _require_tls(token_url, "the discovered token_endpoint")
+            _require_verified_tls(
+                token_url, self.verify_tls, "discovered token_endpoint"
+            )
         except ValueError as exc:
             raise SmartTokenError(str(exc)) from None
         methods = doc.get("token_endpoint_auth_methods_supported")
