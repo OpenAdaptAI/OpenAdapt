@@ -214,6 +214,7 @@ jobs:
             openadapt_flow/runtime/effects/effect.py \
             openadapt_flow/runtime/effects/adapter.py \
             openadapt_flow/runtime/effects/auth.py \
+            openadapt_flow/runtime/effects/smart_auth.py \
             openadapt_flow/runtime/effects/compensation.py \
             openadapt_flow/runtime/effects/document_arrival.py \
             openadapt_flow/runtime/effects/document_hash.py \
