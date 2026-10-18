@@ -431,3 +431,62 @@ def test_a_model_calling_agent_needs_the_customers_key(tmp_path) -> None:
             store=tmp_path / "store",
             screen_access=ScreenAccess(enabled_by="ops-lead", mode="ask_each_time"),
         )
+
+
+def test_only_the_ladders_own_refusals_are_repaired(mockmed) -> None:
+    """A decline, a record mismatch or a found target is never repaired."""
+
+    from openadapt_flow.ir import HaltObservation, IdentityCheck, Resolution, StepResult
+    from openadapt_flow.repair.self_repair import _repairable
+
+    _base_url, bundle = mockmed
+    workflow = Workflow.load(bundle)
+
+    def report(**halted) -> RunReport:
+        done = [
+            StepResult(step_id=s.id, intent=s.intent, ok=True, delivery_attempted=True)
+            for s in workflow.steps[:5]
+        ]
+        last = StepResult(
+            step_id="step_005",
+            intent="click 'Save Encounter'",
+            ok=False,
+            delivery_attempted=False,
+            **halted,
+        )
+        return RunReport(
+            workflow_name="triage",
+            started_at="2026-10-18T00:00:00Z",
+            results=[*done, last],
+            halt=HaltObservation(state_id="step_005", reason=last.error or ""),
+        )
+
+    def geometry() -> Resolution:
+        return Resolution(rung="geometry", point=(1, 1), confidence=0.5, elapsed_ms=0)
+
+    not_found = "Could not resolve target for step 'step_005' (x): all rungs failed"
+    below = "Step 'step_005' is irreversible but only resolved via the 'geometry' rung"
+    assert not isinstance(_repairable(report(error=not_found), workflow), str)
+    assert not isinstance(
+        _repairable(report(error=below, resolution=geometry()), workflow), str
+    )
+    declined = report(
+        error="Approval mode: a person declined this save (wrong_values). "
+        "This save was not made. Nothing was retried."
+    )
+    assert "another reason" in _repairable(declined, workflow)
+    found = report(
+        error="postcondition failed",
+        resolution=Resolution(
+            rung="structural", point=(1, 1), confidence=1.0, elapsed_ms=0
+        ),
+    )
+    assert "found its target" in _repairable(found, workflow)
+    mismatch = report(
+        error=not_found,
+        identity=IdentityCheck(status="mismatch", mode="structured"),
+    )
+    assert "wrong-record" in _repairable(mismatch, workflow)
+    delivered = report(error=not_found)
+    delivered.results[-1].delivery_attempted = None
+    assert "may have reached" in _repairable(delivered, workflow)

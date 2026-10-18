@@ -3845,6 +3845,7 @@ class SelfRepairEvidence(BaseModel):
         "declined",
         "awaiting_approval",
         "resumed",
+        "resume_failed",
     ]
     reason: str = Field(default="", max_length=1024)
     halted_run_dir: Optional[str] = None

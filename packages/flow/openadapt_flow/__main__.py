@@ -2984,7 +2984,7 @@ def _cmd_run(args: argparse.Namespace) -> int:
     if getattr(args, "self_repair", False):
         from openadapt_flow.cli_self_repair import cmd_run_self_repair
 
-        return cmd_run_self_repair(
+        exit_code = cmd_run_self_repair(
             args,
             workflow=workflow,
             bundle=bundle,
@@ -3019,7 +3019,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
             approval_gate_for_run=_approval_gate_for_run,
             finish=_finish_replay,
             default_run_dir=_default_run_dir,
+            attest_pre_state=_maybe_attest_pre_state,
         )
+        _attach_cloud_seal(args)
+        return exit_code
     exit_code = _cmd_replay(args)
     _attach_cloud_seal(args)
     return exit_code

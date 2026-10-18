@@ -21,10 +21,12 @@ Module: `openadapt_flow.repair.self_repair`. CLI: `openadapt-flow run
    these hold:
    - no input reached a step that saves, and no effect was observed;
    - the halted step is a click that never acted;
-   - the deterministic ladder did not find its target, or found it only by
-     geometry.
+   - the halt is one of the ladder's own two refusals: it found no target, or
+     it found the target only by geometry and refused to act on that;
+   - the workflow has exactly one save (for now).
 
-   A halt on the record check (an identity mismatch) is never repaired.
+   A halt on the record check (an identity mismatch) is never repaired, and
+   neither is an item a person declined at the approval gate.
 2. **Propose.** The repair agent is shown the step's intent, the recorded
    evidence (the target crop, its label, its place) and the live screen. It
    proposes one action in its own dialect. Its model calls and their cost go
@@ -68,7 +70,10 @@ Module: `openadapt_flow.repair.self_repair`. CLI: `openadapt-flow run
 6. **Approve.** Flow writes one approval request into the halted run's
    `item-approval/` folder, with a screenshot of the filled form and the new
    control outlined. One person answers it. That answer records both the
-   review and the approval in the store, under that person's name.
+   review and the approval in the store. The approver is recorded as their
+   Cloud user id, or as `<route>:person` (for example
+   `decision_portal:person`) when they answered without signing in, as a
+   paired phone always does.
    - The agent can never review or approve its own candidate.
    - Only a person's answer counts; an agent or rule can't answer it.
    - A decline rejects the candidate. No answer in time leaves it waiting.
@@ -77,7 +82,8 @@ Module: `openadapt_flow.repair.self_repair`. CLI: `openadapt-flow run
    The item re-runs from the start in a fresh session. At the save it runs the
    probe checks again and proceeds only if the form is exactly the one the
    person approved. The record check runs as usual, and the run is the
-   canary's first observation.
+   canary's first observation. If the approved bundle can't run, the canary is
+   rolled back and the status is `resume_failed`.
 
 The re-run is safe because self-repair handles only a halt before any
 effect. The item was never partly saved.
@@ -168,8 +174,9 @@ contains:
 | `no_fix` | No proposal passed its checks, or a campaign failed. Nothing was written. |
 | `needs_fault_probes` | The step's identity is read from the DOM and no fault probe was given. |
 | `declined` | A person declined. The candidate is rejected. |
-| `awaiting_approval` | Nobody answered in time. The candidate waits in the store. |
+| `awaiting_approval` | Nobody answered in time, or an answer was refused (for example, one not from a person). The candidate waits in the store. |
 | `resumed` | The approved bundle re-ran. Read `report.execution_outcome`. |
+| `resume_failed` | The approved bundle could not run, or an unexpected error stopped self-repair. Any canary was rolled back. |
 
 ### Writing a repair agent
 
@@ -214,7 +221,10 @@ openadapt-flow run bundles/triage --config deploy.yaml --url "$APP_URL" --run-di
 
 `run` admits the bundle as usual. The first run uses the same authorization
 and approval gate as without `--self-repair`. Probes and the resumed run
-admit the patched bundle through the same gate settings.
+admit the patched bundle through the same run gate settings, with a fresh
+authorization each. They don't use the deployment's approval mode: the
+person's answer to the repair request is the approval for the item's one
+save, and the resume refuses the save unless the form is the one they saw.
 
 | Flag | Default | Meaning |
 | --- | --- | --- |
@@ -284,8 +294,12 @@ seconds.
 
 ## Limits
 
-- Only clicks on linear steps are repaired, one halted step per run. When the
-  patched run halts at another step, the probe fails with that reason.
+- Only clicks on linear steps are repaired, one halted step per run, in a
+  workflow with exactly one save. When the patched run halts at another step,
+  the probe fails with that reason.
+- The probe stops before every step the run gate classifies as a save, the
+  same fail-closed classifier the approval gate uses. A step that writes but
+  that the classifier misses would run during a probe.
 - The CLI supports browser runs that Flow launches. The Python API takes any
   backend whose sessions you can open, but the DOM-based checks
   (`same_fields`, the structural locator) apply only in a browser. Elsewhere

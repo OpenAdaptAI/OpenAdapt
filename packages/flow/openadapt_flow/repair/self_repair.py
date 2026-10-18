@@ -118,6 +118,10 @@ _POINTER_KINDS = {
     ActionKind.DOUBLE_CLICK: "double_click",
 }
 _STOP_REASON = "self_repair_probe"
+#: The replayer's own wording for its two target-resolution refusals.
+_NOT_FOUND = "Could not resolve target for step"
+_BELOW_RUNG = "only resolved via the"
+_UNTRUSTED_RUNGS = frozenset({"geometry", "grounder"})
 
 
 class SelfRepairRefused(RuntimeError):
@@ -461,8 +465,11 @@ class SelfRepairResult:
     (no proposal passed its probe), ``needs_fault_probes`` (the step's
     identity can't be judged from pixels and no fault probe was given),
     ``declined`` (the person declined), ``awaiting_approval`` (nobody
-    answered in time; the candidate waits in the store) or ``resumed`` (the
-    approved bundle re-ran; see ``report.execution_outcome``).
+    answered in time, or an answer was refused; the candidate waits in the
+    store), ``resumed`` (the approved bundle re-ran; see
+    ``report.execution_outcome``) or ``resume_failed`` (the approved bundle
+    could not run, or an unexpected error stopped self-repair; any canary was
+    rolled back).
     """
 
     status: str
@@ -656,9 +663,14 @@ class SelfRepair:
                     work,
                     evidence,
                 )
-            except SelfRepairRefused as exc:
+            except Exception as exc:  # noqa: BLE001 - every failure saves nothing
+                detail = (
+                    str(exc)
+                    if isinstance(exc, SelfRepairRefused)
+                    else f"self-repair failed ({type(exc).__name__}); nothing was saved"
+                )
                 evidence.steps.append(
-                    SelfRepairStepRecord(stage="propose", passed=False, detail=str(exc))
+                    SelfRepairStepRecord(stage="propose", passed=False, detail=detail)
                 )
                 patch, probe = None, None
         finally:
@@ -673,15 +685,48 @@ class SelfRepair:
                 work,
                 halted_report=report,
             )
-        return self._govern_and_resume(
-            workflow,
-            bundle_dir,
-            patch,
-            probe,
-            report,
+        try:
+            return self._govern_and_resume(
+                workflow, bundle_dir, patch, probe, report, run_dir, work, evidence
+            )
+        except Exception as exc:  # noqa: BLE001 - fail closed, never half-promoted
+            return self._fail_closed(exc, evidence, report, run_dir, work, patch)
+
+    def _fail_closed(
+        self,
+        exc: Exception,
+        evidence: SelfRepairEvidence,
+        halted_report: RunReport,
+        run_dir: Path,
+        work: Path,
+        patch: _Patch,
+    ) -> SelfRepairResult:
+        """An unexpected error after the probe: roll back any canary, stop."""
+
+        from openadapt_flow.repair.lifecycle import RepairLifecycleError
+
+        candidate = None
+        if evidence.candidate_id:
+            try:
+                candidate = self.store.load_candidate(evidence.candidate_id)
+                if candidate.state == "canary":
+                    candidate = self.store.rollback(AUTOMATION, candidate.candidate_id)
+            except RepairLifecycleError:
+                pass
+        reason = f"self-repair stopped ({type(exc).__name__}: {exc})"[:1024]
+        evidence.steps.append(
+            SelfRepairStepRecord(stage="resume", passed=False, detail=reason)
+        )
+        return self._finish(
+            "resume_failed",
+            reason,
+            evidence,
+            halted_report,
             run_dir,
             work,
-            evidence,
+            halted_report=halted_report,
+            candidate=candidate,
+            patched_bundle=patch.bundle_dir,
         )
 
     # -- propose / patch / probe ----------------------------------------------
@@ -772,11 +817,16 @@ class SelfRepair:
                     attempt_dir,
                     scrub_evidence,
                 )
-            except SelfRepairRefused as exc:
-                refusals.append(str(exc))
+            except Exception as exc:  # noqa: BLE001 - a bad proposal is a refusal
+                detail = (
+                    str(exc)
+                    if isinstance(exc, SelfRepairRefused)
+                    else f"the proposal could not be applied ({type(exc).__name__})"
+                )
+                refusals.append(detail)
                 evidence.steps.append(
                     SelfRepairStepRecord(
-                        stage="patch", passed=False, detail=str(exc), attempt=attempt
+                        stage="patch", passed=False, detail=detail, attempt=attempt
                     )
                 )
                 continue
@@ -1018,12 +1068,18 @@ class SelfRepair:
             page = getattr(session.backend, "page", None)
             if page is None:
                 raise SelfRepairRefused("no page to resolve the proposed selector")
-            locator = page.locator(op.target)
-            if locator.count() != 1:
+            try:
+                locator = page.locator(op.target)
+                count = locator.count()
+                box = locator.bounding_box() if count == 1 else None
+            except Exception as exc:  # noqa: BLE001 - an invalid selector
                 raise SelfRepairRefused(
-                    f"the proposed selector matches {locator.count()} elements"
+                    f"the proposed selector is not usable ({type(exc).__name__})"
+                ) from exc
+            if count != 1:
+                raise SelfRepairRefused(
+                    f"the proposed selector matches {count} elements"
                 )
-            box = locator.bounding_box()
             if box is None:
                 raise SelfRepairRefused("the proposed element is not visible")
             return int(box["x"] + box["width"] / 2), int(box["y"] + box["height"] / 2)
@@ -1050,6 +1106,8 @@ class SelfRepair:
         workflow = patch.workflow
 
         def checks(ctx: SaveContext) -> ProbeOutcome:
+            # Called by the gate during execute(), after the session opened.
+            assert session is not None
             return _pre_save_checks(
                 ctx,
                 workflow,
@@ -1062,13 +1120,19 @@ class SelfRepair:
             )
 
         gate = _ProbeGate(checks, resume_form_state=resume_form_state)
-        session = self.target.open(fault)
+        session: Optional[AppSession] = None
         try:
+            session = self.target.open(fault)
             report = self.target.execute(
                 workflow, patch.bundle_dir, session, run_dir, approval_gate=gate
             )
-        except SelfRepairRefused as exc:
-            outcome = ProbeOutcome(checks=[("run_gate", False, str(exc)[:300])])
+        except Exception as exc:  # noqa: BLE001 - a run that can't start saves nothing
+            detail = (
+                str(exc)[:300]
+                if isinstance(exc, SelfRepairRefused)
+                else f"the run could not start ({type(exc).__name__})"
+            )
+            outcome = ProbeOutcome(checks=[("run_gate", False, detail)])
             outcome.run_dir = run_dir
             return outcome
         finally:
@@ -1076,10 +1140,6 @@ class SelfRepair:
         outcome = gate.outcome or ProbeOutcome()
         outcome.report = report
         outcome.run_dir = run_dir
-        if outcome.reached_save and report.model_calls:
-            outcome.checks.append(
-                ("zero_model_calls", False, f"{report.model_calls} model call(s)")
-            )
         return outcome
 
     # -- campaigns, approval, resume ------------------------------------------
@@ -1148,19 +1208,19 @@ class SelfRepair:
                 candidate=candidate,
                 patched_bundle=patch.bundle_dir,
             )
-        request_id, answer = self._ask_person(patch, probe, candidate, run_dir)
+        request_id, answer, why = self._ask_person(patch, probe, candidate, run_dir)
         if answer is None:
             evidence.steps.append(
                 SelfRepairStepRecord(
                     stage="approval",
                     passed=False,
-                    detail="nobody answered in time; the candidate waits in the "
-                    "repair store and nothing was saved",
+                    detail=f"{why}; the candidate waits in the repair store and "
+                    "nothing was saved",
                 )
             )
             return self._finish(
                 "awaiting_approval",
-                "waiting for a person",
+                why,
                 evidence,
                 halted_report,
                 run_dir,
@@ -1243,7 +1303,33 @@ class SelfRepair:
         )
         report = resumed.report
         if report is None:
-            raise SelfRepairRefused(resumed.failure())
+            # The approved bundle never ran: put the prior bundle back so
+            # nothing else picks up a bundle with no canary run behind it.
+            reason = resumed.failure()
+            try:
+                candidate = self.store.rollback(AUTOMATION, candidate.candidate_id)
+            except RepairLifecycleError:
+                pass
+            evidence.steps.append(
+                SelfRepairStepRecord(
+                    stage="resume",
+                    passed=False,
+                    detail=f"{reason}; the canary was rolled back"[:1024],
+                )
+            )
+            return self._finish(
+                "resume_failed",
+                f"the resumed run could not start ({reason}); the canary was "
+                "rolled back",
+                evidence,
+                halted_report,
+                run_dir,
+                work,
+                halted_report=halted_report,
+                candidate=self.store.load_candidate(candidate.candidate_id),
+                patched_bundle=patch.bundle_dir,
+                approval_request_id=request_id,
+            )
         candidate = self.store.record_canary_run(
             candidate.candidate_id, observation_from_report(report)
         )
@@ -1396,8 +1482,11 @@ class SelfRepair:
         probe: ProbeOutcome,
         candidate: RepairCandidate,
         run_dir: Path,
-    ) -> tuple[Optional[str], Optional[tuple[str, str, str]]]:
-        """Ask one person; return ``(request_id, (decision, approver, route))``.
+    ) -> tuple[Optional[str], Optional[tuple[str, str, str]], str]:
+        """Ask one person: ``(request_id, (decision, approver, route), why)``.
+
+        The answer is ``None`` when none counts; ``why`` then says whether
+        nobody answered in time or an answer was refused.
 
         The request goes in the halted run's ``item-approval/`` folder, where
         the decision portal and ``openadapt-flow item-approval`` find it.
@@ -1452,7 +1541,7 @@ class SelfRepair:
             except Exception:  # noqa: BLE001 - a notifier never decides anything
                 pass
         if self.approval_wait_s <= 0:
-            return request.request_id, None
+            return request.request_id, None, "no wait was configured"
         deadline = self._monotonic() + self.approval_wait_s
         while True:
             try:
@@ -1469,19 +1558,24 @@ class SelfRepair:
                 ):
                     # Only a person's answer counts, and a refused answer is
                     # final for this request: nothing is saved.
-                    return request.request_id, None
+                    code = refusal or "not_a_person"
+                    return request.request_id, None, f"an answer was refused ({code})"
                 store.consume(request.request_id)
                 approver = answer.approver_id or f"{answer.route}:person"
-                return request.request_id, (answer.decision, approver, answer.route)
+                return (
+                    request.request_id,
+                    (answer.decision, approver, answer.route),
+                    "",
+                )
             current = self.store.load_candidate(candidate.candidate_id)
             if current.state == "rejected":
-                return request.request_id, (
-                    "decline",
-                    "repair_store:person",
-                    "repair_store",
+                return (
+                    request.request_id,
+                    ("decline", "repair_store:person", "repair_store"),
+                    "",
                 )
             if self._monotonic() >= deadline or request.expired():
-                return request.request_id, None
+                return request.request_id, None, "nobody answered in time"
             self._sleep(self.approval_poll_s)
 
     # -- bookkeeping ---------------------------------------------------------
@@ -1646,10 +1740,30 @@ def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, int, Any]
         )
     if step.action not in _POINTER_KINDS or step.anchor is None:
         return f"{step.id} is not a click on an on-screen target"
-    if halted.resolution is not None and halted.resolution.rung in TRUSTED_RUNGS:
+    # Only the ladder's own two refusals count as "the screen changed": it
+    # found nothing, or it found the target only by geometry (or a model) and
+    # refused to act on that. Any other stop before resolution, such as a
+    # person declining the save at the approval gate, is never repaired.
+    error = halted.error or ""
+    if halted.resolution is None:
+        if not error.startswith(_NOT_FOUND):
+            return (
+                f"{step.id} stopped before resolving its target for another "
+                "reason; only a target the ladder could not find is repaired"
+            )
+    elif halted.resolution.rung not in _UNTRUSTED_RUNGS or _BELOW_RUNG not in error:
         return (
             f"{step.id} found its target ({halted.resolution.rung}) and stopped for "
             "another reason"
+        )
+    approval = report.approval
+    if approval is not None and approval.decision is ItemDecisionKind.DECLINED:
+        return "a person declined this item; it is never repaired"
+    saves = [s.id for s in workflow.steps if is_consequential(s, workflow)]
+    if len(saves) != 1:
+        return (
+            f"the workflow has {len(saves)} saves; self-repair handles a workflow "
+            "with exactly one save for now"
         )
     if not report.halt or report.halt.state_id != step.id:
         return "the report's halt does not name the failed step"
@@ -1736,6 +1850,14 @@ def _pre_save_checks(
     ]
     checks.append(
         ("nothing_written", not early, "ok" if not early else ",".join(early))
+    )
+    # The deterministic run made no model call on the way to the save.
+    checks.append(
+        (
+            "zero_model_calls",
+            ctx.model_calls == 0,
+            f"{ctx.model_calls} model call(s) before the save",
+        )
     )
 
     # The patched step's target was found by the deterministic ladder.

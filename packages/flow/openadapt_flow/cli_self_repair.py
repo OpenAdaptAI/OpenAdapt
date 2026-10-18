@@ -18,14 +18,10 @@ from __future__ import annotations
 import argparse
 import importlib
 from pathlib import Path
-from typing import Any, Callable, Optional
+from typing import TYPE_CHECKING, Any, Callable, Optional
 
-from openadapt_flow.repair.self_repair import (
-    AppSession,
-    ScreenAccess,
-    SelfRepair,
-    SelfRepairRefused,
-)
+if TYPE_CHECKING:
+    from openadapt_flow.repair.self_repair import AppSession
 
 __all__ = ["add_self_repair_flags", "cmd_run_self_repair", "load_agent"]
 
@@ -106,6 +102,8 @@ def add_self_repair_flags(p: argparse.ArgumentParser) -> None:
 
 def load_agent(spec: str) -> Any:
     """Import ``module:name``; instantiate it when it is a class or factory."""
+
+    from openadapt_flow.repair.self_repair import SelfRepairRefused
 
     module_name, _, attr = spec.partition(":")
     if not module_name or not attr:
@@ -188,8 +186,9 @@ class CliTarget:
         self._approval_gate_for_run = approval_gate_for_run
         self.headed = bool(args.headed or cfg.backend.headed)
 
-    def open(self, fault: Optional[str] = None) -> AppSession:
+    def open(self, fault: Optional[str] = None) -> "AppSession":
         from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+        from openadapt_flow.repair.self_repair import AppSession
 
         backend, close = PlaywrightBackend.launch(
             fault or self.url, headless=not self.headed
@@ -200,13 +199,14 @@ class CliTarget:
         self,
         workflow: Any,
         bundle_dir: Path,
-        session: AppSession,
+        session: "AppSession",
         run_dir: Path,
         *,
         approval_gate: Any = None,
     ) -> Any:
         from urllib.parse import urlsplit
 
+        from openadapt_flow.repair.self_repair import SelfRepairRefused
         from openadapt_flow.run_gate import (
             build_runtime_authorization,
             evaluate_run_gate,
@@ -279,10 +279,16 @@ def cmd_run_self_repair(
     approval_gate_for_run: Callable[..., Any],
     finish: Callable[..., int],
     default_run_dir: Callable[[], Path],
+    attest_pre_state: Optional[Callable[..., None]] = None,
 ) -> int:
     """Run the admitted bundle with self-repair on. Returns the exit code."""
 
     from openadapt_flow.cli_hints import command
+    from openadapt_flow.repair.self_repair import (
+        ScreenAccess,
+        SelfRepair,
+        SelfRepairRefused,
+    )
 
     url = args.url or cfg.backend.url
     refusal = _refusal(args, backend_cfg, url)
@@ -344,6 +350,9 @@ def cmd_run_self_repair(
         print(f"run REFUSED: --self-repair: {exc}. Nothing was executed.")
         return 2
     run_dir = Path(args.run_dir) if args.run_dir else default_run_dir()
+    if attest_pre_state is not None:
+        # Same point as a plain run: admitted, nothing actuated yet.
+        attest_pre_state(run_dir, args)
     try:
         result = repair.run(bundle, run_dir)
     except SelfRepairRefused as exc:
