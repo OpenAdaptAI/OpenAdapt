@@ -35,6 +35,14 @@ Recording format (DESIGN.md):
       frames/{i:04d}_before.png
       frames/{i:04d}_after.png   # captured after the action settled
 
+Multi-surface recordings (docs/MULTI_SURFACE.md) add, only once a second
+surface exists: ``"opens": [...]`` on an event whose action opened browser
+pages, a ``{"kind": "switch_surface", "surface": "<id>"}`` event for every
+surface change, ``"surface"`` on every later event, and ``"surfaces"`` in
+``meta.json`` (each page's opening event, opener relation, URL, and title, from
+which the compiler derives the replay-time patterns). A recording that never
+opens a page or switches is written exactly as before.
+
 The settle wait is implemented inline here (perceptual-hash polling) on purpose:
 this module must not depend on `openadapt_flow.vision`.
 """
@@ -53,7 +61,39 @@ from PIL import Image, ImageDraw
 
 from openadapt_flow.backend import Backend, RichPointerActionBackend
 from openadapt_flow.image_hash import perceptual_hash
-from openadapt_flow.ir import StructuralLocator, structural_locator_is_locatable
+from openadapt_flow.ir import (
+    MAX_PAGES_OPENED_PER_STEP,
+    PRIMARY_SURFACE_ID,
+    StructuralLocator,
+    structural_locator_is_locatable,
+)
+
+#: Bound on waiting for a newly opened page's first navigation.
+_NEW_PAGE_LOAD_TIMEOUT_S = 10.0
+# How long a recorded action that raises a browser dialog waits for it.
+_DIALOG_WAIT_S = 5.0
+
+
+def _has_window_opener(page: Any) -> bool:
+    """Whether the page's own ``window.opener`` is set (False for noopener)."""
+
+    from openadapt_flow.runtime.surfaces import page_has_window_opener
+
+    return bool(page_has_window_opener(page))
+
+
+def _url_without_query(url: Any) -> str:
+    """``url`` with its query and fragment removed."""
+
+    from urllib.parse import urlsplit, urlunsplit
+
+    if not isinstance(url, str) or not url:
+        return ""
+    try:
+        parts = urlsplit(url)
+    except ValueError:
+        return ""
+    return urlunsplit((parts.scheme, parts.netloc, parts.path, "", ""))
 
 
 def _phash(png: bytes) -> str:
@@ -93,12 +133,34 @@ class Recorder:
         settle_stable_frames: int = 2,
         settle_timeout_s: float = 3.0,
         network_capture: Optional[Any] = None,
+        surface_id: str = PRIMARY_SURFACE_ID,
+        surface_kind: Optional[str] = None,
+        page_backend_factory: Optional[Callable[[Any], Backend]] = None,
     ) -> None:
+        # ``_backend`` is always the ACTIVE surface's backend; on a
+        # single-surface recording it never changes.
         self._backend = backend
         # Opt-in ``record --capture-network``: a started
         # :class:`openadapt_flow.network_capture.NetworkCapture`, written beside
         # the events by :meth:`finish`.
         self._network_capture = network_capture
+        # Builds the backend for a browser page an action opened. The
+        # interactive recorder passes one that applies its privacy masking
+        # and scrubbed structural reads to every page it follows.
+        self._page_backend_factory = page_backend_factory
+        self._primary_backend = backend
+        self._primary_surface_id = surface_id
+        self._primary_surface_kind = surface_kind
+        self._active_surface = surface_id
+        self._surface_backends: dict[str, Backend] = {surface_id: backend}
+        self._surface_meta: list[dict[str, Any]] = []
+        self._multi_surface = False
+        # Set by expect_dialog(): how the NEXT action answers the dialog it
+        # raises (docs/MULTI_SURFACE.md, "Dialogs").
+        self._expected_dialog: Optional[str] = None
+        self._page_counters = {"popup": 0, "tab": 0}
+        self._known_pages: list[Any] = []
+        self._remember_pages(backend)
         self._dir = Path(out_dir)
         self._frames_dir = self._dir / "frames"
         self._frames_dir.mkdir(parents=True, exist_ok=True)
@@ -211,8 +273,8 @@ class Recorder:
 
     def finish(self) -> Path:
         """Write ``meta.json`` and return the recording directory."""
-        viewport = self._backend.viewport
-        meta = {
+        viewport = self._primary_backend.viewport
+        meta: dict[str, Any] = {
             "id": uuid.uuid4().hex,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "viewport": [int(viewport[0]), int(viewport[1])],
@@ -236,8 +298,247 @@ class Recorder:
                 "file": NETWORK_FILE,
                 "exchanges": self._network_capture.count,
             }
+        if self._multi_surface:
+            meta["surfaces"] = [
+                {
+                    "id": self._primary_surface_id,
+                    "kind": self._primary_kind(),
+                },
+                *self._surface_meta,
+            ]
         (self._dir / "meta.json").write_text(json.dumps(meta, indent=2))
         return self._dir
+
+    # -- multi-surface (docs/MULTI_SURFACE.md) ---------------------------------
+
+    @property
+    def active_surface(self) -> str:
+        """Id of the surface the next action is recorded on."""
+
+        return self._active_surface
+
+    @property
+    def surface_ids(self) -> tuple[str, ...]:
+        """Every surface recorded so far, primary first."""
+
+        return tuple(self._surface_backends)
+
+    def surface_backend(self, surface_id: str) -> Backend:
+        """The backend recorded for ``surface_id`` (a page opened by a step)."""
+
+        return self._surface_backends[surface_id]
+
+    def surface_for_page(self, page: Any) -> Optional[str]:
+        """The surface id recorded for browser ``page``, or None."""
+
+        for surface_id, backend in self._surface_backends.items():
+            if self._browser_page(backend) is page:
+                return surface_id
+        return None
+
+    def knows_page(self, page: Any) -> bool:
+        """Whether ``page`` was open at the start or claimed by an action."""
+
+        return any(page is known for known in self._known_pages)
+
+    def expect_dialog(self, response: str = "accept") -> None:
+        """The next action raises a browser dialog; answer it with ``response``.
+
+        Browser backend only. The dialog's message is recorded as its identity
+        and the compiled step answers only a dialog that shows that message.
+        """
+
+        if response not in ("accept", "dismiss"):
+            raise ValueError("a dialog response is 'accept' or 'dismiss'")
+        self._expected_dialog = response
+
+    def switch_surface(
+        self,
+        surface_id: str,
+        *,
+        backend: Optional[Backend] = None,
+        kind: Optional[str] = None,
+        before_png: Optional[bytes] = None,
+        structural_before: Optional[dict[str, Any]] = None,
+    ) -> None:
+        """Record moving to another surface (a tab/popup, or another backend).
+
+        A page some earlier action opened is switched to by its id (see
+        ``surface_ids``). Another backend (a native app, an RDP/Citrix window)
+        is passed in with ``backend``; its kind is read from the backend class
+        or given as ``kind``. The event's before frame is the old surface and
+        its after frame the new one, settled.
+        """
+
+        import re as _re
+
+        from openadapt_flow.ir import SURFACE_ID_PATTERN
+
+        if surface_id == self._active_surface:
+            raise ValueError(f"surface {surface_id!r} is already active")
+        if backend is None:
+            if surface_id not in self._surface_backends:
+                raise ValueError(
+                    f"surface {surface_id!r} was not opened in this recording; "
+                    "pass backend= to record a switch to another backend"
+                )
+            target = self._surface_backends[surface_id]
+        else:
+            if surface_id in self._surface_backends:
+                if self._surface_backends[surface_id] is not backend:
+                    raise ValueError(f"surface {surface_id!r} is already recorded")
+            elif not _re.fullmatch(SURFACE_ID_PATTERN, surface_id):
+                raise ValueError(f"invalid surface id {surface_id!r}")
+            else:
+                self._surface_meta.append(
+                    {"id": surface_id, "kind": self._kind_of(backend, kind)}
+                )
+                self._surface_backends[surface_id] = backend
+                self._remember_pages(backend)
+            target = backend
+        # A caller that observed the switch (the interactive recorder) captured
+        # the old surface already; a driven recording captures it now.
+        before = before_png if before_png is not None else self._backend.screenshot()
+        if structural_before is None:
+            structural_before = self._structural_state()
+        self._multi_surface = True
+        self._backend = target
+        self._active_surface = surface_id
+        page = self._browser_page(target)
+        if page is not None:
+            try:
+                page.bring_to_front()
+            except Exception:
+                pass
+        after = self._wait_settled()
+        self._commit(
+            {"kind": "switch_surface", "surface": surface_id},
+            before,
+            after,
+            structural_before,
+        )
+
+    def _primary_kind(self) -> str:
+        return self._kind_of(self._primary_backend, self._primary_surface_kind)
+
+    @staticmethod
+    def _kind_of(backend: Backend, kind: Optional[str]) -> str:
+        from openadapt_flow.runtime.surfaces import backend_surface_kinds
+
+        if kind is not None:
+            return kind
+        kinds = backend_surface_kinds(backend)
+        if len(kinds) != 1:
+            raise ValueError(
+                "cannot tell this backend's surface kind; pass kind= "
+                "(web/windows/macos/linux/rdp/citrix)"
+            )
+        return next(iter(kinds))
+
+    @staticmethod
+    def _browser_page(backend: Any) -> Any:
+        page = getattr(backend, "page", None)
+        if page is None or not hasattr(page, "context"):
+            return None
+        return page
+
+    def _context_pages(self, backend: Any) -> list[Any]:
+        page = self._browser_page(backend)
+        if page is None:
+            return []
+        try:
+            return list(page.context.pages)
+        except Exception:
+            return [page]
+
+    def _remember_pages(self, backend: Any) -> None:
+        for page in self._context_pages(backend):
+            if not any(page is known for known in self._known_pages):
+                self._known_pages.append(page)
+
+    def _claim_new_pages(self, event_index: int) -> list[str]:
+        """Record every page opened since the last check, in creation order."""
+
+        new_pages = [
+            page
+            for page in self._context_pages(self._backend)
+            if not any(page is known for known in self._known_pages)
+        ]
+        opener_page = self._browser_page(self._backend)
+
+        def _opened_by_another_known_page(page: Any) -> bool:
+            # A page another recorded page opened belongs to THAT page's
+            # action; it is claimed when that action is recorded. (The
+            # interactive recorder can see a new page before it has written
+            # the pending action of the surface the user just left.)
+            try:
+                live_opener = page.opener()
+            except Exception:
+                return False
+            return (
+                live_opener is not None
+                and live_opener is not opener_page
+                and any(live_opener is known for known in self._known_pages)
+            )
+
+        new_pages = [p for p in new_pages if not _opened_by_another_known_page(p)]
+        if not new_pages:
+            return []
+        if len(new_pages) > MAX_PAGES_OPENED_PER_STEP:
+            raise RuntimeError(
+                f"one action opened {len(new_pages)} browser pages; at most "
+                f"{MAX_PAGES_OPENED_PER_STEP} can be recorded per step"
+            )
+        from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+        ids: list[str] = []
+        for order, page in enumerate(new_pages):
+            self._known_pages.append(page)
+            try:
+                page.wait_for_load_state(
+                    "domcontentloaded", timeout=_NEW_PAGE_LOAD_TIMEOUT_S * 1000
+                )
+            except Exception:
+                pass
+            try:
+                live_opener = page.opener()
+            except Exception:
+                live_opener = None
+            link = "window_opener" if _has_window_opener(page) else "none"
+            if live_opener is not None and live_opener is not opener_page:
+                raise RuntimeError(
+                    "a recorded page was opened by a page that is not the "
+                    "active surface; refusing to guess its opener"
+                )
+            prefix = "popup" if link == "window_opener" else "tab"
+            self._page_counters[prefix] += 1
+            surface_id = f"{prefix}_{self._page_counters[prefix]}"
+            try:
+                url = _url_without_query(page.url)
+            except Exception:
+                url = ""
+            # meta.json keeps only what identifies the page at replay: the
+            # URL without its query or fragment (OAuth code/state, search
+            # terms), and no title (titles carry record names).
+            self._surface_meta.append(
+                {
+                    "id": surface_id,
+                    "kind": "web",
+                    "opened_by_event": event_index,
+                    "opener": self._active_surface,
+                    "open_order": order,
+                    "opener_link": link,
+                    "url": url,
+                }
+            )
+            self._surface_backends[surface_id] = (
+                self._page_backend_factory(page)
+                if self._page_backend_factory is not None
+                else PlaywrightBackend(page, closed_page_frame=True)
+            )
+            ids.append(surface_id)
+        self._multi_surface = True
+        return ids
 
     @property
     def event_count(self) -> int:
@@ -288,8 +589,34 @@ class Recorder:
                 binding = self._submit_binding_at(int(event["x"]), int(event["y"]))
                 if binding:
                     event = {**event, "submit_binding": binding}
+        dialog_response, self._expected_dialog = self._expected_dialog, None
+        if dialog_response is not None:
+            arm = getattr(self._backend, "arm_dialog", None)
+            if not callable(arm):
+                raise RuntimeError(
+                    "this backend cannot see browser dialogs; on a screen-driven "
+                    "backend record the clicks that answer the dialog instead"
+                )
+            arm(dialog_response, None)
         act()
+        if dialog_response is not None:
+            seen = self._backend.take_dialogs(_DIALOG_WAIT_S)  # type: ignore[attr-defined]
+            if len(seen) != 1:
+                raise RuntimeError(
+                    f"the action raised {len(seen)} browser dialogs; exactly one "
+                    "was expected"
+                )
+            event = {
+                **event,
+                "dialog": {
+                    "response": dialog_response,
+                    "message": str(seen[0]["message"]),
+                },
+            }
         after = self._wait_settled()
+        opened = self._claim_new_pages(self._i)
+        if opened:
+            event = {**event, "opens": opened}
         self._commit(event, before, after, structural_before)
 
     def record_observed(
@@ -360,6 +687,12 @@ class Recorder:
         # click) passes it in; otherwise we settle and capture now.
         if after_png is None:
             after_png = self._wait_settled()
+        # The observed action may have opened browser pages (a popup, a
+        # target=_blank tab): claim them for this event, exactly as a driven
+        # action does. A non-browser backend has no pages, so nothing changes.
+        opened = self._claim_new_pages(self._i)
+        if opened:
+            event = {**event, "opens": opened}
         self._commit(
             event,
             before_png,
@@ -404,6 +737,8 @@ class Recorder:
             "viewport_before": before_viewport,
             "viewport_after": after_viewport,
         }
+        if self._multi_surface and event.get("kind") != "switch_surface":
+            line["surface"] = self._active_surface
         for key, value in structural_before.items():
             line[f"{key}_before"] = value
         if structural_after is None:
