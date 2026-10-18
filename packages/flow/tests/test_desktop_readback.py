@@ -379,7 +379,10 @@ def kiosk(tmp_path: Path) -> KioskLookupTransport:
 def _kiosk_verifier(kiosk: KioskLookupTransport, request_id: str) -> Any:
     def open_backend(user: str, password: str) -> tuple[Any, DesktopSessionFacts]:
         assert (user, password) == (ENV["RB_USER"], ENV["RB_PASS"])
-        return FreeRDPBackend(kiosk), DesktopSessionFacts(
+        # A fresh RDP logon: a new screen on the same database.
+        screen = KioskLookupTransport(kiosk.db_path)
+        kiosk.sessions.append(screen)
+        return FreeRDPBackend(screen), DesktopSessionFacts(
             own_session=True, fresh_session=True, signed_in=True, path="ocr"
         )
 
@@ -420,8 +423,9 @@ def test_kiosk_booking_is_confirmed_from_its_own_rdp_session(
     assert verifier.verify(_booked("patient_mrn", "MRN A1001"), before).confirmed
     assert verdict.assurance == "screen_readback"
     # Only the look-up box and Find were touched.
-    assert kiosk.save_clicks == 0
-    assert kiosk.booking_typed == ""
+    assert kiosk.sessions
+    assert all(screen.save_clicks == 0 for screen in kiosk.sessions)
+    assert all(screen.booking_typed == "" for screen in kiosk.sessions)
 
 
 def test_kiosk_ocr_mismatch_is_never_refuted(kiosk: KioskLookupTransport) -> None:
@@ -567,6 +571,7 @@ def test_guard_checks_the_automation_id_too() -> None:
 
 def test_an_already_signed_in_session_is_not_a_separate_sign_in() -> None:
     spec = _winforms_spec(
+        session={"kind": "rdp", "rdp_host": "emr.test"},
         credentials={"username_env": "RB_USER", "password_env": "RB_PASS"},
         sign_in={
             "username": {"automation_id": "user"},
@@ -691,3 +696,148 @@ def test_run_refuses_a_cli_override_onto_the_read_back_session() -> None:
     overridden = cfg.backend.model_copy(update={"agent_url": "http://seat:5001"})
     assert _refuse_shared_readback_session(cfg, overridden, operation="run")
     assert not _refuse_shared_readback_session(cfg, cfg.backend, operation="run")
+
+
+# -- second review, pinned -------------------------------------------------------------
+
+
+def test_a_persistent_session_showing_the_same_view_halts(
+    kiosk: KioskLookupTransport,
+) -> None:
+    # One screen kept between look-ups (an RDP logon that reconnects): the
+    # second look-up sees the same view before and after its search and
+    # can't tell a refresh from a stale screen.
+    def open_backend(user: str, password: str) -> tuple[Any, DesktopSessionFacts]:
+        return FreeRDPBackend(kiosk), DesktopSessionFacts(True, True, True, "ocr")
+
+    verifier = build_desktop_readback_verifier(
+        _kiosk_spec(),
+        {"request_id": "REQ-4815"},
+        timeout_s=0.0,
+        poll_interval_s=0.0,
+        driver=BackendSessionDriver(open_backend, settle_s=0.0),
+        environ=ENV,
+    )
+    kiosk.book("REQ-4815", "MRN A1001", "Ada Lovelace", "2026-11-02 09:30", "Follow-up")
+    before = verifier.capture_pre_state()
+    verdict = verifier.verify(_booked(), before)
+    assert verdict.verdict is Verdict.INDETERMINATE
+    assert "not have refreshed" in verdict.reason
+
+
+def test_app_sign_in_needs_a_network_rdp_session() -> None:
+    with pytest.raises(ValueError, match="network RDP"):
+        _winforms_spec(
+            credentials={"username_env": "RB_USER", "password_env": "RB_PASS"},
+            sign_in={
+                "username": {"automation_id": "user"},
+                "password": {"automation_id": "pass"},
+                "submit": {"automation_id": "signIn"},
+                "signed_in": {"automation_id": "home"},
+            },
+        )
+
+
+def test_a_ui_automation_marker_without_text_counts_when_present() -> None:
+    from openadapt_flow.runtime.effects.desktop_readback import _present
+
+    surface = _ScriptedSurface({"recordPanel": ""})
+    assert _present(surface, ControlRef(automation_id="recordPanel"))
+    assert not _present(surface, ControlRef(automation_id="otherPanel"))
+
+
+def test_result_rows_are_data_and_sign_in_ok_is_allowed() -> None:
+    spec = _winforms_spec()
+    guard = ReadOnlyLookupGuard(spec)
+    surface = _ScriptedSurface({}, under="Neil Post Complete")
+    guard.click(surface, spec.open.results, Seen("Neil Post Complete", (1, 1)))
+    assert surface.actions == ["click Neil Post Complete"]
+    assert save_like_words("OK", sign_in=True) == []
+    assert save_like_words("Submit", sign_in=True) == []
+    assert save_like_words("Save", sign_in=True) == ["save"]
+
+
+def test_effects_a_look_up_cannot_see_halt_before_any_session() -> None:
+    class NoSession:
+        def open(self, *args: Any) -> Any:  # pragma: no cover - must not run
+            raise AssertionError("no session should open")
+
+    verifier = DesktopReadbackVerifier(
+        resolve_desktop_spec(_winforms_spec(), NEIL), driver=NoSession()
+    )
+    keyed = Effect(
+        kind=EffectKind.FIELD_EQUALS,
+        match={"patient": ValueExpr(literal="Neil Sorenson")},
+        field="note",
+        value=ValueExpr(literal="x"),
+        idempotency_key=ValueExpr(literal="k1"),
+        timeout_s=0.0,
+    )
+    assert "does not read" in verifier.verify(keyed, verifier_state()).reason
+    two = Effect(
+        kind=EffectKind.RECORD_WRITTEN,
+        match={"patient": ValueExpr(literal="Neil Sorenson")},
+        expected_count=2,
+        timeout_s=0.0,
+    )
+    assert "more than one" in verifier.verify(two, verifier_state()).reason
+
+
+def test_overlap_folds_kind_aliases_surfaces_and_waits_for_the_user_at_load(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    from openadapt_flow.__main__ import _refuse_shared_readback_session
+    from openadapt_flow.deployment import desktop_readback_session_overlap
+
+    citrix = _kiosk_spec(session={"kind": "citrix", "rdp_window": "Viewer"})
+    assert desktop_readback_session_overlap(
+        citrix, [BackendConfig(kind="remote-display", rdp_window="viewer")]
+    )
+    windows = _winforms_spec(
+        session={"kind": "windows", "agent_url": "http://seat:5001"}
+    )
+    cfg = DeploymentConfig(
+        backend=BackendConfig(kind="windows", agent_url="http://vm:5001"),
+        effects=EffectsConfig(
+            kind="desktop_readback", desktop_readback=windows.model_dump(mode="json")
+        ),
+    )
+    surface = BackendConfig(kind="windows", agent_url="http://seat:5001")
+    assert _refuse_shared_readback_session(
+        cfg, cfg.backend, operation="run", surfaces={"emr": surface}
+    )
+    # Loading a config doesn't need the read-back account's variable yet.
+    monkeypatch.delenv("RB_USER", raising=False)
+    DeploymentConfig(
+        backend=BackendConfig(kind="rdp", rdp_host="kiosk.test", rdp_username="clerk"),
+        effects=EffectsConfig(
+            kind="desktop_readback",
+            desktop_readback=_kiosk_spec().model_dump(mode="json"),
+        ),
+    )
+
+
+def test_ocr_reads_keep_a_minus_sign_and_an_empty_area_is_uncertain() -> None:
+    from types import SimpleNamespace
+
+    from openadapt_flow.runtime.effects.desktop_readback_sessions import (
+        PixelReadSurface,
+    )
+
+    lines = [
+        SimpleNamespace(
+            text="Balance: -50.00", region=(10, 10, 160, 20), confidence=0.99
+        )
+    ]
+    backend = SimpleNamespace(screenshot=lambda: b"png")
+    surface = PixelReadSurface(
+        backend,
+        facts=DesktopSessionFacts(True, True, True, "ocr"),
+        settle_s=0.0,
+        ocr=lambda _png: lines,
+    )
+    read = surface.read(ControlRef(text="Balance", at="right"))
+    assert read.item is not None and read.item.text == "-50.00"
+    empty = surface.read(ControlRef(region=(400, 400, 50, 50)))
+    assert empty.item is not None and empty.item.text == ""
+    assert empty.item.confidence == 0.0

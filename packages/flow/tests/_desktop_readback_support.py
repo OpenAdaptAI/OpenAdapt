@@ -371,6 +371,8 @@ class KioskLookupTransport:
         self.save_clicks = 0
         self.booking_typed = ""
         self.inputs: list[str] = []
+        #: Read-back sessions opened on this kiosk's database (tests).
+        self.sessions: list["KioskLookupTransport"] = []
         with sqlite3.connect(db_path) as connection:
             connection.execute(
                 """

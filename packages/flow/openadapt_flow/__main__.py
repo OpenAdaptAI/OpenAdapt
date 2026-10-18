@@ -691,7 +691,11 @@ def _refuse_missing_citrix_readiness(backend_cfg: object, *, operation: str) -> 
 
 
 def _refuse_shared_readback_session(
-    cfg: object, backend_cfg: object, *, operation: str
+    cfg: object,
+    backend_cfg: object,
+    *,
+    operation: str,
+    surfaces: Optional[dict] = None,
 ) -> bool:
     """Refuse a desktop read-back session that is the session that types.
 
@@ -708,7 +712,9 @@ def _refuse_shared_readback_session(
         spec = getattr(section, "desktop_readback", None)
         if spec is None:
             continue
-        problem = desktop_readback_session_overlap(spec, [backend_cfg])
+        problem = desktop_readback_session_overlap(
+            spec, [backend_cfg, *(surfaces or {}).values()]
+        )
         if problem is not None:
             print(
                 f"{operation} REFUSED: effects.desktop_readback.session {problem}. "
@@ -2189,9 +2195,11 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     refused = _enforce_surface_binding(args, workflow, backend_cfg, operation=operation)
     if refused is not None:
         return refused
-    if _refuse_shared_readback_session(cfg, backend_cfg, operation=operation):
-        return 2
     surface_cfgs = _resolve_surface_bindings(args, cfg, workflow)
+    if _refuse_shared_readback_session(
+        cfg, backend_cfg, operation=operation, surfaces=surface_cfgs
+    ):
+        return 2
     # Opt-in attest pre-state snapshot: the earliest point where the run is
     # ADMITTED (every gate above passed) and the run directory is final, but
     # NO actuation has begun on either the desktop or the web path below.
@@ -10151,6 +10159,9 @@ def _attended_service_from_args(args: argparse.Namespace) -> Iterator[Any]:
         backend_cfg = _resolve_backend_config(args, cfg)
     except (FileNotFoundError, ValueError) as exc:
         raise SystemExit(str(exc)) from exc
+    readback_cfg = cfg.model_copy(update={"effects": effects_cfg})
+    if _refuse_shared_readback_session(readback_cfg, backend_cfg, operation="console"):
+        raise SystemExit(2)
     allow_egress = bool(
         cfg.runtime.allow_model_grounding
         or getattr(args, "allow_model_grounding", False)

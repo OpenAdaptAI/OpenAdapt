@@ -625,11 +625,23 @@ example `ready: { automation_id: patientHeader, shows: "Patient:" }`. Markers
 never only a region: an empty area is "there" whether or not anything is in
 it.
 
-Each look-up opens its own session, so it never reads a screen an earlier
-look-up left behind. A look-up that runs past its time limit gets no more
-input, and no new session opens while it is still running. When `sign_in` is
-declared and the session is already signed in, the check stops: it must sign
-in with its own account to be a separate session.
+Each look-up opens its own connection. A window, a second agent, or an RDP
+logon that reconnects to the reader's disconnected session can still show
+what an earlier look-up left on screen. So a record view (or not-found
+message) that was up before the search counts only after it goes away or
+changes. A view that looks the same before and after the search stops the
+check, because a stale screen and a refreshed one can't be told apart. Set
+the read-back account's RDP sessions to end on disconnect to avoid that stop.
+A look-up that runs past its time limit gets no more input, and no new
+session opens while it is still running.
+
+`sign_in` (the application's own sign-in form) is accepted only with a
+network RDP session. Other sessions persist and stay signed in, so their
+form is not a sign-in per check. When the session is already signed in, the
+check stops: it must sign in with its own account to be a separate session.
+Result rows are record data, so the save-word check reads only the results
+control's declared name and id, not the row text. On the sign-in button,
+"OK" and "Submit" are allowed.
 
 | The look-up shows | Verdict |
 |---|---|
@@ -637,7 +649,8 @@ in with its own account to be a separate session.
 | a different value read through UI Automation | REFUTED. The run ends `RECONCILIATION_REQUIRED` |
 | a different value read with OCR | INDETERMINATE (halt). OCR can misread, so a mismatch is never taken as proof the save is wrong |
 | the application's not-found marker | never CONFIRMED. A REFUTED verdict carries no count: a record the search doesn't find is never proof that nothing was saved, so the run ends in reconciliation |
-| a count check (`record_written`, `exact_new_set`, `count_new_only`, an idempotency key) without `open.results` | INDETERMINATE (halt): one record view can't show a duplicate. With `open.results`, the results must show exactly one match |
+| a count check (`record_written`, `count_new_only`, an idempotency key) without `open.results` | INDETERMINATE (halt): one record view can't show a duplicate. With `open.results`, the results must show exactly one match. Only rows on screen count: a duplicate on another page or below a virtualized list's fold isn't seen |
+| `exact_new_set`, or `expected_count` above 1 | INDETERMINATE (halt): one record view shows one record |
 | an effect on a field the look-up doesn't declare | INDETERMINATE (halt) |
 | two matching results, another record's identifier, a missing control, a value below the OCR confidence floor, a shortened or unparseable value, a refused input, or a failed sign-in | INDETERMINATE (halt) |
 

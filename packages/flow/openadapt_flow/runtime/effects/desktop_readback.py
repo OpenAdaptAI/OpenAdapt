@@ -145,17 +145,27 @@ _SIGN_IN_PHRASES = ("sign in", "sign on", "log in", "log on")
 def save_like_words(text: str, *, sign_in: bool = False) -> list[str]:
     """Save-like words in a control's label (empty when it is safe to click).
 
-    With ``sign_in`` the phrases "sign in", "log in" and their variants are
-    allowed, and only on the sign-in button.
+    With ``sign_in`` (the sign-in form, before any record is open) the
+    phrases "sign in", "log in" and their variants, and "OK" and "Submit",
+    are allowed.
     """
 
     # "saveButton" is "save button": split camelCase names before matching.
     spaced = re.sub(r"(?<=[a-z])(?=[A-Z])", " ", text)
     lowered = " ".join(re.sub(r"[_\-]+", " ", spaced).casefold().split())
+    allowed: frozenset[str] = frozenset()
     if sign_in:
         for phrase in _SIGN_IN_PHRASES:
             lowered = lowered.replace(phrase, " ")
-    return sorted({w for w in re.findall(r"[a-z]+", lowered) if w in SAVE_LIKE_WORDS})
+        # A sign-in form's button often says OK or Submit; no record is open.
+        allowed = frozenset({"ok", "submit"})
+    return sorted(
+        {
+            w
+            for w in re.findall(r"[a-z]+", lowered)
+            if w in SAVE_LIKE_WORDS and w not in allowed
+        }
+    )
 
 
 # -- configuration ------------------------------------------------------------
@@ -339,6 +349,17 @@ class DesktopReadbackSpec(BaseModel):
         if self.sign_in is not None and self.credentials is None:
             raise ValueError(
                 "desktop_readback.sign_in needs desktop_readback.credentials"
+            )
+        if self.sign_in is not None and not (
+            str(self.session.get("kind") or "").strip().lower() == "rdp"
+            and self.session.get("rdp_host")
+        ):
+            # A window or a second agent persists between look-ups and stays
+            # signed in, so its sign-in form is not a sign-in per check.
+            raise ValueError(
+                "desktop_readback.sign_in needs a network RDP session "
+                "(session.kind rdp with rdp_host); other sessions persist and "
+                "stay signed in"
             )
         kind = str(self.session.get("kind") or "").strip().lower()
         if kind not in ("windows", "rdp", "citrix", "macos", "linux"):
@@ -583,8 +604,17 @@ class ReadOnlyLookupGuard:
         target: Seen,
         *,
         sign_in: bool = False,
+        data_row: bool = False,
     ) -> None:
-        for label in self._labels(surface, ref, target):
+        # A result row shows record data ("Complete", "Post-op", a surname
+        # like Post), not a command, so only its declared name and id are
+        # checked.
+        labels = (
+            [label for label in (ref.name or "", ref.automation_id or "") if label]
+            if data_row
+            else self._labels(surface, ref, target)
+        )
+        for label in labels:
             words = save_like_words(label, sign_in=sign_in)
             if words:
                 raise ReadOnlyViolation(
@@ -603,7 +633,7 @@ class ReadOnlyLookupGuard:
             )
         if any(ord(c) < 32 for c in text):
             raise ReadOnlyViolation("refused to type a control character")
-        self._refuse_save_like(surface, ref, target)
+        self._refuse_save_like(surface, ref, target, sign_in=self.phase == "sign_in")
         surface.type_into(target, text)
         self.inputs.append(f"type:{ref.describe()}")
 
@@ -664,7 +694,13 @@ class ReadOnlyLookupGuard:
             raise ReadOnlyViolation(
                 f"refused to click {ref.describe()}: it shows no label to check"
             )
-        self._refuse_save_like(surface, ref, target, sign_in=sign_in_click)
+        self._refuse_save_like(
+            surface,
+            ref,
+            target,
+            sign_in=sign_in_click,
+            data_row=spec.open is not None and ref is spec.open.results,
+        )
         surface.click(target, double=double)
         self.inputs.append(f"click:{ref.describe()}")
 
@@ -711,10 +747,24 @@ def _present(surface: DesktopReadSurface, ref: ControlRef) -> bool:
     """Whether a marker is on screen, shows some text, and (when set) shows
     ``ref.shows``."""
 
+    if ref.structured and ref.shows is None:
+        # A UI Automation control (a panel, say) may have no text at all.
+        return surface.locate(ref).status == "ok"
     seen = surface.read(ref)
     if seen.status != "ok" or seen.item is None or not seen.item.text.strip():
         return False
     return ref.shows is None or _norm(ref.shows) in _norm(seen.item.text)
+
+
+def _view(surface: DesktopReadSurface, spec: DesktopReadbackSpec) -> tuple[Any, ...]:
+    """What the record view shows: the identifier and every field."""
+
+    refs = [spec.identity.reader, *(r.control for r in spec.fields.values())]
+    out = []
+    for ref in refs:
+        seen = surface.read(ref)
+        out.append((seen.status, seen.item.text if seen.item else None))
+    return tuple(out)
 
 
 def _wait_for(
@@ -804,6 +854,12 @@ def look_up(
                 "the search box does not show the query after typing; the typed "
                 "text may have gone elsewhere"
             )
+    # What a session that persists between look-ups may still show from an
+    # earlier one. A view (or a not-found message) that was up before the
+    # search counts only once it changes or goes away and comes back.
+    stale_view = _view(surface, spec) if _present(surface, spec.ready) else None
+    stale_not_found = spec.not_found is not None and _present(surface, spec.not_found)
+    seen_gone = {"view": stale_view is None, "not_found": not stale_not_found}
     if spec.search.submit is None:
         guard.press_enter(surface, box_ref)
     else:
@@ -814,7 +870,16 @@ def look_up(
     surface.settle()
 
     def not_found_shown() -> bool:
-        return spec.not_found is not None and _present(surface, spec.not_found)
+        shown = spec.not_found is not None and _present(surface, spec.not_found)
+        if not shown:
+            seen_gone["not_found"] = True
+        return shown and seen_gone["not_found"]
+
+    def fresh_view() -> bool:
+        if not _present(surface, spec.ready):
+            seen_gone["view"] = True
+            return False
+        return seen_gone["view"] or _view(surface, spec) != stale_view
 
     # -- open the one matching result -------------------------------------------
     if spec.open is not None:
@@ -849,7 +914,7 @@ def look_up(
 
     # -- the record view -----------------------------------------------------------
     def ready_or_absent() -> Optional[str]:
-        if _present(surface, spec.ready):
+        if fresh_view():
             return "ready"
         if not_found_shown():
             return "not_found"
@@ -859,6 +924,11 @@ def look_up(
     if state == "not_found":
         return RawRecordView(ok=True, not_found=True, inputs=list(guard.inputs))
     if state is None:
+        if stale_view is not None and _present(surface, spec.ready):
+            return fail(
+                "the record view still shows what it showed before the search; "
+                "it may not have refreshed, so it can't be read as this save"
+            )
         return fail("the record view did not load")
     identity = surface.read(spec.identity.reader)
     if identity.status != "ok" or identity.item is None:
@@ -887,6 +957,26 @@ class _ReadRecord:
     #: Fields read by OCR. A mismatch there may be a misread, so it never
     #: becomes REFUTED.
     ocr_fields: set[str] = field(default_factory=set)
+
+
+def _without_spaces_for(effect: Effect, fields: set[str]) -> Effect:
+    """``effect`` with spaces removed from the expected values of ``fields``.
+
+    Fields read by OCR are compared without spaces on both sides, because OCR
+    drops and adds them (``2026-11-02 09:30`` reads as ``2026-11-0209:30``).
+    """
+
+    if not fields:
+        return effect
+
+    def squash(name: str, expr: Optional[ValueExpr]) -> Optional[ValueExpr]:
+        if expr is None or expr.literal is None or name not in fields:
+            return expr
+        return ValueExpr(literal="".join(expr.literal.split()))
+
+    match = {k: squash(k, v) or v for k, v in effect.match.items()}
+    value = squash(effect.field, effect.value) if effect.field else effect.value
+    return effect.model_copy(update={"match": match, "value": value}, deep=True)
 
 
 class DesktopReadbackVerifier(VerifierAdapterBase):
@@ -1080,6 +1170,9 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
             ):
                 uncertain.add((0, name))
             normalized, parsed = normalize_value(text, reader)  # type: ignore[arg-type]
+            if seen.ocr and normalized is not None:
+                # OCR drops and adds spaces; compare OCR reads without them.
+                normalized = "".join(normalized.split())
             if not parsed:
                 uncertain.add((0, name))
             record[name] = normalized
@@ -1088,24 +1181,21 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
         ocr_fields = {name for name, seen in raw.values.items() if seen.ocr}
         return _ReadRecord(True, "", [record], uncertain, False, ocr_fields)
 
-    def _judge(
-        self, effect: Effect, before: EffectState, read: _ReadRecord
-    ) -> EffectVerdict:
-        if not read.readable:
-            return EffectVerdict(
-                verdict=Verdict.INDETERMINATE,
-                kind=effect.kind,
-                substrate=self.substrate,
-                reason=f"{read.reason}; cannot certify the save; HALT",
-                unavailable=True,
-            )
+    def _effect_problem(self, effect: Effect) -> Optional[EffectVerdict]:
+        """An effect this look-up can't judge, found before any session opens."""
+
         spec = self._target.spec
         readable_fields = set(spec.fields)
         if spec.identity.field is not None:
             readable_fields.add(spec.identity.field)
-        unknown = sorted(set(effect.match) - readable_fields)
+        named = set(effect.match)
         if effect.kind is EffectKind.FIELD_EQUALS and effect.field:
-            unknown += [] if effect.field in readable_fields else [effect.field]
+            named.add(effect.field)
+        if effect.idempotency_key is not None:
+            named.add(effect.key_field)
+        for member in effect.new_records:
+            named.update(member)
+        unknown = sorted(named - readable_fields)
         if unknown:
             return EffectVerdict(
                 verdict=Verdict.INDETERMINATE,
@@ -1122,6 +1212,18 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
             or effect.count_new_only
             or effect.idempotency_key is not None
         )
+        if effect.kind is EffectKind.EXACT_NEW_SET or (
+            effect.kind is EffectKind.RECORD_WRITTEN and effect.expected_count > 1
+        ):
+            return EffectVerdict(
+                verdict=Verdict.INDETERMINATE,
+                kind=effect.kind,
+                substrate=self.substrate,
+                reason=(
+                    "the effect expects more than one record, and a look-up opens "
+                    "one record view; check it with a system-of-record read; HALT"
+                ),
+            )
         if counts and spec.open is None:
             return EffectVerdict(
                 verdict=Verdict.INDETERMINATE,
@@ -1134,7 +1236,26 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
                     "(field_equals); HALT"
                 ),
             )
-        normalized = normalized_effect(effect, spec.fields)
+        return None
+
+    def _judge(
+        self, effect: Effect, before: EffectState, read: _ReadRecord
+    ) -> EffectVerdict:
+        if not read.readable:
+            return EffectVerdict(
+                verdict=Verdict.INDETERMINATE,
+                kind=effect.kind,
+                substrate=self.substrate,
+                reason=f"{read.reason}; cannot certify the save; HALT",
+                unavailable=True,
+            )
+        problem = self._effect_problem(effect)
+        if problem is not None:
+            return problem
+        spec = self._target.spec
+        normalized = _without_spaces_for(
+            normalized_effect(effect, spec.fields), read.ocr_fields
+        )
         blocking = blocking_uncertain_fields(normalized, read.records, read.uncertain)
         if blocking:
             return EffectVerdict(
@@ -1248,6 +1369,9 @@ class DesktopReadbackVerifier(VerifierAdapterBase):
         ``expected.timeout_s`` passes. Each look-up opens its own session, so
         no look-up reads a screen an earlier one left behind."""
 
+        problem = self._effect_problem(expected)
+        if problem is not None:
+            return problem.model_copy(update={"assurance": UNCHECKED})
         deadline = time.monotonic() + max(0.0, expected.timeout_s)
         while True:
             raw, failure, _facts = self._read_once()

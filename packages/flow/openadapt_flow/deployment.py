@@ -838,7 +838,7 @@ class DeploymentConfig(BaseModel):
             if spec is None:
                 continue
             problem = desktop_readback_session_overlap(
-                spec, [self.backend, *self.surfaces.values()]
+                spec, [self.backend, *self.surfaces.values()], strict_user=False
             )
             if problem is not None:
                 raise ValueError(f"effects.desktop_readback.session: {problem}")
@@ -890,24 +890,32 @@ def desktop_readback_session_overlap(
     spec: DesktopReadbackSpec,
     backends: list[BackendConfig],
     environ: Optional[Mapping[str, str]] = None,
+    *,
+    strict_user: bool = True,
 ) -> Optional[str]:
     """Why ``spec.session`` is (or may be) a session the run types into.
 
     The read-back must open its own session. The same agent is the same
     Windows session; the same RDP host and user would take over the run's
     RDP session; the same local window is the window that typed. Addresses
-    are compared after folding case and loopback names, and an unset window
-    title counts as matching any title.
+    are compared after folding case and loopback names, kinds after folding
+    their aliases (``citrix`` and ``remote-display`` are window-scoped
+    ``rdp``), and an unset window title counts as matching any title.
+
+    With ``strict_user`` False (loading a config, when the read-back
+    account's variable may not be set yet) an unknown read-back user is not
+    a refusal; the run checks again with the variable set.
     """
+    from openadapt_flow.backends.factory import _normalize_kind
 
     try:
         session = BackendConfig.model_validate(spec.session)
     except Exception as exc:  # noqa: BLE001 - surfaced as a config error
         return f"is not a valid backend config ({exc})"
-    kind = (session.kind or "").strip().lower()
+    kind = _normalize_kind(session.kind)
     env = os.environ if environ is None else environ
     for backend in backends:
-        other = (backend.kind or "web").strip().lower()
+        other = _normalize_kind(backend.kind)
         if kind == "windows" and other == "windows":
             mine, theirs = _endpoint(session.agent_url), _endpoint(backend.agent_url)
             if mine is not None and theirs is not None and mine[1:3] == theirs[1:3]:
@@ -915,7 +923,7 @@ def desktop_readback_session_overlap(
                     "uses the same agent as the backend that types; run a second "
                     "agent in a separate Windows session for read-back"
                 )
-        if kind == "rdp" and session.rdp_host and other in ("rdp", "citrix"):
+        if kind == "rdp" and session.rdp_host and other == "rdp":
             if _host(session.rdp_host) == _host(backend.rdp_host) and (
                 session.rdp_port == backend.rdp_port
             ):
@@ -924,6 +932,8 @@ def desktop_readback_session_overlap(
                     if spec.credentials is not None
                     else session.rdp_username or ""
                 )
+                if not user and not strict_user:
+                    continue
                 if (
                     not user
                     or user.casefold() == (backend.rdp_username or "").casefold()

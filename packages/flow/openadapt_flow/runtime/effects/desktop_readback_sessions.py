@@ -149,7 +149,7 @@ class PixelReadSurface:
                     or difflib.SequenceMatcher(None, head, want, autojunk=False).ratio()
                     >= ref.min_ratio
                 ):
-                    found.append((line, shown[len(label) :].lstrip(" :-–·")))
+                    found.append((line, shown[len(label) :].lstrip(" :·")))
         return found
 
     def _value_lines(self, ref: ControlRef, anchor: Any, lines: list[Any]) -> list[Any]:
@@ -245,8 +245,15 @@ class PixelReadSurface:
             if not inside:
                 assert ref.region is not None
                 x, y, w, h = ref.region
+                # Nothing read in the area: empty, or missed by OCR.
                 return Located(
-                    "ok", Seen(text="", point=(x + w // 2, y + h // 2), ocr=True)
+                    "ok",
+                    Seen(
+                        text="",
+                        point=(x + w // 2, y + h // 2),
+                        confidence=0.0,
+                        ocr=True,
+                    ),
                 )
             rows = _group_rows(inside)
             return Located("ok", _seen_from([line for row in rows for line in row]))
