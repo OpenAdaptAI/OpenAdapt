@@ -68,15 +68,17 @@ The sandbox is a practice server that needs no account. It has one workflow, `ad
 
 You need [Claude Code](https://claude.com/claude-code) (signed in) and [uv](https://docs.astral.sh/uv/). To use a different client or your own code, see [Connect your own agent](#connect-your-own-agent).
 
-1. Add the sandbox server. Claude Code saves it for the current folder only.
+1. Register the sandbox server. `--scope user` makes it available in every folder; without it, Claude Code saves it for the current folder only.
 
    ```bash
-   claude mcp add openadapt -- uvx --python 3.12 openadapt-agent serve
+   claude mcp add --scope user openadapt -- uvx --python 3.12 openadapt-agent serve
    ```
 
-2. In the same folder, start Claude Code with `claude`. Claude Code starts the server.
+   This only registers the server. It prints one line saying the server was added to user config, and nothing else.
 
-3. Ask: "Use OpenAdapt to add the triage note 'Synthetic: recheck blood pressure in 2 weeks' with request id demo-0001."
+2. Start Claude Code with `claude`. Claude Code starts the server. Optional: type `/mcp` to check that `openadapt` is connected.
+
+3. Ask: "Use the OpenAdapt sandbox to run add_triage_note with the note 'Synthetic: recheck blood pressure in 2 weeks' and request id demo-0001."
 
 Your agent should call `list_workflows`, then `run_workflow` with these arguments:
 
@@ -105,13 +107,13 @@ openadapt-agent installs from PyPI and requires openadapt-flow 2.1.0 or later, w
 
 ### See every outcome
 
-Ask for each case by adding `sandbox_case` to the inputs, with a new `request_id` each time. For example: "Now try the false_saved_banner case with request id demo-0002."
+Ask for each case by adding `sandbox_case` to the inputs, with a new `request_id` each time. For example: "Now try the duplicate_record case with request id demo-0002."
 
 | `sandbox_case` | `outcome` | What MockMed does |
 | --- | --- | --- |
 | `normal` (default) | `done` | Saves the note, and the record check finds it. |
 | `duplicate_record` | `needs_review` | Lists the same referral twice, so OpenAdapt can't tell which record to open. It stops before saving. |
-| `false_saved_banner` | `not_sure_if_saved` | Shows a saved message, but the note wasn't stored. |
+| `false_saved_banner` | `not_sure_if_saved` | Rejects the note on save, so it isn't stored. |
 | `timeout_after_save` | `not_sure_if_saved` | Saves the note, then times out with an error. |
 | `app_offline` | `did_not_run` | Doesn't answer, so nothing starts. |
 
@@ -119,11 +121,11 @@ The sandbox remembers each `request_id` across sessions. Sending a used `request
 
 ### Drive MockMed with the real engine
 
-The `tutorial` extra makes openadapt-flow (Flow), the engine behind OpenAdapt, drive MockMed in a hidden browser. Replace the sandbox server with this one:
+The `tutorial` extra makes openadapt-flow (Flow), the engine behind OpenAdapt, drive MockMed in a hidden browser. Replace the sandbox server with this one, then restart `claude`:
 
 ```bash
 claude mcp remove openadapt
-claude mcp add openadapt -- uvx --python 3.12 --from 'openadapt-agent[tutorial]' openadapt-agent serve
+claude mcp add --scope user openadapt -- uvx --python 3.12 --from 'openadapt-agent[tutorial]' openadapt-agent serve
 ```
 
 When the server starts, Flow records the workflow once and, if needed, downloads a browser (about 300 MB). The first request waits for that. In our test on a Mac, the first request took about 80 seconds. The call returned `running` after 60 seconds, and the agent called `get_run` for the result. If setup takes more than 15 minutes, the request ends `did_not_run`. With Flow, a `done` result has `proof: "local"` instead of `"simulated"`.
@@ -279,7 +281,7 @@ Flow's [execution profiles](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/p
 | `--policy NAME-OR-PATH` | The policy Flow certifies against, such as `clinical-write` or `permissive`. |
 | `--timeout SECONDS` | How long one run may work (default 600). Time a person spends approving a save doesn't count. A run stopped at the limit is `not_sure_if_saved`. |
 | `--approval-mode MODE` | Whether each save waits for approval. Without it, Flow decides, and a run stops before each save until it's approved (`each_item`). `not_gated` turns that off for every run this server starts; each result records it under `technical.approval_mode`. |
-| `--delegate-approvals AGENT_ID` | Lets your agent answer a waiting save as `AGENT_ID` (an opaque id such as `agent:intake-bot`), with `list_approval_requests` and `answer_approval_request`. Flow accepts the answer only where the run's approver policy allows an agent for that step, and records the agent as the approver. By default only a person may answer. Needs an openadapt-flow with delegated approvers (not released yet). |
+| `--delegate-approvals AGENT_ID` | Lets your agent answer a waiting save as `AGENT_ID` (an opaque id such as `agent:intake-bot`), with `list_approval_requests` and `answer_approval_request`. Flow accepts the answer only where the run's approver policy allows an agent for that step, and records the agent as the approver. By default only a person may answer. Needs openadapt-flow 2.2.0 or later. |
 | `--headed` | Shows the browser. A person needs it to continue or skip a stopped run in a web app. |
 | `--extra-run-arg ARG`, `--flow-cli CMD` | Change how Flow is called. Either one can relax Flow's checks, for example `--extra-run-arg=--allow-unencrypted`. |
 | `--allow-protected-export`, `--allow-synthetic-recorded-defaults`, `--allow-model-grounding` | Off by default. See [Security](#security). |
@@ -341,13 +343,15 @@ If a workflow's name would come out as either one, emit-skill names the skill `o
 
 `serve --authoring` adds recording tools, such as `observe`, `start_record`, `click`, `pause_for_input`, `stop_record`, `compile`, and `admit`. [docs/DESIGN.md](docs/DESIGN.md#recording-tools) lists all 14. A person or your agent shows the task with them, in a web app, a native Windows app, or an RDP or Citrix session, and a person stays at the computer to sign in and accept the result. A task can be learned from one or more demonstrations. The recording server doesn't turn on runs.
 
-1. Add a recording server. `--url` opens the app in a new Chromium window with no saved sign-ins, and `--headed` keeps that window visible so the person can sign in.
+1. Register a recording server. The `tutorial` extra brings the browser driver that `--url` needs. `--url` opens the app in a new Chromium window with no saved sign-ins, and `--headed`, which `--url` requires, keeps that window visible so the person can sign in.
 
    ```bash
-   claude mcp add openadapt-authoring -- uvx --python 3.12 --from 'openadapt-agent[tutorial]' openadapt-agent serve --authoring --url https://app.example.com --headed
+   claude mcp add --scope user openadapt-authoring -- uvx --python 3.12 --from 'openadapt-agent[tutorial]' openadapt-agent serve --authoring --url https://app.example.com --headed
    ```
 
-2. Ask your agent to record the task with the person. When the agent pauses for sign-in, the person signs in to the app in that window.
+   This only registers the server. Claude Code starts it the next time you run `claude`.
+
+2. Run `claude` and ask your agent to record the task with the person. When the agent pauses for sign-in, the person signs in to the app in that window.
 3. When the task is done, the agent calls `compile`. It writes the bundle to `<runs-dir>/authoring/bundle`, which is `~/.openadapt/runs/authoring/bundle` by default.
 4. The agent calls `admit`. Your MCP client then shows the person a confirmation form, and only the person's answer there accepts the bundle. If the client can't show forms (MCP form elicitation), `admit` refuses and nothing is accepted.
 5. Get the bundle ready to run (see [Get a workflow ready to run](#get-a-workflow-ready-to-run)). Then serve it with `--mode production --bundles <runs-dir>/authoring/bundle`.
@@ -362,11 +366,15 @@ For an RDP or Citrix session, pass `--remote-window APP` (the client app, for ex
 
 The recording marks every step as the agent's or the person's (`actor` in `events.jsonl`, `demonstrated_by` in `meta.json`), and a person still accepts the result. On Windows with none of these flags, the tools can only tell the person what to click.
 
-ChatGPT and Claude in a web browser can't start a server on your computer. To record from one of them, start at https://openadapt.ai/start. When openadapt.ai gives you a runner link for the recording job (it contains `bind=oab_`), run this on the computer that has the app:
+ChatGPT and Claude in a web browser can't start a server on your computer. To record from one of them:
 
-```bash
-openadapt-agent authoring connect '<runner link>'
-```
+1. On https://openadapt.ai/#job-box, type the job under **What job do you want to automate?** and click **Get a job page**.
+2. On the job page, click **Connect this computer**. Its **Open OpenAdapt** link is the runner link (`openadapt://runner?pack=...&bind=oab_...`). It opens OpenAdapt Desktop if you have it. The link works once and expires after five minutes if nobody claims it.
+3. Without Desktop, copy that link and run this on the computer that has the app:
+
+   ```bash
+   openadapt-agent authoring connect '<runner link>'
+   ```
 
 It claims the job, polls openadapt.ai over outgoing HTTPS, and asks you in the terminal before a chat account may drive it. Don't confuse it with the launcher's `openadapt connect`, which pairs a computer with OpenAdapt Cloud. [docs/MAILBOX_CLI.md](docs/MAILBOX_CLI.md) has the details.
 

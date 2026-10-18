@@ -125,6 +125,10 @@ from openadapt_flow.runtime.effects.graphql import (  # noqa: F401
 from openadapt_flow.runtime.effects.rest import (  # noqa: F401
     RestRecordVerifier,
 )
+from openadapt_flow.runtime.effects.smart_auth import (  # noqa: F401
+    SmartBackendConfig,
+    SmartBackendTokenSource,
+)
 from openadapt_flow.runtime.effects.sql import (  # noqa: F401
     SqlRecordVerifier,
     assert_read_only_sql,
@@ -176,6 +180,8 @@ __all__ = [
     "record_matches",
     "RestRecordVerifier",
     "FhirEffectVerifier",
+    "SmartBackendConfig",
+    "SmartBackendTokenSource",
     "DEFAULT_OBSERVATION_PATHS",
     "extract_path",
     "DocumentHashVerifier",

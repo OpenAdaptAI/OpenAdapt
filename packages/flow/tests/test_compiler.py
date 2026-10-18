@@ -330,6 +330,22 @@ class TestCompileRecording:
         with pytest.raises(FileNotFoundError, match="incomplete frame pair"):
             compile_recording(recording, tmp_path / "bundle", name="incomplete")
 
+    def test_layout_fingerprints_are_stored_for_click_steps(self, compiled) -> None:
+        from openadapt_flow.runtime import layout_drift
+
+        bundle = compiled["bundle"]
+        wf = compiled["workflow"]
+        path = bundle / layout_drift.FINGERPRINT_ASSET
+        stored = layout_drift.load_bundle_fingerprints(path.read_bytes())
+        clicks = [s.id for s in wf.steps if s.action is ActionKind.CLICK]
+        assert sorted(stored) == sorted(clicks)
+        for fp in stored.values():
+            assert fp.viewport == VIEWPORT
+            assert fp.landmarks == {}  # metrics only, no screen text
+        # Hashed into the manifest like every other recorded asset.
+        assert wf.manifest is not None
+        assert layout_drift.FINGERPRINT_ASSET in wf.manifest.file_hashes
+
     def test_workflow_metadata(self, compiled) -> None:
         wf = compiled["workflow"]
         assert wf.name == "triage-demo"

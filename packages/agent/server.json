@@ -9,13 +9,13 @@
     "source": "github",
     "subfolder": "packages/agent"
   },
-  "version": "2.2.0",
+  "version": "2.2.1",
   "packages": [
     {
       "registryType": "pypi",
       "registryBaseUrl": "https://pypi.org",
       "identifier": "openadapt-agent",
-      "version": "2.2.0",
+      "version": "2.2.1",
       "runtimeHint": "uvx",
       "transport": {
         "type": "stdio"

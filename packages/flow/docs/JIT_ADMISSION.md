@@ -12,7 +12,7 @@ the wrapper itself, see [JIT.md](JIT.md).
 
 | Mode | Who admits | A person's part | Needs a step review |
 | --- | --- | --- | --- |
-| Agent under policy | a registered agent, with its own key | signs an admission policy once | no; the policy's scope and canaries stand in for it |
+| Agent under policy | a registered agent, with its own key; the recording agent itself when the policy sets `allow_self_admission` | signs an admission policy once | no; the policy's scope and canaries stand in for it |
 | Admitter key | a CI job or script, with an admitter key | creates and registers the key | no |
 | Person | a named person at an interactive terminal | everything | yes |
 
@@ -52,9 +52,15 @@ policy-signer key:
   "required_readback": "independent_readback",
   "min_clean_canaries": 3,
   "agent_principals": ["agent:admitter"],
-  "flow_policies": ["clinical-write"]
+  "flow_policies": ["clinical-write"],
+  "allow_self_admission": true
 }
 ```
+
+`allow_self_admission` lets an agent the policy names admit a draft it
+recorded itself, so one agent can record, run its canaries and admit without
+a second agent. Leave it out (or set it to `false`) to require a different
+agent, an admitter key or a person.
 
 ```bash
 openadapt-flow jit sign-policy policy.json --key dana.pem --out signed-policy.json
@@ -106,8 +112,9 @@ an expired or unsigned policy, or an unregistered key is refused outright.
 
 The manifest records the agent principal (`admitted_by_principal_id`), the
 policy's id, digest, signer and expiry, the signed policy itself, the number
-of clean canaries, and the agent's signature over the manifest
-(`admitter_signature`).
+of clean canaries, the agent's signature over the manifest
+(`admitter_signature`), and `"self_admitted": true` when the agent admitted a
+draft it recorded.
 
 ## A CI job with an admitter key
 
@@ -134,9 +141,13 @@ or agent could make it. The steps are in the table under
 ## What every mode keeps
 
 - **A draft never runs unattended.** `run()` returns `needs_human_admit`
-  and executes nothing. The bundle carries a `jit_draft.json` marker.
-  `Replayer.run`, which every execution path goes through, refuses a marked
-  bundle without a valid admission, including a copy of it. That covers
+  and executes nothing. The bundle's workflow records `"origin":
+  "agent_run"`, inside the content digest, and the bundle also carries a
+  `jit_draft.json` label. `Replayer.run`, which every execution path goes
+  through, refuses a bundle with that origin, the label or an admission
+  manifest, unless the admission is valid, including a copy of it. Deleting
+  the label changes nothing. Removing the origin makes a different program,
+  so no review, canary or admission counts for it. That covers
   `openadapt-flow replay` and `run`, `serve-execute` (refused before any
   effect), the server that `emit-mcp` writes, and your own code that calls
   `Replayer.run`. `emit-skill` and `emit-mcp` still write their output for a
@@ -149,10 +160,23 @@ or agent could make it. The steps are in the table under
   attend, admit or reject. An agent acts only through a registered key and
   under a policy a person signed. The admission decision is made by Flow's
   checks, not by the agent or a model.
-- **A run can't approve its own contract.** The identity that made the
-  recording (`recorded_by`, the dialect, or the agent's `principal_id`)
-  can't attend a canary or admit. This holds even when it is a registered
-  agent named in the policy. Verification checks it again.
+- **A run approves its own contract only if the policy says so.** The
+  identity that made the recording (`recorded_by`, the dialect, or the
+  agent's `principal_id`) can't attend a canary or admit, unless it is a
+  registered agent acting under a signed policy with `allow_self_admission`.
+  Then only the agent the signed recorder block names passes, and the same
+  checks decide: the policy's scope, its clean canaries, and a tier 1
+  read-back on every write step. The manifest marks it `"self_admitted":
+  true`, and verification checks that mark against the recorder and the
+  signed policy again. Adding the flag to a policy after it was signed breaks
+  its signature. Flow reads that
+  identity from the draft's `recorder` block, which it signs with the local
+  admission key together with the bundle digest when it writes the draft
+  (and again when `confirm_params` recompiles it). A `candidate.json` or a
+  bundle edited after the recording is refused. When the recording agent
+  exposed no `principal_id`, no registered agent can attend or admit the
+  draft, because Flow can't show it is a different agent; a person or an
+  admitter key can.
 - **`VERIFIED` still needs an independent read-back.** Admission in every
   mode needs a tier 1 read-back on every write step.
 - **The evidence is signed.** Canary records are signed with the local
@@ -174,6 +198,11 @@ or agent could make it. The steps are in the table under
   can read it, it can sign canary records too.
 - An admitted bundle keeps running after its policy expires. Expiry stops
   new admissions.
+- The draft state is in the bundle's content, not signed. Whoever can
+  rewrite `workflow.json`, remove the origin and re-seal it, and delete the
+  label and any admission manifest, has written a new bundle. Nothing
+  admitted it, and it runs under the same gates as any bundle a person
+  compiled. Pin the admitted digest where a run must be the admitted one.
 
 ## The steps
 
@@ -235,11 +264,17 @@ key in that directory.
 
 ### What a run checks
 
-Before an admitted program runs, it must still match its admission: the
-signature verifies, the bundle's digest is the admitted digest, the task
-signature and policy are the admitted ones, the app's origin is the origin
-the canary ran on, and the verifier gives every write step an independent
-read-back. Any difference refuses the run, and nothing executes.
+Every run of an admitted program, on any path through `Replayer.run`
+(`CompiledAgent.run`, `openadapt-flow replay` and `run`, `serve-execute`, an
+emitted MCP server), must still match its admission: the signature
+verifies, the bundle's digest is the admitted digest, the program's
+parameters are the admitted task's, the run's browser origin is the origin
+the canary ran on, and the run's effect verifier gives every write step an
+independent read-back. A run that names no origin, such as a desktop
+replay, is refused. `CompiledAgent.run` also checks that the task signature
+and the Flow policy are the admitted ones; a replay outside the JIT API has
+no task or JIT policy to compare. Any difference refuses the run, and
+nothing executes.
 
 ## The customer's model key
 
