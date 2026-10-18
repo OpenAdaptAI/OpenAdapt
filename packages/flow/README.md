@@ -129,13 +129,15 @@ behavior: we haven't timed a codegen script on the same task or run one
 through our UI-change fixtures.
 
 A newer test on a local OpenEMR copy (14 and 15 Oct 2026, synthetic
-referrals) compared compiled replay with a Claude Sonnet agent over 62 timed
-warm runs each. Replay took 29.7 s median from sign-in to saved record, the
+referrals) compared compiled replay with a Claude Sonnet agent over 63
+new-patient referrals each, in timed warm runs; each saved 62 correctly. Over those correct runs, replay took
+29.7 s median from sign-in to saved record, the
 agent 36.5 s, so replay was about 19% faster, with no model calls against the
 agent's median of about $0.08 per run. A separate database read-back matched
 12 of 12 fields on each correct save; engine certification was off, so the
 engine labeled these runs finished, not checked. Method:
-[openadapt.ai/compare/computer-use-agents](https://openadapt.ai/compare/computer-use-agents).
+[openadapt.ai/compare/computer-use-agents](https://openadapt.ai/compare/computer-use-agents);
+run data: [benchmark/openemr_referral_timing](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/openemr_referral_timing/README.md).
 A side-by-side comparison with UiPath, Power
 Automate, and browser agents is at
 [openadapt.ai/compare](https://openadapt.ai/compare).

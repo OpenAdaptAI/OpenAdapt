@@ -429,6 +429,42 @@ def lines_near_point(lines: Iterable[Any], point_y: int) -> list[Any]:
     return kept
 
 
+#: Upscale factor of the row re-read (see :func:`row_region`). 1 crops
+#: without resizing: a row crop is short, and an engine that does better on
+#: short images upscales them itself (Apple Vision reads under 300 px at 2x).
+#: Upscaling here as well stacks the two (4x on Vision), which on the dense
+#: surface misread 'Philip' as 'Phllip' where the plain crop read it clean.
+ROW_REREAD_FACTOR = 1
+
+
+def row_region(lines: Iterable[Any], band: Region) -> Optional[Region]:
+    """The band's width around one text row, for a tight re-read of that row.
+
+    ``lines`` are the lines :func:`lines_near_point` kept for the point's
+    row. The region spans the band horizontally and the row's lines
+    vertically, padded by half their median height on each side, so the
+    re-read sees the row whole and none of the rows above or below. OCR on a
+    64px band of a dense table reads cells of the neighbouring rows that the
+    band slices through, and Apple Vision then drops cells of the point's own
+    row; the row alone reads clean. Returns None when there are no lines.
+    """
+    rows = [line.region for line in lines]
+    if not rows:
+        return None
+    heights = sorted(r[3] for r in rows)
+    median = heights[len(heights) // 2]
+    # A box much taller than its row's other lines spans several rows (OCR
+    # merged a cell with the cells above and below); it must not stretch the
+    # row back over its neighbours.
+    rows = [r for r in rows if r[3] <= 1.5 * median] or rows
+    pad = max(1, median // 2)
+    top = max(band[1], min(r[1] for r in rows) - pad)
+    bottom = min(band[1] + band[3], max(r[1] + r[3] for r in rows) + pad)
+    if bottom <= top:
+        return None
+    return (band[0], top, band[2], bottom - top)
+
+
 def context_from_lines(
     lines: Iterable[Any],
     *,
