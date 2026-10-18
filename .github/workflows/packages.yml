@@ -25,6 +25,12 @@
 # the live recorder tests on Windows; lint; and the release contract. Flow's
 # `capture` extra installs the in-tree capture, so a capture change also
 # re-runs Flow.
+#
+# openadapt-privacy (packages/privacy) keeps its own uv.lock and runs
+# `uv sync --locked` against it: its suite without Presidio on
+# Python 3.10, 3.11 and 3.12, the full suite with Presidio and the spaCy model
+# on 3.12, and lint plus the release contract (changelog matches the version,
+# `uv build`, archive boundary).
 name: Packages
 
 on:
@@ -53,6 +59,7 @@ jobs:
       types: ${{ steps.classify.outputs.types }}
       agent: ${{ steps.classify.outputs.agent }}
       capture: ${{ steps.classify.outputs.capture }}
+      privacy: ${{ steps.classify.outputs.privacy }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -66,7 +73,7 @@ jobs:
         run: |
           set -euo pipefail
           all() {
-            for pkg in flow types agent capture; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
+            for pkg in flow types agent capture privacy; do echo "$pkg=true" >> "$GITHUB_OUTPUT"; done
             exit 0
           }
           case "$EVENT_NAME" in
@@ -94,11 +101,13 @@ jobs:
           # The agent shim is tested against the in-tree core.
           agent="$(hit "^packages/(agent|flow|types)/|$wf")"
           capture="$(hit "^packages/capture/|$wf")"
+          privacy="$(hit "^packages/privacy/|$wf")"
           {
             echo "flow=$flow"
             echo "types=$types"
             echo "agent=$agent"
             echo "capture=$capture"
+            echo "privacy=$privacy"
           } | tee -a "$GITHUB_OUTPUT"
 
   types:
@@ -541,6 +550,82 @@ jobs:
           uv run --no-sync python scripts/verify_distribution.py dist/*
           uv run --no-sync python scripts/check_source_boundary.py --require-dist
 
+  privacy:
+    name: privacy (py${{ matrix.python-version }})
+    needs: scope
+    if: needs.scope.outputs.privacy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.10", "3.11", "3.12"]
+    defaults:
+      run:
+        working-directory: packages/privacy
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+      - name: Install
+        run: uv sync --locked --python ${{ matrix.python-version }} --extra dev
+      - name: Test (without Presidio)
+        run: uv run --no-sync pytest tests/ -v --ignore=tests/test_presidio.py
+
+  privacy-presidio:
+    name: privacy (py3.12, Presidio)
+    needs: scope
+    if: needs.scope.outputs.privacy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: packages/privacy
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install with Presidio and the spaCy model
+        run: |
+          uv sync --locked --python 3.12 --extra dev --extra presidio
+          uv pip install "pip>=25.3"
+          uv run --no-sync python -m spacy download en_core_web_sm
+      - name: Test
+        run: uv run --no-sync pytest tests/ -v
+
+  privacy-contract:
+    name: privacy lint and release contract
+    needs: scope
+    if: needs.scope.outputs.privacy == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: packages/privacy
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - name: Set up Python
+        run: uv python install 3.12
+      - name: Install
+        run: uv sync --locked --python 3.12 --extra dev
+      - name: Ruff
+        run: uv run --no-sync ruff check openadapt_privacy tests scripts
+      - name: Changelog matches the version and the release workflow
+        run: uv run --no-sync pytest tests/test_release_config.py -v
+      - name: Build wheel and source distribution
+        run: uv build
+      - name: Verify release archive boundaries
+        run: uv run --no-sync python scripts/check_source_boundary.py --require-dist
+
   packages-gate:
     name: packages-gate
     needs:
@@ -554,6 +639,9 @@ jobs:
       - capture-macos
       - capture-windows
       - capture-contract
+      - privacy
+      - privacy-presidio
+      - privacy-contract
     if: always()
     runs-on: ubuntu-latest
     timeout-minutes: 5
