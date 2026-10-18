@@ -296,6 +296,7 @@ def build_worker(user: str, opts: dict[str, Any]) -> Any:
     session: list[Any] = []
 
     def run_item(page: Any, idx: int, row: dict[str, Any], item_dir: Path, pipeline: Any) -> Any:
+        load_start = round(os.getloadavg()[0], 2)
         spec = SyntheticPatientSpec(**row)
         if not session:
             session.append(fixture.token_session("oracle"))
@@ -322,6 +323,10 @@ def build_worker(user: str, opts: dict[str, Any]) -> Any:
         if not opts.get("keep_pngs"):
             for png in (item_dir / "steps").glob("*.png"):
                 png.unlink()
+        # Host load at both ends of the item: the scoreboard times a row only
+        # when both are at or under its limit.
+        (item_dir / "host_load.json").write_text(json.dumps(
+            {"start": load_start, "end": round(os.getloadavg()[0], 2)}))
         return rep
 
     worker = WebPoolWorker(
