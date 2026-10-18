@@ -12,9 +12,9 @@ from types import SimpleNamespace
 
 import pytest
 
-pytest.importorskip("openadapt_flow.contracts")
+pytest.importorskip("openadapt_types")
 
-from openadapt_flow.contracts.execute import ExecuteTerminalOutcomeV1 as E  # noqa: E402
+from openadapt_types.execute import ExecuteTerminalOutcomeV1 as E  # noqa: E402
 
 from openadapt_flow.execute.dispatch import (  # noqa: E402
     _map_outcome,

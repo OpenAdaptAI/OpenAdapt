@@ -58,11 +58,6 @@ SOURCES = [source.value for source in OutcomeSourceV1]
 NO_EFFECT = {"stopped_before_change", "refused", "did_not_finish"}
 
 
-
-def _old_module(cls: type) -> str:
-    """The registry names the openadapt_types module, which aliases openadapt_flow.contracts."""
-    return cls.__module__.replace("openadapt_flow.contracts", "openadapt_types", 1)
-
 def _resolve(inputs: dict[str, Any]) -> PlainOutcomeV1 | PlainProgressV1:
     try:
         return plain_outcome(**inputs)
@@ -130,7 +125,7 @@ def _this_packages_enums() -> list[type[Enum]]:
 
 
 def _symbol_names(symbol: str, enum_cls: type[Enum]) -> bool:
-    path = _old_module(enum_cls).replace(".", "/") + ".py"
+    path = enum_cls.__module__.replace(".", "/") + ".py"
     return symbol.startswith(path + " ") and re.search(rf"\b{enum_cls.__name__}\b", symbol) is not None
 
 
@@ -146,7 +141,7 @@ def test_every_outcome_enum_in_this_package_is_mapped_or_set_aside() -> None:
     ]
     assert ControlOverlayPhase in outcome_enums and ExecuteTerminalOutcomeV1 in outcome_enums
     unaccounted = [
-        f"{_old_module(enum_cls)}.{enum_cls.__name__}"
+        f"{enum_cls.__module__}.{enum_cls.__name__}"
         for enum_cls in outcome_enums
         if not any(_symbol_names(symbol, enum_cls) for symbol in symbols)
     ]
