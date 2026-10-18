@@ -14,6 +14,7 @@ See design doc Section 7.7 for implementation details.
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import urlparse
 
 from openadapt_desktop.backends.protocol import StorageBackend, UploadRecord, UploadResult
 
@@ -164,7 +165,9 @@ class S3Backend:
             Estimated monthly storage cost in USD.
         """
         gb = size_bytes / (1024**3)
-        if self.endpoint and "r2.cloudflarestorage.com" in self.endpoint:
+        # Match R2 by the endpoint's host, not by a substring anywhere in the URL.
+        host = (urlparse(self.endpoint).hostname or "") if self.endpoint else ""
+        if host == "r2.cloudflarestorage.com" or host.endswith(".r2.cloudflarestorage.com"):
             return round(gb * 0.015, 4)
         return round(gb * 0.023, 4)
 

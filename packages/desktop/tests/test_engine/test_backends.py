@@ -49,6 +49,15 @@ class TestS3Backend:
         assert cost is not None
         assert cost == pytest.approx(0.015, abs=0.001)
 
+    def test_estimate_cost_matches_r2_by_host_not_substring(self) -> None:
+        """A non-R2 host that mentions R2 in its path is priced as S3."""
+        backend = S3Backend(
+            bucket="test",
+            endpoint="https://storage.example.com/r2.cloudflarestorage.com",
+        )
+        cost = backend.estimate_cost(1024**3)  # 1 GB
+        assert cost == pytest.approx(0.023, abs=0.001)
+
 
 class TestHostedIngestBackend:
     """Tests for the hosted ingest backend."""
