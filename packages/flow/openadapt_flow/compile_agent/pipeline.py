@@ -52,6 +52,8 @@ from openadapt_flow.jit.keys import CustomerModelKey
 from openadapt_flow.jit.signature import TaskSignature
 
 __all__ = [
+    "BACKENDS",
+    "UnsupportedTarget",
     "CompileResult",
     "FirstRunCompiler",
     "RecordCheck",
@@ -70,6 +72,40 @@ CONFIRMED_FILE = "verify.yaml"
 CHECKS_FILE = "record_checks.json"
 
 _PLACEHOLDER_RE = re.compile(r"{([A-Za-z_][A-Za-z0-9_]*)}")
+
+#: The surfaces ``record --backend`` drives. compile-agent runs on ``web`` only
+#: so far: the JIT captures and runs through a Playwright browser, and the
+#: harness reads the page's DOM.
+BACKENDS = ("web", "windows", "macos", "linux", "rdp", "citrix")
+
+
+class UnsupportedTarget(ValueError):
+    """The app is not a web app. compile-agent does not drive it yet, and never
+    falls back to a browser for it."""
+
+
+def check_target(url: str, backend: str = "web") -> None:
+    """Refuse any target that is not a web app at an http(s) URL.
+
+    Raises:
+        UnsupportedTarget: a non-web backend, or a URL that is not http(s).
+    """
+
+    from urllib.parse import urlsplit
+
+    if backend not in BACKENDS:
+        raise UnsupportedTarget(f"unknown backend {backend!r} (one of {BACKENDS})")
+    if backend != "web":
+        raise UnsupportedTarget(
+            f"compile-agent runs web apps only so far; the {backend!r} backend "
+            "(which record --backend drives) is not supported yet. Nothing ran."
+        )
+    if urlsplit(url).scheme not in ("http", "https"):
+        raise UnsupportedTarget(
+            f"{url!r} is not an http(s) URL. compile-agent runs web apps only so "
+            "far; a desktop, RDP or Citrix target is not supported yet. Nothing ran."
+        )
+
 
 PersonOrCallback = Union[str, Callable[[dict[str, Any]], Optional[str]], None]
 
@@ -290,8 +326,11 @@ class FirstRunCompiler:
         headless: bool = True,
         on_warning: Optional[Callable[[str], None]] = None,
         model_key: Optional[CustomerModelKey] = None,
+        backend: str = "web",
     ) -> None:
         from openadapt_flow.record_sor import load_observer
+
+        check_target(url, backend)
 
         reserved = sorted(set(params) & {"reset", "task_dir"})
         if reserved:

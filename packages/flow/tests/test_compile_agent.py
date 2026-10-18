@@ -447,3 +447,56 @@ def test_a_ref_is_stale_when_its_row_changed() -> None:
     with pytest.raises(StaleRef, match="no longer at its place"):
         harness.click("e1")
     assert computer.executed == []
+
+
+# -- targets ------------------------------------------------------------------------
+
+
+@pytest.mark.parametrize("backend", ["windows", "macos", "linux", "rdp", "citrix"])
+def test_a_non_web_backend_is_refused_before_anything_runs(
+    backend: str, tmp_path: Path, capsys
+) -> None:
+    from openadapt_flow.__main__ import build_parser
+    from openadapt_flow.compile_agent import FirstRunCompiler
+    from openadapt_flow.compile_agent.cli import cmd_compile_agent
+    from openadapt_flow.compile_agent.pipeline import UnsupportedTarget
+
+    args = build_parser().parse_args(
+        ["compile-agent", "Save {note}", "--backend", backend, "--url", "http://a"]
+    )
+    assert cmd_compile_agent(args) == 2
+    assert f"the {backend!r} backend" in capsys.readouterr().err
+    with pytest.raises(UnsupportedTarget, match="web apps only"):
+        FirstRunCompiler(
+            "Save {note}",
+            params=["note"],
+            url="http://a",
+            verify=tmp_path / "missing.yaml",  # never read: refused first
+            expect={"patient_id": "p1"},
+            on_screen=["MRN P1"],
+            backend=backend,
+        )
+
+
+def test_a_deployment_naming_another_backend_is_refused(tmp_path: Path, capsys) -> None:
+    from openadapt_flow.__main__ import build_parser
+    from openadapt_flow.compile_agent.cli import cmd_compile_agent
+
+    config = tmp_path / "deployment.yaml"
+    config.write_text("backend:\n  kind: citrix\n")
+    args = build_parser().parse_args(
+        ["compile-agent", "Save {note}", "--url", "http://a", "--config", str(config)]
+    )
+    assert cmd_compile_agent(args) == 2
+    assert "'citrix' backend" in capsys.readouterr().err
+
+
+def test_a_non_http_url_is_refused(capsys) -> None:
+    from openadapt_flow.__main__ import build_parser
+    from openadapt_flow.compile_agent.cli import cmd_compile_agent
+
+    args = build_parser().parse_args(
+        ["compile-agent", "Save {note}", "--url", "rdp://host"]
+    )
+    assert cmd_compile_agent(args) == 2
+    assert "not an http(s) URL" in capsys.readouterr().err

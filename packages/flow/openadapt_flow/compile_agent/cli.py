@@ -65,6 +65,19 @@ def add_parser(sub: argparse._SubParsersAction) -> None:
         help="the app's entry URL; the agent makes real entries there, so use a test copy",
     )
     p.add_argument(
+        "--backend",
+        choices=["web", "windows", "macos", "linux", "rdp", "citrix"],
+        default="web",
+        help=(
+            "the surface the app runs on, as for record --backend. Only web is "
+            "supported so far; any other is refused before anything runs"
+        ),
+    )
+    p.add_argument(
+        "--config",
+        help="deployment.yaml; its backend.kind must be web (others are refused)",
+    )
+    p.add_argument(
         "--verify",
         help="verify.yaml whose verifier: section reads the system of record",
     )
@@ -253,6 +266,18 @@ def cmd_compile_agent(
         replay = run_compiled(args.task_dir, **params)
         _print(replay.to_dict(), args.json)
         return 0 if replay.verified else 1
+    from openadapt_flow.compile_agent.pipeline import UnsupportedTarget, check_target
+
+    backend = args.backend
+    if args.config:
+        from openadapt_flow.deployment import load_deployment
+
+        backend = load_deployment(args.config, allow_unresolved=True).backend.kind
+    try:
+        check_target(args.url or "http://unset", backend)
+    except UnsupportedTarget as exc:
+        print(f"compile-agent: {exc}", file=sys.stderr)
+        return 2
     missing = [f for f in ("url", "verify") if not getattr(args, f)]
     if missing or not args.expect or not args.on_screen:
         raise SystemExit(

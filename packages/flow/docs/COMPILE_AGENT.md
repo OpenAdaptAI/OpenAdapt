@@ -229,7 +229,13 @@ object with `messages.create`; the tests pass a fake.
 
 ## Limits
 
-- Web apps only, like the JIT path.
+- Web apps only so far. The JIT captures and runs through a Playwright
+  browser, and the harness reads the page's DOM. A Windows, macOS, Linux, RDP
+  or Citrix target (`--backend`, or a `--config` whose `backend.kind` names
+  one) and any URL that is not http(s) are refused before anything runs; there
+  is no fallback to a browser. Those surfaces need the JIT to drive the
+  backends `record --backend` uses and an observer over UI Automation,
+  Accessibility, AT-SPI or pixels.
 - The save gate recognizes a click that commits by the control's label. An
   icon with no label, or a label that names no write ("OK"), is not gated in
   run 1; the record check after run 1 still refuses a wrong record, but only
