@@ -147,7 +147,16 @@ def program_predicate_contract() -> dict[str, Any]:
 
     ocr_module = __import__(_ocr_callable.__module__, fromlist=["_engine"])
     engine = getattr(ocr_module, "_engine", None)
+    if engine is not None and hasattr(engine, "recognize_png"):
+        return {"ocr_backend": engine.name, "ocr_engine": engine.contract()}
     if engine is None:
+        from openadapt_flow.vision.ocr_backends import active_backend_name
+
+        if active_backend_name() == "native":
+            # Bind the native engine itself, never RapidOCR's defaults: a guard
+            # proven under one engine must not pass under the other.
+            native = ocr_module._get_engine()
+            return {"ocr_backend": native.name, "ocr_engine": native.contract()}
         # Contract the default lazy engine before the first OCR call. This
         # produces the same semantic configuration before and after lazy
         # initialization, while the dependency artifact digest binds its exact

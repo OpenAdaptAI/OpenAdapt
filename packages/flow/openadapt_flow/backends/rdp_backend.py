@@ -1,12 +1,11 @@
 """FreeRDP / RDP backend: drive a pixel-only remote desktop over RDP.
 
-The L1/Retinology wedge (docs/L1_INTEGRATION.md) reaches a legacy
-ophthalmology EMR over **RDP**, read **pixel-only** — there is no accessibility
-tree, no DOM, no structured layer of any kind. That is exactly the substrate
-the vision-only runtime was built for: PNG frames in, pixel-coordinate clicks
-and keys out. So RDP is *an adapter, not a rewrite* — this module implements
-the :class:`openadapt_flow.backend.Backend` protocol on top of a small,
-swappable RDP transport.
+A legacy desktop EMR reached over **RDP** is read **pixel-only** — there is
+no accessibility tree, no DOM, no structured layer of any kind. That is
+exactly the substrate the vision-only runtime was built for: PNG frames in,
+pixel-coordinate clicks and keys out. So RDP is *an adapter, not a rewrite*
+— this module implements the :class:`openadapt_flow.backend.Backend` protocol
+on top of a small, swappable RDP transport.
 
 Design (two layers, so the adapter is CI-testable without a live RDP server
 and the RDP library stays replaceable):

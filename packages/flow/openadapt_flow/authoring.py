@@ -55,7 +55,7 @@ import re
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Literal, Mapping, Optional, TypedDict
+from typing import Any, Callable, Literal, Mapping, Optional, TypedDict
 
 from openadapt_flow.compiler.compile import compile_recording
 from openadapt_flow.recorder import Recorder
@@ -268,10 +268,13 @@ class CompileResult(_CompileResultRequired, total=False):
     """Authoring compile is not success of the job.
 
     ``distilled`` (steps in, steps out, dropped steps) is present when the
-    recording was distilled before compile.
+    recording was distilled before compile. ``check_needs_admission`` lists
+    the save steps whose demonstrated check a person must admit
+    (``openadapt-flow check admit``) before it can confirm a save.
     """
 
     distilled: dict[str, Any]
+    check_needs_admission: list[str]
 
 
 class AdmitResult(TypedDict, total=False):
@@ -468,6 +471,10 @@ class AuthoringSession:
         settle_interval_s: Recorder frame-settle poll interval.
         settle_stable_frames: Consecutive stable frames required to settle.
         settle_timeout_s: Max seconds to wait for the frame to settle.
+        system_of_record_reader: Optional read-only snapshot of the system of
+            record, passed to :class:`Recorder`. Each event then keeps the
+            record delta, and ``compile(mine_effects=True)`` proposes an effect
+            contract from it. The proposal still needs a person to admit it.
     """
 
     def __init__(
@@ -481,6 +488,9 @@ class AuthoringSession:
         settle_stable_frames: int = 2,
         settle_timeout_s: float = 3.0,
         backend_hints: Optional[Mapping[str, Any]] = None,
+        system_of_record_reader: Optional[
+            Callable[[], Optional[list[dict[str, Any]]]]
+        ] = None,
     ) -> None:
         kind = _normalize_backend_kind(backend_kind)
         if kind in _COACH_ONLY_KINDS:
@@ -498,6 +508,7 @@ class AuthoringSession:
         self._settle_interval_s = settle_interval_s
         self._settle_stable_frames = settle_stable_frames
         self._settle_timeout_s = settle_timeout_s
+        self._system_of_record_reader = system_of_record_reader
         self._recorder: Optional[Recorder] = None
         self._recording_dir: Optional[Path] = None
         self._nodes: dict[str, _NodePixels] = {}
@@ -508,8 +519,10 @@ class AuthoringSession:
         self._draft: Optional[CompileResult] = None
         self._draft_digest: Optional[str] = None
         self._draft_bundle: Optional[Path] = None
+        self._compiled_dir: Optional[Path] = None
         self._check_start: Optional[int] = None
         self._check_fields: list[Any] = []
+        self._check_reset: Any = None
         self._backend_hints = _clean_backend_hints(kind, backend_hints)
         self._actors: dict[int, str] = {}
         #: Values typed for each parameter in this session, kept in memory
@@ -540,6 +553,12 @@ class AuthoringSession:
     @property
     def recording_dir(self) -> Optional[Path]:
         return self._recording_dir
+
+    @property
+    def compiled_recording_dir(self) -> Optional[Path]:
+        """The recording ``compile`` compiled: the distilled copy, or the original."""
+
+        return self._compiled_dir
 
     def remember_node(
         self,
@@ -612,6 +631,7 @@ class AuthoringSession:
             settle_interval_s=self._settle_interval_s,
             settle_stable_frames=self._settle_stable_frames,
             settle_timeout_s=self._settle_timeout_s,
+            system_of_record_reader=self._system_of_record_reader,
         )
         self._actors = {}
 
@@ -795,12 +815,15 @@ class AuthoringSession:
         return {"recorded": True, "param": pause.param}
 
     def begin_check(self) -> dict[str, Any]:
-        """Ask the person to show how to check the save.
+        """Ask the person to show how they'd check the save persisted.
 
         Events after this call are the check, not the task: the person
-        navigates to the saved record, then marks fields with
-        :meth:`mark_field`. Compile turns them into the save's read-back
-        (:mod:`openadapt_flow.compiler.readback_authoring`).
+        throws away what the screen remembers (a reload, a new search, a
+        reopened window), navigates to the saved record, then marks fields
+        with :meth:`mark_field`. Compile turns them into the save's read-back
+        (:mod:`openadapt_flow.compiler.readback_authoring`). The compiled
+        check confirms nothing until a person admits it
+        (``openadapt-flow check admit``).
         """
         from openadapt_flow.compiler.readback_authoring import CHECK_PROMPT
 
@@ -811,6 +834,33 @@ class AuthoringSession:
         self._check_start = recorder.event_count
         return {"prompt": CHECK_PROMPT, "checking": True}
 
+    def mark_reset(self, kind: str) -> dict[str, Any]:
+        """Name the last recorded step of the check as its state reset.
+
+        For a reset the compiler can't recognize from the recording: a click
+        on the browser's reload button, a window reopened from the taskbar,
+        or signing out and back in. ``kind`` is ``reload``, ``new_search``,
+        ``reopen_window`` or ``fresh_session``. The compiled check records it
+        as declared, and the person who admits the check sees that.
+        """
+        from openadapt_flow.compiler.readback_authoring import DeclaredReset
+
+        recorder = self._require_recording()
+        if self._check_start is None:
+            raise AuthoringError("call begin_check first", code="no_check")
+        last = recorder.event_count - 1
+        if last < self._check_start:
+            raise AuthoringError(
+                "record the reset step first, then name it", code="invalid_reset"
+            )
+        try:
+            self._check_reset = DeclaredReset(kind=kind, event=last)  # type: ignore[arg-type]
+        except ValueError as exc:
+            raise AuthoringError(
+                f"unknown reset kind {kind!r}", code="invalid_reset"
+            ) from exc
+        return {"reset": kind, "event": last}
+
     def mark_field(
         self,
         *,
@@ -818,8 +868,14 @@ class AuthoringSession:
         node_id: Optional[str] = None,
         backend_pixels: Optional[Mapping[str, Any]] = None,
         locator: Optional[str] = None,
+        value_kind: Optional[str] = None,
+        date_order: Optional[str] = None,
     ) -> dict[str, Any]:
-        """Mark the element that shows the value typed for ``param``."""
+        """Mark the element that shows the value typed for ``param``.
+
+        ``value_kind`` (``text``, ``code``, ``date``, ``currency``) says how
+        to compare it; unset, the compiler infers it from the typed value.
+        """
         from openadapt_flow.compiler.readback_authoring import MarkedField
 
         self._require_recording()
@@ -857,6 +913,8 @@ class AuthoringSession:
                 region=target.region,
                 locator=locator,
                 structure_matched=structure_matched,
+                value_kind=value_kind,  # type: ignore[arg-type]
+                date_order=date_order,  # type: ignore[arg-type]
             )
         )
         return {
@@ -887,6 +945,7 @@ class AuthoringSession:
         *,
         name: str = "authoring",
         distill: bool = True,
+        mine_effects: bool = False,
     ) -> CompileResult:
         """Compile via :func:`compile_recording`; never paints ``VERIFIED``.
 
@@ -898,6 +957,10 @@ class AuthoringSession:
         With ``distill`` (the default), steps that had no visible effect are
         removed first (:func:`~openadapt_flow.compiler.distill.distill_recording`)
         and the distilled copy is compiled. The original recording is kept.
+
+        ``mine_effects`` proposes an effect contract from the system-of-record
+        delta the recording kept (see ``system_of_record_reader``). It is a
+        proposal: compile still returns ``needs_human_admit``.
         """
 
         self._require_not_halted()
@@ -946,7 +1009,12 @@ class AuthoringSession:
         from openadapt_flow.compiler.readback_authoring import CheckError
 
         try:
-            workflow = compile_recording(compile_dir, out_bundle, name=name)
+            if mine_effects:
+                workflow = compile_recording(
+                    compile_dir, out_bundle, name=name, mine_effects=True
+                )
+            else:
+                workflow = compile_recording(compile_dir, out_bundle, name=name)
         except CheckError as exc:
             raise AuthoringError(str(exc), code="check_refused") from exc
         recording_id = workflow.recording_id or uuid.uuid4().hex
@@ -958,6 +1026,16 @@ class AuthoringSession:
         }
         if distilled is not None:
             result["distilled"] = distilled
+        from openadapt_flow.compiler.readback_authoring import demonstrated_checks
+
+        pending = [
+            step.id
+            for step, effect in demonstrated_checks(workflow)
+            if effect.readback is not None and effect.readback.admission is None
+        ]
+        if pending:
+            result["check_needs_admission"] = pending
+        self._compiled_dir = compile_dir
         digest = None
         manifest = getattr(workflow, "manifest", None)
         raw_digest = getattr(manifest, "content_digest", None)
@@ -1101,10 +1179,17 @@ class AuthoringSession:
         rec_dir = recorder.finish()
         self._stamp_provenance(rec_dir)
         if self._check_start is not None and self._check_fields:
-            from openadapt_flow.compiler.readback_authoring import write_check
+            from openadapt_flow.compiler.readback_authoring import (
+                CHECK_PROMPT,
+                write_check,
+            )
 
             write_check(
-                rec_dir, start_event=self._check_start, fields=self._check_fields
+                rec_dir,
+                start_event=self._check_start,
+                fields=self._check_fields,
+                reset=self._check_reset,
+                prompt=CHECK_PROMPT,
             )
         self._recording_dir = rec_dir
         self._recorder = None

@@ -59,9 +59,9 @@ refuse before submission. See the SDK's [client migration guide](https://github.
 
 > There is intentionally **no** hosted, multi-tenant "official OpenAdapt
 > workflow server" that exposes OpenAdapt-operated workflows to the
-> public. v2 is stdio-only, single-user, local. A hosted control plane is
-> a separate, proprietary surface (`openadapt-cloud`) and is out of scope
-> for this package.
+> public. v2 is stdio-only, single-user, local. OpenAdapt Cloud, the
+> hosted control plane, is a separate product and is out of scope for
+> this package.
 
 ## 2. Canonical registry metadata
 

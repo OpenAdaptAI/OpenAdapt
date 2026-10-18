@@ -3,7 +3,7 @@
 [![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml)
 [![PyPI](https://img.shields.io/pypi/v/openadapt-flow)](https://pypi.org/project/openadapt-flow/)
 [![Python](https://img.shields.io/pypi/pyversions/openadapt-flow)](https://pypi.org/project/openadapt-flow/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/LICENSE)
 
 A person or an agent shows openadapt-flow a task in a web or desktop app. It
 compiles the task into a program that runs on your own machine and repeats the
@@ -60,6 +60,33 @@ or Edge. Without either, it downloads Playwright's headless Chromium once
 [OpenAdapt launcher](https://github.com/OpenAdaptAI/OpenAdapt) installed,
 `openadapt flow demo` runs the same command.
 
+On macOS, most of a first run in a new environment goes to loading OpenCV,
+which RapidOCR, the default OCR engine, needs. macOS checks each copy of a
+native library the first time it loads, and by default uv gives every new
+environment its own copy. Two settings cut this time:
+
+- `UV_LINK_MODE=hardlink` makes uv link packages from its cache instead of
+  copying them, so macOS checks each library only once. With it, OpenCV took
+  1.2 seconds to load in a second new environment, compared with 12.8 seconds
+  without it.
+- The `native-ocr` extra with `OPENADAPT_FLOW_OCR=native` reads the screen
+  with Apple Vision on macOS or Windows OCR on Windows. A run with it doesn't
+  load OpenCV or RapidOCR at all.
+
+```bash
+OPENADAPT_FLOW_OCR=native uvx --python 3.12 \
+  --from 'openadapt-flow[browser,native-ocr]' openadapt-flow demo
+```
+
+`OPENADAPT_FLOW_OCR` takes `auto` (the default), `native`, or `rapidocr`.
+`auto` uses RapidOCR on every platform, and Linux always uses RapidOCR. The
+native engine is for trying the demo quickly. In the repository's OCR identity
+tests, neither engine accepts a wrong patient, but Apple Vision stops correct
+runs more often: on a dense table of look-alike patients it halted 442 of 480
+correct-patient runs, against 376 for RapidOCR.
+Program-predicate proofs record which OCR engine made them, so a proof made
+under one engine isn't reused under the other.
+
 ![Two runs of the same automation on a fake clinic app. Both final screens show "Encounter saved". The record check found 1 note after run 1, which is marked Done and checked, and 0 notes after run 2, which stopped and asked a person.](docs/showcase/demo-proof.png)
 
 *Synthetic recording. A screenshot of the page that `openadapt-flow demo`
@@ -75,9 +102,9 @@ wrote on 2026-10-09 against the bundled fake clinic app; regenerate it with
 The two final screens are identical, pixel for pixel. Only the record check
 tells the runs apart. To watch each stage in the terminal instead, run
 `openadapt-flow tutorial`, then `openadapt-flow tutorial --break-it`;
-[docs/TUTORIAL.md](docs/TUTORIAL.md) shows the output.
-
-<!-- TODO(readme-links): link the 60-second demo here once it is published. -->
+[docs/TUTORIAL.md](docs/TUTORIAL.md) shows the output. The
+[live demo](https://app.openadapt.ai/demo) shows recorded runs on synthetic
+data.
 
 ## How it compares
 
@@ -127,8 +154,6 @@ final submit, can only be found by position, the run refuses to click. On a
 step with an identity check, the target goes through that check before the
 click, however it was found.
 
-<!-- TODO(readme-links): link the drift proof here once it is published. -->
-
 These are the changes the tests cover, on MockMed or a synthetic test page.
 Except where a row says otherwise, the tests switch off the element locator,
 to test the fallbacks that pixel-only surfaces such as Citrix depend on.
@@ -143,12 +168,6 @@ to test the fallbacks that pixel-only surfaces such as Citrix depend on.
 | Targets moved, relabeled, and re-themed, with their DOM ids unchanged (element locator on) | The element locator found 15 of 15. Image, text, and position matching alone found 0 of 15. | [`benchmark/structural_action/`](benchmark/structural_action/STRUCTURAL_ACTION.md) |
 | Browser zoom, display scaling, font size, or font family changed | Zoom, scaling, and font-size changes stopped the run at the first step. In a 21-point sweep there were no wrong actions and no crashes; only the recorded settings and two serif font swaps finished, and a monospace font stopped at the identity check. With the element locator on, four of these changes produced no wrong writes. | [`benchmark/cosmetic_drift/`](benchmark/cosmetic_drift/COSMETIC_DRIFT.md), [`test_structural_action.py`](tests/e2e/test_structural_action.py) |
 
-<!-- TODO(readme-visual): re-cut docs/showcase/demo.gif with
-scripts/make_demo_gif.py. Its first frame is a black title card (what a still
-preview shows), four frames show the login, the captions are engine telemetry
-(step ids, coordinates, rungs, milliseconds), and the end card says "Both runs
-succeeded". Keep it here, next to the resolution ladder it illustrates, not at
-the top of the README. -->
 ![One recording replayed on two UIs. Left: the theme it was recorded on. Right: a dark theme it had never seen, where each step resolves through text or position matching.](docs/showcase/demo.gif)
 
 Left: the UI the task was recorded on. Right: a dark theme the recording never
@@ -391,8 +410,10 @@ The full list, capability by capability: [docs/LIMITS.md](docs/LIMITS.md).
 
 - [Qualify a workflow](docs/QUALIFY_A_WORKFLOW.md): `openadapt-flow qualify`
   runs a bundle against the normal case and deliberate faults, reads the write
-  back from the system of record, and certifies it under a policy. Terms are
-  defined in [docs/QUALIFICATION_TERMS.md](docs/QUALIFICATION_TERMS.md).
+  back from the system of record, and certifies it under a policy. Qualify
+  and certify are defined in the [glossary](https://docs.openadapt.ai/reference/glossary/#qualify).
+  [docs/QUALIFICATION_TERMS.md](docs/QUALIFICATION_TERMS.md) has the fault
+  cases, what gets signed, and the policy rules.
 - [Production setup](docs/PRODUCTION.md): qualifying a bundle from its
   recording, policies, multi-step processes, signed results, and release
   status.

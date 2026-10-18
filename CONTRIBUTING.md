@@ -7,10 +7,13 @@ Participation in this project is governed by the
 
 ## Product boundary
 
-`OpenAdaptAI/OpenAdapt` is the launcher/meta-package and compatibility
-surface. The canonical compiler and governed runtime live in
-[`openadapt-flow`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow). New engine,
-replay, repair, policy, and backend work belongs there.
+`OpenAdaptAI/OpenAdapt` is a monorepo. The root holds the `openadapt`
+launcher, and `packages/` holds the engine (`packages/flow`), the MCP server
+(`packages/agent`) and the shared contracts (`packages/types`). New engine,
+replay, repair, policy, and backend work belongs in `packages/flow`.
+
+The standalone `openadapt-flow`, `openadapt-agent` and `openadapt-types`
+repositories are frozen. Open new issues and pull requests here.
 
 The [signed Production record](https://docs.openadapt.ai/production-lifecycle.json)
 provides the current admission state. Do not infer a lifecycle state from
@@ -18,30 +21,47 @@ package availability, repository text, or a sibling repository.
 
 ## Where to Contribute
 
-- **This repository**: launcher packaging, unified CLI compatibility, and CI.
-- **`openadapt-flow`**: compiler, replay, verification, governed repair, and
-  backend implementation.
-- **`openadapt-agent`**: agent-facing MCP and Agent Skills integration over
-  governed Flow bundles.
-- **Other repositories**: open issues only when their stated lifecycle and
-  contribution guide match the proposed work.
+- **Root (`openadapt/`, `tests/`)**: launcher packaging, unified CLI
+  compatibility, and CI.
+- **`packages/flow`**: compiler, replay, verification, governed repair, and
+  backend implementation. The MCP server's code is in `openadapt_flow.agent`
+  and the contracts are in `openadapt_flow.contracts`.
+- **`packages/agent`** and **`packages/types`**: the `openadapt-agent` and
+  `openadapt-types` packages. They keep the old imports and commands working
+  on top of Flow.
+- **Other repositories** (capture, privacy, desktop and the rest): open issues
+  only when their stated lifecycle and contribution guide match the proposed
+  work.
 
 ## Getting started
 
 1. Fork and clone the repository.
 2. Create a focused branch from current `origin/main`.
-3. Install the launcher in development mode:
+3. Install what you're changing in development mode. For the launcher:
 
    ```bash
    python -m pip install -e '.[dev]'
    ```
 
-4. Run the focused test suite and formatting checks:
+   For a package, install it from its directory, with Flow from the same
+   checkout. For example, for the MCP server:
+
+   ```bash
+   cd packages/agent
+   python -m pip install -e '../flow[agent]' -e '.[dev]'
+   ```
+
+   [`.github/workflows/packages.yml`](.github/workflows/packages.yml) has the
+   exact install and test commands CI runs for each package.
+
+4. Run the focused test suite and formatting checks. For the launcher:
 
    ```bash
    pytest
    ruff check openadapt tests
    ```
+
+   For a package, run `pytest -q` in its directory.
 
 5. Open a pull request. The pull-request template lists the required release
    and source-boundary checks.
@@ -57,9 +77,9 @@ package availability, repository text, or a sibling repository.
 
 ## Licensing and the open-core boundary
 
-OpenAdapt is open-core. The public repositories (this launcher,
-`openadapt-flow`, `openadapt-capture`, `openadapt-desktop`, and the other
-`openadapt-*` engine repos) are MIT licensed: the mechanism and the public
+OpenAdapt is open-core. The public repositories (this monorepo with the
+launcher and engine, `openadapt-capture`, `openadapt-desktop`, and the other
+`openadapt-*` repos) are MIT licensed: the mechanism and the public
 interfaces are open. The hosted control plane (OpenAdapt Cloud) is a
 proprietary commercial service, and certain data and empirical tuning stay
 private by policy.

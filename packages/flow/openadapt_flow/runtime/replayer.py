@@ -647,6 +647,14 @@ class Replayer:
             here. A switch to a surface with no supplied backend, or to one
             whose backend is of a different kind, halts. Ignored (and must be
             empty) for a single-surface workflow.
+        attended_draft_by: Who attends this run of a JIT draft (the canary,
+            :mod:`openadapt_flow.jit`): a person's name, or a registered
+            ``openadapt_flow.jit.authority.Principal`` (an admitter key, or an
+            agent under a valid signed admission policy). None (default): a bundle
+            carrying ``jit_draft.json`` runs only with a valid admission, and
+            :meth:`run` raises ``DraftNotAdmitted`` otherwise.
+        draft_key_dir: Where the JIT admission key lives, for that check.
+            None uses ``$OPENADAPT_JIT_KEY_DIR`` or ``~/.openadapt/jit``.
     """
 
     def __init__(
@@ -686,7 +694,13 @@ class Replayer:
         ] = None,
         approval_gate: Optional["ApprovalGate"] = None,
         surface_backends: Optional[Mapping[str, Backend]] = None,
+        attended_draft_by: Optional[Any] = None,
+        draft_key_dir: Optional[Path] = None,
     ) -> None:
+        # A JIT draft (openadapt_flow.jit) runs only once admitted, or attended
+        # by a named person (the canary). Checked in run().
+        self._attended_draft_by = attended_draft_by
+        self._draft_key_dir = draft_key_dir
         if vision is None:
             import openadapt_flow.vision as vision  # lazy: heavy OCR deps
 
@@ -1348,6 +1362,16 @@ class Replayer:
         campaign_refusal = self._qualification_campaign_refusal(workflow)
         if campaign_refusal is not None:
             raise ValueError(campaign_refusal)
+        if bundle_dir is not None:
+            # Every execution path runs through here, so a JIT draft with no
+            # valid admission is refused before any action.
+            from openadapt_flow.jit.lifecycle import ensure_runnable
+
+            ensure_runnable(
+                bundle_dir,
+                attended_by=self._attended_draft_by,
+                key_dir=self._draft_key_dir,
+            )
         bundle_dir = Path(bundle_dir)
         run_dir = Path(run_dir)
         self._install_execution_snapshots(workflow)
@@ -14130,10 +14154,9 @@ class Replayer:
         clamps it to the exact final frame.
         """
 
-        import cv2
-        import numpy as np
+        from openadapt_flow.vision import imgops
 
-        frame = cv2.imdecode(np.frombuffer(frame_png, np.uint8), cv2.IMREAD_COLOR)
+        frame = imgops.decode_bgr(frame_png)
         if frame is None:
             return None
         frame_h, frame_w = frame.shape[:2]

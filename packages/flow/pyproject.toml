@@ -64,6 +64,22 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+native-ocr = [
+    # The operating system's own OCR (OPENADAPT_FLOW_OCR=native): Apple Vision
+    # through PyObjC on macOS, Windows.Media.Ocr through the winrt projections
+    # on Windows. With it, the record, compile, and replay path loads neither
+    # RapidOCR nor OpenCV. RapidOCR stays the default and the only engine on
+    # Linux; see openadapt_flow/vision/ocr_backends.py.
+    "pyobjc-core>=10.0; sys_platform == 'darwin'",
+    "pyobjc-framework-Cocoa>=10.0; sys_platform == 'darwin'",
+    "winrt-runtime>=2.0; sys_platform == 'win32'",
+    "winrt-Windows.Media.Ocr>=2.0; sys_platform == 'win32'",
+    "winrt-Windows.Graphics.Imaging>=2.0; sys_platform == 'win32'",
+    "winrt-Windows.Storage.Streams>=2.0; sys_platform == 'win32'",
+    "winrt-Windows.Globalization>=2.0; sys_platform == 'win32'",
+    "winrt-Windows.Foundation>=2.0; sys_platform == 'win32'",
+    "winrt-Windows.Foundation.Collections>=2.0; sys_platform == 'win32'",
+]
 browser = [
     # Browser recording/replay is an explicit substrate capability. Native
     # desktop, RDP, and Citrix users do not need this ~34-47 MB driver wheel or
@@ -99,6 +115,8 @@ dev = [
     "mypy>=1.11",
     "pytest-cov>=5.0",
     "jsonschema>=4.21",
+    # Countersigned Seals tests (RFC 3161 tokens); see the `countersign` extra.
+    "asn1crypto>=1.5",
     # Browser tests remain part of the full development matrix even though the
     # published base runtime no longer installs Playwright for non-web users.
     "playwright>=1.44",
@@ -115,6 +133,13 @@ grounding = ["openadapt-grounding>=0.1.0"]
 console = [
     "fastapi>=0.110",
     "uvicorn>=0.29",
+]
+# Countersigned and Timestamped Seals: `openadapt-flow countersign`. RFC 3161
+# timestamps need an ASN.1 codec for CMS/TSTInfo; asn1crypto is pure Python
+# with no dependencies, and signatures still go through `cryptography`. The
+# Seal verifier is openadapt_flow.contracts.seal, part of the base package.
+countersign = [
+    "asn1crypto>=1.5",
 ]
 # Reference Execute server: `openadapt-flow serve-execute`. Same public
 # request schema as Cloud Execute, hosted in this process with a local
@@ -146,7 +171,7 @@ linux = [
     "PyGObject>=3.46; sys_platform == 'linux'",
 ]
 # FreeRDPBackend: pure-Python async RDP client for the pixel-only RDP path
-# (L1/Retinology EMR over RDP). Lazily imported by AardwolfTransport — never
+# (legacy EMR over RDP). Lazily imported by AardwolfTransport — never
 # needed for the mock-tested adapter, only for the real/live transport.
 rdp = ["aardwolf==0.2.14"]
 # PHI/PII scrubbing on persist/log paths (Presidio-backed). Optional: the

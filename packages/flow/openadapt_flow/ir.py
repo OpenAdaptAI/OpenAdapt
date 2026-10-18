@@ -3361,6 +3361,20 @@ class EffectVerificationEvidence(BaseModel):
     #: keeps its exact bytes.
     endpoint_scope: Literal["loopback", "external", "unknown"] = "unknown"
 
+    @property
+    def assurance(self) -> str:
+        """How the write was checked: ``independent_readback``,
+        ``screen_readback`` or ``unchecked`` (:mod:`openadapt_flow.assurance`).
+
+        Derived from :attr:`verification_tier` and :attr:`final_verdict`, so
+        it adds nothing to the stored record and can't disagree with it.
+        """
+        from openadapt_flow.assurance import assurance_for
+
+        return assurance_for(
+            self.verification_tier, confirmed=self.final_verdict == "confirmed"
+        )
+
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         """Omit the additive ``endpoint_scope`` default from serialized evidence.

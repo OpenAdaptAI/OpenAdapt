@@ -585,6 +585,15 @@ def _band_match_template(tmpl: IdentityTemplate, observed_text: str) -> _id.Band
         if not explained[j] and _id._name_shaped(raw_tok, obs[j])
     )
 
+    evidence_short = _id.identity_evidence_shortfall(
+        [_template_identity_kind(t, canon) for t in toks],
+        matched,
+        raw_matched,
+        # No plaintext to inspect: every token counts as look-alike, the
+        # conservative side of identity_evidence_shortfall's rule.
+        [True] * len(toks),
+    )
+
     return _id.BandMatch(
         matched_chars / total_chars if total_chars else 0.0,
         max(uncovered_runs, default=0),
@@ -593,7 +602,30 @@ def _band_match_template(tmpl: IdentityTemplate, observed_text: str) -> _id.Band
         unexplained_names,
         max_absent_alpha,
         glyph_id_chars,
+        evidence_short,
     )
+
+
+def _template_identity_kind(t, canon) -> Optional[_id.IdentityKind]:
+    """Key-space port of :func:`identity.identity_kind` from shape flags.
+
+    A template stores no date flag, so a date is a token with a digit that is
+    neither identifier-shaped nor alphabetic and is at least as long as the
+    shortest written date (``1/1/80``). Generic column words are excluded from
+    names by hashing them with the bundle salt, as the plaintext path does.
+    """
+    if t.digit and not t.idsh and not t.alpha and t.n >= 6:
+        return "date"
+    if t.idsh:
+        return "id"
+    if (
+        t.alpha
+        and t.name
+        and t.n >= _id.ID_CARRY_NAME_MIN
+        and t.c not in {canon(w) for w in _id._GENERIC_IDENTITY_CANON}
+    ):
+        return "name"
+    return None
 
 
 def verify_template_identity(

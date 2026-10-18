@@ -901,6 +901,102 @@ class BandMatch(NamedTuple):
     unexplained_name_tokens: int = 0
     max_absent_alpha_token: int = 0
     glyph_ambiguous_id_chars: int = 0
+    #: True when the matched band lacks the identifying evidence that
+    #: :func:`identity_evidence_shortfall` requires. Makes the OCR tier
+    #: ABSTAIN when every other budget passes; never affects ``mismatch``.
+    identity_evidence_short: bool = False
+
+
+# ---------------------------------------------------------------------------
+# Identifying-field evidence (the native-OCR wrong-patient case)
+# ---------------------------------------------------------------------------
+#
+# Apple Vision once read a record-time band as only "01/15/1980 M Active": the
+# MRN and the patient name were missing. Every budget above passed on the
+# date, sex and status columns, so a different patient's row with the same
+# DOB verified. The rule below is engine-independent. It looks at which kinds
+# of identifying field the recorded band holds and which of them the live
+# band matched raw (byte-identically after squashing):
+#
+# - ``id``: an identifier-shaped token (MRN, account number);
+# - ``name``: a discriminative name token (not a generic column word);
+# - ``date``: a date-shaped token (DOB).
+#
+# The rule applies to a record band: one whose recording holds an ``id`` or a
+# ``date`` field, or from which OCR dropped a recorded identifying field.
+# Page chrome and name-only text ("Open chart for Phil") keep the budgets
+# above unchanged, because they have no second kind of field to offer.
+#
+# A record band verifies only if it matched at least one ``id`` or ``name``
+# field. It also needs a SECOND, different kind of field to match when either:
+#
+# - a matched identifying token carries a look-alike character (any member
+#   of the OCR confusion classes: l/1/I/|/!, O/0, S/5, Z/2, B/8, G/9, and
+#   rn/m, cl/d, vv/w), so OCR may have read a different value as this one;
+# - a recorded identifying token was NOT matched, so OCR returned fewer of
+#   the recorded identifying fields than the recording held.
+#
+# Otherwise the OCR tier abstains. The rule only removes evidence: it can turn
+# ``verified`` into ``abstain``, never ``mismatch`` or ``abstain`` into
+# ``verified``. It applies to every OCR engine.
+
+#: Characters in an OCR confusion class (either side of the pair).
+_LOOKALIKE_CHARS = frozenset(_CONFUSION_CANON) | frozenset(
+    ch for _pair, target in _CONFUSION_MULTI for ch in target
+)
+_LOOKALIKE_SEQUENCES = tuple(source for source, _target in _CONFUSION_MULTI)
+
+IdentityKind = Literal["id", "name", "date"]
+
+
+def _has_lookalike(token: str) -> bool:
+    """Whether a squashed token holds a character OCR may confuse."""
+    return any(ch in _LOOKALIKE_CHARS for ch in token) or any(
+        seq in token for seq in _LOOKALIKE_SEQUENCES
+    )
+
+
+def identity_kind(token: str) -> Optional[IdentityKind]:
+    """The identifying-field kind of a squashed band token, or None."""
+    if _is_date_like(token):
+        return "date"
+    if _is_identifier_shaped(token):
+        return "id"
+    if _is_discriminative_name(token):
+        return "name"
+    return None
+
+
+def identity_evidence_shortfall(
+    kinds: list[Optional[IdentityKind]],
+    matched: list[bool],
+    raw_matched: list[bool],
+    lookalike: list[bool],
+) -> bool:
+    """Whether the matched band lacks the required identifying evidence.
+
+    All lists are per recorded token. ``matched`` is the canonical match
+    (OCR confusions folded); ``raw_matched`` is the byte-identical match. A
+    field counts as returned when it matched canonically. As evidence, a
+    name or date counts on a canonical match (digit noise in a name or a
+    letter in a date cannot spell a different real value), but an
+    identifier counts only on a raw match, because a homoglyph reading of an
+    identifier can be a different identifier. See the comment above
+    :data:`_LOOKALIKE_CHARS` for the rule.
+    """
+    recorded_kinds = {k for k in kinds if k is not None}
+    field_missing = any(k is not None and not m for k, m in zip(kinds, matched))
+    if not recorded_kinds & {"id", "date"} and not field_missing:
+        return False
+    evidence = [
+        k is not None and (r if k == "id" else m)
+        for k, m, r in zip(kinds, matched, raw_matched)
+    ]
+    matched_kinds = {k for k, e in zip(kinds, evidence) if e}
+    if not matched_kinds & {"id", "name"}:
+        return True
+    needs_second = field_missing or any(e and la for e, la in zip(evidence, lookalike))
+    return needs_second and len(matched_kinds) < 2
 
 
 def _match_tokens(
@@ -1273,6 +1369,12 @@ def band_match(
     # verify_target_identity reads a positive charge here as ABSTAIN (OCR
     # cannot certify), not verify and not mismatch.
     glyph_ambiguous_id_chars = glyph_id_chars
+    evidence_short = identity_evidence_shortfall(
+        [identity_kind(t) for t in exp],
+        matched,
+        raw_matched,
+        [_has_lookalike(t) for t in exp],
+    )
     return BandMatch(
         matched_chars / total_chars,
         max(uncovered_runs, default=0),
@@ -1281,6 +1383,7 @@ def band_match(
         unexplained_names,
         max_absent_alpha,
         glyph_ambiguous_id_chars,
+        evidence_short,
     )
 
 
@@ -1390,6 +1493,7 @@ def _band_ok(match: BandMatch) -> bool:
     return (
         _band_ok_sans_glyph(match)
         and match.glyph_ambiguous_id_chars <= GLYPH_AMBIGUOUS_ID_CHARS_CAP
+        and not match.identity_evidence_short
     )
 
 
@@ -1414,6 +1518,10 @@ def band_verdict(match: BandMatch) -> Literal["verified", "mismatch", "abstain"]
     if not _band_ok_sans_glyph(match):
         return "mismatch"
     if match.glyph_ambiguous_id_chars > GLYPH_AMBIGUOUS_ID_CHARS_CAP:
+        return "abstain"
+    if match.identity_evidence_short:
+        # Not enough independent identifying evidence was read (see
+        # identity_evidence_shortfall): OCR cannot certify SAME.
         return "abstain"
     return "verified"
 

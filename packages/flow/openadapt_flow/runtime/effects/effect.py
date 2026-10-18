@@ -247,13 +247,112 @@ class ReadbackField(BaseModel):
     #: region's center from the page structure (DOM, or accessibility tree);
     #: when the backend can't, the read is INDETERMINATE, never OCR.
     source: Literal["ocr", "structure"] = "ocr"
+    #: How the read and the expected value are compared
+    #: (:mod:`openadapt_flow.runtime.effects.readback_values`): ``text``,
+    #: ``code`` (case and separators ignored), ``date`` or ``currency``.
+    value_kind: Literal["text", "code", "date", "currency"] = "text"
+    #: ``date`` only: the order of a numeric date such as ``03/04/2026``.
+    #: Unset, a numeric date that reads two ways is ambiguous.
+    date_order: Optional[Literal["dmy", "mdy"]] = None
 
     @model_serializer(mode="wrap")
     def _drop_default_source(self, handler: Any) -> dict[str, Any]:
         data: dict[str, Any] = handler(self)
         if self.source == "ocr":
             data.pop("source", None)
+        if self.value_kind == "text":
+            data.pop("value_kind", None)
+        if self.date_order is None:
+            data.pop("date_order", None)
         return data
+
+
+#: State-busting boundaries a demonstrated check can show before it reads.
+ReadbackResetKind = Literal["reload", "new_search", "reopen_window", "fresh_session"]
+
+
+class ReadbackReset(BaseModel):
+    """The step of a demonstrated check that throws away client-side state.
+
+    Without one, the check could read a form buffer or a client-side page the
+    save left behind, and a save that never reached the record would pass.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    kind: ReadbackResetKind
+    #: Index into :attr:`ReadbackSpec.renavigation` of the boundary step.
+    at: int = Field(ge=0)
+    #: ``detected``: the compiler recognized the step (a reload key, a closed
+    #: window, a typed and submitted search). ``declared``: the person said
+    #: which step it is and the compiler could not check it from the
+    #: recording; the person who admits the check sees which.
+    evidence: Literal["detected", "declared"] = "detected"
+
+
+#: Names that are not a person: an admission by one of them admits nothing.
+_NOT_A_PERSON = frozenset(
+    {
+        "",
+        "agent",
+        "agent_and_person",
+        "person",
+        "model",
+        "assistant",
+        "cua",
+        "llm",
+        "ai",
+        "bot",
+        "system",
+        "service",
+        "auto",
+        "automatic",
+        "unknown",
+    }
+)
+_NOT_A_PERSON_PREFIXES = (
+    "agent:",
+    "model:",
+    "cua:",
+    "llm:",
+    "ai:",
+    "bot:",
+    "service:",
+    "svc:",
+    "system:",
+)
+
+
+def is_agent_identity(name: object) -> bool:
+    """True when ``name`` is empty or names an agent, a model or a service.
+
+    An identity check only: Flow can't prove a person typed a name, but it
+    can refuse the names it knows are not people.
+    """
+
+    if not isinstance(name, str):
+        return True
+    lower = name.strip().lower()
+    return lower in _NOT_A_PERSON or lower.startswith(_NOT_A_PERSON_PREFIXES)
+
+
+class ReadbackAdmission(BaseModel):
+    """A person's acceptance of a read-back taught by demonstration.
+
+    The demonstration that taught the check cannot approve it. Until a person
+    admits it, the check can't confirm a save (the verifier rules
+    ``INDETERMINATE``). The admission is bound to the exact check by
+    :attr:`spec_digest`; a changed check needs a new admission.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    admitted_by: str = Field(min_length=1)
+    #: ISO-8601 UTC timestamp.
+    admitted_at: str = Field(min_length=1)
+    spec_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    #: Who admitted it. Only a person can.
+    role: Literal["person"] = "person"
 
 
 class ReadbackSpec(BaseModel):
@@ -290,15 +389,55 @@ class ReadbackSpec(BaseModel):
     #: Several fields to read after one re-navigation. When set, every field
     #: must read back; :attr:`region` is the first field's region.
     fields: list[ReadbackField] = Field(default_factory=list)
+    #: True when a person or agent taught this check by demonstration
+    #: (``check.json``). Such a check confirms nothing until
+    #: :attr:`admission` records that a person accepted it.
+    demonstrated: bool = False
+    #: Who drove the demonstration, from the recording's ``meta.json``:
+    #: ``person``, ``agent`` or ``agent_and_person``. None when unknown.
+    demonstrated_by: Optional[str] = None
+    #: The state-busting step the demonstrated check shows before it reads.
+    reset: Optional[ReadbackReset] = None
+    #: A person's acceptance of this exact check.
+    admission: Optional[ReadbackAdmission] = None
 
     @model_serializer(mode="wrap")
     def _drop_empty_fields(self, handler: Any) -> dict[str, Any]:
-        """Keep the bytes of read-back contracts that predate ``fields``."""
+        """Keep the bytes of read-back contracts that predate these fields."""
 
         data: dict[str, Any] = handler(self)
         if not self.fields:
             data.pop("fields", None)
+        if not self.demonstrated:
+            data.pop("demonstrated", None)
+        if self.demonstrated_by is None:
+            data.pop("demonstrated_by", None)
+        if self.reset is None:
+            data.pop("reset", None)
+        if self.admission is None:
+            data.pop("admission", None)
         return data
+
+    def admission_digest(self) -> str:
+        """SHA-256 of the check a person admits: everything but the admission."""
+
+        payload = self.model_copy(update={"admission": None}).model_dump(mode="json")
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    def admitted(self) -> bool:
+        """True when a person admitted this exact (unresolved) check.
+
+        An admission in the name of an agent, a model or a service admits
+        nothing, however it got into the bundle.
+        """
+
+        return (
+            self.admission is not None
+            and self.admission.role == "person"
+            and not is_agent_identity(self.admission.admitted_by)
+            and self.admission.spec_digest == self.admission_digest()
+        )
 
 
 def _resolve_readback(
@@ -310,6 +449,10 @@ def _resolve_readback(
     unchanged, so older contracts behave as before. A navigation whose
     parameter is missing keeps its ``param`` and the verifier refuses it.
     """
+    if spec is not None and spec.admission is not None and not spec.admitted():
+        # The admission was for another check. Drop it so the verifier sees an
+        # unadmitted check and refuses to confirm with it.
+        spec = spec.model_copy(deep=True, update={"admission": None})
     if spec is None or (
         not spec.fields and not any(nav.param for nav in spec.renavigation)
     ):
@@ -813,6 +956,12 @@ class EffectVerdict(BaseModel):
     #: the read cannot certify the CURRENT state -> STALE, an INDETERMINATE
     #: refinement, never a pass. Additive; default False.
     stale: bool = False
+    #: How the check was done, when the verifier states it:
+    #: ``independent_readback``, ``screen_readback`` or ``unchecked``
+    #: (:mod:`openadapt_flow.assurance`). None for verifiers that don't.
+    assurance: Optional[
+        Literal["independent_readback", "screen_readback", "unchecked"]
+    ] = None
 
     @property
     def should_halt(self) -> bool:

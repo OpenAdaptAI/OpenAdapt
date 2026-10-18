@@ -22,7 +22,6 @@ from typing import TYPE_CHECKING, Iterable, Literal, Optional, Sequence, cast
 if TYPE_CHECKING:
     from openadapt_flow.compiler.annotate import StepAnnotator
 
-import cv2
 import numpy as np
 
 from openadapt_flow import volatility
@@ -62,6 +61,7 @@ from openadapt_flow.runtime.identity import (
     coverage,
     identifier_text_from_lines,
 )
+from openadapt_flow.vision import imgops
 from openadapt_flow.vision.hashing import phash_distance, phash_png
 from openadapt_flow.vision.ocr import OcrLine, normalize_text, ocr
 
@@ -114,7 +114,7 @@ def _selection_readback_region(png: bytes, target_region: Region) -> Region:
     recording coordinates are never replayed directly.
     """
 
-    frame = cv2.imdecode(np.frombuffer(png, dtype=np.uint8), cv2.IMREAD_COLOR)
+    frame = imgops.decode_bgr(png)
     if frame is None:
         return target_region
     frame_h, frame_w = frame.shape[:2]
@@ -226,7 +226,7 @@ def _read_png(path: Path) -> Optional[bytes]:
 def _png_viewport(png: bytes, *, source: str) -> tuple[int, int]:
     """Return a PNG's exact ``(width, height)`` or reject invalid evidence."""
 
-    frame = cv2.imdecode(np.frombuffer(png, dtype=np.uint8), cv2.IMREAD_COLOR)
+    frame = imgops.decode_bgr(png)
     if frame is None:
         raise ValueError(f"could not decode {source} PNG")
     return (int(frame.shape[1]), int(frame.shape[0]))
@@ -356,7 +356,7 @@ def _discriminative_crop_region(frame: np.ndarray, click: Point) -> Region:
     everywhere and nowhere). Falls back to the largest ladder size.
     """
     frame_h, frame_w = frame.shape[:2]
-    gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+    gray = imgops.bgr_to_gray(frame)
     region = _clamped_crop_region(click, frame_w, frame_h)
     for size in CROP_GROWTH_LADDER:
         region = _clamped_crop_region(click, frame_w, frame_h, size)
@@ -368,16 +368,14 @@ def _discriminative_crop_region(frame: np.ndarray, click: Point) -> Region:
 
 def _crop_png(png: bytes, region: Region) -> bytes:
     """Crop ``region`` out of a PNG and re-encode as PNG bytes."""
-    arr = np.frombuffer(png, dtype=np.uint8)
-    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+    img = imgops.decode_bgr(png)
     if img is None:
         raise ValueError("could not decode PNG bytes")
     x, y, w, h = region
-    crop = img[y : y + h, x : x + w]
-    ok, buf = cv2.imencode(".png", crop)
-    if not ok:
+    encoded = imgops.encode_png(img[y : y + h, x : x + w])
+    if encoded is None:
         raise ValueError("could not encode crop as PNG")
-    return buf.tobytes()
+    return encoded
 
 
 def _regions_intersect(a: Region, b: Region) -> bool:
@@ -605,22 +603,20 @@ def _largest_changed_region(before_png: bytes, after_png: bytes) -> Optional[Reg
     largest external contour's bounding rect. Returns None if nothing
     changed.
     """
-    before = cv2.imdecode(np.frombuffer(before_png, dtype=np.uint8), cv2.IMREAD_COLOR)
-    after = cv2.imdecode(np.frombuffer(after_png, dtype=np.uint8), cv2.IMREAD_COLOR)
+    before = imgops.decode_bgr(before_png)
+    after = imgops.decode_bgr(after_png)
     if before is None or after is None:
         return None
     if before.shape != after.shape:
         return (0, 0, after.shape[1], after.shape[0])
-    diff = cv2.absdiff(before, after)
-    gray = cv2.cvtColor(diff, cv2.COLOR_BGR2GRAY)
-    _, mask = cv2.threshold(gray, DIFF_THRESHOLD, 255, cv2.THRESH_BINARY)
-    kernel = np.ones((9, 9), dtype=np.uint8)
-    mask = cv2.dilate(mask, kernel, iterations=2)
-    contours, _ = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-    if not contours:
+    diff = imgops.absdiff(before, after)
+    gray = imgops.bgr_to_gray(diff)
+    mask = imgops.threshold_binary(gray, DIFF_THRESHOLD, 255)
+    mask = imgops.dilate_rect(mask, 9, iterations=2)
+    largest = imgops.largest_external_region(mask)
+    if largest is None:
         return None
-    largest = max(contours, key=cv2.contourArea)
-    x, y, w, h = cv2.boundingRect(largest)
+    x, y, w, h = largest
     if w <= 0 or h <= 0:
         return None
     return (int(x), int(y), int(w), int(h))
@@ -1009,7 +1005,7 @@ def _postconditions(
         # the result as Optional, hence the cast.
         after = cast(
             np.ndarray,
-            cv2.imdecode(np.frombuffer(after_png, dtype=np.uint8), cv2.IMREAD_COLOR),
+            imgops.decode_bgr(after_png),
         )
         frame_h, frame_w = after.shape[:2]
         padded = _pad_region(changed, frame_w, frame_h)
@@ -1758,6 +1754,7 @@ def compile_recording(
     annotator: Optional["StepAnnotator"] = None,
     target_surface: Optional[ExecutionTargetKind] = None,
     pixel_verify_enabled: bool = False,
+    bind_effect_params: bool = False,
 ) -> Workflow:
     """Compile a recording directory into a workflow bundle.
 
@@ -1838,6 +1835,11 @@ def compile_recording(
             or nothing (with an honest "no verifiable effect derivable" log).
             Default False keeps the bundle byte-identical to before; even when
             True a bundle is unchanged wherever mining derives nothing.
+        bind_effect_params: With ``mine_effects``, a mined ``field_equals``
+            whose value is a parameter's demonstrated value reads back that
+            parameter at run time instead of the demonstrated literal, so a
+            run with a new value can verify. A value shared by two parameters
+            stays literal. Default False keeps the mined contract as before.
         admit_api_bindings: Opt-in compile-time REST ``ApiBinding``
             certification (``compiler.binding_admission``). For each
             consequential write whose Effect was mined from an observed
@@ -2032,9 +2034,7 @@ def compile_recording(
             # known-valid. cv2's stub types imdecode as Optional, hence the cast.
             frame = cast(
                 np.ndarray,
-                cv2.imdecode(
-                    np.frombuffer(before_png, dtype=np.uint8), cv2.IMREAD_COLOR
-                ),
+                imgops.decode_bgr(before_png),
             )
             crop_region = _discriminative_crop_region(frame, click)
             frame_lines = cached_lines(i, "before", before_png)
@@ -2775,8 +2775,20 @@ def compile_recording(
             mine_step_effects,
         )
 
+        bindings: dict[str, str] = {}
+        if bind_effect_params:
+            by_value: dict[str, list[str]] = {}
+            for pname, pvalue in params.items():
+                if pvalue:
+                    by_value.setdefault(pvalue, []).append(pname)
+            bindings = {v: names[0] for v, names in by_value.items() if len(names) == 1}
         for step, _sb, _sa, event in pending:
-            mined = mine_step_effects(event, step, exclude_texts=exclude_texts)
+            mined = mine_step_effects(
+                event,
+                step,
+                exclude_texts=exclude_texts,
+                param_bindings=bindings or None,
+            )
             if mined.effects:
                 step.effects = mined.effects
             log = logger.info if mined.disposition != "none" else logger.debug
@@ -2914,6 +2926,9 @@ def compile_recording(
         "secret_param_steps": sorted(secret_param_steps or ()),
         "target_surface": target_surface,
     }
+    if bind_effect_params:
+        # Recorded only when set, so every existing compile keeps its digest.
+        compiler_config["bind_effect_params"] = True
     compiler_config_sha256 = hashlib.sha256(
         json.dumps(
             compiler_config,
