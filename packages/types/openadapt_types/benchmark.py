@@ -12,7 +12,7 @@ an ``abc.ABC``) so importing them never pulls in heavy optional deps.
 
 Example::
 
-    from openadapt_flow.contracts import (
+    from openadapt_types import (
         BenchmarkAgent,
         BenchmarkAction,
         BenchmarkObservation,

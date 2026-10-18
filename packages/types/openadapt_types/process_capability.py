@@ -30,7 +30,7 @@ from pydantic import (
     model_validator,
 )
 
-from openadapt_flow.contracts.execute import ExecuteTerminalOutcomeV1, OracleTierV1
+from openadapt_types.execute import ExecuteTerminalOutcomeV1, OracleTierV1
 
 ARTIFACT_REF_SCHEMA: Literal["openadapt.artifact-ref/v1"] = "openadapt.artifact-ref/v1"
 CODE_CAPABILITY_MANIFEST_SCHEMA: Literal["openadapt.code-capability-manifest/v1"] = (

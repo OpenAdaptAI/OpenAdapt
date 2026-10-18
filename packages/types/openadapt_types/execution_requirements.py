@@ -18,7 +18,7 @@ from pydantic import (
     model_validator,
 )
 
-from openadapt_flow.contracts.runner_capability import (
+from openadapt_types.runner_capability import (
     ExecutionMode,
     ExecutionProfile,
     ExecutionSurface,

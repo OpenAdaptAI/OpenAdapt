@@ -1,6 +1,6 @@
 """Portable, privacy-safe contracts for finite business decisions.
 
-This family is separate from :mod:`openadapt_flow.contracts.human_decision`.
+This family is separate from :mod:`openadapt_types.human_decision`.
 ``HumanDecisionTaskV2`` resolves an operational runtime halt.  A
 ``BusinessDecisionTaskV1`` presents one finite branch that was declared and
 qualified before the run started.  It never grants Continue, Skip, Teach, or

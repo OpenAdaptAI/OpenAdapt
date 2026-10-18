@@ -6,16 +6,16 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from openadapt_flow.contracts.approval import (
+from openadapt_types.approval import (
     ApprovalRecordV1,
     ApproverIdentityV1,
     ApproverPolicyV1,
     AutonomyEligibilityV1,
 )
 
-# The schemas ship with the core since the fold (openadapt_flow.contracts).
-ROOT = Path(__file__).resolve().parents[2]
-SCHEMA_DIR = ROOT / "flow" / "openadapt_flow" / "contracts" / "schemas"
+# The schemas ship inside this package (openadapt_types/schemas).
+ROOT = Path(__file__).resolve().parents[1]
+SCHEMA_DIR = ROOT / "openadapt_types" / "schemas"
 
 MODELS = {
     "approver-identity-v1.json": ApproverIdentityV1,

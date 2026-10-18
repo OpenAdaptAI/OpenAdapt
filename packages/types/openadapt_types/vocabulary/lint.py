@@ -5,7 +5,7 @@ Standard library only. Any repository with Python 3.10 or later can run it,
 installed or copied::
 
     openadapt-vocab-lint terms --level business README.md
-    python -m openadapt_flow.contracts.vocabulary claims src/
+    python -m openadapt_types.vocabulary claims src/
     python path/to/vocabulary/lint.py coverage \\
         --enum openadapt_flow.transaction:TransactionOutcome=transaction_outcome
     python path/to/vocabulary/lint.py check --config .vocab.json
@@ -956,7 +956,7 @@ def check_claims(
                         "error",
                         f"{match.group(0)!r} next to a halt or stop with no outcome that proves no effect. "
                         "Derive the sentence from transaction_outcome or the Execute terminal outcome "
-                        "(openadapt_flow.contracts.plain_results), never from HALTED alone.",
+                        "(openadapt_types.plain_results), never from HALTED alone.",
                     )
                 )
     return findings

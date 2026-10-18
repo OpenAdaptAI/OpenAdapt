@@ -150,6 +150,6 @@ Standard and Regulated runs need a workflow admission; Demo and the synthetic sa
 
 ## Other OpenAdapt packages
 
-- [openadapt-flow](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow) (`pip install openadapt-flow`): records a task, compiles it into a deterministic workflow, replays it and checks the result. The core package; `openadapt-flow[agent]` adds the MCP server code.
-- [openadapt-types](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/types) (`pip install openadapt-types`): the portable contracts, now `openadapt_flow.contracts`; this name is kept as a compatibility shim.
+- [openadapt-flow](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow) (`pip install openadapt-flow`): records a task once, compiles it into a deterministic workflow, replays it and checks the result. The core package; `openadapt-flow[agent]` adds the MCP server code.
+- [openadapt-types](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/types) (`pip install openadapt-types`): the shared request, result and receipt models and their JSON Schemas. Depends only on Pydantic; Flow re-exports it as `openadapt_flow.contracts`.
 - [openadapt](https://github.com/OpenAdaptAI/OpenAdapt) (`pip install openadapt`): the launcher CLI.

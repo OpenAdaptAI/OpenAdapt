@@ -14,7 +14,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import quote, urlsplit
 from urllib.request import HTTPRedirectHandler, Request, build_opener
 
-from openadapt_flow.contracts.execute import (
+from openadapt_types.execute import (
     ExecuteAcceptedV1,
     ExecuteEvidenceReceiptV1,
     ExecuteRequestV1,

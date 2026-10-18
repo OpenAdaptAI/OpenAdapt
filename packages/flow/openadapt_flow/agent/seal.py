@@ -14,7 +14,7 @@ explicit confirmation) to ``~/.openadapt/seal-keys.json``, or named by
 never fetched at verification time, so a network attacker cannot substitute
 keys. A Cloud-connected run's receipt names the Cloud execution; Flow records
 that id as ``cloud_execution_id`` when it attaches the receipt. Byte-compatible with
-``openadapt_flow.contracts.seal`` and Cloud ``src/lib/sealSignature.ts``.
+``openadapt_types.seal`` and Cloud ``src/lib/sealSignature.ts``.
 """
 
 from __future__ import annotations
