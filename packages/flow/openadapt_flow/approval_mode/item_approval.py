@@ -12,8 +12,9 @@ Run it) need no other channel:
 - ``item-approval/answer-<id>.json`` (:class:`ItemApprovalAnswer`), written
   once by ``openadapt-flow item-approval approve|decline``. It names the
   request digest the person saw, who decided (``decided_by`` must be
-  ``human``), the route (only Desktop Run it) and the approver (a Cloud user
-  id, or ``unauthenticated`` when Desktop was signed out).
+  ``human`` for a person), the route (Desktop Run it, or the decision
+  portal on a paired phone) and the approver (a Cloud user id, or
+  ``unauthenticated`` when nobody was signed in).
 - ``item-approval/consumed-<id>``, created once by the run when it uses an
   approval for exactly one save. An approval is never used twice.
 
@@ -31,8 +32,8 @@ import os
 import stat
 import time
 import uuid
-from collections.abc import Callable, Mapping
-from dataclasses import dataclass, field
+from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional
@@ -55,14 +56,8 @@ from openadapt_flow.approval_mode.approver import (
     StepClass,
     WebhookRefused,
 )
-from openadapt_flow.approval_mode.cloud_decision import (
-    CLOUD_PHONE_ROUTE,
-    CloudDecisionRejected,
-    CloudDecisionV1,
-    load_pinned_keys,
-    verify_decision,
-)
 from openadapt_flow.approval_mode.model import (
+    DECISION_PORTAL_ROUTE,
     ITEM_APPROVAL_ROUTE,
     OPAQUE_ID_PATTERN,
     PREFIXED_SHA256_PATTERN,
@@ -71,7 +66,6 @@ from openadapt_flow.approval_mode.model import (
     DeclineReason,
     ItemApprovalRef,
 )
-from openadapt_flow.approval_mode.phone_relay import PHONE_POLL_S, PhoneRelay
 from openadapt_flow.approval_mode.signed_policy import (
     GrantRefused,
     SignedApproverGrant,
@@ -99,8 +93,9 @@ GRANT_FILENAME = "approver-grant.json"
 INITIATOR_FILENAME = "run-initiator.json"
 #: The initiator an agent-started run records when the agent has no id.
 UNIDENTIFIED_AGENT = "agent:unidentified"
-#: Routes a person answers by: Desktop's Run it, or their phone through Cloud.
-PERSON_ROUTES = frozenset({ITEM_APPROVAL_ROUTE, CLOUD_PHONE_ROUTE})
+#: Routes a person answers by: Desktop's Run it, or their phone through the
+#: runner's decision portal.
+PERSON_ROUTES = frozenset({ITEM_APPROVAL_ROUTE, DECISION_PORTAL_ROUTE})
 #: How long a run waits for an answer before it stops before the save.
 DEFAULT_APPROVAL_WAIT_S = 900.0
 MAX_APPROVAL_WAIT_S = 4 * 3600.0
@@ -220,16 +215,12 @@ class ItemApprovalAnswer(BaseModel):
     #: for a person, whose older fields above already name them. Left out of
     #: the file when absent, so earlier answers keep their digest.
     approver: Optional[ApproverIdentityV1] = None
-    #: The Cloud-signed decision behind a phone answer (``cloud_phone``).
-    cloud_decision: Optional[CloudDecisionV1] = None
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         data: dict[str, Any] = handler(self)
         if self.approver is None:
             data.pop("approver", None)
-        if self.cloud_decision is None:
-            data.pop("cloud_decision", None)
         return data
 
     def digest(self) -> str:
@@ -273,8 +264,7 @@ class ApproverContext:
     ``policy`` is person-only unless ``grant`` is a person-signed grant that
     verified just now. ``initiator`` is who started the run (``None`` for a
     person or operator); ``initiator_known`` is False when the run never
-    recorded it, and then no delegate may answer. ``cloud_keys`` are the
-    runner's pinned Cloud decision keys; empty means no phone route.
+    recorded it, and then no delegate may answer.
     """
 
     policy: ApproverPolicyV1 = DEFAULT_APPROVER_POLICY
@@ -282,7 +272,6 @@ class ApproverContext:
     grant_refusal: Optional[str] = None
     initiator: Optional[str] = None
     initiator_known: bool = False
-    cloud_keys: Mapping[str, str] = field(default_factory=dict)
 
 
 def _as_context(
@@ -329,34 +318,6 @@ def _delegate_refusal(
     return None
 
 
-def _cloud_phone_refusal(
-    request: ItemApprovalRequest,
-    answer: ItemApprovalAnswer,
-    context: ApproverContext,
-) -> Optional[str]:
-    decision = answer.cloud_decision
-    if decision is None:
-        return "cloud_decision_missing"
-    try:
-        verify_decision(
-            decision,
-            request_id=request.request_id,
-            request_sha256=request.digest(),
-            pinned_keys=context.cloud_keys,
-        )
-    except CloudDecisionRejected as exc:
-        return exc.code
-    if (
-        answer.approver_kind != "cloud_user"
-        or answer.approver_id != decision.approver_id
-        or answer.auth_method != "cloud_aal2"
-        or answer.decision != decision.decision
-        or answer.decline_reason != decision.decline_reason
-    ):
-        return "answer_fields_inconsistent"
-    return None
-
-
 def answer_refusal(
     request: ItemApprovalRequest,
     answer: ItemApprovalAnswer,
@@ -369,8 +330,8 @@ def answer_refusal(
     The run calls this itself; it never trusts that the CLI checked.
     ``policy`` is the run's :class:`ApproverContext` (``store.context()``); a
     bare policy or ``None`` means no delegate may answer. A person answers
-    through Desktop's Run it, or on their phone through Cloud with a
-    Cloud-signed decision. An agent or system answers only under a verified,
+    through Desktop's Run it, or on their phone through the runner's
+    decision portal. An agent or system answers only under a verified,
     person-signed grant that names it, allows its kind for the step class,
     and wasn't started by it.
     """
@@ -388,12 +349,6 @@ def answer_refusal(
             return "route_not_allowed"
         if approver is not None and approver.auth.value != answer.approver_kind:
             return "answer_fields_inconsistent"
-        if answer.route == CLOUD_PHONE_ROUTE:
-            refusal = _cloud_phone_refusal(request, answer, context)
-            if refusal is not None:
-                return refusal
-        elif answer.cloud_decision is not None:
-            return "answer_fields_inconsistent"
     else:
         if answer.decided_by != "automation":
             return "answer_fields_inconsistent"
@@ -401,8 +356,6 @@ def answer_refusal(
             return "route_not_allowed"
         if answer.approver_kind != "unauthenticated" or answer.approver_id is not None:
             # The older person fields stay empty; ``approver`` names who decided.
-            return "answer_fields_inconsistent"
-        if answer.cloud_decision is not None:
             return "answer_fields_inconsistent"
         refusal_code = _delegate_refusal(request, approver, context)
         if refusal_code is not None:
@@ -511,15 +464,12 @@ class ItemApprovalStore:
         run_dir: Path | str,
         *,
         key_dir: Optional[Path | str] = None,
-        cloud_keys: Optional[Mapping[str, str]] = None,
     ) -> None:
         self.run_dir = Path(run_dir)
         self.dir = self.run_dir / APPROVAL_DIRNAME
         #: Where the signer registry lives (``$OPENADAPT_JIT_KEY_DIR`` or
         #: ``~/.openadapt/jit`` when ``None``). Keep it away from the agents.
         self._key_dir = Path(key_dir) if key_dir is not None else None
-        #: Pinned Cloud decision keys; ``None`` reads the runner's file.
-        self._cloud_keys = dict(cloud_keys) if cloud_keys is not None else None
 
     # -- layout --------------------------------------------------------------
     def _checked_dir(self, *, create: bool) -> Path:
@@ -635,16 +585,11 @@ class ItemApprovalStore:
         """
 
         known, initiator = self._read_initiator()
-        if self._cloud_keys is None:
-            cloud_keys = load_pinned_keys()
-        else:
-            cloud_keys = dict(self._cloud_keys)
 
         def make(**fields: Any) -> ApproverContext:
             return ApproverContext(
                 initiator=initiator,
                 initiator_known=known,
-                cloud_keys=cloud_keys,
                 **fields,
             )
 
@@ -742,6 +687,27 @@ class ItemApprovalStore:
         if request.request_id != request_id:
             raise ItemApprovalRefused("request_unknown", "request id mismatch")
         return request
+
+    def read_frame(self, request: ItemApprovalRequest) -> bytes:
+        """The screenshot the person is shown, checked against its digest.
+
+        Raises :class:`ItemApprovalRefused` when it is missing, too large, or
+        isn't the exact image the request was opened with.
+        """
+
+        try:
+            frame = _read_regular(
+                self.run_dir / request.screenshot, limit=_MAX_FRAME_BYTES
+            )
+        except OSError as exc:
+            raise ItemApprovalRefused(
+                "frame_unreadable", "the screenshot is missing or unreadable"
+            ) from exc
+        if hashlib.sha256(frame).hexdigest() != request.screenshot_sha256:
+            raise ItemApprovalRefused(
+                "frame_digest_mismatch", "the screenshot isn't the one requested"
+            )
+        return frame
 
     def requests(self) -> list[ItemApprovalRequest]:
         """Every readable request in this run, oldest first."""
@@ -904,7 +870,6 @@ def wait_for_answer(
     monotonic: Callable[[], float] = time.monotonic,
     sleep: Callable[[float], None] = time.sleep,
     approver: Optional[Approver] = None,
-    phone_relay: Optional["PhoneRelay"] = None,
 ) -> tuple[Optional[ItemApprovalAnswer], Optional[str]]:
     """Wait for a usable answer. Returns ``(answer, None)`` or ``(None, code)``.
 
@@ -912,38 +877,11 @@ def wait_for_answer(
     the closed reason an answer was refused. A refused answer is final for
     this request: the run stops before the save rather than waiting on.
 
-    With ``phone_relay`` (opt-in phone approval) the request also goes to
-    Cloud, and a Cloud-signed phone decision for this exact request becomes a
-    ``cloud_phone`` answer. Whichever answer is written first wins.
+    The answer can come from Desktop's Run it, from the person's phone
+    through the decision portal (:mod:`openadapt_flow.console.save_approvals`
+    writes it), or from a delegate the run's signed grant allows. Whichever
+    answer is written first wins; the file is created exclusively.
     """
-
-    try:
-        return _wait_for_answer(
-            store,
-            request,
-            timeout_s=timeout_s,
-            poll_s=poll_s,
-            monotonic=monotonic,
-            sleep=sleep,
-            approver=approver,
-            phone_relay=phone_relay,
-        )
-    finally:
-        if phone_relay is not None:
-            _withdraw(store, request, phone_relay)
-
-
-def _wait_for_answer(
-    store: ItemApprovalStore,
-    request: ItemApprovalRequest,
-    *,
-    timeout_s: float,
-    poll_s: float,
-    monotonic: Callable[[], float],
-    sleep: Callable[[float], None],
-    approver: Optional[Approver],
-    phone_relay: Optional["PhoneRelay"],
-) -> tuple[Optional[ItemApprovalAnswer], Optional[str]]:
 
     deadline = monotonic() + max(0.0, min(timeout_s, MAX_APPROVAL_WAIT_S))
     context = store.context()
@@ -952,18 +890,11 @@ def _wait_for_answer(
         # The grant doesn't let this approver decide this step: ask a person.
         delegate = None
     next_ask = 0.0
-    relay = phone_relay
-    if relay is not None and not _publish(store, request, relay):
-        relay = None  # Cloud didn't take it: Desktop still can.
-    next_phone = 0.0
     while True:
         try:
             answer = store.read_answer(request.request_id)
         except ItemApprovalRefused as exc:
             return None, exc.code
-        if answer is None and relay is not None and monotonic() >= next_phone:
-            next_phone = monotonic() + PHONE_POLL_S
-            answer = _take_phone_decision(store, request, relay)
         if answer is None and delegate is not None and monotonic() >= next_ask:
             next_ask = monotonic() + DELEGATE_POLL_S
             answer = _ask_delegate(store, request, delegate)
@@ -979,94 +910,6 @@ def _wait_for_answer(
         if monotonic() >= deadline:
             return None, "approval_wait_timed_out"
         sleep(poll_s)
-
-
-def _publish(
-    store: ItemApprovalStore, request: ItemApprovalRequest, relay: "PhoneRelay"
-) -> bool:
-    try:
-        frame = _read_regular(
-            store.run_dir / request.screenshot, limit=_MAX_FRAME_BYTES
-        )
-        return bool(relay.publish(request, frame))
-    except Exception:  # noqa: BLE001 - any relay failure leaves Desktop approval
-        return False
-
-
-def _withdraw(
-    store: ItemApprovalStore, request: ItemApprovalRequest, relay: "PhoneRelay"
-) -> None:
-    try:
-        answer = store.read_answer(request.request_id)
-    except ItemApprovalRefused:
-        answer = None
-    if answer is not None and answer.route == CLOUD_PHONE_ROUTE:
-        return  # The phone answered; Cloud already closed the link.
-    reason = (
-        "answered_elsewhere"
-        if answer is not None
-        else ("expired" if request.expired() else "run_stopped_waiting")
-    )
-    try:
-        relay.withdraw(request, reason)  # type: ignore[arg-type]
-    except Exception:  # noqa: BLE001 - Cloud expires the link on its own
-        pass
-
-
-def _take_phone_decision(
-    store: ItemApprovalStore, request: ItemApprovalRequest, relay: "PhoneRelay"
-) -> Optional[ItemApprovalAnswer]:
-    """Turn a Cloud-signed phone decision into this request's answer."""
-
-    try:
-        raw = relay.poll(request)
-    except Exception:  # noqa: BLE001 - try again next poll; Desktop still can
-        return None
-    if raw is None:
-        return None
-    return apply_cloud_decision(store, request, raw)
-
-
-def apply_cloud_decision(
-    store: ItemApprovalStore,
-    request: ItemApprovalRequest,
-    raw: Any,
-    *,
-    now: Optional[datetime] = None,
-) -> Optional[ItemApprovalAnswer]:
-    """Verify a Cloud decision for ``request`` and write it as the answer.
-
-    Returns ``None`` (and writes nothing) for a decision that doesn't verify,
-    or when another answer was already written.
-    """
-
-    context = store.context(now=now)
-    try:
-        decision = verify_decision(
-            raw,
-            request_id=request.request_id,
-            request_sha256=request.digest(),
-            pinned_keys=context.cloud_keys,
-        )
-    except CloudDecisionRejected:
-        return None
-    try:
-        answer = make_answer(
-            request,
-            decision=decision.decision,
-            decided_by="human",
-            route=CLOUD_PHONE_ROUTE,
-            approver_id=decision.approver_id,
-            auth_method=decision.auth_method,
-            decline_reason=decision.decline_reason,
-            now=now,
-            policy=context,
-            cloud_decision=decision,
-        )
-        store.write_answer(answer)
-    except ItemApprovalRefused:
-        return None
-    return answer
 
 
 def request_facts(request: ItemApprovalRequest) -> dict[str, str]:
@@ -1134,15 +977,13 @@ def make_answer(
     now: Optional[datetime] = None,
     approver: Optional[ApproverIdentityV1] = None,
     policy: "ApproverPolicyV1 | ApproverContext | None" = None,
-    cloud_decision: Optional[CloudDecisionV1] = None,
 ) -> ItemApprovalAnswer:
     """Build and check one answer. Raises :class:`ItemApprovalRefused`.
 
     ``approver`` names an agent or system; it is refused unless ``policy``
     (``store.context()``) holds a verified, person-signed grant that names it
     and allows its kind here. The answer records the grant's digest as the
-    approver's ``policy_ref``. ``cloud_decision`` is the Cloud-signed phone
-    decision behind a ``cloud_phone`` answer.
+    approver's ``policy_ref``.
     """
 
     context = _as_context(policy)
@@ -1170,7 +1011,6 @@ def make_answer(
             auth_method=auth_method,  # type: ignore[arg-type]
             answered_at=_iso(now or _utc_now()),
             approver=approver,
-            cloud_decision=cloud_decision,
         )
     except ValidationError as exc:
         raise ItemApprovalRefused(
@@ -1215,7 +1055,7 @@ def decided_by_summary(
     """Who answered this request, for Desktop and Cloud to show.
 
     A person: their Cloud user id (or none when Desktop was signed out) and
-    where they answered (``desktop_run_it`` or ``cloud_phone``). An agent or
+    where they answered (``desktop_run_it`` or ``decision_portal``). An agent or
     system: its id and the digest of the person-signed grant it acted under.
     ``None`` when nobody answered yet or the answer isn't readable.
     """
@@ -1256,7 +1096,6 @@ __all__ = [
     "ItemApprovalStore",
     "POLICY_FILENAME",
     "answer_refusal",
-    "apply_cloud_decision",
     "make_answer",
     "request_facts",
     "request_summary",

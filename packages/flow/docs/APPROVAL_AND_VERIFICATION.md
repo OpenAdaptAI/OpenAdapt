@@ -125,37 +125,48 @@ A delegated approver answers by one of three routes:
 The run re-checks every answer: the grant must verify, name the delegate
 and cover the workflow, its policy must allow the approver's kind for the
 step class, the delegate can't have started the run, a person answers only
-from Desktop or their phone (below), and a delegate never fills in the
-person fields. The report's `ItemApprovalRef` records `decided_by:
+from Desktop or the decision portal on their phone (below), and a delegate
+never fills in the person fields. The report's `ItemApprovalRef` records `decided_by:
 automation`, the route and the approver, whose `policy_ref` is the grant's
 digest. `item-approval show` prints each request's `decided_by`: a person
-(Cloud user id and route) or the delegate's id and the grant digest, which
-Desktop and Cloud show on the run. Only a person's decision becomes a
+(Cloud user id, or none, and route) or the delegate's id and the grant
+digest, which Desktop and Cloud show on the run. Only a person's decision becomes a
 training label. Triage never approves anything.
 
 ### A person approves from their phone
 
-Phone approval is opt-in (`runtime.phone_approval: true` or
-`run --phone-approval`), and local-only installs never use it. An owner or
-admin also turns on **Approve saves from your phone** on Cloud's Needs
-attention page; until then Cloud refuses the save and it waits in Desktop as
-before. With both on,
-each waiting save also goes to Cloud through the runner's own outbound
-connection. Cloud pushes a notification with an opaque id and fixed words
-(never a value, a name or the workflow's name) and, if the person chose,
-an email with a single-use link. The link opens Cloud's approve page; after
-sign-in with AAL2 it shows exactly the filled form Desktop would show, and
-**Approve and save** or **Don't save**.
+A save waiting for a person also shows on the decision portal, the phone
+page Desktop serves from this runner (see Desktop's `docs/DECISION_PORTAL.md`
+for pairing and network setup). Nothing new leaves the runner: the phone
+talks to the runner's own console, as it already does for paused runs, and a
+local-only or no-outbound install works the same way.
 
-Cloud signs the decision (`openadapt.cloud-item-decision/v1`) for that exact
-request digest, which binds the run, the save step, the screenshot and the
-form's field state. The run accepts it only when it verifies against the
-decision key pinned on this runner (`item-approval pin-cloud-keys`), the
-approver signed in with AAL2, and nothing else answered first. The answer is
-written once and used for exactly one save, so a replayed link or decision
-has nothing to answer. Then the run re-checks the form before the save, as
-for a Desktop approval, and stops if anything changed while it waited. A
-Desktop answer that lands first wins, and the run withdraws the phone link.
+The console lists waiting saves at `GET /api/save-approvals`. Each one is a
+signed `openadapt.human-decision-task/v1` task with `task_kind:
+save_approval` and question `approve_save`. The task is PHI-free like every
+decision task: opaque digests and closed codes, no value, no name, no
+workflow name. Its `capability_digest` is the request digest, which binds
+the run, the save step, the screenshot and the form's field state. Next to
+the task, the console returns a local-only presentation block with the
+step's wording and the route of the exact screenshot the request was opened
+with (`GET /api/save-approvals/ID/frame`, checked against its digest), so the
+person sees exactly what will be saved.
+
+The phone answers with `POST /api/save-approvals/ID/actions/verify_and_resume`
+(approve) or `.../actions/reject` with one closed `decline_reason`, echoing
+the task's digest and signature. Only the attended console the portal relays
+to takes an answer. A task that changed, or belongs to another save, is
+refused. The answer is written once, as a person on the `decision_portal`
+route, so a second tap or a replay has nothing to answer, and a Desktop
+answer that lands first wins. A paired phone proves a device, not who held
+it, so the answer records an unauthenticated person, like a signed-out
+Desktop answer. The receipt says `accepted_pending_runner`: then the run
+re-checks the form before the save, as for a Desktop approval, and stops if
+anything changed while it waited.
+
+The hosted lane (Cloud's Needs attention page) does not carry save
+approvals. Cloud never receives the screenshot, and a person must see
+exactly what will be saved before approving it.
 
 
 ## How a save is checked

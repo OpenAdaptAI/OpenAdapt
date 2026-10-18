@@ -1,4 +1,4 @@
-"""Signed approver grants, self-approval, and phone decisions. Made-up ids.
+"""Signed approver grants and self-approval. Made-up ids.
 
 Invariants under test:
 
@@ -6,21 +6,16 @@ Invariants under test:
   answer a save; an unsigned, tampered, expired or wrongly signed one means
   person-only;
 * the agent or system that started a run can't answer that run's saves;
-* a phone answer counts only with a Cloud-signed decision for the exact
-  request digest, from a person signed in with AAL2, verified against a key
-  pinned on this runner, and it is used once;
 * every answer names who decided: a person (and where), or the delegate and
   the digest of the grant it acted under.
 """
 
 from __future__ import annotations
 
-import base64
 import json
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
 from openadapt_flow.approval_mode.approver import (
@@ -30,14 +25,11 @@ from openadapt_flow.approval_mode.approver import (
     ApproverPolicyV1,
     StepClass,
 )
-from openadapt_flow.approval_mode.cloud_decision import sign_decision
 from openadapt_flow.approval_mode.item_approval import (
     ItemApprovalRefused,
     ItemApprovalStore,
-    apply_cloud_decision,
     decided_by_summary,
     make_answer,
-    wait_for_answer,
 )
 from openadapt_flow.approval_mode.model import ApprovalMode
 from openadapt_flow.approval_mode.signed_policy import (
@@ -283,209 +275,6 @@ def test_a_planted_initiator_refuses_the_run(tmp_path):
     store2.write_initiator("agent:a")  # same value: fine
     with pytest.raises(ItemApprovalRefused):
         store2.write_initiator(None)
-
-
-# -- phone decisions --------------------------------------------------------------
-
-CLOUD_KEY = Ed25519PrivateKey.generate()
-CLOUD_PUB = base64.b64encode(
-    CLOUD_KEY.public_key().public_bytes(
-        serialization.Encoding.Raw, serialization.PublicFormat.Raw
-    )
-).decode()
-PINNED = {"cloud-decision-1": CLOUD_PUB}
-
-
-def _decision(request, *, key=CLOUD_KEY, **overrides):
-    fields = {
-        "request_id": request.request_id,
-        "request_sha256": request.digest(),
-        "decision": "approve",
-        "approver_id": "cloud-user-0001",
-        "auth_method": "cloud_aal2",
-        "decided_at": datetime.now(timezone.utc).isoformat(),
-        "link_id": "L" * 22,
-        "runner_id": "runner-0001",
-        "key_id": "cloud-decision-1",
-    }
-    fields.update(overrides)
-    return sign_decision(fields, key).model_dump(mode="json")
-
-
-def _phone_store(tmp_path, pinned=PINNED):
-    store = ItemApprovalStore(tmp_path / "run", cloud_keys=pinned)
-    store.write_initiator(None)
-    return store
-
-
-def test_a_signed_phone_decision_becomes_the_answer(tmp_path):
-    store = _phone_store(tmp_path)
-    request = _open(store)
-    answer = apply_cloud_decision(store, request, _decision(request))
-    assert answer is not None and answer.route == "cloud_phone"
-    assert store.status(request) == "approved"
-    ref = answer.reference(request)
-    assert ref.route == "cloud_phone" and ref.decided_by == "human"
-    assert ref.approver_id == "cloud-user-0001" and ref.auth_method == "cloud_aal2"
-    summary = decided_by_summary(store, request)
-    assert summary["kind"] == "person" and summary["route"] == "cloud_phone"
-    # Used once: the second save can't reuse it, and a replay writes nothing.
-    assert store.consume(request.request_id) is True
-    assert store.consume(request.request_id) is False
-    assert apply_cloud_decision(store, request, _decision(request)) is None
-
-
-def test_a_phone_decline_carries_its_reason(tmp_path):
-    store = _phone_store(tmp_path)
-    request = _open(store)
-    raw = _decision(request, decision="decline", decline_reason="wrong_values")
-    answer = apply_cloud_decision(store, request, raw)
-    assert answer is not None and answer.decline_reason == "wrong_values"
-    assert store.status(request) == "declined"
-
-
-@pytest.mark.parametrize(
-    "mutate",
-    [
-        lambda r: {"request_sha256": "sha256:" + "0" * 64},
-        lambda r: {"key_id": "unpinned"},
-        lambda r: {"auth_method": "cloud_aal1"},
-    ],
-)
-def test_phone_decisions_that_dont_bind_are_refused(tmp_path, mutate):
-    store = _phone_store(tmp_path)
-    request = _open(store)
-    try:
-        raw = _decision(request, **mutate(request))
-    except ValueError:
-        return  # refused at the contract: an AAL1 decision can't even be built
-    assert apply_cloud_decision(store, request, raw) is None
-    assert store.status(request) == "waiting"
-
-
-def test_a_decision_for_one_request_cant_answer_another(tmp_path):
-    store = _phone_store(tmp_path)
-    first, second = _open(store), _open(store)
-    raw = _decision(first)
-    raw_for_second = {**raw, "request_id": second.request_id}
-    assert apply_cloud_decision(store, second, raw_for_second) is None
-    assert apply_cloud_decision(store, second, raw) is None
-
-
-def test_a_forged_signature_is_refused(tmp_path):
-    store = _phone_store(tmp_path)
-    request = _open(store)
-    forged = _decision(request, key=Ed25519PrivateKey.generate())
-    assert apply_cloud_decision(store, request, forged) is None
-
-
-def test_no_pinned_key_means_no_phone_route(tmp_path):
-    store = _phone_store(tmp_path, pinned={})
-    request = _open(store)
-    assert apply_cloud_decision(store, request, _decision(request)) is None
-
-
-def test_a_hand_written_phone_answer_is_refused(tmp_path):
-    store = _phone_store(tmp_path)
-    request = _open(store)
-    with pytest.raises(ItemApprovalRefused) as err:
-        make_answer(
-            request,
-            decision="approve",
-            decided_by="human",
-            route="cloud_phone",
-            approver_id="cloud-user-0001",
-            auth_method="cloud_aal2",
-            policy=store.context(),
-        )
-    assert err.value.code == "cloud_decision_missing"
-
-
-class _Relay:
-    runner_id = "runner-0001"
-
-    def __init__(self, decisions):
-        self.decisions = list(decisions)
-        self.published: list[bytes] = []
-        self.withdrawn: list[str] = []
-
-    def publish(self, request, frame_png):
-        self.published.append(frame_png)
-        return True
-
-    def poll(self, request):
-        return self.decisions.pop(0) if self.decisions else None
-
-    def withdraw(self, request, reason):
-        self.withdrawn.append(reason)
-
-
-def _clock():
-    state = {"t": 0.0}
-    return (lambda: state["t"]), (lambda s: state.__setitem__("t", state["t"] + s))
-
-
-def test_the_run_waits_for_a_phone_decision(tmp_path):
-    store = _phone_store(tmp_path)
-    request = _open(store)
-    relay = _Relay([None, _decision(request)])
-    monotonic, sleep = _clock()
-    answer, code = wait_for_answer(
-        store,
-        request,
-        timeout_s=60,
-        poll_s=1,
-        monotonic=monotonic,
-        sleep=sleep,
-        phone_relay=relay,
-    )
-    assert code is None and answer.route == "cloud_phone"
-    assert relay.published == [FRAME]
-    assert relay.withdrawn == []  # the phone answered; nothing to withdraw
-
-
-def test_a_desktop_answer_wins_and_the_phone_link_is_withdrawn(tmp_path):
-    store = _phone_store(tmp_path)
-    request = _open(store)
-    store.write_answer(
-        make_answer(
-            request,
-            decision="approve",
-            decided_by="human",
-            route="desktop_run_it",
-            approver_id="cloud-user-0002",
-            auth_method="cloud_aal2",
-        )
-    )
-    relay = _Relay([_decision(request)])
-    monotonic, sleep = _clock()
-    answer, code = wait_for_answer(
-        store, request, timeout_s=5, monotonic=monotonic, sleep=sleep, phone_relay=relay
-    )
-    assert answer.route == "desktop_run_it"
-    assert relay.withdrawn == ["answered_elsewhere"]
-
-
-def test_a_relay_failure_leaves_desktop_approval(tmp_path):
-    class Broken(_Relay):
-        def publish(self, request, frame_png):
-            raise OSError("offline")
-
-    store = _phone_store(tmp_path)
-    request = _open(store)
-    relay = Broken([])
-    monotonic, sleep = _clock()
-    answer, code = wait_for_answer(
-        store,
-        request,
-        timeout_s=3,
-        poll_s=1,
-        monotonic=monotonic,
-        sleep=sleep,
-        phone_relay=relay,
-    )
-    assert answer is None and code == "approval_wait_timed_out"
-    assert relay.withdrawn == ["run_stopped_waiting"]
 
 
 def test_unknown_grant_fields_are_refused():

@@ -81,12 +81,9 @@ def grant_store(
     *,
     run: str = "run",
     initiator: Optional[str] = None,
-    cloud_keys: Optional[dict[str, str]] = None,
     **kwargs,
 ) -> ItemApprovalStore:
-    store = ItemApprovalStore(
-        tmp_path / run, key_dir=key_dir(tmp_path), cloud_keys=cloud_keys or {}
-    )
+    store = ItemApprovalStore(tmp_path / run, key_dir=key_dir(tmp_path))
     store.write_grant(signed_grant(tmp_path, policy, **kwargs))
     store.write_initiator(initiator)
     return store

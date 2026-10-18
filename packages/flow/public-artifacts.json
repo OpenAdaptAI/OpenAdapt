@@ -1881,7 +1881,7 @@
     },
     {
       "path": "openadapt_flow/contracts/schemas/approval-record-v1.json",
-      "sha256": "0eeacfb80916b6833f577a2f6eb92f7fd4dc54c1144b7d3661dd01acf9258fc2"
+      "sha256": "db5d96377a7ec89ccd2f6f69370f3ee70fce74e51eacdd6446188145daa6aa42"
     },
     {
       "path": "openadapt_flow/contracts/schemas/approver-identity-v1.json",
@@ -1985,7 +1985,7 @@
     },
     {
       "path": "openadapt_flow/contracts/schemas/execute-v1-openapi.json",
-      "sha256": "210a6d02d20e0fb43ef70aa003c3cb39ada4984e85bfb10d52662ba2c7c4d963"
+      "sha256": "a89f98f766eb56234b7ebb6738d8fef81ace9ea17c2b2bf7f3c69b75a3aba621"
     },
     {
       "path": "openadapt_flow/contracts/schemas/execution-requirements-v1.json",
@@ -1997,11 +1997,11 @@
     },
     {
       "path": "openadapt_flow/contracts/schemas/human-decision-task-v1.json",
-      "sha256": "d10e3cf79684e1dd07758b3f82b679e4275971161a91d8d27494acfd611d4fee"
+      "sha256": "b266bc4a77663ac92e24897b19806f360fe026c465f33579b4a27540001d0607"
     },
     {
       "path": "openadapt_flow/contracts/schemas/human-decision-task-v2.json",
-      "sha256": "99e767662eaada4b2c0000026bcc59f33a2edff885274939fa425497e0e47ef9"
+      "sha256": "85f9093287b6bad853a50e4498690d51ef2f97cc538e4d6fa964b8ac3c5e9e1d"
     },
     {
       "path": "openadapt_flow/contracts/schemas/plain-outcome-v1.json",

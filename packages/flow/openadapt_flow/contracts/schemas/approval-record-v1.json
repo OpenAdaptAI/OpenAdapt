@@ -191,7 +191,7 @@
     "route": {
       "enum": [
         "desktop_run_it",
-        "cloud_phone",
+        "decision_portal",
         "review_item",
         "review_batch",
         "local_cli",

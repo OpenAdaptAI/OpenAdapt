@@ -36,6 +36,7 @@ from openadapt_flow import __version__
 from openadapt_flow.console import actions as actions_mod
 from openadapt_flow.console import attention as attention_mod
 from openadapt_flow.console import data, human_decisions, json_artifacts
+from openadapt_flow.console import save_approvals as save_approvals_mod
 from openadapt_flow.runtime.durable.approval import ResumeRefused
 from openadapt_flow.runtime.durable.attended import (
     AttendedActionRefused,
@@ -572,6 +573,54 @@ def create_app(
         return attention_mod.notification(
             attention_mod.list_attention(runs)
         ).model_dump()
+
+    # -- save approvals (decision portal) -----------------------------------
+
+    @app.get("/api/save-approvals")
+    def save_approval_list() -> list[dict[str, Any]]:
+        return [
+            item.model_dump() for item in save_approvals_mod.list_save_approvals(runs)
+        ]
+
+    @app.get("/api/save-approvals/{request_id}")
+    def save_approval_detail(request_id: str) -> dict[str, Any]:
+        try:
+            return save_approvals_mod.save_approval_detail(runs, request_id)
+        except save_approvals_mod.SaveApprovalRefused as exc:
+            raise HTTPException(status_code=404, detail=exc.code) from exc
+
+    @app.get("/api/save-approvals/{request_id}/frame")
+    def save_approval_frame(request_id: str) -> Response:
+        try:
+            frame = save_approvals_mod.save_approval_frame(runs, request_id)
+        except save_approvals_mod.SaveApprovalRefused as exc:
+            raise HTTPException(status_code=404, detail=exc.code) from exc
+        return Response(
+            content=frame,
+            media_type="image/png",
+            headers={"Cache-Control": "no-store", "X-Content-Type-Options": "nosniff"},
+        )
+
+    @app.post("/api/save-approvals/{request_id}/actions/{action_id}")
+    def decide_save_approval(
+        request_id: str,
+        action_id: str,
+        payload: save_approvals_mod.SaveApprovalActionRequest,
+    ) -> JSONResponse:
+        # Answering is an authority action: only the attended console (the
+        # one the decision portal relays to) takes it.
+        if not attend:
+            raise HTTPException(status_code=404, detail="no such action")
+        if action_id != payload.action:
+            raise HTTPException(
+                status_code=400,
+                detail="action path and request do not match",
+            )
+        try:
+            receipt = save_approvals_mod.decide_save_approval(runs, request_id, payload)
+        except save_approvals_mod.SaveApprovalRefused as exc:
+            raise HTTPException(status_code=409, detail=exc.code) from exc
+        return JSONResponse(content=receipt.model_dump(mode="json"))
 
     @app.get("/api/attention/{run_id:path}")
     def attention_detail(run_id: str) -> dict[str, Any]:

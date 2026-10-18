@@ -2057,7 +2057,6 @@ def _cmd_replay(args: argparse.Namespace) -> int:
         args,
         run_dir,
         policy_name=getattr(args, "policy", None) or cfg.policy.policy,
-        cfg=cfg,
     )
     fault_driver = getattr(args, "_qualification_fault_driver", None)
     if _normalize_kind(backend_cfg.kind) != "web":
@@ -2343,40 +2342,6 @@ def _approver_settings(args: argparse.Namespace):
     return loaded, approver
 
 
-def _phone_relay_for_run(args: argparse.Namespace, cfg=None):
-    """The opt-in phone approval relay, or ``None`` (Desktop approval only).
-
-    On only with ``--phone-approval`` or ``runtime.phone_approval: true``.
-    Asking for it without this runner's Cloud pairing, or without a pinned
-    Cloud decision key, refuses the run rather than silently dropping it.
-    """
-
-    wanted = bool(getattr(args, "phone_approval", False)) or bool(
-        getattr(getattr(cfg, "runtime", None), "phone_approval", False)
-    )
-    if not wanted:
-        return None
-    from openadapt_flow.approval_mode.cloud_decision import (
-        default_keys_path,
-        load_pinned_keys,
-    )
-    from openadapt_flow.approval_mode.phone_relay import (
-        PhoneRelayError,
-        relay_from_env,
-    )
-
-    if not load_pinned_keys():
-        raise SystemExit(
-            "run REFUSED: phone approval needs Cloud's decision key pinned on "
-            f"this runner ({default_keys_path()}); run "
-            "`openadapt-flow item-approval pin-cloud-keys`. Nothing was executed."
-        )
-    try:
-        return relay_from_env()
-    except PhoneRelayError as exc:
-        raise SystemExit(f"run REFUSED: {exc}. Nothing was executed.") from None
-
-
 def _prepare_approval_store(
     args: argparse.Namespace, run_dir: Path, *, record_initiator: bool
 ):
@@ -2408,7 +2373,6 @@ def _approval_gate_for_run(
     run_dir: Path,
     *,
     policy_name: Optional[str] = None,
-    cfg=None,
 ):
     """Build the run's approval gate from the mode ``run`` resolved, if any."""
 
@@ -2424,7 +2388,6 @@ def _approval_gate_for_run(
         approval_wait_s=_approval_wait_seconds(args),
         approver=approver,
         policy_name=policy_name,
-        phone_relay=_phone_relay_for_run(args, cfg),
     )
 
 
@@ -3057,7 +3020,6 @@ def _resume_approval_gate(
     run_dir: Path,
     *,
     policy_name: Optional[str] = None,
-    cfg=None,
 ):
     if mode is None:
         return None
@@ -3072,7 +3034,6 @@ def _resume_approval_gate(
         approval_wait_s=_approval_wait_seconds(args),
         approver=approver,
         policy_name=policy_name,
-        phone_relay=_phone_relay_for_run(args, cfg),
     )
 
 
@@ -3348,7 +3309,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             runtime_config=cfg.runtime,
             checkpoint_key=ckpt_key,
             approval_gate=_resume_approval_gate(
-                args, resume_mode, run_dir, policy_name=cfg.policy.policy, cfg=cfg
+                args, resume_mode, run_dir, policy_name=cfg.policy.policy
             ),
         )
         return resume(
@@ -3565,12 +3526,8 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
     )
 
     verb = args.item_approval_cmd
-    if verb == "pin-cloud-keys":
-        return _item_approval_pin_cloud_keys(args)
     run_dir = Path(args.run_dir)
     store = ItemApprovalStore(run_dir)
-    if verb == "apply-cloud-decision":
-        return _item_approval_apply_cloud_decision(args, store)
     if verb == "show":
         rows = [request_summary(store, request) for request in store.requests()]
         if not args.all:
@@ -3666,68 +3623,6 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
     except ItemApprovalRefused as exc:
         return refuse(exc.code, str(exc))
     resume_required = _answer_durable_item_pause(run_dir, request, answer)
-    print(
-        json.dumps(
-            {
-                "ok": True,
-                "request_id": request.request_id,
-                "decision": answer.decision,
-                "answer_sha256": answer.digest(),
-                "resume_required": resume_required,
-            }
-        )
-    )
-    return 0
-
-
-def _item_approval_pin_cloud_keys(args: argparse.Namespace) -> int:
-    """Pin Cloud's phone-decision keys on this runner (once, at pairing)."""
-    import json
-    import os
-
-    from openadapt_flow.approval_mode.cloud_decision import default_keys_path
-    from openadapt_flow.approval_mode.phone_relay import (
-        PhoneRelayError,
-        relay_from_env,
-    )
-
-    target = Path(args.out) if args.out else default_keys_path()
-    try:
-        keys = relay_from_env().decision_keys()
-    except (PhoneRelayError, OSError, ValueError) as exc:
-        print(json.dumps({"ok": False, "code": "pin_failed", "message": str(exc)}))
-        return 2
-    target.parent.mkdir(parents=True, exist_ok=True)
-    tmp = target.with_suffix(".tmp")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w", encoding="utf-8") as handle:
-        handle.write(json.dumps(keys, indent=2, sort_keys=True) + "\n")
-    os.replace(tmp, target)
-    print(json.dumps({"ok": True, "path": str(target), "key_ids": sorted(keys)}))
-    return 0
-
-
-def _item_approval_apply_cloud_decision(args: argparse.Namespace, store) -> int:
-    """Apply a Cloud-signed phone decision to the request it names."""
-    import json
-
-    from openadapt_flow.approval_mode.item_approval import (
-        ItemApprovalRefused,
-        apply_cloud_decision,
-    )
-
-    try:
-        raw = json.loads(Path(args.decision_file).read_text(encoding="utf-8"))
-        request_id = str(raw.get("request_id", "")) if isinstance(raw, dict) else ""
-        request = store.read_request(request_id)
-    except (OSError, ValueError, ItemApprovalRefused):
-        print(json.dumps({"ok": False, "code": "request_unknown"}))
-        return 2
-    answer = apply_cloud_decision(store, request, raw)
-    if answer is None:
-        print(json.dumps({"ok": False, "code": "cloud_decision_refused"}))
-        return 2
-    resume_required = _answer_durable_item_pause(Path(args.run_dir), request, answer)
     print(
         json.dumps(
             {
@@ -6600,18 +6495,6 @@ def _add_approval_flags(p: argparse.ArgumentParser) -> None:
         ),
     )
     p.add_argument(
-        "--phone-approval",
-        action="store_true",
-        default=False,
-        help=(
-            "Also send each waiting save to OpenAdapt Cloud so a person can "
-            "approve it from their phone (opt-in; same as "
-            "runtime.phone_approval). Needs this runner's Cloud pairing "
-            "(OPENADAPT_RUNNER_TOKEN, OPENADAPT_RUNNER_ID) and Cloud's "
-            "decision key pinned (item-approval pin-cloud-keys)."
-        ),
-    )
-    p.add_argument(
         "--approver-webhook",
         default=None,
         metavar="URL",
@@ -8089,23 +7972,6 @@ def build_parser() -> argparse.ArgumentParser:
                 choices=["wrong_values", "wrong_record", "screen_problem"],
             )
         q.set_defaults(func=_cmd_item_approval)
-    q = item_sub.add_parser(
-        "apply-cloud-decision",
-        help=(
-            "Apply a Cloud-signed decision a person made on their phone. It "
-            "must name this run's waiting request and verify against the "
-            "pinned Cloud decision key"
-        ),
-    )
-    q.add_argument("run_dir", help="The run directory")
-    q.add_argument("--decision-file", required=True, metavar="JSON")
-    q.set_defaults(func=_cmd_item_approval)
-    q = item_sub.add_parser(
-        "pin-cloud-keys",
-        help="Pin OpenAdapt Cloud's phone-decision keys on this runner",
-    )
-    q.add_argument("--out", default=None, help="Where to write the pinned keys")
-    q.set_defaults(func=_cmd_item_approval)
 
     p = sub.add_parser(
         "approver-grant",

@@ -167,8 +167,10 @@ DeclineReason = Literal["wrong_values", "wrong_record", "screen_problem"]
 DECLINE_REASONS: tuple[str, ...] = ("wrong_values", "wrong_record", "screen_problem")
 #: The only route that may approve or decline an item in phase 0.
 ITEM_APPROVAL_ROUTE: Literal["desktop_run_it"] = "desktop_run_it"
-#: Routes a person answers by: Desktop's Run it, or their phone through Cloud.
-PERSON_APPROVAL_ROUTES = frozenset({"desktop_run_it", "cloud_phone"})
+#: A person answering on their phone through the runner's decision portal.
+DECISION_PORTAL_ROUTE: Literal["decision_portal"] = "decision_portal"
+#: Routes a person answers by: Desktop's Run it, or the decision portal.
+PERSON_APPROVAL_ROUTES = frozenset({"desktop_run_it", "decision_portal"})
 #: How the approver was authenticated. ``none`` only for ``unauthenticated``.
 ApproverAuthMethod = Literal["cloud_aal2", "cloud_aal1", "none"]
 
@@ -189,12 +191,12 @@ class ItemApprovalRef(BaseModel):
     decision: Literal["approved", "declined"]
     decline_reason: Optional[DeclineReason] = None
     decided_by: Literal["human", "automation"] = "human"
-    #: ``desktop_run_it`` or ``cloud_phone`` (a Cloud-signed decision from
-    #: the person's phone) for a person; ``local_cli``, ``webhook`` or ``mcp``
-    #: for a delegated approver.
-    route: Literal["desktop_run_it", "cloud_phone", "local_cli", "webhook", "mcp"] = (
-        ITEM_APPROVAL_ROUTE
-    )
+    #: ``desktop_run_it`` or ``decision_portal`` (the person's phone, paired
+    #: to this runner's decision portal) for a person; ``local_cli``,
+    #: ``webhook`` or ``mcp`` for a delegated approver.
+    route: Literal[
+        "desktop_run_it", "decision_portal", "local_cli", "webhook", "mcp"
+    ] = ITEM_APPROVAL_ROUTE
     approver_kind: Literal["cloud_user", "unauthenticated"]
     approver_id: Optional[str] = Field(default=None, pattern=OPAQUE_ID_PATTERN)
     auth_method: ApproverAuthMethod
@@ -222,8 +224,6 @@ class ItemApprovalRef(BaseModel):
             raise ValueError(
                 "a person answers in Desktop or on their phone; a delegate by its own route"
             )
-        if self.route == "cloud_phone" and self.auth_method != "cloud_aal2":
-            raise ValueError("a phone approval needs a Cloud sign-in with AAL2")
         if self.approver_kind == "cloud_user":
             if self.approver_id is None or self.auth_method == "none":
                 raise ValueError("a Cloud approver needs an id and a sign-in method")

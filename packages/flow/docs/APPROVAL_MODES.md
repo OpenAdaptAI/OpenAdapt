@@ -51,9 +51,9 @@ openadapt-flow item-approval decline RUN_DIR ... --reason wrong_values
 
 - An answer names the request digest the person saw. A person answers with
   `--decided-by human` from the `desktop_run_it` route, or from their phone
-  through Cloud (`cloud_phone`, opt-in; see
+  on the runner's decision portal (`decision_portal`; see
   [`APPROVAL_AND_VERIFICATION.md`](APPROVAL_AND_VERIFICATION.md)), which
-  needs a Cloud-signed decision for that exact request. A decline carries
+  echoes the signed task for that exact request. A decline carries
   one closed reason: `wrong_values`, `wrong_record` or `screen_problem`.
 - Answers are created once and never replaced. The run checks every answer
   itself, so an answer file written around the command is held to the same
