@@ -572,23 +572,36 @@ def uninstall_ffmpeg() -> None:
         print(f"Nothing to remove at {root}")
 
 
-def share(action: str, path_or_code: str, output_dir: str = ".") -> None:
+def share(
+    action: str,
+    path_or_code: str,
+    output_dir: str = ".",
+    unscrubbed: bool = False,
+    reason: str | None = None,
+) -> None:
     """Share recordings via Magic Wormhole.
+
+    ``send`` scrubs a copy of the recording and sends only the copy. It needs
+    the ``privacy`` extra and refuses to send without it.
 
     Args:
         action: Either "send" or "receive".
         path_or_code: Recording path (for send) or wormhole code (for receive).
         output_dir: Output directory for receive (default: current dir).
+        unscrubbed: Send the raw recording without scrubbing (needs --reason;
+            the choice is recorded).
+        reason: Why the raw recording must be sent.
 
     Examples:
         capture share send ./my_recording
+        capture share send ./my_recording --unscrubbed --reason "synthetic demo"
         capture share receive 7-guitarist-revenge
         capture share receive 7-guitarist-revenge ./recordings
     """
     from openadapt_capture.share import receive, send
 
     if action == "send":
-        send(path_or_code)
+        send(path_or_code, unscrubbed=unscrubbed, reason=reason)
     elif action == "receive":
         receive(path_or_code, output_dir)
     else:
