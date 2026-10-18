@@ -1,0 +1,273 @@
+"""OpenAdapt Capture - GUI interaction capture.
+
+Platform-agnostic event streams with time-aligned media.
+"""
+
+from importlib.metadata import PackageNotFoundError, version
+
+try:
+    __version__ = version("openadapt-capture")
+except PackageNotFoundError:
+    __version__ = "0+unknown"
+
+# High-level APIs (primary interface)
+# Passive browser-event schemas remain public so existing local captures can
+# still be inspected. The repository-only Chrome-extension bridge is not part
+# of the production package or API. Supported browser recording is owned by
+# openadapt-flow's Playwright launch and attach paths.
+from openadapt_capture.authentication import (
+    AUTHENTICATION_HANDOFF_FILENAME,
+    AuthenticationBoundaryError,
+    AuthenticationHandoff,
+    AuthenticationHandoffError,
+    AuthenticationHandoffHandle,
+    AuthenticationHandoffManifest,
+    FreshFrameProof,
+    load_authentication_handoffs,
+)
+from openadapt_capture.browser_events import (
+    BoundingBox,
+    BrowserClickEvent,
+    BrowserEvent,
+    BrowserEventType,
+    BrowserFocusEvent,
+    BrowserInputEvent,
+    BrowserKeyEvent,
+    BrowserNavigationEvent,
+    BrowserScrollEvent,
+    DOMSnapshot,
+    ElementState,
+    NavigationType,
+    SemanticElementRef,
+    VisibleElement,
+)
+from openadapt_capture.capture import Action, Capture, CaptureSession
+
+# Frame comparison utilities
+from openadapt_capture.comparison import (
+    ComparisonReport,
+    FrameComparison,
+    compare_frames,
+    compare_video_to_images,
+    plot_comparison,
+)
+from openadapt_capture.config import RecordingConfig
+from openadapt_capture.control import (
+    CaptureControlAuthenticationError,
+    CaptureControlError,
+    CaptureControlUnavailable,
+    RecorderStatus,
+    begin_authentication_handoff,
+    discover_recorders,
+    end_authentication_handoff,
+    status_recording,
+    stop_recording,
+)
+from openadapt_capture.db.models import (
+    ActionEvent as DBActionEvent,
+)
+
+# Database models (low-level)
+from openadapt_capture.db.models import (
+    Recording,
+    Screenshot,
+)
+from openadapt_capture.db.models import (
+    WindowEvent as DBWindowEvent,
+)
+
+# Event types
+from openadapt_capture.events import (
+    ActionEvent,
+    AudioChunkEvent,
+    AudioEvent,
+    BaseEvent,
+    Event,
+    EventType,
+    KeyDownEvent,
+    KeyShortcutEvent,
+    KeyTypeEvent,
+    KeyUpEvent,
+    MouseButton,
+    MouseClickEvent,
+    MouseDoubleClickEvent,
+    MouseDownEvent,
+    MouseDragEvent,
+    MouseMoveEvent,
+    MouseScrollEvent,
+    MouseUpEvent,
+    ScreenEvent,
+    ScreenFrameEvent,
+)
+
+# Event processing
+from openadapt_capture.processing import (
+    detect_drag_events,
+    get_action_events,
+    get_audio_events,
+    get_screen_events,
+    merge_consecutive_keyboard_events,
+    merge_consecutive_mouse_click_events,
+    merge_consecutive_mouse_move_events,
+    merge_consecutive_mouse_scroll_events,
+    process_events,
+    remove_invalid_keyboard_events,
+    remove_redundant_mouse_move_events,
+)
+
+# Recorder imports are display-side-effect free. Platform permissions and
+# display availability are checked only when native observers start.
+from openadapt_capture.recorder import Recorder
+
+# Performance statistics
+from openadapt_capture.stats import (
+    CaptureStats,
+    PerfStat,
+    plot_capture_performance,
+)
+from openadapt_capture.structural import (
+    STRUCTURAL_OBSERVATION_SCHEMA_VERSION,
+    StructuralAncestor,
+    StructuralBounds,
+    StructuralCandidateContext,
+    StructuralElement,
+    StructuralObservation,
+    StructuralObservationRequest,
+    StructuralObserver,
+    StructuralProcessIdentity,
+    StructuralTreeNode,
+    StructuralWindowIdentity,
+    create_structural_observer,
+    observe_structural_action,
+    observe_window_tree,
+)
+
+# Visualization
+from openadapt_capture.visualize import create_demo, create_html
+
+# Window-scoped capture (record ONE window in its own pixel space)
+from openadapt_capture.window_capture import (
+    TargetWindow,
+    WindowCaptureError,
+    WindowCaptureScope,
+    WindowTarget,
+    translate_point,
+)
+
+__all__ = [
+    # Version
+    "__version__",
+    # High-level APIs
+    "Recorder",
+    "RecordingConfig",
+    "RecorderStatus",
+    "begin_authentication_handoff",
+    "CaptureControlError",
+    "CaptureControlUnavailable",
+    "CaptureControlAuthenticationError",
+    "discover_recorders",
+    "end_authentication_handoff",
+    "status_recording",
+    "stop_recording",
+    "Capture",
+    "CaptureSession",
+    "Action",
+    "AUTHENTICATION_HANDOFF_FILENAME",
+    "AuthenticationBoundaryError",
+    "AuthenticationHandoff",
+    "AuthenticationHandoffError",
+    "AuthenticationHandoffHandle",
+    "AuthenticationHandoffManifest",
+    "FreshFrameProof",
+    "load_authentication_handoffs",
+    # Native structural observation
+    "STRUCTURAL_OBSERVATION_SCHEMA_VERSION",
+    "StructuralAncestor",
+    "StructuralBounds",
+    "StructuralCandidateContext",
+    "StructuralElement",
+    "StructuralObservation",
+    "StructuralObservationRequest",
+    "StructuralObserver",
+    "StructuralProcessIdentity",
+    "StructuralTreeNode",
+    "StructuralWindowIdentity",
+    "create_structural_observer",
+    "observe_structural_action",
+    "observe_window_tree",
+    # Window-scoped capture
+    "WindowTarget",
+    "TargetWindow",
+    "WindowCaptureScope",
+    "WindowCaptureError",
+    "translate_point",
+    # Event types
+    "EventType",
+    "MouseButton",
+    "BaseEvent",
+    "Event",
+    "ActionEvent",
+    "ScreenEvent",
+    "AudioEvent",
+    # Mouse events
+    "MouseMoveEvent",
+    "MouseDownEvent",
+    "MouseUpEvent",
+    "MouseScrollEvent",
+    "MouseClickEvent",
+    "MouseDoubleClickEvent",
+    "MouseDragEvent",
+    # Keyboard events
+    "KeyDownEvent",
+    "KeyUpEvent",
+    "KeyTypeEvent",
+    "KeyShortcutEvent",
+    # Screen/audio events
+    "ScreenFrameEvent",
+    "AudioChunkEvent",
+    # Database models (low-level)
+    "Recording",
+    "DBActionEvent",
+    "Screenshot",
+    "DBWindowEvent",
+    # Processing
+    "process_events",
+    "remove_invalid_keyboard_events",
+    "remove_redundant_mouse_move_events",
+    "merge_consecutive_keyboard_events",
+    "merge_consecutive_mouse_move_events",
+    "merge_consecutive_mouse_scroll_events",
+    "merge_consecutive_mouse_click_events",
+    "detect_drag_events",
+    "get_action_events",
+    "get_screen_events",
+    "get_audio_events",
+    # Performance statistics
+    "CaptureStats",
+    "PerfStat",
+    "plot_capture_performance",
+    # Frame comparison
+    "ComparisonReport",
+    "FrameComparison",
+    "compare_frames",
+    "compare_video_to_images",
+    "plot_comparison",
+    # Visualization
+    "create_demo",
+    "create_html",
+    # Passive browser events (legacy capture reads)
+    "BrowserEventType",
+    "BrowserEvent",
+    "BrowserClickEvent",
+    "BrowserKeyEvent",
+    "BrowserScrollEvent",
+    "BrowserInputEvent",
+    "BrowserNavigationEvent",
+    "BrowserFocusEvent",
+    "SemanticElementRef",
+    "BoundingBox",
+    "ElementState",
+    "DOMSnapshot",
+    "VisibleElement",
+    "NavigationType",
+]

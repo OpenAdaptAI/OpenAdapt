@@ -238,8 +238,18 @@ def test_row_reread_of_a_different_patient_does_not_verify() -> None:
     status, calls = _replayer_check(
         sibling, "MG619501 Sorenson, Philip 1957-10-28", RECORDED
     )
-    assert len(calls) == 3
-    assert status != "verified"
+    # The band already read a different record: that read is final.
+    assert status == "mismatch" and len(calls) == 1
+
+
+def test_a_row_reread_never_overrules_a_read_of_a_different_record() -> None:
+    """The band reads the sibling's record, then the row crop misreads it as
+    the target. Before, the row's "verified" won and the wrong patient's
+    chart was acted on."""
+    status, calls = _replayer_check(
+        RECORDED, "MG619501 Sorenson, Philip 1957-10-28", RECORDED
+    )
+    assert status == "mismatch" and len(calls) == 1
 
 
 def test_verified_band_skips_the_row_reread() -> None:

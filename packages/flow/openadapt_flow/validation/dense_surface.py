@@ -622,6 +622,7 @@ from openadapt_flow.compiler.compile import (  # noqa: E402
     _discriminative_crop_region,
 )
 from openadapt_flow.runtime import identity as identity_mod  # noqa: E402
+from openadapt_flow.runtime.replayer import better_identity_read  # noqa: E402
 from openadapt_flow.runtime.identity import (  # noqa: E402
     band_region,
     context_from_lines,
@@ -738,7 +739,8 @@ def replay_observe(
     )
     used_upscale = False
     first_near = list(near_lines)
-    if check.status != "verified":
+    # Mirrors the replayer: a read of a different record is final.
+    if check.status not in ("verified", "mismatch"):
         upscaled = identity_mod.upscale_crop(frame.png, band)
         if upscaled is not None:
             (retry, r_obs, retry_nf, r_obs_nf, r_lines, r_near) = _band_attempt(
@@ -753,11 +755,7 @@ def replay_observe(
                 ),
                 context_text,
             )
-            rank = {"unreadable": 0, "abstain": 1, "mismatch": 2, "verified": 3}
-            if (rank[retry.status], retry.coverage) > (
-                rank[check.status],
-                check.coverage,
-            ):
+            if better_identity_read(check, retry) is retry:
                 # The upscaled retry runs in a 2x coordinate space; map its
                 # line regions back to the base frame so geometric row
                 # assignment (bleed) stays in one coordinate system.
@@ -781,7 +779,7 @@ def replay_observe(
                 band_lines = _downscale(r_lines)
                 near_lines = _downscale(r_near)
                 used_upscale = True
-    if check.status != "verified":
+    if check.status not in ("verified", "mismatch"):
         # The replayer's last attempt: the point's own row, re-read alone.
         row = identity_mod.row_region(
             [SimpleNamespace(region=region) for _text, region in first_near], band
@@ -801,11 +799,7 @@ def replay_observe(
                 ),
                 context_text,
             )
-            rank = {"unreadable": 0, "abstain": 1, "mismatch": 2, "verified": 3}
-            if (rank[row_check.status], row_check.coverage) > (
-                rank[check.status],
-                check.coverage,
-            ):
+            if better_identity_read(check, row_check) is row_check:
                 check, observed, check_nf, obs_nf = (
                     row_check,
                     w_obs,

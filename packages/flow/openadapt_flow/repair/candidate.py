@@ -45,7 +45,10 @@ RepairState = Literal[
     "rolled_back",
 ]
 
-RepairSource = Literal["heal", "teach", "manual", "model_suggestion"]
+#: ``fleet_patch``: a signed structural patch another tenant exported from its
+#: own approved repair (:mod:`openadapt_flow.fleet`). It enters as a candidate
+#: like any other source and earns activation on this tenant's own gates.
+RepairSource = Literal["heal", "teach", "manual", "model_suggestion", "fleet_patch"]
 
 ActorKind = Literal["human", "automation", "model"]
 
@@ -173,6 +176,21 @@ class ApprovalRecord(BaseModel):
     #: invalidates the approval (checked at stage / canary time).
     prior_content_digest: str = Field(pattern=_SHA256)
     proposed_content_digest: str = Field(pattern=_SHA256)
+    #: Set only when the tenant's own fleet promotion policy pre-approved this
+    #: candidate (:meth:`RepairStore.approve_under_policy`). ``approved_by``
+    #: then names the policy, and ``pre_approved_by`` the person who approved
+    #: the policy. The digest binds the exact policy text that was in force.
+    pre_approval_policy_sha256: Optional[str] = Field(default=None, pattern=_SHA256)
+    pre_approved_by: Optional[str] = Field(default=None, max_length=256)
+
+    @model_validator(mode="after")
+    def _policy_fields_together(self) -> "ApprovalRecord":
+        if (self.pre_approval_policy_sha256 is None) != (self.pre_approved_by is None):
+            raise ValueError(
+                "a policy pre-approval needs both the policy digest and the "
+                "person who approved the policy"
+            )
+        return self
 
 
 class CanaryConfig(BaseModel):
@@ -281,6 +299,37 @@ class TaughtStep(BaseModel):
     frame_sha256: str = Field(pattern=_SHA256)
 
 
+class FleetPatchProvenance(BaseModel):
+    """Where an imported fleet patch came from, by digest and key id only.
+
+    Set on candidates with source ``fleet_patch``. The patch was re-signed by
+    the fleet hub, so this names the hub's distribution certificate, not the
+    tenant that contributed the repair. It holds no value from any tenant's
+    bundles and nothing that links two patches to one source.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    patch_id: str = Field(pattern=_SHA256)
+    app_family: str = Field(
+        pattern=r"^[a-z0-9][a-z0-9._-]{0,63}/[a-z0-9][a-z0-9._-]{0,63}$"
+    )
+    app_fingerprint_sha256: str = Field(pattern=_SHA256)
+    #: The hub's distribution signer, its certificate serial, and the
+    #: intermediate and root above it. Checked against the revocation list
+    #: again before any auto-promotion.
+    signer_key_id: str = Field(pattern=r"^[a-f0-9]{16,64}$")
+    signer_serial: str = Field(pattern=r"^[a-f0-9]{32}$")
+    intermediate_key_id: str = Field(pattern=r"^[a-f0-9]{16,64}$")
+    root_key_id: str = Field(pattern=r"^[a-f0-9]{16,64}$")
+    #: True when the patch flags any identity-evidence anchor. Such a
+    #: candidate always needs a person; no policy can pre-approve it.
+    identity_evidence_changed: bool
+    #: This tenant's step ids the patch touched.
+    patched_steps: list[str] = Field(default_factory=list, max_length=512)
+    signature_chain_verified_at: str = Field(min_length=20, max_length=64)
+
+
 class TransitionRecord(BaseModel):
     """One audited lifecycle transition."""
 
@@ -330,6 +379,7 @@ class RepairCandidate(BaseModel):
     #: ``evidence_run_dir/heals/<step_id>/screen.png``, like heal evidence.
     taught_steps: list[TaughtStep] = Field(default_factory=list)
     provenance: Optional[RepairProvenance] = None
+    fleet_patch: Optional[FleetPatchProvenance] = None
 
     state: RepairState = "candidate"
     history: list[TransitionRecord] = Field(default_factory=list)
@@ -403,6 +453,21 @@ class RepairCandidate(BaseModel):
         for campaign in (self.replay_campaign, self.fault_campaign):
             if campaign is not None:
                 lines.append(f"  {campaign.summary()}")
+        if self.fleet_patch is not None:
+            fleet = self.fleet_patch
+            lines.append(
+                f"  fleet patch {fleet.patch_id[:16]}... distributed by the fleet "
+                f"hub (signer {fleet.signer_key_id[:16]})"
+                + (
+                    ", touches identity evidence"
+                    if fleet.identity_evidence_changed
+                    else ""
+                )
+            )
         if self.approval is not None:
             lines.append(f"  approved by {self.approval.approved_by}")
+            if self.approval.pre_approved_by:
+                lines.append(
+                    f"  under a policy pre-approved by {self.approval.pre_approved_by}"
+                )
         return "\n".join(lines)
