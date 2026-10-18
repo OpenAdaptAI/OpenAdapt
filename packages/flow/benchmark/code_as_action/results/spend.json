@@ -1,0 +1,26 @@
+{
+  "runs": [
+    {
+      "label": "mockmed code t1",
+      "usd": 0.010642,
+      "at": "2026-10-18T19:24:34Z"
+    },
+    {
+      "label": "mockmed code t1",
+      "usd": 0.010804,
+      "at": "2026-10-18T19:25:21Z"
+    },
+    {
+      "label": "mockmed code t1",
+      "usd": 0.012239,
+      "at": "2026-10-18T19:25:56Z"
+    },
+    {
+      "label": "openemr code r1",
+      "usd": 0.047661,
+      "at": "2026-10-18T19:41:04Z"
+    }
+  ],
+  "total_usd": 0.081346,
+  "cap_usd": 15.0
+}

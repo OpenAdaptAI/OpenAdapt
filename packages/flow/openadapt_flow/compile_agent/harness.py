@@ -34,6 +34,7 @@ from openadapt_flow.compile_agent import observe as _observe
 from openadapt_flow.jit.adapters import CaptureComputer, Observation, translate
 
 __all__ = [
+    "CommitHint",
     "GateRefused",
     "GateRequest",
     "Harness",
@@ -50,6 +51,26 @@ class GateRefused(RuntimeError):
 
 class StaleRef(ValueError):
     """The ref is not in the latest observation, or the page changed under it."""
+
+
+@dataclass(frozen=True)
+class CommitHint:
+    """What a structure-aware tool knows about the control it acts on.
+
+    The harness reads the top-level page itself, which can't see into an
+    iframe, and a desktop or remote surface has no page at all. A tool that
+    resolved its target from the frame's DOM, an accessibility tree or OCR
+    passes the control's ``name`` and the ``scope`` text around it (the row,
+    dialog or form). The harness gates the action when either its own reading
+    or the hint says it commits a write; a hint never turns a gate off.
+    """
+
+    name: str
+    scope: str = ""
+    #: An Enter or Space on this control (the focused one), not a click.
+    key: Optional[str] = None
+    #: A text field: a click on it only focuses it, so it commits nothing.
+    editable: bool = False
 
 
 @dataclass(frozen=True)
@@ -130,6 +151,10 @@ class Harness:
         return page
 
     @property
+    def has_page(self) -> bool:
+        return self.computer.page is not None
+
+    @property
     def dialect(self) -> str:
         return self.computer.dialect
 
@@ -186,8 +211,13 @@ class Harness:
 
     # -- every action -------------------------------------------------------------
 
-    def act(self, native: Mapping[str, Any]) -> Observation:
+    def act(
+        self, native: Mapping[str, Any], *, hint: Optional[CommitHint] = None
+    ) -> Observation:
         """Perform one native action in the computer's dialect, behind the gate.
+
+        ``hint`` names the control a structure-aware tool resolved (see
+        :class:`CommitHint`). It can only add a gate.
 
         Raises:
             GateRefused: the action commits a write and the gate refused it.
@@ -195,15 +225,44 @@ class Harness:
                 in it was performed.
         """
 
-        commit = self._commit_target(native)
+        commit = self._commit_target(native) if self.has_page else None
+        if commit is None:
+            commit = self._hinted_commit(native, hint)
         if commit is not None:
             self._check_gate(*commit)
         obs = self.computer.execute(native)
         self.stats.actions += 1
-        if commit is not None:
+        if commit is not None and self.has_page:
             # Let the app react before the agent looks at the result.
             _settle(self.page)
         return obs
+
+    def _hinted_commit(
+        self, native: Mapping[str, Any], hint: Optional[CommitHint]
+    ) -> Optional[tuple[str, Optional[str]]]:
+        """The commit a hint names, and on a surface with no page, every
+        action the harness can't rule out (no hint, or an unread target)."""
+
+        for op in translate(self.dialect, native):
+            if op.kind in ("click", "double_click", "right_click"):
+                if hint is not None and hint.key is None:
+                    if not hint.editable and _observe.commit_label(hint.name):
+                        return (hint.name, hint.scope)
+                elif not self.has_page:
+                    return ("a click on an element the harness could not read", None)
+            elif op.kind == "type" and any(ch in (op.text or "") for ch in "\r\n"):
+                if not self.has_page:
+                    return ("a typed line break", hint.scope if hint else None)
+            elif op.kind == "hotkey" and not self.has_page:
+                shortcut = "+".join([*op.modifiers, op.key or ""])
+                return (f"the shortcut {shortcut}", hint.scope if hint else None)
+            elif op.kind == "press" and op.key in ("Enter", "Space"):
+                if hint is not None and hint.key == op.key:
+                    if op.key == "Enter" or _observe.commit_label(hint.name):
+                        return (f"{op.key} on {hint.name}", hint.scope)
+                elif not self.has_page:
+                    return (f"{op.key} on an element the harness could not read", None)
+        return None
 
     def _commit_target(
         self, native: Mapping[str, Any]
@@ -224,11 +283,24 @@ class Harness:
                 point = (op.x, op.y) if op.x is not None else self.computer.pointer
                 if point is None or point[0] is None:
                     continue
-                at = _observe.element_at(self.page, point[0], point[1])
+                at = _observe.element_at(
+                    self.page,
+                    point[0],
+                    point[1],
+                    backend=getattr(
+                        getattr(self.computer, "session", None), "backend", None
+                    ),
+                )
                 if at is None:
                     return ("a click on an element the harness could not read", None)
                 name = str(at.get("name") or "")
-                if at.get("interactive") and _observe.commit_label(name):
+                # A click on a text field only focuses it ("Postal code"
+                # holds the word "post" but commits nothing).
+                if (
+                    at.get("interactive")
+                    and not at.get("editable")
+                    and _observe.commit_label(name)
+                ):
                     return (name, at.get("scope"))
             elif op.kind == "type" and any(ch in (op.text or "") for ch in "\r\n"):
                 focused = _observe.focused_element(self.page) or {}
@@ -264,7 +336,7 @@ class Harness:
             "control": control,
             "identity": list(self.gate.on_screen),
             "missing": missing,
-            "url": str(getattr(self.page, "url", "")),
+            "url": str(getattr(self.computer.page, "url", "")),
             "screenshot": str(shot) if shot else None,
             "at": time.time(),
         }

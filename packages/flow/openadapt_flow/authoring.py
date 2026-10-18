@@ -534,6 +534,13 @@ class AuthoringSession:
         return self._kind
 
     @property
+    def backend(self) -> Any:
+        """The live backend the recorder drives. Callers read it; actions go
+        through this session so they are recorded."""
+
+        return self._backend
+
+    @property
     def screen_only(self) -> bool:
         """True for a remote session: pixels and keys, no DOM or UIA."""
 

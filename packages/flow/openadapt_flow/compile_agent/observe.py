@@ -338,12 +338,33 @@ def observe(page: Any, *, keep: Sequence[str] = ()) -> StructuralObservation:
     )
 
 
-def element_at(page: Any, x: int, y: int) -> Optional[dict[str, Any]]:
-    """The control (or element) at a point: tag, type, name, in_form."""
+def element_at(
+    page: Any, x: int, y: int, *, backend: Any = None
+) -> Optional[dict[str, Any]]:
+    """The control (or element) at a point: tag, type, name, in_form.
+
+    A point over an iframe is read inside the frame, through the backend's
+    hit-tested frame chain, so a Save button in a frame is seen as one. A
+    frame the backend can't map is reported as unreadable (None).
+    """
 
     try:
-        return page.evaluate(_ELEMENT_AT_JS, [int(x), int(y), INTERACTIVE, SCOPE])
+        at = page.evaluate(_ELEMENT_AT_JS, [int(x), int(y), INTERACTIVE, SCOPE])
     except Exception:  # noqa: BLE001 - an unreadable page has no element
+        return None
+    if not at or str(at.get("tag")) not in ("iframe", "frame"):
+        return at
+    getter = getattr(backend, "_frame_point", None)
+    if not callable(getter):
+        return None
+    try:
+        point = getter(int(x), int(y))
+        if point is None or not point.frame_path:
+            return None
+        return point.scope.evaluate(
+            _ELEMENT_AT_JS, [point.x, point.y, INTERACTIVE, SCOPE]
+        )
+    except Exception:  # noqa: BLE001
         return None
 
 
