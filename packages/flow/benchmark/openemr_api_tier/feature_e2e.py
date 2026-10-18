@@ -159,7 +159,7 @@ def _load1() -> float:
     return float(subprocess.run(["sysctl", "-n", "vm.loadavg"], capture_output=True, text=True).stdout.split()[1])
 
 
-def wait_quiet(max_s: float = 1200.0) -> dict[str, Any]:
+def wait_quiet(max_s: float = float(os.environ.get("GATE_MAX_S", "1200"))) -> dict[str, Any]:
     """Wait until the shared machine's 1-minute load is under GATE_LOAD1."""
 
     t0 = time.time()
