@@ -36,6 +36,10 @@ def bundle_surface(workflow: Workflow) -> str:
     """The surface a bundle was recorded on: ``web`` unless it names another."""
 
     surface = getattr(workflow, "surface", None)
+    surfaces = getattr(workflow, "surfaces", None) or []
+    if surface is None and surfaces:
+        # A multi-surface bundle starts on its first (primary) surface.
+        surface = getattr(surfaces[0], "kind", None)
     hints = getattr(workflow, "backend_hints", None)
     if surface is None and hints is not None:
         surface = getattr(hints, "backend", None)

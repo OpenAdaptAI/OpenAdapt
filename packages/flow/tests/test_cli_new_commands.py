@@ -568,7 +568,7 @@ def test_resume_web_default_builds_playwright_backend(
 
     seen: dict = {}
 
-    def _fake_resume(run_dir, replayer, key=None, execution_target_kind=None):
+    def _fake_resume(run_dir, replayer, key=None, execution_target_kind=None, **_kw):
         seen["called"] = True
         seen["execution_target_kind"] = execution_target_kind
         return _FakeReport()
@@ -623,7 +623,9 @@ def test_resume_wires_all_configured_appliance_tiers(
     monkeypatch.setattr(
         durable_mod,
         "resume",
-        lambda run_dir, replayer, key=None, execution_target_kind=None: _FakeReport(),
+        lambda run_dir, replayer, key=None, execution_target_kind=None, **_kw: (
+            _FakeReport()
+        ),
     )
 
     rc = main(
@@ -713,7 +715,7 @@ def test_resume_windows_config_builds_windows_backend(
     monkeypatch.setattr(
         durable_mod,
         "resume",
-        lambda run_dir, replayer, key=None, execution_target_kind=None: (
+        lambda run_dir, replayer, key=None, execution_target_kind=None, **_kw: (
             captured.update(execution_target_kind=execution_target_kind)
             or _FakeReport()
         ),
@@ -776,7 +778,7 @@ def test_resume_uses_recorded_citrix_target_and_readiness(
     monkeypatch.setattr(
         durable_mod,
         "resume",
-        lambda run_dir, replayer, key=None, execution_target_kind=None: (
+        lambda run_dir, replayer, key=None, execution_target_kind=None, **_kw: (
             captured.update(execution_target_kind=execution_target_kind)
             or _FakeReport()
         ),
@@ -886,3 +888,44 @@ def test_resume_refuses_another_surface_than_the_bundle_was_recorded_on(
     out = capsys.readouterr().out
     assert "resume REFUSED" in out and "bound to surface 'macos'" in out
     assert "Nothing was executed" in out
+
+
+def test_resume_with_a_surface_override_records_it(tmp_path: Path, monkeypatch) -> None:
+    run = _paused_run(tmp_path, surface="macos")
+    main(["approve", str(run)])
+
+    import openadapt_flow.backends.factory as factory
+    import openadapt_flow.report as report_mod
+    import openadapt_flow.runtime as runtime_mod
+    import openadapt_flow.runtime.durable as durable_mod
+
+    seen: dict = {}
+
+    class FakeBackend:
+        def close(self):
+            pass
+
+    monkeypatch.setattr(factory, "build_backend", lambda cfg, **kw: FakeBackend())
+    monkeypatch.setattr(runtime_mod, "Replayer", lambda backend, **kw: object())
+    monkeypatch.setattr(report_mod, "render_run_report", lambda run_dir: "REPORT.md")
+
+    def _fake_resume(run_dir, replayer, key=None, **kw):
+        seen.update(kw)
+        return _FakeReport()
+
+    monkeypatch.setattr(durable_mod, "resume", _fake_resume)
+    rc = main(
+        [
+            "resume",
+            str(run),
+            "--require-approval",
+            "--backend",
+            "windows",
+            "--agent-url",
+            "http://127.0.0.1:5001",
+            "--allow-surface-override",
+        ]
+    )
+    assert rc == 0
+    assert seen["execution_target_kind"] == "windows"
+    assert seen["surface_override"] is True

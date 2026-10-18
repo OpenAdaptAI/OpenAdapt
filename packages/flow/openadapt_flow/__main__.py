@@ -3472,6 +3472,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             replayer,
             key=ckpt_key,
             execution_target_kind=_report_backend_kind(backend_cfg.kind),
+            surface_override=bool(getattr(args, "_surface_override", False)),
         )
 
     try:

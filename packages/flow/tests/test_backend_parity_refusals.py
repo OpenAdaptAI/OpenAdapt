@@ -19,7 +19,7 @@ import pytest
 
 from openadapt_flow.emit import emit_mcp_server, emit_skill
 from openadapt_flow.emit.skill import bundle_surface
-from openadapt_flow.ir import ActionKind, BackendHints, RunReport, Step, Workflow
+from openadapt_flow.ir import ActionKind, BackendHints, Step, Workflow
 
 
 def _bundle(tmp_path: Path, surface: str | None) -> Path:
@@ -101,71 +101,119 @@ def test_a_desktop_mcp_tool_takes_no_url(tmp_path: Path, monkeypatch) -> None:
     assert "playwright" not in (tmp_path / "mcp" / "server.py").read_text()
 
 
-def test_a_desktop_mcp_tool_refuses_without_or_with_the_wrong_deployment(
+def test_a_desktop_mcp_tool_refuses_without_a_deployment(
     tmp_path: Path, monkeypatch
 ) -> None:
-    import openadapt_flow.backends.factory as factory
+    import subprocess
 
     monkeypatch.setattr(
-        factory, "build_backend", lambda *a, **k: pytest.fail("must not build")
+        subprocess, "run", lambda *a, **k: pytest.fail("nothing may run")
     )
     server = _load_server(tmp_path, monkeypatch, "macos")
     out = server.run_triage_note(note="synthetic")
     assert out["success"] is False and out["outcome"] == "REFUSED"
     assert "--config deploy.yaml" in out["detail"]
 
+
+def test_a_desktop_mcp_tool_runs_the_governed_cli_with_every_param_intact(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """A parameter named like a local (``kind``) reaches the run unchanged."""
+
+    import json
+    import subprocess
+
+    bundle = tmp_path / "bundle"
+    Workflow(
+        name="Triage Note",
+        surface="citrix",
+        params={"kind": "x", "section": "y", "workflow": "z"},
+        steps=[
+            Step(id="s0", intent="type", action=ActionKind.TYPE, param="kind"),
+            Step(id="s1", intent="type", action=ActionKind.TYPE, param="section"),
+            Step(id="s2", intent="type", action=ActionKind.TYPE, param="workflow"),
+        ],
+    ).save(bundle)
+    seen: dict[str, Any] = {}
+
+    def run(argv: list[str], **kwargs: Any) -> Any:
+        args = dict(zip(argv[::1], argv[1:]))
+        seen["argv"] = argv
+        seen["params"] = json.loads(Path(args["--params-file"]).read_text())
+        run_dir = Path(args["--run-dir"])
+        run_dir.mkdir(parents=True)
+        (run_dir / "report.json").write_text(
+            json.dumps(
+                {
+                    "execution_outcome": "VERIFIED",
+                    "transaction_outcome": "VERIFIED",
+                    "production_eligible": True,
+                    "model_calls": 0,
+                }
+            )
+        )
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    fastmcp = types.ModuleType("mcp.server.fastmcp")
+    fastmcp.FastMCP = lambda name: types.SimpleNamespace(  # type: ignore[attr-defined]
+        tool=lambda: lambda func: func
+    )
+    for name in ("mcp", "mcp.server"):
+        monkeypatch.setitem(sys.modules, name, types.ModuleType(name))
+    monkeypatch.setitem(sys.modules, "mcp.server.fastmcp", fastmcp)
+    out_path = emit_mcp_server(bundle, tmp_path / "mcp" / "server.py")
+    spec = importlib.util.spec_from_file_location("emitted_params", out_path)
+    assert spec is not None and spec.loader is not None
+    server = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(server)
+    monkeypatch.setattr(subprocess, "run", run)
+    server.DEPLOYMENT = str(tmp_path / "deploy.yaml")
+
+    out = server.run_triage_note(kind="REAL", section="S", workflow="W")
+    assert out["success"] is True and out["outcome"] == "VERIFIED"
+    assert seen["params"] == {"kind": "REAL", "section": "S", "workflow": "W"}
+    assert seen["argv"][1:5] == [
+        "-m",
+        "openadapt_flow",
+        "run",
+        str(out_path.parent / "bundle"),
+    ]
+    assert seen["argv"][seen["argv"].index("--config") + 1] == server.DEPLOYMENT
+    # The params file holds entered values; it is gone after the run.
+    assert not Path(dict(zip(seen["argv"], seen["argv"][1:]))["--params-file"]).exists()
+
+
+def test_a_desktop_mcp_tool_reports_the_run_refusal(
+    tmp_path: Path, monkeypatch
+) -> None:
+    """End to end: the real ``openadapt-flow run`` refuses a deployment that
+    names another surface, and the tool says so. Nothing is built."""
+
+    import os
+
+    server = _load_server(tmp_path, monkeypatch, "macos")
     deploy = tmp_path / "deploy.yaml"
     deploy.write_text(
         "backend:\n  kind: linux\n  linux_app: a\n  linux_window_title: b\n"
     )
     server.DEPLOYMENT = str(deploy)
-    out = server.run_triage_note(note="synthetic")
-    assert out["outcome"] == "REFUSED"
-    assert "recorded on macos" in out["detail"] and "'linux'" in out["detail"]
-
-
-def test_a_desktop_mcp_tool_drives_the_app_its_deployment_names(
-    tmp_path: Path, monkeypatch
-) -> None:
-    import openadapt_flow.backends.factory as factory
-    from openadapt_flow.runtime import Replayer
-
-    seen: dict[str, Any] = {}
-
-    class Backend:
-        def close(self) -> None:
-            seen["closed"] = True
-
-    def build_backend(cfg: Any, **_: Any) -> Backend:
-        seen["cfg"] = cfg
-        return Backend()
-
-    def run(self: Any, workflow: Workflow, **kwargs: Any) -> RunReport:
-        seen["kind"] = kwargs["execution_target_kind"]
-        seen["params"] = kwargs["params"]
-        return RunReport(
-            workflow_name=workflow.name,
-            started_at="2026-10-18T00:00:00Z",
-            success=True,
-            execution_profile="standard",
-            execution_outcome="VERIFIED",
-            transaction_outcome="VERIFIED",
-        )
-
-    monkeypatch.setattr(factory, "build_backend", build_backend)
-    monkeypatch.setattr(Replayer, "run", run)
-    server = _load_server(tmp_path, monkeypatch, "citrix")
-    deploy = tmp_path / "deploy.yaml"
-    deploy.write_text(
-        "backend:\n  kind: citrix\n  rdp_window: wfica32\n"
-        "  rdp_readiness_text: Patient Notes\n"
+    root = str(Path(__file__).resolve().parents[1])
+    monkeypatch.setenv(
+        "PYTHONPATH",
+        os.pathsep.join(p for p in (root, os.environ.get("PYTHONPATH")) if p),
     )
-    server.DEPLOYMENT = str(deploy)
     out = server.run_triage_note(note="synthetic")
-    assert out["success"] is True and out["outcome"] == "VERIFIED"
-    assert seen["cfg"].kind == "citrix" and seen["cfg"].rdp_window == "wfica32"
-    assert seen["kind"] == "citrix" and seen["params"] == {"note": "synthetic"}
-    assert seen["closed"] is True
+    assert out["success"] is False and out["outcome"] == "REFUSED"
+    assert "REFUSED" in out["detail"] and "'macos'" in out["detail"]
+
+
+def test_a_multi_surface_bundle_is_named_by_its_primary_surface() -> None:
+    from openadapt_flow.ir import SurfaceSpec
+
+    workflow = Workflow(
+        name="w", steps=[], surfaces=[SurfaceSpec(id="primary", kind="windows")]
+    )
+    assert bundle_surface(workflow) == "windows"
 
 
 # -- serve-execute, bench, attended console --------------------------------------
