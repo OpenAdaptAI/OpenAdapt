@@ -68,6 +68,10 @@ def cmd_record(a: argparse.Namespace) -> None:
         demo._preauthenticate_browser(backend, f)
         page = backend.page
         form = demo._form_frame(page)
+        # Let the freshly opened form finish its own scripts before the first
+        # recorded action (a select typed into too early keeps its default).
+        form.locator("#form_title").wait_for(state="visible", timeout=30_000)
+        page.wait_for_timeout(1500)
         rec = Recorder(backend, out, app_url=page.url, network_capture=capture, **demo.SETTLE)
         spec = SyntheticPatientSpec(**FAX_A)
 
