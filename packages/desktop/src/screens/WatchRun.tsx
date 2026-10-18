@@ -54,10 +54,10 @@ function issueForReport(report: RunReport): RunIssue | null {
 }
 
 const CONTRACT_LABELS = {
-  authorization: "Authorization",
-  identity: "Identity",
-  postcondition: "Postcondition",
-  effect: "Business effect",
+  authorization: "Allowed to act",
+  identity: "Right record",
+  postcondition: "Screen checks",
+  effect: "Read-back",
 } as const;
 
 function reviewRisk(
@@ -385,9 +385,7 @@ export function WatchRun({
     <div className="content">
       <div className="page-head">
         <div className="titles">
-          <p className="eyebrow">
-            {firstWorkflow ? "First supervised run" : "Execute"}
-          </p>
+          {firstWorkflow && <p className="eyebrow">First supervised run</p>}
           <h1>
             {firstWorkflow
               ? "Review the workflow, then watch it run"
@@ -397,14 +395,14 @@ export function WatchRun({
         {!firstWorkflow && (
           <div className="row">
             <Button disabled={executionBusy} onClick={() => execute("replay")}>
-              {executionBusy ? "Running…" : "Replay"}
+              {executionBusy ? "Running…" : "Replay the recording"}
             </Button>
             <Button
               variant="primary"
               disabled={executionBusy}
               onClick={() => execute("run")}
             >
-              Run with safety gates
+              Run it
             </Button>
           </div>
         )}
@@ -413,8 +411,7 @@ export function WatchRun({
       {firstWorkflow && (
         <Card>
           <CardHead
-            eyebrow="Compiled review"
-            title="Check the compiled workflow"
+            title="Check the steps"
             sub="Read the steps and inputs before OpenAdapt touches the app."
           />
           {reviewReady && currentReview ? (
@@ -522,7 +519,6 @@ export function WatchRun({
 
       <Card>
         <CardHead
-          eyebrow="Target"
           title={
             firstWorkflow
               ? "Recorded application target"
@@ -531,7 +527,7 @@ export function WatchRun({
           sub={
             firstWorkflow
               ? "The supervised run uses the same application target as the recording."
-              : "Choose the application surface. OpenAdapt uses the same compiled workflow and fail-closed verification on every target."
+              : "Pick the app it runs in. The steps and checks are the same everywhere."
           }
         />
         <ExecutionTargetForm
@@ -546,7 +542,7 @@ export function WatchRun({
         />
 
         {!firstWorkflow && <details className="advanced-target">
-          <summary>Advanced deployment details</summary>
+          <summary>Settings for the person who sets this up</summary>
           <div className="advanced-target-body">
             <Field
               label="Deployment config"
@@ -695,31 +691,32 @@ export function WatchRun({
       {report?.outcome_details && (
         <Card>
           <CardHead
-            eyebrow="Execution contract"
-            title="Outcome evidence"
-            sub="The runtime reports what the profile required, what passed, and which external capabilities were used."
+            title="What was checked"
+            sub="What this run had to prove, what passed, and anything it reached outside this computer."
           />
           <div className="row">
             <Pill tone={report.outcome === "VERIFIED" ? "ok" : "warn"}>
-              {report.outcome.replaceAll("_", " ").toLowerCase()}
+              {resultCopy(plainResultForReport(report)).label}
             </Pill>
-            {report.outcome_details.profile && (
-              <Pill tone="neutral">{report.outcome_details.profile}</Pill>
-            )}
+            <Pill tone={report.outcome_details.execution_completed ? "ok" : "warn"}>
+              {report.outcome_details.execution_completed
+                ? "Ran to the end"
+                : "Stopped before the end"}
+            </Pill>
             <Pill
               tone={
                 report.outcome_details.production_eligible ? "ok" : "neutral"
               }
             >
               {report.outcome_details.production_eligible
-                ? "production eligible"
-                : "not production eligible"}
+                ? "Ready for real items"
+                : "Not ready for real items yet"}
             </Pill>
-            <Pill tone={report.outcome_details.execution_completed ? "ok" : "warn"}>
-              {report.outcome_details.execution_completed
-                ? "execution completed"
-                : "execution stopped"}
-            </Pill>
+            {report.outcome_details.profile && (
+              <span className="technical-text" title="Profile">
+                {report.outcome_details.profile}
+              </span>
+            )}
           </div>
           <div className="metrics" style={{ marginTop: "var(--space-4)" }}>
             {(
@@ -768,7 +765,7 @@ export function WatchRun({
 
       {report?.metrics && (
         <Card>
-          <CardHead eyebrow="Run report" title="Metrics" />
+          <CardHead title="Run details" />
           <div className="metrics">
             <div className="metric">
               <span className="label">Steps</span>
@@ -797,8 +794,7 @@ export function WatchRun({
       {firstRunFinished && (
         <Card>
           <CardHead
-            eyebrow="Next"
-            title="Qualify this workflow for repeated use"
+            title="Next: check it for everyday use"
             sub="Your supervised run is saved. Now define which record may change and what result proves success."
           />
           <p className="page-sub">
