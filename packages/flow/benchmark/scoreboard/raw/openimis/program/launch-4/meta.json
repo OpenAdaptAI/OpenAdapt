@@ -1,0 +1,40 @@
+{
+  "protocol_version": "2026-10-18.1",
+  "written_at": "2026-10-18T15:57:21-0400",
+  "machine": "arm64 Darwin 24.6.0",
+  "cpu_count": 12,
+  "python": "3.12.13",
+  "engine": {
+    "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+    "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+  },
+  "benchmark_git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2",
+  "task": "openimis",
+  "arm": "program",
+  "imported_from": "demo/cua_to_program/results/launch-4",
+  "source_sha256": {
+    "batch.csv": "b5cef4c4a8b1c322c23c9294bcd3d702e38dbb7836366fe42415de6691832419"
+  },
+  "batch_meta": {
+    "n": 100,
+    "change_at": 50,
+    "ui_change": {
+      "control": "claim form Save button (icon only)",
+      "change": "relabelled \"Save claim\" (extended button, new accessible name)"
+    },
+    "tag": "CN",
+    "profile": "demo (plain Replayer, SQL record check attached)",
+    "environment": {
+      "engine": {
+        "path": "/Users/abrichr/oa/worktrees/demo-engine-main-plus-1293/packages/flow/openadapt_flow",
+        "git_head": "a8cca993c564fdc13b4c65c01e3e884dcaa50c44"
+      },
+      "machine": "arm64",
+      "system": "Darwin 24.6.0",
+      "python": "3.12.13",
+      "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2",
+      "app": "openIMIS 25.10 reference stack (synthetic demo data), linux/amd64 images under Rosetta in a colima VM"
+    }
+  },
+  "profile": "demo (plain Replayer, SQL record check attached); not admitted"
+}

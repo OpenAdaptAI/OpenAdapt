@@ -28,25 +28,14 @@ from typing import Any, Optional
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-import openimis_app as app  # noqa: E402
+sys.path.insert(0, str(HERE.parents[1] / "packages" / "flow" / "benchmark"))
+
 from openadapt_flow.jit import TaskSignature, WebApp, compile_agent  # noqa: E402
+from scoreboard.tasks import openimis as app  # noqa: E402
 
 TASK = TaskSignature(
     "openimis.claim_entry",
-    (
-        "Enter one health-facility claim on the open Health Facility Claim "
-        "form and save it. The keyboard focus is already in the Insurance No. "
-        "field. Do these steps in exactly this order. 1. Enter insurance "
-        "number {insurance_no} and wait until the insuree's name and an "
-        "active policy appear. 2. Set Claim No. to {claim_no}. 3. Set the "
-        "main diagnosis to 'Scarlet fever, uncomplicated' (type Scarlet in "
-        "the main diagnosis search box and pick it). 4. In the Services table "
-        "add the service 'General Consultation' (type General in its search "
-        "box and pick it). 5. Only after the service is added, set "
-        "Explanation to: {explanation}. 6. Save the claim with the round Save "
-        "button at the bottom right of the page (a floppy-disk icon), then "
-        "stop. Leave every other field as it is."
-    ),
+    app.INSTRUCTION,
     {"insurance_no": str, "claim_no": str, "explanation": str},
 )
 # The bundled strict write policy. The standard gate refuses these openIMIS
@@ -181,8 +170,8 @@ def cmd_record(args: argparse.Namespace) -> int:
         raise SystemExit(f"claim {values['claim_no']} already exists")
     app.ui_change(False)
     if args.agent == "claude":
-        from claude_agent import ClaudeComputerUseAgent
         from openadapt_flow.jit import load_customer_model_key
+        from scoreboard.agent import ClaudeComputerUseAgent
 
         agent: Any = ClaudeComputerUseAgent(
             ledger_path=out / "agent_ledger.json",

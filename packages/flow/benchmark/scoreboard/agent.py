@@ -1,11 +1,15 @@
-"""A Claude computer-use agent loop that the JIT wrapper records.
+"""A Claude computer-use agent loop, for the scoreboard's agent arms.
 
 The loop calls the Claude API with the computer use toolset
-(``computer_toolset_20260801``) and sends every action through
-``CaptureComputer.execute``, so Flow records the agent's run as a
-demonstration. It keeps a ledger of every model call: wall time, token usage
-and list-price cost. Nothing here estimates; every number comes from the API
-response or the clock.
+(``computer_toolset_20260801``). It sends every action to a ``computer``:
+
+* ``CaptureComputer`` (the JIT wrapper), when OpenAdapt records the run;
+* :class:`PlainComputer`, when the agent works alone: the same actions go
+  straight to the Playwright page, with nothing recorded or checked.
+
+It keeps a ledger of every model call: wall time, token usage and list-price
+cost. Nothing here estimates; every number comes from the API response or the
+clock.
 
 The API key is read from the environment (``ANTHROPIC_API_KEY``) by the SDK
 and is never written anywhere.
@@ -22,14 +26,23 @@ from typing import Any, Optional
 MODEL = "claude-opus-5-5"
 EFFORT = "medium"
 
-# List prices for claude-opus-5-5, USD per million tokens (Anthropic API,
-# checked 2026-10-18). Cache writes are 1.25x input for the 5-minute TTL.
-PRICE_PER_MTOK = {
-    "input": 4.00,
-    "output": 20.00,
-    "cache_read": 0.20,
-    "cache_write": 5.00,
+# List prices, USD per million tokens (Anthropic API, checked 2026-10-18).
+# Cache writes are 1.25x input for the 5-minute TTL.
+PRICES_PER_MTOK = {
+    "claude-opus-5-5": {
+        "input": 4.00,
+        "output": 20.00,
+        "cache_read": 0.20,
+        "cache_write": 5.00,
+    },
+    "claude-sonnet-5-5": {
+        "input": 2.00,
+        "output": 10.00,
+        "cache_read": 0.20,
+        "cache_write": 2.50,
+    },
 }
+PRICE_PER_MTOK = PRICES_PER_MTOK[MODEL]
 
 # Members the recording format can't hold, and zoom (a zoom image would need
 # its own capture). Turning them off keeps the model from asking for them.
@@ -42,16 +55,17 @@ DISABLED_MEMBERS = (
     "hold_key",
 )
 
-SYSTEM = """\
-You operate a web browser that shows one page of a health-insurance claims \
-system (openIMIS). There is no address bar and no other application. The \
-screen is 1280x800 pixels. Work only on the page you are shown. Do not \
-navigate away, open menus you do not need, or change any field the task does \
-not mention. All data is synthetic test data.
+SYSTEM_TEMPLATE = """\
+You operate a web browser that shows one page of {app}. There is no address \
+bar and no other application. The screen is 1280x800 pixels. Work only on \
+the page you are shown. Do not navigate away, open menus you do not need, or \
+change any field the task does not mention. All data is synthetic test data.
 
 Click a field before you type into it. To scroll, scroll at the point you \
-last clicked. When the claim is saved, stop and reply with one short \
-sentence; do not take further actions."""
+last clicked. When the task is done, stop and reply with one short sentence; \
+do not take further actions. If you cannot complete the task, say so plainly."""
+
+SYSTEM = SYSTEM_TEMPLATE.format(app="a health-insurance claims system (openIMIS)")
 
 
 class BudgetExceeded(RuntimeError):
@@ -73,15 +87,17 @@ class CallRecord:
     stop_reason: Optional[str]
 
 
-def call_cost(usage: Any) -> float:
+def call_cost(usage: Any, model: str = MODEL) -> float:
+    price = PRICES_PER_MTOK[model]
+
     def n(name: str) -> int:
         return int(getattr(usage, name, 0) or 0)
 
     return (
-        n("input_tokens") * PRICE_PER_MTOK["input"]
-        + n("output_tokens") * PRICE_PER_MTOK["output"]
-        + n("cache_read_input_tokens") * PRICE_PER_MTOK["cache_read"]
-        + n("cache_creation_input_tokens") * PRICE_PER_MTOK["cache_write"]
+        n("input_tokens") * price["input"]
+        + n("output_tokens") * price["output"]
+        + n("cache_read_input_tokens") * price["cache_read"]
+        + n("cache_creation_input_tokens") * price["cache_write"]
     ) / 1_000_000
 
 
@@ -102,13 +118,27 @@ class ClaudeComputerUseAgent:
     max_cost_usd: float = 4.00
     model: str = MODEL
     effort: str = EFFORT
+    system: str = SYSTEM
     dialect: str = "anthropic"
-    principal_id: str = f"agent:anthropic:{MODEL}"
+    principal_id: str = ""
     calls: list[CallRecord] = field(default_factory=list)
     started_at: Optional[float] = None
     finished_at: Optional[float] = None
     final_text: str = ""
     refused_actions: list[dict[str, Any]] = field(default_factory=list)
+
+    def __post_init__(self) -> None:
+        if not self.principal_id:
+            self.principal_id = f"agent:anthropic:{self.model}"
+
+    @property
+    def tokens(self) -> dict[str, int]:
+        return {
+            "input": sum(c.input_tokens for c in self.calls),
+            "output": sum(c.output_tokens for c in self.calls),
+            "cache_read": sum(c.cache_read_input_tokens for c in self.calls),
+            "cache_write": sum(c.cache_creation_input_tokens for c in self.calls),
+        }
 
     @property
     def cost_usd(self) -> float:
@@ -125,9 +155,11 @@ class ClaudeComputerUseAgent:
 
     def run(self, request: Any, computer: Any) -> None:
         import anthropic
+
         from openadapt_flow.jit.adapters import UnsupportedAction
 
-        key = request.model_key.secret() if request.model_key is not None else None
+        model_key = getattr(request, "model_key", None)
+        key = model_key.secret() if model_key is not None else None
         client = anthropic.Anthropic(api_key=key, max_retries=4)
         tools = [
             {
@@ -162,7 +194,7 @@ class ClaudeComputerUseAgent:
             response = client.messages.create(
                 model=self.model,
                 max_tokens=16000,
-                system=SYSTEM,
+                system=self.system,
                 tools=tools,
                 output_config={"effort": self.effort},
                 cache_control={"type": "ephemeral"},
@@ -181,7 +213,7 @@ class ClaudeComputerUseAgent:
                 cache_creation_input_tokens=(
                     response.usage.cache_creation_input_tokens or 0
                 ),
-                cost_usd=call_cost(response.usage),
+                cost_usd=call_cost(response.usage, self.model),
                 actions=[{"name": b.name, "input": b.input} for b in calls],
                 request_id=getattr(response, "_request_id", None),
                 stop_reason=response.stop_reason,
@@ -263,7 +295,7 @@ class ClaudeComputerUseAgent:
             "model": self.model,
             "effort": self.effort,
             "tool": "computer_toolset_20260801",
-            "price_per_mtok_usd": PRICE_PER_MTOK,
+            "price_per_mtok_usd": PRICES_PER_MTOK[self.model],
             "started_at": self.started_at,
             "finished_at": self.finished_at,
             "model_calls": len(self.calls),
@@ -274,3 +306,97 @@ class ClaudeComputerUseAgent:
             "calls": [c.__dict__ for c in self.calls],
         }
         self.ledger_path.write_text(json.dumps(data, indent=2) + "\n")
+
+
+# -- the agent alone ------------------------------------------------------------
+
+
+@dataclass
+class PlainRequest:
+    """What the agent is asked, when no OpenAdapt wrapper is involved."""
+
+    instruction: str
+    model_key: Any = None
+
+
+@dataclass
+class _Observation:
+    png: bytes
+    notes: list[str] = field(default_factory=list)
+
+    def png_base64(self) -> str:
+        import base64
+
+        return base64.b64encode(self.png).decode("ascii")
+
+
+class PlainComputer:
+    """Perform computer-use actions straight on a Playwright page.
+
+    The agent-alone arm: nothing is recorded, checked or refused beyond what
+    the browser itself does. Actions are parsed with the same ``anthropic``
+    translator the JIT wrapper uses, so both arms read the model's actions
+    identically. After each action it waits for the page to go quiet (up to
+    3 s) before the screenshot, as the agent arm of the OpenEMR timing study
+    did.
+    """
+
+    def __init__(self, page: Any) -> None:
+        self.page = page
+        self.actions = 0
+        self._pointer: Optional[tuple[int, int]] = None
+
+    def execute(self, native: dict[str, Any]) -> _Observation:
+        from openadapt_flow.jit.adapters import translate
+
+        page = self.page
+        notes: list[str] = []
+        for op in translate("anthropic", native):
+            if op.kind == "observe":
+                if op.note:
+                    if (
+                        op.note == "pointer move not performed"
+                        and "coordinate" in native
+                    ):
+                        x, y = native["coordinate"]
+                        page.mouse.move(x, y)
+                        self._pointer = (int(x), int(y))
+                    else:
+                        notes.append(op.note)
+                continue
+            if op.kind == "wait":
+                time.sleep(min(max(op.seconds, 0.0), 5.0))
+                continue
+            if op.kind in ("click", "double_click", "right_click"):
+                x, y = (op.x, op.y) if op.x is not None else (self._pointer or (0, 0))
+                page.mouse.click(
+                    x,
+                    y,
+                    button="right" if op.kind == "right_click" else "left",
+                    click_count=2 if op.kind == "double_click" else 1,
+                )
+                self._pointer = (int(x), int(y))
+            elif op.kind == "drag":
+                page.mouse.move(op.x, op.y)
+                page.mouse.down()
+                page.mouse.move(op.end_x, op.end_y, steps=10)
+                page.mouse.up()
+                self._pointer = (int(op.end_x), int(op.end_y))
+            elif op.kind == "type":
+                page.keyboard.type(op.text or "")
+            elif op.kind == "press":
+                page.keyboard.press(op.key or "")
+            elif op.kind == "hotkey":
+                page.keyboard.press("+".join([*op.modifiers, op.key or ""]))
+            elif op.kind == "scroll":
+                if op.x is not None and op.y is not None:
+                    page.mouse.move(op.x, op.y)
+                    self._pointer = (int(op.x), int(op.y))
+                page.mouse.wheel(op.dx, op.dy)
+        self.actions += 1
+        page.wait_for_timeout(300)
+        try:
+            page.wait_for_load_state("networkidle", timeout=3000)
+        except Exception:  # noqa: BLE001 - a busy page still gets its screenshot
+            pass
+        return _Observation(png=page.screenshot(), notes=notes)

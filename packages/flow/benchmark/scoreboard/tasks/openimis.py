@@ -27,9 +27,9 @@ import time
 from pathlib import Path
 from typing import Any, Optional
 
-REPO = Path(__file__).resolve().parents[2]
-FLOW = REPO / "packages" / "flow"
-sys.path.insert(0, str(FLOW / "benchmark"))
+BENCHMARK = Path(__file__).resolve().parents[2]
+if str(BENCHMARK) not in sys.path:
+    sys.path.insert(0, str(BENCHMARK))
 
 from openimis_claims.fixture import (  # noqa: E402
     ACTOR_PASSWORD,
@@ -358,3 +358,67 @@ __all__ = [
 
 if os.environ.get("OPENADAPT_DEMO_DEBUG"):
     print("openimis_app loaded from", __file__, file=sys.stderr)
+
+
+# -- scoreboard task interface --------------------------------------------------
+
+NAME = "openimis"
+APP = "a health-insurance claims system (openIMIS)"
+TASK_ID = "openimis.claim_entry"
+UI_CHANGE_AT = 50
+INSTRUCTION = (
+    "Enter one health-facility claim on the open Health Facility Claim "
+    "form and save it. The keyboard focus is already in the Insurance No. "
+    "field. Do these steps in exactly this order. 1. Enter insurance "
+    "number {insurance_no} and wait until the insuree's name and an "
+    "active policy appear. 2. Set Claim No. to {claim_no}. 3. Set the "
+    "main diagnosis to 'Scarlet fever, uncomplicated' (type Scarlet in "
+    "the main diagnosis search box and pick it). 4. In the Services table "
+    "add the service 'General Consultation' (type General in its search "
+    "box and pick it). 5. Only after the service is added, set "
+    "Explanation to: {explanation}. 6. Save the claim with the round Save "
+    "button at the bottom right of the page (a floppy-disk icon), then "
+    "stop. Leave every other field as it is."
+)
+
+EXPLANATIONS = [
+    "Fever and sore throat, seen same day",
+    "Follow-up after antibiotic course",
+    "Rash on trunk, swab taken",
+    "Child with fever, parent present",
+    "Second visit, symptoms improving",
+]
+
+
+def item_values(i: int, tag: str) -> dict[str, str]:
+    """The synthetic inputs for item ``i`` (1-based) of a batch."""
+
+    chf = POLICYHOLDERS[(i - 1) % len(POLICYHOLDERS)][0]
+    return {
+        "insurance_no": chf,
+        "claim_no": f"{tag}{i:03d}",  # openIMIS accepts at most 8 characters
+        "explanation": f"{EXPLANATIONS[(i - 1) % len(EXPLANATIONS)]} (#{i})",
+    }
+
+
+def check(values: dict[str, str]) -> str:
+    """``correct`` | ``missing`` | ``duplicate`` | ``wrong``."""
+
+    rows = claim_rows(values["claim_no"])
+    if not rows:
+        return "missing"
+    if len(rows) > 1:
+        return "duplicate"
+    row = rows[0]
+    ok = (
+        row["insurance_no"] == values["insurance_no"]
+        and row["explanation"] == values["explanation"]
+        and int(row["claim_status"]) == 2
+        and row["hf_code"] == HEALTH_FACILITY_CODE
+        and row["diagnosis"] == "A389"
+    )
+    return "correct" if ok else "wrong"
+
+
+def instruction(values: dict[str, str]) -> str:
+    return INSTRUCTION.format(**values)

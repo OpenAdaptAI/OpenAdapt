@@ -3,7 +3,7 @@
 It does the same claim entry as the scripted openIMIS demonstration, sending
 every action through the JIT ``CaptureComputer`` in the ``generic`` dialect.
 It calls no model, so ``compile_agent`` records it without a model key. The
-launch demo itself is recorded with ``claude_agent.ClaudeComputerUseAgent``;
+launch demo itself is recorded with ``scoreboard.agent.ClaudeComputerUseAgent``;
 this agent only checks the plumbing.
 """
 
@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from openimis_app import _control_input
+from scoreboard.tasks.openimis import _control_input
 
 DIAGNOSIS_QUERY = "Scarlet"
 DIAGNOSIS_OPTION = "Scarlet fever, uncomplicated"

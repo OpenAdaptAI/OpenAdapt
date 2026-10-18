@@ -1,0 +1,383 @@
+{
+  "protocol_version": "2026-10-18.1",
+  "timed_load_max": 12.0,
+  "spend_usd": 1.378557,
+  "tasks": {
+    "mockmed": {
+      "agent": {
+        "label": "1. Agent alone (Claude Sonnet 5.5 computer use)",
+        "items": 13,
+        "attempts": 13,
+        "runs": [
+          "2026-10-18-a"
+        ],
+        "normal_items": 13,
+        "correct": 13,
+        "correct_rate": 1.0,
+        "silent_wrong": 0,
+        "safe_stops_normal": 0,
+        "fault_items": 0,
+        "fault_items_by_kind": {},
+        "flagged_wrong": 0,
+        "paused": 0,
+        "model_calls_per_item": 5.0,
+        "tokens_per_item": 40631,
+        "cost_usd_total": 0.5022,
+        "cost_usd_per_item": 0.0386,
+        "approvals_asked": 0,
+        "timed_correct_items": 0,
+        "item_s_median": null,
+        "item_s_p90": null,
+        "wall_s_median": null,
+        "wall_s_p90": null,
+        "items_per_hour": null,
+        "host_load_1m": {
+          "min": 122.71,
+          "max": 332.1
+        },
+        "sources": [
+          {
+            "run": "2026-10-18-a",
+            "model": "claude-sonnet-5-5",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+            }
+          }
+        ]
+      },
+      "first_run": {
+        "label": "2. Agent's first run under OpenAdapt (recorded, read back, compiled)",
+        "items": 1,
+        "attempts": 1,
+        "runs": [
+          "2026-10-18-a"
+        ],
+        "normal_items": 1,
+        "correct": 1,
+        "correct_rate": 1.0,
+        "silent_wrong": 0,
+        "safe_stops_normal": 0,
+        "fault_items": 0,
+        "fault_items_by_kind": {},
+        "flagged_wrong": 0,
+        "paused": 0,
+        "model_calls_per_item": 5.0,
+        "tokens_per_item": 40632,
+        "cost_usd_total": 0.0132,
+        "cost_usd_per_item": 0.0132,
+        "approvals_asked": 1,
+        "timed_correct_items": 0,
+        "item_s_median": null,
+        "item_s_p90": null,
+        "wall_s_median": null,
+        "wall_s_p90": null,
+        "items_per_hour": null,
+        "host_load_1m": {
+          "min": 176.29,
+          "max": 176.29
+        },
+        "sources": [
+          {
+            "run": "2026-10-18-a",
+            "model": "claude-sonnet-5-5",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+            }
+          }
+        ]
+      },
+      "program": {
+        "label": "3. Compiled program driving the UI",
+        "items": 49,
+        "attempts": 51,
+        "runs": [
+          "2026-10-18-a"
+        ],
+        "normal_items": 47,
+        "correct": 47,
+        "correct_rate": 1.0,
+        "silent_wrong": 0,
+        "safe_stops_normal": 0,
+        "fault_items": 2,
+        "fault_items_by_kind": {
+          "optimistic": {
+            "correct": 0,
+            "silent_wrong": 0,
+            "safe_stop": 1,
+            "flagged_wrong": 0
+          },
+          "wrong_record": {
+            "correct": 0,
+            "silent_wrong": 0,
+            "safe_stop": 0,
+            "flagged_wrong": 1
+          }
+        },
+        "flagged_wrong": 1,
+        "paused": 0,
+        "model_calls_per_item": 0.0,
+        "tokens_per_item": 0,
+        "cost_usd_total": 0.0,
+        "cost_usd_per_item": 0.0,
+        "approvals_asked": 0,
+        "timed_correct_items": 0,
+        "item_s_median": null,
+        "item_s_p90": null,
+        "wall_s_median": null,
+        "wall_s_p90": null,
+        "items_per_hour": null,
+        "host_load_1m": {
+          "min": 118.57,
+          "max": 419.46
+        },
+        "sources": [
+          {
+            "run": "2026-10-18-a",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+            }
+          }
+        ]
+      }
+    },
+    "openemr_referral": {
+      "agent": {
+        "label": "1. Agent alone (Claude Sonnet 5.5 computer use)",
+        "items": 72,
+        "attempts": 72,
+        "runs": [
+          "study-main-0c642bc0"
+        ],
+        "normal_items": 63,
+        "correct": 62,
+        "correct_rate": 0.9841,
+        "silent_wrong": 0,
+        "safe_stops_normal": 1,
+        "fault_items": 9,
+        "fault_items_by_kind": {
+          "duplicate_check": {
+            "correct": 0,
+            "silent_wrong": 0,
+            "safe_stop": 9,
+            "flagged_wrong": 0
+          }
+        },
+        "flagged_wrong": 0,
+        "paused": 0,
+        "model_calls_per_item": 10.65,
+        "tokens_per_item": null,
+        "cost_usd_total": 6.4239,
+        "cost_usd_per_item": 0.0892,
+        "approvals_asked": 0,
+        "timed_correct_items": 62,
+        "item_s_median": 31.16,
+        "item_s_p90": 40.93,
+        "wall_s_median": 36.49,
+        "wall_s_p90": 46.09,
+        "items_per_hour": 80.5,
+        "host_load_1m": {
+          "min": 2.572265625,
+          "max": 17.49951171875
+        },
+        "sources": [
+          {
+            "run": "study-main-0c642bc0",
+            "imported_from": "packages/flow/benchmark/openemr_referral_timing/runs.csv",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+            },
+            "note": "warm runs, valid only; timed per that study's load gate (12)"
+          }
+        ]
+      },
+      "program": {
+        "label": "3. Compiled program driving the UI",
+        "items": 72,
+        "attempts": 72,
+        "runs": [
+          "study-main-0c642bc0"
+        ],
+        "normal_items": 63,
+        "correct": 62,
+        "correct_rate": 0.9841,
+        "silent_wrong": 0,
+        "safe_stops_normal": 1,
+        "fault_items": 9,
+        "fault_items_by_kind": {
+          "duplicate_check": {
+            "correct": 0,
+            "silent_wrong": 0,
+            "safe_stop": 9,
+            "flagged_wrong": 0
+          }
+        },
+        "flagged_wrong": 0,
+        "paused": 0,
+        "model_calls_per_item": 0.0,
+        "tokens_per_item": 0,
+        "cost_usd_total": 0.0,
+        "cost_usd_per_item": 0.0,
+        "approvals_asked": 0,
+        "timed_correct_items": 62,
+        "item_s_median": 24.14,
+        "item_s_p90": 26.92,
+        "wall_s_median": 29.71,
+        "wall_s_p90": 32.52,
+        "items_per_hour": 100.6,
+        "host_load_1m": {
+          "min": 3.044921875,
+          "max": 12.78515625
+        },
+        "sources": [
+          {
+            "run": "study-main-0c642bc0",
+            "imported_from": "packages/flow/benchmark/openemr_referral_timing/runs.csv",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+            },
+            "note": "warm runs, valid only; timed per that study's load gate (12)"
+          }
+        ]
+      }
+    },
+    "openimis": {
+      "agent": {
+        "label": "1. Agent alone (Claude Sonnet 5.5 computer use)",
+        "items": 4,
+        "attempts": 4,
+        "runs": [
+          "2026-10-18-a"
+        ],
+        "normal_items": 4,
+        "correct": 4,
+        "correct_rate": 1.0,
+        "silent_wrong": 0,
+        "safe_stops_normal": 0,
+        "fault_items": 0,
+        "fault_items_by_kind": {},
+        "flagged_wrong": 0,
+        "paused": 0,
+        "model_calls_per_item": 7.75,
+        "tokens_per_item": 82056,
+        "cost_usd_total": 0.2476,
+        "cost_usd_per_item": 0.0619,
+        "approvals_asked": 0,
+        "timed_correct_items": 0,
+        "item_s_median": null,
+        "item_s_p90": null,
+        "wall_s_median": null,
+        "wall_s_p90": null,
+        "items_per_hour": null,
+        "host_load_1m": {
+          "min": 118.57,
+          "max": 264.6
+        },
+        "sources": [
+          {
+            "run": "2026-10-18-a",
+            "model": "claude-sonnet-5-5",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+            }
+          }
+        ]
+      },
+      "first_run": {
+        "label": "2. Agent's first run under OpenAdapt (recorded, read back, compiled)",
+        "items": 1,
+        "attempts": 1,
+        "runs": [
+          "launch-4"
+        ],
+        "normal_items": 1,
+        "correct": 1,
+        "correct_rate": 1.0,
+        "silent_wrong": 0,
+        "safe_stops_normal": 0,
+        "fault_items": 0,
+        "fault_items_by_kind": {},
+        "flagged_wrong": 0,
+        "paused": 0,
+        "model_calls_per_item": 8.0,
+        "tokens_per_item": 87010,
+        "cost_usd_total": 0.1176,
+        "cost_usd_per_item": 0.1176,
+        "approvals_asked": 0,
+        "timed_correct_items": 0,
+        "item_s_median": null,
+        "item_s_p90": null,
+        "wall_s_median": null,
+        "wall_s_p90": null,
+        "items_per_hour": null,
+        "host_load_1m": null,
+        "sources": [
+          {
+            "run": "launch-4",
+            "imported_from": "demo/cua_to_program/results/launch-4",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+            },
+            "note": "host load not sampled for this run; untimed"
+          }
+        ]
+      },
+      "program": {
+        "label": "3. Compiled program driving the UI",
+        "items": 50,
+        "attempts": 52,
+        "runs": [
+          "launch-4"
+        ],
+        "normal_items": 49,
+        "correct": 49,
+        "correct_rate": 1.0,
+        "silent_wrong": 0,
+        "safe_stops_normal": 0,
+        "fault_items": 1,
+        "fault_items_by_kind": {
+          "ui_change": {
+            "correct": 0,
+            "silent_wrong": 0,
+            "safe_stop": 1,
+            "flagged_wrong": 0
+          }
+        },
+        "flagged_wrong": 0,
+        "paused": 50,
+        "model_calls_per_item": 0.0,
+        "tokens_per_item": 0,
+        "cost_usd_total": 0.0,
+        "cost_usd_per_item": 0.0,
+        "approvals_asked": 0,
+        "timed_correct_items": 0,
+        "item_s_median": null,
+        "item_s_p90": null,
+        "wall_s_median": null,
+        "wall_s_p90": null,
+        "items_per_hour": null,
+        "host_load_1m": {
+          "min": 59.0,
+          "max": 619.5
+        },
+        "sources": [
+          {
+            "run": "launch-4",
+            "imported_from": "demo/cua_to_program/results/launch-4",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+            },
+            "profile": "demo (plain Replayer, SQL record check attached); not admitted"
+          }
+        ]
+      }
+    }
+  }
+}

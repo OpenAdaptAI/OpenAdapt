@@ -246,6 +246,16 @@ def video_box(canvas: Image.Image, col: int, frame: Optional[Image.Image], dim=F
     canvas.paste(frame, (x, VID_Y))
 
 
+def banner(d, col, left_text="", right_text="", color=INK):
+    """A dark band across the top of a panel's screen, for labels."""
+    x = COL_X[col]
+    d.rectangle((x, VID_Y, x + COL_W, VID_Y + 34), fill=(11, 18, 32))
+    if left_text:
+        text(d, (x + 12, VID_Y + 6), left_text, 20, color, True)
+    if right_text:
+        text(d, (x + COL_W - 12, VID_Y + 6), right_text, 20, INK, True, "ra")
+
+
 def counter(d, col, row, label, value, color=INK):
     x = COL_X[col] + 24
     y = VID_Y + VID_H + 30 + row * 74
@@ -338,7 +348,7 @@ def load_note(data: Data) -> str:
     if not loads or max(loads) <= 12:
         return ""
     return (
-        f"timed on a shared host under load {min(loads):.0f}-{max(loads):.0f} "
+        f"measured on a shared host under load {min(loads):.0f}-{max(loads):.0f} "
         "(12 cores)"
     )
 
@@ -396,7 +406,7 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
         # program_s seconds (sign-in comes first and is not measured).
         return max(0.0, clip.duration - attempt.program_s - 0.3)
 
-    agent_speed = 1.0 if cut == "full" else 6.0
+    agent_speed = 1.5 if cut == "full" else 10.0
     t_agent = a_total / agent_speed
 
     def left(canvas, d, t_agent_s, dim=False):
@@ -530,12 +540,12 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
             d,
             2,
             2,
-            "Saved and read back · stopped safely",
+            "Saved and read back · stopped before saving",
             f"{bs['saved']} · {bs['stopped']}",
             GREEN,
         )
         if lapse:
-            text(d, (COL_X[2] + COL_W - 24, VID_Y + 12), lapse, 22, INK, True, "ra")
+            banner(d, 2, right_text=lapse)
         if note:
             badge(d, 2, 900, note, note_color)
 
@@ -554,7 +564,7 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
             "ma",
         )
 
-    scenes.append(Scene(3.5 if cut == "full" else 2.0, title))
+    scenes.append(Scene(3.5 if cut == "full" else 1.5, title))
 
     def agent_scene(canvas, t):
         d = ImageDraw.Draw(canvas)
@@ -563,15 +573,7 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
         middle(canvas, d, ta, 0)
         right(canvas, d, 0)
         if agent_speed != 1.0:
-            text(
-                d,
-                (COL_X[0] + COL_W - 24, VID_Y + 12),
-                f"time-lapse ×{agent_speed:g}",
-                22,
-                INK,
-                True,
-                "ra",
-            )
+            banner(d, 0, right_text=f"time-lapse ×{agent_speed:g}")
 
     scenes.append(
         Scene(
@@ -589,7 +591,7 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
 
     scenes.append(
         Scene(
-            4.0 if cut == "full" else 2.0,
+            4.0 if cut == "full" else 1.5,
             compile_scene,
             "The recording becomes a program with parameters and a database check.",
         )
@@ -598,7 +600,7 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
     if program_clip is not None and first_ok:
         att = recs[first_ok][-1]
         p_off = program_offset(program_clip, att)
-        speed = 1.0 if cut == "full" else 4.0
+        speed = 1.0 if cut == "full" else 8.0
 
         def program_scene(canvas, t):
             d = ImageDraw.Draw(canvas)
@@ -621,14 +623,14 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
 
         scenes.append(
             Scene(
-                att.program_s / speed + 2.0,
+                att.program_s / speed + (2.0 if cut == "full" else 1.0),
                 program_scene,
                 "The program enters the next claim. No model. The save is read back.",
             )
         )
 
     last_before = (change_rec - 1) if change_rec else n_records
-    lapse_s = 8.0 if cut == "full" else 3.0
+    lapse_s = 7.0 if cut == "full" else 2.5
 
     def lapse_scene(canvas, t):
         d = ImageDraw.Draw(canvas)
@@ -658,8 +660,8 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
     if change_rec and change_clip is not None:
         att = recs[change_rec][0]
         c_off = program_offset(change_clip, att)
-        change_s = att.program_s + 4.0 if cut == "full" else 4.0
-        speed = 1.0 if cut == "full" else max(1.0, att.program_s / 2.5)
+        speed = 2.0 if cut == "full" else max(1.0, att.program_s / 2.0)
+        change_s = att.program_s / speed + (4.0 if cut == "full" else 1.5)
 
         def change_scene(canvas, t):
             d = ImageDraw.Draw(canvas)
@@ -683,14 +685,14 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
                 change_clip.at(c_off + min(tp, att.program_s)),
                 note,
                 color,
+                lapse=None,
             )
-            text(
+            banner(
                 d,
-                (COL_X[2] + 24, VID_Y - 30),
+                2,
                 f"Claim {change_rec}: the vendor relabels the Save button",
-                22,
+                None if speed == 1 else f"×{speed:g}",
                 AMBER,
-                True,
             )
 
         scenes.append(
@@ -759,7 +761,7 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
             text(
                 d,
                 (W // 2, 780),
-                "Program times " + load_note(data) + ".",
+                "Times " + load_note(data) + "; not a timing benchmark.",
                 22,
                 MUTED,
                 False,
@@ -775,7 +777,7 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
             "ma",
         )
 
-    scenes.append(Scene(6.0 if cut == "full" else 3.5, end))
+    scenes.append(Scene(6.0 if cut == "full" else 3.0, end))
     return scenes
 
 
