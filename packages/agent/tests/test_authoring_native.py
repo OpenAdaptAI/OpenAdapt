@@ -258,7 +258,21 @@ def test_a_deployment_section_is_one_target(factory):
         pin_local_backend(deployment_backend=SECTIONS["linux"], url="https://example.invalid/")
     with pytest.raises(AuthoringError, match="names a web app"):
         pin_local_backend(deployment_backend={"kind": "web", "url": "https://x/"})
+    with pytest.raises(AuthoringError, match="network RDP"):
+        pin_local_backend(deployment_backend={"kind": "rdp", "rdp_host": "10.0.0.5"})
+    with pytest.raises(AuthoringError, match="pin one target"):
+        pin_local_backend(deployment_backend=SECTIONS["citrix"], remote_window_title="Clinic")
     assert factory == []
+
+
+def test_a_deployment_windows_section_keeps_the_env_agent_token(factory):
+    pin_local_backend(deployment_backend=SECTIONS["windows"], windows_agent_token="t")
+    assert factory[0][0].agent_token == "t"
+    pin_local_backend(
+        deployment_backend=dict(SECTIONS["windows"], agent_token="file"),
+        windows_agent_token="t",
+    )
+    assert factory[1][0].agent_token == "file"
 
 
 @pytest.mark.parametrize("kind", ["linux", "citrix"])
@@ -285,22 +299,29 @@ def test_agent_records_the_app_a_deployment_file_names(factory, tmp_path, kind):
         }
 
 
-def test_serve_pins_the_config_section_only_without_another_pin(tmp_path):
+def test_serve_pins_the_config_section_only_when_asked(tmp_path):
     import argparse
 
-    from openadapt_flow.agent.cli import _authoring_section
+    from openadapt_flow.agent.cli import _authoring_section, build_parser
 
     linux = tmp_path / "linux.yaml"
     linux.write_text("backend:\n  kind: linux\n  linux_app: gedit\n  linux_window_title: Notes\n")
     web = tmp_path / "web.yaml"
     web.write_text("backend:\n  kind: web\n  url: https://example.invalid/\n")
+    broken = tmp_path / "broken.yaml"
+    broken.write_text("backend:\n  kind: [not, a, kind]\n")
 
-    def ns(**kw):
-        base = dict(config=None, url=None, windows_agent_url=None, remote_window=None, citrix=False)
-        base.update(kw)
-        return argparse.Namespace(**base)
+    def ns(*argv):
+        return build_parser().parse_args(["serve", "--authoring", *argv])
 
-    assert _authoring_section(ns(config=str(linux))).kind == "linux"
-    assert _authoring_section(ns(config=str(web))) is None
-    assert _authoring_section(ns(config=str(linux), url="https://x/")) is None
-    assert _authoring_section(ns()) is None
+    # A --config given for runs alone never pins authoring.
+    assert _authoring_section(ns("--config", str(linux))) is None
+    asked = ns("--config", str(linux), "--authoring-from-config")
+    assert _authoring_section(asked).kind == "linux"
+    with pytest.raises(AuthoringError, match="names a web app"):
+        _authoring_section(ns("--config", str(web), "--authoring-from-config"))
+    with pytest.raises(AuthoringError, match="needs --config"):
+        _authoring_section(ns("--authoring-from-config"))
+    with pytest.raises(AuthoringError, match="could not read"):
+        _authoring_section(ns("--config", str(broken), "--authoring-from-config"))
+    assert isinstance(asked, argparse.Namespace)

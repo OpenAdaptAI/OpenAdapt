@@ -500,12 +500,14 @@ def pin_local_backend(
         kind = backend_kind or "web"
         return backend, kind, None
     if deployment_backend is not None:
-        if url or windows_agent_url or remote_window or citrix:
+        if url or windows_agent_url or remote_window or remote_window_title or citrix:
             raise AuthoringError(
                 "pin one target: the deployment file's backend section, or "
                 "--url / --windows-agent-url / --remote-window / --citrix"
             )
-        return _pin_deployment_backend(deployment_backend)
+        return _pin_deployment_backend(
+            deployment_backend, windows_agent_token=windows_agent_token
+        )
     pinned = _pin_desktop_driver(
         windows_agent_url=windows_agent_url,
         windows_agent_token=windows_agent_token,
@@ -597,8 +599,14 @@ def _pin_desktop_driver(
     return backend, kind, getattr(backend, "close", None)
 
 
-def _pin_deployment_backend(section: Any) -> tuple[Any, str, Any]:
-    """Build the app a deployment ``backend:`` section names (not ``web``)."""
+def _pin_deployment_backend(
+    section: Any, *, windows_agent_token: Optional[str] = None
+) -> tuple[Any, str, Any]:
+    """Build the app a deployment ``backend:`` section names (not ``web``).
+
+    Network RDP is refused: authoring would hold one RDP session and every
+    run would open another, which usually disconnects the first.
+    """
 
     try:
         from openadapt_flow.backends.factory import build_backend
@@ -617,6 +625,15 @@ def _pin_deployment_backend(section: Any) -> tuple[Any, str, Any]:
             "the deployment file names a web app; pass --url URL --headed to "
             "record it in a new Chromium window"
         )
+    if kind == "rdp" and config.rdp_host:
+        raise AuthoringError(
+            "authoring over network RDP (backend.rdp_host) is refused: it would "
+            "hold an RDP session that each run's own session disconnects. "
+            "Record inside the remote session, or name the local client window "
+            "(backend.rdp_window)"
+        )
+    if kind == "windows" and not config.agent_token and windows_agent_token:
+        config = config.model_copy(update={"agent_token": windows_agent_token})
     try:
         backend = build_backend(config)
     except (ValueError, RuntimeError, OSError) as exc:
