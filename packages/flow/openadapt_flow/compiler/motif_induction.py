@@ -68,9 +68,10 @@ _SAVE_MODIFIERS = frozenset({"meta", "ctrl", "cmd", "command"})
 
 ADMISSION_PATH: tuple[str, ...] = (
     "Record the task with OpenAdapt Capture (flow record or capture record).",
-    "Compile each recording (flow compile).",
-    "Induce over the recordings (flow induce), using this draft only as a guide.",
-    "Confirm or reject each proposed check, then qualify (flow qualify).",
+    "Run flow admit --candidate <motif_id>: it compiles, induces and proposes "
+    "checks, then stops once for a person (or a delegated agent approver) to "
+    "accept or reject them.",
+    "Qualify the accepted bundle (flow qualify).",
 )
 
 

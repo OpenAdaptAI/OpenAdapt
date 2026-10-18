@@ -10191,6 +10191,9 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     argv = list(sys.argv[1:] if argv is None else argv)
     argv = _qualify_default_form(argv)
+    from openadapt_flow.cli_admit import admit_default_form
+
+    argv = admit_default_form(argv)
     args = build_parser().parse_args(argv)
     try:
         return args.func(args)
