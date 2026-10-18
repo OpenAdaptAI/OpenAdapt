@@ -403,9 +403,11 @@ claims:
           kiosk's look-up panel through the RDP backend and real OCR:
           confirms a booking from its own RDP logon (tier 2), never turns an
           OCR mismatch into REFUTED, and never takes "not found" as proof
-          that nothing was saved. Neither fixture's save control or form is
-          touched. The deployment refuses a read-back session that is the
-          session that types.
+          that nothing was saved. The same look-up confirms through a Citrix
+          Workspace window and a native macOS window (tier 3, a window as the
+          same user). Neither fixture's save control or form is touched. The
+          deployment refuses a read-back session that is the session that
+          types.
     caveats:
       - >-
         The WinForms fixture runs as a UI Automation stand-in that mirrors
