@@ -323,7 +323,10 @@ def _referenced_asset_paths(workflow: "Workflow") -> set[str]:
     crops, postcondition template crops), across the linear steps AND every
     program / subflow action state."""
     refs: set[str] = set()
-    for step in iter_workflow_steps(workflow):
+    # Declared undo steps are not part of the run, but their crops are bundle
+    # content a person may later approve running, so they are hashed too.
+    undo_steps = [step for undo in workflow.undo_steps for step in undo.steps]
+    for step in [*iter_workflow_steps(workflow), *undo_steps]:
         anchor = step.anchor
         if anchor is not None:
             if anchor.template:

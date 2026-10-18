@@ -103,6 +103,18 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   operator can approve and resume from the last verified state (`resume` /
   `approve`), not a restart, and explicitly not "hand the rest to a free-form
   agent."
+- **After a stop: change ledger, write-ordering lint, declared undo.** A stop
+  isn't a rollback, so every run report lists, in order, each step that could
+  have changed the app and whether each declared effect was confirmed, refuted
+  or unknown in the system of record; the halt message and `explain` say what
+  may need undoing. `lint` warns when a write comes before a right-record check
+  or halting precondition it could have run first, and suggests an order
+  without changing the bundle. A bundle can declare an undo step for an
+  effect, written by hand or compiled from a demonstration. After a halt Flow
+  offers it to a person, runs it only after that person approves it at a
+  terminal, and calls it done only when the undo's own effects are confirmed
+  in the system of record (`openadapt-flow undo list | approve | run`). See
+  [`AFTER_A_STOP.md`](AFTER_A_STOP.md).
 - **PHI-free identity.** The wrong-patient identity check can run against a
   salted-hash, shape-preserving `IdentityTemplate` instead of a plaintext
   name / DOB / MRN band, so a compiled bundle need carry no readable PHI while
