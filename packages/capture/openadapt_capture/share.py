@@ -175,6 +175,11 @@ def send(
         print("  must leave this computer. The reason is recorded.")
         return None
 
+    # Check the transfer tool first so a scrub is not wasted.
+    wormhole_path = _ensure_wormhole()
+    if not wormhole_path:
+        return None
+
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp = Path(tmpdir)
         opt_out: dict | None = None
@@ -193,10 +198,6 @@ def send(
                 print("  capture share send PATH --unscrubbed --reason '...'")
                 return None
             _print_scrub_summary(folder)
-
-        wormhole_path = _ensure_wormhole()
-        if not wormhole_path:
-            return None
 
         zip_path = tmp / f"{folder.name}.zip"
         print(f"Compressing {folder.name}...")

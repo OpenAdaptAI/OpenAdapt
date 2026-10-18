@@ -344,3 +344,13 @@ def test_mailbox_opt_out_is_recorded(_lenient_mailbox, opted_out):
     assert PHI in json.dumps(sent)
     (entry,) = _ledger()
     assert entry["purpose"] == "authoring mailbox labels"
+
+
+def test_llm_proposer_cli_refuses_up_front_without_the_extra(no_extra):
+    from openadapt_flow.qualification_proposal import (
+        QualificationProposalError,
+        proposer_from_name,
+    )
+
+    with pytest.raises(QualificationProposalError, match="openadapt-privacy"):
+        proposer_from_name("llm")
