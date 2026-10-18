@@ -1,0 +1,374 @@
+{
+ "source": "packages/flow/benchmark/openemr_referral_timing/runs.csv",
+ "engine_commit": "0c642bc0",
+ "dates": "2026-10-14 22:27 to 2026-10-15 05:35 ET",
+ "system": "OpenEMR 8.0.0.3, local test copy, 8 synthetic referrals (7 normal, 1 possible duplicate)",
+ "agent_model": "claude-sonnet-5-5",
+ "mode": "warm",
+ "sets": {
+  "published": {
+   "openadapt": {
+    "blocks": [
+     2,
+     10
+    ],
+    "runs": 72,
+    "normal_runs": 63,
+    "normal_saved_correct": 62,
+    "readback_12_of_12": 62,
+    "duplicate_runs": 9,
+    "duplicate_no_new_chart": 9,
+    "misses": [
+     {
+      "block": 9,
+      "ref": "r4-theo-lindqvist",
+      "outcome": "HALTED",
+      "new_charts": 0
+     }
+    ],
+    "wall_s": {
+     "n": 62,
+     "median": 29.71,
+     "mean": 29.87,
+     "p10": 26.79,
+     "p90": 32.52,
+     "min": 26.47,
+     "max": 38.48
+    },
+    "phase_median_s": {
+     "browser_launch": 0.14,
+     "signin_form": 3.82,
+     "recorder_start": 0.17,
+     "task": 24.14,
+     "readback_s": 1.43
+    },
+    "actions_median": 41.0,
+    "actions_min": 41,
+    "actions_max": 41,
+    "screens_sent_median": 0.0,
+    "model_calls_median": 0.0,
+    "cost_usd": {
+     "median_all_runs": 0.0,
+     "median_correct_normal": 0.0,
+     "min": 0.0,
+     "max": 0.0,
+     "total": 0.0
+    }
+   },
+   "openadapt_main_bundle": {
+    "blocks": [
+     2,
+     10
+    ],
+    "runs": 72,
+    "normal_runs": 63,
+    "normal_saved_correct": 62,
+    "readback_12_of_12": 62,
+    "duplicate_runs": 9,
+    "duplicate_no_new_chart": 9,
+    "misses": [
+     {
+      "block": 2,
+      "ref": "r1-nadia-brennan",
+      "outcome": "HALTED",
+      "new_charts": 0
+     }
+    ],
+    "wall_s": {
+     "n": 62,
+     "median": 38.59,
+     "mean": 39.28,
+     "p10": 36.37,
+     "p90": 42.39,
+     "min": 35.52,
+     "max": 45.36
+    },
+    "phase_median_s": {
+     "browser_launch": 0.13,
+     "signin_form": 3.78,
+     "recorder_start": 0.13,
+     "task": 32.99,
+     "readback_s": 1.43
+    },
+    "actions_median": 41.0,
+    "actions_min": 41,
+    "actions_max": 41,
+    "screens_sent_median": 0.0,
+    "model_calls_median": 0.0,
+    "cost_usd": {
+     "median_all_runs": 0.0,
+     "median_correct_normal": 0.0,
+     "min": 0.0,
+     "max": 0.0,
+     "total": 0.0
+    }
+   },
+   "agent": {
+    "blocks": [
+     2,
+     10
+    ],
+    "runs": 72,
+    "normal_runs": 63,
+    "normal_saved_correct": 62,
+    "readback_12_of_12": 62,
+    "duplicate_runs": 9,
+    "duplicate_no_new_chart": 9,
+    "misses": [
+     {
+      "block": 6,
+      "ref": "r5-grace-adeyemi",
+      "outcome": "model_done",
+      "new_charts": 0
+     }
+    ],
+    "wall_s": {
+     "n": 62,
+     "median": 36.49,
+     "mean": 39.63,
+     "p10": 32.39,
+     "p90": 46.09,
+     "min": 31.26,
+     "max": 101.76
+    },
+    "phase_median_s": {
+     "browser_launch": 0.13,
+     "signin_form": 3.54,
+     "recorder_start": 0.12,
+     "task": 31.16,
+     "readback_s": 1.41
+    },
+    "actions_median": 49.0,
+    "actions_min": 42,
+    "actions_max": 76,
+    "screens_sent_median": 10.0,
+    "model_calls_median": 10.0,
+    "cost_usd": {
+     "median_all_runs": 0.0828,
+     "median_correct_normal": 0.0827,
+     "min": 0.0203,
+     "max": 0.1988,
+     "total": 6.42
+    }
+   },
+   "openadapt_vs_agent": {
+    "median_difference_s": -6.78,
+    "ci95_s": [
+     -9.46,
+     -5.27
+    ],
+    "percent_faster": 18.6
+   }
+  },
+  "blocks_1_to_10": {
+   "openadapt": {
+    "blocks": [
+     1,
+     10
+    ],
+    "runs": 80,
+    "normal_runs": 70,
+    "normal_saved_correct": 69,
+    "readback_12_of_12": 69,
+    "duplicate_runs": 10,
+    "duplicate_no_new_chart": 10,
+    "misses": [
+     {
+      "block": 9,
+      "ref": "r4-theo-lindqvist",
+      "outcome": "HALTED",
+      "new_charts": 0
+     }
+    ],
+    "wall_s": {
+     "n": 69,
+     "median": 29.66,
+     "mean": 29.96,
+     "p10": 26.94,
+     "p90": 33.75,
+     "min": 26.47,
+     "max": 38.9
+    },
+    "phase_median_s": {
+     "browser_launch": 0.14,
+     "signin_form": 3.82,
+     "recorder_start": 0.17,
+     "task": 23.94,
+     "readback_s": 1.43
+    },
+    "actions_median": 41,
+    "actions_min": 41,
+    "actions_max": 41,
+    "screens_sent_median": 0,
+    "model_calls_median": 0,
+    "cost_usd": {
+     "median_all_runs": 0.0,
+     "median_correct_normal": 0.0,
+     "min": 0.0,
+     "max": 0.0,
+     "total": 0.0
+    }
+   },
+   "openadapt_main_bundle": {
+    "blocks": [
+     1,
+     10
+    ],
+    "runs": 80,
+    "normal_runs": 70,
+    "normal_saved_correct": 69,
+    "readback_12_of_12": 69,
+    "duplicate_runs": 10,
+    "duplicate_no_new_chart": 10,
+    "misses": [
+     {
+      "block": 2,
+      "ref": "r1-nadia-brennan",
+      "outcome": "HALTED",
+      "new_charts": 0
+     }
+    ],
+    "wall_s": {
+     "n": 69,
+     "median": 38.67,
+     "mean": 39.16,
+     "p10": 36.15,
+     "p90": 42.43,
+     "min": 33.83,
+     "max": 45.36
+    },
+    "phase_median_s": {
+     "browser_launch": 0.13,
+     "signin_form": 3.78,
+     "recorder_start": 0.13,
+     "task": 33.01,
+     "readback_s": 1.43
+    },
+    "actions_median": 41,
+    "actions_min": 41,
+    "actions_max": 41,
+    "screens_sent_median": 0,
+    "model_calls_median": 0,
+    "cost_usd": {
+     "median_all_runs": 0.0,
+     "median_correct_normal": 0.0,
+     "min": 0.0,
+     "max": 0.0,
+     "total": 0.0
+    }
+   },
+   "agent": {
+    "blocks": [
+     1,
+     10
+    ],
+    "runs": 80,
+    "normal_runs": 70,
+    "normal_saved_correct": 69,
+    "readback_12_of_12": 69,
+    "duplicate_runs": 10,
+    "duplicate_no_new_chart": 10,
+    "misses": [
+     {
+      "block": 6,
+      "ref": "r5-grace-adeyemi",
+      "outcome": "model_done",
+      "new_charts": 0
+     }
+    ],
+    "wall_s": {
+     "n": 69,
+     "median": 37.65,
+     "mean": 39.95,
+     "p10": 32.32,
+     "p90": 48.57,
+     "min": 31.26,
+     "max": 101.76
+    },
+    "phase_median_s": {
+     "browser_launch": 0.13,
+     "signin_form": 3.53,
+     "recorder_start": 0.12,
+     "task": 32.43,
+     "readback_s": 1.41
+    },
+    "actions_median": 49,
+    "actions_min": 42,
+    "actions_max": 76,
+    "screens_sent_median": 10,
+    "model_calls_median": 10,
+    "cost_usd": {
+     "median_all_runs": 0.0828,
+     "median_correct_normal": 0.0826,
+     "min": 0.0203,
+     "max": 0.1988,
+     "total": 7.16
+    }
+   },
+   "openadapt_vs_agent": {
+    "median_difference_s": -7.98,
+    "ci95_s": [
+     -9.93,
+     -5.7
+    ],
+    "percent_faster": 21.2
+   }
+  },
+  "openadapt_blocks_1_to_15": {
+   "openadapt": {
+    "blocks": [
+     1,
+     15
+    ],
+    "runs": 120,
+    "normal_runs": 105,
+    "normal_saved_correct": 103,
+    "readback_12_of_12": 103,
+    "duplicate_runs": 15,
+    "duplicate_no_new_chart": 15,
+    "misses": [
+     {
+      "block": 9,
+      "ref": "r4-theo-lindqvist",
+      "outcome": "HALTED",
+      "new_charts": 0
+     },
+     {
+      "block": 13,
+      "ref": "r8-priya-raman",
+      "outcome": "HALTED",
+      "new_charts": 0
+     }
+    ],
+    "wall_s": {
+     "n": 103,
+     "median": 29.69,
+     "mean": 29.93,
+     "p10": 27.51,
+     "p90": 32.4,
+     "min": 26.47,
+     "max": 38.9
+    },
+    "phase_median_s": {
+     "browser_launch": 0.13,
+     "signin_form": 3.84,
+     "recorder_start": 0.17,
+     "task": 24.18,
+     "readback_s": 1.44
+    },
+    "actions_median": 41,
+    "actions_min": 41,
+    "actions_max": 41,
+    "screens_sent_median": 0,
+    "model_calls_median": 0,
+    "cost_usd": {
+     "median_all_runs": 0.0,
+     "median_correct_normal": 0.0,
+     "min": 0.0,
+     "max": 0.0,
+     "total": 0.0
+    }
+   }
+  }
+ }
+}
