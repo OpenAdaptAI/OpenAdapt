@@ -195,7 +195,7 @@ decision = queue.decide(
     signing_key=load_or_create_private_key(data_dir),
     schema=schema,
 )
-settled = apply_decision(field_read, decision)
+settled = apply_decision(field_read, decision, item)
 ```
 
 The queue enforces these rules:

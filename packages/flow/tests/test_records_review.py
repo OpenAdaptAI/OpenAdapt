@@ -76,7 +76,7 @@ def test_person_accepts_a_read_and_it_is_signed(tmp_path) -> None:
     assert decision.value == "1234.5"
     assert queue.check(item.item_id, key.public_key())
     assert queue.open_items() == []
-    settled = apply_decision(_record().fields[1], decision)
+    settled = apply_decision(_record().fields[1], decision, item)
     assert settled is not None
     assert settled.value == "1234.5"
     assert settled.grade == "unchecked"  # a person's choice is not a read
@@ -200,4 +200,42 @@ def test_halt_item_and_reject_drop(tmp_path) -> None:
         signing_key=Ed25519PrivateKey.generate(),
         schema=SCHEMA,
     )
-    assert apply_decision(_record().fields[1], decision) is None
+    assert apply_decision(_record().fields[1], decision, halt) is None
+
+
+def test_correction_never_keeps_a_strong_grade(tmp_path) -> None:
+    key = Ed25519PrivateKey.generate()
+    queue = ReviewQueue(tmp_path)
+    item = queue.add_record(_record(), created_by=RUNNER)[0]
+    strong = (
+        _record()
+        .fields[1]
+        .model_copy(update={"value": "1234.5", "grade": "system_of_record"})
+    )
+    decision = queue.decide(
+        item.item_id,
+        action="correct",
+        value="1000000",
+        reviewer=CLERK,
+        signing_key=key,
+        schema=SCHEMA,
+    )
+    settled = apply_decision(strong, decision, item)
+    assert settled is not None and settled.value == "1000000"
+    assert settled.grade == "unchecked"
+
+
+def test_decision_must_answer_this_field(tmp_path) -> None:
+    key = Ed25519PrivateKey.generate()
+    queue = ReviewQueue(tmp_path)
+    item = queue.add_record(_record(), created_by=RUNNER)[0]
+    decision = queue.decide(
+        item.item_id,
+        action="accept_read",
+        channel="clipboard",
+        reviewer=CLERK,
+        signing_key=key,
+        schema=SCHEMA,
+    )
+    with pytest.raises(ReviewError, match="the decision is for field"):
+        apply_decision(_record().fields[0], decision, item)
