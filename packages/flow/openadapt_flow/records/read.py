@@ -16,7 +16,9 @@ field is read through two channels:
 confidence, the read grade and whether it needs review. :func:`read_field`
 does the live read on a backend and then calls it. :func:`add_read` adds a
 later read (the reopened record, or an export, database or API read) and
-upgrades the grade only when that read agrees.
+upgrades the grade only when that read agrees. An export read states its
+source: a ``live_session`` export counts as a screen read, a
+``committed_data`` export as an independent one.
 
 Comparison reuses :mod:`openadapt_flow.runtime.effects.readback_values`, so
 look-alike characters (O and 0, l and 1) in OCR make a read *ambiguous*,
@@ -50,6 +52,7 @@ from typing import Any, Callable, Optional, Protocol, Sequence
 from openadapt_flow.records.schema import (
     Agreement,
     ChannelRead,
+    ExportSource,
     FieldRead,
     FieldSpec,
     ReadChannel,
@@ -144,19 +147,27 @@ def channel_read(
     *,
     engine_confidence: Optional[float] = None,
     session: Optional[str] = None,
+    export_source: Optional[ExportSource] = None,
 ) -> ChannelRead:
-    """One channel's read of ``spec``, normalized for its kind."""
+    """One channel's read of ``spec``, normalized for its kind.
+
+    An ``export`` read needs ``export_source``. ``session`` defaults from the
+    channel: ``independent`` for database, API and committed-data export
+    reads, ``acting`` for everything else.
+    """
 
     if session is None:
-        session = (
-            "independent" if channel in ("export", "database", "api") else "acting"
+        independent = channel in ("database", "api") or (
+            channel == "export" and export_source == "committed_data"
         )
+        session = "independent" if independent else "acting"
     return ChannelRead(
         channel=channel,
         raw=raw,
         normalized=normalize_for(spec, raw),
         engine_confidence=engine_confidence,
         session=session,  # type: ignore[arg-type]
+        export_source=export_source,
     )
 
 
@@ -225,7 +236,7 @@ def _preferred(parsed: Sequence[ChannelRead]) -> ChannelRead:
     """The read whose value is reported: independent, then clipboard, then structure."""
 
     rank = {
-        "export": 0,
+        "export": 1,
         "database": 0,
         "api": 0,
         "clipboard": 1,
@@ -233,7 +244,7 @@ def _preferred(parsed: Sequence[ChannelRead]) -> ChannelRead:
         "accessibility": 2,
         "ocr": 3,
     }
-    return min(parsed, key=lambda r: rank[r.channel])
+    return min(parsed, key=lambda r: 0 if r.independent else rank[r.channel])
 
 
 def combine_reads(

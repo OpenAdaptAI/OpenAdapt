@@ -152,8 +152,8 @@ a value, or when it sets `min_confidence` and falls below it.
 
 For `committed_record_readback`, close the record, reopen it by its identity
 fields, read the field again with `session="reopened"`, and pass the new read
-to `add_read()`. For `verified`, pass a read from an export, database or API
-(`channel_read(spec, "database", value)`). A later read that disagrees sends
+to `add_read()`. For `verified`, pass a database or API read, or an export of committed data
+(`channel_read(spec, "export", value, export_source="committed_data")`). A live-session export gives at most `screen_readback`. A later read that disagrees sends
 the field to review.
 
 ## Requiring a grade before a write

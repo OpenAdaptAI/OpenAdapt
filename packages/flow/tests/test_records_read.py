@@ -131,7 +131,11 @@ def test_disagreeing_independent_read_demotes_to_review() -> None:
             channel_read(CODE, "ocr", "AC-1042"),
         ],
     )
-    later = add_read(CODE, first, channel_read(CODE, "export", "AC-1043"))
+    later = add_read(
+        CODE,
+        first,
+        channel_read(CODE, "export", "AC-1043", export_source="committed_data"),
+    )
     assert later.grade == "unconfirmed"
     assert later.needs_review
 
@@ -257,3 +261,24 @@ def test_read_field_rejects_unsatisfiable_proof() -> None:
         read_field(
             CODE, _Backend(), (0, 0, 5, 5), proof=ReadProof(seal=True), ocr=_ocr("x")
         )
+
+
+def test_export_reads_grade_by_source() -> None:
+    first = combine_reads(CODE, [channel_read(CODE, "clipboard", "AC-1042")])
+    live = add_read(
+        CODE,
+        first,
+        channel_read(CODE, "export", "AC-1042", export_source="live_session"),
+    )
+    assert live.reads[-1].session == "acting"
+    assert live.grade == "screen_readback"
+    saved = add_read(
+        CODE,
+        first,
+        channel_read(CODE, "export", "AC1042", export_source="committed_data"),
+    )
+    assert saved.reads[-1].session == "independent"
+    assert saved.grade == "verified"
+    assert saved.value == "AC1042"  # the independent read is reported
+    with pytest.raises(ValueError, match="needs export_source"):
+        channel_read(CODE, "export", "AC-1042")
