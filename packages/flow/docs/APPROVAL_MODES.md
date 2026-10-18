@@ -19,7 +19,7 @@ report (below) says so for every workflow.
 
 | Command | Mode |
 | --- | --- |
-| `openadapt-flow run` | `--approval-mode`, else `runtime.approval_mode` in the deployment file. Under the Standard and Regulated profiles a missing value means `each_item`. Demo and runs without a profile have no gate unless a mode is named, so Desktop's Run it passes `--approval-mode each_item` itself. |
+| `openadapt-flow run` | `--approval-mode`, else `runtime.approval_mode` in the deployment file. A missing, malformed, or unknown value means `each_item` under every profile, including Demo and runs without a deployment file. `problems_only` and `not_gated` apply only when named exactly. |
 | `openadapt-flow qualify run-case` | The same flags. It always runs under Standard, so the default is `each_item`: the practice item waits for a person. A drill never asks (see below). |
 | `openadapt-flow resume` | The mode the run was admitted with. Asking for another mode is refused. |
 | Cloud-dispatched runs (`runner/commands.py`, the connector) | `not_gated`, passed explicitly, so the report records it. |

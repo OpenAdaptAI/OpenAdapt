@@ -108,7 +108,7 @@ def main():
 
     \b
     Give an MCP client your compiled workflows:
-        openadapt agent serve --bundles DIR --allow-run
+        openadapt agent serve --bundles DIR --mode production
     """
     pass
 
