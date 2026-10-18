@@ -46,7 +46,7 @@ def test_clipboard_and_ocr_agree() -> None:
     field = combine_reads(CODE, reads)
     assert field.agreement == "agree"
     assert field.value == "AC-1042"
-    assert field.grade == "screen_readback"
+    assert field.grade == "same_screen"
     assert field.confidence == pytest.approx(0.995)
     assert not field.needs_review
 
@@ -59,7 +59,7 @@ def test_lookalike_glyphs_are_ambiguous_not_a_match() -> None:
     field = combine_reads(CODE, reads)
     assert field.agreement == "ambiguous"
     assert field.value is None
-    assert field.grade == "unconfirmed"
+    assert field.grade == "unchecked"
     assert field.needs_review
     assert "look-alike" in (field.review_reason or "")
 
@@ -76,13 +76,13 @@ def test_disagreement_goes_to_review() -> None:
     assert field.review_reason == "channels disagree"
 
 
-def test_single_read_is_unconfirmed_not_reviewed_by_default() -> None:
+def test_single_read_is_unchecked_not_reviewed_by_default() -> None:
     field = combine_reads(
         CODE, [channel_read(CODE, "ocr", "AC-1042", engine_confidence=1.0)]
     )
     assert field.agreement == "single"
     assert field.value == "AC-1042"
-    assert field.grade == "unconfirmed"
+    assert field.grade == "unchecked"
     assert field.confidence == pytest.approx(0.6)
     assert not field.needs_review
     assert field.seal is None
@@ -113,14 +113,14 @@ def test_grade_ladder_with_add_read() -> None:
             channel_read(CODE, "ocr", "AC-1042"),
         ],
     )
-    assert first.grade == "screen_readback"
+    assert first.grade == "same_screen"
     reopened = add_read(
         CODE, first, channel_read(CODE, "clipboard", "AC-1042", session="reopened")
     )
-    assert reopened.grade == "committed_record_readback"
-    verified = add_read(CODE, reopened, channel_read(CODE, "database", "AC1042"))
-    assert verified.grade == "verified"
-    assert verified.value == "AC1042"  # the database read is preferred
+    assert reopened.grade == "reopened"
+    by_database = add_read(CODE, reopened, channel_read(CODE, "database", "AC1042"))
+    assert by_database.grade == "system_of_record"
+    assert by_database.value == "AC1042"  # the database read is preferred
 
 
 def test_disagreeing_independent_read_demotes_to_review() -> None:
@@ -136,7 +136,7 @@ def test_disagreeing_independent_read_demotes_to_review() -> None:
         first,
         channel_read(CODE, "export", "AC-1043", source_kind="committed_store"),
     )
-    assert later.grade == "unconfirmed"
+    assert later.grade == "unchecked"
     assert later.needs_review
 
 
@@ -146,7 +146,7 @@ def test_screen_reads_alone_never_verify() -> None:
         channel_read(CODE, "ocr", "AC-1042"),
         channel_read(CODE, "structure", "AC-1042", session="reopened"),
     ]
-    assert combine_reads(CODE, reads).grade == "committed_record_readback"
+    assert combine_reads(CODE, reads).grade == "reopened"
 
 
 class _Backend:
@@ -208,7 +208,7 @@ def test_read_field_live_double_read() -> None:
     assert backend.clicks == [(50, 28)]
     assert backend.keys == ["Meta+a", "Meta+c"]
     assert field.agreement == "agree"
-    assert field.grade == "screen_readback"
+    assert field.grade == "same_screen"
     assert field.region is not None
     assert field.region.bbox == (10, 20, 80, 16)
     assert field.region.frame_size == (200, 100)
@@ -239,7 +239,7 @@ def test_read_field_default_is_one_channel_no_seal() -> None:
         seal=SealRef(run_id="r"),
     )
     assert [r.channel for r in field.reads] == ["ocr"]
-    assert field.grade == "unconfirmed"
+    assert field.grade == "unchecked"
     assert field.seal is None
     assert not field.needs_review
     backend = _Backend()
@@ -271,14 +271,14 @@ def test_export_reads_grade_by_source() -> None:
         channel_read(CODE, "export", "AC-1042", source_kind="live_session"),
     )
     assert live.reads[-1].session == "acting"
-    assert live.grade == "screen_readback"
+    assert live.grade == "same_screen"
     saved = add_read(
         CODE,
         first,
         channel_read(CODE, "export", "AC1042", source_kind="committed_store"),
     )
     assert saved.reads[-1].session == "independent"
-    assert saved.grade == "verified"
+    assert saved.grade == "system_of_record"
     assert saved.value == "AC1042"  # the independent read is reported
     with pytest.raises(ValueError, match="needs source_kind"):
         channel_read(CODE, "export", "AC-1042")

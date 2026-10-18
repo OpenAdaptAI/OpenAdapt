@@ -115,7 +115,7 @@ A workflow can use either kind. A write step that needs `system_of_record` value
 
 `openadapt_flow.records.read.read_field()` reads one field on a live backend.
 By default it uses one channel: the clipboard when you pass one, otherwise
-OCR of the field's region. The value comes back `unconfirmed` with no Seal.
+OCR of the field's region. The value comes back `unchecked` with no Seal.
 
 ```python
 from openadapt_flow.records.read import SystemClipboard, read_field
@@ -151,10 +151,10 @@ A field goes to review when its reads disagree or are ambiguous, when a value
 is not valid for its kind, when `double_read` is on and only one channel read
 a value, or when it sets `min_confidence` and falls below it.
 
-For `committed_record_readback`, close the record, reopen it by its identity
+For `reopened`, close the record, reopen it by its identity
 fields, read the field again with `session="reopened"`, and pass the new read
-to `add_read()`. For `verified`, pass a database or API read, or an export of committed data
-(`channel_read(spec, "export", value, source_kind="committed_store")`). A live-session export gives at most `screen_readback`. A later read that disagrees sends
+to `add_read()`. For `system_of_record`, pass a database or API read, or an export of committed data
+(`channel_read(spec, "export", value, source_kind="committed_store")`). A live-session export gives at most `same_screen`. A later read that disagrees sends
 the field to review.
 
 ## Requiring a grade before a write

@@ -1,7 +1,7 @@
 """The reading step: read one field off the screen into a typed value.
 
 By default a field is read through one channel and the value is returned
-with the grade ``unconfirmed`` and no Seal. Proof is opt-in through
+with the grade ``unchecked`` and no Seal. Proof is opt-in through
 :class:`~openadapt_flow.records.schema.ReadProof`. With ``double_read`` a
 field is read through two channels:
 
@@ -258,7 +258,7 @@ def combine_reads(
     """Judge the channel reads of one field and build its :class:`FieldRead`.
 
     A single read is not sent to review on its own: it is simply
-    ``unconfirmed``. It is sent to review when ``proof.double_read`` asked for
+    ``unchecked``. It is sent to review when ``proof.double_read`` asked for
     two channels, or when the field sets ``min_confidence`` and the read is
     below it.
     """
@@ -348,7 +348,7 @@ def read_field(
 
     By default (``proof`` unset or all off) the field is read through one
     channel: the clipboard when one is given, otherwise OCR. The result is
-    ``unconfirmed`` and carries no Seal. With ``proof.double_read`` both
+    ``unchecked`` and carries no Seal. With ``proof.double_read`` both
     channels are read and compared. With ``proof.seal`` the given ``seal``
     pointer is attached; it is required then and ignored otherwise.
 
