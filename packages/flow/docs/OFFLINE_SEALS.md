@@ -90,9 +90,45 @@ reports `countersign_unavailable` and changes nothing.
 ```bash
 export OPENADAPT_NO_OUTBOUND=1
 export OPENADAPT_NO_OUTBOUND_LOG=/srv/openadapt/audit/outbound-blocked.jsonl
-# Optional: LAN systems of record, as IP literals or private CIDR ranges.
-export OPENADAPT_NO_OUTBOUND_ALLOW=10.20.0.15,192.168.40.0/24
+# Optional: the allow list (see below).
+export OPENADAPT_NO_OUTBOUND_ALLOW_FILE=/srv/openadapt/no-outbound-allow.json
 ```
+
+### The allow list
+
+Nothing but this machine is reachable by default. Other machines on the LAN
+are refused like any outside host. A deployment that drives an application
+over a remote-desktop session allows that session's host, and nothing else,
+by deriving it from the session profile:
+
+```bash
+export OPENADAPT_NO_OUTBOUND_ALLOW_FILE=/srv/openadapt/no-outbound-allow.json
+openadapt-flow no-outbound allow derive /srv/openadapt/session.rdp
+# added: 10.20.0.15/32 port 3389  (session host, from /srv/openadapt/session.rdp)
+```
+
+`derive` reads a Microsoft `.rdp` file (`full address`, `alternate full
+address`, and `gatewayhostname` when a gateway is in use) or a FreeRDP
+session file (JSON with a `target` object holding `host` and `port`, and an
+optional `gateway` object). A host name is resolved once, when you run
+`derive`, and the resulting addresses are stored. Public addresses are
+refused. The command prints every address it added and where it came from.
+The installer runs it for you when you pass the session profile (see
+[`ON_PREM.md`](ON_PREM.md)).
+
+To change the list by hand:
+
+```bash
+openadapt-flow no-outbound allow list          # every entry and its origin
+openadapt-flow no-outbound allow add 10.20.0.40 --port 5432
+openadapt-flow no-outbound allow remove 10.20.0.40
+```
+
+`OPENADAPT_NO_OUTBOUND_ALLOW` still works for a quick, unrecorded addition.
+If `OPENADAPT_NO_OUTBOUND_ALLOW_FILE` names a file that is missing or holds a
+public range, startup stops.
+
+### What the hook does
 
 `openadapt-flow` installs a Python audit hook before any command runs. Every
 `connect`, `sendto` and name lookup in the process passes through it. Anything
@@ -119,5 +155,6 @@ firewall, which remains the primary control.
 
 `tests/test_no_outbound.py` runs each check in a fresh interpreter: public
 connect, UDP send, DNS lookups and an HTTPS client call are refused and
-logged; loopback and allow-listed LAN addresses still work; the hook stays on
+logged; loopback and allow-listed LAN addresses still work, other LAN
+addresses are refused; the hook stays on
 after the environment changes; and the CLI refuses `attach-seal`.
