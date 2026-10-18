@@ -77,12 +77,86 @@ treats the folder as a bundle, and it refuses a folder that already holds one.
   `admitted=False`, and is never attached to a step as an effect. The episodes
   that suggested a check can't approve it.
 
-## How a person admits it
+## How a candidate is admitted
 
-1. Record the task with Capture.
-2. Compile each recording with `flow compile`.
-3. Run `flow induce` over the recordings, using the draft only as a guide.
-4. Confirm or reject each proposed check, then run `flow qualify`.
+Record the task once with Capture. Then run one command:
+
+```bash
+openadapt flow admit --candidate abc --out admissions/abc --name report-mail
+# or, with your own recordings of the same task:
+openadapt flow admit rec-1 rec-2 --out admissions/report-mail --name report-mail
+```
+
+(`openadapt-flow admit` without the launcher.) `--candidate` reads
+`shadow-candidates/abc/` and the recordings in its `recordings/` folder.
+The command compiles each recording, induces one program from two or more
+recordings, and proposes checks. Then it stops **once** and prints a short
+summary:
+
+```text
+Admission 3f9c0a1b2d4e: report-mail
+  from shadow candidate abc
+  2 recording(s), induced into one program; 6 step(s), 1 write(s)
+  Proposed checks (applied on accept):
+  - send: field_equals, tier 1
+  - send: identity:canonical_ladder
+  4 fault case(s) to qualify against
+  Suggested by shadow episodes (not evidence, not applied):
+  - file_written: the spreadsheet is saved
+Type accept to apply these checks, or reject:
+```
+
+`accept` applies the checks with the same gates as `qualify accept`,
+including the oracle gate, and reseals the bundle. Then qualify it as usual
+with `openadapt flow qualify admissions/abc/bundle --verify verify.yaml`.
+Nothing certifies until that campaign passes.
+
+The command stops early and asks for nothing when there is nothing to
+accept:
+
+- no recording yet (it prints the candidate's record-next list);
+- induction refuses;
+- the check proposal HALTs.
+
+Without a terminal, it writes the summary to `admission-pending.json` and
+exits 3. A person decides later with `openadapt flow admit decide DIR`.
+
+### Letting an agent decide
+
+The same steps are MCP tools when the operator starts the agent server with
+`--admissions DIR`:
+
+```bash
+openadapt-agent serve --mode production --bundles ./bundles \
+  --admissions ./admit --delegate-approvals agent:reviewer
+```
+
+- `prepare_admission` takes recording folder names under
+  `DIR/recordings` or a `candidate_id`, and returns the summary and a
+  `pending_sha256`.
+- `list_admissions` lists admissions and their status.
+- `decide_admission` takes the admission, the `pending_sha256` and
+  `accept` or `reject`.
+
+Without `--delegate-approvals`, `decide_admission` asks a person in the
+client's own form, and the record says `person:mcp-form via mcp`. With it,
+the agent decides as the delegated approver from
+[#1190](https://github.com/OpenAdaptAI/OpenAdapt/pull/1190) and
+[#1192](https://github.com/OpenAdaptAI/OpenAdapt/pull/1192), and the record
+says `agent:reviewer via mcp`.
+
+The rules are the same for every decider:
+
+- **Who decided is recorded.** `admission-decision.json`, in the admission
+  folder and in the accepted bundle, names who prepared and who decided, by
+  kind, id and route.
+- **No self-approval.** An agent can't decide an admission it prepared.
+- **The `regulated` policy pack needs a person.**
+- **A decision covers exactly what was shown.** It names the
+  `pending_sha256` of the summary, and the bundle must still match its
+  digest. There is one decision per admission.
+- **No gate is relaxed.** Shadow suggestions are never applied, a HALTed
+  proposal can't be accepted, and no admission is signed here.
 
 ## Example
 
