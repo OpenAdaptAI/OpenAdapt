@@ -32,7 +32,7 @@ import os
 import stat
 import time
 import uuid
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -135,6 +135,29 @@ def _digest(model: BaseModel) -> str:
     return "sha256:" + hashlib.sha256(payload).hexdigest()
 
 
+#: The most field rows one request may carry. Each row is short, so the
+#: request file stays well under its 64 KiB read limit.
+MAX_SAVE_FIELDS = 24
+_MAX_FIELD_VALUE = 512
+
+
+class SaveField(BaseModel):
+    """One value a save writes, as the person sees it on the phone.
+
+    Local only, like the screenshot: it is inside the request file and its
+    digest, served to the paired phone no-store, and never copied into the
+    report, a notification, or anything a delegated approver or Cloud sees.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    label: str = Field(min_length=1, max_length=128)
+    #: The value before the run changed it, when known. ``None`` when the
+    #: field was empty or the run can't tell.
+    before: Optional[str] = Field(default=None, max_length=_MAX_FIELD_VALUE)
+    after: Optional[str] = Field(default=None, max_length=_MAX_FIELD_VALUE)
+
+
 class ItemApprovalRequest(BaseModel):
     """What the person is asked to approve: one save of one item."""
 
@@ -166,12 +189,20 @@ class ItemApprovalRequest(BaseModel):
     #: What kind of save this is, for the approver policy. Left out of the
     #: file when it is the default, so earlier requests keep their digest.
     step_class: StepClass = StepClass.CONSEQUENTIAL
+    #: The values this save writes, for the phone. Part of the digest, so the
+    #: signed task, the answer and the run all bind exactly these values.
+    #: Left out of the file when absent, so earlier requests keep their digest.
+    fields: Optional[tuple[SaveField, ...]] = Field(
+        default=None, min_length=1, max_length=MAX_SAVE_FIELDS
+    )
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         data: dict[str, Any] = handler(self)
         if self.step_class is StepClass.CONSEQUENTIAL:
             data.pop("step_class", None)
+        if self.fields is None:
+            data.pop("fields", None)
         return data
 
     @model_validator(mode="after")
@@ -659,8 +690,13 @@ class ItemApprovalStore:
         now: Optional[datetime] = None,
         ttl_s: float = REQUEST_TTL_S,
         step_class: StepClass = StepClass.CONSEQUENTIAL,
+        fields: Optional[Sequence[SaveField]] = None,
     ) -> ItemApprovalRequest:
-        """Write the screenshot and the request. Returns the request."""
+        """Write the screenshot and the request. Returns the request.
+
+        ``fields`` are the values the save writes, shown on the phone. An
+        empty list is stored as none.
+        """
 
         self._checked_dir(create=True)
         request_id = uuid.uuid4().hex
@@ -684,6 +720,7 @@ class ItemApprovalStore:
             expires_at=_iso(created + timedelta(seconds=min(ttl_s, REQUEST_TTL_S))),
             qualification_case_kind=qualification_case_kind,
             step_class=step_class,
+            fields=tuple(fields) if fields else None,
         )
         _write_exclusive(self.dir / f"{request_id}.png", frame_png)
         _write_exclusive(

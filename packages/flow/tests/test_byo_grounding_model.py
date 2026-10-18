@@ -34,6 +34,17 @@ from openadapt_flow.runtime.grounder import (
     component_may_egress,
 )
 
+
+@pytest.fixture(autouse=True)
+def _send_unscrubbed(monkeypatch, tmp_path):
+    """These tests cover the adapter, not scrubbing: opt out (recorded in tmp).
+
+    Scrubbing of the grounding request is covered in test_outbound_privacy.py.
+    """
+    monkeypatch.setenv("OPENADAPT_HOME", str(tmp_path / "home"))
+    monkeypatch.setenv("OPENADAPT_FLOW_SEND_UNSCRUBBED", "adapter unit test")
+
+
 # --------------------------------------------------------------------------
 # Mocked HTTP plumbing (no network).
 # --------------------------------------------------------------------------
