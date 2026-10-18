@@ -113,10 +113,13 @@ With an MCP client, set the token in the environment the client starts the
 server with. In Claude Code:
 
 ```bash
-claude mcp add openadapt-authoring -e OAFLOW_AGENT_TOKEN=<the same secret> -- \
+claude mcp add --scope user openadapt-authoring -e OAFLOW_AGENT_TOKEN=<the same secret> -- \
   uvx --python 3.12 --from 'openadapt-agent[tutorial]' \
   openadapt-agent serve --authoring --windows-agent-url http://localhost:5001
 ```
+
+This only registers the server. Claude Code starts it the next time you run
+`claude`.
 
 If the agent reports that the Windows backend is missing, install
 `openadapt-flow[windows]` next to it.
