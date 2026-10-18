@@ -93,9 +93,7 @@ def test_runtime_manifest_refuses_missing_probe_or_license(tmp_path: Path) -> No
 def test_embedded_runtime_manifest_pins_complete_reviewed_release() -> None:
     manifest = json.loads(
         (
-            Path(__file__).resolve().parents[1]
-            / "src-tauri"
-            / "ffmpeg-runtime-manifest.json"
+            Path(__file__).resolve().parents[1] / "src-tauri" / "ffmpeg-runtime-manifest.json"
         ).read_text()
     )
     assert manifest["schema_version"] == 1
@@ -115,15 +113,11 @@ def test_embedded_runtime_manifest_pins_complete_reviewed_release() -> None:
         )
         assert re.fullmatch(r"[0-9a-f]{64}", artifact["archive_sha256"])
         assert artifact["source"]["sha256"] == SOURCE_SHA256
-        assert (
-            artifact["source"]["signing_key_fingerprint"]
-            == SIGNING_KEY_FINGERPRINT
-        )
-        assert {
-            file.get("role")
-            for file in artifact["files"]
-            if file.get("role") is not None
-        } == {"ffmpeg", "ffprobe"}
+        assert artifact["source"]["signing_key_fingerprint"] == SIGNING_KEY_FINGERPRINT
+        assert {file.get("role") for file in artifact["files"] if file.get("role") is not None} == {
+            "ffmpeg",
+            "ffprobe",
+        }
 
 
 def test_runtime_workflow_is_pinned_attested_and_separate_from_installers() -> None:

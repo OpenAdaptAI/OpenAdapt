@@ -39,19 +39,19 @@ macOS library-validation entitlement required to load that independently
 signed, hash-verified OpenCV extension; the manifest and full-file cache audit
 remain the admission boundary.
 
-Native releases use a distinct `desktop-vX.Y.Z` tag in the OpenAdapt
-monorepo. The native version comes from `package.json`,
-`src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`, with matching entries
-in both lockfiles. A Desktop release pull request sets them and the Python
-version together (`scripts/prepare_release.py`). After `release-package.yml`
-publishes the engine release `openadapt-desktop-vX.Y.Z` to PyPI, a maintainer
-dispatches the Desktop native installer release workflow from reviewed `main`.
-That transaction requires `packages/desktop` to be unchanged since the engine
-release. It builds, smoke-tests, and attests every installer, attaches them and
-this release's own candidate channel to a draft, and publishes the draft once.
-OpenAdapt's releases are immutable, so a published release is never edited; a
-newer release supersedes an older one by version. This transaction doesn't
-change the admission-driven Production channel. The release policy is in
+Each Desktop version is one immutable `openadapt-desktop-vX.Y.Z` release in the
+OpenAdapt monorepo. It carries the Python wheel and sdist (the same bytes as on
+PyPI), these native installers, and the release's own attested channel. The
+native version comes from `package.json`, `src-tauri/Cargo.toml`, and
+`src-tauri/tauri.conf.json`, with matching entries in both lockfiles; a Desktop
+release pull request sets them and the Python version together
+(`scripts/prepare_release.py`). When it merges, the Desktop release workflow
+builds and smoke-tests every package, attests the exact bytes, attaches
+everything to a draft, publishes the wheel and sdist to PyPI, and publishes the
+draft once. If any build fails, nothing is published. OpenAdapt's releases are
+immutable, so a published release is never edited; a newer release supersedes
+an older one by version. This transaction doesn't change the admission-driven
+Production channel. The release policy is in
 [RELEASES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/RELEASES.md).
 
 ## Artifact labels
@@ -96,7 +96,7 @@ authenticate `SHA256SUMS` before they trust its digests:
 ```bash
 gh attestation verify SHA256SUMS \
   --repo OpenAdaptAI/OpenAdapt \
-  --cert-identity "https://github.com/OpenAdaptAI/OpenAdapt/.github/workflows/desktop-native-release.yml@refs/heads/main" \
+  --cert-identity "https://github.com/OpenAdaptAI/OpenAdapt/.github/workflows/desktop-release.yml@refs/heads/main" \
   --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
   --deny-self-hosted-runners
 sha256sum -c SHA256SUMS
@@ -110,7 +110,7 @@ provenance by hash, states every platform's signing mode, and names the
 previous release's channel by hash. Pass it with `--channel` (and the last
 channel you accepted with `--previous-channel`) to authenticate the whole chain
 before trusting any digest. A download service must select the newest valid
-`desktop-v*` release this way, never from mutable release-note text.
+`openadapt-desktop-v*` release this way, never from mutable release-note text.
 After a native release succeeds, its channel is the authority for that version.
 
 An attestation binds bytes to a build identity; it does not establish that the

@@ -43,9 +43,7 @@ def _write_review_files(path: Path) -> None:
 
     (path / "scrub_manifest.json").write_text('{"scrub_level":"standard"}')
     (path / "review_status.json").write_text(
-        '{"status":"reviewed","approved_tree_sha256":"'
-        + derivative_tree_sha256(path)
-        + '"}'
+        '{"status":"reviewed","approved_tree_sha256":"' + derivative_tree_sha256(path) + '"}'
     )
 
 

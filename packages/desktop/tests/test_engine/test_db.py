@@ -24,9 +24,7 @@ class TestIndexDB:
 
     def test_initialize_creates_tables(self, db: IndexDB) -> None:
         """Both tables should exist after initialization."""
-        tables = db.conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table'"
-        ).fetchall()
+        tables = db.conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         names = {r["name"] for r in tables}
         assert "captures" in names
         assert "upload_jobs" in names

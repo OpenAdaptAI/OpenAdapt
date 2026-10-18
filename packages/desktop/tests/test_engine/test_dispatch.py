@@ -83,9 +83,7 @@ def _first_supervised_bundle(path: Path, *, state_changing: bool) -> dict:
 def _target_digest(target: dict) -> str:
     from openadapt_desktop.targets import ExecutionTarget
 
-    return EngineDispatcher._canonical_target_digest(
-        ExecutionTarget.model_validate(target)
-    )
+    return EngineDispatcher._canonical_target_digest(ExecutionTarget.model_validate(target))
 
 
 class FakeController:
@@ -186,9 +184,7 @@ class TestRecordingCommands:
             "compiled",
         ]
 
-    def test_first_workflow_stage_survives_dispatcher_restart(
-        self, deps, monkeypatch
-    ) -> None:
+    def test_first_workflow_stage_survives_dispatcher_restart(self, deps, monkeypatch) -> None:
         disp, db, _events = deps
         monkeypatch.setattr("openadapt_desktop.dispatch.sys.platform", "linux")
         monkeypatch.setattr(
@@ -714,9 +710,7 @@ class TestLibraryCommands:
         r = disp.dispatch("compile_recording", {"capture_id": "nope"})
         assert r["ok"] is False
 
-    def test_first_supervised_replay_refuses_state_change_before_flow(
-        self, deps
-    ) -> None:
+    def test_first_supervised_replay_refuses_state_change_before_flow(self, deps) -> None:
         disp, db, events = deps
         bundle = disp.config.data_dir / "bundles" / "bnd1"
         review = _first_supervised_bundle(bundle, state_changing=True)
@@ -757,16 +751,13 @@ class TestLibraryCommands:
             "outcome": "refused",
             "pre_action_refusal": True,
             "error": (
-                "Qualification is required before the first run can change "
-                "application state."
+                "Qualification is required before the first run can change application state."
             ),
         }
         assert bridge.replay_called is False
         assert not any(event == "replay_progress" for event, _data in events)
 
-    def test_first_supervised_replay_refuses_a_stale_exact_bundle_binding(
-        self, deps
-    ) -> None:
+    def test_first_supervised_replay_refuses_a_stale_exact_bundle_binding(self, deps) -> None:
         disp, db, _events = deps
         bundle = disp.config.data_dir / "bundles" / "bnd1"
         review = _first_supervised_bundle(bundle, state_changing=False)
@@ -853,9 +844,9 @@ class TestLibraryCommands:
                 "admission": {
                     "workflow_id": "bnd1",
                     "project_revision": review["project"]["revision"],
-                    "bundle_content_digest": review["graph"]["bundle"][
-                        "provenance"
-                    ]["content_digest"],
+                    "bundle_content_digest": review["graph"]["bundle"]["provenance"][
+                        "content_digest"
+                    ],
                 },
             },
         )
@@ -900,9 +891,7 @@ class TestLibraryCommands:
             "admission": {
                 "workflow_id": "bnd1",
                 "project_revision": review["project"]["revision"],
-                "bundle_content_digest": review["graph"]["bundle"]["provenance"][
-                    "content_digest"
-                ],
+                "bundle_content_digest": review["graph"]["bundle"]["provenance"]["content_digest"],
             },
         }
 
@@ -1088,9 +1077,9 @@ class TestLibraryCommands:
                 "admission": {
                     "workflow_id": "fresh-bnd1",
                     "project_revision": review["project"]["revision"],
-                    "bundle_content_digest": review["graph"]["bundle"][
-                        "provenance"
-                    ]["content_digest"],
+                    "bundle_content_digest": review["graph"]["bundle"]["provenance"][
+                        "content_digest"
+                    ],
                 },
             },
         )
@@ -1338,9 +1327,7 @@ class TestLibraryCommands:
         assert replacement["draft_environment"] is False
         assert replacement["project"]["environment"]["target_kind"] == "citrix"
 
-    def test_saved_first_result_cannot_return_to_pre_run_review(
-        self, deps
-    ) -> None:
+    def test_saved_first_result_cannot_return_to_pre_run_review(self, deps) -> None:
         disp, db, _events = deps
         db.set_first_workflow_state(
             stage="result",
@@ -1357,9 +1344,7 @@ class TestLibraryCommands:
 
         assert db.get_first_workflow_state()["stage"] == "result"
 
-    def test_post_result_qualification_stage_survives_restart(
-        self, deps
-    ) -> None:
+    def test_post_result_qualification_stage_survives_restart(self, deps) -> None:
         disp, db, _events = deps
         db.set_first_workflow_state(
             stage="result",
@@ -1828,9 +1813,7 @@ class TestLibraryCommands:
         assert details["production_eligible"] is production_eligible
         assert details["model_calls"] == 0
         assert details["external_network_calls"] == "none"
-        assert details["compensation_actions"] == (
-            1 if outcome == "ROLLED_BACK" else 0
-        )
+        assert details["compensation_actions"] == (1 if outcome == "ROLLED_BACK" else 0)
         states = [data["state"] for event, data in events if event == "replay_progress"]
         assert states == ["running", progress_state]
         terminal = [data for event, data in events if event == "replay_progress"][-1]
@@ -2568,9 +2551,7 @@ class TestConfigCommands:
     def test_set_config_refuses_remote_http(self, deps) -> None:
         disp, _db, _e = deps
         original = disp.config.hosted_host
-        result = disp.dispatch(
-            "set_config", {"key": "host", "value": "http://customer.example"}
-        )
+        result = disp.dispatch("set_config", {"key": "host", "value": "http://customer.example"})
         assert result["ok"] is False
         assert disp.config.hosted_host == original
 
@@ -2864,7 +2845,10 @@ class TestScrubCaptureRefusal:
     """A scrub that could not run must not advance the egress gate."""
 
     def test_unavailable_scrubber_reports_failure_and_holds_state(
-        self, deps, tmp_path: Path, monkeypatch,
+        self,
+        deps,
+        tmp_path: Path,
+        monkeypatch,
     ) -> None:
         """Missing Presidio -> ok False, capture stays CAPTURED, no scrubbed copy.
 

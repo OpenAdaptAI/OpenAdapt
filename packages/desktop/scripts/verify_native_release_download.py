@@ -24,9 +24,11 @@ import subprocess
 from pathlib import Path
 
 DEFAULT_REPOSITORY = "OpenAdaptAI/OpenAdapt"
-NATIVE_TAG_PREFIX = "desktop-v"
-ENGINE_TAG_PREFIX = "openadapt-desktop-v"
-NATIVE_RELEASE_WORKFLOW = ".github/workflows/desktop-native-release.yml"
+# One immutable release per Desktop version carries the wheel, the sdist, the
+# installers, and the channel.
+NATIVE_TAG_PREFIX = "openadapt-desktop-v"
+NATIVE_RELEASE_WORKFLOW = ".github/workflows/desktop-release.yml"
+RELEASE_EVENTS = frozenset({"push", "workflow_dispatch"})
 GITHUB_OIDC_ISSUER = "https://token.actions.githubusercontent.com"
 CHANNEL_NAME = "openadapt-desktop-channel.json"
 CHANNEL_SCHEMA = "openadapt.desktop-release-channel/v3"
@@ -127,7 +129,9 @@ def expected_asset_names(version: str, signing: dict[str, str]) -> set[str]:
         "openadapt-desktop-release-manifest.json",
         PROVENANCE_NAME,
         VERIFIER_NAME,
-        f"OpenAdapt-Desktop-desktop-v{version}.cyclonedx.json",
+        f"OpenAdapt-Desktop-v{version}.cyclonedx.json",
+        f"openadapt_desktop-{version}-py3-none-any.whl",
+        f"openadapt_desktop-{version}.tar.gz",
     }
     platforms = {
         ("macos", "arm64", (".dmg",)),
@@ -179,10 +183,6 @@ def validate_channel(
             "native_version",
             "native_source_commit",
             "native_release_url",
-            "engine_tag",
-            "engine_commit",
-            "engine_release_id",
-            "engine_release_url",
             "signing",
             "checksums",
             "provenance",
@@ -197,18 +197,13 @@ def validate_channel(
     version = str(data.get("native_version") or "")
     _version_tuple(version)
     native_tag = f"{NATIVE_TAG_PREFIX}{version}"
-    engine_tag = f"{ENGINE_TAG_PREFIX}{version}"
-    if data.get("native_tag") != native_tag or data.get("engine_tag") != engine_tag:
+    if data.get("native_tag") != native_tag:
         raise ValueError("release channel tag and version differ")
-    for field in ("native_source_commit", "engine_commit"):
-        if COMMIT_PATTERN.fullmatch(str(data.get(field) or "")) is None:
-            raise ValueError(f"release channel {field} is invalid")
+    if COMMIT_PATTERN.fullmatch(str(data.get("native_source_commit") or "")) is None:
+        raise ValueError("release channel native_source_commit is invalid")
     native_url = f"https://github.com/{repository}/releases/tag/{native_tag}"
-    engine_url = f"https://github.com/{repository}/releases/tag/{engine_tag}"
-    if data.get("native_release_url") != native_url or data.get("engine_release_url") != engine_url:
+    if data.get("native_release_url") != native_url:
         raise ValueError("release channel URL is invalid")
-    if not isinstance(data.get("engine_release_id"), int) or data["engine_release_id"] <= 0:
-        raise ValueError("release channel engine release id is invalid")
     expected_asset_names(version, data.get("signing"))
     assets = f"https://github.com/{repository}/releases/download/{native_tag}"
     _validate_hash_binding(
@@ -246,11 +241,11 @@ def validate_channel(
     expected_promotion = {
         "workflow_path": NATIVE_RELEASE_WORKFLOW,
         "workflow_ref": workflow_ref,
-        "event": "workflow_dispatch",
         "runner_environment": "github-hosted",
     }
     if not isinstance(promotion, dict) or set(promotion) != {
         *expected_promotion,
+        "event",
         "workflow_commit",
         "run_id",
         "run_attempt",
@@ -258,6 +253,8 @@ def validate_channel(
         raise ValueError("release channel promotion binding is invalid")
     if any(promotion.get(field) != value for field, value in expected_promotion.items()):
         raise ValueError("release channel promotion identity is invalid")
+    if promotion.get("event") not in RELEASE_EVENTS:
+        raise ValueError("release channel promotion event is invalid")
     if promotion.get("workflow_commit") != data["native_source_commit"]:
         raise ValueError("release channel promotion commit differs from the native source")
     for field in ("run_id", "run_attempt"):

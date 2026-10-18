@@ -39,9 +39,7 @@ def test_plain_result_matches_the_shared_cases(case: dict) -> None:
     assert result["safe_to_retry"] is case["safe_to_retry"]
 
 
-SWITCH_CASES = json.loads((REPO / "src" / "lib" / "outcome-cases.json").read_text())[
-    "switch_cases"
-]
+SWITCH_CASES = json.loads((REPO / "src" / "lib" / "outcome-cases.json").read_text())["switch_cases"]
 
 
 @pytest.mark.parametrize("case", SWITCH_CASES, ids=lambda c: c["name"])
@@ -136,8 +134,13 @@ def test_an_omitted_optional_input_never_takes_the_recorded_value() -> None:
 
     declared = [
         DECLARED[0],
-        {"name": "note", "type": "string", "secret": False, "required": False,
-         "example": "Reviewed"},
+        {
+            "name": "note",
+            "type": "string",
+            "secret": False,
+            "required": False,
+            "example": "Reviewed",
+        },
     ]
     with pytest.raises(WorkItemError, match="missing: note"):
         validate_inputs({"member_id": "M-2"}, declared)
@@ -164,8 +167,13 @@ class _Storage:
         return {}
 
 
-def _verified_report(*, transaction: str | None, execution: str, halt: dict | None = None,
-                     results: list | None = None) -> dict:
+def _verified_report(
+    *,
+    transaction: str | None,
+    execution: str,
+    halt: dict | None = None,
+    results: list | None = None,
+) -> dict:
     envelope = {
         "version": "openadapt.execution-outcome/v1",
         "outcome": execution,
@@ -251,8 +259,12 @@ def task(tmp_path: Path):
         params={"member_id": "M-0001", "note": "Reviewed"},
         steps=[flow_ir.Step(id="step-1", intent="Click Save", action=flow_ir.ActionKind.CLICK)],
     ).save(bundle)
-    db.insert_capture("cap-1", str(tmp_path / "cap"), "2026-10-08T00:00:00+00:00",
-                      task_description="Add a claim note")
+    db.insert_capture(
+        "cap-1",
+        str(tmp_path / "cap"),
+        "2026-10-08T00:00:00+00:00",
+        task_description="Add a claim note",
+    )
     db.update_capture("cap-1", duration_secs=74.0)
     db.insert_bundle("wf-note", str(bundle), capture_id="cap-1")
     events: list[tuple[str, dict]] = []
@@ -300,9 +312,11 @@ def test_report_forwards_only_a_consistent_transaction_outcome(task) -> None:
     disp, _db, _events = task
     disp.services._flow_bridge = _Bridge(
         [
-            _verified_report(transaction="HALTED_BEFORE_EFFECT", execution="HALTED",
-                             halt={"state_id": "step_1", "intent": "Click Save",
-                                   "reason": "Different member"}),
+            _verified_report(
+                transaction="HALTED_BEFORE_EFFECT",
+                execution="HALTED",
+                halt={"state_id": "step_1", "intent": "Click Save", "reason": "Different member"},
+            ),
             _verified_report(transaction="HALTED_BEFORE_EFFECT", execution="VERIFIED"),
         ]
     )
@@ -320,9 +334,11 @@ def test_an_uncertain_save_blocks_more_items_until_a_person_checks(task) -> None
     disp, db, _events = task
     bridge = _Bridge(
         [
-            _verified_report(transaction="RECONCILIATION_REQUIRED", execution="HALTED",
-                             halt={"state_id": "step_1", "intent": "Click Save",
-                                   "reason": "Delivery uncertain"}),
+            _verified_report(
+                transaction="RECONCILIATION_REQUIRED",
+                execution="HALTED",
+                halt={"state_id": "step_1", "intent": "Click Save", "reason": "Delivery uncertain"},
+            ),
             _verified_report(transaction="VERIFIED", execution="VERIFIED"),
         ]
     )
@@ -367,8 +383,7 @@ def test_an_uncertain_save_blocks_more_items_until_a_person_checks(task) -> None
 
     confirmed = disp.dispatch(
         "resolve_attention_item",
-        {"item_id": first["item"]["item_id"], "action": "confirmed_saved",
-         "record_checked": True},
+        {"item_id": first["item"]["item_id"], "action": "confirmed_saved", "record_checked": True},
     )
     assert confirmed["ok"] is True
     assert db.get_work_item(first["item"]["item_id"])["status"] == "confirmed_saved"
@@ -385,9 +400,14 @@ def test_a_proven_no_write_stop_can_run_again_once(task) -> None:
                 transaction="HALTED_BEFORE_EFFECT",
                 execution="HALTED",
                 halt={"state_id": "step_1", "intent": "Click Save", "reason": "Mismatch"},
-                results=[{"step_id": "step_1", "intent": "Click Save", "ok": False,
-                          "identity": {"status": "mismatch", "expected": "M-1",
-                                       "observed": "M-9"}}],
+                results=[
+                    {
+                        "step_id": "step_1",
+                        "intent": "Click Save",
+                        "ok": False,
+                        "identity": {"status": "mismatch", "expected": "M-1", "observed": "M-9"},
+                    }
+                ],
             ),
             _verified_report(transaction="VERIFIED", execution="VERIFIED"),
         ]
@@ -465,38 +485,72 @@ def test_skip_and_decline_close_a_no_write_item(task) -> None:
     disp, db, _events = task
     disp.services._flow_bridge = _Bridge(
         [
-            _verified_report(transaction="HALTED_BEFORE_EFFECT", execution="HALTED",
-                             halt={"state_id": "step_1", "intent": "Save", "reason": "x"}),
-            _verified_report(transaction="HALTED_BEFORE_EFFECT", execution="HALTED",
-                             halt={"state_id": "step_1", "intent": "Save", "reason": "x"}),
+            _verified_report(
+                transaction="HALTED_BEFORE_EFFECT",
+                execution="HALTED",
+                halt={"state_id": "step_1", "intent": "Save", "reason": "x"},
+            ),
+            _verified_report(
+                transaction="HALTED_BEFORE_EFFECT",
+                execution="HALTED",
+                halt={"state_id": "step_1", "intent": "Save", "reason": "x"},
+            ),
         ]
     )
     one = _run(disp, "M-1")["item"]
     two = _run(disp, "M-2")["item"]
 
-    assert disp.dispatch("resolve_attention_item",
-                         {"item_id": one["item_id"], "action": "skip"})["ok"] is True
-    assert disp.dispatch("resolve_attention_item",
-                         {"item_id": two["item_id"], "action": "decline"})["ok"] is True
+    assert (
+        disp.dispatch("resolve_attention_item", {"item_id": one["item_id"], "action": "skip"})["ok"]
+        is True
+    )
+    assert (
+        disp.dispatch("resolve_attention_item", {"item_id": two["item_id"], "action": "decline"})[
+            "ok"
+        ]
+        is True
+    )
     assert db.get_work_item(one["item_id"])["status"] == "skipped"
     assert db.get_work_item(two["item_id"])["status"] == "declined"
     # A checked-save action is not offered for a stop that wrote nothing.
-    assert disp.dispatch(
-        "resolve_attention_item",
-        {"item_id": one["item_id"], "action": "confirmed_saved"},
-    )["ok"] is False
+    assert (
+        disp.dispatch(
+            "resolve_attention_item",
+            {"item_id": one["item_id"], "action": "confirmed_saved"},
+        )["ok"]
+        is False
+    )
 
 
 def test_summary_counts_only_verified_items_as_done() -> None:
     rows = [
-        {"item_id": "a", "batch_id": "b", "workflow_id": "w", "position": 0,
-         "status": "done", "execution_outcome": "VERIFIED", "transaction_outcome": "VERIFIED"},
-        {"item_id": "b", "batch_id": "b", "workflow_id": "w", "position": 1,
-         "status": "confirmed_saved", "execution_outcome": "HALTED",
-         "transaction_outcome": "RECONCILIATION_REQUIRED"},
-        {"item_id": "c", "batch_id": "b", "workflow_id": "w", "position": 2,
-         "status": "open", "execution_outcome": "COMPLETED_UNVERIFIED",
-         "transaction_outcome": "COMPLETED_UNVERIFIED"},
+        {
+            "item_id": "a",
+            "batch_id": "b",
+            "workflow_id": "w",
+            "position": 0,
+            "status": "done",
+            "execution_outcome": "VERIFIED",
+            "transaction_outcome": "VERIFIED",
+        },
+        {
+            "item_id": "b",
+            "batch_id": "b",
+            "workflow_id": "w",
+            "position": 1,
+            "status": "confirmed_saved",
+            "execution_outcome": "HALTED",
+            "transaction_outcome": "RECONCILIATION_REQUIRED",
+        },
+        {
+            "item_id": "c",
+            "batch_id": "b",
+            "workflow_id": "w",
+            "position": 2,
+            "status": "open",
+            "execution_outcome": "COMPLETED_UNVERIFIED",
+            "transaction_outcome": "COMPLETED_UNVERIFIED",
+        },
     ]
     summary = summarize(rows, baselines={"w": 60.0})
     assert summary["total"]["done_checked"] == 1
@@ -517,13 +571,13 @@ def test_first_task_can_leave_the_read_only_path_before_anything_ran(task) -> No
     assert moved["state"]["stage"] == "complete"
 
     db.set_first_workflow_state(
-        stage="reconciliation", capture_id="cap-1", workflow_id="wf-note",
+        stage="reconciliation",
+        capture_id="cap-1",
+        workflow_id="wf-note",
         task="Add a claim note",
     )
     with pytest.raises(ValueError, match="Invalid first workflow stage transition"):
-        disp.dispatch(
-            "set_first_workflow_stage", {"stage": "complete", "workflow_id": "wf-note"}
-        )
+        disp.dispatch("set_first_workflow_stage", {"stage": "complete", "workflow_id": "wf-note"})
 
 
 def test_task_inputs_return_where_the_task_was_recorded(task) -> None:
@@ -553,10 +607,7 @@ def test_a_certified_task_is_ready_to_run_only_once_sealed(task) -> None:
     assert card["capture_id"] == "cap-1"
 
 
-_PNG = (
-    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x02\x00\x00\x00\x01"
-    b"\x08\x02\x00\x00\x00"
-)
+_PNG = b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x02\x00\x00\x00\x01\x08\x02\x00\x00\x00"
 
 
 class _SampleBridge:
@@ -581,14 +632,21 @@ class _SampleBridge:
                 transaction=transaction,
                 execution=execution,
                 results=[
-                    {"step_id": "step_000", "intent": "type <note>", "ok": True,
-                     "identity": {"status": "verified"}},
-                    {"step_id": "step_001", "intent": "click 'Save Encounter'",
-                     "ok": execution == "VERIFIED",
-                     "identity": {"status": "verified"},
-                     "effect_verified": execution == "VERIFIED",
-                     "effect_evidence": [{"final_verdict": verdict}],
-                     "after_png": "steps/step_001_after.png"},
+                    {
+                        "step_id": "step_000",
+                        "intent": "type <note>",
+                        "ok": True,
+                        "identity": {"status": "verified"},
+                    },
+                    {
+                        "step_id": "step_001",
+                        "intent": "click 'Save Encounter'",
+                        "ok": execution == "VERIFIED",
+                        "identity": {"status": "verified"},
+                        "effect_verified": execution == "VERIFIED",
+                        "effect_evidence": [{"final_verdict": verdict}],
+                        "after_png": "steps/step_001_after.png",
+                    },
                 ],
             )
             report["params"] = {"note": "Synthetic follow-up"}
@@ -650,7 +708,9 @@ def test_an_interrupted_item_run_becomes_a_record_to_check(task) -> None:
 def test_recording_another_task_keeps_an_uncertain_first_run_locked(task) -> None:
     disp, db, _events = task
     db.set_first_workflow_state(
-        stage="reconciliation", capture_id="cap-1", workflow_id="wf-note",
+        stage="reconciliation",
+        capture_id="cap-1",
+        workflow_id="wf-note",
         task="Add a claim note",
     )
 
@@ -669,13 +729,20 @@ def test_a_task_counts_items_waiting_for_a_new_showing(task) -> None:
     disp, _db, _events = task
     disp.services._flow_bridge = _Bridge(
         [
-            _verified_report(transaction="HALTED_BEFORE_EFFECT", execution="HALTED",
-                             halt={"state_id": "step_1", "intent": "Save", "reason": "x"}),
+            _verified_report(
+                transaction="HALTED_BEFORE_EFFECT",
+                execution="HALTED",
+                halt={"state_id": "step_1", "intent": "Save", "reason": "x"},
+            ),
         ]
     )
     item = _run(disp, "M-1")["item"]
-    assert disp.dispatch("resolve_attention_item",
-                         {"item_id": item["item_id"], "action": "teach"})["ok"] is True
+    assert (
+        disp.dispatch("resolve_attention_item", {"item_id": item["item_id"], "action": "teach"})[
+            "ok"
+        ]
+        is True
+    )
 
     card = disp.dispatch("get_workflows", {})[0]
     assert card["open_items"] == 1

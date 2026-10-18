@@ -187,8 +187,7 @@ def test_resolved_capture_ships_shadow_mode() -> None:
     assert _desktop_declared_capture_floor() >= CAPTURE_SHADOW_MODE_FLOOR
     installed = _installed_capture_version()
     assert installed >= CAPTURE_SHADOW_MODE_FLOOR, (
-        f"openadapt-capture {installed} predates shadow mode, added in "
-        f"{CAPTURE_SHADOW_MODE_FLOOR}"
+        f"openadapt-capture {installed} predates shadow mode, added in {CAPTURE_SHADOW_MODE_FLOOR}"
     )
 
     import openadapt_capture.shadow  # noqa: F401

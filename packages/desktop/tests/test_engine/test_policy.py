@@ -81,15 +81,11 @@ class TestFetchAndCache:
             policy_mod._credential_binding_hmac("https://app.openadapt.ai")
         )
         assert "credential_sha256" not in cached["binding"]
-        assert cached["binding"]["policy_sha256"] == policy_mod._policy_sha256(
-            cached["policy"]
-        )
+        assert cached["binding"]["policy_sha256"] == policy_mod._policy_sha256(cached["policy"])
         assert cached["policy"]["policy_version"] == 7
         assert "source" not in cached["policy"]
 
-    def test_network_failure_falls_back_to_cache(
-        self, cache_path: Path, monkeypatch
-    ) -> None:
+    def test_network_failure_falls_back_to_cache(self, cache_path: Path, monkeypatch) -> None:
         _write_bound_cache(_full_policy(policy_version=3))
 
         def _down(*a, **k):
@@ -160,9 +156,7 @@ class TestFetchAndCache:
 
         with pytest.raises(policy_mod.PolicyFetchError, match="moved backwards"):
             policy_mod.fetch_effective_policy("https://app.openadapt.ai")
-        assert policy_mod.load_cached_policy("https://app.openadapt.ai")[
-            "policy_version"
-        ] == 8
+        assert policy_mod.load_cached_policy("https://app.openadapt.ai")["policy_version"] == 8
 
     def test_network_policy_cannot_change_without_a_new_version(
         self, cache_path: Path, monkeypatch
@@ -216,9 +210,7 @@ class TestFetchAndCache:
         assert policy_mod.fetch_effective_policy("https://app.openadapt.ai") == refreshed
         assert policy_mod.load_cached_policy("https://app.openadapt.ai") == refreshed
 
-    def test_remote_policy_host_requires_https(
-        self, cache_path: Path, monkeypatch
-    ) -> None:
+    def test_remote_policy_host_requires_https(self, cache_path: Path, monkeypatch) -> None:
         called = False
 
         def _get(*_args, **_kwargs):
@@ -231,15 +223,11 @@ class TestFetchAndCache:
             policy_mod.fetch_effective_policy("http://policy.example.test")
         assert called is False
 
-    def test_load_cached_policy_degrades_on_corrupt(
-        self, cache_path: Path
-    ) -> None:
+    def test_load_cached_policy_degrades_on_corrupt(self, cache_path: Path) -> None:
         cache_path.write_text("{ not json")
         assert policy_mod.load_cached_policy("https://app.openadapt.ai") is None
 
-    def test_offline_cache_rejects_other_host(
-        self, cache_path: Path, monkeypatch
-    ) -> None:
+    def test_offline_cache_rejects_other_host(self, cache_path: Path, monkeypatch) -> None:
         _write_bound_cache(_full_policy(policy_version=3))
         monkeypatch.setattr(
             "openadapt_desktop.policy.httpx.get",
@@ -249,9 +237,7 @@ class TestFetchAndCache:
         assert result["source"] == policy_mod.UNCONFIRMED_POLICY_SOURCE
         assert result["policy_version"] is None
 
-    def test_offline_cache_rejects_other_credential(
-        self, cache_path: Path, monkeypatch
-    ) -> None:
+    def test_offline_cache_rejects_other_credential(self, cache_path: Path, monkeypatch) -> None:
         _write_bound_cache(_full_policy(policy_version=3))
         monkeypatch.setenv("OPENADAPT_INGEST_TOKEN", "oai_ingest_other_principal")
         monkeypatch.setattr(
@@ -287,9 +273,7 @@ class TestFetchAndCache:
         result = policy_mod.resolve_effective_policy("https://app.openadapt.ai")
         assert result["source"] == policy_mod.UNCONFIRMED_POLICY_SOURCE
 
-    def test_offline_cache_expires(
-        self, cache_path: Path, monkeypatch
-    ) -> None:
+    def test_offline_cache_expires(self, cache_path: Path, monkeypatch) -> None:
         _write_bound_cache(_full_policy())
         envelope = json.loads(cache_path.read_text())
         envelope["fetched_at"] = (
@@ -325,9 +309,7 @@ class TestFetchAndCache:
         )
         assert policy_mod.load_cached_policy("https://app.openadapt.ai") is None
 
-    def test_cache_rejects_a_policy_body_changed_after_binding(
-        self, cache_path: Path
-    ) -> None:
+    def test_cache_rejects_a_policy_body_changed_after_binding(self, cache_path: Path) -> None:
         _write_bound_cache(_full_policy(policy_version=3))
         envelope = json.loads(cache_path.read_text())
         envelope["policy"]["safety"]["halt_on_ambiguous"] = False
@@ -335,9 +317,7 @@ class TestFetchAndCache:
 
         assert policy_mod.load_cached_policy("https://app.openadapt.ai") is None
 
-    def test_atomic_write_leaves_no_temp_files(
-        self, cache_path: Path, monkeypatch
-    ) -> None:
+    def test_atomic_write_leaves_no_temp_files(self, cache_path: Path, monkeypatch) -> None:
         monkeypatch.setattr(
             "openadapt_desktop.policy.httpx.get", lambda *a, **k: FakeResponse(200, _full_policy())
         )
@@ -360,16 +340,12 @@ class TestHardenSafety:
         assert hardened["safety"] == policy_mod.SAFE_SAFETY_DEFAULTS
 
     def test_null_value_fails_closed(self) -> None:
-        hardened = policy_mod.harden_safety(
-            {"safety": {"unverified_write.allow": None}}
-        )
+        hardened = policy_mod.harden_safety({"safety": {"unverified_write.allow": None}})
         assert hardened["safety"]["unverified_write.allow"] is False
 
     def test_server_provided_value_preserved(self) -> None:
         # When the server speaks, it is authoritative -- we only fill gaps.
-        hardened = policy_mod.harden_safety(
-            {"safety": {"identity_gate.strictness": "medium"}}
-        )
+        hardened = policy_mod.harden_safety({"safety": {"identity_gate.strictness": "medium"}})
         assert hardened["safety"]["identity_gate.strictness"] == "medium"
         # ...but the untouched keys still fail closed.
         assert hardened["safety"]["halt_on_ambiguous"] is True
@@ -381,9 +357,7 @@ class TestHardenSafety:
 
 
 class TestServerOmitsSafetyKeyIsFailClosed:
-    def test_server_omitting_a_safety_key_is_hardened(
-        self, cache_path: Path, monkeypatch
-    ) -> None:
+    def test_server_omitting_a_safety_key_is_hardened(self, cache_path: Path, monkeypatch) -> None:
         # (e) A live server response that OMITS a safety key must be hardened to
         # the safe default, not left absent.
         body = _full_policy()
@@ -414,9 +388,7 @@ class TestBindingSafety:
         with pytest.raises(
             policy_mod.PolicyEnforcementError, match="no authoritative safety policy"
         ):
-            policy_mod.binding_safety(
-                _full_policy(source=policy_mod.UNCONFIRMED_POLICY_SOURCE)
-            )
+            policy_mod.binding_safety(_full_policy(source=policy_mod.UNCONFIRMED_POLICY_SOURCE))
 
     def test_missing_safety_block_refuses(self) -> None:
         body = _full_policy(source="network")
@@ -447,9 +419,7 @@ class TestBindingSafety:
     def test_every_safe_default_is_inside_its_domain(self) -> None:
         # The fail-closed defaults must themselves be bindable, or the offline
         # path could never run at all.
-        assert set(policy_mod.SAFETY_VALUE_DOMAINS) == set(
-            policy_mod.SAFE_SAFETY_DEFAULTS
-        )
+        assert set(policy_mod.SAFETY_VALUE_DOMAINS) == set(policy_mod.SAFE_SAFETY_DEFAULTS)
         for key, value in policy_mod.SAFE_SAFETY_DEFAULTS.items():
             assert policy_mod._in_domain(key, value)
 
@@ -465,18 +435,14 @@ class TestApplySafetyPolicy:
         return policy_mod.apply_safety_policy(deployment, safety)
 
     def test_pixel_verify_required_arms_the_check(self) -> None:
-        bound = self._apply(
-            self.BASE, **{"pixel_verify.consequential_policy": "required"}
-        )
+        bound = self._apply(self.BASE, **{"pixel_verify.consequential_policy": "required"})
         assert bound["runtime"]["pixel_verify_enabled"] is True
 
     def test_pixel_verify_disabled_does_not_disarm_a_stricter_config(self) -> None:
         # `disabled` is the platform BASELINE, not a prohibition: an operator
         # who armed the check locally keeps it.
         deployment = {**self.BASE, "runtime": {"pixel_verify_enabled": True}}
-        bound = self._apply(
-            deployment, **{"pixel_verify.consequential_policy": "disabled"}
-        )
+        bound = self._apply(deployment, **{"pixel_verify.consequential_policy": "disabled"})
         assert bound["runtime"]["pixel_verify_enabled"] is True
 
     def test_model_calls_prohibited_forces_local_grounding(self) -> None:
@@ -485,9 +451,7 @@ class TestApplySafetyPolicy:
         assert bound["runtime"]["allow_model_grounding"] is False
 
     def test_model_calls_permitted_is_not_an_instruction_to_enable(self) -> None:
-        bound = self._apply(
-            self.BASE, **{"model_calls.allowed_in_healthy_run": True}
-        )
+        bound = self._apply(self.BASE, **{"model_calls.allowed_in_healthy_run": True})
         assert "allow_model_grounding" not in bound["runtime"]
 
     def test_demo_profile_escalates_to_standard(self) -> None:
@@ -515,9 +479,7 @@ class TestApplySafetyPolicy:
         assert bound["runtime"]["profile"] == "demo"
 
     def test_unrankable_profile_refuses(self) -> None:
-        with pytest.raises(
-            policy_mod.PolicyEnforcementError, match="unrankable execution profile"
-        ):
+        with pytest.raises(policy_mod.PolicyEnforcementError, match="unrankable execution profile"):
             self._apply({**self.BASE, "runtime": {"profile": "yolo"}})
 
     def test_non_object_runtime_refuses(self) -> None:

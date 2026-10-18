@@ -178,51 +178,56 @@ def test_monorepo_engine_release_publishes_only_a_green_reviewed_version() -> No
         pytest.skip("not running from the OpenAdapt monorepo checkout")
     workflow = workflow_path.read_text(encoding="utf-8")
     triggers = workflow[workflow.index("\non:\n") : workflow.index("\njobs:\n")]
-    skip = workflow.index("- name: Read the version and skip one that is already published")
-    subject = workflow.index("- name: Choose the commit whose checks decide the release")
-    wait = workflow.index("- name: Wait for that commit's Packages run and its desktop jobs")
-    unchanged = workflow.index(
-        "- name: Require that main has not changed Desktop since that commit"
-    )
-    dispatch = workflow.index("- name: Dispatch the package release")
+    gate = workflow[workflow.index("\n  gate:") : workflow.index("\n  build-python:")]
+    state = gate.index("- name: Read the version and the state of its release")
+    subject = gate.index("- name: Choose the commit whose checks decide the release")
+    wait = gate.index("- name: Wait for that commit's Packages run and its desktop jobs")
+    unchanged = gate.index("- name: Require that main has not changed Desktop since that commit")
 
     assert (
         "  push:\n    branches: [main]\n    paths:\n      - packages/desktop/pyproject.toml"
         in triggers
     )
-    assert skip < subject < wait < unchanged < dispatch
-    # A green Packages run with the desktop jobs skipped must not release.
+    assert state < subject < wait < unchanged
+    assert "https://pypi.org/pypi/openadapt-desktop/${version}/json" in gate
+    assert "partly published" in gate
+    assert "actions/workflows/packages.yml/runs" in gate
+    assert '--raw-field head_sha="${SUBJECT}"' in gate
     for prefix in ("desktop test / ", "desktop build / "):
-        assert prefix in workflow
-    assert 'git log -1 --format=%H "${GITHUB_SHA}" -- packages/desktop' in workflow
-    assert "https://pypi.org/pypi/openadapt-desktop/${version}/json" in workflow
-    assert "actions/workflows/packages.yml/runs" in workflow
-    assert '--raw-field head_sha="${SUBJECT}"' in workflow
-    assert "git merge-base --is-ancestor" in workflow
-    assert "-- packages/desktop" in workflow
-    assert "gh workflow run release-package.yml" in workflow
-    assert "-f package=desktop" in workflow
-    for forbidden in ("ADMIN_TOKEN", "git push", "semantic-release", "id-token: write"):
-        assert forbidden not in workflow.split("\njobs:\n", 1)[1]
+        assert prefix in gate
+    assert "git merge-base --is-ancestor" in gate
+    jobs = workflow.split("\njobs:\n", 1)[1]
+    for forbidden in ("ADMIN_TOKEN", "semantic-release", "release-package.yml"):
+        assert forbidden not in jobs
+    # Only the attestation and the PyPI upload may mint an OIDC token, and the
+    # only push is the release App's tag.
+    assert jobs.count("id-token: write") == 2
+    assert [line.strip() for line in jobs.splitlines() if "git push" in line] == [
+        'git push origin "refs/tags/${TAG}"'
+    ]
     uses = re.findall(r"\buses:\s+\S+@([^\s#]+)", workflow)
     assert uses and all(re.fullmatch(r"[0-9a-f]{40}", revision) for revision in uses)
 
 
 def test_monorepo_package_release_runs_the_desktop_contract() -> None:
-    workflow_path = MONOREPO_WORKFLOWS / "release-package.yml"
-    if not workflow_path.is_file():
+    """Desktop releases its wheel, sdist and installers together, not via release-package."""
+
+    package_release = MONOREPO_WORKFLOWS / "release-package.yml"
+    desktop_release = MONOREPO_WORKFLOWS / "desktop-release.yml"
+    if not package_release.is_file():
         pytest.skip("not running from the OpenAdapt monorepo checkout")
-    workflow = workflow_path.read_text(encoding="utf-8")
-    assert re.search(r"options: \[[^\]]*\bdesktop\b", workflow)
-    assert '"desktop": "openadapt-desktop"' in workflow
-    contract = workflow[workflow.index('if [ "$PACKAGE" = desktop ]; then') :]
+    assert not re.search(
+        r"options: \[[^\]]*\bdesktop\b", package_release.read_text(encoding="utf-8")
+    )
+    workflow = desktop_release.read_text(encoding="utf-8")
+    build = workflow[workflow.index("\n  build-python:") : workflow.index("\n  build-macos:")]
     for check in (
         "scripts/check_release_consistency.py --require-dist",
-        "scripts/native_release.py version",
         "scripts/check_source_boundary.py --require-dist",
+        "twine check --strict",
         "scripts/verify_build_artifact.py python-distribution",
     ):
-        assert check in contract
+        assert check in build
 
 
 def test_release_versions_are_synchronized() -> None:
@@ -269,15 +274,17 @@ def test_candidate_release_notes_describe_the_bundled_flow_runtime() -> None:
     notes = (ROOT / "docs/RELEASE_CANDIDATE_INSTALLERS.md").read_text(encoding="utf-8")
     pyproject = tomllib.loads((ROOT / "pyproject.toml").read_text(encoding="utf-8"))
     lock = (ROOT / "uv.lock").read_text(encoding="utf-8")
-    native_release = (MONOREPO_WORKFLOWS / "desktop-native-release.yml").read_text(encoding="utf-8")
+    native_release = (MONOREPO_WORKFLOWS / "desktop-release.yml").read_text(encoding="utf-8")
+    publication = (ROOT / "scripts" / "release_publication.py").read_text(encoding="utf-8")
     build_dependencies = pyproject["project"]["optional-dependencies"]["build"]
     dependencies = pyproject["project"]["dependencies"]
     classifiers = pyproject["project"]["classifiers"]
 
     assert not (ROOT / "docs/EXPERIMENTAL_NATIVE_INSTALLERS.md").exists()
     # The release notes state each platform's signing, then this document.
-    assert native_release.count('Path("docs/RELEASE_CANDIDATE_INSTALLERS.md").read_text()') == 1
-    assert native_release.count("--notes-file release-notes.md") == 1
+    assert '"RELEASE_CANDIDATE_INSTALLERS.md"' in publication
+    assert native_release.count("release_publication.py notes") == 1
+    assert native_release.count('--notes-file "${RUNNER_TEMP}/release-notes.md"') == 1
     assert "EXPERIMENTAL_NATIVE_INSTALLERS" not in native_release
     flow_dependencies = [
         dependency for dependency in build_dependencies if dependency.startswith("openadapt-flow")

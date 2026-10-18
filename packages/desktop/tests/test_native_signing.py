@@ -14,7 +14,7 @@ from scripts.native_signing import (
 )
 
 NATIVE_WORKFLOW = (
-    Path(__file__).resolve().parents[3] / ".github" / "workflows" / "desktop-native-release.yml"
+    Path(__file__).resolve().parents[3] / ".github" / "workflows" / "desktop-release.yml"
 )
 
 

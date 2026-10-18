@@ -49,8 +49,7 @@ def _frame(
     tracking = None
     if target:
         tracking = ControlOverlayTargetTrackingV2(
-            rect=target_rect
-            or ControlOverlayNormalizedRectV2(x=0.1, y=0.2, width=0.3, height=0.4),
+            rect=target_rect or ControlOverlayNormalizedRectV2(x=0.1, y=0.2, width=0.3, height=0.4),
             source_viewport=ControlOverlaySourceViewportV2(
                 width_css_px=source_width,
                 height_css_px=source_height,
@@ -237,9 +236,7 @@ def test_direct_rawvideo_export_preserves_source(tmp_path: Path, monkeypatch) ->
     media = capture / "video" / "raw.mp4"
     media.parent.mkdir(parents=True)
     frames = capture / "frames.rgb"
-    frames.write_bytes(
-        b"".join(bytes((index * 60, 30, 100)) * (64 * 64) for index in range(3))
-    )
+    frames.write_bytes(b"".join(bytes((index * 60, 30, 100)) * (64 * 64) for index in range(3)))
     ffmpeg = Path(shutil.which("ffmpeg") or "")
     ffprobe = Path(shutil.which("ffprobe") or "")
     subprocess.run(
@@ -277,10 +274,7 @@ def test_direct_rawvideo_export_preserves_source(tmp_path: Path, monkeypatch) ->
     result = export_presentation_video(capture)
 
     assert result["raw_media_unchanged"] is True
-    assert (
-        result["placement_policy"]
-        == "step-stable-collision-aware-bottom-corner"
-    )
+    assert result["placement_policy"] == "step-stable-collision-aware-bottom-corner"
     assert _sha256(media) == source_hash
     output = Path(str(result["path"]))
     assert output.is_file()

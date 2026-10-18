@@ -30,8 +30,7 @@ class FakeProcess:
 
     def __init__(self, banner: str) -> None:
         self.stdout = io.StringIO(
-            "operator console on http://127.0.0.1:7863  [ACTIONS ENABLED]\n"
-            f"{banner}\n"
+            f"operator console on http://127.0.0.1:7863  [ACTIONS ENABLED]\n{banner}\n"
         )
         self.stderr = io.StringIO()
         self.terminated = False
@@ -104,9 +103,7 @@ def test_a_console_that_never_announces_itself_fails_loud(monkeypatch, tmp_path)
     monkeypatch.setattr(
         "openadapt_desktop.portal.service._flow_command", lambda _bin: ["openadapt-flow"]
     )
-    service = PortalService(
-        configured(tmp_path / "data"), popen=lambda *a, **k: Silent()
-    )
+    service = PortalService(configured(tmp_path / "data"), popen=lambda *a, **k: Silent())
     with pytest.raises(PortalError, match="console"):
         service.start()
     assert service.running is False
@@ -321,9 +318,7 @@ def test_the_portal_passes_the_operators_deployment_target(monkeypatch, tmp_path
         service.stop()
 
 
-def test_the_staged_deployment_config_is_private_while_it_exists(
-    monkeypatch, tmp_path
-) -> None:
+def test_the_staged_deployment_config_is_private_while_it_exists(monkeypatch, tmp_path) -> None:
     service, seen = _spawned(monkeypatch, tmp_path)
     try:
         if os.name != "nt":
@@ -332,9 +327,7 @@ def test_the_staged_deployment_config_is_private_while_it_exists(
         service.stop()
 
 
-def test_the_staged_config_does_not_outlive_the_console_banner(
-    monkeypatch, tmp_path
-) -> None:
+def test_the_staged_config_does_not_outlive_the_console_banner(monkeypatch, tmp_path) -> None:
     """The decisive invariant: a credential-bearing file is not session-lived.
 
     Flow reads ``--config`` eagerly, before it prints the capability banner, and
@@ -371,9 +364,7 @@ def test_a_missing_deployment_target_refuses_before_spawning(monkeypatch, tmp_pa
     assert service.running is False
 
 
-def test_an_unreadable_deployment_config_refuses_without_echoing_it(
-    monkeypatch, tmp_path
-) -> None:
+def test_an_unreadable_deployment_config_refuses_without_echoing_it(monkeypatch, tmp_path) -> None:
     monkeypatch.setattr(
         "openadapt_desktop.portal.service._flow_command", lambda _bin: ["openadapt-flow"]
     )
@@ -536,9 +527,7 @@ RUNNER_TOKEN = "oar_" + "Z" * 40
 
 def remote_configured(data_dir: Path, **overrides) -> EngineConfig:
     data_dir.mkdir(parents=True, exist_ok=True)
-    (data_dir / "deployment.json").write_text(
-        json.dumps(REMOTE_DEPLOYMENT), encoding="utf-8"
-    )
+    (data_dir / "deployment.json").write_text(json.dumps(REMOTE_DEPLOYMENT), encoding="utf-8")
     return EngineConfig(data_dir=data_dir, **overrides)
 
 
@@ -582,13 +571,9 @@ def test_remote_decisions_refuses_when_this_computer_is_not_registered(
     assert "command" not in seen  # nothing was spawned
 
 
-def test_remote_decisions_refuses_a_flow_runtime_without_the_flag(
-    monkeypatch, tmp_path
-) -> None:
+def test_remote_decisions_refuses_a_flow_runtime_without_the_flag(monkeypatch, tmp_path) -> None:
     seen, popen = _capture_spawn(monkeypatch)
-    monkeypatch.setattr(
-        "importlib.metadata.version", lambda _name: "1.25.0", raising=False
-    )
+    monkeypatch.setattr("importlib.metadata.version", lambda _name: "1.25.0", raising=False)
     service = PortalService(remote_configured(tmp_path / "data"), popen=popen)
     with pytest.raises(PortalError, match="1.26.0 or newer"):
         service.start()
@@ -607,9 +592,7 @@ def test_remote_decisions_refuses_prerelease_or_invalid_flow_versions(
     assert "command" not in seen
 
 
-def test_remote_decisions_passes_the_flag_and_the_credential(
-    monkeypatch, tmp_path
-) -> None:
+def test_remote_decisions_passes_the_flag_and_the_credential(monkeypatch, tmp_path) -> None:
     seen, popen = _capture_spawn(monkeypatch)
     monkeypatch.setattr(
         "openadapt_desktop.portal.service.load_runner_credential",

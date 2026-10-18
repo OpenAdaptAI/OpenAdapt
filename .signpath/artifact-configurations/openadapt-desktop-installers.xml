@@ -4,7 +4,7 @@
   into SignPath (project openadapt-desktop > Artifact configurations) and make
   it the default; the workflow does not pass artifact-configuration-slug.
 
-  desktop-native-release.yml uploads one GitHub artifact (a ZIP) holding the
+  desktop-release.yml uploads one GitHub artifact (a ZIP) holding the
   Tauri MSI and the NSIS setup executable, so one signing request, and one
   approval, covers a release:
 

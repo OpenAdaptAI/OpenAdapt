@@ -496,9 +496,7 @@ def test_desktop_binds_one_exact_fault_target_in_a_two_action_scope(
     )
     initialized = _initialize(bundle)
     fault_case = next(
-        item
-        for item in initialized["project"]["cases"]
-        if item["kind"] == "wrong_identity"
+        item for item in initialized["project"]["cases"] if item["kind"] == "wrong_identity"
     )
     assert initialized["controls"]["actions"]["open"]["execution_paths"] == ["gui"]
     assert initialized["controls"]["actions"]["save"]["execution_paths"] == ["api", "gui"]
@@ -558,9 +556,7 @@ def test_dispatcher_forwards_dual_path_fault_target_to_flow_scope(
     )
     initialized = _initialize(bundle)
     fault_case = next(
-        item
-        for item in initialized["project"]["cases"]
-        if item["kind"] == "wrong_identity"
+        item for item in initialized["project"]["cases"] if item["kind"] == "wrong_identity"
     )
     db = IndexDB(tmp_path / "index.db")
     db.initialize()

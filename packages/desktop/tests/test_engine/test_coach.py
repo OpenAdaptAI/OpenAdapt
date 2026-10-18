@@ -137,5 +137,5 @@ def test_presentation_export_does_not_consume_the_coach_channel() -> None:
     source = (root / "openadapt_desktop/presentation_export.py").read_text(encoding="utf-8")
     assert "overlay://coach" in source
     assert "openadapt.control-overlay-coach/v1" in source
-    assert "TIMELINE_SCHEMA = \"openadapt.control-overlay-timeline/v2\"" in source
+    assert 'TIMELINE_SCHEMA = "openadapt.control-overlay-timeline/v2"' in source
     assert "control-overlay-coach" not in source.split("TIMELINE_SCHEMA", 1)[1]

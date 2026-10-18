@@ -61,11 +61,14 @@ def _presidio_that_cannot_run(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 class TestScrubUnavailableIsNotCleanResult:
-    """"Could not scrub" must never look like "scrubbed and found nothing"."""
+    """ "Could not scrub" must never look like "scrubbed and found nothing"."""
 
     @pytest.mark.parametrize("level", [ScrubLevel.STANDARD, ScrubLevel.ENHANCED])
     def test_scrub_image_refuses_and_writes_no_output(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch, level: ScrubLevel,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
+        level: ScrubLevel,
     ) -> None:
         """No provider -> refuse, and leave no unredacted file behind."""
         _break_presidio(monkeypatch)
@@ -76,12 +79,12 @@ class TestScrubUnavailableIsNotCleanResult:
         with pytest.raises(ScrubbingUnavailableError):
             Scrubber(level=level).scrub_image(source, output)
 
-        assert not output.exists(), (
-            "an unredacted screenshot was copied into the scrubbed output"
-        )
+        assert not output.exists(), "an unredacted screenshot was copied into the scrubbed output"
 
     def test_scrub_image_refuses_when_provider_cannot_run(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Importable-but-broken Presidio refuses too, not just a missing one."""
         _presidio_that_cannot_run(monkeypatch)
@@ -95,7 +98,9 @@ class TestScrubUnavailableIsNotCleanResult:
         assert not output.exists()
 
     def test_scrub_capture_refuses_before_writing_anything(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """A refused scrub leaves no directory that reads as a completed one."""
         _break_presidio(monkeypatch)
@@ -106,14 +111,15 @@ class TestScrubUnavailableIsNotCleanResult:
 
         scrubbed = capture.parent / (capture.name + ".scrubbed")
         assert not (scrubbed / "scrub_manifest.json").exists(), (
-            "a manifest reporting zero redactions was written for a scrub "
-            "that never ran"
+            "a manifest reporting zero redactions was written for a scrub that never ran"
         )
         assert not (scrubbed / "review_status.json").exists()
         assert not (scrubbed / "screenshots" / "0001.png").exists()
 
     def test_scrub_text_does_not_silently_downgrade_to_regex(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         """Enhanced text scrubbing refuses rather than returning regex output.
 
@@ -192,7 +198,8 @@ class TestScrubber:
         assert "text_hash" in r
 
     def test_scrub_capture_creates_scrubbed_directory(
-        self, sample_capture_dir: Path,
+        self,
+        sample_capture_dir: Path,
     ) -> None:
         """Scrubbing a capture should create a parallel .scrubbed/ directory."""
         scrubber = Scrubber(level=ScrubLevel.BASIC)
@@ -201,7 +208,8 @@ class TestScrubber:
         assert scrubbed_path.name.endswith(".scrubbed")
 
     def test_scrub_capture_writes_manifest(
-        self, sample_capture_dir: Path,
+        self,
+        sample_capture_dir: Path,
     ) -> None:
         """Scrubbing should create scrub_manifest.json."""
         scrubber = Scrubber(level=ScrubLevel.BASIC)
@@ -215,7 +223,8 @@ class TestScrubber:
         assert "total_redactions" in manifest
 
     def test_scrub_capture_writes_review_status(
-        self, sample_capture_dir: Path,
+        self,
+        sample_capture_dir: Path,
     ) -> None:
         """Scrubbing should create review_status.json."""
         scrubber = Scrubber(level=ScrubLevel.BASIC)
@@ -224,7 +233,8 @@ class TestScrubber:
         assert status_path.exists()
 
     def test_rescrub_atomically_replaces_stale_derivative_files(
-        self, sample_capture_dir: Path,
+        self,
+        sample_capture_dir: Path,
     ) -> None:
         scrubber = Scrubber(level=ScrubLevel.BASIC)
         scrubbed_path = scrubber.scrub_capture(sample_capture_dir)
@@ -238,7 +248,9 @@ class TestScrubber:
         assert (replacement / "scrub_manifest.json").exists()
 
     def test_manifest_never_contains_identity_bearing_local_path(
-        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch,
+        self,
+        tmp_path: Path,
+        monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         capture = _capture_with_screenshot(tmp_path)
         identity_name = "Jane-Doe-record-12345"

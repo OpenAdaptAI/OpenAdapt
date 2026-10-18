@@ -230,9 +230,7 @@ def test_bundle_dashboard_must_match_the_requested_host() -> None:
 def test_handoff_persists_exact_server_id_with_private_permissions(tmp_path: Path) -> None:
     document = push_document(status="accepted_for_ingest")
     result = parse_flow_push(json.dumps(document), "", ok=True)
-    path = persist_deployment_handoff(
-        tmp_path, local_workflow_id="local-workflow-1", result=result
-    )
+    path = persist_deployment_handoff(tmp_path, local_workflow_id="local-workflow-1", result=result)
     saved = json.loads(path.read_text())
     assert saved["state"] == "accepted_recording"
     assert saved["push_result"]["artifact_ingest_id"] == INGEST_ID
@@ -247,9 +245,7 @@ def test_handoff_persists_exact_server_id_with_private_permissions(tmp_path: Pat
 
 def test_invalid_child_result_persists_reconcile_state(tmp_path: Path) -> None:
     result = parse_flow_push("bad", "raw local error", ok=False)
-    path = persist_deployment_handoff(
-        tmp_path, local_workflow_id="local-workflow-1", result=result
-    )
+    path = persist_deployment_handoff(tmp_path, local_workflow_id="local-workflow-1", result=result)
     saved = json.loads(path.read_text())
     assert saved["state"] == "delivery_uncertain"
     assert saved["push_result"] is None

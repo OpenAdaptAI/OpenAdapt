@@ -364,9 +364,7 @@ def test_a_suspended_machine_cannot_extend_a_session(monkeypatch) -> None:
     assert pairings.authenticate(claim["session_token"]) is not None
 
     # The monotonic clock has not moved at all -- as if the laptop slept.
-    later = real.datetime.now(real.timezone.utc) + real.timedelta(
-        seconds=SESSION_TTL_S + 60
-    )
+    later = real.datetime.now(real.timezone.utc) + real.timedelta(seconds=SESSION_TTL_S + 60)
 
     class SleptDatetime(real.datetime):
         @classmethod

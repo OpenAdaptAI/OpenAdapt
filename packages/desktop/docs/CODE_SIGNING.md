@@ -80,7 +80,7 @@ immediately.
 | `APPLE_PASSWORD` | the app-specific password from step 4 |
 | `APPLE_TEAM_ID` | the 10-character Team ID |
 
-On the next `desktop-v*` tag the macOS jobs import the cert into an ephemeral
+On the next Desktop release the macOS jobs import the cert into an ephemeral
 keychain, build a **Developer ID signed** DMG, submit it to Apple's notary
 service, staple the ticket, and the smoke test asserts `spctl` acceptance and a
 stapled ticket. Assets ship as `-macos-arm64-developer-id-notarized-*.dmg`.
@@ -150,13 +150,12 @@ commit, run ID, run attempt, and GitHub-hosted runner.
 `SHA256SUMS` and the website manifest bind the same exact bytes for offline hash
 checks.
 
-This workflow control is not sufficient without repository controls. Configure
-a no-bypass pull-request ruleset for `main`. Configure immutable creation rules
-for both `v*` and `desktop-v*` tags before a release. Only the engine release
-workflow can create `v*`. Only the explicitly dispatched native release
-workflow can create `desktop-v*`. Neither identity can update or delete a tag. The historical
-`desktop-v0.15.0` prerelease is ad-hoc/unsigned and does not satisfy this trust
-contract.
+This workflow control is not sufficient without repository controls. The
+`openadapt-desktop-v*` tags need the two rulesets every monorepo package uses:
+only the openadapt-release App may create them, and no one may update or delete
+them. OpenAdapt's releases are immutable once published. The historical
+`desktop-v0.15.0` prerelease in openadapt-desktop is ad-hoc/unsigned and does
+not satisfy this trust contract.
 
 ---
 
@@ -184,7 +183,7 @@ name — only the human-readable claim wording changes.
 # First authenticate the checksum manifest and its reviewed-main workflow.
 gh attestation verify SHA256SUMS \
   --repo OpenAdaptAI/OpenAdapt \
-  --cert-identity "https://github.com/OpenAdaptAI/OpenAdapt/.github/workflows/desktop-native-release.yml@refs/heads/main" \
+  --cert-identity "https://github.com/OpenAdaptAI/OpenAdapt/.github/workflows/desktop-release.yml@refs/heads/main" \
   --cert-oidc-issuer "https://token.actions.githubusercontent.com" \
   --deny-self-hosted-runners
 

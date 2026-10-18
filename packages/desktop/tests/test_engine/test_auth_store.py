@@ -131,21 +131,15 @@ class TestCredentialStore:
         assert store.store_credential_secure(_cred(token="oai_ingest_new")) is False
         assert store.load_credential("https://app.openadapt.ai") == old
 
-    def test_runner_registration_replaces_one_exact_keychain_entry(
-        self, fake_keyring
-    ) -> None:
+    def test_runner_registration_replaces_one_exact_keychain_entry(self, fake_keyring) -> None:
         host = "https://app.openadapt.ai"
 
-        assert store.store_runner_registration_secure(
-            host, _runner_registration()
-        ) is True
+        assert store.store_runner_registration_secure(host, _runner_registration()) is True
 
         assert store.load_runner_credential(host) == _runner_registration()
         assert fake_keyring.get_password(store.SERVICE_NAME, host) is None
 
-    def test_runner_registration_restores_prior_entry_when_write_fails(
-        self, fake_keyring
-    ) -> None:
+    def test_runner_registration_restores_prior_entry_when_write_fails(self, fake_keyring) -> None:
         host = "https://app.openadapt.ai"
         prior = _runner_registration(_PRIOR_RUNNER_TOKEN)
         assert store.store_runner_registration_secure(host, prior) is True
@@ -158,20 +152,17 @@ class TestCredentialStore:
 
         fake_keyring.set_password = fail_replacement
 
-        assert store.store_runner_registration_secure(
-            host, _runner_registration()
-        ) is False
+        assert store.store_runner_registration_secure(host, _runner_registration()) is False
         assert store.load_runner_credential(host) == prior
 
-    def test_runner_registration_rejects_partial_release_binding(
-        self, fake_keyring
-    ) -> None:
+    def test_runner_registration_rejects_partial_release_binding(self, fake_keyring) -> None:
         registration = _runner_registration()
         del registration["local_runtime_release"]["capture"]
 
-        assert store.store_runner_registration_secure(
-            "https://app.openadapt.ai", registration
-        ) is False
+        assert (
+            store.store_runner_registration_secure("https://app.openadapt.ai", registration)
+            is False
+        )
 
     @pytest.mark.parametrize(
         ("field", "value"),
@@ -190,9 +181,10 @@ class TestCredentialStore:
         registration = _runner_registration()
         registration[field] = value
 
-        assert store.store_runner_registration_secure(
-            "https://app.openadapt.ai", registration
-        ) is False
+        assert (
+            store.store_runner_registration_secure("https://app.openadapt.ai", registration)
+            is False
+        )
 
     @pytest.mark.parametrize(
         ("field", "value"),
@@ -210,9 +202,10 @@ class TestCredentialStore:
         registration = _runner_registration()
         registration["local_runtime_release"]["flow"][field] = value
 
-        assert store.store_runner_registration_secure(
-            "https://app.openadapt.ai", registration
-        ) is False
+        assert (
+            store.store_runner_registration_secure("https://app.openadapt.ai", registration)
+            is False
+        )
 
 
 class TestAuthHeader:
@@ -262,10 +255,7 @@ class TestAuthHeader:
             store.canonical_host_origin("HTTPS://Customer.Example:443/dashboard")
             == "https://customer.example"
         )
-        assert (
-            store.canonical_host_origin("http://localhost:3000/path")
-            == "http://localhost:3000"
-        )
+        assert store.canonical_host_origin("http://localhost:3000/path") == "http://localhost:3000"
         assert store.canonical_host_origin("http://customer.example") == ""
         assert store.canonical_host_origin("https://user@example.com") == ""
 
@@ -335,8 +325,6 @@ class TestProtocolConformance:
 
     def test_credential_shape(self) -> None:
         c = _cred()
-        assert set(c.keys()) == {
-            "kind", "token", "refresh_token", "org_id", "host", "expires_at"
-        }
+        assert set(c.keys()) == {"kind", "token", "refresh_token", "org_id", "host", "expires_at"}
         with pytest.raises(KeyError):
             _ = c["nonexistent"]  # type: ignore[misc]
