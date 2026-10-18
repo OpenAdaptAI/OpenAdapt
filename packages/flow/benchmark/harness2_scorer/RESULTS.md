@@ -96,10 +96,10 @@ agent's report, those 13 "saved" runs would count as successes.
 
 ## Data
 
-- `data/<arm>/results.json`: per task, the chosen harness, the outcome of
+- `evidence/<arm>/results.json`: per task, the chosen harness, the outcome of
   every rollout in the search, and the 10 re-runs with their read-back.
-- `data/summary.json`: the table above, per arm.
-- `data/raw.tar.gz`: every rollout's steps, report, read-back, reward
+- `evidence/summary.json`: the table above, per arm.
+- `evidence/raw.tar.gz`: every rollout's steps, report, read-back, reward
   contract and signed receipt and evidence, plus each search's harnesses,
   selection and proposer audit. The reward workers' private keys and tokens
   are not included; each receipt verifies with the `keys/ed25519.pub` beside
