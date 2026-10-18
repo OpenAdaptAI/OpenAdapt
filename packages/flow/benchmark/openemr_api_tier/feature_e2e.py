@@ -60,6 +60,7 @@ def cmd_record(a: argparse.Namespace) -> None:
         raise SystemExit(f"exists: {out}")
     f = SpikeFixture()
     reset_and_seed(f)
+    print(json.dumps({"record_gate": wait_quiet()}), flush=True)
     backend, close = demo._BasePlaywrightBackend.launch(f.ui_base_url, headless=True)
     try:
         capture = None if a.no_capture else NetworkCapture(backend.page.context).start()
@@ -116,9 +117,17 @@ def cmd_record(a: argparse.Namespace) -> None:
         deadline = time.monotonic() + 30
         while time.monotonic() < deadline and not sql_patients(f, "email='elena.marsh@example.invalid'"):
             time.sleep(0.2)
+        # The demonstration must itself have saved the right record, or it
+        # teaches the wrong thing (under heavy load a keystroke can land in
+        # the wrong field).
+        saved = sql_patients(f, "email='elena.marsh@example.invalid'")
+        want = spec.fields
+        matched = sum(saved[0].get(k) == v for k, v in want.items()) if len(saved) == 1 else 0
         print(json.dumps({"recording": str(recording), "events": len(events),
                           "exchanges": None if capture is None else capture.count,
-                          "saved": len(sql_patients(f, "email='elena.marsh@example.invalid'"))}))
+                          "saved": len(saved), "readback": f"{matched}/{len(want)}"}))
+        if len(saved) != 1 or matched != len(want):
+            raise SystemExit("the demonstration did not save the referral 12/12; record again")
     finally:
         close()
 
