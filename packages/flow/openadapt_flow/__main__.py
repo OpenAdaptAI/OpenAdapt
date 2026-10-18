@@ -718,6 +718,7 @@ def _configured_replayer(
     checkpoint_key: Optional[str] = None,
     approval_gate=None,
     qualification_fault_driver=None,
+    deployment_surface: Optional[str] = None,
 ):
     """Wire the grounding, verification, and actuation layers into a Replayer.
 
@@ -758,6 +759,7 @@ def _configured_replayer(
         checkpoint_key=checkpoint_key,
         approval_gate=approval_gate,
         qualification_fault_driver=qualification_fault_driver,
+        deployment_surface=deployment_surface,
     )
 
 
@@ -792,6 +794,7 @@ def _build_and_run_replayer(
     run_id: Optional[str] = None,
     approval_gate=None,
     qualification_fault_driver=None,
+    deployment_surface: Optional[str] = None,
 ):
     """Build the shared Replayer configuration and execute one workflow."""
     return _configured_replayer(
@@ -812,6 +815,7 @@ def _build_and_run_replayer(
         runtime_config=runtime_config,
         approval_gate=approval_gate,
         qualification_fault_driver=qualification_fault_driver,
+        deployment_surface=deployment_surface,
     ).run(
         workflow,
         params=params,
@@ -1024,6 +1028,7 @@ def _replay_desktop(
             run_id=run_id,
             approval_gate=approval_gate,
             qualification_fault_driver=qualification_fault_driver,
+            deployment_surface=backend_cfg.deployment_surface,
         )
     finally:
         close = getattr(backend, "close", None)
@@ -2167,6 +2172,7 @@ def _cmd_replay(args: argparse.Namespace) -> int:
             run_id=getattr(args, "_qualification_run_id", None),
             approval_gate=approval_gate,
             qualification_fault_driver=fault_driver,
+            deployment_surface=backend_cfg.deployment_surface,
         )
 
     if backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url:
@@ -3333,6 +3339,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             approval_gate=_resume_approval_gate(
                 args, resume_mode, run_dir, policy_name=cfg.policy.policy
             ),
+            deployment_surface=backend_cfg.deployment_surface,
         )
         return resume(
             run_dir,
@@ -6752,6 +6759,17 @@ def _cmd_qualify_campaign(args: argparse.Namespace) -> int:
     print(
         f"\nqualify {verdict}: {len(result.rows)} trial(s) in {result.timing['campaign_wall_s']} s"
     )
+    if result.lookup is not None:
+        pixels = result.lookup.pixels_only
+        print(
+            f"Surface: {result.lookup.surface}; lookups used: "
+            f"{', '.join(result.lookup.capabilities_used)}. Pixels-only pass "
+            f"({'gate' if pixels.role == 'gate' else 'informational'}): "
+            f"{pixels.rate_text()}."
+        )
+        common = pixels.common_failure()
+        if common:
+            print(f"Most common pixels-only failure: {common}")
     if result.certified:
         print(f"Certified under {result.policy}. Bundle: {result.bundle_dir}")
     elif certify is None:

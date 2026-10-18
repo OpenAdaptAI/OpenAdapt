@@ -24,6 +24,19 @@ backend:
   url: http://localhost:8080
   headed: false            # true => a visible browser (demo / debugging)
 
+  # Where this Flow runtime runs relative to the application. It decides
+  # whether structure lookups (DOM, accessibility) are available:
+  #   local              same machine as the app (structure where the backend
+  #                      reads it). The default for web, windows, macos, linux.
+  #   remote_in_session  installed inside the remote or virtual desktop
+  #                      session (structure allowed).
+  #   remote_display     outside the session, looking at its client window
+  #                      (pixels only). The default for rdp and citrix.
+  #   unknown            read as remote_display.
+  # A workflow qualified with structure halts before any write on a surface
+  # that offers pixels only. See docs/SURFACES.md, "Lookup capabilities".
+  # deployment_surface: local
+
   # Native Linux alternative (AT-SPI, one exact X11 app window):
   # kind: linux
   # linux_app: gedit

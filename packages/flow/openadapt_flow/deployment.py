@@ -29,6 +29,10 @@ from typing import Any, Callable, Literal, Mapping, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
+from openadapt_flow.lookup_capabilities import (
+    DeclaredSurface,
+    declared_surface_problem,
+)
 from openadapt_flow.remote_frame_contract import RemoteFrameContract
 
 # Import-light (pydantic only): the effect CONTRACT types double as the
@@ -74,6 +78,23 @@ class BackendConfig(BaseModel):
     #: ``web`` (default) | ``windows`` | ``macos`` | ``linux`` | ``rdp`` |
     #: ``citrix``.
     kind: str = "web"
+
+    #: Where this Flow runtime runs relative to the application:
+    #:
+    #: - ``local``: on the same machine as the application. Structure lookups
+    #:   (DOM, accessibility) are available where the backend reads them.
+    #: - ``remote_in_session``: installed inside the remote or virtual desktop
+    #:   session it automates. Accessibility is available there, so structure
+    #:   lookups are allowed.
+    #: - ``remote_display``: outside the remote session, looking at its client
+    #:   window or display stream. Pixels only.
+    #: - ``unknown``: read as ``remote_display``.
+    #:
+    #: When omitted, ``rdp`` and ``citrix`` are ``remote_display`` and every
+    #: other kind is ``local``. A run whose surface offers fewer lookup
+    #: capabilities than the workflow was qualified with halts before any
+    #: write (see docs/SURFACES.md, "Lookup capabilities").
+    deployment_surface: Optional[DeclaredSurface] = None
 
     #: The GUI URL to drive (the app under automation). None => the caller's
     #: own default (e.g. ``replay`` serves the bundled MockMed demo).
@@ -164,6 +185,13 @@ class BackendConfig(BaseModel):
     # Exact reviewed geometry for derived remote settle comparisons. The
     # enclosing DeploymentConfig serialization binds this value at admission.
     remote_frame_contract: Optional[RemoteFrameContract] = None
+
+    @model_validator(mode="after")
+    def _surface_matches_kind(self) -> "BackendConfig":
+        problem = declared_surface_problem(self.deployment_surface, self.kind)
+        if problem is not None:
+            raise ValueError(f"backend.{problem}")
+        return self
 
 
 #: ``effects.kind`` values served by the engine itself. A plugin can never
@@ -1016,6 +1044,7 @@ def build_replayer(
     qualification_fault_driver: Any = None,
     qualification_environment_observer: Any = None,
     approval_gate: Any = None,
+    deployment_surface: Optional[str] = None,
 ) -> Any:
     """Wire one deployment-qualified backend into the governed Replayer.
 
@@ -1196,6 +1225,7 @@ def build_replayer(
         qualification_fault_driver=qualification_fault_driver,
         qualification_environment_observer=qualification_environment_observer,
         approval_gate=approval_gate,
+        deployment_surface=deployment_surface,
     )
 
 
