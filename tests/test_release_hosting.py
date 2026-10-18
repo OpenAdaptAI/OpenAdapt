@@ -83,3 +83,43 @@ def test_release_hosting_fails_closed_on_an_unsupported_exclude_pattern() -> Non
         MODULE.verify_release_hosting_documents(
             {"enabled": True}, [ambiguous], "v2.0.0"
         )
+
+
+def _package_ruleset(pattern: str, *rule_types: str) -> dict:
+    ruleset = _ruleset(*rule_types)
+    ruleset["conditions"]["ref_name"]["include"] = [pattern]
+    return ruleset
+
+
+@pytest.mark.parametrize("package", ["openadapt-flow", "openadapt-agent", "openadapt-types"])
+def test_release_hosting_accepts_a_package_tag_under_its_own_rules(package: str) -> None:
+    MODULE.verify_release_hosting_documents(
+        {"enabled": True},
+        [
+            _package_ruleset(f"refs/tags/{package}-v*", "creation"),
+            _package_ruleset(f"refs/tags/{package}-v*", "update", "deletion"),
+        ],
+        f"{package}-v2.2.0",
+    )
+
+
+def test_release_hosting_launcher_rules_do_not_cover_a_package_tag() -> None:
+    with pytest.raises(ValueError, match="lacks active tag rules"):
+        MODULE.verify_release_hosting_documents(
+            {"enabled": True},
+            [_ruleset("creation"), _ruleset("update", "deletion")],
+            "openadapt-flow-v2.2.0",
+        )
+
+
+@pytest.mark.parametrize(
+    "tag",
+    ["openadapt-v2.2.0", "openadapt-capture-v1.0.0", "flow-v2.2.0", "openadapt-flow-2.2.0"],
+)
+def test_release_hosting_refuses_a_tag_outside_the_package_list(tag: str) -> None:
+    with pytest.raises(ValueError, match="release tag must be"):
+        MODULE.verify_release_hosting_documents(
+            {"enabled": True},
+            [_ruleset("creation", "update", "deletion")],
+            tag,
+        )

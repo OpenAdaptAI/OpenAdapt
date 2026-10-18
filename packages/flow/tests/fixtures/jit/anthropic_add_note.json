@@ -1,0 +1,76 @@
+{
+  "task_id": "mockmed.add_note",
+  "inputs": {
+    "note": "Synthetic follow-up in two weeks"
+  },
+  "dialect": "anthropic",
+  "source": "Anthropic computer tool (computer_20251124) tool_use inputs, one run, recorded against MockMed at 1280x800",
+  "actions": [
+    {
+      "action": "screenshot"
+    },
+    {
+      "action": "left_click",
+      "coordinate": [
+        775,
+        186
+      ]
+    },
+    {
+      "action": "left_click",
+      "coordinate": [
+        114,
+        159
+      ]
+    },
+    {
+      "action": "left_click",
+      "coordinate": [
+        344,
+        350
+      ]
+    },
+    {
+      "action": "left_click",
+      "coordinate": [
+        1100,
+        650
+      ]
+    },
+    {
+      "action": "mouse_move",
+      "coordinate": [
+        85,
+        214
+      ]
+    },
+    {
+      "action": "left_click",
+      "coordinate": [
+        85,
+        214
+      ]
+    },
+    {
+      "action": "left_click",
+      "coordinate": [
+        344,
+        350
+      ]
+    },
+    {
+      "action": "type",
+      "text": "Synthetic follow-up in two weeks"
+    },
+    {
+      "action": "left_click",
+      "coordinate": [
+        134,
+        457
+      ]
+    },
+    {
+      "action": "screenshot"
+    }
+  ]
+}
