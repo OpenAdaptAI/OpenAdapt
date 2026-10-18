@@ -106,6 +106,22 @@ def test_scorer_reads_the_store_not_the_report(
     ).is_file()
 
 
+def test_a_duplicate_is_never_the_right_outcome(tmp_path):
+    # The timeout task accepts reconciliation_required, but not with two records.
+    task = mockmed_tasks(("timeout",))[0]
+    session = MockMedTarget().start()
+    try:
+        scorer = ReadBackScorer(task, session.oracle_recipe(), tmp_path)
+        scorer.begin("episode_timeout_0001")
+        _post(session.base_url, "p1", task.params["note"])
+        _post(session.base_url, "p1", task.params["note"])
+        score = scorer.score("episode_timeout_0001", "halted_before_effect")
+    finally:
+        session.stop()
+    assert score.outcome == "reconciliation_required" and score.duplicate
+    assert score.passed is False and score.reward == -1.0
+
+
 def test_unknown_variant_is_refused():
     with pytest.raises(ValueError, match="unknown MockMed variants"):
         mockmed_tasks(("plain", "nope"))
@@ -146,6 +162,11 @@ def test_rollout_is_scored_by_readback(tmp_path, variant, harness, outcome, flag
     assert score.passed is (outcome in task.expected)
     run = load_run(run_dir)
     assert run["steps"] > 0 and run["agent_cost_usd"] == 0.0
+    # The worker's private key and token do not outlive the rollout.
+    worker = run_dir / "reward" / "worker"
+    assert (worker / "keys" / "ed25519.pub").is_file()
+    assert not (worker / "keys" / "ed25519.pem").exists()
+    assert not (worker / "token").exists()
     # The rollout is idempotent by run directory.
     assert (
         run_rollout(
