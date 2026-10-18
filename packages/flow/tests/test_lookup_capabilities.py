@@ -395,6 +395,22 @@ def test_bundles_without_the_record_are_unchanged():
     assert replayer._lookup_capability_refusal(workflow, "citrix") is None
 
 
+def test_a_certified_bundle_without_the_record_halts_where_structure_is_missing():
+    """The manual `qualification run` + `certify` path certified without a
+    lookup record, and such a bundle then ran on RDP or Citrix unchecked."""
+    workflow = _workflow()
+    init_project(workflow, environment=_environment())
+    workflow.qualification.last_certification = SimpleNamespace(passed=True)
+    refusal = lookup_capability_refusal(
+        workflow, surface="remote_display", structure_available=False
+    )
+    assert refusal is not None and "Requalify" in refusal
+    assert (
+        lookup_capability_refusal(workflow, surface="local", structure_available=True)
+        is None
+    )
+
+
 # -- the pixels-only pass in qualify -----------------------------------------
 
 APP = {"name": "Demo", "version": "1", "url": "http://127.0.0.1:9301/"}

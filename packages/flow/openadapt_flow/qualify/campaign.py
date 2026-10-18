@@ -689,9 +689,11 @@ def _run(
                 for s in workflow.steps
             ),
         )
-        kwargs.update(lookup or {})
         if hooks.replayer_kwargs is not None:
             kwargs.update(hooks.replayer_kwargs(ctx))
+        # The signed lookup settings win over any hook, so a hook can't turn
+        # structure back on during a pass that must not use it.
+        kwargs.update(lookup or {})
         if pixels_only:
             # The pixels-only pass: the structural rung never runs, whatever
             # the hooks asked for.

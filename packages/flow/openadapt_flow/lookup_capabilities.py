@@ -270,12 +270,29 @@ def lookup_capability_refusal(
 ) -> Optional[str]:
     """Return the halt reason when this run offers fewer lookups than qualified.
 
-    None when the workflow carries no qualified-lookup record (older bundles)
-    or when every capability it was qualified with is available here.
+    None when every capability the workflow was qualified with is available
+    here, or when it was never certified. A certified workflow with no
+    qualified-lookup record halts where structure is missing.
     """
 
     record = qualified_lookup_of(workflow)
-    if record is None or not record.requires_structure or structure_available:
+    if structure_available:
+        return None
+    if record is None:
+        # A workflow certified without a lookup record (the manual
+        # `qualification run` + `certify` path) can't show it was qualified on
+        # pixels alone, so it doesn't run where structure is missing.
+        project = getattr(workflow, "qualification", None)
+        if project is None or getattr(project, "last_certification", None) is None:
+            return None
+        return (
+            "HALTED_BEFORE_EFFECT: this workflow was certified without a record "
+            "of which lookups it was qualified with, and this run's "
+            f"{surface} surface offers pixels only. Nothing was written. "
+            "Requalify it with openadapt-flow qualify (app.surface: "
+            "remote_display in verify.yaml) so it is qualified on pixels alone."
+        )
+    if not record.requires_structure:
         return None
     if surface == "remote_display":
         why = (
