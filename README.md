@@ -4,7 +4,7 @@
 
 **Give your agent a program, not a mouse.**
 
-The open-source harness that compiles computer-use agent runs into verified programs.
+The open-source, verified execution layer for computer-use agents.
 
 [![CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/main.yml) [![Packages CI](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml) [![PyPI](https://img.shields.io/pypi/v/openadapt.svg)](https://pypi.org/project/openadapt/) [![Python 3.10–3.12](https://img.shields.io/badge/python-3.10%E2%80%933.12-blue)](https://www.python.org/downloads/) [![License: MIT](https://img.shields.io/badge/license-MIT-3e6b4f.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE) [![Discord](https://img.shields.io/badge/Discord-community-5865F2?logo=discord&logoColor=white)](https://discord.gg/yF527cQbDG)
 
@@ -29,43 +29,20 @@ instead of guessing.
 | **Run** | The compiled program repeats the task with new inputs. It checks the record before each save and reads it back after. | None |
 | **Repair** | When the app changes, the run stops before saving. An agent shows the fix, the program tries it up to the save without saving, and a person approves it. | Only when something changed, on your own key |
 
-## An agent alone, and an OpenAdapt program
-
-The same referral task on a local OpenEMR 8.0.0.3 test copy with synthetic
-patients, 62 timed runs each (14 and 15 October 2026), judged by the same
-database read-back:
-
-| | Claude computer-use agent | OpenAdapt program |
-|---|---|---|
-| Model calls | On every step of every run | 0 |
-| Screenshots sent to a model | Throughout every run | 0 |
-| Model cost per referral | About $0.08 at list price | $0 |
-| Path through the app | Chosen again each run | The same compiled steps |
-| Median time | 36.5 s | 29.7 s |
-| Referrals saved correctly | 62 of 63 | 62 of 63 |
-
-Both were equally correct here, and the agent matched or beat OpenAdapt in
-three other tests. [Every result](https://openadapt.ai/compare/computer-use-agents)
-is published. The program was only about a fifth faster because it still drives
-every page, as the agent does; direct API steps compiled from the recording's
-network traffic are in review
-([#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269)). OpenAdapt isn't
-affiliated with the OpenEMR project.
-
 ## Why the read-back matters
 
-A success screen is not proof of a save. In a fault test through the real
-replayer, 72 of 90 runs left a wrong record behind a success screen: a save that
-never landed, landed partly, landed twice, or changed another record. Each check
-below was asked whether those 72 runs had succeeded:
+A success screen is not proof of a save. We injected 8 kinds of bad save into
+a test app (a save that never landed, landed partly, landed twice, went to the
+wrong record, or changed another record), 9 runs each, alongside clean runs.
+Each check below was asked whether those 72 bad saves had succeeded:
 
-| How the save was checked | Wrong records reported as saved |
+| How the save was checked | Bad saves reported as saved |
 |---|---|
 | The app's "Saved" message on screen | 54 of 72 |
 | A read of the record over the app's REST API | 9 of 72 (all writes to a table it didn't read) |
-| A read of every table the save touched | 0 of 72 |
+| A read of every table in the database | 0 of 72 |
 
-The faults are a small, hand-written set, so this measures coverage, not a
+This is a coverage test over a small, hand-written set of faults, not a
 real-world error rate. [EFFECT_E2E.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/effect_e2e/EFFECT_E2E.md)
 has the method and raw results.
 
@@ -181,6 +158,29 @@ use [OpenAdapt Desktop](https://openadapt.ai/download).
 the system of record. `openadapt-flow serve-reward` turns the same check into a
 reward for training or evaluating computer-use agents
 ([REWARD_WORKER.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/REWARD_WORKER.md)).
+
+## An agent alone, and an OpenAdapt program
+
+The same referral task on a local OpenEMR 8.0.0.3 test copy with synthetic
+patients, 62 timed runs each (14 and 15 October 2026), judged by the same
+database read-back:
+
+| | Claude computer-use agent | OpenAdapt program |
+|---|---|---|
+| Model calls | On every step of every run | 0 |
+| Screenshots sent to a model | Throughout every run | 0 |
+| Model cost per referral | About $0.08 at list price | $0 |
+| Path through the app | Chosen again each run | The same compiled steps |
+| Median time | 36.5 s | 29.7 s |
+| Referrals saved correctly | 62 of 63 | 62 of 63 |
+
+Both were equally correct here, and the agent matched or beat OpenAdapt in
+three other tests. [Every result](https://openadapt.ai/compare/computer-use-agents)
+is published. The program was only about a fifth faster because it still drives
+every page, as the agent does; direct API steps compiled from the recording's
+network traffic are in review
+([#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269)). OpenAdapt isn't
+affiliated with the OpenEMR project.
 
 ## Every backend
 
