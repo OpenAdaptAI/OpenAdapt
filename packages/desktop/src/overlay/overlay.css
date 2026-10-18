@@ -1,0 +1,321 @@
+html:has(.control-overlay),
+body:has(.control-overlay),
+#root:has(.control-overlay) {
+  background: transparent;
+  overflow: hidden;
+}
+
+.control-overlay-host {
+  background: transparent;
+  inset: 0;
+  position: absolute;
+}
+
+.control-overlay {
+  align-items: stretch;
+  background: var(--slate-0);
+  background: color-mix(in srgb, var(--slate-0) 94%, transparent);
+  border: 1px solid var(--line-strong);
+  border-top: 2px solid var(--run-lift);
+  border-radius: 16px;
+  bottom: 0;
+  box-shadow: var(--shadow-pop);
+  color: var(--fog-1);
+  display: grid;
+  font-size: var(--fs-caption);
+  grid-template-columns: minmax(0, 1fr) auto;
+  left: 0;
+  min-width: 0;
+  overflow: hidden;
+  position: absolute;
+  user-select: none;
+  width: 100%;
+}
+
+.control-overlay.compact {
+  grid-template-columns: minmax(0, 1fr);
+  min-height: 72px;
+}
+
+.control-overlay-host.stage .control-overlay {
+  bottom: 24px;
+  left: 24px;
+  right: auto;
+  width: min(440px, calc(100% - 48px));
+}
+
+.overlay-target-ring {
+  border: 2px dashed color-mix(in srgb, var(--run-lift) 85%, white);
+  border-radius: 10px;
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--slate-0) 45%, transparent);
+  pointer-events: none;
+  position: absolute;
+}
+
+.control-overlay.expanded {
+  height: 100vh;
+}
+
+.control-overlay.phase-recording {
+  border-top-color: var(--crit-lift);
+}
+.control-overlay.phase-pausing,
+.control-overlay.phase-resuming,
+.control-overlay.phase-stopping {
+  border-top-color: var(--warn-lift);
+}
+.control-overlay.phase-halted,
+.control-overlay.phase-completed_unverified,
+.control-overlay.phase-rolled_back,
+.control-overlay.phase-failed {
+  border-top-color: var(--warn-lift);
+}
+.control-overlay.phase-verified {
+  border-top-color: var(--success-lift);
+}
+
+.overlay-main {
+  align-items: center;
+  cursor: default;
+  display: flex;
+  min-width: 0;
+  padding: var(--space-2) var(--space-3);
+}
+
+.overlay-copy {
+  min-width: 0;
+}
+
+.overlay-primary {
+  align-items: center;
+  display: flex;
+  gap: var(--space-2);
+  min-width: 0;
+  white-space: nowrap;
+}
+
+.overlay-primary strong {
+  color: var(--fog-0);
+  font-size: var(--fs-sm);
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overlay-step,
+.overlay-profile,
+.overlay-safety,
+.overlay-turn {
+  font-family: var(--font-mono);
+  font-size: 10px;
+}
+
+.overlay-step {
+  color: var(--fog-2);
+}
+
+.overlay-profile {
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-pill);
+  color: var(--fog-2);
+  padding: 2px 7px;
+  text-transform: uppercase;
+}
+
+.overlay-safety {
+  background: color-mix(in srgb, var(--run-lift) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--run-lift) 50%, transparent);
+  border-radius: var(--radius-pill);
+  color: var(--fog-1);
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+}
+
+.overlay-turn {
+  background: color-mix(in srgb, var(--warn-lift) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--warn-lift) 50%, transparent);
+  border-radius: var(--radius-pill);
+  color: var(--fog-1);
+  letter-spacing: 0.04em;
+  padding: 2px 7px;
+  text-transform: uppercase;
+}
+
+.overlay-hint,
+.overlay-pause-copy {
+  color: var(--fog-1);
+  margin: var(--space-1) 0 0;
+  max-width: 36rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.overlay-pause-copy {
+  white-space: normal;
+}
+
+.phase-halted .overlay-safety,
+.phase-completed_unverified .overlay-safety,
+.phase-rolled_back .overlay-safety,
+.phase-failed .overlay-safety {
+  background: color-mix(in srgb, var(--warn-lift) 14%, transparent);
+  border-color: color-mix(in srgb, var(--warn-lift) 50%, transparent);
+}
+
+.phase-verified .overlay-safety {
+  background: color-mix(in srgb, var(--success-lift) 14%, transparent);
+  border-color: color-mix(in srgb, var(--success-lift) 50%, transparent);
+}
+
+.overlay-secondary,
+.overlay-details {
+  align-items: center;
+  color: var(--fog-3);
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.overlay-rail {
+  align-items: center;
+  color: var(--fog-3);
+  display: flex;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  gap: var(--space-2);
+  margin-top: var(--space-1);
+  text-transform: uppercase;
+}
+
+.overlay-rail i {
+  background: var(--line-strong);
+  flex: 1;
+  height: 1px;
+}
+
+.overlay-secondary span,
+.overlay-details span {
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overlay-secondary span + span::before {
+  color: var(--line-strong);
+  content: "·";
+  margin-right: var(--space-2);
+}
+
+.overlay-details {
+  border-top: 1px solid var(--line);
+  color: var(--fog-2);
+  margin-top: var(--space-2);
+  padding-top: var(--space-1);
+}
+
+.overlay-details strong {
+  color: var(--fog-1);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.overlay-pulse {
+  flex: 0 0 auto;
+  background: var(--run-lift);
+  border-radius: var(--radius-pill);
+  height: 7px;
+  width: 7px;
+}
+
+.phase-recording .overlay-pulse {
+  background: var(--crit-lift);
+  animation: overlay-pulse 1.2s ease-in-out infinite;
+}
+.phase-pausing .overlay-pulse,
+.phase-resuming .overlay-pulse,
+.phase-stopping .overlay-pulse {
+  background: var(--warn-lift);
+  animation: overlay-pulse 0.8s ease-in-out infinite;
+}
+.phase-halted .overlay-pulse,
+.phase-completed_unverified .overlay-pulse,
+.phase-rolled_back .overlay-pulse,
+.phase-failed .overlay-pulse {
+  background: var(--warn-lift);
+}
+.phase-verified .overlay-pulse {
+  background: var(--success-lift);
+}
+
+@keyframes overlay-pulse {
+  50% { opacity: 0.35; }
+}
+
+.overlay-controls {
+  align-items: center;
+  border-left: 1px solid var(--line);
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-3) var(--space-2);
+}
+
+.overlay-button,
+.overlay-dismiss {
+  background: var(--slate-2);
+  border: 1px solid var(--line-strong);
+  color: var(--fog-1);
+  cursor: pointer;
+  font: inherit;
+}
+
+.overlay-button {
+  border-radius: var(--radius-pill);
+  padding: var(--space-1) var(--space-3);
+}
+
+.overlay-button.stop:not(:disabled) {
+  border-color: var(--crit-lift);
+  color: var(--crit-lift);
+}
+
+.overlay-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.38;
+}
+
+.overlay-button:focus-visible,
+.overlay-dismiss:focus-visible {
+  outline: 2px solid var(--accent-lift);
+  outline-offset: 2px;
+}
+
+.overlay-dismiss {
+  align-items: center;
+  background: transparent;
+  border-color: transparent;
+  border-radius: var(--radius-pill);
+  display: inline-flex;
+  font-size: var(--fs-md);
+  height: 24px;
+  justify-content: center;
+  width: 24px;
+}
+
+.sr-only {
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  padding: 0;
+  position: absolute;
+  width: 1px;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phase-recording .overlay-pulse { animation: none; }
+}
