@@ -694,13 +694,13 @@ def test_assurance_grades_are_the_published_contract_labels() -> None:
     """The grades are the shared ReadBackTier labels, strongest first."""
 
     from openadapt_flow.assurance import ASSURANCE_GRADES, assurance_for
-    from openadapt_flow.contracts.approval import ReadBackTier
+    from openadapt_types.approval import ReadBackTier
 
     assert ASSURANCE_GRADES == tuple(tier.label for tier in sorted(ReadBackTier))
     from typing import get_args
 
     from openadapt_flow.assurance import Assurance
-    from openadapt_flow.contracts.approval import VerificationTierLabel
+    from openadapt_types.approval import VerificationTierLabel
 
     assert get_args(Assurance) == get_args(VerificationTierLabel)
     for flow_tier in (1, 2, 3, 4):

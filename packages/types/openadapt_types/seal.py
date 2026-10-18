@@ -1,6 +1,6 @@
 """Cloud issuer signatures on Seals (``openadapt.seal-signature/v1``).
 
-A Seal is an :class:`~openadapt_flow.contracts.execute.ExecuteEvidenceReceiptV1`. Cloud
+A Seal is an :class:`~openadapt_types.execute.ExecuteEvidenceReceiptV1`. Cloud
 may attach ``seal_signature``: an Ed25519 signature by a published OpenAdapt
 Cloud issuer key over the receipt's canonical sha256 (the receipt without its
 ``seal_signature``). Byte-compatible with Cloud ``src/lib/sealSignature.ts``.

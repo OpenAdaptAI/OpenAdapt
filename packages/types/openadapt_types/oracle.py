@@ -13,7 +13,7 @@ Seal ladder (higher is stronger):
 
 This numbering is the Seal ladder. It is not
 ``EffectVerificationTier``, which counts the other way. Both map onto the
-check-level ladder in ``openadapt_flow.check_level`` (``OracleTier.check_level``).
+check-level ladder in ``openadapt_types.check_level`` (``OracleTier.check_level``).
 """
 
 from __future__ import annotations
@@ -30,7 +30,7 @@ from pydantic import (
     model_validator,
 )
 
-from openadapt_flow.check_level import CheckLevel, from_oracle_tier
+from openadapt_types.check_level import CheckLevel, from_oracle_tier
 
 PRODUCTION_SEAL_MINIMUM_TIER = 2
 

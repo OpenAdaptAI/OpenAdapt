@@ -51,14 +51,14 @@ from pydantic import (
     model_validator,
 )
 
-from openadapt_flow.contracts.execute import OracleTierV1
-from openadapt_flow.contracts.oracle import (
+from openadapt_types.execute import OracleTierV1
+from openadapt_types.oracle import (
     PRODUCTION_SEAL_MINIMUM_TIER,
     OracleChannel,
     OracleTier,
     tier_of,
 )
-from openadapt_flow.contracts.process_capability import (
+from openadapt_types.process_capability import (
     _digest_payload,
     _parse_timestamp,
     _StrictContract,

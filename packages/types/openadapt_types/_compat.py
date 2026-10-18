@@ -6,7 +6,7 @@ old code keeps working, new code uses ``openadapt-types`` directly.
 
 Usage::
 
-    from openadapt_flow.contracts._compat import (
+    from openadapt_types._compat import (
         from_benchmark_observation,
         from_benchmark_action,
         from_ml_observation,

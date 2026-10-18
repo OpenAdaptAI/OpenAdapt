@@ -6,7 +6,7 @@ from typing import Any
 
 from pydantic.json_schema import models_json_schema
 
-from openadapt_flow.contracts.execute import (
+from openadapt_types.execute import (
     EXECUTE_OPENAPI_SCHEMA,
     ExecuteAcceptedV1,
     ExecuteDecisionRequiredWebhookV1,
