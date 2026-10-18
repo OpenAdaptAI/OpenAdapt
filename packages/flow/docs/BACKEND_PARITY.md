@@ -92,8 +92,8 @@ drives an app).
 
 | Entry point | Web | Windows | macOS | Linux | RDP | Citrix |
 | --- | --- | --- | --- | --- | --- | --- |
-| `jit.compile_agent(app=WebApp(...))` | tested (`tests/e2e/test_jit_cua_e2e.py`) | | | | | |
-| `jit.compile_agent(app=SurfaceApp(...))` | | works | works | works | tested | tested |
+| `jit.compile_agent(app=WebApp(...))` | tested (`tests/e2e/test_jit_cua_e2e.py`) | n/a (use `SurfaceApp`) | n/a | n/a | n/a | n/a |
+| `jit.compile_agent(app=SurfaceApp(...))` ([#1283](https://github.com/OpenAdaptAI/OpenAdapt/pull/1283)) | n/a (use `WebApp`) | works | works | works (needs `linux_allow_physical_input`) | tested | tested |
 | `AuthoringSession` (agent drives a recording) | tested | tested | tested | works | tested | tested |
 | `runtime.effects.ui_readback` | tested | see below | see below | see below | see below | see below |
 | `openadapt-agent serve --authoring` (pinning a window) | tested | tested | tested (frontmost window only) | **refused** | tested | tested |
@@ -115,6 +115,14 @@ drives an app).
   [VERIFICATION.md](VERIFICATION.md)).
 - `openadapt-agent serve --authoring` on Linux: there is no Linux pin flag,
   so it stops with "stdio --authoring needs a locally pinned window".
+  [#1287](https://github.com/OpenAdaptAI/OpenAdapt/pull/1287) adds
+  `--authoring --config deploy.yaml --authoring-from-config` for every
+  surface except network RDP, which it refuses (each run's own session would
+  disconnect the recording's).
+- An agent clicks at window coordinates. Native Linux refuses coordinate
+  input unless the section sets `linux_allow_physical_input: true`
+  ("coordinate input is disabled for native Linux"), so agent-driven
+  recording on Linux needs it. Replay of a recorded AT-SPI target does not.
 
 ## URL flags
 
@@ -136,16 +144,16 @@ are not app URLs.
 
 | Gap | Where | Status |
 | --- | --- | --- |
-| `emit-mcp` server drives Playwright for every bundle | `emit/mcp_tool.py` | fixing |
-| `emit-skill` tells the agent to pass `--url` for a desktop bundle | `emit/skill.py` | fixing |
-| `serve-execute` runs every bundle in a browser | `execute/dispatch.py` | fixing |
-| `bench` runs a desktop bundle against the web demo | `__main__.py` (`_cmd_bench`) | fixing |
-| `console --attend` drives Citrix without the readiness marker | `runtime/durable/attended_service.py` | fixing |
-| `resume --backend X` on a bundle recorded on Y is not refused | `__main__.py` (`_cmd_resume`) | fixing |
-| Agent authoring can't pin a Linux window or a named macOS app | `agent/authoring.py`, `agent/cli.py` | fixing |
-| JIT canary on RDP or Citrix needs qualified pixel identity | `jit/` | follow-up |
-| `variants route` / `run` on a desktop surface: no fixture test | PR #1264 | after merge |
-| `induce --probe-on` on a desktop test copy: no fixture test | PR #1276 | after merge |
-| `run --self-repair` refuses non-web: "only browser runs can be repaired for now" | PR #1265 | after merge |
-| `compile-agent` CLI takes only `--url` | PR #1277 | after merge |
+| `emit-mcp` server drives Playwright for every bundle | `emit/mcp_tool.py` | [#1285](https://github.com/OpenAdaptAI/OpenAdapt/pull/1285) |
+| `emit-skill` tells the agent to pass `--url` for a desktop bundle | `emit/skill.py` | [#1285](https://github.com/OpenAdaptAI/OpenAdapt/pull/1285) |
+| `serve-execute` runs every bundle in a browser | `execute/dispatch.py` | [#1285](https://github.com/OpenAdaptAI/OpenAdapt/pull/1285) (refuses non-web) |
+| `bench` runs a desktop bundle against the web demo | `__main__.py` (`_cmd_bench`) | [#1285](https://github.com/OpenAdaptAI/OpenAdapt/pull/1285) (refuses non-web) |
+| `console --attend` drives Citrix without the readiness marker | `runtime/durable/attended_service.py` | [#1285](https://github.com/OpenAdaptAI/OpenAdapt/pull/1285) |
+| `resume --backend X` on a bundle recorded on Y is not refused | `__main__.py` (`_cmd_resume`) | [#1285](https://github.com/OpenAdaptAI/OpenAdapt/pull/1285) |
+| Agent authoring can't pin a Linux window or a named macOS app | `agent/authoring.py`, `agent/cli.py` | [#1287](https://github.com/OpenAdaptAI/OpenAdapt/pull/1287) (`serve --authoring --config deploy.yaml --authoring-from-config`) |
+| JIT canary on RDP or Citrix needs qualified pixel identity | `jit/` | follow-up ([#1283](https://github.com/OpenAdaptAI/OpenAdapt/pull/1283) refuses it with the gate's reason) |
+| `route` on a desktop surface: no test | [#1264](https://github.com/OpenAdaptAI/OpenAdapt/pull/1264) | [#1288](https://github.com/OpenAdaptAI/OpenAdapt/pull/1288) |
+| `induce --probe-on` on a desktop test copy: no test | [#1276](https://github.com/OpenAdaptAI/OpenAdapt/pull/1276) | [#1289](https://github.com/OpenAdaptAI/OpenAdapt/pull/1289) |
+| `run --self-repair` refuses non-web: "only browser runs can be repaired for now" | [#1265](https://github.com/OpenAdaptAI/OpenAdapt/pull/1265) | refused with a reason; desktop support after it merges |
+| `compile-agent` CLI takes only `--url` | [#1277](https://github.com/OpenAdaptAI/OpenAdapt/pull/1277) | after it merges (this page's URL-flag test will flag it) |
 | The GTK3 AT-SPI qualification job is in `packages/flow/.github/`, which GitHub does not run in the monorepo | `.github/workflows/` | follow-up |
