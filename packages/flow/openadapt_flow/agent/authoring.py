@@ -471,6 +471,7 @@ def pin_local_backend(
     remote_window: Optional[str] = None,
     remote_window_title: Optional[str] = None,
     citrix: bool = False,
+    deployment_backend: Any = None,
 ) -> tuple[Any, str, Any]:
     """Pin the local target. Titles never go to MCP.
 
@@ -484,6 +485,10 @@ def pin_local_backend(
       operator already started (never started here).
     - ``remote_window`` / ``citrix`` → the RDP or Citrix client window,
       screen-only.
+    - ``deployment_backend`` (the ``backend:`` section of a deployment file)
+      → whatever app it names, built by the same factory ``openadapt-flow
+      run --config`` uses: a Windows app, one macOS or Linux window, or an
+      RDP or Citrix client window.
     - Windows with none of those → coach-only.
     - macOS / Linux → unique frontmost window via Flow backends when those
       constructors are importable (F1). Non-unique Linux titles are coach-only.
@@ -494,6 +499,13 @@ def pin_local_backend(
     if backend is not None:
         kind = backend_kind or "web"
         return backend, kind, None
+    if deployment_backend is not None:
+        if url or windows_agent_url or remote_window or citrix:
+            raise AuthoringError(
+                "pin one target: the deployment file's backend section, or "
+                "--url / --windows-agent-url / --remote-window / --citrix"
+            )
+        return _pin_deployment_backend(deployment_backend)
     pinned = _pin_desktop_driver(
         windows_agent_url=windows_agent_url,
         windows_agent_token=windows_agent_token,
@@ -577,6 +589,33 @@ def _pin_desktop_driver(
             kind=kind,
             rdp_window=remote_window or None,
             rdp_window_title=remote_window_title or None,
+        )
+    try:
+        backend = build_backend(config)
+    except (ValueError, RuntimeError, OSError) as exc:
+        raise AuthoringError(f"could not pin the {kind} target: {exc}") from exc
+    return backend, kind, getattr(backend, "close", None)
+
+
+def _pin_deployment_backend(section: Any) -> tuple[Any, str, Any]:
+    """Build the app a deployment ``backend:`` section names (not ``web``)."""
+
+    try:
+        from openadapt_flow.backends.factory import build_backend
+        from openadapt_flow.deployment import BackendConfig
+    except ImportError as exc:  # pragma: no cover - Flow is a dependency
+        raise AuthoringError(f"openadapt-flow backends are unavailable: {exc}") from exc
+    config = (
+        section
+        if isinstance(section, BackendConfig)
+        else BackendConfig.model_validate(dict(section))
+    )
+    kind = str(config.kind or "").strip().lower().replace("_", "-")
+    kind = "rdp" if kind == "remote-display" else kind
+    if kind == "web":
+        raise AuthoringError(
+            "the deployment file names a web app; pass --url URL --headed to "
+            "record it in a new Chromium window"
         )
     try:
         backend = build_backend(config)
@@ -715,6 +754,7 @@ def open_authoring_session(
     remote_window: Optional[str] = None,
     remote_window_title: Optional[str] = None,
     citrix: bool = False,
+    deployment_backend: Any = None,
     **kwargs: Any,
 ) -> object:
     """Construct Flow's public authoring session when that module exists.
@@ -750,6 +790,7 @@ def open_authoring_session(
             remote_window=remote_window,
             remote_window_title=remote_window_title,
             citrix=citrix,
+            deployment_backend=deployment_backend,
         ),
         **kwargs,
     )
@@ -818,6 +859,16 @@ def _open_pinned_session(
         if pin.get("remote_window_title"):
             hints["rdp_window_title"] = pin["remote_window_title"]
         kwargs.setdefault("backend_hints", hints)
+    section = pin.get("deployment_backend")
+    if canonical in _SCREEN_ONLY_BACKENDS and section is not None:
+        read = section.get if isinstance(section, dict) else section.__getattribute__
+        hints = {
+            key: read(key)
+            for key in ("rdp_window", "rdp_window_title", "rdp_readiness_text")
+        }
+        hints = {key: value for key, value in hints.items() if value}
+        if hints:
+            kwargs.setdefault("backend_hints", hints)
     kind = canonical
     opener = getattr(flow_authoring, "open_session", None)
     session_cls = getattr(flow_authoring, "AuthoringSession", None)

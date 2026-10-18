@@ -36,6 +36,23 @@ from openadapt_flow.agent.runner import RunnerConfig, default_runs_dir
 __all__ = ["build_parser", "main"]
 
 
+def _authoring_section(args: argparse.Namespace) -> object:
+    """The ``backend:`` section ``--config`` names, when authoring should pin it.
+
+    Only a non-web section, and only when no other pin flag was given: a web
+    app is still pinned with ``--url --headed`` (a fresh browser window).
+    """
+
+    if not args.config or (
+        args.url or args.windows_agent_url or args.remote_window or args.citrix
+    ):
+        return None
+    from openadapt_flow.deployment import load_deployment
+
+    section = load_deployment(args.config).backend
+    return None if (section.kind or "web").strip().lower() == "web" else section
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="openadapt-agent",
@@ -201,7 +218,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         default=None,
         metavar="YAML",
-        help="Deployment config YAML forwarded to `openadapt-flow run --config`",
+        help=(
+            "Deployment config YAML forwarded to `openadapt-flow run --config`. "
+            "With --authoring and no other pin flag, its backend: section also "
+            "names the app to record (windows, macos, linux, rdp, citrix)."
+        ),
     )
     p.add_argument(
         "--policy",
@@ -657,6 +678,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
                         remote_window=args.remote_window,
                         remote_window_title=args.remote_window_title,
                         citrix=args.citrix,
+                        deployment_backend=_authoring_section(args),
                     ),
                     out_dir=authoring_dir,
                     screens=args.authoring_screens,
