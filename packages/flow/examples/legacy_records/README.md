@@ -14,6 +14,16 @@ This example shows OpenAdapt reading records out of desktop apps that have no AP
 | Read-back | Read the chart before the write; close, reopen by record id, read clipboard and OCR; the triage entry count must have gone up by one | Close, reopen by bill id, read clipboard and OCR, plus the live-session export (Ctrl+E) and the scheduled export (a separate process) |
 | Best grade | `reopened` for the record id and subject id (read before the write and again after reopening). `same_screen` for the triage values, which are only read after reopening. | `system_of_record`, from the scheduled export of saved data |
 
+## Outcomes
+
+| Outcome | Referral triage | Invoice posting | Review queue |
+|---|---|---|---|
+| `committed` | Triage entry written; the reopened chart shows it and one more entry than before | Bill entered; the reopened bill and the scheduled export show it | Only for values that need review |
+| `no_action` | The physician chose `decline` (`reason_code` `declined`). Evidence: the chart search on screen (clipboard and OCR), and for one matching chart its triage entry count before and after reopening. | The controller chose `hold` or `reject` (`held`, `rejected`). Evidence: the supplier's bill count on screen and in the scheduled export. | Only with `--review-decisions` or `"policy": {"review_decisions": true}` in the answers file |
+| `halted` | More than one chart matches, the chart shows a different subject, the save was dropped, an exception was not settled, the no-write evidence is too weak, or a screen did not appear | The supplier is missing or different, the bill cannot be reopened or exported, an exception was not settled, the no-write evidence is too weak, or a screen did not appear | Always |
+
+A `no_action` result never counts as a save and is never billable. Its evidence must reach the grade a commit of the same workflow carries: `same_screen` for the referral (the weakest grade of a committed triage entry) and `system_of_record` for the invoice. Weaker evidence halts the run instead.
+
 Grades are names from the check-level ladder and follow the reading step's rule: `reopened` needs a read in the acting session and a read of the reopened record, and `system_of_record` needs a read that does not go through the app's screens.
 
 ## Run the demo
@@ -58,5 +68,4 @@ The runs make no model calls.
 - **The Seal.** It is a prototype signature. It will be replaced by offline Seals with a local site key.
 - **Grades.** The rule is `openadapt_flow.records.schema.grade_for`, applied through `openadapt_flow.interchange.conformance.supported_grade`.
 - **The run path.** A deployment runs a compiled Flow workflow over RDP. This demo uses the scripted driver, labelled as a prototype.
-- **Declined referrals.** A `decline` decision needs no EMR work. The result exchange records it as `halted` with the reason, and no identity match, because no search ran. The v0 format has no separate outcome for "nothing to do".
 - **OCR look-alikes.** The demo shows OCR reading `TEST-R1` as `TEST-Rl`. The value goes to the review queue rather than counting as confirmed. Look-alike-aware comparison is separate work.

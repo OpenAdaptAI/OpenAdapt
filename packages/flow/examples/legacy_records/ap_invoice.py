@@ -27,15 +27,16 @@ import subprocess
 import time
 from datetime import date
 from pathlib import Path
-from typing import Any
+from typing import Any, Optional
 
-from evidence import EXECUTOR, read_field
+from evidence import EXECUTOR, grade, now, read_field
 from pipeline import (
     People,
     Spec,
     decide,
     finish,
     intake,
+    record_no_action,
     result_exchange,
     unsettled,
 )
@@ -52,6 +53,22 @@ SPECS = [
 
 def value(ex: dict[str, Any], name: str) -> str:
     return next(f["value"] for f in ex["fields"] if f["name"] == name)
+
+
+#: The check level a posted bill carries: every bill value is read back
+#: through the scheduled export of saved data. A hold or reject (no_action)
+#: must show nothing was written at least as well.
+COMMIT_GRADE = "system_of_record"
+
+
+def read_export_rows(path: Path, since: float) -> Optional[list[dict[str, str]]]:
+    """Every row of an export written at or after ``since``; None if none was."""
+    deadline = time.time() + 8
+    while time.time() < deadline:
+        if path.is_file() and path.stat().st_mtime >= since:
+            return list(csv.DictReader(path.open()))
+        time.sleep(0.2)
+    return None
 
 
 def read_export(path: Path, bill_id: str, since: float) -> dict[str, str]:
@@ -187,6 +204,7 @@ def post_one(
             ledger_db,
             app_python,
             req,
+            people,
             halt,
             log,
         )
@@ -198,6 +216,78 @@ def post_one(
         )
         app.key("Escape")
         return halt(f"screen check failed {when}: {err}")
+
+
+def _no_bill(
+    res: dict[str, Any],
+    req: dict[str, Any],
+    choice: str,
+    sup: str,
+    pane: str,
+    run_dir: Path,
+    l1_dir: Path,
+    export_dir: Path,
+    ledger_db: Path,
+    app_python: str,
+    people: People,
+    halt,
+    log,
+) -> str:
+    """A hold or reject enters no bill. Read back that none was entered: the
+    supplier's bill count on screen, and in the scheduled export of saved
+    data."""
+    on_screen = pane_value(pane, "Open bills")
+    started = time.time() - 1
+    scheduled_export(app_python, ledger_db, export_dir)
+    rows = read_export_rows(export_dir / "scheduled" / "bills.csv", started)
+    exported = None if rows is None else str(sum(r["supplier_id"] == sup for r in rows))
+    reads = [
+        {
+            "channel": "clipboard",
+            "value": on_screen,
+            "artifact_id": "bill",
+            "session": "acting",
+            "observed_at": now(),
+        },
+        {
+            "channel": "export",
+            "value": exported,
+            "source_kind": "committed_store",
+            "session": "independent",
+            "observed_at": now(),
+        },
+    ]
+    log(
+        f"  {choice}: no bill entered; {sup} bills on screen {on_screen}, export {exported}"
+    )
+    if on_screen is None or not on_screen.isdigit():
+        return halt(f"supplier {sup} screen does not show its bill count")
+    if exported != on_screen:
+        return halt(
+            f"supplier {sup} shows {on_screen} bills, the scheduled export has "
+            f"{exported}; cannot show that nothing was written"
+        )
+    res["fields"].append(
+        {
+            "name": "supplier_bills",
+            "type": "integer",
+            "value": int(on_screen),
+            "confidence": 1.0,
+            "grade": grade(reads, on_screen),
+            "reads": reads,
+        }
+    )
+    weak = record_no_action(
+        req,
+        res,
+        reason_code="held" if choice == "hold" else "rejected",
+        required_grade=COMMIT_GRADE,
+        evidence=["supplier_bills"],
+    )
+    if weak:
+        return halt(weak)
+    finish(req, res, run_dir, l1_dir, log, review=people.review_decisions)
+    return choice
 
 
 def _post(
@@ -218,6 +308,7 @@ def _post(
     ledger_db: Path,
     app_python: str,
     req: dict[str, Any],
+    people: People,
     halt,
     log,
 ) -> str:
@@ -229,7 +320,8 @@ def _post(
     if screen == "Supplier not found":
         ident["match"] = {"status": "new", "candidates": 0, "checked_by": EXECUTOR}
         return halt(f"supplier {sup} is not in the ledger; nothing was written")
-    shown = pane_value(app.copy_pane(), "Supplier")
+    pane = app.copy_pane()
+    shown = pane_value(pane, "Supplier")
     supplier["reads"] = [
         {
             "channel": "clipboard",
@@ -252,10 +344,21 @@ def _post(
         "checked_by": EXECUTOR,
     }
     if choice != "approve":
-        res["outcome"] = "committed"
-        log(f"  {choice}: no bill entered")
-        finish(req, res, run_dir, l1_dir, log)
-        return choice
+        return _no_bill(
+            res,
+            req,
+            choice,
+            sup,
+            pane,
+            run_dir,
+            l1_dir,
+            export_dir,
+            ledger_db,
+            app_python,
+            people,
+            halt,
+            log,
+        )
 
     app.key("ctrl+b")
     app.wait_screen(f"New bill {sup}")
@@ -343,9 +446,15 @@ def main() -> None:
     p.add_argument("--ledger-db", type=Path, required=True)
     p.add_argument("--app-python", default="python3")
     p.add_argument("--answers", type=Path)
+    p.add_argument(
+        "--review-decisions",
+        action="store_true",
+        help="site policy: send held and rejected invoices (no_action) to review",
+    )
     a = p.parse_args()
     a.run_dir.mkdir(parents=True, exist_ok=True)
     people = People.load(a.answers, "ap_clerk", "controller")
+    people.review_decisions = people.review_decisions or a.review_decisions
     app = X11App("Mock Ledger")
     log_path = a.run_dir / "run.log"
 

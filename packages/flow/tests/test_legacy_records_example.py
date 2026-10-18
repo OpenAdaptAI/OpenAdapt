@@ -402,19 +402,41 @@ def test_rerun_against_a_dropped_save_halts(inbox: Path, mock_emr) -> None:
     assert (inbox / "run2" / "review_queue" / "referral-0008-result.json").exists()
 
 
-def test_a_decline_claims_no_search(inbox: Path, mock_emr) -> None:
+@pytest.mark.parametrize("review_decisions", [False, True])
+def test_a_decline_is_no_action_with_a_read_back(
+    inbox: Path, mock_emr, review_decisions: bool
+) -> None:
     fax = inbox / "fax_inbox" / "referral-0008.pdf"
+    people = _scripted({"referral-0008.pdf": "decline"})
+    people.review_decisions = review_decisions
+    outcome, res = _triage(
+        _emr(mock_emr, inbox / "emr.sqlite"), fax, people, inbox / "run"
+    )
+    assert outcome == "declined"
+    assert res["outcome"] == "no_action" and "halt_reason" not in res
+    na = res["no_action"]
+    assert na["reason_code"] == "declined"
+    assert na["decided_by"]["id"] == "physician:t-doc"
+    assert na["required_grade"] == referral_triage.COMMIT_GRADE
+    assert na["evidence"] == ["search_matches", "triage_entries"]
+    assert _field(res, "triage_entries")["grade"] == "reopened"
+    assert res["identities"][0]["match"]["status"] == "existing"
+    queued = (inbox / "run" / "review_queue" / "referral-0008-result.json").exists()
+    assert queued == review_decisions
+
+
+def test_a_decline_with_no_chart_reads_back_the_search(inbox: Path, mock_emr) -> None:
+    fax = inbox / "fax_inbox" / "referral-0007.pdf"
     outcome, res = _triage(
         _emr(mock_emr, inbox / "emr.sqlite"),
         fax,
-        _scripted({"referral-0008.pdf": "decline"}),
+        _scripted({"referral-0007.pdf": "decline"}),
         inbox / "run",
     )
-    assert outcome == "declined"
-    assert res["outcome"] == "halted" and "no chart search ran" in res["halt_reason"]
-    assert res["identities"][0]["match"] == {"status": "not_checked"}
-    assert not any(f["name"] == "search_matches" for f in res["fields"])
-    assert not any(f.get("reads") for f in res["fields"])
+    assert outcome == "declined" and res["outcome"] == "no_action"
+    assert res["no_action"]["evidence"] == ["search_matches"]
+    assert _field(res, "search_matches")["grade"] == "same_screen"
+    assert res["identities"][0]["match"]["status"] == "new"
 
 
 def test_a_screen_halt_after_the_save_writes_a_halted_result(
@@ -497,7 +519,7 @@ def mock_ledger(monkeypatch: pytest.MonkeyPatch):
     return ledger
 
 
-@pytest.mark.parametrize("choice", ["approve", "hold"])
+@pytest.mark.parametrize("choice", ["approve", "hold", "reject"])
 def test_invoice_posting_conforms(inbox: Path, mock_ledger, choice: str) -> None:
     db, exports, run = inbox / "ledger.sqlite", inbox / "exports", inbox / "run"
     con = mock_ledger.connect(db)
@@ -523,4 +545,9 @@ def test_invoice_posting_conforms(inbox: Path, mock_ledger, choice: str) -> None
         assert outcome == "committed"
         assert _field(res, "amount")["grade"] == "system_of_record"
     else:
-        assert outcome == "hold" and res["outcome"] == "committed"
+        assert outcome == choice and res["outcome"] == "no_action"
+        na = res["no_action"]
+        assert na["reason_code"] == {"hold": "held", "reject": "rejected"}[choice]
+        assert na["required_grade"] == ap_invoice.COMMIT_GRADE == "system_of_record"
+        assert _field(res, "supplier_bills")["grade"] == "system_of_record"
+        assert not (run / "review_queue").exists()

@@ -34,7 +34,7 @@ from evidence import (
 
 from openadapt_flow.intake.document import read_document
 from openadapt_flow.intake.extract import extract_fields
-from openadapt_flow.interchange import emit_exchange
+from openadapt_flow.interchange import READ_GRADES, emit_exchange
 from openadapt_flow.ir import ParamSpec
 
 
@@ -51,6 +51,8 @@ class People:
     staff: str
     approver: str
     answers: dict[str, Any] = field(default_factory=dict)
+    #: Site policy: send decisions that write nothing (no_action) to review.
+    review_decisions: bool = False
 
     @classmethod
     def load(
@@ -62,7 +64,12 @@ class People:
             people = cls(f"{staff_role}:{staff}", f"{approver_role}:{approver}")
         else:
             data = json.loads(path.read_text())
-            people = cls(data["staff"], data["approver"], data)
+            people = cls(
+                data["staff"],
+                data["approver"],
+                data,
+                bool(data.get("policy", {}).get("review_decisions", False)),
+            )
         if people.staff == people.approver:
             raise SystemExit("the person who confirms exceptions cannot also approve")
         return people
@@ -238,6 +245,46 @@ def unsettled(ex: dict[str, Any]) -> list[str]:
     return [f["name"] for f in ex["fields"] if f.get("needs_review")]
 
 
+def record_no_action(
+    req: dict[str, Any],
+    res: dict[str, Any],
+    *,
+    reason_code: str,
+    required_grade: str,
+    evidence: list[str],
+) -> Optional[str]:
+    """Mark ``res`` as ``no_action``: decided, and nothing meant to be written.
+
+    ``evidence`` names fields of ``res`` whose reads show no new or changed
+    record; each must be graded at least ``required_grade``, the check level
+    a commit of the workflow needs. Returns a halt reason instead when the
+    evidence is weaker than that, and leaves ``res`` unchanged.
+    """
+    grades = {f["name"]: f.get("grade", "unchecked") for f in res["fields"]}
+    weak = [
+        n
+        for n in evidence
+        if READ_GRADES.index(grades.get(n, "unchecked"))
+        < READ_GRADES.index(required_grade)
+    ]
+    if weak:
+        return (
+            f"could not show at {required_grade} that nothing was written "
+            f"({', '.join(f'{n}: {grades.get(n)}' for n in weak)})"
+        )
+    decision = req["decisions"][-1]
+    res["outcome"] = "no_action"
+    res["no_action"] = {
+        "decided_by": decision["decided_by"],
+        "reason_code": reason_code,
+        "decision_id": decision["decision_id"],
+        "decided_at": decision["decided_at"],
+        "required_grade": required_grade,
+        "evidence": evidence,
+    }
+    return None
+
+
 def result_exchange(ex: dict[str, Any], *, artifact: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": V,
@@ -266,7 +313,9 @@ def finish(
     """Step 6: check, seal, write both exchanges, emit to the L1 directory.
 
     A halted result, or one with values to review, goes to the review queue
-    unless ``review`` is False (a decision that needs no app work).
+    unless ``review`` is False. A ``no_action`` result passes
+    ``review=people.review_decisions``: it goes to review only when the site's
+    policy reviews decisions.
     """
     request = seal(request, run_dir)
     result = seal(result, run_dir)
@@ -280,7 +329,7 @@ def finish(
         for f in result["fields"]
         if f.get("needs_review")
     ]
-    if review and (result["outcome"] == "halted" or to_review):
+    if review and (result["outcome"] in ("halted", "no_action") or to_review):
         queue = run_dir / "review_queue"
         queue.mkdir(exist_ok=True)
         (queue / f"{result['exchange_id']}.json").write_text(

@@ -32,6 +32,7 @@ from pipeline import (
     decide,
     finish,
     intake,
+    record_no_action,
     result_exchange,
     unsettled,
 )
@@ -47,6 +48,10 @@ SPECS = [
     Spec("reason_code", "code", ["reason code"], r"TEST-R\d+"),
 ]
 PRIORITIES = ["urgent", "soon", "routine", "decline"]
+#: The check level a committed triage entry carries: its weakest read-back
+#: grade is ``same_screen`` (the triage values are only read after
+#: reopening). A ``no_action`` must show nothing was written at least as well.
+COMMIT_GRADE = "same_screen"
 
 
 def value(ex: dict[str, Any], name: str) -> str:
@@ -140,17 +145,11 @@ def triage_one(
         output_field="priority",
         log=log,
     )
-    if priority == "decline":
-        # Nothing to do in the EMR: no search ran, so no match is claimed.
-        res["outcome"] = "halted"
-        res["halt_reason"] = (
-            "declined by the physician; no chart search ran and nothing was written"
-        )
-        log("  declined: no search, nothing written")
-        finish(req, res, run_dir, l1_dir, log, review=False)
-        return "declined"
-
     try:
+        if priority == "decline":
+            return _decline(
+                emr, req, res, ident, name, dob, sid, people, run_dir, l1_dir, halt, log
+            )
         return _write_and_read_back(
             emr,
             fax,
@@ -175,6 +174,139 @@ def triage_one(
         )
         emr.key("Escape")
         return halt(f"screen check failed {when}: {err}")
+
+
+def _decline(
+    emr: X11App,
+    req: dict[str, Any],
+    res: dict[str, Any],
+    ident: dict[str, Any],
+    name: str,
+    dob: str,
+    sid: str,
+    people: People,
+    run_dir: Path,
+    l1_dir: Path,
+    halt,
+    log,
+) -> str:
+    """A declined referral writes nothing. Read back that nothing was written:
+    the chart search, and for one matching chart its triage entry count before
+    and after reopening."""
+    emr.key("Escape")
+    emr.wait_screen("Search")
+    emr.type(f"{name} {dob}")
+    emr.key("Return")
+    n = int(emr.wait_screen(r"Search results \((\d+)\)").group(1))
+    listing = emr.copy_pane()
+    frame = emr.frame()
+    matches = read_field(
+        "search_matches",
+        "integer",
+        expected=str(n),
+        clipboard=pane_value(listing, "Matches"),
+        ocr_line=frame.value_after("Matches"),
+        frame=frame,
+        session="acting",
+        artifact_id="chart",
+        screen=f"Search results ({n})",
+    )
+    matches["value"] = n
+    res["fields"].append(matches)
+    evidence = ["search_matches"]
+    log(f"  declined; search {name} {dob}: {n} match(es)")
+    if n != 1:
+        ident["match"] = {
+            "status": "ambiguous" if n > 1 else "new",
+            "candidates": n,
+            "checked_by": EXECUTOR,
+        }
+    else:
+        rid = re.search(r"REC-\d+", listing.splitlines()[1]).group(0)
+        emr.key("ctrl+o")
+        emr.wait_screen("Open chart")
+        emr.type(rid)
+        emr.key("Return")
+        emr.wait_screen(f"Chart {rid}")
+        before = emr.copy_pane()
+        entries_before = pane_value(before, "Triage entries")
+        emr.key("Escape")
+        emr.wait_screen("Search")
+        emr.key("ctrl+o")
+        emr.wait_screen("Open chart")
+        emr.type(rid)
+        emr.key("Return")
+        emr.wait_screen(f"Chart {rid}")
+        text = emr.copy_pane()
+        frame = emr.frame()
+        entries = read_field(
+            "triage_entries",
+            "integer",
+            expected=entries_before,
+            clipboard=pane_value(text, "Triage entries"),
+            ocr_line=frame.value_after("Triage entries"),
+            frame=frame,
+            session="reopened",
+            artifact_id="chart",
+            screen=f"Chart {rid}",
+            acting=[("clipboard", entries_before)],
+        )
+        after = entries["value"]
+        if entries_before is None or not entries_before.isdigit():
+            return halt(f"chart {rid} does not show its triage entry count")
+        if after != entries_before:
+            return halt(
+                f"chart {rid} had {entries_before} triage entries and {after} after "
+                "reopening, though nothing was written"
+            )
+        # The evidence value is the state first read; later reads must match.
+        entries["value"] = int(entries_before)
+        res["fields"].append(entries)
+        res["fields"].append(
+            {
+                "name": "chart_id",
+                "type": "code",
+                "value": rid,
+                "confidence": 1.0,
+                "reads": [
+                    {
+                        "channel": "clipboard",
+                        "value": pane_value(before, "Record"),
+                        "artifact_id": "chart",
+                        "session": "acting",
+                    }
+                ],
+            }
+        )
+        evidence.append("triage_entries")
+        if pane_value(before, "Subject ID") == sid:
+            ident["fields"] = ["chart_id"]
+            ident["match"] = {
+                "status": "existing",
+                "record_ref": rid,
+                "candidates": 1,
+                "checked_by": EXECUTOR,
+            }
+        else:
+            ident["match"] = {
+                "status": "ambiguous",
+                "candidates": 1,
+                "checked_by": EXECUTOR,
+            }
+        res["artifacts"][0]["file_number"] = rid
+        log(f"  triage entries on {rid}: {entries_before}, unchanged after reopening")
+    weak = record_no_action(
+        req,
+        res,
+        reason_code="declined",
+        required_grade=COMMIT_GRADE,
+        evidence=evidence,
+    )
+    if weak:
+        return halt(weak)
+    log("  no_action: declined, nothing written")
+    finish(req, res, run_dir, l1_dir, log, review=people.review_decisions)
+    return "declined"
 
 
 def _write_and_read_back(
@@ -386,9 +518,15 @@ def main() -> None:
     p.add_argument("--run-dir", type=Path, required=True)
     p.add_argument("--l1-dir", type=Path, required=True)
     p.add_argument("--answers", type=Path)
+    p.add_argument(
+        "--review-decisions",
+        action="store_true",
+        help="site policy: send declined referrals (no_action) to review",
+    )
     a = p.parse_args()
     a.run_dir.mkdir(parents=True, exist_ok=True)
     people = People.load(a.answers, "intake_staff", "physician")
+    people.review_decisions = people.review_decisions or a.review_decisions
     emr = X11App("Mock EMR")
     log_path = a.run_dir / "run.log"
 
