@@ -11,24 +11,34 @@ Each pass is evidence-gated and records every change it makes, so the result
 stays auditable: :func:`apply_fixup_passes` returns the notes, and the
 compiler writes them to ``compile_notes.json`` in the bundle.
 
+The two passes that drop a key (``drop_select_commit_enter`` and
+``drop_select_all_on_empty_field``) are off unless the caller passes
+``drop_redundant_keys=True``. Their evidence is about the demonstration, and
+the TYPE read-back at replay can't make up for a wrong drop: a field that
+holds text at replay gets the typed value appended, and the read-back
+(the old value plus the typed text) still passes; a ``<select>`` the typed
+label did not commit is not caught on every backend. Without the drop, a
+strict policy may refuse the bundle, which is the safe direction.
+
 =================================  ==========================================
 Pass                               What it does, and the evidence it needs
 =================================  ==========================================
-``drop_select_commit_enter``       Drops the Enter that followed typing an
-                                   option label into a browser ``<select>``
-                                   (structural role ``combobox``). The typed
-                                   label selects the option and the TYPE
-                                   step's read-back verifies it. Needs
-                                   structural info; skipped without it (RDP
-                                   and Citrix already collapse a pixel
-                                   selection into one SELECT_OPTION step).
-``drop_select_all_on_empty_field`` Drops Ctrl+A between a click and a TYPE
-                                   when the Ctrl+A changed no pixel in the
-                                   clicked field's box: there was no text to
-                                   select, so the field was empty. A pure
-                                   pixel test, so it holds on every surface.
-                                   The TYPE step's read-back still verifies
-                                   the field holds exactly the typed value.
+``drop_select_commit_enter``       Opt-in (``drop_redundant_keys``). Drops
+                                   the Enter that followed typing an option
+                                   label into a browser ``<select>``
+                                   (structural role ``combobox``), on the
+                                   assumption that the typed label selects
+                                   the option. Needs structural info;
+                                   skipped without it (RDP and Citrix
+                                   already collapse a pixel selection into
+                                   one SELECT_OPTION step).
+``drop_select_all_on_empty_field`` Opt-in (``drop_redundant_keys``). Drops
+                                   Ctrl+A between a click and a TYPE when
+                                   the Ctrl+A changed no pixel in the
+                                   clicked field's box: the field was empty
+                                   in the demonstration. It may not be at
+                                   replay, and the TYPE read-back does not
+                                   catch an appended value.
 ``focused_field_region_stable``    Gives a field click that has no
                                    postcondition a ``REGION_STABLE`` check of
                                    the clicked box, from the recorded
@@ -169,8 +179,9 @@ def apply_fixup_passes(
     surface: Optional[str] = None,
     pixel_verify_enabled: bool = False,
     surface_kind_for: Optional[Callable[[Step], Optional[str]]] = None,
+    drop_redundant_keys: bool = False,
 ) -> tuple[list[Step], list[dict[str, Any]]]:
-    """Run the four passes; return the new step list and one note per change.
+    """Run the passes; return the new step list and one note per change.
 
     ``steps`` is not modified; changed steps are deep copies. Templates are
     written under ``bundle_dir/templates``.
@@ -179,6 +190,9 @@ def apply_fixup_passes(
     ``runtime.pixel_verify_enabled``. ``surface_kind_for`` names the surface
     kind one step runs on, for a bundle whose steps span several surfaces;
     without it every step runs on ``surface``.
+
+    ``drop_redundant_keys`` turns on the two passes that drop a demonstrated
+    key (see the module docstring for why they are off by default).
     """
     from openadapt_flow.runtime.identity import verifiable_identity_evidence
 
@@ -196,7 +210,8 @@ def apply_fixup_passes(
     for i, step in enumerate(steps):
         structural = _structural(step)
         if (
-            web_structure
+            drop_redundant_keys
+            and web_structure
             and step.action is ActionKind.CLICK
             and structural is not None
             and structural.role == "combobox"
@@ -219,7 +234,8 @@ def apply_fixup_passes(
     # Pass 2: Ctrl+A on a freshly clicked, empty field before TYPE.
     for i, step in enumerate(steps):
         if (
-            step.id in dropped
+            not drop_redundant_keys
+            or step.id in dropped
             or not is_select_all(step)
             or i == 0
             or i + 1 >= len(steps)
