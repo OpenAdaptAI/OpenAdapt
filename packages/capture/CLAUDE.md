@@ -10,7 +10,7 @@ Key responsibilities:
 - Process raw events into structured actions (clicks, drags, typing)
 - Retain optional action-time structural evidence where a provider exists
 - Keep raw captures local unless a caller invokes an explicit transfer path
-- Expose an optional privacy integration without claiming automatic scrubbing
+- Scrub a copy before `capture share` sends it; never claim the local recording is scrubbed
 
 **Always use PRs, never push directly to main**
 
@@ -65,7 +65,8 @@ openadapt_capture/
   video.py         # External FFmpeg process boundary and frame extraction
   audio.py         # Audio recording + transcription
   visualize/       # Demo GIF and HTML viewer generation
-  share.py         # Magic Wormhole sharing
+  share.py         # Magic Wormhole sharing (sends a scrubbed copy by default)
+  share_scrub.py   # Builds that scrubbed copy
   cli.py           # CLI commands (capture record, capture info, capture share)
 experimental/      # Unfinished prototypes kept out of the package (Chrome extension, WebSocket bridge)
 ```
