@@ -15,6 +15,8 @@ import pytest
 
 pytest.importorskip("playwright.sync_api")
 
+from playwright.sync_api import Error as PlaywrightError  # noqa: E402
+
 import tests.test_multi_surface_e2e as _e2e  # noqa: E402
 from openadapt_flow.backends.playwright_backend import PlaywrightBackend  # noqa: E402
 from openadapt_flow.compiler import compile_recording  # noqa: E402
@@ -74,7 +76,14 @@ def _drive(page, pump) -> None:
     settle()
     popup.click("#agree")
     settle()
-    popup.click("#approve-close")
+    try:
+        popup.click("#approve-close")
+    except PlaywrightError as exc:
+        # The button's own onclick closes the popup. Playwright can report
+        # that close as an error after it delivered the click; the loop below
+        # still requires the popup to have closed.
+        if "closed" not in str(exc):
+            raise
     for _ in range(100):
         if popup.is_closed():
             break
