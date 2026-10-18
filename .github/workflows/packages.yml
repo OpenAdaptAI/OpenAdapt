@@ -48,8 +48,10 @@ permissions:
   contents: read
 
 concurrency:
-  group: packages-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  # A pull request's newer push supersedes its older run. Runs on main are
+  # never cancelled: desktop-release.yml needs every main commit's own result.
+  group: packages-${{ github.event.pull_request.number || github.sha }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 env:
   PIP_DISABLE_PIP_VERSION_CHECK: "1"
@@ -668,8 +670,9 @@ jobs:
           python-version: "3.12"
       - name: Require a version bump for a change that should ship
         # The checkout is the pull request's merge commit: HEAD^1 is the base
-        # tip and HEAD^2 is the pull request head.
-        run: python scripts/check_release_intent.py --base HEAD^1 --head HEAD^2
+        # tip. HEAD (the merge) is the head: its versions and changelog are what
+        # would land, and HEAD^1..HEAD lists exactly the pull request's commits.
+        run: python scripts/check_release_intent.py --base HEAD^1 --head HEAD
 
   packages-gate:
     name: packages-gate

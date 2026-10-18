@@ -173,3 +173,19 @@ def test_intent_fails_a_bump_without_its_changelog_section(repo: Path) -> None:
     head = _commit(repo, "fix: something")
     problems = check_release_intent.check(repo, base, head)
     assert any(f"CHANGELOG.md must start with v{version}" in problem for problem in problems)
+
+
+def test_intent_judges_the_merge_not_a_stale_branch_head(repo: Path) -> None:
+    """A docs-only branch cut before a version bump must not be told to downgrade."""
+
+    start = _git(repo, "rev-parse", "HEAD")
+    _git(repo, "checkout", "-q", "-b", "docs-branch")
+    _commit(repo, "docs: explain the tray", touch="docs/tray.md")
+    _git(repo, "checkout", "-q", "-")
+    _commit(repo, "fix: keep the tray alive", touch="src/tray.txt")
+    prepare_release.prepare(repo, today=datetime.date(2026, 10, 18))
+    base = _commit(repo, "chore: release")
+    _git(repo, "merge", "-q", "--no-ff", "-m", "merge docs", "docs-branch")
+    merge = _git(repo, "rev-parse", "HEAD")
+    assert start != base
+    assert check_release_intent.check(repo, base, merge) == []

@@ -179,9 +179,10 @@ def test_monorepo_engine_release_publishes_only_a_green_reviewed_version() -> No
     workflow = workflow_path.read_text(encoding="utf-8")
     triggers = workflow[workflow.index("\non:\n") : workflow.index("\njobs:\n")]
     skip = workflow.index("- name: Read the version and skip one that is already published")
-    wait = workflow.index("- name: Wait for this exact commit's Packages run")
+    subject = workflow.index("- name: Choose the commit whose checks decide the release")
+    wait = workflow.index("- name: Wait for that commit's Packages run and its desktop jobs")
     unchanged = workflow.index(
-        "- name: Require that main has not changed Desktop since this commit"
+        "- name: Require that main has not changed Desktop since that commit"
     )
     dispatch = workflow.index("- name: Dispatch the package release")
 
@@ -189,10 +190,14 @@ def test_monorepo_engine_release_publishes_only_a_green_reviewed_version() -> No
         "  push:\n    branches: [main]\n    paths:\n      - packages/desktop/pyproject.toml"
         in triggers
     )
-    assert skip < wait < unchanged < dispatch
+    assert skip < subject < wait < unchanged < dispatch
+    # A green Packages run with the desktop jobs skipped must not release.
+    for prefix in ("desktop test / ", "desktop build / "):
+        assert prefix in workflow
+    assert 'git log -1 --format=%H "${GITHUB_SHA}" -- packages/desktop' in workflow
     assert "https://pypi.org/pypi/openadapt-desktop/${version}/json" in workflow
     assert "actions/workflows/packages.yml/runs" in workflow
-    assert '--raw-field head_sha="${GITHUB_SHA}"' in workflow
+    assert '--raw-field head_sha="${SUBJECT}"' in workflow
     assert "git merge-base --is-ancestor" in workflow
     assert "-- packages/desktop" in workflow
     assert "gh workflow run release-package.yml" in workflow
