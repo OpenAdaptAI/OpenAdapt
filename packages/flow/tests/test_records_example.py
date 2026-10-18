@@ -34,12 +34,12 @@ def test_demo_end_to_end(tmp_path, capsys) -> None:
         r["_record_key"]: r for r in csv.DictReader((tmp_path / "accounts.csv").open())
     }
     assert rows["AC-1042"]["_grade"] == "system_of_record"
-    assert (
-        rows["AC-3307"]["balance"] == "7905.25"
-    )  # settled from the export, not the screen
-    assert rows["AC-3307"]["_grade"] == "unchecked"
+    # A person settled AC-3307's balance. That is not a read, so the record
+    # stays unchecked and an export that needs reopened skips it.
+    assert "AC-3307" not in rows
+    assert "skipped AC-3307: below reopened: balance" in printed
     with sqlite3.connect(tmp_path / "accounts.db") as conn:
-        assert conn.execute("SELECT count(*) FROM accounts").fetchone() == (3,)
+        assert conn.execute("SELECT count(*) FROM accounts").fetchone() == (2,)
 
 
 def test_omop_template(tmp_path) -> None:

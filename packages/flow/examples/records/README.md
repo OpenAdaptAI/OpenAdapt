@@ -26,7 +26,8 @@ python examples/records/demo.py --out /tmp/records-demo
 python examples/records/demo.py --out /tmp/records-demo --simulated-ocr  # fast, no OCR engine
 ```
 
-Agreeing fields reach `system_of_record`. A field a person settled keeps the grade its
-reads support, so its record exports as `unchecked`.
+Agreeing fields reach `system_of_record`. A field a person settled is
+`unchecked`: a decision is not a read. The export needs `reopened`, so it
+skips that record and says why.
 
 `templates/omop/` holds an OMOP CDM template, kept outside the core.
