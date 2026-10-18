@@ -29,6 +29,7 @@ from typing import Any, Callable, Literal, Mapping, Optional
 
 from pydantic import (
     BaseModel,
+    ConfigDict,
     Field,
     field_validator,
     model_serializer,
@@ -777,6 +778,62 @@ class IdempotencySection(BaseModel):
     key_env: Optional[str] = None
 
 
+class WorklistAccount(BaseModel):
+    """One signed-in session for a parallel worklist worker.
+
+    Holds env var NAMES only, never a credential value.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Label shown in the run report (for example ``clerk-1``).
+    name: str = Field(min_length=1, max_length=64)
+    #: Sign-in bundle parameter -> NAME of the env var holding its value
+    #: (for example ``{username: EMR_USER_1}``).
+    params_env: dict[str, str] = Field(default_factory=dict)
+    #: Secret sign-in parameter (a step marked ``secret``) -> NAME of the env
+    #: var holding it (for example ``{password: EMR_PASS_1}``).
+    secrets_env: dict[str, str] = Field(default_factory=dict)
+    #: Attach to this account's own signed-in Chromium (CDP) instead of
+    #: launching a browser and replaying the sign-in bundle.
+    browser_cdp_endpoint: Optional[str] = None
+    #: RDP: the user this session connects as, and the NAME of the env var
+    #: holding the password (FreeRDP session pool).
+    rdp_username: Optional[str] = None
+    rdp_password_env: Optional[str] = None
+
+
+class WorklistSection(BaseModel):
+    """Parallel worklist runs (``--workers N``, docs/THROUGHPUT.md).
+
+    The defaults run one item at a time, as before. ``--workers`` above
+    ``max_workers`` is refused, so the deployment states how many sessions
+    the app tolerates at once.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: The app's concurrency limit: how many signed-in sessions may enter
+    #: items at once. ``--workers`` above this is refused.
+    max_workers: int = Field(default=1, ge=1, le=64)
+    #: Items touch disjoint records and may run in any order and at the same
+    #: time. Required for ``--workers`` above 1 and a read-back window above 0.
+    items_independent: bool = False
+    #: Pipelined read-back window k (default 0 = verify each save before the
+    #: next item starts). See ``runtime/readback_pipeline.py``.
+    readback_window: int = Field(default=0, ge=0, le=16)
+    #: ``stop`` (default): any halt stops new claims on every worker.
+    #: ``skip_unwritten``: an item that halted before writing anything is
+    #: recorded and the run goes on; anything else still stops it.
+    on_halt: Literal["stop", "skip_unwritten"] = "stop"
+    #: Recorded sign-in bundle each worker replays once with its account.
+    sign_in_bundle: Optional[str] = None
+    #: Page each item starts from (default: ``backend.url``).
+    entry_url: Optional[str] = None
+    #: One account per worker. Workers never share a session.
+    accounts: list[WorklistAccount] = Field(default_factory=list)
+
+
 #: Sentinel written by ``config init`` for fields the operator must fill.
 UNRESOLVED = "UNRESOLVED"
 
@@ -805,14 +862,20 @@ class DeploymentConfig(BaseModel):
     #: declares. ``--surface NAME=...`` flags apply over these entries. Empty
     #: (and omitted when serialized) otherwise.
     surfaces: dict[str, BackendConfig] = Field(default_factory=dict)
+    #: Parallel worklist runs (``--workers``). Omitted when serialized at its
+    #: defaults (one worker).
+    worklist: WorklistSection = Field(default_factory=WorklistSection)
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
-        """Keep configs without surface bindings byte-identical."""
+        """Keep configs without surface bindings or worklist settings
+        byte-identical."""
 
         data: dict[str, Any] = handler(self)
         if not self.surfaces:
             data.pop("surfaces", None)
+        if self.worklist == WorklistSection():
+            data.pop("worklist", None)
         return data
 
 

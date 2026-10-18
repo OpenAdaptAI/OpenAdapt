@@ -49,17 +49,25 @@ class ReadbackPipeline:
     """One side thread per worker for deferred read-backs."""
 
     def __init__(self) -> None:
-        self._executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="readback")
+        self._executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="readback"
+        )
         self._lock = threading.Lock()
         self._handoff: Optional[PipelinedReadback] = None
         #: Why the last item verified inline instead (for the run report).
         self.inline_reason: Optional[str] = None
 
-    def submit(self, step_id: str, verify: Callable[[], Optional[str]]) -> PipelinedReadback:
-        entry = PipelinedReadback(step_id=step_id, verdict=self._executor.submit(verify))
+    def submit(
+        self, step_id: str, verify: Callable[[], Optional[str]]
+    ) -> PipelinedReadback:
+        entry = PipelinedReadback(
+            step_id=step_id, verdict=self._executor.submit(verify)
+        )
         return entry
 
-    def hand_off(self, entry: PipelinedReadback, settle: Callable[[Optional[str]], Any]) -> None:
+    def hand_off(
+        self, entry: PipelinedReadback, settle: Callable[[Optional[str]], Any]
+    ) -> None:
         """Called by the Replayer as the item finishes: settle on completion."""
 
         entry.settle = settle
@@ -68,7 +76,9 @@ class ReadbackPipeline:
             try:
                 error = fut.result()
             except Exception as exc:  # noqa: BLE001 - a raising verifier is a failure
-                error = f"read-back raised {type(exc).__name__}; reconciliation is required"
+                error = (
+                    f"read-back raised {type(exc).__name__}; reconciliation is required"
+                )
             try:
                 entry.settled.set_result(settle(error))
             except Exception as exc:  # noqa: BLE001

@@ -2427,7 +2427,9 @@ class Replayer:
             else:
                 # The run ended some other way: settle the read-back inline
                 # before the report is written.
-                self._apply_pipelined_verdict(report, self._join_pipelined_readback(keep=True))
+                self._apply_pipelined_verdict(
+                    report, self._join_pipelined_readback(keep=True)
+                )
                 self._pipelined_readback = None
         self._end_surfaces()
         if self._surface_environment_observations:
@@ -2525,9 +2527,7 @@ class Replayer:
         entry.result = result  # type: ignore[attr-defined]
         entry.intent = step.intent  # type: ignore[attr-defined]
         result.effect_verified = None
-        result.effect_results.append(
-            "[pipelined] system-of-record read-back pending"
-        )
+        result.effect_results.append("[pipelined] system-of-record read-back pending")
         self._pipelined_readback = entry
 
     def _join_pipelined_readback(self, *, keep: bool = False) -> Optional[str]:
@@ -2539,9 +2539,7 @@ class Replayer:
         try:
             error = entry.verdict.result()
         except Exception as exc:  # noqa: BLE001 - a raising verifier fails closed
-            error = (
-                f"read-back raised {type(exc).__name__}; reconciliation is required"
-            )
+            error = f"read-back raised {type(exc).__name__}; reconciliation is required"
         self._copy_pipelined_evidence(entry, error)
         if not keep:
             self._pipelined_readback = None
@@ -2602,7 +2600,9 @@ class Replayer:
             outcome="halt",
             # The screen now belongs to the next item; nothing is probed.
             observed_texts=[],
-            completed_intents=[r.intent for r in report.results if r.ok and not r.skipped],
+            completed_intents=[
+                r.intent for r in report.results if r.ok and not r.skipped
+            ],
         )
 
     def _settle_pipelined_readback(

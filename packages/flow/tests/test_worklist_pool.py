@@ -111,7 +111,10 @@ def test_forced_halt_on_one_worker_stops_the_others(tmp_path: Path) -> None:
             halted.set()
             return ItemRun(
                 state=HALTED,
-                detail={"halt_reason": "identity check failed", "transaction_outcome": "halted_before_effect"},
+                detail={
+                    "halt_reason": "identity check failed",
+                    "transaction_outcome": "halted_before_effect",
+                },
             )
         return ItemRun(state=VERIFIED)
 
@@ -124,7 +127,9 @@ def test_forced_halt_on_one_worker_stops_the_others(tmp_path: Path) -> None:
 
     w1 = FakeWorker("w1", halting, delay_s=0.01)
     peers = [FakeWorker(f"w{i}", slow_peer, delay_s=0.03) for i in (2, 3, 4)]
-    report = run_worklist_pool(_rows(100), [w1, *peers], run_dir=tmp_path, policy=_policy(4))
+    report = run_worklist_pool(
+        _rows(100), [w1, *peers], run_dir=tmp_path, policy=_policy(4)
+    )
 
     assert not report.success
     assert report.stop is not None
@@ -153,7 +158,10 @@ def test_reconciliation_required_stops_even_when_skipping_halts(tmp_path: Path) 
                 state=HALTED, detail={"transaction_outcome": "halted_before_effect"}
             )
         if idx == 3:
-            return ItemRun(state=RECONCILIATION_REQUIRED, detail={"halt_reason": "write not confirmed"})
+            return ItemRun(
+                state=RECONCILIATION_REQUIRED,
+                detail={"halt_reason": "write not confirmed"},
+            )
         return ItemRun(state=VERIFIED)
 
     w = FakeWorker("w1", behave)
@@ -171,7 +179,9 @@ def test_worker_exception_is_an_error_and_stops(tmp_path: Path) -> None:
             raise RuntimeError("browser crashed")
         return ItemRun(state=COMPLETED)
 
-    report = run_worklist_pool(_rows(10), [FakeWorker("w1", boom)], run_dir=tmp_path, policy=_policy(1))
+    report = run_worklist_pool(
+        _rows(10), [FakeWorker("w1", boom)], run_dir=tmp_path, policy=_policy(1)
+    )
     states = {item["idx"]: item["state"] for item in report.items}
     assert states[2] == ERROR
     assert report.stop is not None and report.stop["idx"] == 2
@@ -181,7 +191,9 @@ def test_worker_exception_is_an_error_and_stops(tmp_path: Path) -> None:
 def test_refuses_more_workers_than_the_app_allows(tmp_path: Path) -> None:
     workers = [FakeWorker(f"w{i}") for i in range(4)]
     with pytest.raises(PoolRefusal, match="limit of 2"):
-        run_worklist_pool(_rows(4), workers, run_dir=tmp_path, policy=_policy(4, max_workers=2))
+        run_worklist_pool(
+            _rows(4), workers, run_dir=tmp_path, policy=_policy(4, max_workers=2)
+        )
     assert not any(w.opened for w in workers)
     assert not (tmp_path / QUEUE_FILENAME).exists()
 
@@ -196,7 +208,10 @@ def test_refuses_parallel_items_not_declared_independent(tmp_path: Path) -> None
         )
     with pytest.raises(PoolRefusal, match="items_independent"):
         run_worklist_pool(
-            _rows(4), [FakeWorker("a")], run_dir=tmp_path, policy=PoolPolicy(workers=1, readback_window=1)
+            _rows(4),
+            [FakeWorker("a")],
+            run_dir=tmp_path,
+            policy=PoolPolicy(workers=1, readback_window=1),
         )
 
 
@@ -217,7 +232,9 @@ def test_sign_in_failure_runs_nothing(tmp_path: Path) -> None:
     assert a.ran == []
 
 
-def test_reopen_marks_claimed_items_uncertain_and_never_reclaims(tmp_path: Path) -> None:
+def test_reopen_marks_claimed_items_uncertain_and_never_reclaims(
+    tmp_path: Path,
+) -> None:
     rows = _rows(3)
     fp = rows_fingerprint(rows)
     q = WorklistQueue.open(tmp_path / QUEUE_FILENAME, rows, fingerprint=fp)
@@ -227,12 +244,16 @@ def test_reopen_marks_claimed_items_uncertain_and_never_reclaims(tmp_path: Path)
     assert q2.items()[0]["state"] == UNCERTAIN
     assert q2.claim("w2") == (1, rows[1])
     with pytest.raises(PoolRefusal, match="different worklist"):
-        WorklistQueue.open(tmp_path / QUEUE_FILENAME, _rows(4), fingerprint=rows_fingerprint(_rows(4)))
+        WorklistQueue.open(
+            tmp_path / QUEUE_FILENAME, _rows(4), fingerprint=rows_fingerprint(_rows(4))
+        )
 
 
 def test_only_the_claiming_worker_records_a_result(tmp_path: Path) -> None:
     rows = _rows(1)
-    q = WorklistQueue.open(tmp_path / QUEUE_FILENAME, rows, fingerprint=rows_fingerprint(rows))
+    q = WorklistQueue.open(
+        tmp_path / QUEUE_FILENAME, rows, fingerprint=rows_fingerprint(rows)
+    )
     q.claim("w1")
     with pytest.raises(RuntimeError, match="not claimed by w2"):
         q.set_state(0, "w2", VERIFIED, {})
@@ -241,7 +262,9 @@ def test_only_the_claiming_worker_records_a_result(tmp_path: Path) -> None:
 class PipelinedWorker(FakeWorker):
     """Read-back runs on a side thread and resolves after ``readback_s``."""
 
-    def __init__(self, name: str, fail_idx: Optional[int], readback_s: float, **kw: Any) -> None:
+    def __init__(
+        self, name: str, fail_idx: Optional[int], readback_s: float, **kw: Any
+    ) -> None:
         super().__init__(name, **kw)
         self.fail_idx = fail_idx
         self.readback_s = readback_s
@@ -262,7 +285,9 @@ class PipelinedWorker(FakeWorker):
             with self._lock:
                 self._outstanding -= 1
             if idx == self.fail_idx:
-                fut.set_result((RECONCILIATION_REQUIRED, {"halt_reason": "saved record differs"}))
+                fut.set_result(
+                    (RECONCILIATION_REQUIRED, {"halt_reason": "saved record differs"})
+                )
             else:
                 fut.set_result((VERIFIED, {}))
 
@@ -271,7 +296,9 @@ class PipelinedWorker(FakeWorker):
 
 
 @pytest.mark.parametrize("window", [1, 2])
-def test_pipelined_readback_failure_names_items_written_after(tmp_path: Path, window: int) -> None:
+def test_pipelined_readback_failure_names_items_written_after(
+    tmp_path: Path, window: int
+) -> None:
     w = PipelinedWorker("w1", fail_idx=3, readback_s=0.05, delay_s=0.01)
     report = run_worklist_pool(
         _rows(20), [w], run_dir=tmp_path, policy=_policy(1, readback_window=window)
@@ -304,9 +331,16 @@ def test_item_state_from_report() -> None:
         def __init__(self, **kw: Any) -> None:
             self.__dict__.update(kw)
 
-    assert item_state_from_report(R(transaction_outcome="reconciliation_required", execution_outcome="halted")) == RECONCILIATION_REQUIRED
+    assert (
+        item_state_from_report(
+            R(transaction_outcome="reconciliation_required", execution_outcome="halted")
+        )
+        == RECONCILIATION_REQUIRED
+    )
     assert item_state_from_report(R(execution_outcome="verified")) == VERIFIED
-    assert item_state_from_report(R(execution_outcome="completed_unverified")) == COMPLETED
+    assert (
+        item_state_from_report(R(execution_outcome="completed_unverified")) == COMPLETED
+    )
     assert item_state_from_report(R(execution_outcome="halted")) == HALTED
     assert item_state_from_report(R(success=True)) == COMPLETED
     assert item_state_from_report(R(success=False)) == HALTED

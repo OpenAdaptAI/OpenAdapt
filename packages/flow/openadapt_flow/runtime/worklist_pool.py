@@ -470,7 +470,11 @@ class PoolReport:
             f"{len(self.items)}",
         ]
         if self.stop:
-            where = f"item {self.stop.get('idx')}" if self.stop.get("idx") is not None else "the pool"
+            where = (
+                f"item {self.stop.get('idx')}"
+                if self.stop.get("idx") is not None
+                else "the pool"
+            )
             lines.append(
                 f"- **Stopped** by {self.stop.get('worker')} at {where}: "
                 f"{self.stop.get('reason')}"
@@ -494,7 +498,13 @@ class PoolReport:
             lines.append(
                 f"| {w.name} | {len(w.items)} | {states} | {w.busy_s:.1f} | {w.open_s:.1f} |"
             )
-        lines += ["", "## Per item", "", "| Item | Worker | State | Seconds |", "|---:|---|---|---:|"]
+        lines += [
+            "",
+            "## Per item",
+            "",
+            "| Item | Worker | State | Seconds |",
+            "|---:|---|---|---:|",
+        ]
         for item in self.items:
             res = item.get("result") or {}
             secs = res.get("wall_s")
@@ -562,7 +572,9 @@ def run_worklist_pool(
         queue.request_stop(reason, worker=worker, idx=idx)
         say(f"STOP ({worker}, item {idx}): {reason}")
 
-    def finish(worker: PoolWorker, idx: int, state: str, detail: dict[str, Any]) -> None:
+    def finish(
+        worker: PoolWorker, idx: int, state: str, detail: dict[str, Any]
+    ) -> None:
         queue.set_state(idx, worker.name, state, detail)
         with lock:
             s = summaries[worker.name]
@@ -597,7 +609,10 @@ def run_worklist_pool(
             try:
                 state, detail = fut.result()
             except Exception as exc:  # noqa: BLE001
-                state, detail = ERROR, {"halt_reason": f"read-back raised {type(exc).__name__}"}
+                state, detail = (
+                    ERROR,
+                    {"halt_reason": f"read-back raised {type(exc).__name__}"},
+                )
             if state not in SUCCESS_STATES:
                 with lock:
                     written_after[str(idx)] = list(after)
@@ -624,7 +639,11 @@ def run_worklist_pool(
                 except Exception as exc:  # noqa: BLE001 - fail closed
                     out = ItemRun(
                         state=ERROR,
-                        detail={"halt_reason": f"worker raised {type(exc).__name__}: {exc}"[:300]},
+                        detail={
+                            "halt_reason": f"worker raised {type(exc).__name__}: {exc}"[
+                                :300
+                            ]
+                        },
                     )
                 wall = time.monotonic() - t_item
                 summary.busy_s += wall
@@ -633,10 +652,14 @@ def run_worklist_pool(
                     queue.set_state(idx, worker.name, READBACK_PENDING, detail)
                     fut: Future = Future()
 
-                    def _chain(src: Future, dst: Future = fut, base: dict = detail) -> None:
+                    def _chain(
+                        src: Future, dst: Future = fut, base: dict = detail
+                    ) -> None:
                         try:
                             st, more = src.result()
-                            dst.set_result((st, {**base, **more, "readback": "pipelined"}))
+                            dst.set_result(
+                                (st, {**base, **more, "readback": "pipelined"})
+                            )
                         except Exception as exc:  # noqa: BLE001
                             dst.set_exception(exc)
 
@@ -658,7 +681,9 @@ def run_worklist_pool(
                 pass
 
     threads = [
-        threading.Thread(target=worker_main, args=(w,), name=f"worklist-{w.name}", daemon=True)
+        threading.Thread(
+            target=worker_main, args=(w,), name=f"worklist-{w.name}", daemon=True
+        )
         for w in workers
     ]
     for t in threads:
@@ -680,7 +705,9 @@ def run_worklist_pool(
         for t in threads:
             t.join()
         failed = [s.name for s in summaries.values() if s.error]
-        raise PoolRefusal(f"sign-in failed for {', '.join(failed)}; nothing was executed")
+        raise PoolRefusal(
+            f"sign-in failed for {', '.join(failed)}; nothing was executed"
+        )
     go.set()
     for t in threads:
         t.join()

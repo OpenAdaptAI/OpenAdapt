@@ -100,7 +100,10 @@ VISION_FUNCS = (
 # Report buckets: which named calls count toward each.
 BUCKETS: dict[str, tuple[str, ...]] = {
     "waits: fixed sleeps (poll intervals)": ("time.sleep",),
-    "waits: page signals (DOM/network quiet)": ("be.page_quiescent", "be.page_change_marker"),
+    "waits: page signals (DOM/network quiet)": (
+        "be.page_quiescent",
+        "be.page_change_marker",
+    ),
     "waits: screen settle (frame compare)": (
         "vision.wait_settled",
         "vision.wait_settled_result",
@@ -132,7 +135,12 @@ BUCKETS: dict[str, tuple[str, ...]] = {
         "vision.find_text",
         "vision.find_text_candidates",
     ),
-    "typing and keys": ("be.type_text", "be.type_text_guarded", "be.press", "be.press_guarded"),
+    "typing and keys": (
+        "be.type_text",
+        "be.type_text_guarded",
+        "be.press",
+        "be.press_guarded",
+    ),
     "clicks and scrolls": (
         "be.click",
         "be.right_click",
@@ -179,8 +187,12 @@ class RunProfiler:
         self.stats: dict[str, dict[str, float]] = defaultdict(
             lambda: {"n": 0, "excl_s": 0.0, "incl_s": 0.0}
         )
-        self.steps: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
-        self.by_parent: dict[str, dict[str, float]] = defaultdict(lambda: defaultdict(float))
+        self.steps: dict[str, dict[str, float]] = defaultdict(
+            lambda: defaultdict(float)
+        )
+        self.by_parent: dict[str, dict[str, float]] = defaultdict(
+            lambda: defaultdict(float)
+        )
         self._current_step: str | None = None
         self._undo: list[Callable[[], None]] = []
 
@@ -194,10 +206,13 @@ class RunProfiler:
         incl = time.perf_counter() - start
         excl = incl - child
         if name == "vision.ocr" and any(
-            f[0] in ("rp._verify_identity_ocr", "rp._verify_identity") for f in self._stack
+            f[0] in ("rp._verify_identity_ocr", "rp._verify_identity")
+            for f in self._stack
         ):
             name = "vision.ocr@identity"
-        parent = next((f[0] for f in reversed(self._stack) if f[0].startswith("rp.")), "-")
+        parent = next(
+            (f[0] for f in reversed(self._stack) if f[0].startswith("rp.")), "-"
+        )
         self.by_parent[name][parent] += excl
         st = self.stats[name]
         st["n"] += 1
@@ -219,7 +234,11 @@ class RunProfiler:
                 return fn(*a, **k)
             prev_step = prof._current_step
             if name == "rp._run_step":
-                step = a[0 if static else 1] if len(a) > (0 if static else 1) else k.get("step")
+                step = (
+                    a[0 if static else 1]
+                    if len(a) > (0 if static else 1)
+                    else k.get("step")
+                )
                 prof._current_step = getattr(step, "id", None) or prev_step
             prof._enter(name)
             try:
@@ -251,7 +270,9 @@ class RunProfiler:
             if raw is None:
                 continue
             if isinstance(raw, staticmethod):
-                wrapped: Any = staticmethod(self._wrap(f"rp.{m}", raw.__func__, static=True))
+                wrapped: Any = staticmethod(
+                    self._wrap(f"rp.{m}", raw.__func__, static=True)
+                )
             else:
                 wrapped = self._wrap(f"rp.{m}", raw)
             setattr(Replayer, m, wrapped)
@@ -269,7 +290,9 @@ class RunProfiler:
                 continue
             wrapped = self._wrap(f"vision.{fn_name}", orig)
             setattr(mod, fn_name, wrapped)
-            self._undo.append(lambda mod=mod, fn_name=fn_name, orig=orig: setattr(mod, fn_name, orig))
+            self._undo.append(
+                lambda mod=mod, fn_name=fn_name, orig=orig: setattr(mod, fn_name, orig)
+            )
             # Modules that imported the function by name keep their own
             # reference; patch those too.
             for other in ("openadapt_flow.runtime.replayer", "openadapt_flow.vision"):
@@ -277,7 +300,9 @@ class RunProfiler:
                 if getattr(om, fn_name, None) is orig:
                     setattr(om, fn_name, wrapped)
                     self._undo.append(
-                        lambda om=om, fn_name=fn_name, orig=orig: setattr(om, fn_name, orig)
+                        lambda om=om, fn_name=fn_name, orig=orig: setattr(
+                            om, fn_name, orig
+                        )
                     )
         orig_sleep = time.sleep
         time.sleep = self._wrap("time.sleep", orig_sleep)
@@ -290,7 +315,9 @@ class RunProfiler:
     # -- output -----------------------------------------------------------
 
     def summary(self) -> dict[str, dict[str, float]]:
-        return {k: {kk: round(vv, 4) for kk, vv in v.items()} for k, v in self.stats.items()}
+        return {
+            k: {kk: round(vv, 4) for kk, vv in v.items()} for k, v in self.stats.items()
+        }
 
     def parents(self) -> dict[str, dict[str, float]]:
         """Exclusive time of each call, split by the nearest Replayer caller."""
@@ -303,7 +330,9 @@ class RunProfiler:
         out: dict[str, float] = {}
         named = set()
         for bucket, names in BUCKETS.items():
-            out[bucket] = round(sum(self.stats[n]["excl_s"] for n in names if n in self.stats), 4)
+            out[bucket] = round(
+                sum(self.stats[n]["excl_s"] for n in names if n in self.stats), 4
+            )
             named.update(names)
         unnamed = [n for n in self.stats if n not in named]
         out["unassigned"] = round(sum(self.stats[n]["excl_s"] for n in unnamed), 4)
