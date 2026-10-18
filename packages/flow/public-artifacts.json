@@ -300,6 +300,10 @@
       "sha256": "7df8820b7aae0201389175581a443d5fbf7bafd99ceb3afe93e91744ef3a6cd8"
     },
     {
+      "path": "benchmark/known_ids/results.json",
+      "sha256": "d5375af0c4be169d0f8e10150541767fd239a268a6224cbc9d6710ed5c801818"
+    },
+    {
       "path": "benchmark/latency_cost.png",
       "sha256": "2a336702a53fbc4a24c6eef5bfb8b7b093334b91c263010780fc48370376a569"
     },
@@ -442,6 +446,10 @@
     {
       "path": "benchmark/rdp_multiapp/policy.yaml",
       "sha256": "ff978d7755b24731c22f311b1791b4f9b70c8dd515c17e8beefb4d0e22f78c23"
+    },
+    {
+      "path": "benchmark/rdp_pool/results.json",
+      "sha256": "6a689187c57027247671cb47dc36b256a672c78887a394486fc43b82de306551"
     },
     {
       "path": "benchmark/reliability/summary.json",
