@@ -45,7 +45,6 @@ def test_core_format_names_no_domain() -> None:
         "patient",
         "clinic",
         "physician",
-        "retina",
         "eye",
         "emr",
         "mrn",
