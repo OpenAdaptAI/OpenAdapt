@@ -2609,6 +2609,29 @@ class PixelIdentityEvidence(BaseModel):
         return self
 
 
+class KnownIdEvidence(BaseModel):
+    """Why a look-alike identifier abstain was lifted (runtime.known_ids).
+
+    Holds no identifier values: only the digest and size of the complete
+    known-ID list, its named source, and how many reads agreed.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    list_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    list_source: str
+    list_size: int = Field(ge=1)
+    reads: int = Field(ge=1)
+    resolved_ids: int = Field(ge=1)
+    #: Separate screenshots the reads came from (the second read uses a fresh
+    #: capture, not the first frame again).
+    frames: int = Field(default=1, ge=1)
+    #: Admission record: when the operator confirmed the export, and the
+    #: SHA-256 of the export file they confirmed.
+    confirmed_at: Optional[str] = None
+    export_sha256: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
 class IdentityCheck(BaseModel):
     """Outcome of the pre-click target-identity check (runtime.identity).
 
@@ -2665,6 +2688,32 @@ class IdentityCheck(BaseModel):
         description=(
             "Hashes and local inventory references for the exact crops behind "
             "a pixel verdict. Crop pixels never enter the report."
+        ),
+    )
+    abstain_reason: Optional[
+        Literal["glyph_confusable_identifier", "identity_evidence_short"]
+    ] = Field(
+        default=None,
+        description=(
+            "Why an OCR-tier check abstained: the band rests on a look-alike "
+            "identifier, or too little identifying evidence was read."
+        ),
+    )
+    known_id_evidence: Optional[KnownIdEvidence] = Field(
+        default=None,
+        description=(
+            "Set when a look-alike abstain was lifted against a complete "
+            "known-ID list (runtime.known_ids)."
+        ),
+    )
+    known_id_halt: Optional[
+        Literal["known_ids_unconfirmed", "known_ids_changed", "known_ids_stale"]
+    ] = Field(
+        default=None,
+        description=(
+            "Set when the known-ID list was needed but may not be used: no "
+            "admission confirmation, the export changed since it was "
+            "confirmed, or it is older than the configured age. The step halts."
         ),
     )
 
