@@ -28,6 +28,13 @@ AGENT_A = ap.Decider(kind="agent", id="agent:intake-bot", route="mcp")
 AGENT_B = ap.Decider(kind="agent", id="agent:reviewer", route="mcp")
 
 
+@pytest.fixture(autouse=True)
+def _local_admission_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """The local admission key lives in the test's key directory, not ~."""
+
+    monkeypatch.setenv("OPENADAPT_JIT_KEY_DIR", str(key_dir(tmp_path)))
+
+
 def _agent_policy() -> ApproverPolicyV1:
     allowed = {c.value: ["person"] for c in StepClass}
     allowed[StepClass.CONSEQUENTIAL.value] = ["person", "agent"]
@@ -287,6 +294,13 @@ def test_an_agent_admission_stops_applying_when_its_grant_does(tmp_path: Path) -
     )
     record_path.write_text(json.dumps(record))
     assert ap.admitted_approval_mode(bundle, key_dir=keys).refusal == (
+        "admission_signature_invalid"
+    )
+    # Even re-signed by someone holding the local key, the swapped grant
+    # doesn't match the digest the decision recorded.
+    record.pop("signature")
+    ap._write_signed(record_path, record, keys)
+    assert ap.admitted_approval_mode(bundle, key_dir=keys).refusal == (
         "policy_ref_mismatch"
     )
 
@@ -505,3 +519,177 @@ def test_run_uses_the_admitted_mode_unless_told_otherwise(tmp_path, capsys) -> N
     # Without an admission the default is a person approving each save.
     bare = SimpleNamespace(approval_mode=None, bundle=str(tmp_path))
     assert _resolve_run_approval_mode(bare, no_cfg, None).value == "each_item"
+
+
+# -- fail-closed review of #1212 ---------------------------------------------
+
+
+def _forged_decision(bundle: Path, pending: ap.PendingAdmission) -> dict:
+    return {
+        "schema_version": ap.DECISION_SCHEMA,
+        "admission_id": pending.admission_id,
+        "decision": "accept",
+        "decided_by": {"kind": "person", "id": "pat", "route": "cli"},
+        "prepared_by": {"kind": "person", "id": "pat", "route": "cli"},
+        "decided_at": "2026-01-01T00:00:00+00:00",
+        "pending_sha256": pending.sha256(),
+        "bundle_content_digest": pending.bundle_content_digest,
+        "proposal_sha256": pending.proposal_sha256,
+        "accepted_bundle_content_digest": ap._bundle_digest(bundle),
+        "approval_mode": "problems_only",
+        "workflow_name": pending.workflow_name,
+    }
+
+
+def test_a_decision_file_written_without_the_admission_key_admits_nothing(
+    tmp_path: Path,
+) -> None:
+    pending = _prepare(tmp_path)
+    bundle = tmp_path / "admission" / "bundle"
+    path = bundle / ap.DECISION_FILE
+    path.write_text(json.dumps(_forged_decision(bundle, pending)))
+    forged = ap.admitted_approval_mode(bundle)
+    assert forged.approval_mode is None
+    assert forged.refusal == "admission_signature_invalid"
+    # A signature by another key is no better.
+    record = _forged_decision(bundle, pending)
+    ap._write_signed(path, record, tmp_path / "other-keys")
+    assert ap.admitted_approval_mode(bundle).refusal == "admission_signature_invalid"
+
+
+def test_a_signed_decision_edited_afterwards_admits_nothing(tmp_path: Path) -> None:
+    pending = _prepare(tmp_path, by=AGENT_A)
+    ap.decide_admission(
+        tmp_path / "admission",
+        pending_sha256=pending.sha256(),
+        decision="accept",
+        decided_by=AGENT_B,
+        approver_grant=_grant(tmp_path),
+        key_dir=key_dir(tmp_path),
+    )
+    bundle = tmp_path / "admission" / "bundle"
+    path = bundle / ap.DECISION_FILE
+    record = json.loads(path.read_text())
+    # An agent's admission relabelled as a person's, to skip the grant check.
+    record["decided_by"] = {"kind": "person", "id": "pat", "route": "cli"}
+    record["approver_grant"] = None
+    path.write_text(json.dumps(record))
+    edited = ap.admitted_approval_mode(bundle)
+    assert edited.approval_mode is None
+    assert edited.refusal == "admission_signature_invalid"
+
+
+def test_an_edited_pending_file_is_refused(tmp_path: Path) -> None:
+    _prepare(tmp_path, by=AGENT_B)
+    path = tmp_path / "admission" / ap.PENDING_FILE
+    data = json.loads(path.read_text())
+    # Relabel the preparer so the agent that prepared it could decide it.
+    data["prepared_by"] = {"kind": "person", "id": "pat", "route": "cli"}
+    path.write_text(json.dumps(data))
+    with pytest.raises(ap.AdmissionError, match="not signed"):
+        ap.load_pending(tmp_path / "admission")
+    data.pop("signature")
+    edited = ap.PendingAdmission.model_validate(data)
+    with pytest.raises(ap.AdmissionError, match="not signed"):
+        ap.decide_admission(
+            tmp_path / "admission",
+            pending_sha256=edited.sha256(),
+            decision="accept",
+            decided_by=AGENT_B,
+            approver_grant=_grant(tmp_path),
+            key_dir=key_dir(tmp_path),
+        )
+    assert not (tmp_path / "admission" / ap.DECISION_FILE).exists()
+
+
+def test_an_agent_cannot_decide_what_an_unidentified_client_prepared(
+    tmp_path: Path,
+) -> None:
+    unidentified = ap.Decider(kind="agent", id=ap.UNIDENTIFIED_AGENT, route="mcp")
+    pending = _prepare(tmp_path, by=unidentified)
+    with pytest.raises(ap.AdmissionError, match="unidentified"):
+        ap.decide_admission(
+            tmp_path / "admission",
+            pending_sha256=pending.sha256(),
+            decision="accept",
+            decided_by=AGENT_B,
+            approver_grant=_grant(tmp_path),
+            key_dir=key_dir(tmp_path),
+        )
+    # A person still can.
+    result = ap.decide_admission(
+        tmp_path / "admission",
+        pending_sha256=pending.sha256(),
+        decision="accept",
+        decided_by=PERSON,
+    )
+    assert result.decided_by == PERSON
+
+
+def test_the_value_free_summary_quotes_no_recorded_text() -> None:
+    recorded = "Sample Label Alpha"
+    halted = ap.PendingAdmission(
+        admission_id="0" * 32,
+        status="halted",
+        halt_reason=f"induction refused near {recorded}",
+        workflow_name="w",
+        policy_pack="community",
+        prepared_by=PERSON,
+        created_at="2026-01-01T00:00:00+00:00",
+        record_next=[
+            {
+                "code": "ambiguous_branch",
+                "instruction": f"Record each of {recorded} vs Other under a "
+                "detectable condition.",
+            }
+        ],
+    )
+    assert recorded in ap.render_summary(halted)
+    agent_view = ap.render_summary(halted, value_free=True)
+    assert recorded not in agent_view
+    assert "ambiguous_branch" in agent_view
+    ready = halted.model_copy(
+        update={
+            "status": "needs_decision",
+            "halt_reason": None,
+            "record_next": [],
+            "shadow_suggestions": [
+                {"kind": "file_saved", "summary": f"saved {recorded}.xlsx"}
+            ],
+        }
+    )
+    assert recorded not in ap.render_summary(ready, value_free=True)
+
+
+def test_an_admitted_bundle_still_asks_a_person_until_the_switch_is_on(
+    tmp_path: Path, capsys
+) -> None:
+    """Admission picks problems_only; the switch record still gates each save."""
+
+    from openadapt_flow.__main__ import _resolve_run_approval_mode
+    from openadapt_flow.approval_mode.gate import ApprovalGate
+    from openadapt_flow.approval_mode.model import ItemDecisionKind
+    from tests._approval_mode_support import BUNDLE_DIGEST, good_item
+    from tests.test_approval_mode_gate import Harness
+
+    pending = _prepare(tmp_path)
+    ap.decide_admission(
+        tmp_path / "admission",
+        pending_sha256=pending.sha256(),
+        decision="accept",
+        decided_by=PERSON,
+    )
+    args = SimpleNamespace(
+        approval_mode=None, bundle=str(tmp_path / "admission" / "bundle")
+    )
+    no_cfg = SimpleNamespace(runtime=SimpleNamespace(approval_mode=None))
+    mode = _resolve_run_approval_mode(args, no_cfg, None)
+    assert mode.value == "problems_only"
+    # No signed switch record: the gate sends the save to a person.
+    gate = ApprovalGate(mode, item=good_item())
+    gate.begin_item(
+        run_id="r", bundle_content_digest=BUNDLE_DIGEST, profile="regulated"
+    )
+    verdict = gate.before_save(Harness(tmp_path / "gate").save_context())
+    assert not verdict.proceed
+    assert verdict.decision.kind is ItemDecisionKind.APPROVAL_REQUIRED

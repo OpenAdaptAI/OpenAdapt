@@ -38,7 +38,15 @@ What it never does:
   was shown.
 * treat shadow-suggested checks as evidence. They are listed for the person
   or approver to read; only checks mined from real recordings are applied.
-* sign an admission. No local-dev or production admission is minted here.
+* sign a release admission. No local-dev or production admission is minted
+  here. The pending summary and the decision record are signed with this
+  machine's local admission key (the JIT key directory, kept away from the
+  agents it governs), so write access to the admission folder or the bundle
+  is not enough to forge a decision or change who prepared it.
+* send recorded screen text to an agent. The summary an MCP client gets
+  (:func:`render_summary` with ``value_free=True``) carries codes, counts and
+  step ids only; induction's record-next lines can quote recorded labels and
+  stay at the terminal.
 * let an agent admit without a person's signature. An agent decides only
   under a verified grant that names it, covers this workflow, and lets an
   agent approve consequential saves; anything less is refused.
@@ -72,6 +80,10 @@ DECISION_SCHEMA: Literal["openadapt.admission-decision/v1"] = (
 DECIDER_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$"
 #: Policy packs under which only a person may decide.
 PERSON_ONLY_PACKS = frozenset({"regulated"})
+#: The preparer id for an MCP client that runs without --delegate-approvals.
+#: It names no one, so it may be the same agent that later decides; only a
+#: person decides what it prepared.
+UNIDENTIFIED_AGENT = "mcp-client"
 #: The approval mode an accepted admission gives the workflow's runs.
 ADMITTED_APPROVAL_MODE: Literal["problems_only"] = "problems_only"
 _SHA256 = r"^sha256:[0-9a-f]{64}$"
@@ -260,6 +272,7 @@ def prepare_admission(
     candidate: Optional[Path | str] = None,
     policy_pack: str = "community",
     admission_id: Optional[str] = None,
+    key_dir: Optional[Path | str] = None,
 ) -> PendingAdmission:
     """Run compile, induce and the check proposal; write the single stop.
 
@@ -267,6 +280,9 @@ def prepare_admission(
     ``candidate`` and no inputs, the recordings are read from the candidate's
     ``recordings/`` folder; with none there, the result is
     ``needs_recording`` and carries the candidate's record-next list.
+
+    The pending file is signed with the local admission key in ``key_dir``
+    (default ``~/.openadapt/jit``).
     """
 
     from openadapt_flow.compiler import compile_recording
@@ -318,7 +334,7 @@ def prepare_admission(
 
     def stop(status: PendingStatus, reason: str, **extra: Any) -> PendingAdmission:
         pending = PendingAdmission(status=status, halt_reason=reason, **base, **extra)
-        _write_json(target / PENDING_FILE, pending.model_dump(mode="json"))
+        _write_signed(target / PENDING_FILE, pending.model_dump(mode="json"), key_dir)
         return pending
 
     if not paths:
@@ -391,7 +407,7 @@ def prepare_admission(
             **detail,
         )
     pending = PendingAdmission(status="needs_decision", **base, **detail)
-    _write_json(target / PENDING_FILE, pending.model_dump(mode="json"))
+    _write_signed(target / PENDING_FILE, pending.model_dump(mode="json"), key_dir)
     return pending
 
 
@@ -414,15 +430,58 @@ def _copy_templates(compiled: Sequence[Path], bundle_dir: Path) -> None:
             shutil.copy2(item, dest)
 
 
-def load_pending(out: Path | str) -> PendingAdmission:
+def load_pending(
+    out: Path | str, *, key_dir: Optional[Path | str] = None
+) -> PendingAdmission:
+    """The pending admission, only if this machine's admission key signed it."""
+
     path = Path(out) / PENDING_FILE
-    if not path.is_file():
+    if not path.is_file() or path.is_symlink():
         raise AdmissionError(f"no pending admission in {out}")
-    return PendingAdmission.model_validate_json(path.read_text(encoding="utf-8"))
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise AdmissionError(f"the pending admission is unreadable: {exc}") from exc
+    if not _signed(data, key_dir):
+        raise AdmissionError(
+            "the pending admission is not signed by this machine's admission "
+            "key; prepare it again"
+        )
+    data.pop("signature", None)
+    return PendingAdmission.model_validate(data)
 
 
 def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", "utf-8")
+
+
+def _key_dir(key_dir: Optional[Path | str]) -> Path:
+    from openadapt_flow.jit.lifecycle import default_key_dir
+
+    return Path(key_dir) if key_dir is not None else default_key_dir()
+
+
+def _write_signed(
+    path: Path, payload: dict[str, Any], key_dir: Optional[Path | str]
+) -> None:
+    """Write ``payload`` with a signature by the local admission key."""
+
+    from openadapt_flow.jit.lifecycle import _sign_record
+
+    body = {k: v for k, v in payload.items() if k != "signature"}
+    body["signature"] = _sign_record(body, _key_dir(key_dir))
+    _write_json(path, body)
+
+
+def _signed(data: Any, key_dir: Optional[Path | str]) -> bool:
+    from openadapt_flow.jit.lifecycle import _record_signed
+
+    if not isinstance(data, dict) or not isinstance(data.get("signature"), str):
+        return False
+    try:
+        return _record_signed(data, _key_dir(key_dir))
+    except (OSError, ValueError):
+        return False
 
 
 def _agent_identity(decided_by: Decider) -> Any:
@@ -512,6 +571,11 @@ def check_decider(
             f"the {pending.policy_pack!r} policy pack needs a person to decide"
         )
     prepared = pending.prepared_by
+    if prepared.kind == "agent" and prepared.id == UNIDENTIFIED_AGENT:
+        raise AdmissionError(
+            "an unidentified MCP client prepared this admission, so it may be "
+            "the same agent; a person decides it"
+        )
     if prepared.kind == "agent" and prepared.id == decided_by.id:
         raise AdmissionError(
             "self-approval refused: the agent that prepared this admission "
@@ -559,7 +623,7 @@ def decide_admission(
     )
 
     target = Path(out)
-    pending = load_pending(target)
+    pending = load_pending(target, key_dir=key_dir)
     if (target / DECISION_FILE).exists():
         raise AdmissionError("this admission was already decided")
     if pending.sha256() != pending_sha256:
@@ -636,9 +700,9 @@ def decide_admission(
         )
     result = AdmissionDecision(**record)
     payload = result.model_dump(mode="json")
-    _write_json(target / DECISION_FILE, payload)
+    _write_signed(target / DECISION_FILE, payload, key_dir)
     if decision == "accept":
-        _write_json(bundle / DECISION_FILE, payload)
+        _write_signed(bundle / DECISION_FILE, payload, key_dir)
     return result
 
 
@@ -663,17 +727,24 @@ def admitted_approval_mode(
     """The approval mode an accepted admission gives this exact bundle.
 
     No admission, or a rejected one: no mode (the run's default applies). A
-    recorded admission for a bundle that has since changed, or an agent's
-    admission whose grant no longer verifies, names the reason and gives no
-    mode. Never raises.
+    record this machine's admission key didn't sign, a recorded admission for
+    a bundle that has since changed, or an agent's admission whose grant no
+    longer verifies, names the reason and gives no mode. Never raises.
     """
 
     path = Path(bundle) / DECISION_FILE
     if not path.is_file() or path.is_symlink():
         return AdmittedMode()
     try:
-        record = AdmissionDecision.model_validate_json(path.read_text("utf-8"))
+        data = json.loads(path.read_text("utf-8"))
     except (OSError, ValueError):
+        return AdmittedMode(refusal="admission_unreadable")
+    if not _signed(data, key_dir):
+        return AdmittedMode(refusal="admission_signature_invalid")
+    try:
+        data.pop("signature", None)
+        record = AdmissionDecision.model_validate(data)
+    except ValueError:
         return AdmittedMode(refusal="admission_unreadable")
     if record.decision != "accept" or record.approval_mode is None:
         return AdmittedMode()
@@ -699,8 +770,13 @@ def admitted_approval_mode(
     return AdmittedMode(approval_mode=record.approval_mode, admitted_by=decider)
 
 
-def render_summary(pending: PendingAdmission) -> str:
-    """The short summary shown at the single stop."""
+def render_summary(pending: PendingAdmission, *, value_free: bool = False) -> str:
+    """The short summary shown at the single stop.
+
+    ``value_free`` is the form for an MCP client: it leaves out the halt
+    reason, the record-next lines and shadow-suggestion text, which can quote
+    labels or dialog text from the recordings, and keeps their codes.
+    """
 
     lines = [f"Admission {pending.admission_id[:12]}: {pending.workflow_name}"]
     if pending.candidate_motif_id:
@@ -711,6 +787,11 @@ def render_summary(pending: PendingAdmission) -> str:
         + f"; {pending.n_steps} step(s), {pending.n_writes} write(s)"
     )
     if pending.status != "needs_decision":
+        if value_free:
+            lines.append(f"  STOPPED ({pending.status})")
+            for item in pending.record_next:
+                lines.append(f"  - record next: {item.get('code')}")
+            return "\n".join(lines) + "\n"
         lines.append(f"  STOPPED ({pending.status}): {pending.halt_reason}")
         for item in pending.record_next:
             lines.append(f"  - record next: {item.get('instruction')}")
@@ -723,7 +804,8 @@ def render_summary(pending: PendingAdmission) -> str:
     if pending.shadow_suggestions:
         lines.append("  Suggested by shadow episodes (not evidence, not applied):")
         for item in pending.shadow_suggestions:
-            lines.append(f"  - {item.get('kind')}: {item.get('summary')}")
+            text = "" if value_free else f": {item.get('summary')}"
+            lines.append(f"  - {item.get('kind')}{text}")
     lines.append(f"  Prepared by {pending.prepared_by.label()}")
     return "\n".join(lines) + "\n"
 
@@ -742,4 +824,5 @@ __all__ = [
     "prepare_admission",
     "render_summary",
     "resolve_candidate",
+    "UNIDENTIFIED_AGENT",
 ]

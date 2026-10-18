@@ -18,11 +18,17 @@ Who decides:
   argument never stands in for that answer.
 
 What an agent can't do: decide an admission it prepared (the record names
-the preparer), decide under the ``regulated`` policy pack, or decide without
-the exact ``pending_sha256`` it was shown, or decide without a grant a person
-signed. Accepting runs the same gates as ``qualify accept`` and admits the
-workflow to the ``problems_only`` approval mode; nothing here signs an
-admission.
+the preparer), decide one an unidentified client prepared (a server without
+``--delegate-approvals`` records its preparer as ``mcp-client``), decide
+under the ``regulated`` policy pack, decide without the exact
+``pending_sha256`` it was shown, or decide without a grant a person signed.
+Accepting runs the same gates as ``qualify accept`` and admits the workflow to
+the ``problems_only`` approval mode.
+
+What an agent sees: codes, counts and step ids. The summaries these tools
+return are value-free (:func:`~openadapt_flow.admit_pipeline.render_summary`
+with ``value_free=True``), because the client may send them to a hosted
+model and induction's record-next lines can quote recorded labels.
 """
 
 from __future__ import annotations
@@ -34,6 +40,7 @@ from typing import Any, Optional
 
 from openadapt_flow.admit_pipeline import (
     PENDING_FILE,
+    UNIDENTIFIED_AGENT,
     AdmissionError,
     Decider,
     decide_admission,
@@ -118,7 +125,9 @@ class AdmissionDesk:
         return resolved
 
     def _preparer(self) -> Decider:
-        return Decider(kind="agent", id=self.delegate_id or "mcp-client", route="mcp")
+        return Decider(
+            kind="agent", id=self.delegate_id or UNIDENTIFIED_AGENT, route="mcp"
+        )
 
     # -- specs -------------------------------------------------------------
 
@@ -201,11 +210,10 @@ class AdmissionDesk:
     # -- tools -------------------------------------------------------------
 
     def _view(self, folder: Path) -> dict[str, Any]:
-        pending = load_pending(folder)
+        pending = load_pending(folder, key_dir=self.key_dir)
         return {
             "admission": folder.name,
             "status": pending.status,
-            "halt_reason": pending.halt_reason,
             "workflow_name": pending.workflow_name,
             "policy_pack": pending.policy_pack,
             "prepared_by": pending.prepared_by.model_dump(mode="json"),
@@ -216,7 +224,7 @@ class AdmissionDesk:
             ],
             "record_next": [item.get("code") for item in pending.record_next],
             "decided": (folder / "admission-decision.json").exists(),
-            "summary": render_summary(pending),
+            "summary": render_summary(pending, value_free=True),
             "pending_sha256": pending.sha256(),
         }
 
@@ -242,6 +250,7 @@ class AdmissionDesk:
                 candidate=candidate,
                 policy_pack=arguments.get("policy_pack") or "community",
                 admission_id=admission_id,
+                key_dir=self.key_dir,
             )
         except AdmissionError as exc:
             raise AdmissionToolError(str(exc)) from exc
@@ -257,14 +266,22 @@ class AdmissionDesk:
                     and not folder.is_symlink()
                     and (folder / PENDING_FILE).is_file()
                 ):
-                    rows.append(self._view(folder))
+                    try:
+                        rows.append(self._view(folder))
+                    except AdmissionError:
+                        # Unsigned or unreadable: listed as such, never shown.
+                        rows.append({"admission": folder.name, "status": "unverified"})
         return {"admissions": rows}
 
     def confirmation_message(self, arguments: dict[str, Any]) -> str:
         folder = self._child("admissions", arguments.get("admission"), _ADMISSION)
         verb = "accept" if arguments.get("decision") == "accept" else "reject"
+        try:
+            pending = load_pending(folder, key_dir=self.key_dir)
+        except AdmissionError as exc:
+            raise AdmissionToolError(str(exc)) from exc
         return (
-            render_summary(load_pending(folder))
+            render_summary(pending, value_free=True)
             + f"\nConfirm that you, a person, {verb} this admission."
         )
 

@@ -199,6 +199,47 @@ def test_without_a_delegate_the_bridge_never_decides(bundles_root, runner_config
         )
 
 
+def test_a_delegate_cannot_decide_what_an_unidentified_client_prepared(
+    bundles_root, runner_config, tmp_path
+):
+    _recording(tmp_path)
+    # Prepared on a server without --delegate-approvals: the preparer is
+    # "mcp-client", which may be the same agent that holds the delegate id.
+    view = _bridge(bundles_root, runner_config, tmp_path).dispatch(
+        "prepare_admission", {"recordings": ["rec1"], "name": "w"}
+    )
+    assert view["prepared_by"]["id"] == "mcp-client"
+    reviewer = _bridge(
+        bundles_root,
+        runner_config,
+        tmp_path,
+        delegate="agent:reviewer",
+        grant=_grant_file(tmp_path),
+    )
+    with pytest.raises(BridgeError, match="unidentified"):
+        reviewer.dispatch(
+            "decide_admission",
+            {
+                "admission": view["admission"],
+                "pending_sha256": view["pending_sha256"],
+                "decision": "accept",
+            },
+        )
+    assert not (tmp_path / "admissions" / view["admission"] / "admission-decision.json").exists()
+
+
+def test_a_tampered_pending_file_is_listed_but_never_shown(bundles_root, runner_config, tmp_path):
+    _recording(tmp_path)
+    bridge = _bridge(bundles_root, runner_config, tmp_path, delegate="agent:intake-bot")
+    view = bridge.dispatch("prepare_admission", {"recordings": ["rec1"], "name": "w"})
+    path = tmp_path / "admissions" / view["admission"] / "admission-pending.json"
+    data = json.loads(path.read_text())
+    data["prepared_by"] = {"kind": "person", "id": "pat", "route": "cli"}
+    path.write_text(json.dumps(data))
+    listed = bridge.dispatch("list_admissions", {})["admissions"]
+    assert listed == [{"admission": view["admission"], "status": "unverified"}]
+
+
 def test_paths_stay_inside_the_admissions_folder(bundles_root, runner_config, tmp_path):
     bridge = _bridge(bundles_root, runner_config, tmp_path, delegate="agent:x")
     for bad in ("../etc", "/tmp", "a/b"):

@@ -156,13 +156,25 @@ The rules are the same for every decider:
 - **Who decided is recorded.** `admission-decision.json`, in the admission
   folder and in the accepted bundle, names who prepared and who decided, by
   kind, id and route.
-- **No self-approval.** An agent can't decide an admission it prepared.
+- **No self-approval.** An agent can't decide an admission it prepared. A
+  server started without `--delegate-approvals` records its preparer as
+  `agent:mcp-client`, which names no one; only a person decides those.
+- **Signed by this machine.** `admission-pending.json` and
+  `admission-decision.json` are signed with the local admission key (the JIT
+  key directory, `$OPENADAPT_JIT_KEY_DIR` or `~/.openadapt/jit`). An edited or
+  hand-written file is refused, so write access to the admission folder or
+  the bundle is not enough to change who prepared or decided. Keep the key
+  directory away from the agents it governs.
+- **The agent sees codes, not screen text.** The summaries the MCP tools
+  return carry step ids, check kinds, counts and record-next codes. Induction's
+  record-next lines and halt reasons can quote labels from the recordings, so
+  they are shown only at the terminal.
 - **The `regulated` policy pack needs a person.**
 - **A decision covers exactly what was shown.** It names the
   `pending_sha256` of the summary, and the bundle must still match its
   digest. There is one decision per admission.
 - **No gate is relaxed.** Shadow suggestions are never applied, a HALTed
-  proposal can't be accepted, and no admission is signed here.
+  proposal can't be accepted, and no release admission is signed here.
 
 ### What admission changes for runs
 
@@ -174,10 +186,12 @@ only when OpenAdapt read the saved record back from your system's data and it
 matched. Per-save approval (`each_item`, with one-tap approval from a phone
 paired to the Desktop decision portal) stays available as the strictest
 setting. `openadapt-flow run` reads this from `admission-decision.json` in the
-bundle and prints who admitted it. Four things keep it narrow:
+bundle and prints who admitted it. Five things keep it narrow:
 
 - A `--approval-mode` flag or the deployment's `runtime.approval_mode` still
   wins.
+- The decision record must carry a valid signature by the local admission
+  key. A record without one, or edited after signing, gives no mode.
 - It applies only to the exact admitted bundle. After any change to the
   bundle, each save waits for a person again.
 - An agent's admission applies only while its signed grant still verifies.
