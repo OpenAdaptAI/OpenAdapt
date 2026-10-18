@@ -65,20 +65,20 @@ being merged now.
     machine is landing); a strict no-outbound mode, an unattended on-prem
     service, and signed, timestamped receipts are released.
 
-## Corrections to common reviews
+## Often missed
 
-| A review says | What is true | Where |
-| --- | --- | --- |
-| "It compiles one linear demonstration and halts on every branch it hasn't seen." | It learns branching programs from several demonstrations, from repeated halts, and from many background runs. | `induce`, `teach-branch`, [SHADOW_MINING.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/capture/docs/SHADOW_MINING.md) |
-| "A bundle is locked to one surface." | Programs chain across surfaces, and one program can switch surfaces mid-run. | `compose`, `process`, [#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197) |
-| "It replays pixel macros that break when zoom or fonts change." | Page structure is the first rung on web, Windows and macOS. Pixels are the fallback for remote desktops. Benchmarks that say "vision-only" ran a deliberately pixel-only arm. | [RESOLUTION_LADDER.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/RESOLUTION_LADDER.md) |
-| "It can't compile clicks into API calls." | Steps can run as API calls today; compiling them from captured network traffic is being merged. | `runtime/actuators/api.py`, [#1261](https://github.com/OpenAdaptAI/OpenAdapt/pull/1261) |
-| "When the UI changes it just halts and pages a person." | It halts before any write, then repairs: governed repair, agent-demonstrated fixes, fleet patches, and self-repair probed up to the save. | [REPAIR_LIFECYCLE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/REPAIR_LIFECYCLE.md) |
-| "It needs a human demonstration first." | A computer-use agent's verified run can be compiled instead. | [JIT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/JIT.md) |
-| "Approvals check an intent string, not what is executed." | Approvals bind to the exact screenshot and form-state digest, and the form is re-read before saving. | [APPROVAL_MODES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/APPROVAL_MODES.md) |
-| "It can't read the document a decision depends on." | `intake` fills inputs from a referral PDF, fax image or email and holds back anything unclear for a person. | [INTAKE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/INTAKE.md) |
-| "The code is spread over 17 repositories." | The product is one monorepo with four packages (flow, agent, types, capture); older repositories are frozen or research. | [README](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/README.md) |
-| "openadapt-ml (model training) is the product." | It is research. The product makes no model calls on healthy runs. | [README](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/README.md) |
+| What OpenAdapt does | Where |
+| --- | --- |
+| Learns branching programs from several demonstrations, from repeated halts, and from many background runs. | `induce`, `teach-branch`, [SHADOW_MINING.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/capture/docs/SHADOW_MINING.md) |
+| Chains programs across surfaces, and one program can switch surfaces, tabs and popups mid-run. | `compose`, `process`, [#1197](https://github.com/OpenAdaptAI/OpenAdapt/pull/1197) |
+| Uses page structure first on web, Windows, macOS and Linux, with pixels as the fallback for remote desktops. Benchmarks labelled "vision-only" ran a deliberately pixel-only arm. | [RESOLUTION_LADDER.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/RESOLUTION_LADDER.md) |
+| Runs steps as direct API calls; compiling them from captured network traffic is being merged. | `runtime/actuators/api.py`, [#1269](https://github.com/OpenAdaptAI/OpenAdapt/pull/1269) |
+| Repairs itself when the app changes: governed repair, agent-demonstrated fixes, fleet patches, and self-repair probed up to the save. | [REPAIR_LIFECYCLE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/REPAIR_LIFECYCLE.md) |
+| Compiles a computer-use agent's verified run, with no human demonstration needed. | [JIT.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/JIT.md) |
+| Binds each approval to the exact screenshot and form state, and re-reads the form before saving. | [APPROVAL_MODES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/APPROVAL_MODES.md) |
+| Fills inputs from a referral PDF, fax image or email, and holds back anything unclear for a person. | `intake`, [INTAKE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/docs/INTAKE.md) |
+| Ships as one monorepo with separately installable packages (flow, agent, types, capture, and privacy and desktop moving in). | [README](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/README.md) |
+| Makes no model calls on healthy runs. Model training (openadapt-ml) is separate research. | [README](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/README.md) |
 
 The MCP server section follows; the other packages are listed at the end.
 
