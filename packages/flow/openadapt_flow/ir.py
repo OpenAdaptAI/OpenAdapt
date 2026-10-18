@@ -3526,19 +3526,15 @@ class ServerResponseEvidence(BaseModel):
 
     Kept on the step as evidence at check level ``same_screen``: it comes from
     the same transaction as the save, so on its own it never confirms an
-    effect and never makes a run VERIFIED. It holds no body, URL, or record
-    value: the method, the status, and digests.
+    effect and never makes a run VERIFIED. It holds the method, the status and
+    the media type only: no URL, path, body, or digest of one (a digest of a
+    short path or body can be guessed).
     """
 
     model_config = ConfigDict(extra="forbid")
 
     method: Literal["POST", "PUT", "PATCH", "DELETE"]
     status: int = Field(ge=100, le=599)
-    #: SHA-256 of the request's origin and path (no query string).
-    endpoint_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
-    #: SHA-256 of the response body, when the browser still had it.
-    body_sha256: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
-    body_bytes: Optional[int] = Field(default=None, ge=0)
     #: The response's media type (``application/json``), without parameters.
     content_type: Optional[str] = Field(default=None, max_length=100)
     #: Where this evidence ranks (:mod:`openadapt_flow.check_level`).
@@ -3546,7 +3542,8 @@ class ServerResponseEvidence(BaseModel):
 
     @property
     def ok(self) -> bool:
-        return 200 <= self.status < 300
+        """Not an error: 2xx, or a 3xx redirect after a form post."""
+        return self.status < 400
 
 
 class StepResult(BaseModel):

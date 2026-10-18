@@ -140,7 +140,8 @@ class ReceiptServerResponses(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     observed: ReceiptCount
-    #: Answers with a 2xx status.
+    #: Answers that were not errors (status below 400; a form save often
+    #: answers with a redirect).
     ok: ReceiptCount
     check_level: Literal["same_screen"] = "same_screen"
 

@@ -703,10 +703,17 @@ Citrix session.
 In a browser, a save usually sends a write request (POST, PUT, PATCH,
 DELETE) and the server answers it. Flow keeps that answer on the save step
 (`StepResult.server_responses`) and counts it on the receipt
-(`server_responses`: observed, 2xx, `check_level: same_screen`). It keeps the
-method, the status, a digest of the endpoint (origin and path, no query
-string), a digest and size of the body, and the media type. It never keeps a
-body, a URL, a header or a value.
+(`server_responses`: observed, not errors, `check_level: same_screen`). It
+keeps the method, the status and the media type. It never keeps a URL, a path,
+a header, a body, or a digest of any of them (a digest of a short path or body
+can be guessed), and it never reads a response body, so a streaming answer
+can't hold up the run.
+
+Only the page's own write requests count: `fetch`, XHR and form submissions
+to the page's origin, sent after the save began. A beacon, a request to
+another origin (analytics, a widget), a request already in flight, and an
+answer from a service worker are left out. "Not an error" means a status
+below 400, because a form save often answers with a redirect.
 
 The answer comes from the same transaction as the save. A server can say
 `201 Created` and store the wrong value, or store it under another record, or

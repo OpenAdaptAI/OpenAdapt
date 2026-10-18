@@ -8,7 +8,6 @@ effect and never makes a run VERIFIED. No body, URL or value is kept.
 
 from __future__ import annotations
 
-import hashlib
 import http.server
 import threading
 from pathlib import Path
@@ -43,23 +42,28 @@ BODY = b'{"id": "enc-7", "status": "saved"}'
 
 
 class _Request:
-    def __init__(self, method: str) -> None:
+    def __init__(self, method: str, kind: str = "fetch") -> None:
         self.method = method
+        self.resource_type = kind
 
 
 class _Response:
-    def __init__(self, method: str, status: int, url: str, body: bytes) -> None:
-        self.request = _Request(method)
+    def __init__(
+        self, request: _Request, status: int, url: str, *, worker: bool = False
+    ) -> None:
+        self.request = request
         self.status = status
         self.url = url
         self.headers = {"content-type": "application/json; charset=utf-8"}
-        self._body = body
+        self.from_service_worker = worker
 
-    def body(self) -> bytes:
-        return self._body
+    def body(self) -> bytes:  # pragma: no cover - must never be called
+        raise AssertionError("the log must not read response bodies")
 
 
 class _Page:
+    url = "https://emr.test/patients/MRN-1/encounters"
+
     def __init__(self) -> None:
         self.handlers: dict[str, Any] = {}
 
@@ -67,39 +71,39 @@ class _Page:
         self.handlers[event] = handler
 
 
-def test_only_answers_to_write_requests_are_kept_without_values() -> None:
+def _send(page: _Page, request: _Request, status: int, url: str, **kw: Any) -> None:
+    page.handlers["request"](request)
+    page.handlers["response"](_Response(request, status, url, **kw))
+
+
+def test_only_the_saves_own_writes_are_kept_without_values() -> None:
     page = _Page()
     log = ServerResponseLog(page)
-    emit = page.handlers["response"]
-    emit(_Response("GET", 200, "https://emr.test/patients/MRN-1", b"x"))
+    in_flight = _Request("POST")
+    page.handlers["request"](in_flight)  # an autosave sent before the save
     mark = log.mark()
-    emit(_Response("POST", 201, "https://emr.test/api/encounters?patient=MRN-1", BODY))
-    emit(_Response("GET", 200, "https://emr.test/api/encounters", b"[]"))
+    page.handlers["response"](_Response(in_flight, 200, "https://emr.test/autosave"))
+    _send(page, _Request("POST"), 201, "https://emr.test/api/encounters?p=MRN-1")
+    _send(page, _Request("GET"), 200, "https://emr.test/api/encounters")
+    _send(page, _Request("POST", "ping"), 204, "https://emr.test/beacon")
+    _send(page, _Request("POST"), 200, "https://analytics.example/collect")
+    _send(page, _Request("POST"), 200, "https://emr.test/queue", worker=True)
     [answer] = log.since(mark)
     assert answer.method == "POST" and answer.status == 201 and answer.ok
-    assert answer.body_sha256 == hashlib.sha256(BODY).hexdigest()
     assert answer.content_type == "application/json"
     assert answer.check_level == "same_screen"
     dumped = answer.model_dump_json()
-    for leak in ("MRN-1", "emr.test", "enc-7", "patient="):
+    for leak in ("MRN-1", "emr.test", "encounters", "p="):
         assert leak not in dumped
-    # The query string is not part of the endpoint digest.
-    other = _Response("POST", 201, "https://emr.test/api/encounters", BODY)
-    emit(other)
-    assert log.since(mark)[1].endpoint_sha256 == answer.endpoint_sha256
 
 
-def test_an_answer_whose_body_is_gone_keeps_its_status() -> None:
+def test_a_form_redirect_is_not_an_error_but_a_500_is() -> None:
     page = _Page()
     log = ServerResponseLog(page)
-
-    class Gone(_Response):
-        def body(self) -> bytes:
-            raise RuntimeError("navigated")
-
-    page.handlers["response"](Gone("PUT", 500, "https://emr.test/api/x", b""))
-    [answer] = log.since(0)
-    assert answer.status == 500 and not answer.ok and answer.body_sha256 is None
+    _send(page, _Request("POST", "document"), 302, "https://emr.test/save")
+    _send(page, _Request("PUT"), 500, "https://emr.test/api/x")
+    redirect, failure = log.since(0)
+    assert redirect.ok and not failure.ok
 
 
 # -- the replayer --------------------------------------------------------------------
@@ -123,12 +127,7 @@ class AnsweringBackend(FakeBackend):
         super().press(key)
         self.answers.append(
             ServerResponseEvidence(
-                method="POST",
-                status=self.status,
-                endpoint_sha256="e" * 64,
-                body_sha256=hashlib.sha256(BODY).hexdigest(),
-                body_bytes=len(BODY),
-                content_type="application/json",
+                method="POST", status=self.status, content_type="application/json"
             )
         )
 
@@ -218,8 +217,8 @@ def test_the_receipt_counts_answers_as_supporting_evidence() -> None:
     plain = build_receipt(report)
     assert "server_responses" not in plain.model_dump()
     report.results[-1].server_responses = [
-        ServerResponseEvidence(method="POST", status=201, endpoint_sha256="e" * 64),
-        ServerResponseEvidence(method="POST", status=500, endpoint_sha256="e" * 64),
+        ServerResponseEvidence(method="POST", status=201),
+        ServerResponseEvidence(method="POST", status=500),
     ]
     receipt = build_receipt(report)
     assert receipt.server_responses is not None
@@ -289,5 +288,5 @@ def test_the_browser_backend_keeps_the_answer_to_a_real_save(save_server: str) -
         finally:
             browser.close()
     assert answer.method == "POST" and answer.status == 201
-    assert answer.body_sha256 == hashlib.sha256(BODY).hexdigest()
+    assert answer.content_type == "application/json"
     assert "MRN-9" not in answer.model_dump_json()

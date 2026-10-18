@@ -197,8 +197,8 @@ older scales keep their published numbers and map onto it:
 | 0 `unchecked` | No read, unreachable or stale store, no tier | (no confirmed tier) | (no Seal) | `unchecked` | No |
 
 The server's own answer to a save, when the browser sees it, is kept too
-(`StepResult.server_responses`: method, status, digests, never a body or a
-URL; counted on the receipt as `server_responses`). It ranks `same_screen`:
+(`StepResult.server_responses`: method, status and media type, never a URL,
+a body or a digest of one; counted on the receipt as `server_responses`). It ranks `same_screen`:
 it comes from the same transaction as the save, so on its own it never
 confirms a save, never makes a run `VERIFIED`, and never makes a save clean.
 A 500 behind a "Saved" banner is still worth seeing.

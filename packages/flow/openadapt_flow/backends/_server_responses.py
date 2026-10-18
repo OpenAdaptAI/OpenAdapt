@@ -1,4 +1,4 @@
-"""The server's answers to write requests, as the browser sees them.
+"""The server's answers to a save's write requests, as the browser sees them.
 
 When a person or a program presses Save in a web application, the browser
 usually sends a write request (POST, PUT, PATCH, DELETE) and the server
@@ -8,16 +8,24 @@ is right, because it comes from the same transaction as the save. The
 replayer keeps it on the step as evidence at check level ``same_screen``,
 and only a read-back decides whether the save is confirmed.
 
-:class:`ServerResponseLog` listens to one Playwright page. It keeps a bounded
-log of answers to write requests and returns them as
-:class:`~openadapt_flow.ir.ServerResponseEvidence`: method, status, digests
-of the endpoint and the body, the body's size and media type. It never keeps
-a body, a URL, a header, or a query string.
+:class:`ServerResponseLog` listens to one Playwright page. It keeps answers
+to write requests that:
+
+- the page's own code sent (``fetch``, XHR, or a form submission), not a
+  beacon, an image or a script;
+- went to the page's own origin;
+- were sent after the save began (requests already in flight are ignored);
+- came from the network, not from a service worker (an offline-first app's
+  worker can answer a write that never reached the server).
+
+It keeps the method, the status and the media type, and whether the request
+went to the page's origin. It never keeps a URL, a path, a header, a body or
+a digest of any of them: a digest of a short path or body can be guessed. It
+never reads a response body, so a streaming answer can't hold up the run.
 """
 
 from __future__ import annotations
 
-import hashlib
 import threading
 from collections import deque
 from typing import Any, Optional
@@ -26,70 +34,84 @@ from urllib.parse import urlsplit
 from openadapt_flow.ir import ServerResponseEvidence
 
 WRITE_METHODS = frozenset({"POST", "PUT", "PATCH", "DELETE"})
-
+#: Requests the page's own code makes: fetch, XHR, and form submissions.
+_PAGE_REQUESTS = frozenset({"fetch", "xhr", "document"})
 #: Answers kept in the log; older ones drop off.
 _MAX_LOG = 64
-#: Bodies above this size are not read to compute a digest.
-_MAX_BODY_BYTES = 5 * 1024 * 1024
 
 
-def _endpoint_digest(url: str) -> str:
+def _origin(url: str) -> str:
     parts = urlsplit(url)
-    endpoint = f"{parts.scheme}://{parts.netloc}{parts.path}".lower()
-    return hashlib.sha256(endpoint.encode("utf-8")).hexdigest()
+    return f"{parts.scheme}://{parts.netloc}".lower()
 
 
 class ServerResponseLog:
-    """A bounded log of answers to write requests on one page.
-
-    The Playwright event handler only stores the response object; the body is
-    read later, outside the handler, because a sync handler must not block on
-    the page.
-    """
+    """A bounded log of answers to the page's own write requests."""
 
     def __init__(self, page: Any) -> None:
+        self._page = page
         self._lock = threading.Lock()
-        self._log: deque[tuple[int, Any]] = deque(maxlen=_MAX_LOG)
+        #: Sequence number of each tracked write request, by request object.
+        self._issued: dict[int, int] = {}
         self._seq = 0
+        self._log: deque[tuple[int, ServerResponseEvidence]] = deque(maxlen=_MAX_LOG)
         self.armed = False
         try:
+            page.on("request", self._on_request)
             page.on("response", self._on_response)
             self.armed = True
         except Exception:  # noqa: BLE001 - evidence only
             self.armed = False
 
-    def _on_response(self, response: Any) -> None:
+    def _on_request(self, request: Any) -> None:
         try:
-            method = str(response.request.method).upper()
+            method = str(request.method).upper()
+            kind = str(request.resource_type)
         except Exception:  # noqa: BLE001
             return
-        if method not in WRITE_METHODS:
+        if method not in WRITE_METHODS or kind not in _PAGE_REQUESTS:
             return
         with self._lock:
             self._seq += 1
-            self._log.append((self._seq, response))
+            self._issued[id(request)] = self._seq
+            if len(self._issued) > 4 * _MAX_LOG:
+                # Requests that never got an answer don't pile up.
+                oldest = sorted(self._issued.items(), key=lambda kv: kv[1])
+                for key, _ in oldest[: len(oldest) - 2 * _MAX_LOG]:
+                    self._issued.pop(key, None)
+
+    def _on_response(self, response: Any) -> None:
+        try:
+            request = response.request
+        except Exception:  # noqa: BLE001
+            return
+        with self._lock:
+            seq = self._issued.pop(id(request), None)
+        if seq is None:
+            return
+        evidence = _evidence(self._page, response)
+        if evidence is None:
+            return
+        with self._lock:
+            self._log.append((seq, evidence))
 
     def mark(self) -> int:
-        """The log position now; answers after it belong to what comes next."""
+        """Requests sent after this mark belong to what comes next."""
 
         with self._lock:
             return self._seq
 
     def since(self, mark: int) -> list[ServerResponseEvidence]:
-        """Answers logged after ``mark``, as evidence (oldest first)."""
+        """Answers to write requests sent after ``mark`` (oldest first)."""
 
         with self._lock:
-            entries = [(seq, r) for seq, r in self._log if seq > mark]
-        out: list[ServerResponseEvidence] = []
-        for _seq, response in entries:
-            evidence = _evidence(response)
-            if evidence is not None:
-                out.append(evidence)
-        return out
+            return [evidence for seq, evidence in self._log if seq > mark]
 
 
-def _evidence(response: Any) -> Optional[ServerResponseEvidence]:
+def _evidence(page: Any, response: Any) -> Optional[ServerResponseEvidence]:
     try:
+        if getattr(response, "from_service_worker", False):
+            return None
         method = str(response.request.method).upper()
         status = int(response.status)
         url = str(response.url)
@@ -97,34 +119,23 @@ def _evidence(response: Any) -> Optional[ServerResponseEvidence]:
         return None
     if method not in WRITE_METHODS or not 100 <= status <= 599:
         return None
+    try:
+        page_origin = _origin(str(page.url))
+    except Exception:  # noqa: BLE001
+        return None
+    if _origin(url) != page_origin:
+        # Another origin: analytics, a third-party widget. Not the save.
+        return None
     content_type: Optional[str] = None
     try:
-        headers = response.headers or {}
-        raw = headers.get("content-type")
+        raw = (response.headers or {}).get("content-type")
         if raw:
             content_type = str(raw).split(";", 1)[0].strip().lower()[:100] or None
     except Exception:  # noqa: BLE001
         content_type = None
-    body_sha256: Optional[str] = None
-    body_bytes: Optional[int] = None
-    try:
-        length = int((response.headers or {}).get("content-length") or 0)
-    except (TypeError, ValueError):
-        length = 0
-    if length <= _MAX_BODY_BYTES:
-        try:
-            body = response.body()
-        except Exception:  # noqa: BLE001 - the page moved on; no body
-            body = None
-        if isinstance(body, (bytes, bytearray)) and len(body) <= _MAX_BODY_BYTES:
-            body_sha256 = hashlib.sha256(bytes(body)).hexdigest()
-            body_bytes = len(body)
     return ServerResponseEvidence(
         method=method,  # type: ignore[arg-type]
         status=status,
-        endpoint_sha256=_endpoint_digest(url),
-        body_sha256=body_sha256,
-        body_bytes=body_bytes,
         content_type=content_type,
     )
 

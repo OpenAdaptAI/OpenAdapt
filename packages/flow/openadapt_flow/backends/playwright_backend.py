@@ -1100,7 +1100,8 @@ class PlaywrightBackend:
         return self._server_responses.mark()
 
     def server_responses_since(self, mark: int) -> list[Any]:
-        """Server answers to write requests made after ``mark``."""
+        """Server answers to the page's own write requests sent after
+        ``mark``; never blocks on a response body."""
         return self._server_responses.since(mark)
 
     @property

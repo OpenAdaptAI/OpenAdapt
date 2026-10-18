@@ -604,7 +604,7 @@ def better_identity_read(first: Any, retry: Any) -> Any:
 
 
 #: Server answers kept per step (a save makes one or a few write requests).
-_MAX_SERVER_RESPONSES = 16
+_MAX_SERVER_RESPONSES = 64
 
 
 class Replayer:

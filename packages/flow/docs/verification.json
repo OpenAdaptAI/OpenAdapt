@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-18T15:02:08-04:00 (git HEAD commit date)",
+  "generated_at": "2026-10-18T15:29:50-04:00 (git HEAD commit date)",
   "green_check_run": false,
   "green_check_job": null,
   "green_check_scope": [],
@@ -580,7 +580,7 @@
     },
     {
       "id": "server-response-evidence",
-      "claim": "In a browser, the server's answer to a save request is kept on the step and counted on the receipt at check level same_screen, with no body, URL or value. It comes from the same transaction as the save, so on its own it never confirms an effect or makes a run VERIFIED.",
+      "claim": "In a browser, the server's answer to a save's own write request is kept on the step and counted on the receipt at check level same_screen, as method, status and media type only. It comes from the same transaction as the save, so on its own it never confirms an effect or makes a run VERIFIED.",
       "tier": "supported",
       "reproducibility": null,
       "surfaces": [
@@ -588,7 +588,7 @@
       ],
       "strongest_evidence": "supported",
       "caveats": [
-        "Only the browser backend sees server answers. An answer that arrives after the step's checks finish is not kept."
+        "Only the browser backend sees server answers. A save that writes to another origin (a separate API host) leaves none. An answer that arrives after the screen postconditions is not kept."
       ],
       "evidence": [
         {
@@ -601,7 +601,7 @@
           "node_found": null,
           "ci_job": "test",
           "junit_status": null,
-          "proves": "Only answers to write requests are kept, as method, status and digests with no URL, query or body text; a real Chromium save produces one; a 201 answer with an unconfirmed read-back still ends RECONCILIATION_REQUIRED and not billable; the receipt counts answers without changing its evidence tier; results without answers serialize as before."
+          "proves": "Only same-origin fetch, XHR and form writes sent after the mark are kept, never beacons, other origins, requests already in flight or service-worker answers, and never a URL, path or body; a real Chromium save produces one; a 201 answer with an unconfirmed read-back still ends RECONCILIATION_REQUIRED and not billable; a redirect counts as not an error; the receipt counts answers without changing its evidence tier; results without answers serialize as before."
         }
       ],
       "errors": []
