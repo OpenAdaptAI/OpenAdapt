@@ -208,7 +208,13 @@ class WorklistQueue:
             return done(
                 "waiting_for_person", "items wait for one person's answer", preflight
             )
-        return done("done", "", preflight)
+        return done(
+            "done",
+            f"{len(waiting)} item(s) did not verify and wait for a person"
+            if waiting
+            else "",
+            preflight,
+        )
 
     # -- pieces ------------------------------------------------------------
 
@@ -308,6 +314,6 @@ class WorklistQueue:
         ):
             return None
         staged = repair.store.bundle_path(result.candidate.proposed_content_digest)
-        return (
-            staged if staged.is_dir() else result.patched_bundle
-        ), result.candidate.candidate_id
+        if not staged.is_dir():
+            return None  # no hash-verified staged copy: run nothing with it
+        return staged, result.candidate.candidate_id

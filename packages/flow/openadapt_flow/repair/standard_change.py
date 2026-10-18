@@ -701,12 +701,13 @@ def receipt_fields(report: Any) -> Optional[dict[str, str]]:
 
     evidence = getattr(report, "self_repair", None)
     change = getattr(evidence, "standard_change", None)
-    if change is None or not getattr(evidence, "candidate_id", None):
+    candidate_id = getattr(evidence, "candidate_id", None)
+    if change is None or not candidate_id:
         return None
     return {
         "change_class": change.change_class,
         "policy_sha256": change.policy_sha256,
-        "candidate_id": evidence.candidate_id,
+        "candidate_id": candidate_id,
     }
 
 
