@@ -3180,6 +3180,37 @@ def compile_recording(
             _check.tier,
         )
 
+    # A web recording made with --capture-network: propose an API step for
+    # the save when its request can be explained field by field. It runs only
+    # after a person admits it (openadapt-flow api admit).
+    from openadapt_flow.network_capture import NETWORK_FILE
+
+    if (recording / NETWORK_FILE).is_file():
+        from openadapt_flow.compiler.api_proposal import propose_api_step
+
+        workflow, _api_step, _api_reasons = propose_api_step(workflow, recording)
+        if _api_step is not None:
+            logger.info(
+                "proposed an API step for %s (%d GUI steps); a person admits it "
+                "with 'api admit'",
+                _api_step.id,
+                len(_api_step.api_binding.web_form.replaces_steps),
+            )
+        else:
+            logger.info("no API step proposed: %s", "; ".join(_api_reasons))
+        # Say what happened either way, so "no API step" is never silent.
+        (bundle / "api_proposal.json").write_text(
+            json.dumps(
+                {
+                    "proposed": _api_step is not None,
+                    "step": None if _api_step is None else _api_step.id,
+                    "reasons": _api_reasons,
+                },
+                indent=2,
+            )
+            + "\n"
+        )
+
     # Bind each consequential click on an unlabeled control to the form whose
     # fields the demonstration filled, or record why it cannot be bound (the
     # replayer refuses that click). Runs after every risk decision, model

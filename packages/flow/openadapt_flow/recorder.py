@@ -132,6 +132,7 @@ class Recorder:
         settle_interval_s: float = 0.1,
         settle_stable_frames: int = 2,
         settle_timeout_s: float = 3.0,
+        network_capture: Optional[Any] = None,
         surface_id: str = PRIMARY_SURFACE_ID,
         surface_kind: Optional[str] = None,
         page_backend_factory: Optional[Callable[[Any], Backend]] = None,
@@ -139,6 +140,10 @@ class Recorder:
         # ``_backend`` is always the ACTIVE surface's backend; on a
         # single-surface recording it never changes.
         self._backend = backend
+        # Opt-in ``record --capture-network``: a started
+        # :class:`openadapt_flow.network_capture.NetworkCapture`, written beside
+        # the events by :meth:`finish`.
+        self._network_capture = network_capture
         # Builds the backend for a browser page an action opened. The
         # interactive recorder passes one that applies its privacy masking
         # and scrubbed structural reads to every page it follows.
@@ -284,6 +289,15 @@ class Recorder:
             "params": dict(self._params),
             "secret_params": sorted(self._secret_params),
         }
+        if self._network_capture is not None:
+            from openadapt_flow.network_capture import NETWORK_FILE
+
+            self._network_capture.stop()
+            self._network_capture.write(self._dir, self._t0)
+            meta["network_capture"] = {
+                "file": NETWORK_FILE,
+                "exchanges": self._network_capture.count,
+            }
         if self._multi_surface:
             meta["surfaces"] = [
                 {

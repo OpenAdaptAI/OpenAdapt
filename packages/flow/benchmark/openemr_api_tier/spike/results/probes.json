@@ -1,0 +1,91 @@
+{
+ "fixture_before": {
+  "baseline": "359322296c24ca08859a70a9ba29efb673fbf6b43d96879c981b811e1276e1d0",
+  "seed_status": 201,
+  "reset_seed_s": 4.43
+ },
+ "probes": [
+  {
+   "probe": "stale_csrf",
+   "question": "Does a save with another session's CSRF token write?",
+   "new_charts": 0,
+   "http": 200,
+   "tokens_differ_between_sessions": true,
+   "response_has_success": false,
+   "response_head": "Authentication Error"
+  },
+  {
+   "probe": "missing_csrf",
+   "question": "Does a save without a CSRF token write?",
+   "new_charts": 0,
+   "http": 200,
+   "response_has_success": false
+  },
+  {
+   "probe": "token_rotation",
+   "question": "Does the CSRF token change after a save in the same session?",
+   "new_charts": 1,
+   "http": 200,
+   "token_same_after_save": true,
+   "response_has_success": true
+  },
+  {
+   "probe": "skip_duplicate_check",
+   "question": "Does the server itself stop a possible duplicate (r6) when the duplicate-check request is skipped?",
+   "new_charts": 1,
+   "http": 200,
+   "response_has_success": true
+  },
+  {
+   "probe": "double_submit",
+   "question": "Does sending the same save twice write twice?",
+   "new_charts": 2,
+   "http": [
+    200,
+    200
+   ]
+  },
+  {
+   "probe": "no_session",
+   "question": "Does a save without a signed-in session write, and what comes back?",
+   "new_charts": 0,
+   "http": 200,
+   "location": null,
+   "response_head": "Site ID is missing from session data!"
+  },
+  {
+   "probe": "form_controls_changed",
+   "question": "Does the API step refuse before sending when the form's fields differ from the recording?",
+   "new_charts": 0,
+   "status": "unavailable",
+   "reason": "form changed since the recording (added ['form_mname'], removed []) -- save not sent"
+  },
+  {
+   "probe": "validation_rule_changed",
+   "question": "Middle Name made required in the layout: does the API step refuse instead of saving a record the browser form would have blocked?",
+   "new_charts": 0,
+   "status": "unavailable",
+   "reason": "the form's client-side validation rules changed since the recording -- save not sent"
+  },
+  {
+   "probe": "server_enforces_rule",
+   "question": "With Middle Name required in the layout, does the server reject a POST that leaves it empty?",
+   "new_charts": 1,
+   "http": 200,
+   "response_has_success": true,
+   "api_step_refusal": "form_mname is required by the form and would be empty"
+  },
+  {
+   "probe": "unknown_select_label",
+   "question": "state_label not among the form's options: refuse before sending?",
+   "new_charts": 0,
+   "status": "unavailable",
+   "reason": "form_state: no single option labelled 'Atlantis' -- save not sent"
+  }
+ ],
+ "fixture_after": {
+  "baseline": "359322296c24ca08859a70a9ba29efb673fbf6b43d96879c981b811e1276e1d0",
+  "seed_status": 201,
+  "reset_seed_s": 4.25
+ }
+}
