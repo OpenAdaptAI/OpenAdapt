@@ -203,6 +203,43 @@ _SEALED_CANONICAL_OMISSIONS_BY_VERSION: dict[
             ),
         ),
         _SealedCanonicalOmission(
+            owner=Step,
+            field_name="surface",
+            omitted_values=(None,),
+            reason=(
+                "a step with no named surface runs on the primary surface, "
+                "which is what every pre-multi-surface bundle did; a named "
+                "surface remains sealed content"
+            ),
+        ),
+        _SealedCanonicalOmission(
+            owner=Step,
+            field_name="opens",
+            omitted_values=([],),
+            reason=(
+                "an empty opened-page list predates the multi-surface fields; "
+                "a step that opens pages is sealed content"
+            ),
+        ),
+        _SealedCanonicalOmission(
+            owner=Step,
+            field_name="surface_origin",
+            omitted_values=(None,),
+            reason=(
+                "absent switch-target origin predates the multi-surface "
+                "fields; a recorded origin remains sealed content"
+            ),
+        ),
+        _SealedCanonicalOmission(
+            owner=Step,
+            field_name="dialog",
+            omitted_values=(None,),
+            reason=(
+                "a step that raises no browser dialog is what every earlier "
+                "bundle held; a recorded dialog answer remains sealed content"
+            ),
+        ),
+        _SealedCanonicalOmission(
             owner=Effect,
             field_name="new_records",
             omitted_values=([],),
