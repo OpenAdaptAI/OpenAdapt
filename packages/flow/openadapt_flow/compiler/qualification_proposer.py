@@ -187,6 +187,13 @@ class LazyLLMQualificationProposer:
             from openadapt_flow.benchmark.agent_baseline import MODEL as DEFAULT_MODEL
 
             model = DEFAULT_MODEL
+        from openadapt_flow import privacy
+
+        # The bundle name and metadata values can name a patient. Scrub them
+        # before the request, or refuse when the privacy extra is missing.
+        context = privacy.prepare_outbound(  # type: ignore[assignment]
+            json_ready(context), "qualification proposer request"
+        )
         prompt = (
             "From this sanitized recording metadata, suggest either an identity "
             "field name or a one-line effect-contract sketch. Do not emit the "
