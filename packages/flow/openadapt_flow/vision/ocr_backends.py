@@ -145,6 +145,18 @@ class AppleVisionEngine:
     Language correction is off so identifiers such as MRNs are read as drawn,
     not corrected toward dictionary words.
 
+    Three measured fixes for screen captures (see
+    ``scripts/native_ocr_tuning/RESEARCH.md``):
+
+    * Tall images are read in overlapping horizontal strips. On a full
+      2240x3702 frame Vision skipped whole table columns that it read in
+      every strip.
+    * Short images (identity bands, row crops) are upscaled before reading.
+    * A read with any upside-down line is redone with request revision 2.
+      Revision 3 sometimes reads a crop that slices through the rows above
+      and below rotated 180 degrees; revision 2 has no orientation step, and
+      a screen capture is always upright.
+
     Vision.framework is loaded straight from the system with
     ``objc.loadBundle``, and Vision decodes the PNG itself. That skips
     PyObjC's Vision and Quartz wrapper packages, which take about two seconds
@@ -155,6 +167,15 @@ class AppleVisionEngine:
     languages = ("en-US",)
     #: ``VNRequestTextRecognitionLevelAccurate``.
     _LEVEL_ACCURATE = 0
+    #: Images taller than ``STRIP_HEIGHT * 1.25`` are read in strips of about
+    #: this height, each overlapping its neighbours by ``STRIP_OVERLAP``.
+    STRIP_HEIGHT = 768
+    STRIP_OVERLAP = 192
+    #: Images shorter than this are upscaled by ``SHORT_IMAGE_SCALE``.
+    SHORT_IMAGE_HEIGHT = 300
+    SHORT_IMAGE_SCALE = 2
+    #: Request revision used to re-read an image that came back upside down.
+    UPRIGHT_REVISION = 2
 
     def __init__(self) -> None:
         import objc
@@ -168,10 +189,17 @@ class AppleVisionEngine:
         self._lock = threading.Lock()
         probe = self._request_class.alloc().init()
         self._revision = int(probe.revision())
+        supported = self._request_class.supportedRevisions()
+        self._upright_revision: Optional[int] = (
+            self.UPRIGHT_REVISION
+            if self._revision != self.UPRIGHT_REVISION
+            and bool(supported.containsIndex_(self.UPRIGHT_REVISION))
+            else None
+        )
 
-    def _request(self) -> Any:
+    def _request(self, revision: Optional[int] = None) -> Any:
         request = self._request_class.alloc().init()
-        request.setRevision_(self._revision)
+        request.setRevision_(self._revision if revision is None else revision)
         request.setRecognitionLevel_(self._LEVEL_ACCURATE)
         request.setUsesLanguageCorrection_(False)
         request.setRecognitionLanguages_(list(self.languages))
@@ -184,8 +212,70 @@ class AppleVisionEngine:
         if size is None:
             raise ValueError("could not decode PNG bytes")
         width, height = size
+        if height > self.STRIP_HEIGHT * 1.25:
+            return self._recognize_strips(png, width, height)
+        if height < self.SHORT_IMAGE_HEIGHT:
+            return self._recognize_upscaled(png, self.SHORT_IMAGE_SCALE)
+        return self._recognize(png, width, height)
+
+    def _recognize_strips(self, png: bytes, width: int, height: int) -> list[RawLine]:
+        """Read a tall image strip by strip.
+
+        Each line is kept from the one strip whose core (the strip without
+        its overlap) holds the line's vertical center; the overlap keeps that
+        line whole inside the strip.
+        """
+        from PIL import Image
+
+        count = -(-height // self.STRIP_HEIGHT)
+        step = -(-height // count)
+        lines: list[RawLine] = []
+        with Image.open(io.BytesIO(png)) as image:
+            image.load()
+            for k in range(count):
+                core0, core1 = k * step, min(height, (k + 1) * step)
+                y0 = max(0, core0 - self.STRIP_OVERLAP)
+                y1 = min(height, core1 + self.STRIP_OVERLAP)
+                strip = _encode_png(image.crop((0, y0, width, y1)))
+                for x, y, w, h, text, confidence in self._recognize(
+                    strip, width, y1 - y0
+                ):
+                    if core0 <= y + y0 + h / 2 < core1:
+                        lines.append((x, y + y0, w, h, text, confidence))
+        return lines
+
+    def _recognize_upscaled(self, png: bytes, scale: int) -> list[RawLine]:
+        """Read an image upscaled by ``scale`` (Lanczos); boxes map back."""
+        from PIL import Image
+
+        with Image.open(io.BytesIO(png)) as image:
+            width, height = image.size
+            big = image.convert("RGB").resize(
+                (width * scale, height * scale), Image.Resampling.LANCZOS
+            )
+        lines: list[RawLine] = []
+        for x, y, w, h, text, confidence in self._recognize(
+            _encode_png(big), width * scale, height * scale
+        ):
+            x0, y0 = x // scale, y // scale
+            x1 = min(width, -(-(x + w) // scale))
+            y1 = min(height, -(-(y + h) // scale))
+            lines.append((x0, y0, max(0, x1 - x0), max(0, y1 - y0), text, confidence))
+        return lines
+
+    def _recognize(self, png: bytes, width: int, height: int) -> list[RawLine]:
+        """One read; redone at the upright revision if any line is flipped."""
+        observed = self._observe(png, width, height, None)
+        if self._upright_revision is not None and any(f for _, f in observed):
+            observed = self._observe(png, width, height, self._upright_revision)
+        return [line for line, _flipped in observed]
+
+    def _observe(
+        self, png: bytes, width: int, height: int, revision: Optional[int]
+    ) -> list[tuple[RawLine, bool]]:
+        """Run Vision once; each line with whether it was read upside down."""
         data = self._nsdata.dataWithBytes_length_(png, len(png))
-        request = self._request()
+        request = self._request(revision)
         handler = self._handler_class.alloc().initWithData_options_(data, None)
         with self._lock:
             result = handler.performRequests_error_([request], None)
@@ -193,7 +283,7 @@ class AppleVisionEngine:
         ok = result[0] if isinstance(result, tuple) else bool(result)
         if not ok:
             raise RuntimeError("Apple Vision text recognition failed")
-        lines: list[RawLine] = []
+        lines: list[tuple[RawLine, bool]] = []
         for observation in request.results() or []:
             candidates = observation.topCandidates_(1)
             if not candidates:
@@ -207,14 +297,19 @@ class AppleVisionEngine:
             y1 = (1.0 - box.origin.y) * height
             ix0, iy0 = int(max(0.0, x0)), int(max(0.0, y0))
             ix1, iy1 = int(min(float(width), x1)), int(min(float(height), y1))
+            # The quad's top edge runs right to left on an upside-down read.
+            flipped = bool(observation.topLeft().x > observation.topRight().x)
             lines.append(
                 (
-                    ix0,
-                    iy0,
-                    max(0, ix1 - ix0),
-                    max(0, iy1 - iy0),
-                    str(candidate.string()),
-                    float(candidate.confidence()),
+                    (
+                        ix0,
+                        iy0,
+                        max(0, ix1 - ix0),
+                        max(0, iy1 - iy0),
+                        str(candidate.string()),
+                        float(candidate.confidence()),
+                    ),
+                    flipped,
                 )
             )
         return lines
@@ -227,12 +322,24 @@ class AppleVisionEngine:
             "macos": platform.mac_ver()[0],
             "machine": platform.machine(),
             "request_revision": self._revision,
+            "upright_revision": self._upright_revision,
             "recognition_level": "accurate",
             "language_correction": False,
             "languages": list(self.languages),
             "image_input": "png-data",
+            "strip_height": self.STRIP_HEIGHT,
+            "strip_overlap": self.STRIP_OVERLAP,
+            "short_image_height": self.SHORT_IMAGE_HEIGHT,
+            "short_image_scale": self.SHORT_IMAGE_SCALE,
             "pyobjc": str(getattr(objc, "__version__", "")),
         }
+
+
+def _encode_png(image: Any) -> bytes:
+    """Encode a PIL image as PNG, favouring speed over size."""
+    out = io.BytesIO()
+    image.save(out, format="PNG", compress_level=1)
+    return out.getvalue()
 
 
 # --------------------------------------------------------------------------

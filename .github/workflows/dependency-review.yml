@@ -8,6 +8,12 @@ on:
 permissions:
   contents: read
 
+# Cancel a pull request's earlier run when it gets a new commit; runs on
+# main always finish.
+concurrency:
+  group: dependency-review-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   dependency-review:
     name: dependency-review

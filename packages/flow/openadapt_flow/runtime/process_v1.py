@@ -26,6 +26,27 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
 )
+from openadapt_types.authentication import (
+    AuthenticationReceiptV1,
+    AuthenticationRunBindingV1,
+    AuthenticationTaskContractV1,
+    validate_authentication_receipt,
+)
+from openadapt_types.execute import ExecuteTerminalOutcomeV1
+from openadapt_types.human_decision import (
+    HumanDecisionReceiptV1,
+    HumanDecisionTaskV1,
+    sign_human_decision_task_hmac,
+)
+from openadapt_types.process_capability import (
+    ArtifactDataClassification,
+    ArtifactRefV1,
+    ArtifactStorageBoundary,
+    ArtifactVerificationState,
+    CodeCapabilityAdmissionEnvelopeV1,
+    CodeCapabilityManifestV1,
+    ProcessEvidenceReceiptV1,
+)
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from openadapt_flow.admitted_composition import (
@@ -39,27 +60,6 @@ from openadapt_flow.admitted_composition import (
     predecessor_map,
     resolve_pointer,
     topological_order,
-)
-from openadapt_flow.contracts.authentication import (
-    AuthenticationReceiptV1,
-    AuthenticationRunBindingV1,
-    AuthenticationTaskContractV1,
-    validate_authentication_receipt,
-)
-from openadapt_flow.contracts.execute import ExecuteTerminalOutcomeV1
-from openadapt_flow.contracts.human_decision import (
-    HumanDecisionReceiptV1,
-    HumanDecisionTaskV1,
-    sign_human_decision_task_hmac,
-)
-from openadapt_flow.contracts.process_capability import (
-    ArtifactDataClassification,
-    ArtifactRefV1,
-    ArtifactStorageBoundary,
-    ArtifactVerificationState,
-    CodeCapabilityAdmissionEnvelopeV1,
-    CodeCapabilityManifestV1,
-    ProcessEvidenceReceiptV1,
 )
 from openadapt_flow.ir import Workflow
 from openadapt_flow.qualification_admission import (

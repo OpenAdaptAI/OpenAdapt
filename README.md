@@ -133,17 +133,19 @@ screen. [Connect an agent](https://docs.openadapt.ai/how-to/connect-an-agent/) c
 ## Measured so far
 
 On a local OpenEMR 8.0.0.3 test copy with synthetic referrals (14 and
-15 October 2026), OpenAdapt and a Claude computer-use agent each entered
-referrals in 62 timed runs. Median time was 29.7 seconds for OpenAdapt and 36.5
-seconds for the agent. OpenAdapt made no model calls; the agent cost about
+15 October 2026), OpenAdapt and a Claude computer-use agent each entered 63
+new-patient referrals in timed runs. Median time over the correct runs was 29.7 seconds for
+OpenAdapt and 36.5 seconds for the agent. OpenAdapt made no model calls; the agent cost about
 $0.08 a run at list price. Both saved 62 of 63 normal referrals correctly,
 judged by the same database read-back, and the agent matched or beat OpenAdapt
 in three other tests. [Every result](https://openadapt.ai/compare/computer-use-agents)
-is published. OpenAdapt isn't affiliated with the OpenEMR project.
+is published, and the [run data](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/flow/benchmark/openemr_referral_timing/README.md)
+is in this repository. OpenAdapt isn't affiliated with the OpenEMR project.
 
 In a fault test through the real replayer, 72 of 90 runs left a wrong record
 behind a success screen. A check of the success banner reported success on 54
-of those 72; a full read of the database caught all 72. [How a save is checked](https://docs.openadapt.ai/explanation/verification/) has the method.
+of those 72; a full read of the database caught all 72. The faults were a fixed
+list injected into our own engine: a coverage test, not a real-world error rate. [How a save is checked](https://docs.openadapt.ai/explanation/verification/) has the method.
 
 <details>
 <summary>Where it runs</summary>
@@ -227,7 +229,8 @@ repository; engine changes go in [`packages/flow/`](https://github.com/OpenAdapt
 [Contribution guide](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CONTRIBUTING.md) ·
 [Issues](https://github.com/OpenAdaptAI/OpenAdapt/issues) ·
 [Discussions](https://github.com/OpenAdaptAI/OpenAdapt/discussions) ·
-[Report a vulnerability](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/SECURITY.md)
+[Report a vulnerability](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/SECURITY.md) ·
+[Code signing policy](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CODE_SIGNING_POLICY.md)
 
 Maintained by [OpenAdaptAI](https://github.com/OpenAdaptAI) under the
 [MIT License](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/LICENSE).
