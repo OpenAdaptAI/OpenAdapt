@@ -110,11 +110,14 @@ _ActionErrorType = Literal[
 
 # The shared enum map. SELECT_OPTION deliberately stays outside it until the
 # cross-package schema can carry its commit key and field evidence without
-# degrading it to TYPE; :func:`step_to_action` refuses that conversion loudly.
+# degrading it to TYPE. SWITCH_SURFACE is a flow-only control step (it moves
+# the replay between bound surfaces) with no canonical ActionType.
+# :func:`step_to_action` refuses both conversions loudly.
+_FLOW_ONLY_ACTION_KINDS = frozenset(
+    {ir.ActionKind.SELECT_OPTION, ir.ActionKind.SWITCH_SURFACE}
+)
 ACTION_KIND_TO_ACTION_TYPE: dict[ir.ActionKind, str] = {
-    kind: kind.value
-    for kind in ir.ActionKind
-    if kind is not ir.ActionKind.SELECT_OPTION
+    kind: kind.value for kind in ir.ActionKind if kind not in _FLOW_ONLY_ACTION_KINDS
 }
 
 
@@ -177,6 +180,11 @@ def step_to_action(step: ir.Step) -> "Action":
         raise ValueError(
             "SELECT_OPTION is not representable in openadapt-types without "
             "losing its atomic commit contract"
+        )
+    if step.action is ir.ActionKind.SWITCH_SURFACE:
+        raise ValueError(
+            "SWITCH_SURFACE is a flow-only control step with no openadapt-types "
+            "ActionType"
         )
     action_type = ActionType(ACTION_KIND_TO_ACTION_TYPE[step.action])
 

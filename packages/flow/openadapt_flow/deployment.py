@@ -27,7 +27,13 @@ import re
 from pathlib import Path
 from typing import Any, Callable, Literal, Mapping, Optional
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import (
+    BaseModel,
+    Field,
+    field_validator,
+    model_serializer,
+    model_validator,
+)
 
 from openadapt_flow.lookup_capabilities import (
     DeclaredSurface,
@@ -793,6 +799,21 @@ class DeploymentConfig(BaseModel):
     runtime: RuntimeSection = Field(default_factory=RuntimeSection)
     policy: PolicySection = Field(default_factory=PolicySection)
     human_decisions: HumanDecisionsConfig = Field(default_factory=HumanDecisionsConfig)
+    #: Multi-surface bundles only (docs/MULTI_SURFACE.md): the backend for each
+    #: BACKEND surface the bundle switches to, keyed by surface id, with the
+    #: same fields as ``backend``. ``kind`` defaults to the kind the bundle
+    #: declares. ``--surface NAME=...`` flags apply over these entries. Empty
+    #: (and omitted when serialized) otherwise.
+    surfaces: dict[str, BackendConfig] = Field(default_factory=dict)
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Keep configs without surface bindings byte-identical."""
+
+        data: dict[str, Any] = handler(self)
+        if not self.surfaces:
+            data.pop("surfaces", None)
+        return data
 
 
 def incomplete_deployment_reasons(cfg: DeploymentConfig) -> list[str]:
