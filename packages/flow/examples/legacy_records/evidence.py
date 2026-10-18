@@ -2,12 +2,17 @@
 
 PROTOTYPE glue shared by the two workflows. Two parts are stand-ins:
 
-- Grades follow the reading step's rule (``openadapt_flow.records.schema``):
-  two agreeing reads give ``screen_readback``, a reopened record gives
-  ``committed_record_readback``, an independent read gives ``verified``. An
-  export counts as independent only when it came from saved data
-  (``source_kind`` ``committed_store``); an export from the live session
-  counts as a screen read. The grade is derived from the reads, never passed in.
+- Grades follow the reading step's rule (``openadapt_flow.records.schema.
+  grade_for``), as the interchange checks apply it
+  (``openadapt_flow.interchange.conformance.supported_grade``). Only reads
+  with a value count; they must equal the value and come from two different
+  (channel, session) pairs. An independent read gives ``system_of_record``;
+  a read in the acting session plus a screen read of the reopened record
+  gives ``reopened``; two channels give ``same_screen``; anything else is
+  ``unchecked``. An export counts as independent only when it came from saved
+  data (``source_kind`` ``committed_store``); an export from the live session
+  is a read in the acting session. The grade is derived from the reads, never
+  passed in.
 - The Seal is an Ed25519 signature over the exchange checksum with a key that
   exists only in memory for this run. The offline Seal service replaces it;
   the exchange keeps the same ``seals`` entry shape.
@@ -26,6 +31,8 @@ from x11 import Frame, OcrLine, norm
 
 from openadapt_flow import __version__
 from openadapt_flow.interchange import check, with_checksum
+from openadapt_flow.interchange.conformance import supported_grade
+from openadapt_flow.interchange.model import Read
 
 V = "openadapt.records-interchange/v0"
 EXECUTOR = {"kind": "executor", "id": "openadapt-flow@demo-runner"}
@@ -36,15 +43,15 @@ def now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def grade(reads: list[dict[str, Any]], agreement: str) -> str:
-    """Derive the grade from the reads."""
-    if agreement != "agree" or len(reads) < 2:
-        return "unconfirmed"
-    if any(r["session"] == "independent" for r in reads):
-        return "verified"
-    if any(r["session"] == "reopened" for r in reads):
-        return "committed_record_readback"
-    return "screen_readback"
+def grade(reads: list[dict[str, Any]], value: Optional[str]) -> str:
+    """Derive the grade from the reads of ``value``.
+
+    A read that saw something other than ``value`` makes it ``unchecked``.
+    """
+    parsed = [r for r in reads if r["value"] is not None]
+    if value is None or any(str(r["value"]).strip() != value.strip() for r in parsed):
+        return "unchecked"
+    return supported_grade(Read.model_validate(r) for r in reads)
 
 
 def read_field(
@@ -59,9 +66,25 @@ def read_field(
     artifact_id: str,
     screen: str,
     exports: Optional[list[tuple[Optional[str], str]]] = None,
+    acting: Optional[list[tuple[str, Optional[str]]]] = None,
 ) -> dict[str, Any]:
-    """One field read through two (or three) channels, with its evidence."""
+    """One field read through two (or more) channels, with its evidence.
+
+    ``clipboard`` and ``ocr_line`` were read in ``session``. ``acting`` lists
+    ``(channel, value)`` reads of the same value made earlier in the acting
+    session (for example from the record pane before the write).
+    """
     reads: list[dict[str, Any]] = [
+        {
+            "channel": channel,
+            "value": seen,
+            "artifact_id": artifact_id,
+            "session": "acting",
+            "observed_at": now(),
+        }
+        for channel, seen in acting or []
+    ]
+    reads += [
         {
             "channel": "clipboard",
             "value": clipboard,
@@ -92,7 +115,8 @@ def read_field(
                 "channel": "export",
                 "value": value,
                 "source_kind": source_kind,
-                "session": "independent" if committed else session,
+                # A live-session export is made by the acting session.
+                "session": "independent" if committed else "acting",
                 "observed_at": now(),
             }
         )
@@ -100,8 +124,7 @@ def read_field(
     agree = (
         all(v is not None for v in values) and len({norm(str(v)) for v in values}) == 1
     )
-    agreement = "agree" if agree else "disagree"
-    g = grade(reads, agreement)
+    g = grade(reads, clipboard)
     matches = (
         clipboard is not None
         and expected is not None

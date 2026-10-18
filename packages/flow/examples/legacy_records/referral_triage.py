@@ -7,7 +7,11 @@ PROTOTYPE, SYNTHETIC DATA ONLY. A template, not part of OpenAdapt's core.
       -> close, reopen by record id, read back -> Seal -> L1 directory
 
 A name-and-date-of-birth search that finds more than one chart stops the run
-and puts the referral in the review queue. Nothing is written for it.
+and puts the referral in the review queue. Nothing is written for it. After
+the save, the chart is reopened and must show one more triage entry than
+before, so a save the app reports but drops halts even when an earlier entry
+with the same values is on screen. A screen that does not appear as expected,
+before or after the save, also halts with a result exchange.
 
     python referral_triage.py --inbox fax_inbox --run-dir out/referrals \\
         --l1-dir out/extractions [--answers answers.json]
@@ -22,7 +26,15 @@ from pathlib import Path
 from typing import Any
 
 from evidence import EXECUTOR, read_field
-from pipeline import People, Spec, decide, finish, intake, result_exchange
+from pipeline import (
+    People,
+    Spec,
+    decide,
+    finish,
+    intake,
+    result_exchange,
+    unsettled,
+)
 from x11 import DriverHalt, X11App, pane_value
 
 WORKFLOW = "example.referral_triage"
@@ -64,7 +76,8 @@ def triage_one(
     name, dob, sid = (
         value(req, n) for n in ("subject_name", "date_of_birth", "subject_id")
     )
-    req["artifacts"][0]["file_number"] = sid
+    file_number = sid or fax.stem
+    req["artifacts"][0]["file_number"] = file_number
     clinic = next(f for f in req["fields"] if f["name"] == "referring_clinic")
     req["fields"].remove(clinic)  # domain detail travels as an extension
     req["extensions"][EXTENSION] = {"referring_clinic": clinic["value"]}
@@ -76,6 +89,48 @@ def triage_one(
             "match": {"status": "not_checked"},
         }
     ]
+    res = result_exchange(
+        req,
+        artifact={
+            "artifact_id": "chart",
+            "source_type": "rdp_screen",
+            "file_number": file_number,
+            "date": today,
+            "doctype": "triage-entry",
+        },
+    )
+    # Until a chart is matched, the identity is the subject id the request
+    # carries; no application read is claimed for it.
+    res["fields"].append(
+        {
+            "name": "referral_subject_id",
+            "type": "code",
+            "value": sid,
+            "confidence": 1.0,
+        }
+    )
+    ident = {
+        "identity_id": "subject",
+        "role": "subject",
+        "fields": ["referral_subject_id"],
+        "match": {"status": "not_checked"},
+    }
+    res["identities"] = [ident]
+    state = {"saved": False}
+
+    def halt(reason: str, *, review: bool = True) -> str:
+        res["outcome"], res["halt_reason"] = "halted", reason
+        log(f"  HALT: {reason}")
+        finish(req, res, run_dir, l1_dir, log, review=review)
+        return "halted"
+
+    open_items = unsettled(req)
+    if open_items:
+        return halt(
+            f"no person settled the exception on {', '.join(open_items)}; "
+            "no search ran and nothing was written"
+        )
+
     priority = decide(
         req,
         people,
@@ -85,40 +140,59 @@ def triage_one(
         output_field="priority",
         log=log,
     )
-
-    res = result_exchange(
-        req,
-        artifact={
-            "artifact_id": "chart",
-            "source_type": "rdp_screen",
-            "file_number": sid,
-            "date": today,
-            "doctype": "triage-entry",
-        },
-    )
-    ident = {
-        "identity_id": "subject",
-        "role": "subject",
-        "fields": ["search_matches"],
-        "match": {"status": "not_checked"},
-    }
-    res["identities"] = [ident]
-
-    def halt(reason: str) -> str:
-        res["outcome"], res["halt_reason"] = "halted", reason
-        log(f"  HALT: {reason}")
-        finish(req, res, run_dir, l1_dir, log)
-        return "halted"
-
     if priority == "decline":
-        res["outcome"] = "committed"
-        res["fields"].append(
-            {"name": "search_matches", "type": "integer", "value": 0, "confidence": 1.0}
+        # Nothing to do in the EMR: no search ran, so no match is claimed.
+        res["outcome"] = "halted"
+        res["halt_reason"] = (
+            "declined by the physician; no chart search ran and nothing was written"
         )
-        ident["match"] = {"status": "new", "candidates": 0, "checked_by": EXECUTOR}
-        finish(req, res, run_dir, l1_dir, log)
+        log("  declined: no search, nothing written")
+        finish(req, res, run_dir, l1_dir, log, review=False)
         return "declined"
 
+    try:
+        return _write_and_read_back(
+            emr,
+            fax,
+            req,
+            res,
+            ident,
+            state,
+            name,
+            dob,
+            sid,
+            priority,
+            run_dir,
+            l1_dir,
+            halt,
+            log,
+        )
+    except DriverHalt as err:
+        when = (
+            "after the save keystroke, so the entry may or may not be saved"
+            if state["saved"]
+            else "before the save keystroke; nothing was saved"
+        )
+        emr.key("Escape")
+        return halt(f"screen check failed {when}: {err}")
+
+
+def _write_and_read_back(
+    emr: X11App,
+    fax: Path,
+    req: dict[str, Any],
+    res: dict[str, Any],
+    ident: dict[str, Any],
+    state: dict[str, bool],
+    name: str,
+    dob: str,
+    sid: str,
+    priority: str,
+    run_dir: Path,
+    l1_dir: Path,
+    halt,
+    log,
+) -> str:
     # Identity: search by name and date of birth.
     emr.key("Escape")
     emr.wait_screen("Search")
@@ -169,18 +243,43 @@ def triage_one(
         emr.type(rid)
         emr.key("Return")
         emr.wait_screen(f"Chart {rid}")
-        on_screen = pane_value(emr.copy_pane(), "Subject ID")
-        if on_screen != sid:
-            ident["match"] = {
-                "status": "ambiguous",
-                "candidates": 1,
-                "checked_by": EXECUTOR,
-            }
-            return halt(
-                f"chart {rid} shows subject id {on_screen!r}, the referral has {sid!r}"
-            )
         status = "existing"
-    ident["fields"] = ["record_id"]
+
+    # The chart as the acting session sees it before the write.
+    before = emr.copy_pane()
+    acting_rid = pane_value(before, "Record")
+    acting_sid = pane_value(before, "Subject ID")
+    entries_before = pane_value(before, "Triage entries")
+    if acting_sid != sid:
+        ident["match"] = {
+            "status": "ambiguous",
+            "candidates": max(n, 1),
+            "checked_by": EXECUTOR,
+        }
+        return halt(
+            f"chart {rid} shows subject id {acting_sid!r}, the referral has {sid!r}"
+        )
+    if entries_before is None or not entries_before.isdigit():
+        return halt(
+            f"chart {rid} does not show its triage entry count; nothing was written"
+        )
+    res["fields"].append(
+        {
+            "name": "chart_id",
+            "type": "code",
+            "value": rid,
+            "confidence": 1.0,
+            "reads": [
+                {
+                    "channel": "clipboard",
+                    "value": acting_rid,
+                    "artifact_id": "chart",
+                    "session": "acting",
+                }
+            ],
+        }
+    )
+    ident["fields"] = ["chart_id"]
     ident["match"] = {
         "status": status,
         "record_ref": rid,
@@ -193,6 +292,7 @@ def triage_one(
     emr.key("ctrl+t")
     emr.wait_screen(f"Triage entry {rid}")
     emr.fill([priority, reason_code, fax.name])
+    state["saved"] = True
     emr.key("ctrl+s")
     emr.wait_screen(f"Saved {rid}")
     log(f"  wrote triage entry on {rid}: {priority}, {reason_code}, {fax.name}")
@@ -209,40 +309,72 @@ def triage_one(
     frame = emr.frame()
     (run_dir / "frames").mkdir(exist_ok=True)
     (run_dir / "frames" / f"{fax.stem}-readback.png").write_bytes(frame.png)
+    # record_id and subject_id were also read before the write, in the acting
+    # session; the triage values were only typed into a form there, so they
+    # have reads of the reopened record only.
     expected = {
-        "record_id": ("Record", "code", rid),
-        "subject_id": ("Subject ID", "code", sid),
-        "priority": ("Priority", "enum", priority),
-        "referral_code": ("Referral code", "code", reason_code),
-        "document": ("Document", "text", fax.name),
+        "record_id": ("Record", "code", rid, acting_rid),
+        "subject_id": ("Subject ID", "code", sid, acting_sid),
+        "priority": ("Priority", "enum", priority, None),
+        "referral_code": ("Referral code", "code", reason_code, None),
+        "document": ("Document", "text", fax.name, None),
     }
-    for fname, (label, kind, want) in expected.items():
-        res["fields"].append(
-            read_field(
-                fname,
-                kind,
-                expected=want,
-                clipboard=pane_value(text, label),
-                ocr_line=frame.value_after(label),
-                frame=frame,
-                session="reopened",
-                artifact_id="chart",
-                screen=f"Chart {rid}",
-            )
+    readback = []
+    for fname, (label, kind, want, acting) in expected.items():
+        f = read_field(
+            fname,
+            kind,
+            expected=want,
+            clipboard=pane_value(text, label),
+            ocr_line=frame.value_after(label),
+            frame=frame,
+            session="reopened",
+            artifact_id="chart",
+            screen=f"Chart {rid}",
+            acting=[("clipboard", acting)] if acting is not None else None,
         )
+        res["fields"].append(f)
+        readback.append(f)
+    # A save the app reported but dropped can leave an earlier entry with the
+    # same values on screen, so the entry count must have gone up by one.
+    entries_after = pane_value(text, "Triage entries")
+    res["fields"].append(
+        {
+            "name": "triage_entries",
+            "type": "integer",
+            "value": int(entries_after)
+            if entries_after and entries_after.isdigit()
+            else None,
+            "confidence": 1.0,
+            "reads": [
+                {
+                    "channel": "clipboard",
+                    "value": entries_after,
+                    "artifact_id": "chart",
+                    "session": "reopened",
+                }
+            ],
+        }
+    )
     res["artifacts"][0]["file_number"] = rid
-    for f in res["fields"][1:]:
+    for f in readback:
         log(
             f"  read back {f['name']}: {f['value']!r} [{f['grade']}]"
             + (f"  REVIEW: {f['review_reason']}" if f.get("needs_review") else "")
         )
+    log(f"  triage entries on {rid}: {entries_before} before, {entries_after} after")
     lost = [
         f["name"]
-        for f in res["fields"][1:]
+        for f in readback
         if f.get("needs_review") and "wrote" in f.get("review_reason", "")
     ]
     if lost:
         return halt(f"read-back after reopening {rid} does not show {', '.join(lost)}")
+    if entries_after != str(int(entries_before) + 1):
+        return halt(
+            f"chart {rid} had {entries_before} triage entries before the save and "
+            f"{entries_after} after reopening; the new entry was not kept"
+        )
     res["outcome"] = "committed"
     finish(req, res, run_dir, l1_dir, log)
     return "committed"

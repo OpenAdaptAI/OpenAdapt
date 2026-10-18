@@ -5,9 +5,14 @@
 # display, then checks every exchange the runs wrote:
 #   1. referral triage into Mock EMR (new chart, existing chart, ambiguous halt)
 #   2. the same template against an EMR that drops saves (halts on read-back)
-#   3. supplier invoices into Mock Ledger (verified through the ledger export)
+#   3. supplier invoices into Mock Ledger (system_of_record grade from the
+#      scheduled export of saved data)
 #
 #   examples/legacy_records/demo.sh [OUT_DIR] [--record]
+#
+# OUT_DIR must be new, empty, or a folder an earlier run of this demo made
+# (it holds a .legacy-records-demo marker). Anything else is refused, so the
+# demo never deletes a folder it did not create.
 #
 # Needs: Xvfb (or an existing DISPLAY), xdotool, xclip, ImageMagick `import`,
 # python3 with tkinter for the apps, and openadapt-flow for the workflows
@@ -15,12 +20,40 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")" && pwd)"
-OUT="${1:-$PWD/legacy-records-demo}"
+OUT=""
 RECORD=0
-for a in "$@"; do [[ "$a" == "--record" ]] && RECORD=1; done
+for a in "$@"; do
+  case "$a" in
+    --record) RECORD=1 ;;
+    -*) echo "unknown option: $a" >&2; exit 2 ;;
+    *) [[ -z "$OUT" ]] || { echo "one output folder only" >&2; exit 2; }; OUT="$a" ;;
+  esac
+done
+OUT="${OUT:-$PWD/legacy-records-demo}"
 FLOW_PYTHON="${FLOW_PYTHON:-python}"
 APP_PYTHON="${APP_PYTHON:-python3}"
-rm -rf "$OUT" && mkdir -p "$OUT"
+MARKER=".legacy-records-demo"
+
+refuse() { echo "refusing to use $OUT as the output folder: $1" >&2; exit 2; }
+case "$OUT" in
+  "" | "." | ".." | "/" | "~" | "$HOME" | "$HOME/") refuse "not a dedicated folder" ;;
+esac
+if [[ -L "$OUT" ]]; then refuse "it is a symlink"; fi
+if [[ -e "$OUT" && ! -d "$OUT" ]]; then refuse "it is not a folder"; fi
+if [[ -d "$OUT" ]]; then
+  REAL="$(cd "$OUT" && pwd -P)"
+  for bad in / "$(cd "$HOME" && pwd -P)" "$(pwd -P)" "$HERE"; do
+    [[ "$REAL" == "$bad" ]] && refuse "not a dedicated folder"
+  done
+  if [[ -f "$OUT/$MARKER" ]]; then
+    rm -rf -- "$OUT"  # made by an earlier run of this demo
+  elif [[ -n "$(ls -A -- "$OUT")" ]]; then
+    refuse "it is not empty and was not made by this demo"
+  fi
+fi
+mkdir -p -- "$OUT"
+OUT="$(cd "$OUT" && pwd -P)"
+echo "legacy-records demo output; safe to delete" > "$OUT/$MARKER"
 cd "$OUT"
 
 PIDS=()

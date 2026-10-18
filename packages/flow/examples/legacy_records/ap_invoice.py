@@ -8,9 +8,11 @@ an accounts-payable app, to show nothing in the core is clinical:
       -> close, reopen by bill id, read back -> ledger export read -> Seal
 
 Two exports are read. Ctrl+E in the app is an export from the live session,
-so it counts like a screen read. The scheduled export is a separate process
-that reads saved data, so values that match it are graded ``verified``. A supplier that is not in the ledger stops the run;
-creating suppliers is not part of this workflow.
+so it counts as a read in the acting session. The scheduled export is a
+separate process that reads saved data, so values that match it are graded
+``system_of_record``. A supplier that is not in the ledger stops the run;
+creating suppliers is not part of this workflow. A screen that does not appear
+as expected, before or after the save, halts with a result exchange.
 
     python ap_invoice.py --inbox invoice_inbox --run-dir out/invoices \\
         --l1-dir out/extractions --export-dir exports --ledger-db ledger.sqlite \\
@@ -28,7 +30,15 @@ from pathlib import Path
 from typing import Any
 
 from evidence import EXECUTOR, read_field
-from pipeline import People, Spec, decide, finish, intake, result_exchange
+from pipeline import (
+    People,
+    Spec,
+    decide,
+    finish,
+    intake,
+    result_exchange,
+    unsettled,
+)
 from x11 import DriverHalt, X11App, pane_value
 
 WORKFLOW = "example.ap_post_invoice"
@@ -104,7 +114,8 @@ def post_one(
     sup, inv_no, amount, due = (
         value(req, n) for n in ("supplier_id", "invoice_no", "amount", "due_date")
     )
-    req["artifacts"][0]["file_number"] = sup
+    file_number = sup or inv.stem
+    req["artifacts"][0]["file_number"] = file_number
     req["identities"] = [
         {
             "identity_id": "supplier",
@@ -113,6 +124,41 @@ def post_one(
             "match": {"status": "not_checked"},
         }
     ]
+    res = result_exchange(
+        req,
+        artifact={
+            "artifact_id": "bill",
+            "source_type": "rdp_screen",
+            "file_number": file_number,
+            "date": today,
+            "doctype": "bill-posting",
+        },
+    )
+    # The supplier id from the request; the supplier screen's read is added
+    # once the ledger shows it.
+    supplier = {"name": "supplier_id", "type": "code", "value": sup, "confidence": 1.0}
+    res["fields"].append(supplier)
+    ident = {
+        "identity_id": "supplier",
+        "role": "counterparty",
+        "fields": ["supplier_id"],
+        "match": {"status": "not_checked"},
+    }
+    res["identities"] = [ident]
+    state = {"saved": False}
+
+    def halt(reason: str) -> str:
+        res["outcome"], res["halt_reason"] = "halted", reason
+        log(f"  HALT: {reason}")
+        finish(req, res, run_dir, l1_dir, log)
+        return "halted"
+
+    open_items = unsettled(req)
+    if open_items:
+        return halt(
+            f"no person settled the exception on {', '.join(open_items)}; "
+            "nothing was searched or written"
+        )
     choice = decide(
         req,
         people,
@@ -122,33 +168,59 @@ def post_one(
         output_field="approval",
         log=log,
     )
-    res = result_exchange(
-        req,
-        artifact={
-            "artifact_id": "bill",
-            "source_type": "rdp_screen",
-            "file_number": sup,
-            "date": today,
-            "doctype": "bill-posting",
-        },
-    )
-    res["fields"].append(
-        {"name": "supplier_matches", "type": "integer", "value": 0, "confidence": 1.0}
-    )
-    ident = {
-        "identity_id": "supplier",
-        "role": "counterparty",
-        "fields": ["supplier_matches"],
-        "match": {"status": "not_checked"},
-    }
-    res["identities"] = [ident]
+    try:
+        return _post(
+            app,
+            inv,
+            res,
+            supplier,
+            ident,
+            state,
+            choice,
+            sup,
+            inv_no,
+            amount,
+            due,
+            run_dir,
+            l1_dir,
+            export_dir,
+            ledger_db,
+            app_python,
+            req,
+            halt,
+            log,
+        )
+    except DriverHalt as err:
+        when = (
+            "after the save keystroke, so the bill may or may not be saved"
+            if state["saved"]
+            else "before the save keystroke; nothing was saved"
+        )
+        app.key("Escape")
+        return halt(f"screen check failed {when}: {err}")
 
-    def halt(reason: str) -> str:
-        res["outcome"], res["halt_reason"] = "halted", reason
-        log(f"  HALT: {reason}")
-        finish(req, res, run_dir, l1_dir, log)
-        return "halted"
 
+def _post(
+    app: X11App,
+    inv: Path,
+    res: dict[str, Any],
+    supplier: dict[str, Any],
+    ident: dict[str, Any],
+    state: dict[str, bool],
+    choice: str,
+    sup: str,
+    inv_no: str,
+    amount: str,
+    due: str,
+    run_dir: Path,
+    l1_dir: Path,
+    export_dir: Path,
+    ledger_db: Path,
+    app_python: str,
+    req: dict[str, Any],
+    halt,
+    log,
+) -> str:
     app.key("Escape")
     app.wait_screen("Find supplier")
     app.type(sup)
@@ -158,7 +230,14 @@ def post_one(
         ident["match"] = {"status": "new", "candidates": 0, "checked_by": EXECUTOR}
         return halt(f"supplier {sup} is not in the ledger; nothing was written")
     shown = pane_value(app.copy_pane(), "Supplier")
-    res["fields"][0]["value"] = 1
+    supplier["reads"] = [
+        {
+            "channel": "clipboard",
+            "value": shown,
+            "artifact_id": "bill",
+            "session": "acting",
+        }
+    ]
     if shown != sup:
         ident["match"] = {
             "status": "ambiguous",
@@ -181,6 +260,7 @@ def post_one(
     app.key("ctrl+b")
     app.wait_screen(f"New bill {sup}")
     app.fill([inv_no, amount, due])
+    state["saved"] = True
     app.key("ctrl+s")
     bill = app.wait_screen(r"Saved (B-\d+)").group(1)
     log(f"  entered bill {bill}: {inv_no}, {amount}, {due}")
@@ -215,33 +295,34 @@ def post_one(
         "amount": ("Amount", "currency", amount, "amount"),
         "due_date": ("Due date", "date", due, "due_date"),
     }
+    readback = []
     for fname, (label, kind, want, col) in expected.items():
-        res["fields"].append(
-            read_field(
-                fname,
-                kind,
-                expected=want,
-                clipboard=pane_value(text, label),
-                ocr_line=frame.value_after(label),
-                frame=frame,
-                session="reopened",
-                artifact_id="bill",
-                screen=f"Bill {bill}",
-                exports=[
-                    (live.get(col), "live_session"),
-                    (exported.get(col), "committed_store"),
-                ],
-            )
+        f = read_field(
+            fname,
+            kind,
+            expected=want,
+            clipboard=pane_value(text, label),
+            ocr_line=frame.value_after(label),
+            frame=frame,
+            session="reopened",
+            artifact_id="bill",
+            screen=f"Bill {bill}",
+            exports=[
+                (live.get(col), "live_session"),
+                (exported.get(col), "committed_store"),
+            ],
         )
+        res["fields"].append(f)
+        readback.append(f)
     res["artifacts"][0]["file_number"] = bill
-    for f in res["fields"][1:]:
+    for f in readback:
         log(
             f"  read back {f['name']}: {f['value']!r} [{f['grade']}]"
             + (f"  REVIEW: {f['review_reason']}" if f.get("needs_review") else "")
         )
     lost = [
         f["name"]
-        for f in res["fields"][1:]
+        for f in readback
         if f.get("needs_review") and "wrote" in f.get("review_reason", "")
     ]
     if lost or not exported:

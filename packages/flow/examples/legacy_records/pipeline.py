@@ -8,7 +8,9 @@
 6. The result exchange is checked, sealed and written to the L1 directory.
 
 People's answers come from the terminal, or from an answers file in the demo.
-The same person cannot both confirm exceptions and approve.
+The same person cannot both confirm exceptions and approve. In scripted mode
+an exception with no listed answer is not confirmed (the document halts), and
+a scripted decision must be one of the options.
 """
 
 from __future__ import annotations
@@ -65,16 +67,27 @@ class People:
             raise SystemExit("the person who confirms exceptions cannot also approve")
         return people
 
-    def correct(self, doc: str, name: str, proposed: Optional[str]) -> str:
-        scripted = self.answers.get("corrections", {}).get(doc, {})
+    def correct(self, doc: str, name: str, proposed: Optional[str]) -> Optional[str]:
+        """The value the staff member settled on, or None when nobody did.
+
+        In scripted mode only a listed answer counts: an exception the answers
+        file does not mention was not looked at by anyone.
+        """
         if self.answers:
-            return scripted.get(name, proposed or "")
+            scripted = self.answers.get("corrections", {}).get(doc, {})
+            got = scripted.get(name)
+            return None if got is None else str(got)
         got = input(f"  {name} = {proposed!r}. Enter to accept, or type a correction: ")
-        return got.strip() or (proposed or "")
+        return got.strip() or proposed
 
     def decide(self, doc: str, question: str, options: list[str]) -> str:
         if self.answers:
-            return self.answers["decisions"][doc]
+            choice = self.answers.get("decisions", {}).get(doc)
+            if choice not in options:
+                raise SystemExit(
+                    f"scripted decision for {doc} is {choice!r}, not one of {options}"
+                )
+            return choice
         while True:
             got = input(f"  {question} {options}: ").strip()
             if got in options:
@@ -130,6 +143,23 @@ def intake(
         if reasons:
             log(f"  exception: {s.name} = {value!r} ({'; '.join(reasons)})")
             fixed = people.correct(path.name, s.name, value)
+            if fixed is None:
+                entry["needs_review"] = True
+                entry["review_reason"] = (
+                    f"exception ({'; '.join(reasons)}) was not confirmed or "
+                    "corrected by a person"
+                )
+                if (
+                    s.pattern
+                    and value is not None
+                    and not re.fullmatch(s.pattern, value)
+                ):
+                    # The document read keeps what was seen; the field does
+                    # not carry a value that fails its pattern.
+                    entry["value"] = None
+                log(f"    nobody settled {s.name}; it is not confirmed")
+                fields.append(entry)
+                continue
             if s.pattern and not re.fullmatch(s.pattern, fixed):
                 raise SystemExit(
                     f"{s.name}: {fixed!r} still does not match {s.pattern}"
@@ -203,6 +233,11 @@ def decide(
     return choice
 
 
+def unsettled(ex: dict[str, Any]) -> list[str]:
+    """Names of request fields that still need a person."""
+    return [f["name"] for f in ex["fields"] if f.get("needs_review")]
+
+
 def result_exchange(ex: dict[str, Any], *, artifact: dict[str, Any]) -> dict[str, Any]:
     return {
         "schema_version": V,
@@ -225,8 +260,14 @@ def finish(
     run_dir: Path,
     l1_dir: Path,
     log: Callable[[str], None],
+    *,
+    review: bool = True,
 ) -> None:
-    """Step 6: check, seal, write both exchanges, emit to the L1 directory."""
+    """Step 6: check, seal, write both exchanges, emit to the L1 directory.
+
+    A halted result, or one with values to review, goes to the review queue
+    unless ``review`` is False (a decision that needs no app work).
+    """
     request = seal(request, run_dir)
     result = seal(result, run_dir)
     for doc in (request, result):
@@ -234,12 +275,12 @@ def finish(
         refs = emit_exchange(path, l1_dir)
         for r in refs:
             log(f"  L1: {r.path.name}")
-    review = [
+    to_review = [
         f"{f['name']}: {f['review_reason']}"
         for f in result["fields"]
         if f.get("needs_review")
     ]
-    if result["outcome"] == "halted" or review:
+    if review and (result["outcome"] == "halted" or to_review):
         queue = run_dir / "review_queue"
         queue.mkdir(exist_ok=True)
         (queue / f"{result['exchange_id']}.json").write_text(
@@ -248,7 +289,7 @@ def finish(
                     "exchange": f"{result['exchange_id']}.json",
                     "outcome": result["outcome"],
                     "halt_reason": result.get("halt_reason"),
-                    "fields_to_review": review,
+                    "fields_to_review": to_review,
                     "needs": "a person",
                 },
                 indent=2,
