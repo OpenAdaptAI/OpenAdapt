@@ -2054,7 +2054,9 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     # NO actuation has begun on either the desktop or the web path below.
     _maybe_attest_pre_state(run_dir, args)
     approval_gate = _approval_gate_for_run(
-        args, run_dir, policy_name=getattr(args, "policy", None) or cfg.policy.policy
+        args,
+        run_dir,
+        policy_name=getattr(args, "policy", None) or cfg.policy.policy,
     )
     fault_driver = getattr(args, "_qualification_fault_driver", None)
     if _normalize_kind(backend_cfg.kind) != "web":
@@ -2292,22 +2294,40 @@ def _approval_wait_seconds(args: argparse.Namespace) -> float:
 
 
 def _approver_settings(args: argparse.Namespace):
-    """The run's approver policy and delegated approver, from its flags."""
+    """The run's approver grant and delegated approver, from its flags.
+
+    ``--approver-policy`` is a person-signed grant
+    (``openadapt-flow approver-grant sign``) or a person-only policy. An
+    unsigned policy that admits an agent, or a grant that doesn't verify
+    against the signer registry, gives no authority: the run stays
+    person-only and says why.
+    """
 
     import os
+    import sys
 
     from openadapt_flow.approval_mode.approver import (
         ApproverAuth,
         ApproverIdentityV1,
         ApproverKind,
-        ApproverPolicyV1,
         WebhookApprover,
     )
+    from openadapt_flow.approval_mode.signed_policy import load_approver_policy
+    from openadapt_flow.jit.lifecycle import default_key_dir
 
-    policy = None
+    loaded = None
     path = getattr(args, "approver_policy", None)
     if path:
-        policy = ApproverPolicyV1.model_validate_json(Path(path).read_text())
+        loaded = load_approver_policy(path, default_key_dir())
+        if loaded.refusal is not None:
+            from openadapt_flow.cli_hints import command
+
+            print(
+                f"approver policy not used ({loaded.refusal}): only a person "
+                "answers this run's saves. A delegate needs a grant a "
+                f"registered person signed ({command('approver-grant sign')}).",
+                file=sys.stderr,
+            )
     approver = None
     url = getattr(args, "approver_webhook", None)
     if url:
@@ -2321,11 +2341,40 @@ def _approver_settings(args: argparse.Namespace):
                 id=getattr(args, "approver_webhook_id", None),
             ),
         )
-    return policy, approver
+    return loaded, approver
+
+
+def _prepare_approval_store(
+    args: argparse.Namespace, run_dir: Path, *, record_initiator: bool
+):
+    """The run's item-approval store with its grant and initiator recorded."""
+
+    from openadapt_flow.approval_mode.item_approval import (
+        ItemApprovalRefused,
+        ItemApprovalStore,
+    )
+
+    store = ItemApprovalStore(run_dir)
+    loaded, approver = _approver_settings(args)
+    try:
+        if loaded is not None and loaded.signed is not None:
+            store.write_grant(loaded.signed)
+        elif loaded is not None and loaded.refusal is None:
+            store.write_policy(loaded.policy)
+        if record_initiator:
+            store.write_initiator(getattr(args, "started_by", None))
+    except ItemApprovalRefused as exc:
+        raise SystemExit(
+            f"run REFUSED: {exc} ({exc.code}). Nothing was executed."
+        ) from None
+    return store, approver
 
 
 def _approval_gate_for_run(
-    args: argparse.Namespace, run_dir: Path, *, policy_name: Optional[str] = None
+    args: argparse.Namespace,
+    run_dir: Path,
+    *,
+    policy_name: Optional[str] = None,
 ):
     """Build the run's approval gate from the mode ``run`` resolved, if any."""
 
@@ -2333,14 +2382,12 @@ def _approval_gate_for_run(
     if mode is None:
         return None
     from openadapt_flow.approval_mode.gate import ApprovalGate
-    from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
 
-    policy, approver = _approver_settings(args)
+    store, approver = _prepare_approval_store(args, run_dir, record_initiator=True)
     return ApprovalGate(
         mode,
-        approval_store=ItemApprovalStore(run_dir),
+        approval_store=store,
         approval_wait_s=_approval_wait_seconds(args),
-        approver_policy=policy,
         approver=approver,
         policy_name=policy_name,
     )
@@ -2970,19 +3017,23 @@ def _carry_item_approval_to_pause(run_dir: Path, store, pending):
 
 
 def _resume_approval_gate(
-    args: argparse.Namespace, mode, run_dir: Path, *, policy_name: Optional[str] = None
+    args: argparse.Namespace,
+    mode,
+    run_dir: Path,
+    *,
+    policy_name: Optional[str] = None,
 ):
     if mode is None:
         return None
     from openadapt_flow.approval_mode.gate import ApprovalGate
-    from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
 
-    policy, approver = _approver_settings(args)
+    # A resume keeps the run's own grant and initiator; it never re-records
+    # who started the run.
+    store, approver = _prepare_approval_store(args, run_dir, record_initiator=False)
     return ApprovalGate(
         mode,
-        approval_store=ItemApprovalStore(run_dir),
+        approval_store=store,
         approval_wait_s=_approval_wait_seconds(args),
-        approver_policy=policy,
         approver=approver,
         policy_name=policy_name,
     )
@@ -3476,9 +3527,9 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
         request_summary,
     )
 
+    verb = args.item_approval_cmd
     run_dir = Path(args.run_dir)
     store = ItemApprovalStore(run_dir)
-    verb = args.item_approval_cmd
     if verb == "show":
         rows = [request_summary(store, request) for request in store.requests()]
         if not args.all:
@@ -3568,7 +3619,7 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
             else args.auth_method,
             decline_reason=getattr(args, "reason", None),
             approver=delegate,
-            policy=store.policy(),
+            policy=store.context(),
         )
         store.write_answer(answer)
     except ItemApprovalRefused as exc:
@@ -3588,66 +3639,81 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_approver_grant(args: argparse.Namespace) -> int:
+    """Sign or check a person's approver grant (who may answer saves)."""
+    import json
+    import sys
+
+    from openadapt_flow.approval_mode.signed_policy import (
+        ApproverGrant,
+        GrantRefused,
+        SignedApproverGrant,
+        sign_grant,
+        verify_grant,
+    )
+    from openadapt_flow.jit import authority
+    from openadapt_flow.jit.lifecycle import default_key_dir
+
+    key_dir = Path(args.key_dir) if args.key_dir else default_key_dir()
+    if args.approver_grant_cmd == "verify":
+        try:
+            signed = SignedApproverGrant.model_validate_json(
+                Path(args.grant).read_text(encoding="utf-8")
+            )
+            verified = verify_grant(signed, key_dir)
+        except (OSError, ValueError) as exc:
+            code = getattr(exc, "code", "approver_grant_unreadable")
+            print(json.dumps({"ok": False, "code": code, "message": str(exc)}))
+            return 2
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "policy_ref": verified.policy_ref,
+                    "signer": verified.signer,
+                    "delegates": list(verified.grant.delegates),
+                    "workflows": list(verified.grant.workflows),
+                    "expires_at": verified.grant.expires_at,
+                }
+            )
+        )
+        return 0
+    # sign: a person, at a terminal, with their encrypted policy-signer key.
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        print(
+            "approver-grant sign needs a person at an interactive terminal; "
+            "an agent or script can't sign a grant.",
+            file=sys.stderr,
+        )
+        return 2
+    grant = ApproverGrant.model_validate_json(Path(args.grant).read_text("utf-8"))
+    print(grant.model_dump_json(indent=2, by_alias=True))
+    reply = input(f"Sign this grant as {grant.signer}? Type yes to sign: ")
+    if reply.strip().lower() not in ("yes", "ok"):
+        print("Not signed.")
+        return 1
+    try:
+        signed = sign_grant(grant, authority.load_encrypted_key(args.key))
+        verified = verify_grant(signed, key_dir)
+    except (authority.AuthorityError, GrantRefused) as exc:
+        print(f"Not signed: {exc}", file=sys.stderr)
+        return 2
+    signed.save(args.out)
+    print(f"signed grant {verified.policy_ref} written to {args.out}")
+    return 0
+
+
 def _answer_durable_item_pause(run_dir: Path, request, answer) -> bool:
     """Carry an answer to a durable pause the run left after waiting.
 
-    A run that stopped waiting (no answer in time) left a durable
-    ``item_approval`` pause. An approval then authorizes exactly one resume of
-    that pause; a decline ends it. Returns True when ``resume`` must follow.
+    See :func:`openadapt_flow.approval_mode.durable_carry.carry_answer_to_durable_pause`.
+    Returns True when ``resume`` must follow.
     """
-    from openadapt_flow import crypto
-    from openadapt_flow.runtime.durable.approval import (
-        ResumeRefused,
-        issue_resume_approval,
+    from openadapt_flow.approval_mode.durable_carry import (
+        carry_answer_to_durable_pause,
     )
-    from openadapt_flow.runtime.durable.checkpoint import CheckpointStore
-    from openadapt_flow.runtime.durable.program_checkpoint import bundle_version
 
-    try:
-        store = CheckpointStore(run_dir, key=crypto.resolve_key(None))
-        pending = store.read_pending()
-        manifest = store.read_manifest()
-    except Exception:  # noqa: BLE001 - no durable pause to carry the answer to
-        return False
-    if (
-        pending is None
-        or manifest is None
-        or pending.category != "item_approval"
-        or pending.status != "pending"
-        or pending.step_id != request.step_id
-        or pending.step_index != request.step_index
-        or manifest.run_id != request.run_id
-    ):
-        return False
-    if answer.decision == "decline":
-        store.cas_pending(
-            store.model_digest(pending),
-            pending.model_copy(update={"status": "rejected"}),
-        )
-        return False
-    approver = (
-        f"desktop:{answer.approver_id}"
-        if answer.approver_id is not None
-        else "desktop:unauthenticated"
-    )
-    try:
-        approval = issue_resume_approval(
-            pending,
-            approver=approver,
-            resolution="approve_item",
-            bundle_version=bundle_version(manifest.bundle_dir),
-            workflow_name=pending.workflow_name,
-            run_id=manifest.run_id,
-            run_dir=run_dir,
-        )
-        store.commit_approval_transition(
-            expected_pending=pending,
-            approval=approval,
-            target_status="approved",
-        )
-    except (ResumeRefused, OSError):
-        return False
-    return True
+    return carry_answer_to_durable_pause(run_dir, request, answer)
 
 
 def _cmd_bench(args: argparse.Namespace) -> int:
@@ -6369,10 +6435,21 @@ def _add_approval_flags(p: argparse.ArgumentParser) -> None:
         default=None,
         metavar="FILE",
         help=(
-            "An openadapt.approver-policy/v1 JSON file: which kinds of approver "
-            "(person, rule, agent, system) may answer each class of save. "
-            "Without it only a person may answer. A clinical_write save takes "
-            "a non-person approver only when the policy pins an opt-in."
+            "A person-signed approver grant (openadapt-flow approver-grant "
+            "sign): which agents or systems may answer which classes of save, "
+            "until when. Without a grant that verifies against the signer "
+            "registry, only a person may answer; an unsigned or tampered file "
+            "gives no authority. A clinical_write save takes a non-person "
+            "approver only when the grant's policy pins an opt-in."
+        ),
+    )
+    p.add_argument(
+        "--started-by",
+        default=None,
+        metavar="ID",
+        help=(
+            "The agent or system that started this run (opaque id). It can "
+            "never answer this run's saves. openadapt-agent sets it."
         ),
     )
     p.add_argument(
@@ -7865,6 +7942,25 @@ def build_parser() -> argparse.ArgumentParser:
                 choices=["wrong_values", "wrong_record", "screen_problem"],
             )
         q.set_defaults(func=_cmd_item_approval)
+
+    p = sub.add_parser(
+        "approver-grant",
+        help=(
+            "Sign or check a grant that lets named agents or systems answer "
+            "some saves. Only a registered person signs, at a terminal"
+        ),
+    )
+    grant_sub = p.add_subparsers(dest="approver_grant_cmd", required=True)
+    q = grant_sub.add_parser("sign", help="Sign a grant with your policy-signer key")
+    q.add_argument("grant", help="Unsigned openadapt-flow/approver-grant/v1 JSON")
+    q.add_argument("--key", required=True, help="Your encrypted policy-signer key")
+    q.add_argument("--out", required=True)
+    q.add_argument("--key-dir", default=None)
+    q.set_defaults(func=_cmd_approver_grant)
+    q = grant_sub.add_parser("verify", help="Check a signed grant against the registry")
+    q.add_argument("grant", help="Signed grant JSON")
+    q.add_argument("--key-dir", default=None)
+    q.set_defaults(func=_cmd_approver_grant)
 
     p = sub.add_parser(
         "bench", help="Replay a bundle N times against MockMed and aggregate"
