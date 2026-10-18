@@ -107,6 +107,7 @@ def run_rollout(
         score = scorer.score(episode_id, signal)
     finally:
         session.stop()
+        _drop_secrets(run_dir / "reward" / "worker")
     _write(
         run_dir,
         task,
@@ -120,6 +121,18 @@ def run_rollout(
         surface,
     )
     return run_dir
+
+
+def _drop_secrets(worker_dir: Path) -> None:
+    """Delete the worker's per-rollout signing key and bearer token.
+
+    Each rollout's worker is used once. The receipts it signed stay
+    verifiable with ``keys/ed25519.pub``; the private key and token have no
+    further use, and leaving them in a run directory invites committing them.
+    """
+
+    for rel in ("keys/ed25519.pem", "token"):
+        (worker_dir / rel).unlink(missing_ok=True)
 
 
 def _drive(

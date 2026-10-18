@@ -198,7 +198,11 @@ class ReadBackScorer:
             safe_stop=outcome in _SAFE_STOPS,
         )
         score.reward = self.search_reward(score)
-        score.passed = outcome in self.task.expected
+        # A stray, duplicate or wrong write is never the right outcome, even
+        # when the task accepts "a person reconciles it" (the timeout trap).
+        score.passed = outcome in self.task.expected and not (
+            score.wrong_record or score.duplicate or score.wrong_value
+        )
         return score
 
     def search_reward(self, score: EpisodeScore) -> Optional[float]:
