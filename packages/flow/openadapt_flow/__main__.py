@@ -10222,10 +10222,15 @@ def _qualify_default_form(argv: list[str]) -> list[str]:
     return argv
 
 
+# Flags that print and exit before any work, so loading OCR would only slow
+# the exit down.
+_PREWARM_SKIP_FLAGS = frozenset({"-h", "--help", "--version"})
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     """CLI entry point. Returns a process exit code."""
     raw = list(sys.argv[1:] if argv is None else argv)
-    if raw[:1] in (["demo"], ["tutorial"]):
+    if raw[:1] in (["demo"], ["tutorial"]) and not _PREWARM_SKIP_FLAGS & set(raw):
         # Building the parser imports for a second or two on a new install;
         # start loading OCR and checking the browser driver meanwhile.
         from openadapt_flow import _prewarm
