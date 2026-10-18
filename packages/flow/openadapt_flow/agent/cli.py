@@ -36,6 +36,34 @@ from openadapt_flow.agent.runner import RunnerConfig, default_runs_dir
 __all__ = ["build_parser", "main"]
 
 
+def _authoring_section(args: argparse.Namespace) -> object:
+    """The ``backend:`` section to pin for authoring, with
+    ``--authoring-from-config``; otherwise None.
+
+    A ``--config`` given only for runs never pins authoring by itself. A web
+    section is pinned with ``--url --headed`` instead (a fresh browser window).
+    """
+
+    from openadapt_flow.agent.authoring import AuthoringError
+
+    if not getattr(args, "authoring_from_config", False):
+        return None
+    if not args.config:
+        raise AuthoringError("--authoring-from-config needs --config deploy.yaml")
+    from openadapt_flow.deployment import load_deployment
+
+    try:
+        section = load_deployment(args.config).backend
+    except (OSError, ValueError) as exc:
+        raise AuthoringError(f"could not read {args.config}: {exc}") from exc
+    if (section.kind or "web").strip().lower() == "web":
+        raise AuthoringError(
+            "the deployment file names a web app; pass --url URL --headed to "
+            "record it in a new Chromium window"
+        )
+    return section
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="openadapt-agent",
@@ -99,6 +127,16 @@ def build_parser() -> argparse.ArgumentParser:
             "(macOS; no DOM identity). Local stdio may also type through the "
             "recorder; hosted MCP remains pause-only. Does not enable run "
             "tools. This process stays stdio and must not be served over HTTP."
+        ),
+    )
+    p.add_argument(
+        "--authoring-from-config",
+        action="store_true",
+        help=(
+            "With --authoring and --config: record the app the deployment "
+            "file's backend: section names (windows, macos, linux, a local "
+            "rdp or citrix client window), the same app its runs drive. "
+            "Network RDP (rdp_host) is refused for authoring."
         ),
     )
     p.add_argument(
@@ -233,7 +271,11 @@ def build_parser() -> argparse.ArgumentParser:
         "--config",
         default=None,
         metavar="YAML",
-        help="Deployment config YAML forwarded to `openadapt-flow run --config`",
+        help=(
+            "Deployment config YAML forwarded to `openadapt-flow run --config`. "
+            "With --authoring-from-config, its backend: section also names the "
+            "app to record."
+        ),
     )
     p.add_argument(
         "--policy",
@@ -691,6 +733,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
                         remote_window=args.remote_window,
                         remote_window_title=args.remote_window_title,
                         citrix=args.citrix,
+                        deployment_backend=_authoring_section(args),
                     ),
                     out_dir=authoring_dir,
                     screens=args.authoring_screens,
