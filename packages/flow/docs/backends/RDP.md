@@ -152,12 +152,50 @@ backend.close()
 (Or pass a full aardwolf URL:
 `rdp+ntlm-password://DOMAIN\\user:password@host:port`.)
 
+## Headless FreeRDP sessions
+
+`openadapt_flow.backends.xfreerdp.XFreeRDPTransport` is a second
+`RDPTransport`. It runs the FreeRDP 3 client (`xfreerdp3`) in a private
+`Xvfb` display, so no window or desktop session is needed. Frames come from
+the display and input goes through `xdotool`. Linux only.
+
+Every session is pinned to a `SessionProfile`: size, color depth, client and
+desktop scale (100, 140 or 180), DPI, lossless codec, font smoothing,
+wallpaper, themes, clipboard and keyboard layout. `profile.sha256` identifies
+the profile, so a recording and a replay can prove they used the same one.
+
+The password is requested once at connect through a callable and written to
+the client's standard input (`/from-stdin:force`). It never appears on the
+command line or in a log, and the transport doesn't keep it.
+
+```python
+from openadapt_flow.backends.rdp_backend import FreeRDPBackend
+from openadapt_flow.backends.xfreerdp import RdpTarget, SessionProfile, XFreeRDPTransport
+
+transport = XFreeRDPTransport(
+    RdpTarget("10.0.0.5", 3389, username="svc-records"),
+    password=read_secret_from_vault,
+    profile=SessionProfile(width=1280, height=800),
+)
+backend = FreeRDPBackend(transport)
+```
+
+`SessionPool` runs several sessions in parallel. All sessions in a pool must
+share one profile. `pool.run(jobs, work)` leases one session per job and
+returns per-job timing and errors.
+
+Throughput on a synthetic loopback target is in
+`benchmark/rdp_pool/RESULTS.md`. On a shared 8-CPU machine one session did
+41.6 lookups a minute and two did 54.8; OCR, not the transport, was the
+limit.
+
 ## Running the tests
 
 Mock tests (no RDP server, run in CI):
 
 ```bash
 pytest tests/test_rdp_backend.py -q
+pytest tests/test_xfreerdp.py -q   # set OAFLOW_XFREERDP_E2E=1 for the live loopback test
 ```
 
 They cover screenshot→PNG (PIL and raw-bytes framebuffers), viewport, click /

@@ -444,6 +444,10 @@
       "sha256": "ff978d7755b24731c22f311b1791b4f9b70c8dd515c17e8beefb4d0e22f78c23"
     },
     {
+      "path": "benchmark/rdp_pool/results.json",
+      "sha256": "85b79ceda7098ad1fb851d73b4dfae148d9c52d3420610832dc5b249edbd40ab"
+    },
+    {
       "path": "benchmark/reliability/summary.json",
       "sha256": "54ca722fd49a9eb4e0cb1fda7de6781e2a71f45aa872b849045dd106cce4ad1a"
     },
