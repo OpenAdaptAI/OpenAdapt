@@ -84,7 +84,7 @@ Same test OpenEMR, same synthetic referrals, 14 and 15 Oct 2026. Times run from 
   Reference it by its absolute raw.githubusercontent.com URL. PyPI shows this
   README too, and a relative image path doesn't render there.
   Left column, "Today": a staff member keys a referral into a generic EMR
-  window and trusts the "Saved" banner.
+  window and moves on when it says "Saved".
   Right column, "With OpenAdapt": the same screens, the saved record read back
   and compared with the input, and a mismatch that stops the run and sends one
   question to a person.
@@ -166,8 +166,8 @@ uvx --python 3.12 openadapt quickstart --break-it
 `openadapt quickstart --break-it` does the same.
 
 This runs a synthetic clinic task twice on your computer. The first run is
-done and checked. In the second run, the test server rejects the save after
-the app shows that it saved. The record check finds no saved record, so the
+done and checked. In the second run, the test server is set up to reject the
+save, so it never reaches the record. The record check finds nothing, so the
 run stops and leaves the record for a person to check.
 
 To start from a packaged workflow instead of a recording, run
@@ -282,14 +282,15 @@ recording, the compiled bundle, and the run receipt under its output directory
 (default `tutorials/tutorial-<UTC timestamp>`). `openadapt quickstart` is a
 wrapper around the same engine path.
 
-Then watch it refuse to trust the screen:
+Then watch it stop when a save doesn't land:
 
 ```bash
 openadapt quickstart --break-it
 ```
 
-Same certified bundle. This time the backend rejects the write after the app
-has already painted its success banner, so every on-screen check passes:
+Same certified bundle. This time the test backend is set up to reject the
+write. Every on-screen check still passes, so only the record check can catch
+it:
 
 ```
   The screen claimed:  every on-screen check passed -- the app painted its success banner
