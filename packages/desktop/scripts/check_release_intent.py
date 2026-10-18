@@ -58,8 +58,11 @@ def check(root: Path, base: str, head: str) -> list[str]:
     releasable = [
         commit.subject
         for commit in commits
-        if commit.breaking
-        or (commit.parsed and commit.parsed.group("type") in {"feat", "fix", "perf"})
+        if commit.ships
+        and (
+            commit.breaking
+            or (commit.parsed and commit.parsed.group("type") in {"feat", "fix", "perf"})
+        )
     ]
 
     # Every engine and native version source always carries the one version.
