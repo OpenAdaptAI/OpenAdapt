@@ -621,7 +621,7 @@
     },
     {
       "path": "claims.yaml",
-      "sha256": "ec1bd4acfa3d487e78809d6a5ecb742a60c6d8e858ab6fa7d50c75ea76083e7e"
+      "sha256": "71a11747c16285e91ad19a8359d098df98410e27885c41418ddb0c8deb651379"
     },
     {
       "path": "deploy/on-prem/docker-compose.yml",
@@ -1857,7 +1857,7 @@
     },
     {
       "path": "docs/verification.json",
-      "sha256": "a0512978638a854e31a1b6f6f2538f717345168c6e89d42369637499223c6c9f"
+      "sha256": "a027dcd8f35300ee2a9524ae133e1cc6f859d21ec85862bbee8847f292356998"
     },
     {
       "path": "examples/claude-code-demo/demo.gif",
@@ -2069,7 +2069,7 @@
     },
     {
       "path": "openadapt_flow/contracts/vocabulary/outcomes.json",
-      "sha256": "51efd49471deda16f73d00b153b3e3cda4c13cd042ea57e33b0feaf6cd3e3bac"
+      "sha256": "6fd889d095f04d43a6b1b470b4cbf3f282726b90f437868e43c23b0879c69f40"
     },
     {
       "path": "openadapt_flow/contracts/vocabulary/vocabulary.json",
