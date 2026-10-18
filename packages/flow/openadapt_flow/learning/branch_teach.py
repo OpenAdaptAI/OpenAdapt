@@ -33,6 +33,13 @@ This module learns the branch from several examples of the same resolution:
    lifecycle as any repair: campaigns, human approval and a canary
    (``openadapt-flow repair``).
 
+Narration (``narration.json`` beside a fix recording or a halted run, see
+:mod:`openadapt_flow.narration`) can name the narrowing parameter: "if the
+payer type is medicaid, dismiss the notice". It is used only when every example
+has that value and every normal run that shows the signature has another one.
+Otherwise it is reported as contradicted and teach-branch decides as before.
+The sentence is kept beside the guard (``Workflow.guard_sources``).
+
 At runtime the branch is an ordinary guarded program state: an OCR text check
 and, when narrowed, a parameter compare. It makes zero model calls.
 """
@@ -49,6 +56,7 @@ from pydantic import BaseModel, Field
 
 from openadapt_flow.ir import (
     Guard,
+    GuardSource,
     ParamKind,
     Predicate,
     PredicateKind,
@@ -156,6 +164,12 @@ class BranchTeachResult(BaseModel):
     negatives: int = 0
     outcome: Optional[LearnOutcome] = None
     out_bundle: Optional[Path] = None
+    narration: Optional[str] = Field(
+        default=None, description="The narrated sentence that named the condition"
+    )
+    narration_status: Optional[str] = Field(
+        default=None, description="'certified' (every run agrees) | 'contradicted'"
+    )
 
     def summary(self) -> str:
         lines = [
@@ -165,6 +179,13 @@ class BranchTeachResult(BaseModel):
         ]
         if self.signature is not None:
             lines.append(f"  condition: {self.signature.describe()}")
+        if self.narration is not None:
+            verdict = (
+                "every example and normal run agrees"
+                if self.narration_status == "certified"
+                else "a run contradicts it, so it was not used"
+            )
+            lines.append(f"  narration: {self.narration!r} ({verdict})")
         if self.reason:
             lines.append(f"  reason: {self.reason}")
         if self.outcome is not None and self.outcome.gate is not None:
@@ -408,6 +429,71 @@ def _narrowing_param(
     return usable[0], ""
 
 
+def _example_narration(example: BranchExample, extra: Sequence) -> list[str]:
+    """Sentences spoken while demonstrating this example's fix (or its run)."""
+    from openadapt_flow.narration import NarrationRefused, load_narration
+
+    texts: list[str] = []
+    for where in (Path(example.fix), Path(example.run_dir)):
+        if not where.is_dir():
+            continue
+        try:
+            nar = load_narration(where)
+        except NarrationRefused:
+            nar = None
+        if nar is not None:
+            texts.extend(line.text for line in nar.lines)
+    for nar in extra:
+        texts.extend(line.text for line in nar.lines)
+    return texts
+
+
+def _narrated_param(
+    sentences: Sequence[str],
+    examples: Sequence["_Example"],
+    base: Workflow,
+    others: Sequence[dict[str, str]] = (),
+) -> Optional[tuple[str, str, str]]:
+    """``(param, value, sentence)`` a narrated rule names, or None.
+
+    Only a categorical parameter (see :func:`_categorical`) whose value some
+    example or normal run (``others``) had can be named. Whether the runs
+    agree is checked by the caller.
+    """
+    from openadapt_flow.compiler.narration_rules import (
+        FieldValues,
+        _match_field,
+        parse_rule,
+    )
+
+    runs = [ex.params for ex in examples] + list(others)
+    names = sorted({k for r in runs for k in r if _categorical(base, k)})
+    fields = [
+        FieldValues(param=k, label=k, values=[r.get(k) for r in runs]) for k in names
+    ]
+    for sentence in sentences:
+        rule = parse_rule(sentence)
+        if rule is None or not rule.runs_when_condition_holds:
+            continue
+        matched = _match_field(rule.subject, rule.value, fields)
+        if matched is not None:
+            return matched[0].param, matched[1], rule.sentence
+    return None
+
+
+def _narrated_guard_state(workflow: Workflow, predicate: Predicate) -> Optional[str]:
+    graph = workflow.program
+    if graph is None:
+        return None
+    for sid, state in graph.states.items():
+        if any(tr.guard == predicate for tr in state.transitions):
+            return sid
+        if state.step is not None and state.step.guard is not None:
+            if state.step.guard.predicate == predicate:
+                return sid
+    return None
+
+
 def _happy_path(program: ProgramGraph) -> list[str]:
     """Intents along the unconditional first edges from the entry."""
     intents: list[str] = []
@@ -442,13 +528,16 @@ def teach_branch(
     skill_id: Optional[str] = None,
     library_dir: Optional[Path | str] = None,
     screen_texts: Optional[Callable[[Path, RunReport], list[str]]] = None,
+    narration: Sequence = (),
 ) -> BranchTeachResult:
     """Learn one guarded branch from two or more resolved halts.
 
     Returns a :class:`BranchTeachResult`. ``promoted`` False is a governed
     refusal: nothing is written to ``out``. Raises :class:`TeachError` for
     unusable inputs. ``screen_texts`` reads the text of a normal run's screens
-    (default: OCR of its recorded frames).
+    (default: OCR of its recorded frames). ``narration`` adds
+    :class:`~openadapt_flow.narration.Narration` objects to the
+    ``narration.json`` files found beside the fixes and halted runs.
     """
     if len(examples) < 2:
         raise TeachError(
@@ -508,18 +597,39 @@ def teach_branch(
     clean = [
         c for c in candidates if not any(_contains(t, c) for _, t in negative_runs)
     ]
-    if clean:
-        signature = BranchSignature(text=clean[0])
+    text = clean[0] if clean else candidates[0]
+    overlapping = [
+        runtime_params_for_gui(r.params)
+        for r, t in negative_runs
+        if _contains(t, text)
+    ]
+    sentences = [
+        line for ex in examples for line in _example_narration(ex, ())
+    ] + [line.text for nar in narration for line in nar.lines]
+    spoken = _narrated_param(
+        sentences,
+        loaded,
+        base,
+        [runtime_params_for_gui(r.params) for r, _ in negative_runs],
+    )
+    spoken_ok = spoken is not None and all(
+        ex.params.get(spoken[0]) == spoken[1] for ex in loaded
+    ) and all(n.get(spoken[0]) not in (None, spoken[1]) for n in overlapping)
+    said = {
+        "narration": spoken[2] if spoken else None,
+        "narration_status": (
+            None if spoken is None else "certified" if spoken_ok else "contradicted"
+        ),
+    }
+    if spoken_ok:
+        assert spoken is not None
+        signature = BranchSignature(text=text, param=spoken[0], value=spoken[1])
+    elif clean:
+        signature = BranchSignature(text=text)
     else:
-        text = candidates[0]
-        overlapping = [
-            runtime_params_for_gui(r.params)
-            for r, t in negative_runs
-            if _contains(t, text)
-        ]
         narrowed, why = _narrowing_param(loaded, overlapping, base)
         if narrowed is None:
-            return _refused(why, examples=len(loaded), negatives=n_neg)
+            return _refused(why, examples=len(loaded), negatives=n_neg, **said)
         signature = BranchSignature(text=text, param=narrowed[0], value=narrowed[1])
 
     # One correction trace per example, all keyed on the shared signature.
@@ -626,6 +736,22 @@ def teach_branch(
             "data_sources": dict(base.data_sources),
         }
     )
+    if spoken_ok:
+        assert spoken is not None
+        where = _narrated_guard_state(updated, signature.predicate())
+        if where is not None:
+            updated = updated.model_copy(
+                update={
+                    "guard_sources": {
+                        **updated.guard_sources,
+                        where: GuardSource(
+                            sentence=spoken[2],
+                            rule=f"take the fix only when {signature.describe()}",
+                            certified_by="recordings_agree",
+                        ),
+                    }
+                }
+            )
     out_bundle = Path(out)
     _copy_templates(Path(bundle), out_bundle)
     _copy_carried(carried, out_bundle)
@@ -638,6 +764,7 @@ def teach_branch(
         "condition": {
             "text_sha256": _digest(signature.text),
             "param": signature.param,
+            "narration_sha256": _digest(spoken[2]) if spoken_ok and spoken else None,
         },
         "example_run_reports_sha256": [
             _digest((ex.run_dir / "report.json").read_text(encoding="utf-8"))
@@ -663,4 +790,5 @@ def teach_branch(
         negatives=n_neg,
         outcome=outcome,
         out_bundle=out_bundle,
+        **said,
     )

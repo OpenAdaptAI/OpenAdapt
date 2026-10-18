@@ -594,3 +594,56 @@ def test_cli_narration_attach_scrubs_a_transcript(tmp_path, capsys):
     out = capsys.readouterr().out
     assert "John Smith" not in out and "<PERSON>" in out
     assert "John Smith" not in (rec / "narration.json").read_text()
+
+
+# -- explain the program back -------------------------------------------------
+
+
+def test_visualize_shows_each_guard_with_the_sentence_that_suggested_it(tmp_path):
+    from openadapt_flow.visualize import (
+        PresentationProfile,
+        build_program_graph,
+        project_program_graph,
+        render_html,
+        render_mermaid,
+    )
+
+    traces = [visit("Medicare", False), visit("Aetna", True)]
+    result = induce_program(traces, narration=[said(RULE, "step_003"), None])
+    result.workflow.save(tmp_path / "prog")
+    spec = build_program_graph(Workflow.load(tmp_path / "prog"))
+    (node,) = [n for n in spec.nodes if n.guard_reason]
+    assert node.guard_reason == RULE
+    assert node.guard_certified_by == "recordings_agree"
+    assert "narrated rule" in node.badges
+    assert "insurance" in node.guard and node.guard_on_unmet == "skip"
+    assert RULE in render_html(spec)
+    assert "narrated rule" in render_mermaid(spec) and "because:" in render_mermaid(spec)
+
+    # Off this machine the sentence is recorded text, so it is dropped.
+    for profile in ("remote-safe", "public-synthetic"):
+        safe = project_program_graph(spec, PresentationProfile(profile))
+        assert all(n.guard_reason is None for n in safe.nodes)
+        assert all(e.guard_reason is None for e in safe.edges)
+        assert any(n.guard_certified_by == "recordings_agree" for n in safe.nodes)
+
+
+def test_visualize_shows_a_narrated_branch_on_its_edge():
+    from openadapt_flow.visualize import build_program_graph
+
+    def trace(payer: str) -> Workflow:
+        decide = (
+            _key("step_002", "M", "press M to bill medicare", risk="irreversible")
+            if payer == "Medicare"
+            else _key("step_002", "C", "press C to collect the copay", risk="irreversible")
+        )
+        return Workflow(name="b", steps=[_type("step_001", "insurance", payer), decide])
+
+    rule = "If the insurance is Medicare, bill Medicare directly."
+    result = induce_program(
+        [trace("Medicare"), trace("Aetna")], narration=[said(rule, "step_002"), None]
+    )
+    spec = build_program_graph(result.workflow)
+    (branch,) = [n for n in spec.nodes if n.kind.value == "branch"]
+    assert branch.guard_reason == rule
+    assert [e.guard_reason for e in spec.edges if e.guard_reason] == [rule]

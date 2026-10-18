@@ -130,10 +130,30 @@ def cmd_show(args: argparse.Namespace) -> int:
     except RepairLifecycleError as exc:
         return _print_refusal(exc)
     print(candidate.diff_summary())
+    _print_narrated_guards(candidate)
     if args.json:
         print()
         print(candidate.model_dump_json(indent=2))
     return 0
+
+
+def _print_narrated_guards(candidate: RepairCandidate) -> None:
+    """Show each guard the proposed bundle took from narration, with the
+    sentence (read from the local bundle; the candidate record holds digests)."""
+    path = candidate.proposed_bundle_path
+    if not path or not (Path(path) / "workflow.json").is_file():
+        return
+    try:
+        workflow = Workflow.load(Path(path))
+    except Exception:  # noqa: BLE001 - the summary above is still valid
+        return
+    if not workflow.guard_sources:
+        return
+    print("  guards suggested by narration:")
+    for where, source in sorted(workflow.guard_sources.items()):
+        who = f" by {source.accepted_by}" if source.accepted_by else ""
+        print(f"    - {where}: {source.rule or 'guard'}")
+        print(f"      said: {source.sentence!r} (certified: {source.certified_by}{who})")
 
 
 def cmd_review(args: argparse.Namespace) -> int:
