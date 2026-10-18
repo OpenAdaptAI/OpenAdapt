@@ -128,7 +128,8 @@ The same steps are MCP tools when the operator starts the agent server with
 
 ```bash
 openadapt-agent serve --mode production --bundles ./bundles \
-  --admissions ./admit --delegate-approvals agent:reviewer
+  --admissions ./admit --delegate-approvals agent:reviewer \
+  --approver-grant ./reviewer-grant.json
 ```
 
 - `prepare_admission` takes recording folder names under
@@ -140,10 +141,15 @@ openadapt-agent serve --mode production --bundles ./bundles \
 
 Without `--delegate-approvals`, `decide_admission` asks a person in the
 client's own form, and the record says `person:mcp-form via mcp`. With it,
-the agent decides as the delegated approver from
-[#1190](https://github.com/OpenAdaptAI/OpenAdapt/pull/1190) and
-[#1192](https://github.com/OpenAdaptAI/OpenAdapt/pull/1192), and the record
-says `agent:reviewer via mcp`.
+the agent decides as the delegated approver, but only under the approver
+grant in `--approver-grant` that a registered person signed
+(`openadapt-flow approver-grant sign`; see
+[`APPROVAL_AND_VERIFICATION.md`](APPROVAL_AND_VERIFICATION.md)). Flow checks
+the grant on every decision: it must verify against the signer registry, name
+the agent, cover the workflow, and let an agent approve consequential saves.
+Without such a grant the agent's decision is refused. The record says
+`agent:reviewer via mcp under grant <digest> signed by <person>` and keeps the
+signed grant.
 
 The rules are the same for every decider:
 
@@ -157,6 +163,26 @@ The rules are the same for every decider:
   digest. There is one decision per admission.
 - **No gate is relaxed.** Shadow suggestions are never applied, a HALTed
   proposal can't be accepted, and no admission is signed here.
+
+### What admission changes for runs
+
+Accepting admits the workflow to the `problems_only` approval mode. Its runs
+no longer wait before every save. They stop only when a check fails, the
+screen changed, or a step falls outside what was qualified, and then a person
+decides. `openadapt-flow run` reads this from `admission-decision.json` in the
+bundle and prints who admitted it. Four things keep it narrow:
+
+- A `--approval-mode` flag or the deployment's `runtime.approval_mode` still
+  wins.
+- It applies only to the exact admitted bundle. After any change to the
+  bundle, each save waits for a person again.
+- An agent's admission applies only while its signed grant still verifies.
+  If the grant expires, is swapped or no longer names the agent, each save
+  waits for a person again.
+- `problems_only` keeps its own gates (see "Earning only problems" in
+  [`APPROVAL_AND_VERIFICATION.md`](APPROVAL_AND_VERIFICATION.md)). Until the
+  workflow passes the readiness test and its switch is on, every save still
+  waits for a person, and repeated problems switch it back.
 
 ## Example
 

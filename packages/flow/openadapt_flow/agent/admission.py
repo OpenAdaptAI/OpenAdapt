@@ -7,16 +7,22 @@ path. Admissions are written under ``DIR/admissions/<admission>``.
 
 Who decides:
 
-* With ``--delegate-approvals AGENT_ID`` the calling agent decides as that
-  delegated approver, and the record says ``agent:AGENT_ID via mcp``.
+* With ``--delegate-approvals AGENT_ID --approver-grant FILE`` the calling
+  agent decides as that delegated approver, under the person-signed grant in
+  FILE. Flow verifies the grant on every decision, and the record says
+  ``agent:AGENT_ID via mcp under grant <digest> signed by <person>``. Without
+  a grant that verifies, names AGENT_ID, covers the workflow and lets an
+  agent approve saves, the agent's decision is refused.
 * Without it, ``decide_admission`` asks a person in the client's own form
   (MCP elicitation) and records ``person:mcp-form via mcp``. A model-supplied
   argument never stands in for that answer.
 
 What an agent can't do: decide an admission it prepared (the record names
 the preparer), decide under the ``regulated`` policy pack, or decide without
-the exact ``pending_sha256`` it was shown. Accepting runs the same gates as
-``qualify accept``; nothing here signs an admission.
+the exact ``pending_sha256`` it was shown, or decide without a grant a person
+signed. Accepting runs the same gates as ``qualify accept`` and admits the
+workflow to the ``problems_only`` approval mode; nothing here signs an
+admission.
 """
 
 from __future__ import annotations
@@ -70,9 +76,32 @@ class AdmissionToolError(ValueError):
 class AdmissionDesk:
     """The admission tools over one operator-chosen folder."""
 
-    def __init__(self, root: Path | str, *, delegate_id: Optional[str] = None):
+    def __init__(
+        self,
+        root: Path | str,
+        *,
+        delegate_id: Optional[str] = None,
+        approver_grant: Optional[Path | str] = None,
+        key_dir: Optional[Path | str] = None,
+    ):
         self.root = Path(root).expanduser().resolve()
         self.delegate_id = delegate_id
+        #: The person-signed grant the delegate decides under. Read on every
+        #: decision so a replaced or expired file stops working at once.
+        self.approver_grant = (
+            Path(approver_grant).expanduser() if approver_grant else None
+        )
+        self.key_dir = key_dir
+
+    def _grant(self) -> Any:
+        if self.approver_grant is None:
+            return None
+        import json
+
+        try:
+            return json.loads(self.approver_grant.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
 
     # -- paths -------------------------------------------------------------
 
@@ -262,6 +291,8 @@ class AdmissionDesk:
                 decision=decision,
                 decided_by=decider,
                 reason=reason,
+                approver_grant=self._grant() if decider.kind == "agent" else None,
+                key_dir=self.key_dir,
             )
         except AdmissionError as exc:
             raise AdmissionToolError(str(exc)) from exc
@@ -271,6 +302,7 @@ class AdmissionDesk:
             "decided_by": result.decided_by.model_dump(mode="json"),
             "prepared_by": result.prepared_by.model_dump(mode="json"),
             "oracle_gate_passed": result.oracle_gate_passed,
+            "approval_mode": result.approval_mode,
             "next": result.next,
         }
 

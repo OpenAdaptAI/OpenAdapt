@@ -13,8 +13,18 @@ shadow-mined candidate) chains what used to be four manual steps:
    which re-runs the oracle gate, and reseal the bundle.
 
 The decision can come from a person at a terminal, or from a delegated agent
-approver over MCP (``openadapt-agent serve --delegate-approvals``). Either
-way the decision record names who decided, by kind, id and route.
+approver over MCP (``openadapt-agent serve --delegate-approvals``) acting
+under an approver grant a person signed (``openadapt-flow approver-grant
+sign``). Either way the decision record names who decided, by kind, id and
+route, and for an agent the grant's digest and the person who signed it.
+
+Accepting admits the workflow to the ``problems_only`` approval mode: its runs
+stop only for problems (a failed check, a changed screen, a step outside what
+was qualified) instead of before every save. :func:`admitted_approval_mode`
+is what ``openadapt-flow run`` reads. It applies only to the exact bundle that
+was admitted, and for an agent's admission only while the grant still
+verifies. ``problems_only`` keeps all of its own gates: until the switch is
+earned and on, every save still waits for a person.
 
 What it never does:
 
@@ -29,6 +39,9 @@ What it never does:
 * treat shadow-suggested checks as evidence. They are listed for the person
   or approver to read; only checks mined from real recordings are applied.
 * sign an admission. No local-dev or production admission is minted here.
+* let an agent admit without a person's signature. An agent decides only
+  under a verified grant that names it, covers this workflow, and lets an
+  agent approve consequential saves; anything less is refused.
 """
 
 from __future__ import annotations
@@ -41,7 +54,7 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Literal, Optional, Sequence
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_serializer, model_validator
 
 PENDING_FILE = "admission-pending.json"
 DECISION_FILE = "admission-decision.json"
@@ -59,6 +72,9 @@ DECISION_SCHEMA: Literal["openadapt.admission-decision/v1"] = (
 DECIDER_ID_PATTERN = r"^[A-Za-z0-9][A-Za-z0-9._:@/-]{0,255}$"
 #: Policy packs under which only a person may decide.
 PERSON_ONLY_PACKS = frozenset({"regulated"})
+#: The approval mode an accepted admission gives the workflow's runs.
+ADMITTED_APPROVAL_MODE: Literal["problems_only"] = "problems_only"
+_SHA256 = r"^sha256:[0-9a-f]{64}$"
 
 PendingStatus = Literal["needs_decision", "needs_recording", "halted"]
 
@@ -75,9 +91,36 @@ class Decider(BaseModel):
     kind: Literal["person", "agent"]
     id: str = Field(pattern=DECIDER_ID_PATTERN)
     route: Literal["cli", "mcp"]
+    #: For an agent that decided: the digest of the person-signed approver
+    #: grant it decided under. Left out of the record for a person.
+    policy_ref: Optional[str] = Field(default=None, pattern=_SHA256)
+    #: For an agent that decided: the registered person who signed that grant.
+    on_behalf_of: Optional[str] = Field(default=None, pattern=DECIDER_ID_PATTERN)
+
+    @model_serializer(mode="wrap")
+    def _compact(self, handler: Any) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        for key in ("policy_ref", "on_behalf_of"):
+            if data.get(key) is None:
+                data.pop(key, None)
+        return data
+
+    @model_validator(mode="after")
+    def _grant_only_for_an_agent(self) -> "Decider":
+        if self.kind == "person" and (
+            self.policy_ref is not None or self.on_behalf_of is not None
+        ):
+            raise ValueError("a person decides for themselves, under no grant")
+        if (self.policy_ref is None) != (self.on_behalf_of is None):
+            raise ValueError("a grant names both its digest and its signer")
+        return self
 
     def label(self) -> str:
-        return f"{self.kind}:{self.id} via {self.route}"
+        text = f"{self.kind}:{self.id} via {self.route}"
+        if self.policy_ref is not None:
+            short = self.policy_ref.removeprefix("sha256:")[:12]
+            text += f" under grant {short} signed by {self.on_behalf_of}"
+        return text
 
 
 class PendingAdmission(BaseModel):
@@ -128,6 +171,13 @@ class AdmissionDecision(BaseModel):
     accepted_bundle_content_digest: Optional[str] = None
     oracle_gate_passed: Optional[bool] = None
     next: list[str] = Field(default_factory=list)
+    #: The workflow the admission names, for the grant's workflow scope.
+    workflow_name: Optional[str] = None
+    #: Set on accept: the approval mode the admitted workflow's runs use.
+    approval_mode: Optional[Literal["problems_only"]] = None
+    #: The person-signed grant an agent decided under, kept whole so a run
+    #: re-verifies it. ``None`` for a person's decision.
+    approver_grant: Optional[dict[str, Any]] = None
 
 
 def _sha(payload: Any) -> str:
@@ -375,11 +425,88 @@ def _write_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2, sort_keys=True) + "\n", "utf-8")
 
 
-def check_decider(pending: PendingAdmission, decided_by: Decider) -> None:
-    """Refuse self-approval and agent decisions where only a person may decide."""
+def _agent_identity(decided_by: Decider) -> Any:
+    from openadapt_flow.approval_mode.approver import (
+        ApproverAuth,
+        ApproverIdentityV1,
+        ApproverKind,
+    )
+
+    return ApproverIdentityV1(
+        kind=ApproverKind.AGENT,
+        auth=(
+            ApproverAuth.MCP_SESSION
+            if decided_by.route == "mcp"
+            else ApproverAuth.LOCAL_CLI
+        ),
+        id=decided_by.id,
+    )
+
+
+def _grant_refusal(
+    signed: Any,
+    agent: Decider,
+    workflow_name: str,
+    *,
+    key_dir: Optional[Path | str],
+    now: Optional[datetime] = None,
+) -> tuple[Optional[Any], Optional[str]]:
+    """``(verified grant, None)`` or ``(None, closed reason)``."""
+
+    from openadapt_flow.approval_mode.approver import StepClass
+    from openadapt_flow.approval_mode.signed_policy import (
+        GrantRefused,
+        SignedApproverGrant,
+        verify_grant,
+    )
+
+    if signed is None:
+        return None, "approver_grant_missing"
+    try:
+        grant = (
+            signed
+            if isinstance(signed, SignedApproverGrant)
+            else SignedApproverGrant.model_validate(signed)
+        )
+    except ValueError:
+        return None, "approver_grant_unreadable"
+    if key_dir is None:
+        from openadapt_flow.jit.lifecycle import default_key_dir
+
+        key_dir = default_key_dir()
+    try:
+        verified = verify_grant(grant, key_dir, now=now)
+    except GrantRefused as exc:
+        return None, exc.code
+    if not verified.names(agent.id):
+        return None, "delegate_not_in_grant"
+    if not verified.covers(workflow_name):
+        return None, "workflow_not_in_grant"
+    # Admitting to problems_only lets consequential saves go ahead without a
+    # person. An agent may grant that only where the person's grant already
+    # lets an agent approve a consequential save itself.
+    if verified.policy.refusal(StepClass.CONSEQUENTIAL, _agent_identity(agent)):
+        return None, "grant_does_not_allow_agent_saves"
+    if agent.policy_ref is not None and agent.policy_ref != verified.policy_ref:
+        return None, "policy_ref_mismatch"
+    return verified, None
+
+
+def check_decider(
+    pending: PendingAdmission,
+    decided_by: Decider,
+    *,
+    approver_grant: Any = None,
+    key_dir: Optional[Path | str] = None,
+) -> Decider:
+    """Refuse self-approval, and any agent decision a person didn't sign for.
+
+    Returns the decider as recorded: an agent gains the digest of the grant
+    it decided under and the person who signed it.
+    """
 
     if decided_by.kind != "agent":
-        return
+        return decided_by
     if pending.policy_pack in PERSON_ONLY_PACKS:
         raise AdmissionError(
             f"the {pending.policy_pack!r} policy pack needs a person to decide"
@@ -390,6 +517,18 @@ def check_decider(pending: PendingAdmission, decided_by: Decider) -> None:
             "self-approval refused: the agent that prepared this admission "
             "can't decide it"
         )
+    verified, refusal = _grant_refusal(
+        approver_grant, decided_by, pending.workflow_name, key_dir=key_dir
+    )
+    if verified is None:
+        raise AdmissionError(
+            f"an agent admits a workflow only under an approver grant a person "
+            f"signed that names it, covers this workflow and lets an agent "
+            f"approve saves ({refusal}); see `openadapt-flow approver-grant sign`"
+        )
+    return decided_by.model_copy(
+        update={"policy_ref": verified.policy_ref, "on_behalf_of": verified.signer}
+    )
 
 
 def decide_admission(
@@ -399,8 +538,17 @@ def decide_admission(
     decision: Literal["accept", "reject"],
     decided_by: Decider,
     reason: Optional[str] = None,
+    approver_grant: Any = None,
+    key_dir: Optional[Path | str] = None,
 ) -> AdmissionDecision:
-    """Record one decision on the pending admission, and apply it on accept."""
+    """Record one decision on the pending admission, and apply it on accept.
+
+    An agent decides only with ``approver_grant``: a person-signed
+    :class:`~openadapt_flow.approval_mode.signed_policy.SignedApproverGrant`
+    that verifies against the signer registry in ``key_dir`` (default
+    ``~/.openadapt/jit``). Accepting sets the workflow's approval mode to
+    ``problems_only``.
+    """
 
     from openadapt_flow.ir import Workflow
     from openadapt_flow.qualification_proposal import (
@@ -423,7 +571,9 @@ def decide_admission(
             f"nothing to decide: the admission is {pending.status}"
             + (f" ({pending.halt_reason})" if pending.halt_reason else "")
         )
-    check_decider(pending, decided_by)
+    decided_by = check_decider(
+        pending, decided_by, approver_grant=approver_grant, key_dir=key_dir
+    )
     if decision not in ("accept", "reject"):
         raise AdmissionError("decision must be accept or reject")
     if decision == "reject" and not reason:
@@ -450,7 +600,17 @@ def decide_admission(
         "pending_sha256": pending_sha256,
         "bundle_content_digest": pending.bundle_content_digest,
         "proposal_sha256": pending.proposal_sha256,
+        "workflow_name": pending.workflow_name,
     }
+    if decided_by.kind == "agent":
+        from openadapt_flow.approval_mode.signed_policy import SignedApproverGrant
+
+        signed = (
+            approver_grant
+            if isinstance(approver_grant, SignedApproverGrant)
+            else SignedApproverGrant.model_validate(approver_grant)
+        )
+        record["approver_grant"] = signed.model_dump(mode="json", by_alias=True)
     if decision == "accept":
         proposal = load_proposal(target / PROPOSAL_FILE)
         if proposal.sha256() != pending.proposal_sha256:
@@ -465,9 +625,13 @@ def decide_admission(
         record.update(
             accepted_bundle_content_digest=_bundle_digest(bundle),
             oracle_gate_passed=bool(gate.get("passed")),
+            approval_mode=ADMITTED_APPROVAL_MODE,
             next=[
                 "qualify campaign: run the qualification cases before this "
-                "program can be certified"
+                "program can be certified",
+                "runs use the problems_only approval mode: they stop only for "
+                "problems once the switch is earned; until then each save "
+                "still waits for a person",
             ],
         )
     result = AdmissionDecision(**record)
@@ -476,6 +640,63 @@ def decide_admission(
     if decision == "accept":
         _write_json(bundle / DECISION_FILE, payload)
     return result
+
+
+class AdmittedMode(BaseModel):
+    """What a run reads from the bundle's admission decision."""
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    #: ``problems_only`` when the admission applies; ``None`` otherwise.
+    approval_mode: Optional[Literal["problems_only"]] = None
+    admitted_by: Optional[Decider] = None
+    #: Why a recorded admission doesn't apply, as a closed code.
+    refusal: Optional[str] = None
+
+
+def admitted_approval_mode(
+    bundle: Path | str,
+    *,
+    key_dir: Optional[Path | str] = None,
+    now: Optional[datetime] = None,
+) -> AdmittedMode:
+    """The approval mode an accepted admission gives this exact bundle.
+
+    No admission, or a rejected one: no mode (the run's default applies). A
+    recorded admission for a bundle that has since changed, or an agent's
+    admission whose grant no longer verifies, names the reason and gives no
+    mode. Never raises.
+    """
+
+    path = Path(bundle) / DECISION_FILE
+    if not path.is_file() or path.is_symlink():
+        return AdmittedMode()
+    try:
+        record = AdmissionDecision.model_validate_json(path.read_text("utf-8"))
+    except (OSError, ValueError):
+        return AdmittedMode(refusal="admission_unreadable")
+    if record.decision != "accept" or record.approval_mode is None:
+        return AdmittedMode()
+    try:
+        current = _bundle_digest(Path(bundle))
+    except Exception:  # noqa: BLE001 - an unreadable bundle never widens a run
+        return AdmittedMode(refusal="admission_bundle_unreadable")
+    if current != record.accepted_bundle_content_digest:
+        return AdmittedMode(refusal="admission_bundle_changed")
+    decider = record.decided_by
+    if decider.kind == "agent":
+        if record.workflow_name is None or decider.policy_ref is None:
+            return AdmittedMode(refusal="approver_grant_missing")
+        verified, refusal = _grant_refusal(
+            record.approver_grant,
+            decider,
+            record.workflow_name,
+            key_dir=key_dir,
+            now=now,
+        )
+        if verified is None:
+            return AdmittedMode(refusal=refusal)
+    return AdmittedMode(approval_mode=record.approval_mode, admitted_by=decider)
 
 
 def render_summary(pending: PendingAdmission) -> str:
@@ -508,7 +729,10 @@ def render_summary(pending: PendingAdmission) -> str:
 
 
 __all__ = [
+    "ADMITTED_APPROVAL_MODE",
     "AdmissionDecision",
+    "AdmittedMode",
+    "admitted_approval_mode",
     "AdmissionError",
     "Decider",
     "PendingAdmission",

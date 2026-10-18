@@ -1,9 +1,10 @@
 """MCP admission tools: prepare, list, decide. Made-up values only.
 
 The tools are off unless the operator passes --admissions. A person decides
-in the client's form; with --delegate-approvals the agent decides as that
-approver. An agent never decides an admission it prepared, and the record
-names who decided.
+in the client's form; with --delegate-approvals and a person-signed
+--approver-grant the agent decides as that approver. An agent never decides
+an admission it prepared or without a grant that verifies, and the record
+names who decided (and, for an agent, the grant and who signed it).
 """
 
 from __future__ import annotations
@@ -59,9 +60,7 @@ def _recording(root: Path, name: str = "rec1") -> None:
                     ocr_text="Save",
                     structured_identity="record identity",
                 ),
-                expect=[
-                    Postcondition(kind=PostconditionKind.TEXT_PRESENT, text="Saved")
-                ],
+                expect=[Postcondition(kind=PostconditionKind.TEXT_PRESENT, text="Saved")],
                 effects=[
                     Effect(
                         kind=EffectKind.FIELD_EQUALS,
@@ -92,8 +91,40 @@ def _recording(root: Path, name: str = "rec1") -> None:
     )
 
 
-def _bridge(bundles_root, runner_config, root, *, delegate=None):
-    desk = AdmissionDesk(root, delegate_id=delegate)
+def _grant_file(root: Path, delegates=("agent:reviewer",)) -> Path:
+    """A grant a made-up registered person signed, letting agents approve saves."""
+
+    from datetime import datetime, timedelta, timezone
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    from openadapt_flow.approval_mode.approver import ApproverPolicyV1, StepClass
+    from openadapt_flow.approval_mode.signed_policy import ApproverGrant, sign_grant
+    from openadapt_flow.jit.authority import public_hex, register_principal
+
+    key = Ed25519PrivateKey.generate()
+    register_principal(
+        root / "keys",
+        role="policy_signer",
+        principal_id="person-0001",
+        public_key_hex=public_hex(key),
+    )
+    allowed = {c.value: ["person"] for c in StepClass}
+    allowed[StepClass.CONSEQUENTIAL.value] = ["person", "agent"]
+    start = datetime.now(timezone.utc) - timedelta(minutes=1)
+    grant = ApproverGrant(
+        grant_id="grant-0001",
+        signer="person-0001",
+        signed_at=start.isoformat(),
+        expires_at=(start + timedelta(days=30)).isoformat(),
+        approver_policy=ApproverPolicyV1.model_validate({"allowed": allowed}),
+        delegates=delegates,
+    )
+    return sign_grant(grant, key).save(root / "grant.json")
+
+
+def _bridge(bundles_root, runner_config, root, *, delegate=None, grant=None):
+    desk = AdmissionDesk(root, delegate_id=delegate, approver_grant=grant, key_dir=root / "keys")
     return AgentBridge(bundles_root, runner_config, admission_desk=desk)
 
 
@@ -132,9 +163,19 @@ def test_an_agent_cannot_decide_what_it_prepared(bundles_root, runner_config, tm
     }
     with pytest.raises(BridgeError, match="self-approval"):
         bridge.dispatch("decide_admission", args)
-    reviewer = _bridge(bundles_root, runner_config, tmp_path, delegate="agent:reviewer")
+    ungranted = _bridge(bundles_root, runner_config, tmp_path, delegate="agent:reviewer")
+    with pytest.raises(BridgeError, match="approver_grant_missing"):
+        ungranted.dispatch("decide_admission", args)
+    grant = _grant_file(tmp_path)
+    reviewer = _bridge(
+        bundles_root, runner_config, tmp_path, delegate="agent:reviewer", grant=grant
+    )
     result = reviewer.dispatch("decide_admission", args)
-    assert result["decided_by"] == {"kind": "agent", "id": "agent:reviewer", "route": "mcp"}
+    assert result["decided_by"]["kind"] == "agent"
+    assert result["decided_by"]["id"] == "agent:reviewer"
+    assert result["decided_by"]["on_behalf_of"] == "person-0001"
+    assert result["decided_by"]["policy_ref"].startswith("sha256:")
+    assert result["approval_mode"] == "problems_only"
     assert result["prepared_by"]["id"] == "agent:intake-bot"
     assert result["oracle_gate_passed"] is True
     record = json.loads(

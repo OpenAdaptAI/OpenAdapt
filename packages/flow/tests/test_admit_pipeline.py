@@ -15,15 +15,28 @@ import pytest
 
 from openadapt_flow import admit_pipeline as ap
 from openadapt_flow.__main__ import main
+from openadapt_flow.approval_mode.approver import ApproverPolicyV1, StepClass
 from openadapt_flow.cli_admit import EXIT_STOPPED, _ask_once, admit_default_form
 from openadapt_flow.compiler.motif_induction import induce_candidate, write_candidate
 from openadapt_flow.ir import Workflow
+from tests._approver_grant_support import key_dir, signed_grant
 from tests.test_qualification_proposal import _png, _workflow
 
 SHADOW = Path(__file__).parent / "fixtures" / "shadow"
 PERSON = ap.Decider(kind="person", id="pat", route="cli")
 AGENT_A = ap.Decider(kind="agent", id="agent:intake-bot", route="mcp")
 AGENT_B = ap.Decider(kind="agent", id="agent:reviewer", route="mcp")
+
+
+def _agent_policy() -> ApproverPolicyV1:
+    allowed = {c.value: ["person"] for c in StepClass}
+    allowed[StepClass.CONSEQUENTIAL.value] = ["person", "agent"]
+    return ApproverPolicyV1.model_validate({"allowed": allowed})
+
+
+def _grant(tmp_path: Path, **kwargs):
+    kwargs.setdefault("delegates", ("agent:reviewer",))
+    return signed_grant(tmp_path, _agent_policy(), **kwargs)
 
 
 def _recording(root: Path, name: str = "rec1", *, effects: bool = True) -> Path:
@@ -95,6 +108,8 @@ def test_person_accept_applies_checks_and_records_who_decided(tmp_path: Path) ->
         (tmp_path / "admission" / "bundle" / ap.DECISION_FILE).read_text()
     )
     assert record["decided_by"] == {"kind": "person", "id": "pat", "route": "cli"}
+    assert record["approval_mode"] == "problems_only"
+    assert record["approver_grant"] is None
     assert "qualify campaign" in record["next"][0]
     # No admission is signed here.
     assert not (
@@ -112,13 +127,168 @@ def test_an_agent_cannot_decide_what_it_prepared(tmp_path: Path) -> None:
             decided_by=AGENT_A,
         )
     assert not (tmp_path / "admission" / ap.DECISION_FILE).exists()
+    grant = _grant(tmp_path)
     result = ap.decide_admission(
         tmp_path / "admission",
         pending_sha256=pending.sha256(),
         decision="accept",
         decided_by=AGENT_B,
+        approver_grant=grant,
+        key_dir=key_dir(tmp_path),
     )
-    assert result.decided_by == AGENT_B and result.prepared_by == AGENT_A
+    assert result.decided_by.id == AGENT_B.id and result.prepared_by == AGENT_A
+    # The record names the grant and the person who signed it.
+    assert result.decided_by.policy_ref == grant.grant.digest()
+    assert result.decided_by.on_behalf_of == grant.grant.signer
+    assert result.approval_mode == "problems_only"
+    assert "under grant" in result.decided_by.label()
+
+
+@pytest.mark.parametrize(
+    "grant_kwargs, refusal",
+    [
+        (None, "approver_grant_missing"),
+        ({"delegates": ("agent:someone-else",)}, "delegate_not_in_grant"),
+        ({"workflows": ("another-workflow",)}, "workflow_not_in_grant"),
+        ({"days": 1, "signed_at": "expired"}, "approver_grant_expired"),
+    ],
+)
+def test_an_agent_admits_only_under_a_person_signed_grant(
+    tmp_path: Path, grant_kwargs, refusal
+) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    pending = _prepare(tmp_path)
+    grant = None
+    if grant_kwargs is not None:
+        kwargs = dict(grant_kwargs)
+        if kwargs.get("signed_at") == "expired":
+            kwargs["signed_at"] = datetime.now(timezone.utc) - timedelta(days=3)
+        grant = _grant(tmp_path, **kwargs)
+    with pytest.raises(ap.AdmissionError, match=refusal):
+        ap.decide_admission(
+            tmp_path / "admission",
+            pending_sha256=pending.sha256(),
+            decision="accept",
+            decided_by=AGENT_B,
+            approver_grant=grant,
+            key_dir=key_dir(tmp_path),
+        )
+    assert not (tmp_path / "admission" / ap.DECISION_FILE).exists()
+
+
+def test_a_tampered_or_person_only_grant_admits_nothing(tmp_path: Path) -> None:
+    pending = _prepare(tmp_path)
+    grant = _grant(tmp_path)
+    tampered = grant.model_dump(mode="json", by_alias=True)
+    tampered["grant"]["delegates"] = ["agent:reviewer", "agent:intruder"]
+    with pytest.raises(ap.AdmissionError, match="approver_grant_signature_invalid"):
+        ap.decide_admission(
+            tmp_path / "admission",
+            pending_sha256=pending.sha256(),
+            decision="accept",
+            decided_by=AGENT_B,
+            approver_grant=tampered,
+            key_dir=key_dir(tmp_path),
+        )
+    # A grant that lets an agent approve only read-only steps can't admit a
+    # workflow whose saves would then go ahead without a person.
+    allowed = {c.value: ["person"] for c in StepClass}
+    allowed[StepClass.READ_ONLY.value] = ["person", "agent"]
+    narrow = signed_grant(
+        tmp_path,
+        ApproverPolicyV1.model_validate({"allowed": allowed}),
+        delegates=("agent:reviewer",),
+    )
+    with pytest.raises(ap.AdmissionError, match="grant_does_not_allow_agent_saves"):
+        ap.decide_admission(
+            tmp_path / "admission",
+            pending_sha256=pending.sha256(),
+            decision="accept",
+            decided_by=AGENT_B,
+            approver_grant=narrow,
+            key_dir=key_dir(tmp_path),
+        )
+
+
+def test_a_person_cannot_claim_a_grant() -> None:
+    with pytest.raises(ValueError):
+        ap.Decider(
+            kind="person",
+            id="pat",
+            route="cli",
+            policy_ref="sha256:" + "a" * 64,
+            on_behalf_of="person-0001",
+        )
+
+
+def test_an_admitted_bundle_runs_only_problems(tmp_path: Path) -> None:
+    pending = _prepare(tmp_path)
+    bundle = tmp_path / "admission" / "bundle"
+    assert ap.admitted_approval_mode(bundle) == ap.AdmittedMode()
+    ap.decide_admission(
+        tmp_path / "admission",
+        pending_sha256=pending.sha256(),
+        decision="accept",
+        decided_by=PERSON,
+    )
+    admitted = ap.admitted_approval_mode(bundle)
+    assert admitted.approval_mode == "problems_only"
+    assert admitted.admitted_by == PERSON
+    # Changing the bundle after admission drops back to the default.
+    workflow = Workflow.load(bundle)
+    workflow.name = "edited-after-admission"
+    workflow.save(bundle)
+    changed = ap.admitted_approval_mode(bundle)
+    assert changed.approval_mode is None
+    assert changed.refusal == "admission_bundle_changed"
+
+
+def test_a_rejected_admission_sets_no_mode(tmp_path: Path) -> None:
+    pending = _prepare(tmp_path)
+    ap.decide_admission(
+        tmp_path / "admission",
+        pending_sha256=pending.sha256(),
+        decision="reject",
+        decided_by=PERSON,
+        reason="wrong program",
+    )
+    assert ap.admitted_approval_mode(tmp_path / "admission" / "bundle") == (
+        ap.AdmittedMode()
+    )
+
+
+def test_an_agent_admission_stops_applying_when_its_grant_does(tmp_path: Path) -> None:
+    from datetime import datetime, timedelta, timezone
+
+    pending = _prepare(tmp_path, by=AGENT_A)
+    ap.decide_admission(
+        tmp_path / "admission",
+        pending_sha256=pending.sha256(),
+        decision="accept",
+        decided_by=AGENT_B,
+        approver_grant=_grant(tmp_path, days=2),
+        key_dir=key_dir(tmp_path),
+    )
+    bundle = tmp_path / "admission" / "bundle"
+    keys = key_dir(tmp_path)
+    assert ap.admitted_approval_mode(bundle, key_dir=keys).approval_mode == (
+        "problems_only"
+    )
+    later = datetime.now(timezone.utc) + timedelta(days=3)
+    expired = ap.admitted_approval_mode(bundle, key_dir=keys, now=later)
+    assert expired.approval_mode is None
+    assert expired.refusal == "approver_grant_expired"
+    # A grant swapped into the record no longer matches the recorded digest.
+    record_path = bundle / ap.DECISION_FILE
+    record = json.loads(record_path.read_text())
+    record["approver_grant"] = _grant(tmp_path, days=5).model_dump(
+        mode="json", by_alias=True
+    )
+    record_path.write_text(json.dumps(record))
+    assert ap.admitted_approval_mode(bundle, key_dir=keys).refusal == (
+        "policy_ref_mismatch"
+    )
 
 
 def test_regulated_pack_needs_a_person() -> None:
@@ -310,3 +480,28 @@ def test_cli_decide_refuses_without_a_terminal(tmp_path) -> None:
     _prepare(tmp_path)
     with pytest.raises(SystemExit, match="interactive terminal"):
         main(["admit", "decide", str(tmp_path / "admission")])
+
+
+def test_run_uses_the_admitted_mode_unless_told_otherwise(tmp_path, capsys) -> None:
+    from openadapt_flow.__main__ import _resolve_run_approval_mode
+
+    pending = _prepare(tmp_path)
+    ap.decide_admission(
+        tmp_path / "admission",
+        pending_sha256=pending.sha256(),
+        decision="accept",
+        decided_by=PERSON,
+    )
+    bundle = str(tmp_path / "admission" / "bundle")
+    no_cfg = SimpleNamespace(runtime=SimpleNamespace(approval_mode=None))
+    args = SimpleNamespace(approval_mode=None, bundle=bundle)
+    assert _resolve_run_approval_mode(args, no_cfg, None).value == "problems_only"
+    assert "Admitted by person:pat via cli" in capsys.readouterr().out
+    # A flag or the deployment's runtime.approval_mode still wins.
+    flagged = SimpleNamespace(approval_mode="each_item", bundle=bundle)
+    assert _resolve_run_approval_mode(flagged, no_cfg, None).value == "each_item"
+    deployed = SimpleNamespace(runtime=SimpleNamespace(approval_mode="each_item"))
+    assert _resolve_run_approval_mode(args, deployed, None).value == "each_item"
+    # Without an admission the default is a person approving each save.
+    bare = SimpleNamespace(approval_mode=None, bundle=str(tmp_path))
+    assert _resolve_run_approval_mode(bare, no_cfg, None).value == "each_item"

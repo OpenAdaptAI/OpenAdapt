@@ -2278,7 +2278,39 @@ def _resolve_run_approval_mode(args: argparse.Namespace, cfg, profile_value):
     requested = getattr(args, "approval_mode", None)
     if requested is None:
         requested = getattr(getattr(cfg, "runtime", None), "approval_mode", None)
+    if requested is None:
+        requested = _admitted_approval_mode(args)
     return resolve_approval_mode(requested)
+
+
+def _admitted_approval_mode(args: argparse.Namespace) -> Optional[str]:
+    """The approval mode the bundle's admission gives it, or ``None``.
+
+    An accepted ``openadapt-flow admit`` sets ``problems_only`` for that exact
+    bundle. A flag or ``runtime.approval_mode`` still wins. A bundle changed
+    since admission, or an agent's admission whose person-signed grant no
+    longer verifies, falls back to the default (a person approves each save)
+    and says why.
+    """
+
+    bundle = getattr(args, "bundle", None)
+    if not bundle:
+        return None
+    from openadapt_flow.admit_pipeline import admitted_approval_mode
+
+    admitted = admitted_approval_mode(Path(bundle))
+    if admitted.refusal is not None:
+        print(
+            f"admission approval mode not used ({admitted.refusal}): a person "
+            "approves each save."
+        )
+        return None
+    if admitted.approval_mode is not None and admitted.admitted_by is not None:
+        print(
+            f"Admitted by {admitted.admitted_by.label()}: this workflow uses "
+            f"{admitted.approval_mode}."
+        )
+    return admitted.approval_mode
 
 
 def _approval_wait_seconds(args: argparse.Namespace) -> float:
