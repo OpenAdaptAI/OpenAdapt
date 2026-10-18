@@ -3,7 +3,8 @@
 It draws one account screen at a time as a PNG and behaves like a Flow
 backend (``screenshot``, ``click``, ``press``). Copying a field puts the
 app's own text on its clipboard. ``export_csv`` stands in for the app's
-report export, a channel that does not go through the screens.
+scheduled report export: it reads saved data, not the open screen, so its
+reads use ``export_source="committed_data"``.
 """
 
 from __future__ import annotations
