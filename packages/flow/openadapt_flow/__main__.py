@@ -51,9 +51,10 @@ imported lazily inside each handler so ``--help`` always works):
   environment, identity, and effect pins from the demo; ``qualify accept``
   runs the proposed oracle against a ``--break-it`` fault before it can
   succeed; refusing a pin HALTs.
-- ``scaffold-verifier`` — draft (never approve) an effect-oracle contract
-  (``effect_contract.yaml``) from a recording or bundle's write-shaped steps;
-  refuses demonstrations with no consequential step.
+- ``scaffold-verifier`` — build a record check from the reads the app made
+  after the save and fault-test it (``record_check.proposed.yaml``), or, with
+  no read, draft an effect-oracle contract (``effect_contract.yaml``); never
+  approves; refuses demonstrations with no consequential step.
 - ``explain`` — plain-language, read-only read of a completed run directory:
   what happened, why the outcome is the safe one, and the next suggested
   command.
@@ -4008,10 +4009,34 @@ def _print_lint_epilogue(
 
 def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
     """Draft (never approve) an effect-oracle contract from retained evidence."""
-    from openadapt_flow.scaffold_verifier import NEXT_COMMANDS_TEMPLATE, write_draft
+    from openadapt_flow.scaffold_verifier import (
+        NEXT_COMMANDS_TEMPLATE,
+        build_record_check,
+        write_draft,
+    )
 
-    out, count = write_draft(
-        Path(args.source), Path(args.out) if getattr(args, "out", None) else None
+    def optional_path(name: str) -> Optional[Path]:
+        value = getattr(args, name, None)
+        return Path(value) if value else None
+
+    out_dir = optional_path("out")
+    built = build_record_check(
+        Path(args.source),
+        out_dir,
+        db=optional_path("db"),
+        verifier=optional_path("verifier"),
+        prove=getattr(args, "prove", None),
+        recording=optional_path("recording"),
+        bundle=optional_path("bundle"),
+        complete_read=bool(getattr(args, "complete_read", False)),
+    )
+    if built is not None:
+        print(built.summary)
+        return 0 if built.working else 1
+    out, count = write_draft(Path(args.source), out_dir)
+    print(
+        "No read in the recording returns the saved record (no network capture, "
+        "--db or --verifier), so this is a TODO draft."
     )
     print(NEXT_COMMANDS_TEMPLATE.format(out=out, count=count))
     return 0
@@ -8343,10 +8368,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "scaffold-verifier",
         help=(
-            "Draft an effect-oracle contract (effect_contract.yaml) from a "
-            "recording or bundle's write-shaped steps. The output is a DRAFT "
-            "requiring human edit; refuses demonstrations with no "
-            "consequential (write) step"
+            "Build a record check from the reads the app made after the save "
+            "and test it against injected bad writes (record_check.proposed.yaml "
+            "+ record_check.proof.json; exit 1 when it misses one). Without a "
+            "read, drafts effect_contract.yaml for a person to fill in. Never "
+            "approves; refuses demonstrations with no consequential (write) step"
         ),
     )
     p.add_argument(
@@ -8359,7 +8385,58 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="DIR",
         help=(
-            "Directory for the drafted effect_contract.yaml (default: beside the input)"
+            "Directory for the proposed check or drafted effect_contract.yaml "
+            "(default: beside the input)"
+        ),
+    )
+    p.add_argument(
+        "--db",
+        default=None,
+        metavar="SQLITE",
+        help=(
+            "Read-only database read path (SQLite file): find the saved row in "
+            "every table and guard the rest with a no-new-rows check"
+        ),
+    )
+    p.add_argument(
+        "--verifier",
+        default=None,
+        metavar="YAML",
+        help=(
+            "A verify.yaml whose `verifier:` section reads the system of "
+            "record (REST, FHIR, SQL); read once to find the saved record"
+        ),
+    )
+    p.add_argument(
+        "--prove",
+        default=None,
+        choices=("mockmed", "effect-e2e"),
+        help=(
+            "Also run the proposed check end to end against this "
+            "fault-injection fixture (the check must match its record service)"
+        ),
+    )
+    p.add_argument(
+        "--complete-read",
+        action="store_true",
+        help=(
+            "Declare that the reads return everything the save can change "
+            "(one store, no other tables). Recorded as declared, not proven"
+        ),
+    )
+    p.add_argument(
+        "--recording",
+        default=None,
+        metavar="DIR",
+        help="The recording a bundle was compiled from (when SOURCE is a bundle)",
+    )
+    p.add_argument(
+        "--bundle",
+        default=None,
+        metavar="DIR",
+        help=(
+            "The bundle compiled from this recording, for identity coverage "
+            "(when SOURCE is a recording)"
         ),
     )
     p.set_defaults(func=_cmd_scaffold_verifier)

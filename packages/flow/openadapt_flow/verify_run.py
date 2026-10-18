@@ -252,12 +252,14 @@ def parse_verify_config(data: Any, *, source: str = "verify config") -> VerifyCo
         cfg = VerifyConfig.model_validate(data)
     except Exception as exc:
         raise VerifyRunError(f"invalid {source}: {exc}") from exc
-    if cfg.verifier.kind in _NOT_INDEPENDENT:
-        raise VerifyRunError(
-            f"verifier kind {cfg.verifier.kind!r} does not read independently of "
-            "the executor; verify-run needs a system-of-record or "
-            "separate-session verifier"
-        )
+    kinds = [cfg.verifier.kind] + [s.kind for s in cfg.verifier.surfaces.values()]
+    for kind in kinds:
+        if kind in _NOT_INDEPENDENT:
+            raise VerifyRunError(
+                f"verifier kind {kind!r} does not read independently of "
+                "the executor; verify-run needs a system-of-record or "
+                "separate-session verifier"
+            )
     if cfg.verifier.candidates:
         raise VerifyRunError("verify-run does not support verifier candidates yet")
     for effect in cfg.effects:
@@ -364,6 +366,11 @@ def _tag_reads(verifier: Any, execution_id: str) -> None:
     across runs of one ``verify.yaml``.
     """
 
+    routed = getattr(verifier, "verifiers", None)
+    if isinstance(routed, dict):
+        for sub in routed.values():
+            _tag_reads(sub, execution_id)
+        return
     if not hasattr(verifier, "headers"):
         return
     trace = secrets.token_hex(16)
