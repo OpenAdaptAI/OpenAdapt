@@ -110,6 +110,52 @@ ChannelRead(channel="export", raw="AC-1042", session="independent",
 A workflow can use either kind. A write step that needs `verified` values
 (see below) halts on values backed only by a live-session export.
 
+## The reading step
+
+`openadapt_flow.records.read.read_field()` reads one field on a live backend.
+By default it uses one channel: the clipboard when you pass one, otherwise
+OCR of the field's region. The value comes back `unconfirmed` with no Seal.
+
+```python
+from openadapt_flow.records.read import SystemClipboard, read_field
+
+field = read_field(spec, backend, (412, 188, 160, 22), clipboard=SystemClipboard())
+```
+
+For the clipboard read, Flow sets the clipboard to a marker value, clicks the
+field, presses the copy keys (default `Meta+a`, `Meta+c`) and reads it back.
+A clipboard still holding the marker means the copy did nothing, so it counts
+as no read rather than as the previous field's value. Every read records the
+screenshot hash, the region and the crop hash in `region`.
+
+With `proof=ReadProof(double_read=True)`, both the clipboard and OCR are read
+and compared. The reported value is the clipboard's, because it is the
+application's own text. Comparison reuses the read-back rules in
+`openadapt_flow.runtime.effects.readback_values`: reads that differ only in
+look-alike characters are `ambiguous` and go to review, never treated as a
+match. With `seal=True`, pass a `SealRef`; it is attached to the value.
+
+Confidence is a fixed rule:
+
+| Reads | Confidence |
+|---|---|
+| Two or more agree | 0.95 + 0.05 × OCR engine confidence |
+| Clipboard only | 0.7 |
+| OCR only | 0.6 × OCR engine confidence |
+| Look-alike characters only | 0.4 |
+| Disagree | 0.1 |
+| Nothing parsed | 0 |
+
+A field goes to review when its reads disagree or are ambiguous, when a value
+is not valid for its kind, when `double_read` is on and only one channel read
+a value, or when it sets `min_confidence` and falls below it.
+
+For `committed_record_readback`, close the record, reopen it by its identity
+fields, read the field again with `session="reopened"`, and pass the new read
+to `add_read()`. For `verified`, pass a read from an export, database or API
+(`channel_read(spec, "database", value)`). A later read that disagrees sends
+the field to review.
+
 ## Requiring a grade before a write
 
 A step that writes a read value into a system of record can declare the

@@ -16,7 +16,9 @@ from openadapt_flow.records.read import (
     normalize_for,
     read_field,
 )
-from openadapt_flow.records.schema import FieldSpec
+from openadapt_flow.records.schema import FieldSpec, ReadProof, SealRef
+
+DOUBLE = ReadProof(double_read=True)
 
 CODE = FieldSpec(name="account_number", kind="code")
 AMOUNT = FieldSpec(name="balance", kind="currency")
@@ -74,7 +76,7 @@ def test_disagreement_goes_to_review() -> None:
     assert field.review_reason == "channels disagree"
 
 
-def test_single_read_is_unconfirmed_and_reviewed() -> None:
+def test_single_read_is_unconfirmed_not_reviewed_by_default() -> None:
     field = combine_reads(
         CODE, [channel_read(CODE, "ocr", "AC-1042", engine_confidence=1.0)]
     )
@@ -82,7 +84,15 @@ def test_single_read_is_unconfirmed_and_reviewed() -> None:
     assert field.value == "AC-1042"
     assert field.grade == "unconfirmed"
     assert field.confidence == pytest.approx(0.6)
-    assert field.needs_review
+    assert not field.needs_review
+    assert field.seal is None
+
+
+def test_single_read_reviewed_when_double_read_or_confidence_asked() -> None:
+    reads = [channel_read(CODE, "ocr", "AC-1042", engine_confidence=1.0)]
+    assert combine_reads(CODE, reads, proof=DOUBLE).needs_review
+    gated = FieldSpec(name="account_number", kind="code", min_confidence=0.9)
+    assert "below 0.90" in (combine_reads(gated, reads).review_reason or "")
 
 
 def test_invalid_value_is_flagged() -> None:
@@ -184,10 +194,13 @@ def test_read_field_live_double_read() -> None:
         CODE,
         backend,
         (10, 20, 80, 16),
+        proof=ReadProof(double_read=True, seal=True),
         clipboard=clip,
         ocr=_ocr("AC-1042"),
         step_id="s3",
+        seal=SealRef(run_id="r1"),
     )
+    assert field.seal == SealRef(run_id="r1")
     assert backend.clicks == [(50, 28)]
     assert backend.keys == ["Meta+a", "Meta+c"]
     assert field.agreement == "agree"
@@ -204,15 +217,43 @@ def test_read_field_stale_clipboard_is_no_read() -> None:
     clip = _Clipboard(None)  # the copy did nothing: the sentinel is still there
     clip.backend = backend
     field = read_field(
-        CODE, backend, (0, 0, 50, 10), clipboard=clip, ocr=_ocr("AC-1042")
+        CODE, backend, (0, 0, 50, 10), proof=DOUBLE, clipboard=clip, ocr=_ocr("AC-1042")
     )
     assert [r.channel for r in field.reads] == ["clipboard", "ocr"]
     assert field.reads[0].raw is None
     assert field.agreement == "single"
     assert field.needs_review
+    assert "double read requested" in (field.review_reason or "")
 
 
-def test_read_field_ocr_only() -> None:
-    field = read_field(CODE, _Backend(), (0, 0, 50, 10), ocr=_ocr("AC-1042", 1.0))
+def test_read_field_default_is_one_channel_no_seal() -> None:
+    field = read_field(
+        CODE,
+        _Backend(),
+        (0, 0, 50, 10),
+        ocr=_ocr("AC-1042", 1.0),
+        seal=SealRef(run_id="r"),
+    )
     assert [r.channel for r in field.reads] == ["ocr"]
     assert field.grade == "unconfirmed"
+    assert field.seal is None
+    assert not field.needs_review
+    backend = _Backend()
+    clip = _Clipboard("AC-1042")
+    clip.backend = backend
+
+    def no_ocr(png, *, region=None):
+        raise AssertionError("OCR must not run for a default clipboard read")
+
+    field = read_field(CODE, backend, (0, 0, 50, 10), clipboard=clip, ocr=no_ocr)
+    assert [r.channel for r in field.reads] == ["clipboard"]
+    assert field.value == "AC-1042"
+
+
+def test_read_field_rejects_unsatisfiable_proof() -> None:
+    with pytest.raises(ValueError, match="needs a clipboard"):
+        read_field(CODE, _Backend(), (0, 0, 5, 5), proof=DOUBLE, ocr=_ocr("x"))
+    with pytest.raises(ValueError, match="no SealRef"):
+        read_field(
+            CODE, _Backend(), (0, 0, 5, 5), proof=ReadProof(seal=True), ocr=_ocr("x")
+        )

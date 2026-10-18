@@ -1,6 +1,9 @@
 """The reading step: read one field off the screen into a typed value.
 
-A field is read through two channels when it can be:
+By default a field is read through one channel and the value is returned
+with the grade ``unconfirmed`` and no Seal. Proof is opt-in through
+:class:`~openadapt_flow.records.schema.ReadProof`. With ``double_read`` a
+field is read through two channels:
 
 - the **clipboard**: focus the field, select it, copy it, and read the
   application's own text. This is deterministic when the application allows
@@ -32,8 +35,9 @@ disagree                  0.1
 nothing parsed            0.0
 ========================  ===========================================
 
-With the default ``min_confidence`` of 0.9, only agreeing reads pass without
-review.
+A field that sets ``min_confidence`` sends reads below it to review. Without
+it, only disagreement, look-alike ambiguity, an invalid value or a missing
+second channel (when ``double_read`` is on) send a field to review.
 """
 
 from __future__ import annotations
@@ -49,6 +53,7 @@ from openadapt_flow.records.schema import (
     FieldRead,
     FieldSpec,
     ReadChannel,
+    ReadProof,
     SealRef,
     SourceRegion,
     grade_for,
@@ -237,8 +242,15 @@ def combine_reads(
     *,
     region: Optional[SourceRegion] = None,
     seal: Optional[SealRef] = None,
+    proof: Optional[ReadProof] = None,
 ) -> FieldRead:
-    """Judge the channel reads of one field and build its :class:`FieldRead`."""
+    """Judge the channel reads of one field and build its :class:`FieldRead`.
+
+    A single read is not sent to review on its own: it is simply
+    ``unconfirmed``. It is sent to review when ``proof.double_read`` asked for
+    two channels, or when the field sets ``min_confidence`` and the read is
+    below it.
+    """
 
     if not reads:
         raise ValueError("combine_reads needs at least one channel read")
@@ -258,7 +270,9 @@ def combine_reads(
         reasons.append("channels disagree")
     elif agreement == "ambiguous":
         reasons.append("reads differ only in look-alike characters")
-    elif confidence < spec.min_confidence:
+    elif proof is not None and proof.double_read and len(parsed) < 2:
+        reasons.append("double read requested; only one channel read a value")
+    elif spec.min_confidence is not None and confidence < spec.min_confidence:
         reasons.append(f"confidence {confidence:.2f} below {spec.min_confidence:.2f}")
     unparsed = [r.channel for r in reads if r.raw and r.normalized is None]
     if unparsed and parsed:
@@ -286,7 +300,7 @@ def add_read(spec: FieldSpec, prior: FieldRead, later: ChannelRead) -> FieldRead
 
     return combine_reads(
         spec, (*prior.reads, later), region=prior.region, seal=prior.seal
-    )
+    ).model_copy(update={"review_decision": prior.review_decision})
 
 
 def _sha256(data: bytes) -> str:
@@ -311,6 +325,7 @@ def read_field(
     backend: Any,
     bbox: tuple[int, int, int, int],
     *,
+    proof: Optional[ReadProof] = None,
     clipboard: Optional[ClipboardReader] = None,
     copy_keys: Sequence[str] = ("Meta+a", "Meta+c"),
     ocr: Optional[Callable[..., list[Any]]] = None,
@@ -318,25 +333,32 @@ def read_field(
     step_id: Optional[str] = None,
     seal: Optional[SealRef] = None,
 ) -> FieldRead:
-    """Read ``spec`` at ``bbox`` on ``backend`` by OCR and, if given, the clipboard.
+    """Read ``spec`` at ``bbox`` on ``backend``.
+
+    By default (``proof`` unset or all off) the field is read through one
+    channel: the clipboard when one is given, otherwise OCR. The result is
+    ``unconfirmed`` and carries no Seal. With ``proof.double_read`` both
+    channels are read and compared. With ``proof.seal`` the given ``seal``
+    pointer is attached; it is required then and ignored otherwise.
 
     ``backend`` is a Flow :class:`~openadapt_flow.backend.Backend`. The
     screenshot is taken before the field is focused, so the region and its
-    hashes show the screen the OCR read. For the clipboard read, the
-    clipboard is first set to a sentinel, the field centre is clicked, and
-    ``copy_keys`` are pressed; a clipboard still holding the sentinel counts
-    as no read. Pass ``session="reopened"`` when reading a record that was
+    hashes show the screen that was read. For the clipboard read, the
+    clipboard is first set to a marker, the field centre is clicked, and
+    ``copy_keys`` are pressed; a clipboard still holding the marker counts as
+    no read. Pass ``session="reopened"`` when reading a record that was
     closed and reopened by its identity fields.
     """
 
-    if ocr is None:
-        from openadapt_flow.vision.ocr import ocr as _ocr
+    proof = proof or ReadProof()
+    if proof.double_read and clipboard is None:
+        raise ValueError("double_read needs a clipboard as the second channel")
+    if proof.seal and seal is None:
+        raise ValueError("seal is on for this field but no SealRef was given")
+    use_clipboard = clipboard is not None
+    use_ocr = proof.double_read or not use_clipboard
 
-        ocr = _ocr
     png = backend.screenshot()
-    lines = ocr(png, region=bbox) or []
-    ocr_text = " ".join(line.text for line in lines).strip()
-    ocr_conf = min((float(line.confidence) for line in lines), default=0.0)
     width_height = None
     try:
         from PIL import Image
@@ -352,16 +374,9 @@ def read_field(
         frame_size=width_height,
         step_id=step_id,
     )
-    reads = [
-        channel_read(
-            spec,
-            "ocr",
-            ocr_text or None,
-            engine_confidence=ocr_conf if lines else None,
-            session=session,
-        )
-    ]
-    if clipboard is not None:
+    reads: list[ChannelRead] = []
+    if use_clipboard:
+        assert clipboard is not None
         clipboard.write_text(_SENTINEL)
         x, y, w, h = bbox
         backend.click(x + w // 2, y + h // 2)
@@ -370,8 +385,27 @@ def read_field(
         copied = clipboard.read_text()
         if copied == _SENTINEL:
             copied = None
-        reads.insert(0, channel_read(spec, "clipboard", copied, session=session))
-    return combine_reads(spec, reads, region=region, seal=seal)
+        reads.append(channel_read(spec, "clipboard", copied, session=session))
+    if use_ocr:
+        if ocr is None:
+            from openadapt_flow.vision.ocr import ocr as _ocr
+
+            ocr = _ocr
+        lines = ocr(png, region=bbox) or []
+        ocr_text = " ".join(line.text for line in lines).strip()
+        ocr_conf = min((float(line.confidence) for line in lines), default=0.0)
+        reads.append(
+            channel_read(
+                spec,
+                "ocr",
+                ocr_text or None,
+                engine_confidence=ocr_conf if lines else None,
+                session=session,
+            )
+        )
+    return combine_reads(
+        spec, reads, region=region, seal=seal if proof.seal else None, proof=proof
+    )
 
 
 class SystemClipboard:
