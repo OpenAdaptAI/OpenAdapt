@@ -2613,6 +2613,13 @@ class KnownIdEvidence(BaseModel):
     list_size: int = Field(ge=1)
     reads: int = Field(ge=1)
     resolved_ids: int = Field(ge=1)
+    #: Separate screenshots the reads came from (the second read uses a fresh
+    #: capture, not the first frame again).
+    frames: int = Field(default=1, ge=1)
+    #: Admission record: when the operator confirmed the export, and the
+    #: SHA-256 of the export file they confirmed.
+    confirmed_at: Optional[str] = None
+    export_sha256: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
 class IdentityCheck(BaseModel):
@@ -2687,6 +2694,16 @@ class IdentityCheck(BaseModel):
         description=(
             "Set when a look-alike abstain was lifted against a complete "
             "known-ID list (runtime.known_ids)."
+        ),
+    )
+    known_id_halt: Optional[
+        Literal["known_ids_unconfirmed", "known_ids_changed", "known_ids_stale"]
+    ] = Field(
+        default=None,
+        description=(
+            "Set when the known-ID list was needed but may not be used: no "
+            "admission confirmation, the export changed since it was "
+            "confirmed, or it is older than the configured age. The step halts."
         ),
     )
 

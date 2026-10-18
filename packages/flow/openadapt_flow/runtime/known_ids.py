@@ -16,8 +16,13 @@ anywhere in the system, so the abstain can be lifted.
 
 Rules, all required:
 
-- the list is attested complete for the identifier namespace;
-- at least :data:`MIN_READS` independent OCR reads of the live band all
+- the list comes from a configured export of the system of record, and an
+  operator confirmed its source and completeness at admission (see
+  :func:`confirm_export` and :class:`KnownIdAdmission`); replay halts when
+  that confirmation is missing, the export's hash changed, or the export is
+  older than the configured age;
+- at least :data:`MIN_READS` OCR reads of the live band, each from its own
+  screenshot (the replayer captures a fresh frame for the second read), all
   abstained for the look-alike reason only (every other identity budget,
   such as name and date of birth, passed in every read);
 - every read yields the same set of look-alike classes for its
@@ -33,11 +38,15 @@ Anything else leaves the original verdict unchanged. This step can only turn
 
 from __future__ import annotations
 
+import csv
 import hashlib
+import io
 import json
-from dataclasses import dataclass, field
+import os
+from dataclasses import asdict, dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Iterable, Mapping, Optional, Sequence
+from typing import Any, Iterable, Literal, Mapping, Optional, Sequence
 
 from openadapt_flow.ir import IdentityCheck, KnownIdEvidence
 from openadapt_flow.runtime import identity as identity_mod
@@ -206,3 +215,231 @@ def resolve_lookalike_abstain(
 def ids_from_rows(rows: Iterable[Mapping[str, object]], column: str) -> list[str]:
     """Collect one column of a worklist or export as identifiers."""
     return [str(r[column]) for r in rows if r.get(column) not in (None, "")]
+
+
+# --------------------------------------------------------------- admission
+#
+# The list must come from a configured export of the system of record, and a
+# person must confirm, at admission, where it came from and that it is
+# complete. That confirmation is recorded (who, when, source, row count,
+# hash). Replay refuses to use the list, and halts with a named reason, when
+# there is no confirmation, when the export's bytes no longer match the
+# confirmed hash, or when the export is older than the configured age.
+
+CONFIRMATION_SCHEMA = "openadapt.known-ids-confirmation/v1"
+DEFAULT_MAX_AGE_S = 24 * 3600.0
+
+KnownIdHaltReason = Literal[
+    "known_ids_unconfirmed", "known_ids_changed", "known_ids_stale"
+]
+
+
+class KnownIdAdmissionHalt(KnownIdListError):
+    """The known-ID list may not be used; replay must halt."""
+
+    def __init__(self, reason: KnownIdHaltReason, detail: str) -> None:
+        super().__init__(f"{reason}: {detail}")
+        self.reason: KnownIdHaltReason = reason
+        self.detail = detail
+
+
+def _utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _iso(dt: datetime) -> str:
+    return dt.astimezone(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _parse_iso(value: str) -> datetime:
+    dt = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
+def file_sha256(path: Path | str) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as fh:
+        for chunk in iter(lambda: fh.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def load_export(path: Path | str, column: Optional[str] = None) -> list[str]:
+    """Identifiers from an export of the system of record.
+
+    Accepts CSV (``column`` names the identifier column), a JSON list, a JSON
+    object with an ``ids`` list, or plain text with one identifier per line.
+    """
+    path = Path(path)
+    text = path.read_text(encoding="utf-8-sig")
+    suffix = path.suffix.lower()
+    if suffix == ".json":
+        data = json.loads(text)
+        ids = data.get("ids") if isinstance(data, dict) else data
+        if not isinstance(ids, list):
+            raise KnownIdListError(f"{path}: expected a list of identifiers")
+        return [str(v) for v in ids if v not in (None, "")]
+    if suffix in (".csv", ".tsv"):
+        if not column:
+            raise KnownIdListError(f"{path}: name the identifier column")
+        reader = csv.DictReader(
+            io.StringIO(text), delimiter="\t" if suffix == ".tsv" else ","
+        )
+        if reader.fieldnames is None or column not in reader.fieldnames:
+            raise KnownIdListError(f"{path}: no column {column!r}")
+        return ids_from_rows(reader, column)
+    return [ln.strip() for ln in text.splitlines() if ln.strip()]
+
+
+@dataclass(frozen=True)
+class KnownIdConfirmation:
+    """What the operator confirmed at admission."""
+
+    confirmed_by: str
+    confirmed_at: str
+    source: str
+    export_path: str
+    exported_at: str
+    row_count: int
+    sha256: str
+    id_column: Optional[str]
+    complete: bool = True
+    schema: str = CONFIRMATION_SCHEMA
+
+    def wire(self) -> dict[str, Any]:
+        return asdict(self)
+
+    @classmethod
+    def load(cls, path: Path | str) -> "KnownIdConfirmation":
+        data = json.loads(Path(path).read_text(encoding="utf-8"))
+        if not isinstance(data, dict) or data.get("schema") != CONFIRMATION_SCHEMA:
+            raise KnownIdListError(f"{path}: not a {CONFIRMATION_SCHEMA} record")
+        try:
+            return cls(**data)
+        except TypeError as exc:
+            raise KnownIdListError(f"{path}: bad confirmation record") from exc
+
+
+def default_confirmation_path(export_path: Path | str) -> Path:
+    p = Path(export_path)
+    return p.with_name(p.name + ".confirmation.json")
+
+
+def confirm_export(
+    export_path: Path | str,
+    *,
+    source: str,
+    confirmed_by: str,
+    column: Optional[str] = None,
+    exported_at: Optional[datetime] = None,
+    confirmation_path: Optional[Path | str] = None,
+    now: Optional[datetime] = None,
+) -> KnownIdConfirmation:
+    """Record that ``confirmed_by`` confirmed this export complete.
+
+    Writes the confirmation next to the export (or at ``confirmation_path``)
+    and appends it to ``<confirmation>.log.jsonl`` so earlier confirmations
+    stay on record. ``exported_at`` defaults to the file's modification time.
+    """
+    if not source.strip():
+        raise KnownIdListError("name the export's source")
+    if not confirmed_by.strip():
+        raise KnownIdListError("record who confirmed the list")
+    export_path = Path(export_path)
+    ids = load_export(export_path, column)
+    if not ids:
+        raise KnownIdListError(f"{export_path}: no identifiers")
+    exported = exported_at or datetime.fromtimestamp(
+        export_path.stat().st_mtime, tz=timezone.utc
+    )
+    record = KnownIdConfirmation(
+        confirmed_by=confirmed_by.strip(),
+        confirmed_at=_iso(now or _utc_now()),
+        source=source.strip(),
+        export_path=str(export_path.resolve()),
+        exported_at=_iso(exported),
+        row_count=len(ids),
+        sha256=file_sha256(export_path),
+        id_column=column,
+    )
+    out = Path(confirmation_path or default_confirmation_path(export_path))
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_name(out.name + ".tmp")
+    tmp.write_text(json.dumps(record.wire(), indent=2, sort_keys=True) + "\n", "utf-8")
+    os.replace(tmp, out)
+    with open(out.with_name(out.name + ".log.jsonl"), "a", encoding="utf-8") as fh:
+        fh.write(json.dumps(record.wire(), sort_keys=True) + "\n")
+    return record
+
+
+@dataclass
+class KnownIdAdmission:
+    """A confirmed known-ID list, re-checked before every use."""
+
+    export_path: Path
+    confirmation: KnownIdConfirmation
+    known_ids: KnownIdList
+    max_age_s: float = DEFAULT_MAX_AGE_S
+
+    @classmethod
+    def load(
+        cls,
+        export_path: Path | str,
+        *,
+        column: Optional[str] = None,
+        confirmation_path: Optional[Path | str] = None,
+        max_age_s: float = DEFAULT_MAX_AGE_S,
+        now: Optional[datetime] = None,
+    ) -> "KnownIdAdmission":
+        """Load and check. Raises :class:`KnownIdAdmissionHalt` if unusable."""
+        export_path = Path(export_path)
+        cpath = Path(confirmation_path or default_confirmation_path(export_path))
+        if not cpath.is_file():
+            raise KnownIdAdmissionHalt(
+                "known_ids_unconfirmed",
+                f"no admission confirmation at {cpath}; run "
+                "`openadapt-flow known-ids confirm`",
+            )
+        confirmation = KnownIdConfirmation.load(cpath)
+        admission = cls(
+            export_path=export_path,
+            confirmation=confirmation,
+            known_ids=KnownIdList(ids=(), source=confirmation.source, complete=False),
+            max_age_s=max_age_s,
+        )
+        halt = admission.check(now)
+        if halt is not None:
+            raise halt
+        ids = load_export(export_path, column or confirmation.id_column)
+        admission.known_ids = KnownIdList(
+            ids=tuple(ids), source=confirmation.source, complete=confirmation.complete
+        )
+        return admission
+
+    def check(self, now: Optional[datetime] = None) -> Optional[KnownIdAdmissionHalt]:
+        """None when the list may be used now; otherwise the halt to raise."""
+        c = self.confirmation
+        if not c.complete:
+            return KnownIdAdmissionHalt(
+                "known_ids_unconfirmed", "completeness was not confirmed"
+            )
+        try:
+            digest = file_sha256(self.export_path)
+        except OSError:
+            return KnownIdAdmissionHalt(
+                "known_ids_changed", f"export {self.export_path} is unreadable"
+            )
+        if digest != c.sha256:
+            return KnownIdAdmissionHalt(
+                "known_ids_changed",
+                "the export changed since it was confirmed "
+                f"({c.sha256[:12]} -> {digest[:12]}); confirm it again",
+            )
+        age = ((now or _utc_now()) - _parse_iso(c.exported_at)).total_seconds()
+        if age > self.max_age_s:
+            return KnownIdAdmissionHalt(
+                "known_ids_stale",
+                f"the export is {age / 3600:.1f} h old; the limit is "
+                f"{self.max_age_s / 3600:.1f} h. Load a fresh export and confirm it",
+            )
+        return None

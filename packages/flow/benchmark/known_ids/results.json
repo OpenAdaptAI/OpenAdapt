@@ -286,6 +286,28 @@
         "RC204247"
       ]
     },
+    "fresh_capture_identical": {
+      "1:hi_res_arial": true,
+      "1:native_arial": true,
+      "1:small_dense": true,
+      "1:serif_drift": true,
+      "2:hi_res_arial": true,
+      "2:native_arial": true,
+      "2:small_dense": true,
+      "2:serif_drift": true,
+      "3:hi_res_arial": true,
+      "3:native_arial": true,
+      "3:small_dense": true,
+      "3:serif_drift": true,
+      "4:hi_res_arial": true,
+      "4:native_arial": true,
+      "4:small_dense": true,
+      "4:serif_drift": true,
+      "5:hi_res_arial": true,
+      "5:native_arial": true,
+      "5:small_dense": true,
+      "5:serif_drift": true
+    },
     "operating_point": {
       "coverage_threshold": 0.8,
       "uncovered_run_cap": 4,
@@ -298,126 +320,157 @@
   "scored": {
     "all": {
       "correct_row_clicks": 480,
-      "false_stops_before": 376,
-      "false_stops_after": 204,
       "sibling_row_clicks": 480,
+      "false_stops_before": 376,
+      "false_stops_after_same_frame": 204,
+      "false_stops_after": 203,
       "false_accepts_before": 0,
+      "false_accepts_after_same_frame": 0,
       "false_accepts_after": 0
     },
     "no_lookalike_twin_in_list": {
       "correct_row_clicks": 280,
-      "false_stops_before": 176,
-      "false_stops_after": 4,
       "sibling_row_clicks": 280,
+      "false_stops_before": 176,
+      "false_stops_after_same_frame": 4,
+      "false_stops_after": 3,
       "false_accepts_before": 0,
+      "false_accepts_after_same_frame": 0,
       "false_accepts_after": 0
     },
     "lookalike_twin_in_list": {
       "correct_row_clicks": 200,
-      "false_stops_before": 200,
-      "false_stops_after": 200,
       "sibling_row_clicks": 200,
+      "false_stops_before": 200,
+      "false_stops_after_same_frame": 200,
+      "false_stops_after": 200,
       "false_accepts_before": 0,
+      "false_accepts_after_same_frame": 0,
       "false_accepts_after": 0
     },
     "by_collision_class": {
       "generational_suffix": {
         "correct_row_clicks": 40,
-        "false_stops_before": 8,
-        "false_stops_after": 0,
         "sibling_row_clicks": 40,
+        "false_stops_before": 8,
+        "false_stops_after_same_frame": 0,
+        "false_stops_after": 0,
         "false_accepts_before": 0,
+        "false_accepts_after_same_frame": 0,
         "false_accepts_after": 0
       },
       "id_confusion_O0": {
         "correct_row_clicks": 40,
-        "false_stops_before": 40,
-        "false_stops_after": 40,
         "sibling_row_clicks": 40,
+        "false_stops_before": 40,
+        "false_stops_after_same_frame": 40,
+        "false_stops_after": 40,
         "false_accepts_before": 0,
+        "false_accepts_after_same_frame": 0,
         "false_accepts_after": 0
       },
       "id_confusion_l1": {
         "correct_row_clicks": 40,
-        "false_stops_before": 40,
-        "false_stops_after": 40,
         "sibling_row_clicks": 40,
+        "false_stops_before": 40,
+        "false_stops_after_same_frame": 40,
+        "false_stops_after": 40,
         "false_accepts_before": 0,
+        "false_accepts_after_same_frame": 0,
         "false_accepts_after": 0
       },
       "id_numeric_O0": {
         "correct_row_clicks": 40,
-        "false_stops_before": 40,
-        "false_stops_after": 40,
         "sibling_row_clicks": 40,
+        "false_stops_before": 40,
+        "false_stops_after_same_frame": 40,
+        "false_stops_after": 40,
         "false_accepts_before": 0,
+        "false_accepts_after_same_frame": 0,
         "false_accepts_after": 0
       },
       "id_numeric_l1": {
         "correct_row_clicks": 40,
-        "false_stops_before": 40,
-        "false_stops_after": 40,
         "sibling_row_clicks": 40,
+        "false_stops_before": 40,
+        "false_stops_after_same_frame": 40,
+        "false_stops_after": 40,
         "false_accepts_before": 0,
+        "false_accepts_after_same_frame": 0,
         "false_accepts_after": 0
       },
       "id_split_numeric_O0": {
         "correct_row_clicks": 40,
-        "false_stops_before": 40,
-        "false_stops_after": 40,
         "sibling_row_clicks": 40,
+        "false_stops_before": 40,
+        "false_stops_after_same_frame": 40,
+        "false_stops_after": 40,
         "false_accepts_before": 0,
+        "false_accepts_after_same_frame": 0,
         "false_accepts_after": 0
       },
       "letterletter_name": {
         "correct_row_clicks": 40,
-        "false_stops_before": 32,
-        "false_stops_after": 1,
         "sibling_row_clicks": 40,
+        "false_stops_before": 32,
+        "false_stops_after_same_frame": 1,
+        "false_stops_after": 1,
         "false_accepts_before": 0,
+        "false_accepts_after_same_frame": 0,
         "false_accepts_after": 0
       },
       "mrn_transposition": {
         "correct_row_clicks": 40,
-        "false_stops_before": 16,
-        "false_stops_after": 2,
         "sibling_row_clicks": 40,
+        "false_stops_before": 16,
+        "false_stops_after_same_frame": 2,
+        "false_stops_after": 2,
         "false_accepts_before": 0,
+        "false_accepts_after_same_frame": 0,
         "false_accepts_after": 0
       },
       "near_surname": {
         "correct_row_clicks": 40,
-        "false_stops_before": 24,
-        "false_stops_after": 0,
         "sibling_row_clicks": 40,
+        "false_stops_before": 24,
+        "false_stops_after_same_frame": 0,
+        "false_stops_after": 0,
         "false_accepts_before": 0,
+        "false_accepts_after_same_frame": 0,
         "false_accepts_after": 0
       },
       "nguyen_variant": {
         "correct_row_clicks": 40,
-        "false_stops_before": 32,
-        "false_stops_after": 0,
         "sibling_row_clicks": 40,
+        "false_stops_before": 32,
+        "false_stops_after_same_frame": 0,
+        "false_stops_after": 0,
         "false_accepts_before": 0,
+        "false_accepts_after_same_frame": 0,
         "false_accepts_after": 0
       },
       "same_name_diff_dob": {
         "correct_row_clicks": 40,
-        "false_stops_before": 32,
-        "false_stops_after": 1,
         "sibling_row_clicks": 40,
+        "false_stops_before": 32,
+        "false_stops_after_same_frame": 1,
+        "false_stops_after": 0,
         "false_accepts_before": 0,
+        "false_accepts_after_same_frame": 0,
         "false_accepts_after": 0
       },
       "same_surname_diff_first": {
         "correct_row_clicks": 40,
-        "false_stops_before": 32,
-        "false_stops_after": 0,
         "sibling_row_clicks": 40,
+        "false_stops_before": 32,
+        "false_stops_after_same_frame": 0,
+        "false_stops_after": 0,
         "false_accepts_before": 0,
+        "false_accepts_after_same_frame": 0,
         "false_accepts_after": 0
       }
     },
-    "unarmed_clicks": 0
+    "unarmed_clicks": 0,
+    "fresh_reads_taken": 495
   }
 }

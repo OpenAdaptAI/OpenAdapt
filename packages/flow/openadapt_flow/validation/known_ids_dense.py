@@ -2,12 +2,16 @@
 
 Runs the dense sibling-surface study (:mod:`.dense_surface`: rendered list,
 real OCR, the replayer's band extraction and 2x retry) and scores every armed
-click twice from the SAME OCR reads:
+click three ways:
 
-- **before**: the shipped OCR verdict;
-- **after**: the same reads passed through
-  :func:`openadapt_flow.runtime.known_ids.resolve_lookalike_abstain`, with the
-  seed's complete synthetic MRN list as the known-ID list.
+- **no list**: the shipped OCR verdict;
+- **same frame**: the native read and the 2x upscale of one frame passed
+  through :func:`openadapt_flow.runtime.known_ids.resolve_lookalike_abstain`
+  (the earlier design);
+- **fresh capture**: the native read of the first frame and the native read
+  of a new screenshot (the current design, ``Replayer._known_id_lift``).
+
+Both list variants use the seed's complete synthetic identifier list.
 
 Denominators are stated per number. A false stop is an armed click on the
 CORRECT row that does not verify. A false accept is an armed click on the
@@ -34,26 +38,47 @@ from openadapt_flow.runtime.known_ids import KnownIdList, resolve_lookalike_abst
 TWIN_CLASS_PREFIX = "id_"
 
 
-def _after(reads: list[dict[str, Any]], ids: KnownIdList) -> str:
-    checks = [
-        IdentityCheck(
-            status=r["status"],
-            abstain_reason=r.get("abstain_reason"),
-            coverage=r.get("coverage", 0.0),
-            observed=r.get("observed", ""),
-        )
-        for r in reads
-    ]
-    final = max(
+def _check(r: dict[str, Any]) -> IdentityCheck:
+    return IdentityCheck(
+        status=r["status"],
+        abstain_reason=r.get("abstain_reason"),
+        coverage=r.get("coverage", 0.0),
+        observed=r.get("observed", ""),
+    )
+
+
+def _final(checks: list[IdentityCheck]) -> IdentityCheck:
+    return max(
         checks,
         key=lambda c: (
             {"unreadable": 0, "abstain": 1, "mismatch": 2, "verified": 3}[c.status],
             c.coverage,
         ),
     )
+
+
+def _after_same_frame(reads: list[dict[str, Any]], ids: KnownIdList) -> str:
+    """Earlier design: native read and 2x upscale of the SAME frame."""
+    checks = [_check(r) for r in reads]
+    final = _final(checks)
     if final.status == "verified":
         return "verified"
     lifted = resolve_lookalike_abstain(checks, ids)
+    return "verified" if lifted is not None else final.status
+
+
+def _after_fresh(
+    reads: list[dict[str, Any]], fresh: Optional[dict[str, Any]], ids: KnownIdList
+) -> str:
+    """Current design: native read of the first frame and a native read of a
+    FRESH capture (``Replayer._known_id_lift``)."""
+    checks = [_check(r) for r in reads]
+    final = _final(checks)
+    if final.status == "verified":
+        return "verified"
+    if fresh is None:
+        return final.status
+    lifted = resolve_lookalike_abstain([checks[0], _check(fresh)], ids)
     return "verified" if lifted is not None else final.status
 
 
@@ -68,23 +93,33 @@ def score(result: dict[str, Any]) -> dict[str, Any]:
     armed = [t for t in result["trials"] if t["armed"]]
 
     def bucket(rows: list[dict[str, Any]]) -> dict[str, Any]:
-        before_stop = after_stop = before_acc = after_acc = 0
+        out = {
+            "correct_row_clicks": len(rows),
+            "sibling_row_clicks": len(rows),
+            "false_stops_before": 0,
+            "false_stops_after_same_frame": 0,
+            "false_stops_after": 0,
+            "false_accepts_before": 0,
+            "false_accepts_after_same_frame": 0,
+            "false_accepts_after": 0,
+        }
         for t in rows:
             ids = lists[str(t["seed"])]
-            fa_after = _after(t["fa_reads"], ids)
-            acc_after = _after(t["acc_reads"], ids)
-            before_stop += t["fa_status"] != "verified"
-            after_stop += fa_after != "verified"
-            before_acc += t["acc_status"] == "verified"
-            after_acc += acc_after == "verified"
-        return {
-            "correct_row_clicks": len(rows),
-            "false_stops_before": before_stop,
-            "false_stops_after": after_stop,
-            "sibling_row_clicks": len(rows),
-            "false_accepts_before": before_acc,
-            "false_accepts_after": after_acc,
-        }
+            out["false_stops_before"] += t["fa_status"] != "verified"
+            out["false_stops_after_same_frame"] += (
+                _after_same_frame(t["fa_reads"], ids) != "verified"
+            )
+            out["false_stops_after"] += (
+                _after_fresh(t["fa_reads"], t.get("fa_fresh_read"), ids) != "verified"
+            )
+            out["false_accepts_before"] += t["acc_status"] == "verified"
+            out["false_accepts_after_same_frame"] += (
+                _after_same_frame(t["acc_reads"], ids) == "verified"
+            )
+            out["false_accepts_after"] += (
+                _after_fresh(t["acc_reads"], t.get("acc_fresh_read"), ids) == "verified"
+            )
+        return out
 
     by_class: dict[str, list[dict[str, Any]]] = {}
     for t in armed:
@@ -97,6 +132,10 @@ def score(result: dict[str, Any]) -> dict[str, Any]:
         "lookalike_twin_in_list": bucket(twin),
         "by_collision_class": {k: bucket(v) for k, v in sorted(by_class.items())},
         "unarmed_clicks": sum(1 for t in result["trials"] if not t["armed"]),
+        "fresh_reads_taken": sum(
+            (t.get("fa_fresh_read") is not None) + (t.get("acc_fresh_read") is not None)
+            for t in armed
+        ),
     }
 
 
@@ -108,13 +147,25 @@ def _row(name: str, b: dict[str, Any]) -> str:
     n = b["correct_row_clicks"]
     return (
         f"| {name} | {n} | {b['false_stops_before']} ({_pct(b['false_stops_before'], n)}) "
+        f"| {b['false_stops_after_same_frame']} "
+        f"({_pct(b['false_stops_after_same_frame'], n)}) "
         f"| {b['false_stops_after']} ({_pct(b['false_stops_after'], n)}) "
-        f"| {b['false_accepts_before']} / {b['false_accepts_after']} |"
+        f"| {b['false_accepts_before']} / {b['false_accepts_after_same_frame']} "
+        f"/ {b['false_accepts_after']} |"
     )
 
 
 def render_markdown(scored: dict[str, Any], meta: dict[str, Any]) -> str:
     a = scored["all"]
+    n = a["correct_row_clicks"]
+    identical = meta.get("fresh_capture_identical") or {}
+    same_px = sum(1 for v in identical.values() if v)
+    diff = abs(a["false_stops_after_same_frame"] - a["false_stops_after"])
+    header = (
+        "| group | correct-row clicks | false stops, no list "
+        "| false stops, list + same-frame reads | false stops, list + fresh capture "
+        "| false accepts (no list / same frame / fresh) |"
+    )
     lines = [
         "# Known-ID cross-check: dense record list, before and after",
         "",
@@ -129,34 +180,44 @@ def render_markdown(scored: dict[str, Any], meta: dict[str, Any]) -> str:
         "extraction and its 2x retry.",
         f"- Replay conditions: {', '.join(meta['replay_conditions'])}. "
         f"Click configs: {', '.join(meta['click_configs'])}.",
-        "- Before: the shipped OCR verdict. After: the same two OCR reads "
-        "passed through `runtime.known_ids.resolve_lookalike_abstain`, with "
-        "every MRN in the seed's table as the complete known-ID list.",
+        "- No list: the shipped OCR verdict.",
+        "- List + same-frame reads (earlier design): the native read and the "
+        "2x upscale of the same frame passed through "
+        "`runtime.known_ids.resolve_lookalike_abstain`.",
+        "- List + fresh capture (current design): the native read of the first "
+        "frame and a native read of a new screenshot of the same screen, as "
+        "`Replayer._known_id_lift` does.",
+        "- In both list columns every identifier in the seed's table is the "
+        "complete known-ID list.",
         "- Denominator for false stops: armed clicks on the correct row. "
         "Denominator for false accepts: armed clicks on the adjacent sibling "
         "row (same count).",
         "",
         "## Headline",
         "",
-        f"- False stops: **{a['false_stops_before']} / {a['correct_row_clicks']} "
-        f"({_pct(a['false_stops_before'], a['correct_row_clicks'])}) before, "
-        f"{a['false_stops_after']} / {a['correct_row_clicks']} "
-        f"({_pct(a['false_stops_after'], a['correct_row_clicks'])}) after.**",
-        f"- False accepts: {a['false_accepts_before']} / {a['sibling_row_clicks']} "
-        f"before, {a['false_accepts_after']} / {a['sibling_row_clicks']} after.",
+        f"- False stops: **{a['false_stops_before']} / {n} "
+        f"({_pct(a['false_stops_before'], n)}) with no list; "
+        f"{a['false_stops_after_same_frame']} / {n} "
+        f"({_pct(a['false_stops_after_same_frame'], n)}) with the list and "
+        f"same-frame reads; {a['false_stops_after']} / {n} "
+        f"({_pct(a['false_stops_after'], n)}) with the list and a fresh capture.**",
+        f"- False accepts: {a['false_accepts_before']} / "
+        f"{a['false_accepts_after_same_frame']} / {a['false_accepts_after']} "
+        f"of {a['sibling_row_clicks']}.",
+        f"- Fresh captures read: {scored.get('fresh_reads_taken', 0)} "
+        "(only clicks whose first read abstained on a look-alike identifier "
+        "take one).",
         "",
-        "| group | correct-row clicks | false stops before | false stops after "
-        "| false accepts before / after |",
-        "| --- | --- | --- | --- | --- |",
+        header,
+        "| --- | --- | --- | --- | --- | --- |",
         _row("all", a),
         _row("no look-alike twin in list", scored["no_lookalike_twin_in_list"]),
         _row("look-alike twin in list (`id_*`)", scored["lookalike_twin_in_list"]),
         "",
         "## By collision class",
         "",
-        "| class | correct-row clicks | false stops before | false stops after "
-        "| false accepts before / after |",
-        "| --- | --- | --- | --- | --- |",
+        header.replace("| group |", "| class |"),
+        "| --- | --- | --- | --- | --- | --- |",
     ]
     for name, b in scored["by_collision_class"].items():
         lines.append(_row(f"`{name}`", b))
@@ -164,26 +225,40 @@ def render_markdown(scored: dict[str, Any], meta: dict[str, Any]) -> str:
         "",
         "## How to read this",
         "",
-        "In the `id_*` classes the sibling's MRN differs from the target's "
-        "only by a look-alike glyph, and both are in the list. OCR cannot "
-        "tell them apart, so the run still stops; that stop is correct, not "
-        "a false stop in any useful sense. It is counted here so the "
+        "In the `id_*` classes the sibling's identifier differs from the "
+        "target's only by a look-alike glyph, and both are in the list. OCR "
+        "cannot tell them apart, so the run still stops; that stop is correct, "
+        "not a false stop in any useful sense. It is counted here so the "
         "denominator stays the full published one.",
         "",
-        "The remaining stops after the cross-check are band mismatches that "
-        "have nothing to do with look-alike glyphs (dense-row OCR drops or "
-        "garbles a name cell).",
+        "The same-frame design accepted a lift only when the native read and "
+        "the 2x upscale both abstained on a look-alike identifier. The fresh "
+        "capture design needs the native read of two separate screenshots to "
+        "agree instead; a screen that changes between captures blocks the "
+        f"lift. On this fixture the two designs differ by {diff} of {n} "
+        "correct-row clicks. Because the fixture's fresh captures are "
+        "pixel-identical (see Limits), that difference comes only from clicks "
+        "where the 2x upscale read the band differently from the native read.",
+        "",
+        "The remaining stops are band mismatches that have nothing to do with "
+        "look-alike glyphs (dense-row OCR drops or garbles a name cell).",
         "",
         "## Limits",
         "",
-        "- The lift is only as safe as the list is complete. A listed "
-        "identifier set that misses a real look-alike record lets that record "
-        "verify. The list must come from the system of record, not from the "
-        "screen being checked, and the operator attests completeness.",
+        "- The lift is only as safe as the list is complete. The list must "
+        "come from a configured export of the system of record, and an "
+        "operator confirms its source and completeness at admission; replay "
+        "halts if that confirmation is missing, the export changed, or it is "
+        "older than the configured age.",
         "- One fixture, one OCR engine (RapidOCR), synthetic rows. A "
         "different renderer, font or OCR engine moves these numbers.",
-        "- The two reads are the native frame and a 2x upscale of the same "
-        "frame. They are independent OCR passes, not independent captures.",
+        f"- The fixture renders deterministically: {same_px} of "
+        f"{len(identical)} fresh renders (one per seed and replay condition) "
+        "were pixel-identical to the first. "
+        "On those, the second read repeats the first. What the fresh capture "
+        "guards against (a caret, a partial repaint or a screen that changed "
+        "between captures) does not occur in this fixture, so these numbers "
+        "measure the availability cost of the design, not its protection.",
         "",
     ]
     return "\n".join(lines)
@@ -218,9 +293,11 @@ def main(argv: Optional[list[str]] = None) -> int:
     (out / "KNOWN_IDS.md").write_text(render_markdown(scored, result["meta"]))
     a = scored["all"]
     print(
-        f"false stops {a['false_stops_before']}/{a['correct_row_clicks']} -> "
-        f"{a['false_stops_after']}/{a['correct_row_clicks']}; false accepts "
-        f"{a['false_accepts_before']} -> {a['false_accepts_after']} "
+        f"false stops {a['false_stops_before']} / "
+        f"{a['false_stops_after_same_frame']} (same frame) / "
+        f"{a['false_stops_after']} (fresh capture) of {a['correct_row_clicks']}; "
+        f"false accepts {a['false_accepts_before']} / "
+        f"{a['false_accepts_after_same_frame']} / {a['false_accepts_after']} "
         f"of {a['sibling_row_clicks']}"
     )
     return 0
