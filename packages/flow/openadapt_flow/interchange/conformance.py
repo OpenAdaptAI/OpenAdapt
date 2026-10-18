@@ -18,7 +18,8 @@ import json
 import re
 import tempfile
 from dataclasses import dataclass
-from datetime import date
+from datetime import date, datetime
+from decimal import Decimal, InvalidOperation
 from pathlib import Path, PurePosixPath
 from typing import Any, Iterable, Optional
 
@@ -74,6 +75,8 @@ CODES: dict[str, str] = {
     "IX082": "a no_action has no read-back evidence at the check level a commit needs",
     "IX083": "the read-back evidence of a no_action shows a new or changed record",
     "IX084": "an exchange sent to an executor claims a no_action outcome",
+    "IX085": "a no_action evidence field lacks a read before the decision or a "
+    "read after it",
 }
 
 #: Codes used by earlier drafts of v0 and no longer emitted. They are not
@@ -142,14 +145,43 @@ def _independent(read: Any) -> bool:
 APPLICATION_CHANNELS: frozenset[str] = SCREEN_CHANNELS | INDEPENDENT_CHANNELS
 
 
+def _number(v: object) -> Optional[Decimal]:
+    if isinstance(v, bool) or v is None:
+        return None
+    try:
+        return Decimal(str(v).strip()) if isinstance(v, (int, float, str)) else None
+    except InvalidOperation:
+        return None
+
+
 def _same(a: object, b: object) -> bool:
-    """Whether a read saw the field's value. Values of different JSON types
-    compare by their text, so ``"5"`` read off a screen matches the integer 5."""
+    """Whether a read saw the field's value. Numbers compare by value, so
+    ``1``, ``1.0`` and ``"1"`` read off a screen all match; other values of
+    different JSON types compare by their text."""
+    if isinstance(a, bool) or isinstance(b, bool):
+        return type(a) is type(b) and a == b
+    if a is None or b is None:
+        return a is b
+    na, nb = _number(a), _number(b)
+    if (
+        na is not None
+        and nb is not None
+        and (not isinstance(a, str) or not isinstance(b, str))
+    ):
+        return na == nb
     if type(a) is type(b):
         return a == b
-    if a is None or b is None or isinstance(a, bool) or isinstance(b, bool):
-        return False
     return str(a).strip() == str(b).strip()
+
+
+def _time(value: Optional[str]) -> Optional[datetime]:
+    if not value:
+        return None
+    try:
+        t = datetime.fromisoformat(value)
+    except ValueError:
+        return None
+    return t if t.tzinfo is not None else None
 
 
 def supported_grade(reads: Iterable[Any]) -> str:
@@ -191,7 +223,7 @@ _DRIVE = re.compile(r"^[A-Za-z]:")
 
 def _payload_path_ok(raw: str) -> bool:
     """A payload path is relative, POSIX, and stays inside its directory."""
-    if "\\" in raw or _DRIVE.match(raw):
+    if "\\" in raw or "\x00" in raw or _DRIVE.match(raw):
         return False
     rel = PurePosixPath(raw)
     return not rel.is_absolute() and ".." not in rel.parts
@@ -202,8 +234,11 @@ def resolve_payload(base_dir: Path | str, raw: str) -> Optional[Path]:
     None when the path is not allowed or resolves outside ``base_dir``."""
     if not _payload_path_ok(raw):
         return None
-    base = Path(base_dir).resolve()
-    path = (base / raw).resolve()
+    try:
+        base = Path(base_dir).resolve()
+        path = (base / raw).resolve()
+    except (OSError, ValueError):
+        return None
     if path != base and base not in path.parents:
         return None
     return path
@@ -415,6 +450,32 @@ def check(doc: dict[str, Any], *, base_dir: Optional[Path] = None) -> list[Viola
             )
         if not na.evidence:
             add("IX082", "no_action.evidence", "no evidence fields")
+        decided = _time(na.decided_at)
+        by_name = {f.name: f for f in ex.fields}
+        for name in na.evidence:
+            f = by_name.get(name)
+            if f is None:
+                continue
+            reads = [r for r in f.reads if r.channel in APPLICATION_CHANNELS]
+            before = decided is not None and any(
+                r.session == "acting"
+                and (t := _time(r.observed_at)) is not None
+                and t <= decided
+                for r in reads
+            )
+            after = decided is not None and any(
+                r.session in ("reopened", "independent")
+                and (t := _time(r.observed_at)) is not None
+                and t > decided
+                for r in reads
+            )
+            if not (before and after):
+                add(
+                    "IX085",
+                    f"fields[{name}]",
+                    "needs no_action.decided_at, an acting read observed at or "
+                    "before it, and a reopened or independent read observed after it",
+                )
         for name in na.evidence:
             if name not in grades:
                 add("IX082", "no_action.evidence", f"unknown field {name!r}")

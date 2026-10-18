@@ -268,6 +268,18 @@
       ]
     },
     {
+      "file": "invalid/no_action_without_before_read.json",
+      "expect": [
+        "IX085"
+      ]
+    },
+    {
+      "file": "invalid/payload_nul_path.json",
+      "expect": [
+        "IX071"
+      ]
+    },
+    {
       "file": "invalid/no_action_below_commit_level.json",
       "expect": [
         "IX082"

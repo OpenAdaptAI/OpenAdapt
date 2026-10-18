@@ -12,6 +12,7 @@ platform already ingests:
 
 from __future__ import annotations
 
+import hashlib
 import json
 from pathlib import Path
 
@@ -48,6 +49,17 @@ def emit_exchange(
                 raise ExchangeNotConforming(
                     f"IX071 artifacts[{a.artifact_id}].payload: the path "
                     "resolves outside the exchange directory"
+                )
+            # Hash again just before copying, so a file changed since the
+            # check is not emitted under the exchange's sha256.
+            try:
+                digest = hashlib.sha256(resolved.read_bytes()).hexdigest()
+            except OSError:
+                digest = None
+            if digest != a.payload.sha256:
+                raise ExchangeNotConforming(
+                    f"IX070 artifacts[{a.artifact_id}].payload: the file changed "
+                    "after the check"
                 )
             payload = resolved
         refs.append(

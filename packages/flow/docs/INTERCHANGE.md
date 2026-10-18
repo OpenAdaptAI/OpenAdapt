@@ -49,7 +49,7 @@ Unknown top-level members are rejected. A producer that needs to add a field add
 | `pending` | Work to do, or not finished. | Either side | None. | No | No |
 | `committed` | The executor wrote the record and read it back. | Executor | At least one read of the target application (IX064). Every identity resolved (IX063). | Yes | Per the run's own billing policy |
 | `halted` | The executor stopped. Whatever it wrote before stopping is described by the fields. | Executor | `halt_reason` (IX062). | No | No |
-| `no_action` | A person decided the item, and nothing was meant to be written. | Executor | A `no_action` record with a person in `decided_by`, a `reason_code`, and read-back evidence that no record is new or changed, at the check level a commit needs (IX080 to IX084). | No, never | No, never |
+| `no_action` | A person decided the item, and nothing was meant to be written. | Executor | A `no_action` record with a person in `decided_by`, a `reason_code`, and read-back evidence from before and after the decision that no record is new or changed, at the check level a commit needs (IX080 to IX085). | No, never | No, never |
 
 A `to_executor` exchange cannot claim `committed` (IX066) or `no_action` (IX084).
 
@@ -59,11 +59,19 @@ A `to_executor` exchange cannot claim `committed` (IX066) or `no_action` (IX084)
 |---|---|
 | `decided_by` | The person who decided. Must be `human` (IX081). |
 | `reason_code` | Why nothing was written, in lowercase snake case, such as `declined`, `held` or `rejected`. |
-| `decision_id`, `decided_at` | Optional pointer to the decision, in this exchange or the one it answers. |
+| `decided_at` | When the person decided. Required: the evidence reads are placed before and after it (IX085). |
+| `decision_id` | Optional pointer to the decision, in this exchange or the one it answers. |
 | `required_grade` | The check level a commit of the same workflow needs: the weakest grade its committed read-back carries, or its write step's minimum grade. It cannot be `unchecked`. |
 | `evidence` | Names of fields whose reads show the state did not change, such as a record's entry count read before the decision and again after reopening. At least one is required, and each must be graded at least `required_grade` (IX082). |
 
-The value of an evidence field is the state the executor first read, such as an entry count. A later read of it that differs means a record was created or changed while the item was handled, which is IX083.
+Each evidence field needs two reads with an `observed_at` time:
+
+- a **before** read: `session` `acting`, observed at or before `decided_at`;
+- an **after** read: `session` `reopened` (the record closed and reopened, or the search run again) or `independent`, observed after `decided_at`.
+
+Without both, the field is IX085. The value of an evidence field is the state of the before read. An after read that differs means a record was created or changed, which is IX083.
+
+When no record existed (a search found nothing), the evidence is the search result: the result count read before the decision, and the same search run again after it.
 
 A `no_action` exchange is never a save and never billable. A counter of saves or billable items counts `committed` only. It does not go to a review queue unless the site's policy says decisions need review.
 
@@ -194,12 +202,13 @@ A document conforms when it matches the JSON Schema and has no violation from th
 | `IX065` | An exchange from an executor does not say which exchange it answers. |
 | `IX066` | An exchange sent to an executor claims a committed outcome. |
 | `IX070` | A payload file is missing or its sha256 does not match. |
-| `IX071` | A payload path is absolute, uses a backslash or drive letter, or leaves the exchange directory (also through a symlink). |
+| `IX071` | A payload path is absolute, uses a backslash, a NUL character or a drive letter, or leaves the exchange directory (also through a symlink). |
 | `IX080` | A `no_action` outcome has no `no_action` record, or a `no_action` record is on another outcome. |
 | `IX081` | A `no_action` was decided by something other than a person. |
 | `IX082` | A `no_action` has no read-back evidence at the check level a commit needs. |
 | `IX083` | The read-back evidence of a `no_action` shows a new or changed record. |
 | `IX084` | An exchange sent to an executor claims a `no_action` outcome. |
+| `IX085` | A `no_action` evidence field lacks a read before the decision or a read after it. |
 
 Retired: `IX012` (a Seal on an exchange without a checksum). The checksum is now required, so a missing one is `IX001`. Retired codes are not reused within v0.
 
