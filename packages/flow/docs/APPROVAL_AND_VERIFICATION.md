@@ -220,6 +220,12 @@ must be under the target (5% at 90% by default). With no artifact or no
 audit labels it raises `EligibilityUnavailable` and the workflow stays per
 item. `openadapt-flow triage eligibility` prints the result.
 
+An accepted `openadapt-flow admit` sets `problems_only` as the admitted
+bundle's default approval mode (see `docs/SHADOW_CANDIDATES.md`). An agent
+admits only under a person-signed grant that lets an agent approve
+consequential saves. The gates above still apply: an admitted workflow sends
+every save to a person until it has earned the switch.
+
 ## Admitting a demonstrated read-back (planned)
 
 `openadapt-flow check admit` (branch `feat/demonstrated-readback-verifier`,
