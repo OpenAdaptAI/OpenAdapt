@@ -544,31 +544,53 @@ def _has_loop(workflow: Workflow) -> bool:
     )
 
 
-def _bundle_without_undo_digest(workflow: Workflow) -> Optional[str]:
-    """The content digest the bundle had before any undo was declared.
-
-    Undo declarations and their crops (``templates/undo-*``) are left out, so
-    an undo declared after the stop still matches the bundle the run used.
-    """
-    from openadapt_flow.bundle_validation import compute_content_digest
-
-    if workflow.manifest is None:
-        return None
-    bare = workflow.model_copy(update={"undo_steps": []})
-    files = {
-        rel: digest
-        for rel, digest in workflow.manifest.file_hashes.items()
-        if not rel.startswith("templates/undo-")
-    }
-    return compute_content_digest(bare, files)
+LINEAGE_FILENAME = "undo-lineage.json"
+_LINEAGE_SCHEMA = "openadapt.undo-lineage/v1"
 
 
-def bundle_mismatch(report: RunReport, workflow: Workflow) -> Optional[str]:
+def _read_lineage(bundle_dir: Path) -> list[str]:
+    path = bundle_dir / LINEAGE_FILENAME
+    if not path.is_file():
+        return []
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    if not isinstance(raw, dict) or raw.get("schema") != _LINEAGE_SCHEMA:
+        return []
+    digests = raw.get("prior_content_digests")
+    return (
+        [d for d in digests if isinstance(d, str)] if isinstance(digests, list) else []
+    )
+
+
+def _record_lineage(bundle_dir: Path, prior_digest: str) -> None:
+    digests = _read_lineage(bundle_dir)
+    if prior_digest not in digests:
+        digests.append(prior_digest)
+    (bundle_dir / LINEAGE_FILENAME).write_text(
+        json.dumps(
+            {"schema": _LINEAGE_SCHEMA, "prior_content_digests": digests}, indent=2
+        ),
+        encoding="utf-8",
+    )
+
+
+def bundle_mismatch(
+    report: RunReport, workflow: Workflow, bundle_dir: Optional[Path | str] = None
+) -> Optional[str]:
     """Why ``workflow`` is not the bundle this run used, or None if it is.
 
-    The run's sealed digest must equal the bundle's digest, with or without
-    its undo declarations. Without a sealed digest on either side, the name
-    and every ledger step (id and intent) must match.
+    The run's sealed digest must equal the bundle's current digest, or a
+    digest the bundle had before an undo was declared on it (recorded by
+    :func:`declare_undo` in ``undo-lineage.json`` in ``bundle_dir``). That
+    keeps an undo declared after the stop, and any re-certification that
+    follows, matched to the run. Without a sealed digest on either side, the
+    name and every ledger step (id and intent) must match.
+
+    This guards against passing the wrong bundle by accident. It is not a
+    defense against someone who can edit the bundle directory: the approval
+    is what binds the undo a person approved.
     """
     from openadapt_flow.traversal import iter_workflow_steps
 
@@ -576,10 +598,10 @@ def bundle_mismatch(report: RunReport, workflow: Workflow) -> Optional[str]:
         return f"the run used workflow {report.workflow_name!r}, not {workflow.name!r}"
     run_digest = report.bundle_content_digest
     if run_digest is not None and workflow.manifest is not None:
-        if run_digest in {
-            workflow.manifest.content_digest,
-            _bundle_without_undo_digest(workflow),
-        }:
+        known = {workflow.manifest.content_digest}
+        if bundle_dir is not None:
+            known.update(_read_lineage(Path(bundle_dir)))
+        if run_digest in known:
             return None
         return (
             "the bundle's content digest differs from the one the run used; "
@@ -593,7 +615,12 @@ def bundle_mismatch(report: RunReport, workflow: Workflow) -> Optional[str]:
     return None
 
 
-def offer_undos(run_dir: Path | str, workflow: Workflow) -> list[UndoOffer]:
+def offer_undos(
+    run_dir: Path | str,
+    workflow: Workflow,
+    *,
+    bundle_dir: Optional[Path | str] = None,
+) -> list[UndoOffer]:
     """The undos Flow offers a person for this stopped run, latest step first.
 
     An undo is offered when the run stopped (``success`` is False), the
@@ -609,7 +636,7 @@ def offer_undos(run_dir: Path | str, workflow: Workflow) -> list[UndoOffer]:
     report, report_sha = _load_report(run_dir)
     if report.success or report.loop_iterations or _has_loop(workflow):
         return []
-    if bundle_mismatch(report, workflow) is not None:
+    if bundle_mismatch(report, workflow, bundle_dir) is not None:
         return []
     bundle_digest = (
         workflow.manifest.content_digest if workflow.manifest is not None else None
@@ -649,12 +676,17 @@ def offer_undos(run_dir: Path | str, workflow: Workflow) -> list[UndoOffer]:
     return offers
 
 
-def _find_offer(run_dir: Path, workflow: Workflow, undo_id: str) -> UndoOffer:
-    for offer in offer_undos(run_dir, workflow):
+def _find_offer(
+    run_dir: Path,
+    workflow: Workflow,
+    undo_id: str,
+    bundle_dir: Optional[Path | str] = None,
+) -> UndoOffer:
+    for offer in offer_undos(run_dir, workflow, bundle_dir=bundle_dir):
         if offer.undo_id == undo_id:
             return offer
     report, _ = _load_report(run_dir)
-    why = bundle_mismatch(report, workflow)
+    why = bundle_mismatch(report, workflow, bundle_dir)
     raise UndoNotOffered(
         f"undo {undo_id!r} is not offered for {run_dir}: "
         + (
@@ -681,6 +713,7 @@ def approve_undo(
     *,
     approver: Optional[str] = None,
     note: str = "",
+    bundle_dir: Optional[Path | str] = None,
 ) -> UndoApproval:
     """Record a person's approval to run one offered undo.
 
@@ -691,7 +724,7 @@ def approve_undo(
     interactive terminal after the person types the undo id.
     """
     run_dir = Path(run_dir)
-    offer = _find_offer(run_dir, workflow, undo_id)
+    offer = _find_offer(run_dir, workflow, undo_id, bundle_dir)
     undo_dir = _undo_dir(run_dir, undo_id)
     if (undo_dir / CLAIM_FILENAME).exists():
         raise UndoAlreadyRun(f"undo {undo_id!r} was already run; it runs once")
@@ -766,7 +799,11 @@ def undo_workflow(workflow: Workflow, undo: UndoStep) -> Workflow:
 
 
 def prepare_undo_run(
-    run_dir: Path | str, workflow: Workflow, undo_id: str
+    run_dir: Path | str,
+    workflow: Workflow,
+    undo_id: str,
+    *,
+    bundle_dir: Optional[Path | str] = None,
 ) -> PreparedUndo:
     """Check the approval and claim it. Raises :class:`UndoRefused` otherwise.
 
@@ -774,7 +811,7 @@ def prepare_undo_run(
     most once even when two processes race.
     """
     run_dir = Path(run_dir)
-    offer = _find_offer(run_dir, workflow, undo_id)
+    offer = _find_offer(run_dir, workflow, undo_id, bundle_dir)
     approval_path = _undo_dir(run_dir, undo_id) / APPROVAL_FILENAME
     if not approval_path.is_file():
         raise UndoNotApproved(
@@ -900,7 +937,7 @@ def run_undo(
     approval was already used. The undo runs through the normal runtime, so
     identity checks, the risk gate and effect verification all apply.
     """
-    prepared = prepare_undo_run(run_dir, workflow, undo_id)
+    prepared = prepare_undo_run(run_dir, workflow, undo_id, bundle_dir=bundle_dir)
     report: Optional[RunReport] = None
     try:
         report = replayer.run(
@@ -1007,6 +1044,9 @@ def declare_undo(
     for rel, source in (assets or {}).items():
         (bundle_dir / rel).parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(source, bundle_dir / rel)
+    if workflow.manifest is not None and workflow.manifest.content_digest:
+        # Runs made with the bundle as it was still match it afterwards.
+        _record_lineage(bundle_dir, workflow.manifest.content_digest)
     workflow.undo_steps = [*workflow.undo_steps, undo]
     if workflow.manifest is not None:
         _invalidate_prior_certification(
@@ -1038,6 +1078,7 @@ __all__ = [
     "finish_undo_run",
     "offer_undos",
     "prepare_undo_run",
+    "LINEAGE_FILENAME",
     "bundle_mismatch",
     "read_undo_approval",
     "read_undo_result",

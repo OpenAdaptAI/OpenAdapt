@@ -15,7 +15,7 @@ import os
 import shlex
 import sys
 from pathlib import Path
-from typing import Callable, Literal, Sequence
+from typing import Callable, Literal, Optional, Sequence
 
 from openadapt_flow.after_stop import (
     UndoRefused,
@@ -36,13 +36,16 @@ def register(
     sub: argparse._SubParsersAction,
     *,
     replay: Callable[[argparse.Namespace], int],
+    target_problem: Callable[[argparse.Namespace, Workflow], Optional[str]],
     add_run_flags: Sequence[Callable[[argparse.ArgumentParser], None]],
 ) -> None:
     """Add the ``undo`` command group.
 
     ``replay`` is the CLI's replay command and ``add_run_flags`` its backend,
     browser and deployment flag builders, so ``undo run`` drives the app the
-    same way ``replay`` does.
+    same way ``replay`` does. ``target_problem`` says why the resolved
+    backend names no real application (it would fall back to the bundled
+    demo), or returns None.
     """
     parser = sub.add_parser(
         "undo",
@@ -113,7 +116,9 @@ def register(
     p.add_argument("--headed", action="store_true", help="Run the browser headed")
     for add in add_run_flags:
         add(p)
-    p.set_defaults(func=_cmd_undo_run, _undo_replay=replay)
+    p.set_defaults(
+        func=_cmd_undo_run, _undo_replay=replay, _undo_target_problem=target_problem
+    )
 
 
 def _load_json_list(path: str, what: str) -> list:
@@ -175,7 +180,7 @@ def _cmd_undo_list(args: argparse.Namespace) -> int:
     run_dir = Path(args.run_dir)
     workflow = Workflow.load(args.bundle)
     try:
-        offers = offer_undos(run_dir, workflow)
+        offers = offer_undos(run_dir, workflow, bundle_dir=args.bundle)
     except UndoRefused as exc:
         print(f"undo list: {exc}", file=sys.stderr)
         return 1
@@ -243,7 +248,10 @@ def _cmd_undo_approve(args: argparse.Namespace) -> int:
             file=sys.stderr,
         )
         return 2
-    offers = {offer.undo_id: offer for offer in offer_undos(run_dir, workflow)}
+    offers = {
+        offer.undo_id: offer
+        for offer in offer_undos(run_dir, workflow, bundle_dir=args.bundle)
+    }
     offer = offers.get(args.undo_id)
     if offer is None:
         print(f"Undo {args.undo_id!r} is not offered for this run.", file=sys.stderr)
@@ -265,7 +273,9 @@ def _cmd_undo_approve(args: argparse.Namespace) -> int:
         print("Not approved. Nothing was recorded.")
         return 1
     try:
-        approval = approve_undo(run_dir, workflow, undo.id, note=args.note)
+        approval = approve_undo(
+            run_dir, workflow, undo.id, note=args.note, bundle_dir=args.bundle
+        )
     except UndoRefused as exc:
         print(f"Approval refused: {exc}", file=sys.stderr)
         return 1
@@ -281,25 +291,22 @@ def _cmd_undo_approve(args: argparse.Namespace) -> int:
 
 def _cmd_undo_run(args: argparse.Namespace) -> int:
     run_dir = Path(args.run_dir)
+    workflow = Workflow.load(args.bundle)
     # Without a target, replay would start the bundled MockMed demo app: the
     # undo would act on the demo, leave the real record alone and use up the
     # approval. Refuse before claiming it.
-    if not (
-        args.url
-        or getattr(args, "config", None)
-        or getattr(args, "browser_cdp_endpoint", None)
-        or getattr(args, "backend", None) not in (None, "web")
-    ):
+    problem = args._undo_target_problem(args, workflow)
+    if problem:
         print(
-            "undo run REFUSED: name the application to undo in (--url, "
-            "--config, --browser-cdp-endpoint, or a non-web --backend). "
-            "Nothing was executed and the approval is unused.",
+            f"undo run REFUSED: {problem}. Nothing was executed and the "
+            "approval is unused.",
             file=sys.stderr,
         )
         return 2
-    workflow = Workflow.load(args.bundle)
     try:
-        prepared = prepare_undo_run(run_dir, workflow, args.undo_id)
+        prepared = prepare_undo_run(
+            run_dir, workflow, args.undo_id, bundle_dir=args.bundle
+        )
     except UndoRefused as exc:
         print(f"undo run REFUSED: {exc}. Nothing was executed.", file=sys.stderr)
         return 3

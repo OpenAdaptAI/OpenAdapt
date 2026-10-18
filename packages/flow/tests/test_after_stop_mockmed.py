@@ -405,6 +405,25 @@ def test_cli_refuses_to_approve_or_run_without_a_person(tmp_path, mockmed, capsy
     assert args.func(args) == 2
     assert "approval is unused" in capsys.readouterr().err
 
+    # A --config that wires only the verifier still names no application.
+    config = tmp_path / "verifier-only.yaml"
+    config.write_text(f"effects:\n  kind: rest\n  base_url: {mockmed}\n")
+    args = parser.parse_args(
+        [
+            "undo",
+            "run",
+            str(run_dir),
+            "--bundle",
+            str(bundle),
+            "--undo",
+            "undo-triage",
+            "--config",
+            str(config),
+        ]
+    )
+    assert args.func(args) == 2
+    assert "approval is unused" in capsys.readouterr().err
+
     args = parser.parse_args(
         [
             "undo",
@@ -693,7 +712,39 @@ def test_undo_declared_after_the_stop_still_matches_the_run(tmp_path, mockmed):
     )
     assert offer_undos(run_dir, workflow) == []
     declared = declare_undo(bundle, UNDO_TRIAGE)
-    assert [o.undo_id for o in offer_undos(run_dir, declared)] == ["undo-triage"]
+    assert [o.undo_id for o in offer_undos(run_dir, declared, bundle_dir=bundle)] == [
+        "undo-triage"
+    ]
+    # Without the bundle's lineage, the changed digest doesn't match.
+    assert offer_undos(run_dir, declared) == []
+
+
+def test_a_second_undo_declared_after_the_stop_still_matches(tmp_path, mockmed):
+    """The run's bundle already had an undo, and was certified."""
+    from openadapt_flow.after_stop import bundle_mismatch, declare_undo
+
+    workflow = _workflow()
+    workflow.stamp_certification("test-policy", True)
+    bundle = tmp_path / "bundle"
+    workflow.save(bundle)
+    workflow = Workflow.load(bundle)
+    replayer = Replayer(
+        MockMedBackend(mockmed),
+        vision=_vision(),
+        effect_verifier=RestRecordVerifier(mockmed),
+        poll_interval_s=0.01,
+    )
+    run_dir = tmp_path / "run"
+    report = replayer.run(workflow, bundle_dir=bundle, run_dir=run_dir)
+    undo_vitals = UNDO_TRIAGE.model_copy(
+        update={"id": "undo-vitals", "undoes": "save_vitals"}
+    )
+    declared = declare_undo(bundle, undo_vitals)
+    assert declared.manifest.content_digest != report.bundle_content_digest
+    assert bundle_mismatch(report, declared, bundle) is None
+    assert [o.undo_id for o in offer_undos(run_dir, declared, bundle_dir=bundle)] == [
+        "undo-triage"
+    ]
 
 
 def test_a_stale_unused_approval_can_be_replaced_but_a_used_one_cannot(

@@ -135,9 +135,12 @@ openadapt-flow undo declare bundle --id undo-triage --undoes save_triage --inten
 1. **Offer.** After a stop, Flow offers an undo when all of these hold:
    - The step's ledger entry may need undoing, and the bundle declares an undo
      for it.
-   - The bundle is the one the run used: its sealed digest, with or without its
-     undo declarations, matches the run's. An undo declared after the stop
-     still matches.
+   - The bundle is the one the run used: the run's sealed digest is the
+     bundle's current digest, or one the bundle had before `undo declare`
+     changed it. `undo declare` records those earlier digests in
+     `undo-lineage.json` in the bundle, so an undo declared after the stop
+     still matches. This guards against passing the wrong bundle by accident;
+     the approval is what binds the undo a person approved.
    - The workflow has no loop, and the run recorded no loop iterations.
 
    Offers are listed latest step first, because the latest change should be
@@ -165,9 +168,10 @@ openadapt-flow undo declare bundle --id undo-triage --undoes save_triage --inten
 
 3. **Run.** The undo runs through the normal replay path, so identity checks,
    the risk gate and effect verification all apply. It takes the same backend
-   and deployment flags as `replay`, and it refuses to start without a target
-   (`--url`, `--config`, `--browser-cdp-endpoint` or a non-web `--backend`), so
-   it can't act on the bundled demo app by mistake. An approval is used once: a
+   and deployment flags as `replay`. It resolves them the way `replay` does and
+   refuses to start when they name no application (a web target with no URL
+   and no attached browser), so it can't act on the bundled demo app by
+   mistake. An approval is used once: a
    claim file is created with exclusive create before anything runs.
 
    ```bash

@@ -934,6 +934,32 @@ def _change_ledger_epilogue(
     return "\n".join(lines) if lines else None
 
 
+def _undo_run_target_problem(args: argparse.Namespace, workflow) -> Optional[str]:
+    """Why ``undo run`` has no real application to act on, or None.
+
+    Resolves ``--config`` and the backend flags the way replay does. A web
+    target with no URL and no attached browser would start the bundled
+    MockMed demo, so the undo would act on the demo and use up its approval.
+    """
+    from openadapt_flow.backends.factory import _normalize_kind
+
+    cfg, _effects, _actuation = _deployment_sections(args)
+    backend = _resolve_backend_config(args, cfg, workflow)
+    if _normalize_kind(backend.kind) != "web":
+        return None
+    if (
+        getattr(args, "url", None)
+        or backend.url
+        or backend.browser_cdp_endpoint
+        or backend.browser_page_url
+    ):
+        return None
+    return (
+        "name the application to undo in: --url, a --config whose backend has "
+        "a url, an attached browser, or a non-web --backend"
+    )
+
+
 def _finish_replay(
     run_dir: Path,
     report,
@@ -10116,6 +10142,7 @@ def build_parser() -> argparse.ArgumentParser:
     _register_undo(
         sub,
         replay=_cmd_replay,
+        target_problem=_undo_run_target_problem,
         add_run_flags=(
             _add_backend_flags,
             _add_browser_session_flags,
