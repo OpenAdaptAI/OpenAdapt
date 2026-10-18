@@ -35,6 +35,7 @@ promote a new bundle.
 
 from __future__ import annotations
 
+import functools
 import hashlib
 import hmac
 import json
@@ -594,6 +595,11 @@ class Replayer:
             optional local-VLM veto tier of the pre-click identity ladder;
             None (default) disables that tier -- the ladder still runs
             structured-text, pixel-compare, OCR, and halt with no model.
+        known_ids: Optional complete ``runtime.known_ids.KnownIdList``. When
+            set, an OCR identity check that abstained only because the band
+            rests on a look-alike identifier is lifted to verified if two OCR
+            reads agree and exactly one listed identifier is in that
+            look-alike class. None (default) keeps the abstain.
         effect_verifier: Optional system-of-record ``EffectVerifier``
             (``runtime.effects``) bound to the deployment's system of record
             (a REST/FHIR API, a document store). When set, any step that
@@ -674,6 +680,7 @@ class Replayer:
         vision: Optional[Any] = None,
         grounder: Optional[Any] = None,
         identity_vlm: Optional[Any] = None,
+        known_ids: Optional[Any] = None,
         state_verifier: Optional[Any] = None,
         effect_verifier: Optional[EffectVerifier] = None,
         effect_compensator: Optional[Any] = None,
@@ -910,6 +917,9 @@ class Replayer:
         # When None the ladder runs structured-text + pixel-compare + OCR +
         # halt with no model dependency.
         self.identity_vlm = identity_vlm
+        # Optional complete known-ID list (runtime.known_ids): lifts a
+        # look-alike identifier abstain only when no listed twin exists.
+        self.known_ids = known_ids
         # Optional VLM drift-oracle (state-verifier), OFF by default. When set,
         # it may CONFIRM a render-drift-sensitive postcondition that
         # deterministically false-failed (the same heal-under-drift the
@@ -8335,6 +8345,19 @@ class Replayer:
                 f"{check.quorum_required or 0} independent signals verified "
                 "on the fresh frame — refusing to act; run aborted"
             )
+        elif check.known_id_halt is not None:
+            names = {
+                "known_ids_unconfirmed": "has no admission confirmation",
+                "known_ids_changed": "changed since it was confirmed",
+                "known_ids_stale": "is older than the configured age",
+            }
+            error = (
+                f"Step '{step.id}' ({step.intent}) needs the known-ID list to "
+                f"rule out a look-alike identifier, and the list "
+                f"{names[check.known_id_halt]} ({check.known_id_halt}) — "
+                "confirm a current export; refusing to act"
+            )
+            result.safety_halt = True
         elif check.status == "mismatch":
             error = (
                 f"Identity check failed for step '{step.id}' "
@@ -12902,17 +12925,22 @@ class Replayer:
             )
 
         live_region = identifier_region or band
-        check = attempt(
-            before_png,
-            # Match compilation: OCR the full frame, then retain only the
-            # translated identifier region. OCRing the crop itself can change
-            # segmentation/glyph recognition and false-halt a healthy screen.
-            None if identifier_region is not None else live_region,
-            resolution.point[1],
-            exclude,
-            scoped_identifier=identifier_region is not None,
-            identifier_filter=identifier_region,
-        )
+
+        def native_attempt(png: bytes) -> IdentityCheck:
+            return attempt(
+                png,
+                # Match compilation: OCR the full frame, then retain only the
+                # translated identifier region. OCRing the crop itself can
+                # change segmentation/glyph recognition and false-halt a
+                # healthy screen.
+                None if identifier_region is not None else live_region,
+                resolution.point[1],
+                exclude,
+                scoped_identifier=identifier_region is not None,
+                identifier_filter=identifier_region,
+            )
+
+        check = native_attempt(before_png)
         if check.status in ("verified", "mismatch"):
             # A read that names a different record is final: a later read of
             # the same screen must never overrule it into "verified".
@@ -12935,7 +12963,78 @@ class Replayer:
             ),
             scoped_identifier=identifier_region is not None,
         )
+        if (
+            self.known_ids is not None
+            and retry.status not in ("verified", "mismatch")
+            and check.status == "abstain"
+            and check.abstain_reason == "glyph_confusable_identifier"
+        ):
+            # The band rests on a look-alike identifier. A confirmed,
+            # complete known-ID list with exactly one member in that class
+            # rules out a twin (runtime.known_ids), provided a second read
+            # from a FRESH screenshot agrees with the first.
+            matches: Optional[Callable[[str], bool]] = None
+            if anchor.identity_template is not None and anchor.identity_template.tokens:
+                from openadapt_flow.runtime import identity_template as itmpl
+
+                matches = functools.partial(
+                    itmpl.recorded_identifier_matches, anchor.identity_template
+                )
+            lifted = self._known_id_lift(check, native_attempt, params, matches)
+            if lifted is not None:
+                return lifted
         return better_identity_read(check, retry)
+
+    def _known_id_lift(
+        self,
+        first: IdentityCheck,
+        read: Callable[[bytes], IdentityCheck],
+        params: Optional[Mapping[str, RuntimeParamScalar]],
+        recorded_id_matches: Optional[Callable[[str], bool]] = None,
+    ) -> Optional[IdentityCheck]:
+        """Known-ID cross-check for a look-alike abstain.
+
+        Returns a ``verified`` check, the abstain marked with a named
+        ``known_id_halt`` when the list may not be used now, the fresh read
+        when it is a ``mismatch`` (final), or None (keep the original
+        verdict). The second read comes from a new screenshot,
+        so a transient render state on one capture cannot satisfy both.
+        """
+        from openadapt_flow.runtime import known_ids as known_ids_mod
+
+        admission = (
+            self.known_ids
+            if isinstance(self.known_ids, known_ids_mod.KnownIdAdmission)
+            else None
+        )
+        if admission is not None:
+            halt = admission.check()
+            if halt is not None:
+                return first.model_copy(update={"known_id_halt": halt.reason})
+            known: Any = admission.known_ids
+        else:
+            known = self.known_ids
+        second = read(self.backend.screenshot())
+        if second.status == "mismatch":
+            # The fresh read names a different record; that is final.
+            return second
+        lifted = known_ids_mod.resolve_lookalike_abstain(
+            [first, second],
+            known,
+            run_values=runtime_params_for_gui(params or {}),
+            recorded_id_matches=recorded_id_matches,
+        )
+        if lifted is None or lifted.known_id_evidence is None:
+            return None
+        update: dict[str, Any] = {"frames": 2}
+        if admission is not None:
+            update["confirmed_at"] = admission.confirmation.confirmed_at
+            update["export_sha256"] = admission.confirmation.sha256
+        return lifted.model_copy(
+            update={
+                "known_id_evidence": lifted.known_id_evidence.model_copy(update=update)
+            }
+        )
 
     # -- typed-input verification -------------------------------------------------
 

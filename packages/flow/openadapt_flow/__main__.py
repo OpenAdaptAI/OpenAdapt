@@ -8041,6 +8041,10 @@ def build_parser() -> argparse.ArgumentParser:
 
     add_countersign_parser(sub)
 
+    from openadapt_flow.cli_known_ids import register as _register_known_ids
+
+    _register_known_ids(sub)
+
     p = sub.add_parser(
         "bind-record-checks",
         help=(
@@ -10245,6 +10249,17 @@ def main(argv: Sequence[str] | None = None) -> int:
         # Missing optional browser support is a setup decision, not a crash.
         print(f"Browser setup required:\n{exc}", file=sys.stderr)
         return 2
+    except Exception as exc:
+        from openadapt_flow.runtime.known_ids import KnownIdAdmissionHalt
+
+        if not isinstance(exc, KnownIdAdmissionHalt):
+            raise
+        # The configured known-ID list may not be used: halt before any step
+        # runs, with the named reason.
+        print(
+            f"replay halted before start: {exc.reason}: {exc.detail}", file=sys.stderr
+        )
+        return 3
 
 
 if __name__ == "__main__":
