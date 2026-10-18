@@ -136,6 +136,14 @@ def first_screen_probe(
         explicit = getattr(args, "first_screen", None)
         if explicit:
             return Path(explicit).read_bytes()
+        try:
+            return _probe()
+        except SystemExit as exc:
+            # Backend helpers refuse with SystemExit; the router turns any
+            # capture failure into a named first_screen_unavailable halt.
+            raise RuntimeError(str(exc.code)) from None
+
+    def _probe() -> Optional[bytes]:
         from openadapt_flow.__main__ import (
             _attached_web_page,
             _deployment_sections,
@@ -152,7 +160,13 @@ def first_screen_probe(
         cfg, _effects, _actuation = _deployment_sections(args)
         backend_cfg = _resolve_backend_config(args, cfg, workflow)
         if _normalize_kind(backend_cfg.kind) != "web":
-            return build_backend(backend_cfg).screenshot()
+            backend = build_backend(backend_cfg)
+            try:
+                return backend.screenshot()
+            finally:
+                close = getattr(backend, "close", None)
+                if callable(close):
+                    close()
         url = getattr(args, "url", None) or cfg.backend.url
         if backend_cfg.browser_cdp_endpoint or backend_cfg.browser_page_url:
             with _attached_web_page(backend_cfg, url=url, workflow=workflow) as page:
@@ -241,11 +255,12 @@ def cmd_run_variants(args: argparse.Namespace, *, run_child) -> int:
     except VariantSetError as exc:
         print(f"run REFUSED: {exc}. Nothing was executed.")
         return 2
-    run_dir = (
-        Path(args.run_dir)
-        if getattr(args, "run_dir", None)
-        else Path("runs") / "variants"
-    )
+    if getattr(args, "run_dir", None):
+        run_dir = Path(args.run_dir)
+    else:
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+        run_dir = Path("runs") / f"variants-{stamp}"
+    dry_run = bool(getattr(args, "dry_run", False) or getattr(args, "explain", False))
     revoked_raw = os.environ.get("OPENADAPT_REVOKED_ADMISSION_IDS", "")
     revoked = {item.strip() for item in revoked_raw.split(",") if item.strip()}
     trust = _load_trust(parent, args)
@@ -261,8 +276,15 @@ def cmd_run_variants(args: argparse.Namespace, *, run_child) -> int:
         trusted_signers=trust,
         revoked_admission_ids=revoked,
         now=datetime.now(timezone.utc),
+        dry_run=dry_run,
     )
     report_path = run_dir / VARIANT_REPORT_FILENAME
+    if report.outcome == "DRY_RUN":
+        print(
+            f"Variant {report.decision.variant!r} would run; its admission "
+            f"verified. Nothing was executed. Decision: {report_path}"
+        )
+        return 0
     if report.child is None:
         print(f"Variant router HALTED ({report.reason}): {report.detail}")
         print(f"Nothing was executed. Decision: {report_path}")

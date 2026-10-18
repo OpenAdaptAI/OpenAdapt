@@ -28,9 +28,13 @@ variant's `when` clause against the item:
    - `theme`: the mean luminance class of the frame. A mean of 96 or less is
      `dark`, 160 or more is `light`, and anything between is `indeterminate`.
      An indeterminate frame matches neither theme.
-   - `text_present` and `text_absent`: local OCR presence checks for markers
-     such as an application version string (`Version 12`) or a tenant banner.
-     These use the same `text_present` check that step guards use.
+   - `text_present` and `text_absent`: markers such as an application version
+     string (`Version 12`) or a tenant banner. A marker is present when it
+     appears as whole words on one line of the local OCR read, ignoring case
+     and spacing. `Version 1` doesn't match `Version 11`, and `Version 12`
+     doesn't match `Version 12.1`. Routing doesn't use the fuzzy match that
+     step guards use, because a fuzzy match would find `Version 11` on a
+     `Version 12` screen.
 
 The router reads the screen only when some variant has a screen condition. An
 input-only set never captures a frame.
@@ -45,14 +49,17 @@ Exactly one variant must match:
 
 The router makes no model call.
 
-## Conditions must be disjoint
+## Conditions must be separated
 
-When you author or extend a set, every pair of variants must be provably
-disjoint. Two variants are disjoint when at least one of these is true:
+When you author or extend a set, every pair of variants must be separated. Two
+variants are separated when at least one of these is true:
 
 - They constrain the same input to value sets that don't overlap.
 - They require different themes.
 - One requires a marker that the other requires absent.
+- Each requires a marker that the other doesn't require. A screen that shows
+  both markers then matches both variants, and the router halts with
+  `ambiguous_variant_match`.
 
 If no such reason exists, authoring refuses the pair. For example,
 `theme: dark` and `inputs: {payer: [medicare]}` can both hold for a Medicare
@@ -61,9 +68,19 @@ to the Medicare variant. A variant with no condition is refused for the same
 reason. Because of this rule, the routing decision never depends on the order
 in which variants are declared.
 
-Two version markers need one exclusion. `text_present: [Version 11]` and
-`text_present: [Version 12]` can both appear on one screen, so add
-`text_absent: [Version 11]` to the Version 12 variant.
+For application versions, give each variant a marker it requires:
+`text_present: [Version 11]` and `text_present: [Version 12]`. Prefer this to
+a marker that a variant requires absent. A missed or garbled OCR read satisfies
+an absence condition, so it would send the item to the "absent" variant. A
+missed read never satisfies a presence condition, so it halts with
+`no_variant_matched`.
+
+All variants of one set must be recorded on the same surface (or all be
+unbound), because the router reads the first screen through one backend.
+
+The `unmet` list in `variant-report.json` names the allowed values for each
+input, so it reveals which values an item didn't have. Route on business
+inputs such as payer or clinic, not on patient identifiers.
 
 ## Author a variant set
 
@@ -100,8 +117,8 @@ openadapt-flow variants author --spec variants.json --out encounter-intake
 ```
 
 Authoring refuses a variant whose envelope digest doesn't match its live
-bundle, a bundle that isn't a compiled workflow, duplicate names, and
-overlapping conditions.
+bundle, a bundle that isn't a compiled workflow, duplicate names, mixed
+surfaces, and conditions that aren't separated.
 
 To print a set, run `openadapt-flow variants show encounter-intake`.
 
@@ -121,6 +138,11 @@ openadapt-flow run encounter-intake --profile standard \
   --param payer=medicare --param patient_id=... \
   --qualification-trust qualification-trust.json
 ```
+
+`run --dry-run` (or `--explain`) routes and verifies the chosen variant's
+admission, records outcome `DRY_RUN`, and executes nothing. Without
+`--run-dir`, each run writes to a new `runs/variants-<UTC timestamp>`
+directory.
 
 The trust registry comes from `--qualification-trust`, the
 `OPENADAPT_QUALIFICATION_TRUST` environment variable, or
@@ -150,6 +172,7 @@ the admission check.
 | `first_screen_unavailable` | A variant has a screen condition, but no frame was supplied, captured, or readable. |
 | `variant_admission_refused` | The chosen variant's envelope is missing, doesn't match its pointer or live bundle digest, or fails signature, expiry, or revocation checks. The router doesn't fall back to another variant. |
 | `variant_bundle_unloadable` | The chosen bundle couldn't be loaded. |
+| `run_dir_not_empty` | The chosen variant's run directory already holds a run. The router refuses it so that an earlier `report.json` is never read as this run's result. |
 
 For each variant, the decision lists the conditions that didn't hold, such as
 `input 'payer' is not one of ['commercial']` or
@@ -196,9 +219,11 @@ The command makes these checks:
 
 - The new bundle's envelope must match the live bundle. Admission isn't
   skipped for a repaired case.
-- With `--derived-from`, a repair candidate record in the bundle must name the
-  parent variant's admitted bundle as its prior revision.
-- The new conditions must be disjoint from every existing variant.
+- With `--derived-from`, the bundle must carry its repair candidate record. The
+  record's prior revision must be the parent variant's admitted bundle, and its
+  proposed revision must be the bundle being added. A `rejected` or
+  `rolled_back` candidate is refused.
+- The new conditions must be separated from every existing variant.
 
 The variant records `promotion.derived_from` and the repair candidate ID and
 state. Repeat `--when-input NAME=VALUE` to allow several values, and use
@@ -243,7 +268,9 @@ it's Cloud Execute.
   or a desktop window, the router and the run read the same session.
 - `resume` of a paused routed run runs outside the router and doesn't
   re-stamp the report. `variant-report.json` remains the record of the choice.
-- Through Cloud Execute, the child report lives on Cloud, so
-  `report_names_variant` is `false` locally.
+- Through Cloud Execute (`OPENADAPT_EXECUTE_URL`), the child runs remotely and
+  the route stamp doesn't reach its report or receipt. The local
+  `variant-report.json` still records the choice, and `report_names_variant`
+  is `false`.
 - The cross-language production receipt projection doesn't carry the
   `variant` block. It binds the block through `source_receipt_sha256`.

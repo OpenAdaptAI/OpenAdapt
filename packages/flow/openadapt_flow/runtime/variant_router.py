@@ -2,10 +2,11 @@
 
 ``route_variant`` picks at most one variant from the item's inputs and a
 fingerprint of the first screen. It makes no model call: inputs compare as
-exact strings, the theme is a luminance class of the frame, and markers are
-the same local OCR presence check that ``text_present`` guards use. Zero
-matches, two matches, or a needed screen that could not be captured each halt
-with a named reason.
+exact strings, the theme is a luminance class of the frame, and a marker must
+appear as whole words on one line of the local OCR read (not the fuzzy
+``text_present`` match guards use, which would let ``Version 11`` match
+``Version 12``). Zero matches, two matches, or a needed screen that could not
+be captured each halt with a named reason.
 
 ``execute_variant_set`` then treats the chosen variant exactly like a process
 child: the variant's own admission envelope is verified (pointer, live bundle
@@ -24,6 +25,7 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import re
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Literal, Mapping, Optional, Union
@@ -67,6 +69,7 @@ RouteReason = Literal[
     "first_screen_unavailable",
     "variant_admission_refused",
     "variant_bundle_unloadable",
+    "run_dir_not_empty",
 ]
 
 FirstScreen = Union[bytes, None, Callable[[], Optional[bytes]]]
@@ -187,8 +190,9 @@ def screen_fingerprint(
             from openadapt_flow import vision as default_vision
 
             vision = default_vision
+        lines = [str(getattr(line, "text", line)) for line in vision.ocr(frame_png)]
         for marker in markers:
-            found[marker] = bool(vision.text_present(frame_png, marker))
+            found[marker] = marker_on_lines(marker, lines)
     return ScreenFingerprint(
         frame_sha256=hashlib.sha256(frame_png).hexdigest(),
         width=width,
@@ -197,6 +201,24 @@ def screen_fingerprint(
         theme=classify_theme(mean),
         markers=found,
     )
+
+
+def _words(text: str) -> str:
+    return " ".join(text.split()).casefold()
+
+
+def marker_on_lines(marker: str, lines: list[str]) -> bool:
+    """True when ``marker`` appears as whole words on one OCR line.
+
+    Case and runs of whitespace are ignored. A word character, or a ``.``
+    followed by more text, on either side breaks the match, so ``Version 1``
+    is not found in ``Version 11`` and ``Version 12`` is not found in
+    ``Version 12.1``.
+    """
+
+    needle = re.escape(_words(marker))
+    pattern = re.compile(rf"(?<![\w.]){needle}(?!\w|\.\w)")
+    return any(pattern.search(_words(line)) for line in lines)
 
 
 def _input_text(value: object) -> str:
@@ -404,8 +426,13 @@ def execute_variant_set(
     revoked_admission_ids: set[str] | frozenset[str] = frozenset(),
     now: Optional[datetime] = None,
     vision: Any = None,
+    dry_run: bool = False,
 ) -> VariantRunReport:
-    """Route, verify the chosen variant's admission, then run it governed."""
+    """Route, verify the chosen variant's admission, then run it governed.
+
+    With ``dry_run`` the router stops after the admission check and records
+    outcome ``DRY_RUN``; nothing is executed.
+    """
 
     parent = Path(parent_dir)
     root = Path(run_dir)
@@ -454,13 +481,33 @@ def execute_variant_set(
             decision.fingerprint.digest() if decision.fingerprint is not None else None
         ),
     )
+    child_dir = root / spec.name
+    if child_dir.exists() and any(child_dir.iterdir()):
+        # A child refused before it writes a report would otherwise leave an
+        # earlier run's report.json to be read as this run's result.
+        return halted(
+            "run_dir_not_empty",
+            f"{child_dir} already holds a run; use a fresh run directory",
+        )
+    if dry_run:
+        return _write(
+            root,
+            VariantRunReport(
+                variant_set=variant_set.name,
+                outcome="DRY_RUN",
+                reason="routed",
+                detail=f"variant {spec.name!r} would run; its admission verified",
+                decision=decision,
+                started_at=started,
+                finished_at=_now(),
+            ),
+        )
     accepted = workflow_param_names(workflow)
     child_inputs = {
         str(key): _input_text(value)
         for key, value in item_inputs.items()
         if key in accepted
     }
-    child_dir = root / spec.name
     with variant_route_scope(stamp):
         result = execute(
             AdmittedCapability(

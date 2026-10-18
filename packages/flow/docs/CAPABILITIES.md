@@ -35,8 +35,8 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   differently), a variant set keeps each variant as its own bundle with its
   own admission. A deterministic pre-run router picks exactly one variant from
   the item's inputs and a fingerprint of the first screen (luminance theme
-  class plus local OCR markers such as an app version or tenant banner), with
-  no model call. Conditions must be provably disjoint at authoring time. No
+  class plus whole-word OCR markers such as an app version or tenant banner),
+  with no model call. Conditions must be separated at authoring time. No
   match, an ambiguous match, a missing frame, or a refused admission halts with
   a named reason; the router never guesses or falls back. The run report and
   receipt name the variant that ran, and `variants add --derived-from` promotes

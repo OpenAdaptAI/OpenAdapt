@@ -13,12 +13,22 @@ a named reason; it never guesses.
 Schema: ``openadapt.variant-set/v0``. Filename: ``variant-set.json``. The
 runtime lives in :mod:`openadapt_flow.runtime.variant_router`.
 
-Conditions must be statically disjoint: for every pair of variants the
-authoring check proves that no input and screen state can satisfy both. A
-pair is disjoint when they constrain the same input to non-overlapping value
-sets, require different themes, or one requires a text marker that the other
-requires absent. Anything else is refused, so a routing decision can never
-depend on declaration order.
+Every pair of variants must be separated, so a routing decision never
+depends on declaration order. A pair is separated when the authoring check
+proves no item can satisfy both (they constrain the same input to
+non-overlapping value sets, require different themes, or one requires a text
+marker the other requires absent), or when each requires a text marker the
+other does not. In that last case a screen showing both markers matches both
+variants, and the router halts as ambiguous. Anything else is refused.
+
+Markers match whole words on one OCR line, ignoring case and spacing, so
+``Version 1`` does not match ``Version 11`` and ``Version 12`` does not match
+``Version 12.1``. Prefer a marker each variant requires over one a variant
+requires absent: a missed OCR read satisfies an absence condition, but it
+never satisfies a presence condition.
+
+All variants of one set must be recorded on the same surface, because the
+router reads the first screen through one backend.
 """
 
 from __future__ import annotations
@@ -134,8 +144,13 @@ class VariantSpec(AdmittedChildSpec):
     promotion: Optional[VariantPromotion] = None
 
 
-def disjointness_witness(a: VariantWhen, b: VariantWhen) -> Optional[str]:
-    """Return why ``a`` and ``b`` can never both hold, or ``None``."""
+def separation_witness(a: VariantWhen, b: VariantWhen) -> Optional[str]:
+    """Return why ``a`` and ``b`` never yield a guess, or ``None``.
+
+    Either no item satisfies both, or each needs a marker the other does not
+    need, so a screen that satisfies both shows both markers and halts as
+    ambiguous.
+    """
 
     for name in sorted(set(a.inputs) & set(b.inputs)):
         if not set(a.inputs[name]) & set(b.inputs[name]):
@@ -149,6 +164,10 @@ def disjointness_witness(a: VariantWhen, b: VariantWhen) -> Optional[str]:
         return (
             f"marker {sorted(conflict)[0]!r} is required by one, forbidden by the other"
         )
+    if set(a.text_present) - set(b.text_present) and set(b.text_present) - set(
+        a.text_present
+    ):
+        return "each requires a marker the other does not; both present halts"
     return None
 
 
@@ -182,13 +201,19 @@ class VariantSet(BaseModel):
                         f"variant {item.name!r} derives from unknown variant "
                         f"{promotion.derived_from!r}"
                     )
+        surfaces = {item.surface or "unbound" for item in self.variants}
+        if len(surfaces) > 1:
+            raise ValueError(
+                f"variants are recorded on different surfaces {sorted(surfaces)}; "
+                "the router reads the first screen through one backend"
+            )
         for first, second in combinations(self.variants, 2):
-            if disjointness_witness(first.when, second.when) is None:
+            if separation_witness(first.when, second.when) is None:
                 raise ValueError(
                     f"variants {first.name!r} and {second.name!r} can both match "
-                    "the same item; make their conditions disjoint (different "
-                    "values for a shared input, different themes, or a marker one "
-                    "requires and the other forbids)"
+                    "the same item; separate them (different values for a shared "
+                    "input, different themes, a marker one requires and the other "
+                    "forbids, or a marker each requires that the other does not)"
                 )
         return self
 
@@ -379,21 +404,25 @@ def add_variant(parent_dir: Path | str, item: VariantInput) -> VariantSet:
     current = VariantSet.load(parent)
     if item.name in {spec.name for spec in current.variants}:
         raise VariantSetError(f"variant {item.name!r} already exists in the set")
-    if item.derived_from is not None:
-        base = current.variant(item.derived_from)
-        _check_lineage(item.bundle, base)
     spec = _admitted_spec(item, parent)
+    if item.derived_from is not None:
+        _check_lineage(item.bundle, current.variant(item.derived_from), spec)
     updated = _validated(current.name, [*current.variants, spec])
     updated.save(parent)
     return updated
 
 
-def _check_lineage(bundle: Path, base: VariantSpec) -> None:
+def _check_lineage(bundle: Path, base: VariantSpec, spec: VariantSpec) -> None:
+    """A promoted variant must carry the repair candidate that produced it."""
+
     from openadapt_flow.repair.registration import detached_candidate_path
 
     path = detached_candidate_path(bundle)
     if not path.is_file():
-        return
+        raise VariantSetError(
+            f"--derived-from needs the repair candidate record the heal or teach "
+            f"wrote ({path}); without it the lineage is unproven"
+        )
     try:
         record = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError) as exc:
@@ -407,3 +436,17 @@ def _check_lineage(bundle: Path, base: VariantSpec) -> None:
             f"{base.name!r} (prior revision {prior}, variant bundle "
             f"{base.bundle_content_digest})"
         )
+    proposed = record.get("proposed_content_digest")
+    if proposed != spec.bundle_content_digest:
+        raise VariantSetError(
+            f"repair candidate in {bundle} describes a different revision "
+            f"({proposed}) than the admitted bundle ({spec.bundle_content_digest})"
+        )
+    if record.get("state") in _REFUSED_REPAIR_STATES:
+        raise VariantSetError(
+            f"repair candidate in {bundle} is {record.get('state')}; it cannot "
+            "become a variant"
+        )
+
+
+_REFUSED_REPAIR_STATES = frozenset({"rejected", "rolled_back"})

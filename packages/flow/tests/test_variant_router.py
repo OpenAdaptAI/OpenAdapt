@@ -252,37 +252,58 @@ def test_input_only_set_never_reads_the_screen(tmp_path: Path) -> None:
     assert decision.fingerprint is None
 
 
-def test_app_version_marker_routes_on_ocr_presence(tmp_path: Path) -> None:
+class _OcrVision:
+    """OCR stand-in: the lines the local OCR read returns for the frame."""
+
+    def __init__(self, *lines: str) -> None:
+        self.lines = list(lines)
+
+    def ocr(self, frame: bytes, *, region=None):
+        return [type("Line", (), {"text": line})() for line in self.lines]
+
+    def text_present(self, frame: bytes, text: str) -> bool:  # pragma: no cover
+        raise AssertionError("routing markers must not use fuzzy text_present")
+
+
+def _version_set(tmp_path: Path) -> VariantSet:
     items = []
     for name, when in (
         ("light", VariantWhen(text_present=["Version 11"])),
-        (
-            "medicare",
-            VariantWhen(text_present=["Version 12"], text_absent=["Version 11"]),
-        ),
+        ("medicare", VariantWhen(text_present=["Version 12"])),
     ):
         bundle, envelope = _bundle(tmp_path, name)
         items.append(
             VariantInput(name=name, bundle=bundle, admission=envelope, when=when)
         )
-    variant_set = author_variant_set(items, name="by-version", out=tmp_path / "set")
+    return author_variant_set(items, name="by-version", out=tmp_path / "set")
 
-    class Vision:
-        def __init__(self, present: set[str]) -> None:
-            self.present = present
 
-        def text_present(self, frame: bytes, text: str) -> bool:
-            return text in self.present
-
+def test_app_version_marker_routes_on_exact_words(tmp_path: Path) -> None:
+    variant_set = _version_set(tmp_path)
     frame = _png(240)
-    v12 = route_variant(
-        variant_set, inputs={}, first_screen=frame, vision=Vision({"Version 12"})
-    )
-    assert v12.variant == "medicare"
-    v11 = route_variant(
-        variant_set, inputs={}, first_screen=frame, vision=Vision({"Version 11"})
-    )
-    assert v11.variant == "light"
+
+    def route(*lines: str):
+        return route_variant(
+            variant_set, inputs={}, first_screen=frame, vision=_OcrVision(*lines)
+        )
+
+    # A fuzzy match would find "Version 11" in this line; whole words do not.
+    assert route("MockMed EMR Version 12").variant == "medicare"
+    assert route("MockMed EMR  version 11").variant == "light"
+    # An OCR misread satisfies neither presence condition: halt, not a default.
+    assert route("MockMed EMR Version l2").reason == "no_variant_matched"
+    assert route("Version 12.1").reason == "no_variant_matched"
+    # Both markers on one screen: each variant matches, so the router halts.
+    assert route("Version 11", "Version 12").reason == "ambiguous_variant_match"
+
+
+def test_marker_word_boundaries() -> None:
+    from openadapt_flow.runtime.variant_router import marker_on_lines
+
+    assert marker_on_lines("Version 12", ["EMR Version 12"])
+    assert not marker_on_lines("Version 1", ["EMR Version 11"])
+    assert not marker_on_lines("Version 11", ["EMR Version 12"])
+    assert marker_on_lines("Acme Clinic", ["Tenant: (ACME   clinic)"])
 
 
 # ---------------------------------------------------------------------------
@@ -591,7 +612,9 @@ def test_receipt_refuses_a_stamp_for_another_bundle() -> None:
 # ---------------------------------------------------------------------------
 
 
-def _healed_bundle(tmp_path: Path, *, prior_digest: str) -> tuple[Path, Path]:
+def _healed_bundle(
+    tmp_path: Path, *, prior_digest: str, state: str = "approved"
+) -> tuple[Path, Path]:
     bundle, envelope = _bundle(tmp_path, "medicare_v2")
     record = bundle / "repair" / "candidate.json"
     record.parent.mkdir()
@@ -599,8 +622,11 @@ def _healed_bundle(tmp_path: Path, *, prior_digest: str) -> tuple[Path, Path]:
         json.dumps(
             {
                 "candidate_id": "cand-0001",
-                "state": "promoted",
+                "state": state,
                 "prior_content_digest": prior_digest,
+                "proposed_content_digest": live_bundle_content_digest(
+                    Workflow.load(bundle), bundle
+                ),
             }
         )
     )
@@ -826,6 +852,25 @@ def test_cli_author_route_and_run(
     assert len(seen) == 1
     assert "no_variant_matched" in capsys.readouterr().out
 
+    dry = build_parser().parse_args(
+        [
+            "run",
+            str(out),
+            "--dry-run",
+            "--run-dir",
+            str(tmp_path / "dry"),
+            "--param",
+            "payer=medicare",
+            "--first-screen",
+            str(light),
+            "--qualification-trust",
+            str(trust),
+        ]
+    )
+    assert cli_variants.cmd_run_variants(dry, run_child=run_child) == 0
+    assert len(seen) == 1
+    assert "Nothing was executed" in capsys.readouterr().out
+
 
 def test_replay_refuses_a_variant_set(tmp_path: Path) -> None:
     from openadapt_flow.__main__ import main
@@ -878,3 +923,132 @@ def test_cli_add_promotes_a_repaired_bundle(tmp_path: Path) -> None:
     added = VariantSet.load(parent).variant("medicare_v2")
     assert added.when.inputs == {"payer": ["medicare", "medicare-advantage"]}
     assert added.promotion is not None and added.promotion.derived_from == "light"
+
+
+def test_promotion_requires_repair_evidence(tmp_path: Path) -> None:
+    _variant_set, parent = _author(tmp_path, names=("light", "dark"))
+    bundle, envelope = _bundle(tmp_path, "medicare_v2")
+    item = VariantInput(
+        name="medicare_v2",
+        bundle=bundle,
+        admission=envelope,
+        when=VariantWhen(theme="light", inputs={"payer": ["medicare"]}),
+        derived_from="light",
+    )
+    with pytest.raises(VariantSetError, match="lineage is unproven"):
+        add_variant(parent, item)
+
+
+def test_promotion_refuses_a_rejected_candidate(tmp_path: Path) -> None:
+    variant_set, parent = _author(tmp_path, names=("light", "dark"))
+    bundle, envelope = _healed_bundle(
+        tmp_path,
+        prior_digest=variant_set.variant("light").bundle_content_digest,
+        state="rejected",
+    )
+    with pytest.raises(VariantSetError, match="rejected"):
+        add_variant(
+            parent,
+            VariantInput(
+                name="medicare_v2",
+                bundle=bundle,
+                admission=envelope,
+                when=VariantWhen(theme="light", inputs={"payer": ["medicare"]}),
+                derived_from="light",
+            ),
+        )
+
+
+def test_variants_on_different_surfaces_are_refused(tmp_path: Path) -> None:
+    items = []
+    for name, when in (("light", CONDITIONS["light"]), ("dark", CONDITIONS["dark"])):
+        bundle, envelope = _bundle(tmp_path, name)
+        if name == "dark":
+            workflow = Workflow.load(bundle)
+            workflow.surface = "citrix"
+            workflow.save(bundle)
+            envelope = _envelope_for(
+                bundle,
+                admission_id=ADMISSIONS[name],
+                workflow_version_id=VERSIONS[name],
+            )
+        items.append(
+            VariantInput(name=name, bundle=bundle, admission=envelope, when=when)
+        )
+    with pytest.raises(VariantSetError, match="different surfaces"):
+        author_variant_set(items, name="mixed", out=tmp_path / "set")
+
+
+def test_dry_run_verifies_admission_and_executes_nothing(
+    tmp_path: Path, mockmed_frames
+) -> None:
+    variant_set, parent = _author(tmp_path)
+    calls: list[dict] = []
+    report = _run(
+        variant_set,
+        parent,
+        tmp_path,
+        inputs={"payer": "medicare"},
+        frame=mockmed_frames["light"],
+        calls=calls,
+        dry_run=True,
+    )
+    assert report.outcome == "DRY_RUN"
+    assert report.decision.variant == "medicare"
+    assert calls == []
+    revoked = _run(
+        variant_set,
+        parent,
+        tmp_path / "again",
+        inputs={"payer": "medicare"},
+        frame=mockmed_frames["light"],
+        calls=calls,
+        dry_run=True,
+        revoked_admission_ids={ADMISSIONS["medicare"]},
+    )
+    assert revoked.reason == "variant_admission_refused"
+
+
+def test_reused_run_directory_halts_instead_of_reading_a_stale_report(
+    tmp_path: Path, mockmed_frames
+) -> None:
+    variant_set, parent = _author(tmp_path)
+    calls: list[dict] = []
+    first = _run(
+        variant_set,
+        parent,
+        tmp_path,
+        inputs={"payer": "medicare"},
+        frame=mockmed_frames["light"],
+        calls=calls,
+    )
+    assert first.outcome == "VERIFIED"
+    second = _run(
+        variant_set,
+        parent,
+        tmp_path,
+        inputs={"payer": "medicare"},
+        frame=mockmed_frames["light"],
+        calls=calls,
+    )
+    assert second.outcome == "HALTED"
+    assert second.reason == "run_dir_not_empty"
+    assert len(calls) == 1
+
+
+def test_probe_refusal_becomes_a_named_halt(tmp_path: Path) -> None:
+    from openadapt_flow.cli_variants import first_screen_probe
+
+    variant_set, parent = _author(tmp_path)
+    args = argparse.Namespace(
+        first_screen=None,
+        url="http://127.0.0.1:9",
+        browser_cdp_endpoint="not-a-loopback-endpoint",
+        backend="web",
+    )
+    decision = route_variant(
+        variant_set,
+        inputs={"payer": "medicare"},
+        first_screen=first_screen_probe(args, variant_set, parent),
+    )
+    assert decision.reason == "first_screen_unavailable"
