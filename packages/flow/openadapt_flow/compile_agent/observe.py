@@ -347,7 +347,7 @@ def observe(page: Any, *, keep: Sequence[str] = ()) -> StructuralObservation:
 def element_at(
     page: Any, x: int, y: int, *, backend: Any = None
 ) -> Optional[dict[str, Any]]:
-    """The control (or element) at a point: tag, type, name, in_form.
+    """The control (or element) at a point: tag, name, editable, scope.
 
     A point over an iframe is read inside the frame, through the backend's
     hit-tested frame chain, so a Save button in a frame is seen as one. A

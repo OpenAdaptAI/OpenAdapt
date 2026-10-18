@@ -500,3 +500,75 @@ def test_a_non_http_url_is_refused(capsys) -> None:
     )
     assert cmd_compile_agent(args) == 2
     assert "not an http(s) URL" in capsys.readouterr().err
+
+
+# -- frames and text fields -----------------------------------------------------------
+
+
+class _FramePage(_Page):
+    """A top page whose point and focus land on an iframe."""
+
+    def __init__(self, inner: Any) -> None:
+        super().__init__("outer page with no identity")
+        self.inner = inner
+        self.main_frame = object()
+        self.frames = [self.main_frame, inner]
+
+    def evaluate(self, script: str, arg: Any = None) -> Any:
+        if "elementFromPoint" in script or "activeElement" in script:
+            return self._describe("frame", tag="iframe")
+        return None
+
+
+def test_a_save_inside_an_iframe_is_read_in_the_frame() -> None:
+    from openadapt_flow.compile_agent.observe import element_at
+
+    inner = _Page("Alex Testcase — MRN P2")
+    backend = SimpleNamespace(
+        _frame_point=lambda x, y: SimpleNamespace(
+            frame_path=("iframe#chart",), scope=inner, x=x - 10, y=y - 10
+        )
+    )
+    page = _FramePage(inner)
+    assert element_at(page, 50, 60, backend=backend)["name"] == "Save"
+    # A frame the backend can't map is unreadable, so a click there is gated.
+    assert element_at(page, 50, 60) is None
+
+
+def test_a_click_in_an_iframe_is_gated(tmp_path: Path) -> None:
+    computer = _Computer("x")
+    inner = _Page("Alex Testcase — MRN P2")
+    computer.page = _FramePage(inner)
+    computer.session = SimpleNamespace(
+        backend=SimpleNamespace(
+            _frame_point=lambda x, y: SimpleNamespace(
+                frame_path=("iframe",), scope=inner, x=x, y=y
+            )
+        )
+    )
+    _refused(computer, {"action": "left_click", "coordinate": [5, 5]}, tmp_path)
+
+
+def test_focus_inside_an_iframe_is_followed() -> None:
+    from openadapt_flow.compile_agent.observe import focused_element
+
+    class _Frame:
+        def evaluate(self, script: str, arg: Any = None) -> Any:
+            if "hasFocus" in script:
+                return True
+            return {"tag": "input", "name": "Note", "scope": "Jane Sample — MRN P1"}
+
+    page = _FramePage(_Frame())
+    assert focused_element(page)["scope"] == "Jane Sample — MRN P1"
+
+
+def test_a_click_on_a_text_field_is_not_a_commit() -> None:
+    from openadapt_flow.compile_agent.harness import Harness, SaveGate
+
+    computer = _Computer(
+        "Alex Testcase — MRN P2",
+        element={"name": "Postal code", "tag": "input", "editable": True},
+    )
+    harness = Harness(computer, SaveGate(["MRN P1"]))  # type: ignore[arg-type]
+    harness.act({"action": "left_click", "coordinate": [1, 2]})
+    assert len(computer.executed) == 1 and harness.stats.gate_checks == 0
