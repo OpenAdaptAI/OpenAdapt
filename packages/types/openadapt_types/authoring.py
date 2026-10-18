@@ -1,9 +1,9 @@
 """Public MCP wire contracts for hosted and stdio authoring.
 
 These models are the vendor-facing observe, command, and bind shapes. They do
-not reuse :class:`~openadapt_flow.contracts.computer_state.ComputerState` or
-:class:`~openadapt_flow.contracts.computer_state.UINode`. Sharing
-:class:`~openadapt_flow.contracts.computer_state.ElementRole` is the only computer-state
+not reuse :class:`~openadapt_types.computer_state.ComputerState` or
+:class:`~openadapt_types.computer_state.UINode`. Sharing
+:class:`~openadapt_types.computer_state.ElementRole` is the only computer-state
 type that may appear here.
 
 The projector that drops field values, titles, and screenshots lives in
@@ -31,7 +31,7 @@ from pydantic import (
     model_validator,
 )
 
-from openadapt_flow.contracts.computer_state import ElementRole
+from openadapt_types.computer_state import ElementRole
 
 AUTHORING_OBSERVE_SCHEMA: Literal["openadapt.authoring.observe/v1"] = (
     "openadapt.authoring.observe/v1"

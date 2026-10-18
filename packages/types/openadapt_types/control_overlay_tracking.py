@@ -32,7 +32,7 @@ from pydantic import (
     model_validator,
 )
 
-from openadapt_flow.contracts.control_overlay import (
+from openadapt_types.control_overlay import (
     CONTROL_OVERLAY_STATUS_BY_PHASE,
     CONTROL_OVERLAY_WORKFLOW_LABEL_BY_MODE,
     ControlOverlayControlsV1,

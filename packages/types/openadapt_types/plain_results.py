@@ -8,7 +8,7 @@ The rules live in ``openadapt_types/vocabulary/outcomes.json`` so that code
 in other languages can apply the same table. This module applies them in
 Python::
 
-    from openadapt_flow.contracts import plain_outcome
+    from openadapt_types import plain_outcome
 
     result = plain_outcome(
         transaction_outcome="RECONCILIATION_REQUIRED",
@@ -46,12 +46,12 @@ from pydantic import (
     model_validator,
 )
 
-from openadapt_flow.contracts.execute import (
+from openadapt_types.execute import (
     ExecuteEvidenceReceiptV1,
     ExecuteStatusV1,
     ExecuteTerminalWebhookV1,
 )
-from openadapt_flow.contracts.vocabulary.lint import (
+from openadapt_types.vocabulary.lint import (
     MAY_CHANGE_RESULTS,
     NO_CHANGE_RESULTS,
     load_registry,

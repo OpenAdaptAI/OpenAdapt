@@ -29,13 +29,13 @@ from pydantic import (
     model_validator,
 )
 
-from openadapt_flow.contracts.business_decision import BusinessDecisionTaskV1
-from openadapt_flow.contracts.human_decision import HumanDecisionTaskV1
-from openadapt_flow.contracts.oracle import (
+from openadapt_types.business_decision import BusinessDecisionTaskV1
+from openadapt_types.human_decision import HumanDecisionTaskV1
+from openadapt_types.oracle import (
     oracle_tier_from_effect_strength,
     production_seal_allowed,
 )
-from openadapt_flow.contracts.seal import SealSignatureV1
+from openadapt_types.seal import SealSignatureV1
 
 EXECUTE_REQUEST_SCHEMA = "openadapt.execute-request/v1"
 EXECUTE_ACCEPTED_SCHEMA = "openadapt.execute-accepted/v1"
@@ -201,7 +201,7 @@ class ExecuteEvidenceReceiptV1(_StrictContract):
     evidence_digest: StrictStr = Field(pattern=_SHA256_PATTERN)
     issued_at: StrictStr = Field(pattern=_TIMESTAMP_PATTERN)
     # Optional, additive: Cloud issuer signature over this receipt's canonical
-    # hash (openadapt_flow.contracts.seal). Absent means unsigned, never sealed.
+    # hash (openadapt_types.seal). Absent means unsigned, never sealed.
     seal_signature: SealSignatureV1 | None = None
 
     @model_validator(mode="after")

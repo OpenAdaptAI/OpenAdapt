@@ -26,7 +26,7 @@ from pydantic import (
     model_validator,
 )
 
-from openadapt_flow.contracts.human_decision import HumanDecisionSubstrate
+from openadapt_types.human_decision import HumanDecisionSubstrate
 
 AUTHENTICATION_CAPTURE_POLICY_SCHEMA: Literal[
     "openadapt.authentication-capture-policy/v1"

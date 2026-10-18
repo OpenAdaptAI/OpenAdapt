@@ -7,11 +7,12 @@
 # skipped, and the single `packages-gate` job always reports, so it can be a
 # required check without blocking unrelated PRs.
 #
-# After the fold, openadapt-flow is the core: the contracts (formerly
-# openadapt-types) live in openadapt_flow.contracts and the MCP server (formerly
-# openadapt-agent) in openadapt_flow.agent. openadapt-types and openadapt-agent
-# are compatibility shims, tested here against the in-tree core, so a core
-# change re-runs both shim jobs.
+# Dependencies point one way: openadapt-types (the pydantic-only contracts) is
+# the leaf, openadapt-flow depends on it and re-exports it as
+# openadapt_flow.contracts, and the MCP server lives in openadapt_flow.agent
+# with openadapt-agent as its compatibility shim. Every job that installs the
+# in-tree Flow also installs the in-tree types, so a types change re-runs Flow
+# and the agent shim, and the types job installs nothing else.
 #
 # Flow is split: lint, four unit shards, and a critical job that runs the
 # golden free-path task (VERIFIED read-back against an independent oracle),
@@ -85,11 +86,13 @@ jobs:
           # fail on SIGPIPE and silently report "not changed".
           hit() { if grep -Eq "$1" <<<"$changed"; then echo true; else echo false; fi; }
           wf='^\.github/workflows/packages\.yml$'
-          # Flow's `capture` extra is tested against the in-tree capture.
-          flow="$(hit "^packages/(flow|capture)/|$wf")"
-          # Both shims are tested against the in-tree core, so a core change re-runs them.
-          types="$(hit "^packages/(types|flow)/|$wf")"
-          agent="$(hit "^packages/(agent|flow)/|$wf")"
+          # Flow depends on the in-tree types, and its `capture` extra is tested
+          # against the in-tree capture.
+          flow="$(hit "^packages/(flow|capture|types)/|$wf")"
+          # The types package is the leaf: only its own files re-run it.
+          types="$(hit "^packages/types/|$wf")"
+          # The agent shim is tested against the in-tree core.
+          agent="$(hit "^packages/(agent|flow|types)/|$wf")"
           capture="$(hit "^packages/capture/|$wf")"
           {
             echo "flow=$flow"
@@ -99,7 +102,7 @@ jobs:
           } | tee -a "$GITHUB_OUTPUT"
 
   types:
-    name: types shim (py${{ matrix.python-version }})
+    name: types (py${{ matrix.python-version }})
     needs: scope
     if: needs.scope.outputs.types == 'true'
     runs-on: ubuntu-latest
@@ -119,17 +122,17 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
-      - name: Install the shim against the in-tree core
-        run: pip install -e ../flow -e ".[dev]" 'ruff==0.17.0' 'build==1.6.1'
-      - name: Confirm the shim resolves to the in-tree core
+      - name: Install the package alone
+        run: pip install -e ".[dev]" 'ruff==0.17.0' 'build==1.6.1'
+      - name: Confirm the leaf package installs without Flow
         run: |
           python - <<'PY'
-          import pathlib, openadapt_types
+          import importlib.util, pathlib, openadapt_types
           here = pathlib.Path(openadapt_types.__file__).resolve().as_posix()
-          print("openadapt_types resolves through", here)
-          import openadapt_flow.contracts as contracts
-          where = pathlib.Path(contracts.__file__).resolve().as_posix()
-          assert "packages/flow/openadapt_flow/contracts" in where, where
+          assert "packages/types/openadapt_types" in here, here
+          for name in ("openadapt_flow", "cv2", "onnxruntime"):
+              assert importlib.util.find_spec(name) is None, f"{name} is installed"
+          print("openadapt_types from", here)
           PY
       - name: Ruff
         run: ruff check openadapt_types tests scripts
@@ -163,7 +166,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           cache: pip
       - name: Install the shim against the in-tree core
-        run: pip install -e '../flow[agent]' -e ".[dev]"
+        run: pip install -e ../types -e '../flow[agent]' -e ".[dev]"
       - name: Confirm the in-tree Flow is the one installed
         run: |
           python - <<'PY'
@@ -195,7 +198,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install
-        run: pip install -e '.[dev]'
+        run: pip install -e ../types -e '.[dev]'
       - name: Release consistency and public artifact inventory
         # Flow's own gate: version sync across project, module and lock, and
         # every public data/config asset listed in public-artifacts.json.
@@ -266,7 +269,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install
-        run: pip install -e ../capture -e '.[dev,capture,agent]'
+        run: pip install -e ../types -e ../capture -e '.[dev,capture,agent]'
       - name: Verify the in-tree openadapt-capture imports headless
         run: |
           python - <<'PY'
@@ -328,7 +331,7 @@ jobs:
           python-version: "3.12"
           cache: pip
       - name: Install
-        run: pip install -e '.[dev]'
+        run: pip install -e ../types -e '.[dev]'
       - name: Resolve Playwright version
         id: pw
         run: |

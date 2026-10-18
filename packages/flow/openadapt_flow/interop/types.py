@@ -19,7 +19,7 @@ Design (per ``docs/ECOSYSTEM_INTEGRATION.md`` §2):
   ``identity_armed`` are net-new *compiler evidence* the passive canonical
   schema deliberately does not model. They are flow-only and are NOT smuggled
   into ``Action.raw``; the shared vocabulary carries only the shared fields.
-* **Lazy, optional dependency.** ``openadapt_flow.contracts`` is imported *inside* the
+* **Lazy, optional dependency.** ``openadapt_types`` is imported *inside* the
   functions, never at module import time, so importing this module stays
   cheap and the dependency stays optional (extra: ``openadapt-flow[interop]``).
 
@@ -81,7 +81,7 @@ from openadapt_flow import ir
 _PARAM_PLACEHOLDER_RE = re.compile(r"^\{(\w+)\}$")
 
 if TYPE_CHECKING:  # import-light: only for type checkers, never at runtime import
-    from openadapt_flow.contracts import Action, ActionResult, ActionTarget
+    from openadapt_types import Action, ActionResult, ActionTarget
 
     # Without pydantic's mypy plugin, ``Field(None, ...)`` defaults in
     # openadapt-types look required to mypy.  The whole-package development
@@ -157,7 +157,7 @@ def _canonical_to_scroll(
 
 
 def step_to_action(step: ir.Step) -> "Action":
-    """Map a flow ``Step`` onto an ``openadapt_flow.contracts.Action`` (shared fields).
+    """Map a flow ``Step`` onto an ``openadapt_types.Action`` (shared fields).
 
     Preserves the shared vocabulary (action type, target coordinates, text,
     key, scroll, intent) and drops compiler-only evidence (anchor templates,
@@ -174,7 +174,7 @@ def step_to_action(step: ir.Step) -> "Action":
         ValueError: If openadapt-types cannot validate the action (should not
             happen for well-formed steps).
     """
-    from openadapt_flow.contracts import Action, ActionTarget, ActionType
+    from openadapt_types import Action, ActionTarget, ActionType
 
     if step.action is ir.ActionKind.SELECT_OPTION:
         raise ValueError(
@@ -261,7 +261,7 @@ def step_to_action(step: ir.Step) -> "Action":
 
 
 def result_to_action_result(step_result: ir.StepResult) -> "ActionResult":
-    """Map a flow ``StepResult`` onto an ``openadapt_flow.contracts.ActionResult``.
+    """Map a flow ``StepResult`` onto an ``openadapt_types.ActionResult``.
 
     Carries ``ok`` -> ``success``, ``error`` -> ``error``,
     ``elapsed_ms`` -> ``duration_ms``, and the resolved click point
@@ -276,7 +276,7 @@ def result_to_action_result(step_result: ir.StepResult) -> "ActionResult":
     Returns:
         A canonical ``ActionResult``.
     """
-    from openadapt_flow.contracts import ActionResult
+    from openadapt_types import ActionResult
 
     resolved_coordinates: Optional[tuple[int, int]] = None
     if step_result.resolution is not None:
