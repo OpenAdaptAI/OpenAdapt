@@ -1102,6 +1102,13 @@ def _cmd_record(args: argparse.Namespace) -> int:
     with_check = bool(getattr(args, "with_check", False))
     observation = None
     verify_path = getattr(args, "verify", None)
+    # A bare --verify needs no file: the look-up the person records after
+    # the save becomes the check.
+    from_lookup = verify_path == ""
+    if from_lookup:
+        from openadapt_flow.compiler.lookup_detect import LOOKUP_GUIDANCE
+
+        print(LOOKUP_GUIDANCE)
     if verify_path:
         from openadapt_flow.record_sor import RecordingObservation, RecordSorError
 
@@ -1126,6 +1133,8 @@ def _cmd_record(args: argparse.Namespace) -> int:
         contract, proposal, diff = observation.finish(Path(args.out))
         for line in summary_lines(contract, proposal, diff):
             print(line)
+    if code == 0 and (Path(args.out) / "events.jsonl").is_file():
+        _propose_lookup_check(args, from_lookup=from_lookup)
     if code == 0 and with_check:
         from openadapt_flow.cli_check import guided_check
         from openadapt_flow.cli_hints import command
@@ -1141,6 +1150,46 @@ def _cmd_record(args: argparse.Namespace) -> int:
         else:
             guided_check(recording)
     return code
+
+
+def _propose_lookup_check(args: argparse.Namespace, *, from_lookup: bool) -> None:
+    """Find a look-up after the save and propose it as the record check."""
+
+    from openadapt_flow.cli_hints import command
+    from openadapt_flow.compiler.lookup_detect import (
+        READBACK_PROPOSAL_FILE,
+        propose_from_recording,
+    )
+
+    recording = Path(args.out)
+    kind = str(getattr(args, "backend", None) or "web")
+    proposal, written, lines = propose_from_recording(recording, session_kind=kind)
+    for line in lines:
+        print(line)
+    if proposal is None:
+        return
+    print(
+        "Accept the same-session check with "
+        f"'{command(f'check accept {recording}')}'; a person still admits it."
+    )
+    readback = recording / READBACK_PROPOSAL_FILE
+    if readback in written:
+        print(
+            f"{readback.name} checks from a separate session: fill in its "
+            "UNRESOLVED values and review each effect."
+        )
+        if from_lookup:
+            from openadapt_flow.record_sor import PROPOSED_CONTRACT_NAME
+
+            target = recording / PROPOSED_CONTRACT_NAME
+            target.write_text(readback.read_text())
+            target.chmod(0o600)
+            print(f"Proposed contract: {target}")
+    elif from_lookup:
+        print(
+            "record --verify: a web recording's look-up becomes the same-session "
+            "check only; a separate-session check needs effects.kind ui_readback."
+        )
 
 
 def _cmd_record_capture(args: argparse.Namespace) -> int:
@@ -7185,6 +7234,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     p.add_argument(
         "--verify",
+        nargs="?",
+        const="",
         default=None,
         metavar="VERIFY_YAML",
         help=(
@@ -7192,7 +7243,8 @@ def build_parser() -> argparse.ArgumentParser:
             "file (rest, sql, fhir, graphql or file) before and after the "
             "recording, and propose the checks for what changed in "
             "verify.proposed.yaml. Both reads go to sor_snapshots.json "
-            "(mode 0600)"
+            "(mode 0600). With no file, look the record up after you save: "
+            "that look-up becomes the proposed check"
         ),
     )
     _add_backend_flags(p)

@@ -275,6 +275,17 @@ class Recording:
             )
         except AuthoringError as exc2:
             return owner._capture_refused("capture_failed", str(exc2), computer)
+        if session.recording_dir is not None:
+            # The agent looked the record up after saving: propose that
+            # look-up as the check (check.proposed.json beside the recording).
+            from openadapt_flow.compiler.lookup_detect import propose_from_recording
+
+            _proposal, _written, lines = propose_from_recording(
+                session.recording_dir, session_kind="web", values=self._values
+            )
+            for line in lines:
+                if owner.on_warning is not None:
+                    owner.on_warning(line)
         return owner._write_draft(
             session, compiled, computer, self._values, self._dialect
         )

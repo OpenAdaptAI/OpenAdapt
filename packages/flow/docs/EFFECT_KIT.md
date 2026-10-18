@@ -263,6 +263,45 @@ Both reads are kept in `sor_snapshots.json` (mode 0600, raw records). The
 proposed file is also mode 0600 and copies `verifier:` as written, with
 `${NAME}` references unexpanded. Without `--verify`, `record` is unchanged.
 
+## A check learned from a look-up
+
+People often check a save by looking the record up. When a recording shows
+that after the save, Flow learns the check from it, with no marking and no
+configuration (`openadapt_flow/compiler/lookup_detect.py`). It runs at the
+end of `record` (browser, desktop, RDP, Citrix) and after an agent's JIT
+capture. It finds, in order:
+
+1. the save: the last click whose label has a save word (read from the
+   recorded control, or with OCR on the frame before the click);
+2. after it, text typed into a box and submitted with Enter or a click: the
+   search;
+3. optionally, a click that opens a result;
+4. on the last frame, the recorded values the look-up brought onto the
+   screen, each read with OCR, with the label next to it or above it. A value
+   that was already on screen before the look-up (the form that was just
+   saved) and the search box's own text don't count.
+
+It writes two proposals beside the recording:
+
+- `check.proposed.json`: the look-up as a check in the same session (tier 3,
+  the next section). `openadapt-flow check accept REC` makes it the
+  recording's `check.json`, and a person still admits the compiled check;
+- `readback.proposed.yaml`, for a desktop, RDP or Citrix recording: the same
+  look-up as a separate-session `desktop_readback` (tier 2 with its own
+  sign-in), in `verify.yaml` form. Its session address is `UNRESOLVED`, and
+  every effect is a `field_equals` marked `needs_operator_confirmation`.
+
+`openadapt-flow record --verify` with no file uses this: it prints "Look the
+record up once so OpenAdapt can check future saves." before the recording,
+and writes the separate-session proposal as `verify.proposed.yaml` after it.
+Every `record` ends with that prompt when it finds no look-up. A web
+recording gets the same-session proposal only; a separate-session web check is
+`ui_readback`, which needs selectors the frames don't show.
+
+Nothing found means nothing proposed, and nothing proposed is trusted until a
+person reviews it. The detector reads frames with OCR and makes no model
+calls.
+
 ## A read-back taught by demonstration ("Now show how you'd check it saved")
 
 For an application with no API, database or export (a legacy desktop app,
