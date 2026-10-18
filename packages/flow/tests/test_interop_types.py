@@ -309,16 +309,19 @@ def test_reverse_rejects_out_of_vocabulary_action() -> None:
 
 
 def test_importing_shim_does_not_import_openadapt_types() -> None:
-    """The module must not pull openadapt_types until a function is called.
+    """The module must not load the action models until a function is called.
 
-    Verified in a fresh subprocess so pytest.importorskip / other tests in this
-    process can't pollute the result.
+    Flow imports ``openadapt_types.check_level`` at startup, and the
+    ``openadapt_types`` root is lazy, so the root may be loaded; the action
+    models (``openadapt_types.action``) must not be. Verified in a fresh
+    subprocess so pytest.importorskip / other tests in this process can't
+    pollute the result.
     """
     code = (
         "import sys\n"
         "import openadapt_flow.interop.types as t\n"
-        "assert 'openadapt_types' not in sys.modules, "
-        "'shim imported openadapt_types at module import time'\n"
+        "assert 'openadapt_types.action' not in sys.modules, "
+        "'shim imported the action models at module import time'\n"
         "print('OK')\n"
     )
     proc = subprocess.run(
