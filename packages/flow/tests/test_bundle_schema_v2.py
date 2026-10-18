@@ -192,6 +192,10 @@ def _pre_frame_path_content(wf: Workflow, shape: str) -> dict:
         # Reviewed v2 omission: submit-binding evidence postdates these seals.
         assert step.pop("submit_binding") is None
         assert step.pop("submit_binding_unbound_reason") is None
+        # Reviewed v2 omission: the READ step's spec and grade floor postdate
+        # these seals.
+        assert step.pop("read") is None
+        assert step.pop("read_gate") is None
     for effect in _effect_payloads(content, shape):
         # Reviewed v2 omission: the exact_new_set over-write guard postdates
         # these seals. Navigated to the exact owning Effect, never stripped by
@@ -992,3 +996,39 @@ def test_load_validation_can_be_disabled(tmp_path):
     # opt out of validation -> loads despite the dangling target
     loaded = Workflow.load(b, validate=False)
     assert loaded.name == "broken"
+
+
+def test_a_read_spec_and_grade_floor_are_sealed_content(tmp_path):
+    """Absent read fields keep old digests; populated ones change them."""
+
+    from openadapt_flow.ir import ReadStepSpec
+    from openadapt_flow.records.schema import FieldSpec, GradeGate
+
+    b = _write_bundle_dir(tmp_path)
+    wf = _structural_workflow("linear")
+    file_hashes = bv.compute_file_hashes(wf, b)
+    legacy = bv.compute_content_digest(wf, file_hashes)
+    assert legacy == _synthetic_legacy_digest(wf, "linear", file_hashes)
+
+    gated = wf.model_copy(deep=True)
+    gated.steps[0].read_gate = GradeGate(fields=("amount",), min_grade="verified")
+    assert bv.compute_content_digest(gated, file_hashes) != legacy
+
+    read = Workflow(
+        name="linear",
+        created_at=_FIXED_CREATED_AT,
+        steps=[
+            Step(
+                id="r",
+                intent="read amount",
+                action=ActionKind.READ,
+                read=ReadStepSpec(
+                    schema_name="ledger_entry",
+                    field=FieldSpec(name="amount", kind="decimal"),
+                    region=(10, 10, 80, 20),
+                ),
+            )
+        ],
+    )
+    content = bv._workflow_content(read)
+    assert content["steps"][0]["read"]["field"]["name"] == "amount"

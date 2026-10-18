@@ -683,11 +683,17 @@ class Replayer:
         approval_gate: Optional["ApprovalGate"] = None,
         attended_draft_by: Optional[Any] = None,
         draft_key_dir: Optional[Path] = None,
+        read_clipboard: Optional[Any] = None,
     ) -> None:
         # A JIT draft (openadapt_flow.jit) runs only once admitted, or attended
         # by a named person (the canary). Checked in run().
         self._attended_draft_by = attended_draft_by
         self._draft_key_dir = draft_key_dir
+        # READ steps: the clipboard of the driven session (a
+        # records.read.ClipboardReader), or None for OCR-only reads. Values
+        # read this run, by field name, for later steps' read_gate.
+        self._read_clipboard = read_clipboard
+        self._field_reads: dict[str, Any] = {}
         if vision is None:
             import openadapt_flow.vision as vision  # lazy: heavy OCR deps
 
@@ -1381,6 +1387,7 @@ class Replayer:
             if self.governed_authorization is not None
             else uuid.uuid4().hex
         )
+        self._field_reads = {}
         self._idempotency_reservation_owned = False
         self._qualification_fault_mutations = []
         self._qualification_fault_public_key = None
@@ -10189,6 +10196,108 @@ class Replayer:
                 needs_person=True,
             )
 
+    def _read_gate_refusal(self, step: Step, result: StepResult) -> Optional[str]:
+        """Halt before acting when values this step needs are below its gate."""
+
+        from openadapt_flow.records.schema import GradeTooLow, RecordRead
+
+        gate = step.read_gate
+        assert gate is not None
+        reads = tuple(self._field_reads.values())
+        if gate.fields:
+            missing = [name for name in gate.fields if name not in self._field_reads]
+            reads = tuple(r for r in reads if r.field in gate.fields)
+        else:
+            missing = []
+        record = RecordRead.model_construct(
+            schema_name="",
+            schema_version=1,
+            record_key="",
+            run_id=self._run_id,
+            read_at="",
+            fields=reads,
+        )
+        try:
+            gate.check(record)
+            if missing:
+                raise GradeTooLow(
+                    "", {name: "unconfirmed" for name in missing}, gate.min_grade
+                )
+        except GradeTooLow as exc:
+            result.safety_halt = True
+            result.failure_category = "safety_halt"
+            listed = ", ".join(f"{k} ({v})" for k, v in exc.below.items())
+            return (
+                f"Step '{step.id}' ({step.intent}) needs read values at "
+                f"{gate.min_grade} or better; below it: {listed}. Halting for "
+                "a person"
+            )
+        return None
+
+    def _act_read(
+        self,
+        step: Step,
+        resolution: Optional[Resolution],
+        *,
+        workflow: Workflow,
+        params: Mapping[str, RuntimeParamScalar],
+        before_png: bytes,
+        result: StepResult,
+    ) -> Optional[str]:
+        """READ: read one field into ``result.field_read``. Zero model calls:
+        OCR and the clipboard are deterministic channels."""
+
+        from openadapt_flow.records.read import read_field
+        from openadapt_flow.records.schema import SealRef
+
+        spec = step.read
+        assert spec is not None
+        region = self._translate_recorded_region(step, resolution, spec.region)
+        clipboard = self._read_clipboard
+        if spec.proof.double_read and clipboard is None:
+            result.failure_category = "runtime_failure"
+            return (
+                f"Step '{step.id}' ({step.intent}) asks for a double read but "
+                "this run has no clipboard channel"
+            )
+        if clipboard is not None:
+            # Focusing and copying a field is input delivery, so it passes the
+            # same authorization gate as any other input.
+            refusal = self._delivery_authorization_refusal(
+                workflow, params, step, result
+            )
+            if refusal is not None:
+                return refusal
+            result.delivery_attempted = True
+        seal = SealRef(run_id=self._run_id) if spec.proof.seal else None
+        try:
+            field_read = read_field(
+                spec.field,
+                self.backend,
+                region,
+                proof=spec.proof,
+                clipboard=clipboard,
+                copy_keys=tuple(spec.copy_keys),
+                ocr=self.vision.ocr,
+                step_id=step.id,
+                seal=seal,
+                frame_png=before_png,
+            )
+        except Exception as exc:  # noqa: BLE001 - a read failure is a halt
+            result.failure_category = "runtime_failure"
+            return f"Step '{step.id}' ({step.intent}) could not read: {exc}"
+        result.field_read = field_read
+        result.actuation = "read"
+        self._field_reads[spec.field.name] = field_read
+        if field_read.needs_review and spec.on_review == "halt":
+            result.safety_halt = True
+            result.failure_category = "safety_halt"
+            return (
+                f"Step '{step.id}' ({step.intent}) read a value that needs "
+                f"review ({field_read.review_reason}). Halting for a person"
+            )
+        return None
+
     def _act(
         self,
         step: Step,
@@ -10208,6 +10317,19 @@ class Replayer:
         Returns:
             An error string (no action performed / partial) or None.
         """
+        if step.read_gate is not None:
+            refusal = self._read_gate_refusal(step, result)
+            if refusal is not None:
+                return refusal
+        if step.action is ActionKind.READ:
+            return self._act_read(
+                step,
+                resolution,
+                workflow=workflow,
+                params=params,
+                before_png=before_png,
+                result=result,
+            )
         if step.action in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK):
             assert resolution is not None  # guaranteed by _resolve_step
             x, y = resolution.point

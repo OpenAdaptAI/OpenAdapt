@@ -343,6 +343,7 @@ def read_field(
     session: str = "acting",
     step_id: Optional[str] = None,
     seal: Optional[SealRef] = None,
+    frame_png: Optional[bytes] = None,
 ) -> FieldRead:
     """Read ``spec`` at ``bbox`` on ``backend``.
 
@@ -358,7 +359,9 @@ def read_field(
     clipboard is first set to a marker, the field centre is clicked, and
     ``copy_keys`` are pressed; a clipboard still holding the marker counts as
     no read. Pass ``session="reopened"`` when reading a record that was
-    closed and reopened by its identity fields.
+    closed and reopened by its identity fields. ``frame_png`` reuses a frame
+    the caller already captured (the runtime's pre-step frame) instead of
+    taking a new screenshot.
     """
 
     proof = proof or ReadProof()
@@ -369,7 +372,7 @@ def read_field(
     use_clipboard = clipboard is not None
     use_ocr = proof.double_read or not use_clipboard
 
-    png = backend.screenshot()
+    png = frame_png if frame_png is not None else backend.screenshot()
     width_height = None
     try:
         from PIL import Image

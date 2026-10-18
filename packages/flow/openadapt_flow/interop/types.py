@@ -111,10 +111,10 @@ _ActionErrorType = Literal[
 # The shared enum map. SELECT_OPTION deliberately stays outside it until the
 # cross-package schema can carry its commit key and field evidence without
 # degrading it to TYPE; :func:`step_to_action` refuses that conversion loudly.
+# READ stays outside it too: the shared schema has no typed field read.
+_NOT_SHARED = frozenset({ir.ActionKind.SELECT_OPTION, ir.ActionKind.READ})
 ACTION_KIND_TO_ACTION_TYPE: dict[ir.ActionKind, str] = {
-    kind: kind.value
-    for kind in ir.ActionKind
-    if kind is not ir.ActionKind.SELECT_OPTION
+    kind: kind.value for kind in ir.ActionKind if kind not in _NOT_SHARED
 }
 
 
@@ -177,6 +177,11 @@ def step_to_action(step: ir.Step) -> "Action":
         raise ValueError(
             "SELECT_OPTION is not representable in openadapt-types without "
             "losing its atomic commit contract"
+        )
+    if step.action is ir.ActionKind.READ:
+        raise ValueError(
+            "READ is not representable in openadapt-types without losing its "
+            "typed field and proof settings"
         )
     action_type = ActionType(ACTION_KIND_TO_ACTION_TYPE[step.action])
 

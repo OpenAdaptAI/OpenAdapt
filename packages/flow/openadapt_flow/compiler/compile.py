@@ -2305,6 +2305,54 @@ def compile_recording(
                     event,
                 )
             )
+        elif kind == "read":
+            # A demonstrated read: the person marked a field's value box as an
+            # output. It compiles to a READ step; nothing is actuated, so it
+            # gets no postconditions (pass 2 skips it). A marked label box
+            # becomes the anchor, so replay moves the value box with the label.
+            from openadapt_flow.ir import ReadStepSpec
+            from openadapt_flow.records.schema import FieldSpec, ReadProof
+
+            value_region = tuple(int(v) for v in event["region"])
+            if len(value_region) != 4:
+                raise ValueError(f"read event {i} needs region [x, y, w, h]")
+            read_anchor: Optional[Anchor] = None
+            label_region = event.get("label_region")
+            if label_region is not None:
+                if before_png is None:
+                    raise ValueError(f"read event {i} has a label box but no frame")
+                lx, ly, lw, lh = (int(v) for v in label_region)
+                label_rel = f"templates/{step_id}.png"
+                (bundle / label_rel).write_bytes(
+                    _crop_png(before_png, (lx, ly, lw, lh))
+                )
+                read_anchor = Anchor(
+                    template=label_rel,
+                    region=(lx, ly, lw, lh),
+                    click_point=(lx + lw // 2, ly + lh // 2),
+                    ocr_text=event.get("label_text"),
+                )
+            field_spec = FieldSpec.model_validate(event["field"])
+            pending.append(
+                (
+                    Step(
+                        id=step_id,
+                        intent=f"read {field_spec.name}",
+                        action=ActionKind.READ,
+                        anchor=read_anchor,
+                        read=ReadStepSpec(
+                            schema_name=str(event["schema_name"]),
+                            field=field_spec,
+                            region=value_region,
+                            proof=ReadProof.model_validate(event.get("proof") or {}),
+                            on_review=event.get("on_review", "halt"),
+                        ),
+                    ),
+                    before_png,
+                    after_png,
+                    event,
+                )
+            )
         else:
             raise ValueError(f"unknown event kind {kind!r} (event {i})")
 
@@ -2468,8 +2516,8 @@ def compile_recording(
         steps.append(step)
         if event.get("submit_binding") is not None:
             binding_observations[step.id] = event["submit_binding"]
-        if step.action is ActionKind.SCROLL:
-            continue  # see the scroll branch in pass 1
+        if step.action in (ActionKind.SCROLL, ActionKind.READ):
+            continue  # see the scroll and read branches in pass 1
         step_region_drops: list[tuple[Region, str]] = []
         next_before: Optional[bytes] = None
         next_lines: Optional[list[OcrLine]] = None

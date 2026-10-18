@@ -108,6 +108,11 @@ def _step_call(step: Step) -> str:
         return f"    flow.wait(timeout_s={step.timeout_s!r})"
     if step.action is ActionKind.SCROLL:
         return f"    flow.scroll({step.scroll_dx or 0!r}, {step.scroll_dy or 0!r})"
+    if step.action is ActionKind.READ and step.read is not None:
+        return (
+            f"    record[{step.read.field.name!r}] = "
+            f"flow.read({step.read.field.kind!r}, region={step.read.region!r})"
+        )
     raise ValueError(f"unknown action {step.action!r}")
 
 
