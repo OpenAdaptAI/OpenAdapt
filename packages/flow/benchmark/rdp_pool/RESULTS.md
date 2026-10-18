@@ -30,6 +30,9 @@ this machine adds contention instead of throughput. Actions alone (click,
 type, settle) take 0.3–0.8 s. These numbers say nothing about a real remote
 host, a WAN link, or a Windows server.
 
+One fixture first name was changed after the run; the recorded strings in
+`results.json` were edited to match. Nothing else changed.
+
 Run it again:
 
 ```bash

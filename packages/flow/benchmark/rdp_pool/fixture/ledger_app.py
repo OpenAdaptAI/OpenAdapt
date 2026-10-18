@@ -15,7 +15,7 @@ import tkinter as tk
 
 def accounts(seed: int, n: int = 500) -> dict[str, tuple[str, str]]:
     rng = random.Random(seed)
-    first = ["Alex", "Blair", "Casey", "Drew", "Emery", "Finley", "Harper", "Jordan"]
+    first = ["Alex", "Brook", "Casey", "Drew", "Emery", "Finley", "Harper", "Jordan"]
     last = ["Archer", "Brooks", "Carver", "Dalton", "Ellis", "Foster", "Grant", "Hayes"]
     out: dict[str, tuple[str, str]] = {}
     while len(out) < n:
