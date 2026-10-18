@@ -88,6 +88,7 @@ ALLOWLISTED_PATHS = (
     "packages/flow/benchmark/vision_hardening/README.md",
     "packages/types/source-policy.public.json",
     "packages/agent/source-policy.public.json",
+    "packages/capture/source-policy.public.json",
 )
 
 # Binary-ish extensions we skip for content scanning (path scan still applies).

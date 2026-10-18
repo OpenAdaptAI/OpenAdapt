@@ -107,7 +107,7 @@ openadapt-flow qualify set-identity bundle \
   --step save \
   --signal application=application:exact \
   --signal workflow_state=workflow_state:exact \
-  --signal-expected application=accuro \
+  --signal-expected application=records-app \
   --signal-expected workflow_state=patient-chart \
   --quorum 2
 

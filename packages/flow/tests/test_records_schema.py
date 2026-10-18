@@ -50,30 +50,30 @@ def _read(
 
 def test_grades_order_weakest_first() -> None:
     assert READ_GRADES == (
-        "unconfirmed",
-        "screen_readback",
-        "committed_record_readback",
-        "verified",
+        "unchecked",
+        "same_screen",
+        "reopened",
+        "system_of_record",
     )
-    assert weakest_grade(["verified", "screen_readback"]) == "screen_readback"
-    assert weakest_grade([]) == "unconfirmed"
-    assert grade_at_least("verified", "committed_record_readback")
-    assert not grade_at_least("screen_readback", "committed_record_readback")
+    assert weakest_grade(["system_of_record", "same_screen"]) == "same_screen"
+    assert weakest_grade([]) == "unchecked"
+    assert grade_at_least("system_of_record", "reopened")
+    assert not grade_at_least("same_screen", "reopened")
 
 
 def test_grade_for_each_rung() -> None:
     clip, ocr = _read("clipboard", "INV-1"), _read("ocr", "INV-1")
     reopened = _read("clipboard", "INV-1", "reopened")
     export = _read("export", "INV-1", "independent", "committed_store")
-    assert grade_for([clip], "single") == "unconfirmed"
-    assert grade_for([clip, ocr], "disagree") == "unconfirmed"
-    assert grade_for([clip, ocr], "ambiguous") == "unconfirmed"
-    assert grade_for([clip, ocr], "agree") == "screen_readback"
-    assert grade_for([clip, ocr, reopened], "agree") == "committed_record_readback"
-    assert grade_for([clip, export], "agree") == "verified"
+    assert grade_for([clip], "single") == "unchecked"
+    assert grade_for([clip, ocr], "disagree") == "unchecked"
+    assert grade_for([clip, ocr], "ambiguous") == "unchecked"
+    assert grade_for([clip, ocr], "agree") == "same_screen"
+    assert grade_for([clip, ocr, reopened], "agree") == "reopened"
+    assert grade_for([clip, export], "agree") == "system_of_record"
 
 
-def test_verified_needs_an_independent_channel() -> None:
+def test_system_of_record_needs_an_independent_channel() -> None:
     reads = (_read("clipboard", "1"), _read("ocr", "1", "reopened"))
     with pytest.raises(ValidationError, match="stronger than the reads support"):
         FieldRead(
@@ -82,7 +82,7 @@ def test_verified_needs_an_independent_channel() -> None:
             reads=reads,
             agreement="agree",
             confidence=1.0,
-            grade="verified",
+            grade="system_of_record",
         )
 
 
@@ -101,7 +101,7 @@ def test_needs_review_requires_reason() -> None:
             reads=(_read("ocr", "Acme"),),
             agreement="single",
             confidence=0.5,
-            grade="unconfirmed",
+            grade="unchecked",
             needs_review=True,
         )
 
@@ -152,7 +152,7 @@ def test_record_read_round_trip_and_check() -> None:
         reads=(_read("clipboard", "INV-1"), _read("ocr", "INV-1")),
         agreement="agree",
         confidence=0.99,
-        grade="screen_readback",
+        grade="same_screen",
         region=region,
         seal=seal,
     )
@@ -166,7 +166,7 @@ def test_record_read_round_trip_and_check() -> None:
     )
     again = RecordRead.model_validate_json(record.model_dump_json())
     assert again == record
-    assert again.grade == "screen_readback"
+    assert again.grade == "same_screen"
     assert not seal.sealed
     with pytest.raises(ValueError, match="required fields not read"):
         record.check_against(INVOICE)
@@ -202,7 +202,7 @@ def test_proof_is_off_by_default_and_overridable() -> None:
 def _record(grade: str, needs_review: bool = False) -> RecordRead:
     reads = (_read("clipboard", "1"),)
     agreement = "single"
-    if grade != "unconfirmed":
+    if grade != "unchecked":
         reads = (_read("clipboard", "1"), _read("database", "1", "independent"))
         agreement = "agree"
     field = FieldRead(
@@ -226,23 +226,21 @@ def _record(grade: str, needs_review: bool = False) -> RecordRead:
 
 
 def test_default_single_read_is_unconfirmed_without_seal() -> None:
-    record = _record("unconfirmed")
-    assert record.grade == "unconfirmed"
+    record = _record("unchecked")
+    assert record.grade == "unchecked"
     assert record.fields[0].seal is None
 
 
 def test_grade_gate_halts_below_floor() -> None:
-    gate = GradeGate(min_grade="committed_record_readback")
-    with pytest.raises(GradeTooLow, match="below committed_record_readback"):
-        gate.check(_record("unconfirmed"))
-    gate.check(_record("verified"))
+    gate = GradeGate(min_grade="reopened")
+    with pytest.raises(GradeTooLow, match="below reopened"):
+        gate.check(_record("unchecked"))
+    gate.check(_record("system_of_record"))
     with pytest.raises(GradeTooLow):
-        GradeGate(min_grade="unconfirmed").check(
-            _record("unconfirmed", needs_review=True)
-        )
+        GradeGate(min_grade="unchecked").check(_record("unchecked", needs_review=True))
     with pytest.raises(GradeTooLow, match="vendor"):
-        GradeGate(min_grade="unconfirmed", fields=("vendor",)).check(
-            _record("verified")
+        GradeGate(min_grade="unchecked", fields=("vendor",)).check(
+            _record("system_of_record")
         )
 
 
@@ -253,11 +251,11 @@ def test_source_kind_decides_the_grade() -> None:
     reopened = _read("clipboard", "INV-1", "reopened")
     assert not live.independent
     assert saved.independent
-    assert grade_for([clip, live], "agree") == "screen_readback"
-    assert grade_for([clip, live, reopened], "agree") == "committed_record_readback"
-    assert grade_for([clip, saved], "agree") == "verified"
+    assert grade_for([clip, live], "agree") == "same_screen"
+    assert grade_for([clip, live, reopened], "agree") == "reopened"
+    assert grade_for([clip, saved], "agree") == "system_of_record"
     # Two reads from the same live session never verify, however many.
-    assert grade_for([live, _read("ocr", "INV-1")], "agree") == "screen_readback"
+    assert grade_for([live, _read("ocr", "INV-1")], "agree") == "same_screen"
 
 
 def test_source_kind_is_required_and_consistent() -> None:
@@ -276,7 +274,7 @@ def test_source_kind_is_required_and_consistent() -> None:
         ChannelRead(channel="ocr", raw="x", source_kind="live_session")
 
 
-def test_live_export_cannot_claim_verified() -> None:
+def test_live_export_cannot_claim_system_of_record() -> None:
     reads = (
         _read("clipboard", "1"),
         _read("export", "1", "acting", "live_session"),
@@ -288,7 +286,7 @@ def test_live_export_cannot_claim_verified() -> None:
             reads=reads,
             agreement="agree",
             confidence=1.0,
-            grade="verified",
+            grade="system_of_record",
         )
 
 
@@ -314,10 +312,10 @@ def test_write_gate_accepts_either_export_kind_per_floor() -> None:
 
     live = record_with(_read("export", "1", "acting", "live_session"))
     saved = record_with(_read("export", "1", "independent", "committed_store"))
-    lenient = GradeGate(min_grade="screen_readback")
+    lenient = GradeGate(min_grade="same_screen")
     lenient.check(live)
     lenient.check(saved)
-    strict = GradeGate(min_grade="verified")
+    strict = GradeGate(min_grade="system_of_record")
     strict.check(saved)
-    with pytest.raises(GradeTooLow, match="screen_readback"):
+    with pytest.raises(GradeTooLow, match="same_screen"):
         strict.check(live)
