@@ -593,6 +593,12 @@ class CaptureComputer:
 
         return self._page
 
+    @property
+    def pointer(self) -> Optional[tuple[int, int]]:
+        """Where the last click or drag left the pointer, or None."""
+
+        return self._pointer
+
     def screenshot(self) -> bytes:
         """The current frame, without performing or recording an action."""
 

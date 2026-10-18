@@ -138,7 +138,7 @@ class AgentLedger:
             "cache_creation_input_tokens": self.total("cache_creation_input_tokens"),
             "cache_read_input_tokens": self.total("cache_read_input_tokens"),
             "prompt_tokens": sum(call.prompt_tokens for call in self.calls),
-            "images_sent": sum(call.images_in_request for call in self.calls),
+            "images_in_requests": sum(call.images_in_request for call in self.calls),
             "cost_usd": round(self.cost_usd(), 6),
             "wall_seconds": round(self.wall_seconds, 3),
             "model_seconds": round(self.model_seconds, 3),

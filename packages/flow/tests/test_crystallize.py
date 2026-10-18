@@ -283,3 +283,72 @@ def test_the_emitted_mcp_server_parses(tmp_path: Path) -> None:
     funcs = [n.name for n in tree.body if isinstance(n, ast.FunctionDef)]
     assert funcs == ["demo_add_note"]
     assert "note: str" in path.read_text()
+
+
+# -- the save gate ----------------------------------------------------------------
+
+
+class _Page:
+    url = "http://app.test/#encounter"
+
+    def __init__(self, screen: str) -> None:
+        self.screen = screen
+
+    def evaluate(self, script: str, arg: Any = None) -> Any:
+        if "innerText" in script and arg is None:
+            return self.screen
+        if "elementFromPoint" in script:
+            return {"tag": "button", "type": "submit", "name": "Save", "in_form": False}
+        return None
+
+
+class _Computer:
+    dialect = "anthropic"
+    pointer = (40, 50)
+
+    def __init__(self, screen: str) -> None:
+        self.page = _Page(screen)
+        self.executed: list[dict[str, Any]] = []
+
+    def screenshot(self) -> bytes:
+        return b"png"
+
+    def execute(self, native: dict[str, Any]) -> Any:
+        self.executed.append(native)
+        return SimpleNamespace(png=b"png", notes=[])
+
+
+@pytest.mark.parametrize(
+    "native", [{"action": "left_click"}, {"action": "left_click", "coordinate": [1, 2]}]
+)
+def test_a_save_on_the_wrong_record_is_never_performed(
+    native: dict, tmp_path: Path
+) -> None:
+    from openadapt_flow.crystallize.harness import Harness, SaveGate
+
+    computer = _Computer("Alex Testcase — MRN P2")
+    harness = Harness(computer, SaveGate(["MRN P1"]), evidence_dir=tmp_path)  # type: ignore[arg-type]
+    with pytest.raises(GateRefused, match="MRN P1"):
+        harness.act(native)
+    assert computer.executed == []
+    assert harness.gate_log[0]["decision"] == "refused_wrong_record"
+    assert (tmp_path / "gate-01.png").is_file()
+
+
+def test_the_hold_decides_after_the_identity_check(tmp_path: Path) -> None:
+    from openadapt_flow.crystallize.harness import Harness, SaveGate
+
+    asked: list[Any] = []
+    computer = _Computer("Jane Sample — MRN P1")
+    deny = Harness(
+        computer,  # type: ignore[arg-type]
+        SaveGate(["MRN P1"], hold=lambda req: asked.append(req) or False),
+    )
+    with pytest.raises(GateRefused, match="hold"):
+        deny.act({"action": "left_click", "coordinate": [1, 2]})
+    assert computer.executed == [] and asked[0].control == "Save"
+
+    allow = Harness(computer, SaveGate(["MRN P1"], hold=lambda req: True))  # type: ignore[arg-type]
+    allow.act({"action": "left_click", "coordinate": [1, 2]})
+    assert len(computer.executed) == 1
+    assert allow.gate_log[-1]["decision"] == "approved_by_hold"

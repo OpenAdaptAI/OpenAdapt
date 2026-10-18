@@ -102,7 +102,6 @@ class HarnessStats:
     #: Kept as evidence with the run; not sent to the model.
     gate_evidence_screenshots: int = 0
     gate_refusals: int = 0
-    refused_actions: int = 0
 
     def to_dict(self) -> dict[str, int]:
         return dict(self.__dict__)
@@ -205,8 +204,12 @@ class Harness:
         """The label of the control this action commits, or None."""
 
         for op in translate(self.dialect, native):
-            if op.kind in ("click", "double_click") and op.x is not None:
-                at = _observe.element_at(self.page, op.x, op.y) or {}
+            if op.kind in ("click", "double_click", "right_click"):
+                # A click with no point lands where the pointer is.
+                point = (op.x, op.y) if op.x is not None else self.computer.pointer
+                if point is None or point[0] is None:
+                    continue
+                at = _observe.element_at(self.page, point[0], point[1]) or {}
                 name = str(at.get("name") or "")
                 if at.get("tag") in ("button", "a", "input") and _observe.commit_label(
                     name
