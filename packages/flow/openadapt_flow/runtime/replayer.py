@@ -6900,6 +6900,41 @@ class Replayer:
                     result,
                     evidence_run_dir=run_dir,
                 )
+                if (
+                    error is not None
+                    and result.identity is not None
+                    and result.identity.status == "mismatch"
+                    and time.monotonic() < deadline
+                ):
+                    # A list or menu that re-renders between the observed
+                    # frame and the identity read can show the target in one
+                    # and not the other. Look once more on a fresh settled
+                    # frame: re-resolve, and act only if identity verifies
+                    # there. A second mismatch halts exactly as the first.
+                    time.sleep(self.poll_interval_s)
+                    fresh_png = self.vision.wait_settled(self.backend)
+                    fresh_resolution, _region, fresh_error = self._resolve_step(
+                        step, fresh_png, bundle_dir, workflow
+                    )
+                    if fresh_error is None and fresh_resolution is not None:
+                        result.identity_reobserved = True
+                        before_png = fresh_png
+                        result.before_png = self._save_step_png(
+                            run_dir, evidence_step_id, "before", before_png
+                        )
+                        last_frame = before_png
+                        resolution = fresh_resolution
+                        result.resolution = resolution
+                        error = self._identity_gate_error(
+                            step,
+                            resolution,
+                            before_png,
+                            params,
+                            workflow,
+                            bundle_dir,
+                            result,
+                            evidence_run_dir=run_dir,
+                        )
                 if error is not None and result.identity is not None:
                     code: Literal["identity_conflict", "identity_unverifiable"] = (
                         "identity_conflict"

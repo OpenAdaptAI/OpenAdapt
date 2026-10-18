@@ -3634,6 +3634,10 @@ class StepResult(BaseModel):
     # (recorded for audit; empty unless an appliance is configured).
     postcondition_drift_rescues: list[str] = Field(default_factory=list)
     drift_oracle_calls: int = 0  # VLM state-verifier calls this step
+    # The first identity check on this step mismatched and a second check on
+    # a fresh settled frame ran (see Replayer: one re-observation before a
+    # halt). The step acted only if that second check verified.
+    identity_reobserved: bool = False
     heal: Optional[HealEvent] = None
     error: Optional[str] = None
     before_png: Optional[str] = None  # run-dir-relative paths

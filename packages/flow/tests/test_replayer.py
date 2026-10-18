@@ -2522,6 +2522,52 @@ def test_identity_mismatch_refuses_to_click(bundle, run_dir):
     assert "refusing to act" in result.error
 
 
+def test_identity_mismatch_on_a_re_rendering_frame_reobserves_once(bundle, run_dir):
+    """A list that re-renders between the frame and the identity read shows
+    the wrong band once. One fresh look verifies it, and the click goes to
+    the target. The step records that it re-observed."""
+    vision = resolving_vision()
+    vision.template_results.append(
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.99)
+    )
+    # The first band read sees the field under the closed list; every later
+    # read sees the target's row.
+    vision.ocr_results = [[OcrLine("Explanation")]]
+    vision.ocr_lines = [OcrLine("Jane Sample Knee pain referral High")]
+    backend = FakeBackend()
+    step = context_click_step("Jane Sample Knee pain referral High")
+    step.timeout_s = 5.0
+    report = Replayer(backend, vision=vision, poll_interval_s=0.01).run(
+        Workflow(name="wf", steps=[step]), bundle_dir=bundle, run_dir=run_dir
+    )
+    assert report.success is True
+    assert ("click", 110, 105, False) in backend.actions
+    result = report.results[0]
+    assert result.identity_reobserved is True
+    assert result.identity.status == "verified"
+
+
+def test_identity_mismatch_twice_still_halts_without_acting(bundle, run_dir):
+    """The re-observation never relaxes identity: a second mismatch halts."""
+    vision = resolving_vision()
+    vision.template_results.append(
+        Match(point=(110, 105), region=(100, 100, 50, 20), confidence=0.99)
+    )
+    vision.ocr_lines = [OcrLine("Taylor Duplicate Knee pain referral High")]
+    backend = FakeBackend()
+    step = context_click_step("Jane Sample Knee pain referral High")
+    step.timeout_s = 5.0
+    report = Replayer(backend, vision=vision, poll_interval_s=0.01).run(
+        Workflow(name="wf", steps=[step]), bundle_dir=bundle, run_dir=run_dir
+    )
+    assert report.success is False
+    assert backend.actions == []
+    result = report.results[0]
+    assert result.identity_reobserved is True
+    assert result.identity.status == "mismatch"
+    assert "Identity check failed" in result.error
+
+
 def test_consequential_remote_reruns_identity_on_fresh_frame(bundle, run_dir):
     frame = make_png()
     backend = RemoteLeaseBackend(initial_frame=frame, fresh_frame=frame)
