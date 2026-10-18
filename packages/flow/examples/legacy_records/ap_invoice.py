@@ -4,7 +4,7 @@ PROTOTYPE, SYNTHETIC DATA ONLY. The same steps as the referral template, on
 an accounts-payable app, to show nothing in the core is clinical:
 
     invoice folder -> parsed document -> clerk confirms exceptions
-      -> one controller approval -> find supplier (must exist) -> enter bill
+      -> find supplier (must exist) -> one controller approval -> enter bill
       -> close, reopen by bill id, read back -> ledger export read -> Seal
 
 Two exports are read. Ctrl+E in the app is an export from the live session,
@@ -176,15 +176,6 @@ def post_one(
             f"no person settled the exception on {', '.join(open_items)}; "
             "nothing was searched or written"
         )
-    choice = decide(
-        req,
-        people,
-        question="Approve this invoice for payment?",
-        options=["approve", "hold", "reject"],
-        role="controller",
-        output_field="approval",
-        log=log,
-    )
     try:
         return _post(
             app,
@@ -193,7 +184,6 @@ def post_one(
             supplier,
             ident,
             state,
-            choice,
             sup,
             inv_no,
             amount,
@@ -224,6 +214,7 @@ def _no_bill(
     choice: str,
     sup: str,
     pane: str,
+    pane_at: str,
     run_dir: Path,
     l1_dir: Path,
     export_dir: Path,
@@ -234,8 +225,8 @@ def _no_bill(
     log,
 ) -> str:
     """A hold or reject enters no bill. Read back that none was entered: the
-    supplier's bill count on screen, and in the scheduled export of saved
-    data."""
+    supplier's bill count on screen before the decision, and in the scheduled
+    export of saved data after it."""
     on_screen = pane_value(pane, "Open bills")
     started = time.time() - 1
     scheduled_export(app_python, ledger_db, export_dir)
@@ -247,7 +238,7 @@ def _no_bill(
             "value": on_screen,
             "artifact_id": "bill",
             "session": "acting",
-            "observed_at": now(),
+            "observed_at": pane_at,
         },
         {
             "channel": "export",
@@ -297,7 +288,6 @@ def _post(
     supplier: dict[str, Any],
     ident: dict[str, Any],
     state: dict[str, bool],
-    choice: str,
     sup: str,
     inv_no: str,
     amount: str,
@@ -320,7 +310,7 @@ def _post(
     if screen == "Supplier not found":
         ident["match"] = {"status": "new", "candidates": 0, "checked_by": EXECUTOR}
         return halt(f"supplier {sup} is not in the ledger; nothing was written")
-    pane = app.copy_pane()
+    pane, pane_at = app.copy_pane(), now()
     shown = pane_value(pane, "Supplier")
     supplier["reads"] = [
         {
@@ -343,6 +333,17 @@ def _post(
         "candidates": 1,
         "checked_by": EXECUTOR,
     }
+    # The controller decides once the supplier is confirmed, so the supplier
+    # screen above is the state before the decision.
+    choice = decide(
+        req,
+        people,
+        question="Approve this invoice for payment?",
+        options=["approve", "hold", "reject"],
+        role="controller",
+        output_field="approval",
+        log=log,
+    )
     if choice != "approve":
         return _no_bill(
             res,
@@ -350,6 +351,7 @@ def _post(
             choice,
             sup,
             pane,
+            pane_at,
             run_dir,
             l1_dir,
             export_dir,

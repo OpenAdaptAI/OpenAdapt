@@ -40,7 +40,8 @@ DOC_SIDE = {"kind": "system", "id": "intake@demo-site"}
 
 
 def now() -> str:
-    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+    # Microseconds, so a read made after a decision has a later time.
+    return datetime.now(timezone.utc).isoformat(timespec="microseconds")
 
 
 def grade(reads: list[dict[str, Any]], value: Optional[str]) -> str:
@@ -66,13 +67,14 @@ def read_field(
     artifact_id: str,
     screen: str,
     exports: Optional[list[tuple[Optional[str], str]]] = None,
-    acting: Optional[list[tuple[str, Optional[str]]]] = None,
+    acting: Optional[list[tuple[str, Optional[str], str]]] = None,
 ) -> dict[str, Any]:
     """One field read through two (or more) channels, with its evidence.
 
     ``clipboard`` and ``ocr_line`` were read in ``session``. ``acting`` lists
     ``(channel, value)`` reads of the same value made earlier in the acting
-    session (for example from the record pane before the write).
+    session (for example from the record pane before the write), as
+    ``(channel, value, observed_at)``.
     """
     reads: list[dict[str, Any]] = [
         {
@@ -80,9 +82,9 @@ def read_field(
             "value": seen,
             "artifact_id": artifact_id,
             "session": "acting",
-            "observed_at": now(),
+            "observed_at": at,
         }
-        for channel, seen in acting or []
+        for channel, seen, at in acting or []
     ]
     reads += [
         {

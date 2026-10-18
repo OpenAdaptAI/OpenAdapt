@@ -128,14 +128,22 @@ def test_grades_follow_the_reading_rule() -> None:
     )
     assert (
         evidence.read_field(
-            "r", "code", **kw, session="reopened", acting=[("clipboard", "REC-1")]
+            "r",
+            "code",
+            **kw,
+            session="reopened",
+            acting=[("clipboard", "REC-1", evidence.now())],
         )["grade"]
         == "reopened"
     )
     # An acting read that saw something else gives no grade at all.
     assert (
         evidence.read_field(
-            "r", "code", **kw, session="reopened", acting=[("clipboard", "REC-2")]
+            "r",
+            "code",
+            **kw,
+            session="reopened",
+            acting=[("clipboard", "REC-2", evidence.now())],
         )["grade"]
         == "unchecked"
     )
@@ -435,7 +443,11 @@ def test_a_decline_with_no_chart_reads_back_the_search(inbox: Path, mock_emr) ->
     )
     assert outcome == "declined" and res["outcome"] == "no_action"
     assert res["no_action"]["evidence"] == ["search_matches"]
-    assert _field(res, "search_matches")["grade"] == "same_screen"
+    # The search result read before the decision and the search run again
+    # after it.
+    sessions = [r["session"] for r in _field(res, "search_matches")["reads"]]
+    assert sessions == ["acting", "acting", "reopened", "reopened"]
+    assert _field(res, "search_matches")["grade"] == "reopened"
     assert res["identities"][0]["match"]["status"] == "new"
 
 
@@ -450,7 +462,7 @@ def test_a_screen_halt_after_the_save_writes_a_halted_result(
         inbox / "run",
     )
     assert outcome == "halted"
-    assert "after the save keystroke" in res["halt_reason"]
+    assert "may already be saved: a triage entry on REC-100001" in res["halt_reason"]
     assert (inbox / "run" / "review_queue" / "referral-0008-result.json").exists()
 
 
@@ -551,3 +563,25 @@ def test_invoice_posting_conforms(inbox: Path, mock_ledger, choice: str) -> None
         assert na["required_grade"] == ap_invoice.COMMIT_GRADE == "system_of_record"
         assert _field(res, "supplier_bills")["grade"] == "system_of_record"
         assert not (run / "review_queue").exists()
+
+
+@pytest.mark.parametrize(
+    ("fail_on", "may_exist"),
+    [
+        ("Chart (REC", "may already be saved: a new chart for TESTPATIENT, ALPHA"),
+        ("Triage entry", "may already be saved: new chart REC-"),
+    ],
+)
+def test_a_screen_halt_after_the_chart_save_names_the_new_chart(
+    inbox: Path, mock_emr, fail_on: str, may_exist: str
+) -> None:
+    fax = inbox / "fax_inbox" / "referral-0007.pdf"
+    outcome, res = _triage(
+        _emr(mock_emr, inbox / "emr.sqlite", fail_on=fail_on),
+        fax,
+        _scripted({"referral-0007.pdf": "urgent"}),
+        inbox / "run",
+    )
+    assert outcome == "halted"
+    assert may_exist in res["halt_reason"]
+    assert "nothing was saved" not in res["halt_reason"]

@@ -19,8 +19,10 @@ This example shows OpenAdapt reading records out of desktop apps that have no AP
 | Outcome | Referral triage | Invoice posting | Review queue |
 |---|---|---|---|
 | `committed` | Triage entry written; the reopened chart shows it and one more entry than before | Bill entered; the reopened bill and the scheduled export show it | Only for values that need review |
-| `no_action` | The physician chose `decline` (`reason_code` `declined`). Evidence: the chart search on screen (clipboard and OCR), and for one matching chart its triage entry count before and after reopening. | The controller chose `hold` or `reject` (`held`, `rejected`). Evidence: the supplier's bill count on screen and in the scheduled export. | Only with `--review-decisions` or `"policy": {"review_decisions": true}` in the answers file |
+| `no_action` | The physician chose `decline` (`reason_code` `declined`). Evidence: the chart search result before the decision and the same search run again after it (clipboard and OCR), and for one matching chart its triage entry count before the decision and after reopening. | The controller chose `hold` or `reject` (`held`, `rejected`). Evidence: the supplier's bill count on screen before the decision, and in the scheduled export after it. | Only with `--review-decisions` or `"policy": {"review_decisions": true}` in the answers file |
 | `halted` | More than one chart matches, the chart shows a different subject, the save was dropped, an exception was not settled, the no-write evidence is too weak, or a screen did not appear | The supplier is missing or different, the bill cannot be reopened or exported, an exception was not settled, the no-write evidence is too weak, or a screen did not appear | Always |
+
+Both workflows find the record before asking for the decision, so the screen read before the decision is the state a later read must match. A halt reason names what a save keystroke may already have created, such as a new chart saved before its triage entry.
 
 A `no_action` result never counts as a save and is never billable. Its evidence must reach the grade a commit of the same workflow carries: `same_screen` for the referral (the weakest grade of a committed triage entry) and `system_of_record` for the invoice. Weaker evidence halts the run instead.
 

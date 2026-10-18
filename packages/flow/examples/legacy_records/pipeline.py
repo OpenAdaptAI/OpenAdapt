@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Optional
@@ -236,6 +237,8 @@ def decide(
             "decided_at": now(),
         }
     )
+    # Reads after the decision must carry a later time than decided_at.
+    time.sleep(0.001)
     log(f"  {people.approver} chose {choice!r}")
     return choice
 
