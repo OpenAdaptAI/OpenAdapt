@@ -478,7 +478,7 @@ export function WatchRun({
                     }
                   />
                   <span>
-                    I reviewed these steps. The task uses test data, and I will
+                    I reviewed these steps. The workflow uses test data, and I will
                     keep the target app in view.
                   </span>
                 </label>

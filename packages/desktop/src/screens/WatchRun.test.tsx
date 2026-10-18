@@ -304,7 +304,7 @@ it("requires the first user to review the compiled workflow before a supervised 
 
   fireEvent.click(
     screen.getByRole("checkbox", {
-      name: "I reviewed these steps. The task uses test data, and I will keep the target app in view.",
+      name: "I reviewed these steps. The workflow uses test data, and I will keep the target app in view.",
     }),
   );
   expect(runButton.disabled).toBe(false);

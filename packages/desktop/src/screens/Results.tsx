@@ -129,7 +129,7 @@ export function Results({ onNeedsYou }: { onNeedsYou: () => void }) {
             No results yet
           </Status>
           <p>
-            Run a checked task on a list of items. Each item shows up here, and
+            Run a checked workflow on a list of items. Each item shows up here, and
             only items OpenAdapt read back from the record count as done.
           </p>
         </div>
@@ -197,12 +197,12 @@ export function Results({ onNeedsYou }: { onNeedsYou: () => void }) {
       {switches.length > 0 && <SwitchSection switches={switches} />}
 
       <section className="results-section" aria-labelledby="by-task">
-        <h2 id="by-task">By task</h2>
+        <h2 id="by-task">By workflow</h2>
         <div className="table-scroll">
           <table className="results-table">
             <thead>
               <tr>
-                <th>Task</th>
+                <th>Workflow</th>
                 <th className="num">Done and checked</th>
                 <th className="num">Needed a person</th>
                 <th className="num">Prevented</th>
@@ -264,7 +264,7 @@ export function Results({ onNeedsYou }: { onNeedsYou: () => void }) {
         <p className="fine-print">
           The time saved is an estimate, not a measurement. It multiplies the
           items OpenAdapt finished and checked by the minutes each one takes by
-          hand. The default is how long your recording of the task took; type
+          hand. The default is how long your recording of the workflow took; type
           your team's own number if it's different. Time spent answering Needs
           you isn't subtracted.
         </p>
@@ -345,7 +345,7 @@ function SwitchSection({ switches }: { switches: SwitchSummary[] }) {
           const status = switchStatus(entry.state);
           return (
             <li key={entry.workflow_id}>
-              <span className="switch-summary-task">{entry.task_name || "A task"}</span>
+              <span className="switch-summary-task">{entry.task_name || "A workflow"}</span>
               <Status tone={status.tone} icon={status.icon}>
                 {status.word}
               </Status>

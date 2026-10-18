@@ -226,7 +226,7 @@ export function attentionCopy(item: AttentionItem): AttentionCopy {
           ? `OpenAdapt couldn't find “${targetName(item)}” on the screen`
           : "OpenAdapt couldn't find the next thing to click",
         sentence:
-          "The app may look different from when you showed the task. It stopped instead of guessing where to click.",
+          "The app may look different from when you showed the workflow. It stopped instead of guessing where to click.",
         prevented: "It stopped before saving. Nothing was written.",
         preventedTone: "ok",
         choices: [...choices].sort((left, right) =>
