@@ -42,10 +42,11 @@ def _sha(path: Path) -> str:
 
 
 def _fresh(path: Path) -> Path:
-    items = path / "items.csv"
-    if items.is_file():
-        items.unlink()
-    return items
+    """An import rewrites its run directory: rows and meta."""
+    for name in ("items.csv", "meta.json"):
+        if (path / name).is_file():
+            (path / name).unlink()
+    return path / "items.csv"
 
 
 def openimis_demo(run_id: str, program_only: bool = False) -> None:
@@ -99,6 +100,7 @@ def _openimis_first_run(src: Path, run_id: str) -> None:
         out,
         task="openimis",
         arm="first_run",
+        model=ledger["model"],
         imported_from=str(src.relative_to(REPO)),
         source_sha256={
             p.name: _sha(p)
@@ -275,6 +277,8 @@ def openemr() -> None:
             out,
             task="openemr_referral",
             arm=out.parent.name,
+            # That study's agent arm: claude-sonnet-5-5 (its PROTOCOL.md).
+            model="claude-sonnet-5-5" if out.parent.name == "agent" else None,
             imported_from=str(OPENEMR.relative_to(REPO)),
             source_sha256=_sha(OPENEMR),
             note=(

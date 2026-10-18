@@ -1,87 +1,18 @@
 {
   "protocol_version": "2026-10-18.1",
-  "written_at": "2026-10-18T15:49:04-0400",
+  "written_at": "2026-10-18T17:20:50-0400",
   "machine": "arm64 Darwin 24.6.0",
   "cpu_count": 12,
   "python": "3.12.13",
   "engine": {
     "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
-    "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+    "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
   },
-  "benchmark_git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2",
+  "benchmark_git_head": "13d3327c58636033adf5b71460774165a026dd4c",
   "task": "openemr_referral",
   "arm": "program",
+  "model": null,
   "imported_from": "packages/flow/benchmark/openemr_referral_timing/runs.csv",
   "source_sha256": "b4b24eaa8df86c9a54cc3a435cb6baff1940931e893750a4896fca57bf3eaa87",
-  "note": "warm runs, valid only; timed per that study's load gate (12)",
-  "sessions": [
-    {
-      "protocol_version": "2026-10-18.1",
-      "written_at": "2026-10-18T15:49:34-0400",
-      "machine": "arm64 Darwin 24.6.0",
-      "cpu_count": 12,
-      "python": "3.12.13",
-      "engine": {
-        "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
-        "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
-      },
-      "benchmark_git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2",
-      "task": "openemr_referral",
-      "arm": "program",
-      "imported_from": "packages/flow/benchmark/openemr_referral_timing/runs.csv",
-      "source_sha256": "b4b24eaa8df86c9a54cc3a435cb6baff1940931e893750a4896fca57bf3eaa87",
-      "note": "warm runs, valid only; timed per that study's load gate (12)"
-    },
-    {
-      "protocol_version": "2026-10-18.1",
-      "written_at": "2026-10-18T15:49:50-0400",
-      "machine": "arm64 Darwin 24.6.0",
-      "cpu_count": 12,
-      "python": "3.12.13",
-      "engine": {
-        "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
-        "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
-      },
-      "benchmark_git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2",
-      "task": "openemr_referral",
-      "arm": "program",
-      "imported_from": "packages/flow/benchmark/openemr_referral_timing/runs.csv",
-      "source_sha256": "b4b24eaa8df86c9a54cc3a435cb6baff1940931e893750a4896fca57bf3eaa87",
-      "note": "the study's published set: engine 0c642bc0, warm, blocks 2-10, valid runs; timed per its start gate (1-minute load < 12)"
-    },
-    {
-      "protocol_version": "2026-10-18.1",
-      "written_at": "2026-10-18T16:11:29-0400",
-      "machine": "arm64 Darwin 24.6.0",
-      "cpu_count": 12,
-      "python": "3.12.13",
-      "engine": {
-        "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
-        "git_head": "0e6c4db2237ce6a0162fd787184b0331b17615de"
-      },
-      "benchmark_git_head": "0e6c4db2237ce6a0162fd787184b0331b17615de",
-      "task": "openemr_referral",
-      "arm": "program",
-      "imported_from": "packages/flow/benchmark/openemr_referral_timing/runs.csv",
-      "source_sha256": "b4b24eaa8df86c9a54cc3a435cb6baff1940931e893750a4896fca57bf3eaa87",
-      "note": "the study's published set: engine 0c642bc0, warm, blocks 2-10, valid runs; timed per its start gate (1-minute load < 12)"
-    },
-    {
-      "protocol_version": "2026-10-18.1",
-      "written_at": "2026-10-18T16:11:42-0400",
-      "machine": "arm64 Darwin 24.6.0",
-      "cpu_count": 12,
-      "python": "3.12.13",
-      "engine": {
-        "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
-        "git_head": "0e6c4db2237ce6a0162fd787184b0331b17615de"
-      },
-      "benchmark_git_head": "0e6c4db2237ce6a0162fd787184b0331b17615de",
-      "task": "openemr_referral",
-      "arm": "program",
-      "imported_from": "packages/flow/benchmark/openemr_referral_timing/runs.csv",
-      "source_sha256": "b4b24eaa8df86c9a54cc3a435cb6baff1940931e893750a4896fca57bf3eaa87",
-      "note": "the study's published set: engine 0c642bc0, warm, blocks 2-10, valid runs; timed per its start gate (1-minute load < 12)"
-    }
-  ]
+  "note": "the study's published set: engine 0c642bc0, warm, blocks 2-10, valid runs; timed per its start gate (1-minute load < 12)"
 }

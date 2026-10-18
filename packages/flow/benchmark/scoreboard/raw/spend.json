@@ -1,5 +1,5 @@
 {
-  "total_usd": 3.172722,
+  "total_usd": 3.866907,
   "entries": [
     {
       "usd": 0.577,
@@ -299,6 +299,81 @@
       "usd": 0.038688,
       "note": "mockmed agent 2026-10-18-a item 41",
       "at": 1792354307.547764
+    },
+    {
+      "usd": 0.038638,
+      "note": "mockmed agent 2026-10-18-a item 42",
+      "at": 1792354352.952689
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 43",
+      "at": 1792354402.4337258
+    },
+    {
+      "usd": 0.038608,
+      "note": "mockmed agent 2026-10-18-a item 44",
+      "at": 1792354439.651799
+    },
+    {
+      "usd": 0.038558,
+      "note": "mockmed agent 2026-10-18-a item 45",
+      "at": 1792354648.761775
+    },
+    {
+      "usd": 0.038538,
+      "note": "mockmed agent 2026-10-18-a item 46",
+      "at": 1792354696.634707
+    },
+    {
+      "usd": 0.038698,
+      "note": "mockmed agent 2026-10-18-a item 47",
+      "at": 1792354744.58158
+    },
+    {
+      "usd": 0.038538,
+      "note": "mockmed agent 2026-10-18-a item 48",
+      "at": 1792354796.941616
+    },
+    {
+      "usd": 0.038658,
+      "note": "mockmed agent 2026-10-18-a item 49",
+      "at": 1792354846.340391
+    },
+    {
+      "usd": 0.038548,
+      "note": "mockmed agent 2026-10-18-a item 50",
+      "at": 1792354884.0382369
+    },
+    {
+      "usd": 0.038658,
+      "note": "mockmed agent 2026-10-18-a item 51",
+      "at": 1792354913.4168131
+    },
+    {
+      "usd": 0.038688,
+      "note": "mockmed agent 2026-10-18-a item 52",
+      "at": 1792354954.2666008
+    },
+    {
+      "usd": 0.100659,
+      "note": "openemr_referral first_run 2026-10-18-a",
+      "at": 1792358264.2258198
+    },
+    {
+      "usd": 0.056532,
+      "note": "openimis agent 2026-10-18-a item 17",
+      "at": 1792358342.786124
+    },
+    {
+      "usd": 0.056576,
+      "note": "openimis agent 2026-10-18-a item 18",
+      "at": 1792358389.682724
+    },
+    {
+      "usd": 0.05573,
+      "note": "openimis agent 2026-10-18-a item 19",
+      "at": 1792358431.418853
     }
   ]
 }

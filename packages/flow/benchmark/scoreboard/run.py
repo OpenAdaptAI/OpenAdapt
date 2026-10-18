@@ -24,6 +24,7 @@ import argparse
 import json
 import os
 import shutil
+import signal
 import sys
 import time
 from pathlib import Path
@@ -56,6 +57,15 @@ FAILURE_WORDS = (
     "error",
 )
 REVIEWER = "scoreboard-reviewer@example.invalid"
+ITEM_TIMEOUT_S = 600
+
+
+class ItemTimeout(Exception):
+    pass
+
+
+def _item_timeout(signum: int, frame: Any) -> None:
+    raise ItemTimeout(f"item exceeded {ITEM_TIMEOUT_S} s")
 
 
 # -- spend ------------------------------------------------------------------------
@@ -100,6 +110,10 @@ def task_module(name: str) -> Any:
         from scoreboard.tasks import openimis
 
         return openimis
+    if name == "openemr_referral":
+        from scoreboard.tasks import openemr
+
+        return openemr
     raise SystemExit(f"unknown task {name!r}")
 
 
@@ -227,6 +241,10 @@ def arm_agent(args: argparse.Namespace) -> int:
                 max_cost_usd=args.max_cost,
             )
             error: Optional[BaseException] = None
+            # Watchdog: an item that hangs (once, a browser call blocked for an
+            # hour) becomes an error row instead of stalling the batch.
+            signal.signal(signal.SIGALRM, _item_timeout)
+            signal.alarm(ITEM_TIMEOUT_S)
             try:
                 task.setup(backend.page)
                 agent.run(
@@ -236,6 +254,7 @@ def arm_agent(args: argparse.Namespace) -> int:
             except Exception as exc:  # noqa: BLE001 - recorded, the batch goes on
                 error = exc
             finally:
+                signal.alarm(0)
                 close()
             wall = time.time() - w0
             add_spend(agent.cost_usd, f"{task.NAME} agent {args.run_id} item {i}")
@@ -329,57 +348,102 @@ def _admitter(key_dir: Path) -> Any:
     return authority.principal_from_key(authority.load_encrypted_key(pem), key_dir)
 
 
+def _openemr_jit(cache: Path, values: dict[str, str], agent: Any = None) -> Any:
+    from openadapt_flow.jit import TaskSignature, WebApp, compile_agent
+    from scoreboard.tasks import openemr as T
+
+    return compile_agent(
+        agent,
+        task=TaskSignature(T.TASK_ID, T.INSTRUCTION, {p: str for p in T.PARAMS}),
+        app=WebApp(
+            url=T.entry_url(),
+            record_reader=T.patients,
+            setup=T.setup,
+            capture_settle_timeout_s=10.0,
+        ),
+        verifier=T.oracle_verifier(values),
+        policy="clinical-write",
+        cache_dir=cache,
+        key_dir=cache / "admission-keys",
+        model_key=model_key() if agent is not None else None,
+        dialect="anthropic",
+    )
+
+
+def _admission(
+    jit: Any, params: list[str], canary_values: dict[str, str], cache: Path
+) -> dict[str, Any]:
+    """Confirm parameters, review, attended canary, admit; record what happens."""
+
+    out: dict[str, Any] = {}
+    try:
+        confirmed = jit.confirm_params(
+            principal_id=REVIEWER, accept_params=params, confirm="ok"
+        )
+        jit.review(
+            principal_id=REVIEWER, reviewed_steps=confirmed["steps"], confirm="ok"
+        )
+        out["steps"] = len(confirmed["steps"])
+        canary = jit.canary(principal_id=REVIEWER, **canary_values)
+        out.update(
+            canary_status=canary.status,
+            canary_detail=canary.detail,
+            canary_halt=canary.halt_reason,
+        )
+        if canary.verified:
+            jit.admit_with_key(_admitter(cache / "admission-keys"))
+            out["admitted"] = True
+    except Exception as exc:  # noqa: BLE001 - the refusal is the result
+        out["admission_error"] = f"{type(exc).__name__}: {exc}"[:600]
+    out.setdefault("admitted", False)
+    candidate = jit.candidate() or {}
+    out["params"] = candidate.get("params")
+    return out
+
+
 def arm_first_run(args: argparse.Namespace) -> int:
     task = task_module(args.task)
-    if task.NAME != "mockmed":
-        raise SystemExit(
-            "first_run runs live on mockmed; openIMIS is imported (importers.py)"
-        )
     out = schema.run_dir(task.NAME, "first_run", args.run_id)
     cache = out / "jit-cache"
     if cache.exists():
         shutil.rmtree(cache)
     schema.write_meta(out, task=task.NAME, arm="first_run", model=AGENT_MODEL)
-    sess = Session(task, args.tag, faults=False)
-    try:
+    agent = ClaudeComputerUseAgent(
+        ledger_path=out / "ledger.json",
+        model=AGENT_MODEL,
+        system=SYSTEM_TEMPLATE.format(app=task.APP),
+        max_cost_usd=args.max_cost,
+    )
+    sess = None
+    if task.NAME == "mockmed":
+        sess = Session(task, args.tag, faults=False)
         it = sess.item(0)
-        agent = ClaudeComputerUseAgent(
-            ledger_path=out / "ledger.json",
-            model=AGENT_MODEL,
-            system=SYSTEM_TEMPLATE.format(app=task.APP),
-            max_cost_usd=args.max_cost,
-        )
+        values, canary_values, params = it.values, sess.item(999).values, ["note"]
         jit = _mockmed_jit(sess, cache, it, agent)
+        readback_fn = lambda: sess.readback(it)  # noqa: E731
+    elif task.NAME == "openemr_referral":
+        values, canary_values = task.item_values(0), task.item_values(999)
+        params = list(task.PARAMS)
+        jit = _openemr_jit(cache, values, agent)
+        before_ids = {p["id"] for p in task.patients()}
+        readback_fn = lambda: task.check(values, before_ids)  # noqa: E731
+    else:
+        raise SystemExit(
+            "openIMIS arm 2 is imported from the launch demo (importers.py)"
+        )
+    try:
         load0 = schema.load_1m()
         w0 = time.time()
-        result = jit.run(**it.values)
+        result = jit.run(**values)
         wall = time.time() - w0
-        add_spend(agent.cost_usd, f"mockmed first_run {args.run_id}")
-        readback = sess.readback(it)
+        add_spend(agent.cost_usd, f"{task.NAME} first_run {args.run_id}")
+        readback = readback_fn()
         summary: dict[str, Any] = {
             "record_status": result.status,
             "detail": result.detail,
         }
-        admitted = False
         if result.candidate is not None:
-            confirmed = jit.confirm_params(
-                principal_id=REVIEWER, accept_params=["note"], confirm="ok"
-            )
-            jit.review(
-                principal_id=REVIEWER, reviewed_steps=confirmed["steps"], confirm="ok"
-            )
-            canary_it = sess.item(999)
-            canary = jit.canary(principal_id=REVIEWER, **canary_it.values)
-            summary.update(
-                steps=len(confirmed["steps"]),
-                canary_status=canary.status,
-                canary_detail=canary.detail,
-                canary_halt=canary.halt_reason,
-            )
-            if canary.verified:
-                jit.admit_with_key(_admitter(cache / "admission-keys"))
-                admitted = True
-        summary["admitted"] = admitted
+            summary.update(_admission(jit, params, canary_values, cache))
         (out / "first_run.json").write_text(
             json.dumps(summary, indent=2, default=str) + "\n"
         )
@@ -405,15 +469,28 @@ def arm_first_run(args: argparse.Namespace) -> int:
                 (agent.finished_at or time.time()) - (agent.started_at or w0), 3
             ),
             wall_s=round(wall, 3),
-            approvals_asked=1 if admitted else 0,
+            approvals_asked=1 if summary.get("admitted") else 0,
             host_load_1m=load0,
             timed=schema.timed(load0, schema.load_1m()),
-            detail=json.dumps(summary, default=str)[:300],
+            detail=json.dumps(
+                {
+                    k: summary.get(k)
+                    for k in (
+                        "record_status",
+                        "steps",
+                        "canary_status",
+                        "admitted",
+                        "admission_error",
+                    )
+                },
+                default=str,
+            )[:300],
         )
         schema.append(out / "items.csv", row)
-        print(json.dumps(summary, indent=2, default=str))
+        print(json.dumps(summary, indent=2, default=str)[:3000])
     finally:
-        sess.close()
+        if sess is not None:
+            sess.close()
     return 0
 
 
@@ -516,7 +593,7 @@ def arm_program(args: argparse.Namespace) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("arm", choices=["agent", "first_run", "program"])
-    parser.add_argument("task", choices=["mockmed", "openimis"])
+    parser.add_argument("task", choices=["mockmed", "openimis", "openemr_referral"])
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--n", type=int, default=100)
     parser.add_argument("--start", type=int, default=1)

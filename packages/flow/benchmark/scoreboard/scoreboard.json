@@ -1,26 +1,32 @@
 {
   "protocol_version": "2026-10-18.1",
   "timed_load_max": 12.0,
-  "spend_usd": 3.172722,
+  "spend_usd": 3.866907,
   "tasks": {
     "mockmed": {
       "agent": {
         "label": "1. Agent alone (Claude Sonnet 5.5 computer use)",
-        "items": 41,
-        "attempts": 41,
+        "items": 52,
+        "attempts": 52,
         "runs": [
           "2026-10-18-a"
         ],
-        "normal_items": 39,
-        "correct": 39,
+        "normal_items": 47,
+        "correct": 47,
         "correct_rate": 1.0,
         "silent_wrong": 2,
         "safe_stops_normal": 0,
-        "fault_items": 2,
+        "fault_items": 5,
         "fault_items_by_kind": {
           "optimistic": {
             "correct": 0,
             "silent_wrong": 1,
+            "safe_stop": 0,
+            "flagged_wrong": 0
+          },
+          "ui_change": {
+            "correct": 3,
+            "silent_wrong": 0,
             "safe_stop": 0,
             "flagged_wrong": 0
           },
@@ -31,13 +37,13 @@
             "flagged_wrong": 0
           }
         },
-        "planned_items": 41,
-        "done_correctly_all_items": 39,
+        "planned_items": 52,
+        "done_correctly_all_items": 50,
         "flagged_wrong": 0,
         "paused": 0,
         "model_calls_per_item": 5.0,
         "tokens_per_item": 40629,
-        "cost_usd_total": 1.5828,
+        "cost_usd_total": 2.0075,
         "cost_usd_per_item": 0.0386,
         "approvals_asked": 0,
         "timed_correct_items": 0,
@@ -213,11 +219,56 @@
           {
             "run": "study-main-0c642bc0",
             "imported_from": "packages/flow/benchmark/openemr_referral_timing/runs.csv",
+            "model": "claude-sonnet-5-5",
             "engine": {
               "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
-              "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+              "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
             },
-            "note": "warm runs, valid only; timed per that study's load gate (12)"
+            "note": "the study's published set: engine 0c642bc0, warm, blocks 2-10, valid runs; timed per its start gate (1-minute load < 12)"
+          }
+        ]
+      },
+      "first_run": {
+        "label": "2. Agent's first run under OpenAdapt (recorded, read back, compiled)",
+        "items": 1,
+        "attempts": 1,
+        "runs": [
+          "2026-10-18-a"
+        ],
+        "normal_items": 1,
+        "correct": 1,
+        "correct_rate": 1.0,
+        "silent_wrong": 0,
+        "safe_stops_normal": 0,
+        "fault_items": 0,
+        "fault_items_by_kind": {},
+        "planned_items": 1,
+        "done_correctly_all_items": 1,
+        "flagged_wrong": 0,
+        "paused": 0,
+        "model_calls_per_item": 12.0,
+        "tokens_per_item": 158278,
+        "cost_usd_total": 0.1007,
+        "cost_usd_per_item": 0.1007,
+        "approvals_asked": 0,
+        "timed_correct_items": 0,
+        "item_s_median": null,
+        "item_s_p90": null,
+        "wall_s_median": null,
+        "wall_s_p90": null,
+        "items_per_hour": null,
+        "host_load_1m": {
+          "min": 4.28,
+          "max": 4.28
+        },
+        "sources": [
+          {
+            "run": "2026-10-18-a",
+            "model": "claude-sonnet-5-5",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
+            }
           }
         ]
       },
@@ -267,9 +318,9 @@
             "imported_from": "packages/flow/benchmark/openemr_referral_timing/runs.csv",
             "engine": {
               "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
-              "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+              "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
             },
-            "note": "warm runs, valid only; timed per that study's load gate (12)"
+            "note": "the study's published set: engine 0c642bc0, warm, blocks 2-10, valid runs; timed per its start gate (1-minute load < 12)"
           }
         ]
       }
@@ -277,26 +328,26 @@
     "openimis": {
       "agent": {
         "label": "1. Agent alone (Claude Sonnet 5.5 computer use)",
-        "items": 16,
-        "attempts": 16,
+        "items": 19,
+        "attempts": 19,
         "runs": [
           "2026-10-18-a"
         ],
-        "normal_items": 16,
-        "correct": 16,
+        "normal_items": 19,
+        "correct": 19,
         "correct_rate": 1.0,
         "silent_wrong": 0,
         "safe_stops_normal": 0,
         "fault_items": 0,
         "fault_items_by_kind": {},
-        "planned_items": 16,
-        "done_correctly_all_items": 16,
+        "planned_items": 19,
+        "done_correctly_all_items": 19,
         "flagged_wrong": 0,
         "paused": 0,
-        "model_calls_per_item": 7.5,
-        "tokens_per_item": 78077,
-        "cost_usd_total": 0.9611,
-        "cost_usd_per_item": 0.0601,
+        "model_calls_per_item": 7.42,
+        "tokens_per_item": 76820,
+        "cost_usd_total": 1.13,
+        "cost_usd_per_item": 0.0595,
         "approvals_asked": 0,
         "timed_correct_items": 0,
         "item_s_median": null,
@@ -305,7 +356,7 @@
         "wall_s_p90": null,
         "items_per_hour": null,
         "host_load_1m": {
-          "min": 89.41,
+          "min": 16.02,
           "max": 498.31
         },
         "sources": [
@@ -353,9 +404,10 @@
           {
             "run": "launch-4",
             "imported_from": "demo/cua_to_program/results/launch-4",
+            "model": "claude-opus-5-5",
             "engine": {
               "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
-              "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+              "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
             },
             "note": "host load not sampled for this run; untimed"
           }
@@ -363,16 +415,17 @@
       },
       "program": {
         "label": "3. Compiled program driving the UI",
-        "items": 50,
-        "attempts": 52,
+        "items": 150,
+        "attempts": 154,
         "runs": [
-          "launch-4"
+          "launch-4",
+          "launch-4-c100"
         ],
-        "normal_items": 49,
-        "correct": 49,
-        "correct_rate": 1.0,
+        "normal_items": 149,
+        "correct": 148,
+        "correct_rate": 0.9933,
         "silent_wrong": 0,
-        "safe_stops_normal": 0,
+        "safe_stops_normal": 1,
         "fault_items": 1,
         "fault_items_by_kind": {
           "ui_change": {
@@ -382,8 +435,8 @@
             "flagged_wrong": 0
           }
         },
-        "planned_items": 100,
-        "done_correctly_all_items": 49,
+        "planned_items": 200,
+        "done_correctly_all_items": 148,
         "flagged_wrong": 0,
         "paused": 50,
         "model_calls_per_item": 0.0,
@@ -407,7 +460,16 @@
             "imported_from": "demo/cua_to_program/results/launch-4",
             "engine": {
               "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
-              "git_head": "5881cb38b24b3d24402c45dcec86af4934a99cc2"
+              "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
+            },
+            "profile": "demo (plain Replayer, SQL record check attached); not admitted"
+          },
+          {
+            "run": "launch-4-c100",
+            "imported_from": "demo/cua_to_program/results/launch-4-c100",
+            "engine": {
+              "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+              "git_head": "13d3327c58636033adf5b71460774165a026dd4c"
             },
             "profile": "demo (plain Replayer, SQL record check attached); not admitted"
           }
