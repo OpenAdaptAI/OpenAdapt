@@ -155,5 +155,5 @@ are not app URLs.
 | `route` on a desktop surface: no test | [#1264](https://github.com/OpenAdaptAI/OpenAdapt/pull/1264) | [#1288](https://github.com/OpenAdaptAI/OpenAdapt/pull/1288) |
 | `induce --probe-on` on a desktop test copy: no test | [#1276](https://github.com/OpenAdaptAI/OpenAdapt/pull/1276) | [#1289](https://github.com/OpenAdaptAI/OpenAdapt/pull/1289) |
 | `run --self-repair` refuses non-web: "only browser runs can be repaired for now" | [#1265](https://github.com/OpenAdaptAI/OpenAdapt/pull/1265) | refused with a reason; desktop support after it merges |
-| `compile-agent` CLI takes only `--url` | [#1277](https://github.com/OpenAdaptAI/OpenAdapt/pull/1277) | after it merges (this page's URL-flag test will flag it) |
+| `compile-agent` takes `--backend`/`--config` but refuses every non-web target (exit 2, before anything runs); its observe step and save gate read the DOM | [#1277](https://github.com/OpenAdaptAI/OpenAdapt/pull/1277) | refused with a reason; desktop support (via `jit.SurfaceApp`) after it merges |
 | The GTK3 AT-SPI qualification job is in `packages/flow/.github/`, which GitHub does not run in the monorepo | `.github/workflows/` | follow-up |
