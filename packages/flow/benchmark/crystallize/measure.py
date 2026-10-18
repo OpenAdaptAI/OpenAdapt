@@ -135,7 +135,9 @@ def _median(rows: list[dict[str, Any]], key: str) -> float | None:
     return round(statistics.median(values), 3) if values else None
 
 
-def _summary(runs: list[dict[str, Any]], replays: list[dict[str, Any]]) -> dict[str, Any]:
+def _summary(
+    runs: list[dict[str, Any]], replays: list[dict[str, Any]]
+) -> dict[str, Any]:
     arms: dict[str, Any] = {}
     for arm in ("selective", "every_turn"):
         rows = []
@@ -244,17 +246,25 @@ def main() -> int:
                 order.reverse()
             for arm in order:
                 if spent + args.max_run_usd > args.max_total_usd:
-                    print(f"stopping: ${spent:.2f} spent, cap ${args.max_total_usd:.2f}")
+                    print(
+                        f"stopping: ${spent:.2f} spent, cap ${args.max_total_usd:.2f}"
+                    )
                     raise StopIteration
                 work = work_root / f"t{trial}-{arm}"
                 work.mkdir(parents=True)
-                crystallizer = _crystallizer(work, base, f"mockmed.measure-{arm}-t{trial}")
+                crystallizer = _crystallizer(
+                    work, base, f"mockmed.measure-{arm}-t{trial}"
+                )
                 agent = ClaudeAgent(
                     vision=arm, effort=args.effort, max_cost_usd=args.max_run_usd
                 )
                 started = time.time()
                 load_before = os.getloadavg()[0]
-                result = crystallizer.record(agent, {"note": NOTE})
+                # A distinct note per trial, as real tasks have distinct inputs:
+                # with one note for every trial, later runs read earlier runs'
+                # screenshots from the prompt cache and cost less than a real run.
+                note = f"{NOTE}, trial {trial}"
+                result = crystallizer.record(agent, {"note": note})
                 run1 = _clean_run1(result.run1)
                 cost = float(((run1.get("agent") or {}).get("cost_usd")) or 0.0)
                 spent += cost
@@ -266,9 +276,13 @@ def main() -> int:
                         "%Y-%m-%dT%H:%M:%SZ", time.gmtime(started)
                     ),
                     "status": result.status,
+                    "note": note,
                     "detail": result.detail if result.status != "draft" else None,
                     # The host is shared; wall time moves with its load.
-                    "host_load_1m": [round(load_before, 1), round(os.getloadavg()[0], 1)],
+                    "host_load_1m": [
+                        round(load_before, 1),
+                        round(os.getloadavg()[0], 1),
+                    ],
                     "run1": run1,
                 }
                 runs.append(row)
@@ -340,7 +354,9 @@ def main() -> int:
         "total_cost_usd": round(spent, 4),
         "prices_per_mtok": "input 4.00, output 20.00, cache write 5.00, cache read 0.20",
     }
-    (args.out / "summary.json").write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n")
+    (args.out / "summary.json").write_text(
+        json.dumps(summary, indent=2, sort_keys=True) + "\n"
+    )
     print(json.dumps(summary, indent=2, sort_keys=True))
     return 0
 

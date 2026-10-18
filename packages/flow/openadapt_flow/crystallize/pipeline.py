@@ -438,6 +438,10 @@ class Crystallizer:
         self.save_spec()
         jit = self._jit()
         values = self.task.validate(params)
+        # A new run 1 makes a new draft: checks a person confirmed for an
+        # earlier draft must not carry over to it.
+        for stale in (CONFIRMED_FILE, CHECKS_FILE, "admission.json", "emitted.json"):
+            (self.out_dir / stale).unlink(missing_ok=True)
         attempt = self.dir / "attempts" / _stamp()
         harnessed = _HarnessedAgent(
             agent,

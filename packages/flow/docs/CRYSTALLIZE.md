@@ -119,7 +119,22 @@ save back.
 
 ## Measured on MockMed
 
-MEASUREMENT_PLACEHOLDER
+Ten live trials per arm with `claude-opus-5-5`, alternating order, a distinct
+note per trial ([benchmark/crystallize](../benchmark/crystallize/README.md),
+raw rows committed):
+
+| Per run 1 (median) | Structure first | Screenshot every turn |
+| --- | ---: | ---: |
+| Passed the record check | 10 / 10 | 10 / 10 |
+| Screenshots sent to the model | 1 | 15 |
+| Prompt tokens | 10,332 | 76,053 (7.4x) |
+| Cost | $0.028 | $0.148 (5.3x) |
+| Model time | 8.9 s | 11.6 s |
+
+Both arms made 5 model calls. Wall time depended mostly on the load of the
+shared host; in the first three trials, at low load, run 1 took 15 to 18 s
+structure first and 36 to 59 s with a screenshot every turn. Ten later runs of
+the admitted programs ended VERIFIED with 0 model calls and 0 tokens.
 
 ## Python
 
