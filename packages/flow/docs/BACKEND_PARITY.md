@@ -151,6 +151,7 @@ are not app URLs.
 | `console --attend` drives Citrix without the readiness marker | `runtime/durable/attended_service.py` | [#1285](https://github.com/OpenAdaptAI/OpenAdapt/pull/1285) |
 | `resume --backend X` on a bundle recorded on Y is not refused | `__main__.py` (`_cmd_resume`) | [#1285](https://github.com/OpenAdaptAI/OpenAdapt/pull/1285) |
 | Agent authoring can't pin a Linux window or a named macOS app | `agent/authoring.py`, `agent/cli.py` | [#1287](https://github.com/OpenAdaptAI/OpenAdapt/pull/1287) (`serve --authoring --config deploy.yaml --authoring-from-config`) |
+| `AuthoringSession.observe()` lists no elements on Windows, macOS or Linux: only the web backend implements `authoring_tree()`, so a desktop agent falls back to OCR text | `backends/windows_backend.py`, `macos_backend.py`, `linux_backend.py` | follow-up |
 | JIT canary on RDP or Citrix needs qualified pixel identity | `jit/` | follow-up ([#1283](https://github.com/OpenAdaptAI/OpenAdapt/pull/1283) refuses it with the gate's reason) |
 | `route` on a desktop surface: no test | [#1264](https://github.com/OpenAdaptAI/OpenAdapt/pull/1264) | [#1288](https://github.com/OpenAdaptAI/OpenAdapt/pull/1288) |
 | `induce --probe-on` on a desktop test copy: no test | [#1276](https://github.com/OpenAdaptAI/OpenAdapt/pull/1276) | [#1289](https://github.com/OpenAdaptAI/OpenAdapt/pull/1289) |
