@@ -122,19 +122,29 @@ def test_every_package_has_a_budget_and_no_allow_forbid_overlap() -> None:
         assert not overlap, (label, overlap)
 
 
-def test_local_build_restores_the_version(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    pyproject = tmp_path / "pyproject.toml"
+def test_local_build_patches_a_copy_and_never_the_checkout(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    package = tmp_path / "pkg"
+    (package / "example").mkdir(parents=True)
+    (package / "example" / "__init__.py").write_text("", encoding="utf-8")
     original = '[project]\nname = "example"\nversion = "1.2.3"\n\n[tool.x]\nversion = "9"\n'
-    pyproject.write_text(original, encoding="utf-8")
+    (package / "pyproject.toml").write_text(original, encoding="utf-8")
     seen = {}
 
-    def fake_run(command, check):  # noqa: ANN001 - subprocess.run stand-in
-        seen["text"] = pyproject.read_text(encoding="utf-8")
-        raise RuntimeError("build failed")
+    def fake_run(command, check=False, **kwargs):  # noqa: ANN001 - subprocess.run stand-in
+        if command[0] == "git":
+            return weigh.subprocess.CompletedProcess(command, 128, "", "not a git repository")
+        built = Path(command[-1])
+        seen["text"] = (built / "pyproject.toml").read_text(encoding="utf-8")
+        seen["files"] = sorted(p.relative_to(built).as_posix() for p in built.rglob("*") if p.is_file())
+        seen["dir"] = built
+        return weigh.subprocess.CompletedProcess(command, 0)
 
     monkeypatch.setattr(weigh.subprocess, "run", fake_run)
-    with pytest.raises(RuntimeError):
-        weigh.build_local_wheel(tmp_path, tmp_path / "dist")
+    assert weigh.build_local_wheel(package, tmp_path / "dist") == ("example", "1.2.3+weight")
     assert 'version = "1.2.3+weight"' in seen["text"]
     assert 'version = "9"' in seen["text"]
-    assert pyproject.read_text(encoding="utf-8") == original
+    assert seen["files"] == ["example/__init__.py", "pyproject.toml"]
+    assert seen["dir"] != package and not seen["dir"].exists()
+    assert (package / "pyproject.toml").read_text(encoding="utf-8") == original

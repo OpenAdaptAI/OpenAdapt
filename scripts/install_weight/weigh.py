@@ -144,24 +144,63 @@ def _project_field(pyproject: str, field: str) -> str:
     return match.group(1)
 
 
+#: Never copied into a build: local environments, caches and outputs.
+_SKIP_PARTS = {".git", ".venv", "venv", "node_modules", "__pycache__", "dist", "build", "runs"}
+
+
+def _source_files(path: Path) -> list[Path]:
+    """The files a CI checkout has under ``path``, relative to it.
+
+    Tracked files plus untracked ones git does not ignore, so ignored local
+    data (private corpora, caches) never reaches a build. Outside a git
+    checkout, every file except the usual local directories.
+    """
+    nested = {"packages", "legacy"} if path.resolve() == ROOT else set()
+    listed = subprocess.run(
+        ["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard", "."],
+        cwd=path,
+        capture_output=True,
+        text=True,
+    )
+    if listed.returncode == 0:
+        names = [Path(name) for name in listed.stdout.split("\0") if name]
+    else:
+        names = [file.relative_to(path) for file in path.rglob("*") if file.is_file()]
+    return [
+        name
+        for name in names
+        if not (_SKIP_PARTS & set(name.parts)) and name.parts[0] not in nested
+        and (path / name).is_file()
+    ]
+
+
 def build_local_wheel(path: Path, out_dir: Path) -> tuple[str, str]:
-    """Build ``path`` as ``<version>+weight`` and return (dist name, version)."""
-    pyproject_path = path / "pyproject.toml"
-    original = pyproject_path.read_text(encoding="utf-8")
+    """Build ``path`` as ``<version>+weight`` and return (dist name, version).
+
+    The build runs on a temporary copy, so the checkout's pyproject.toml is
+    never edited, even if the run is killed.
+    """
+    original = (path / "pyproject.toml").read_text(encoding="utf-8")
     name = _project_field(original, "name")
     version = f"{_project_field(original, 'version')}+{LOCAL_LABEL}"
     head, tail = original.split("[project]", 1)
     patched = head + "[project]" + re.sub(
         r'(?m)^version = "[^"]+"', f'version = "{version}"', tail, count=1
     )
+    work = Path(tempfile.mkdtemp(prefix="weight-build-"))
     try:
-        pyproject_path.write_text(patched, encoding="utf-8")
+        copy = work / path.resolve().name
+        for relative in _source_files(path):
+            target = copy / relative
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(path / relative, target)
+        (copy / "pyproject.toml").write_text(patched, encoding="utf-8")
         subprocess.run(
-            ["uv", "build", "-q", "--wheel", "--out-dir", str(out_dir), str(path)],
+            ["uv", "build", "-q", "--wheel", "--out-dir", str(out_dir.resolve()), str(copy)],
             check=True,
         )
     finally:
-        pyproject_path.write_text(original, encoding="utf-8")
+        shutil.rmtree(work, ignore_errors=True)
     return name, version
 
 
