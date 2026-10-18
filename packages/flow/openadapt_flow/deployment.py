@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import re
 from pathlib import Path
 from typing import Any, Callable, Literal, Mapping, Optional
@@ -45,6 +46,7 @@ from openadapt_flow.remote_frame_contract import RemoteFrameContract
 # declarative config vocabulary, so a deployment YAML binds run parameters
 # with the exact ``{param: ...}`` / ``{literal: ...}`` form bundles use.
 from openadapt_flow.runtime.effects.auth import AuthRef, ResolvedSecrets
+from openadapt_flow.runtime.effects.desktop_readback import DesktopReadbackSpec
 from openadapt_flow.runtime.effects.effect import Region, ValueExpr
 from openadapt_flow.runtime.effects.smart_auth import SmartBackendConfig
 from openadapt_flow.runtime.effects.ui_readback import UiReadbackSpec
@@ -216,6 +218,8 @@ BUILTIN_EFFECT_KINDS = frozenset(
         "email",
         "document",
         "document-hash",
+        "desktop_readback",
+        "desktop-readback",
     }
 )
 
@@ -335,6 +339,15 @@ class EffectsConfig(BaseModel):
     #: ``docs/EFFECT_KIT.md``. Required for ``kind: ui_readback``; ignored
     #: otherwise.
     ui_readback: Optional[UiReadbackSpec] = None
+
+    # -- desktop_readback (separate-session look-up in a desktop, RDP, or
+    #    Citrix application) ------------------------------------------------
+    #: The read-back session (its own ``backend:``-style config), how it
+    #: signs in, how to search for and open the record, and how to read each
+    #: field (UI Automation or OCR). See
+    #: ``runtime/effects/desktop_readback.py`` and ``docs/EFFECT_KIT.md``.
+    #: Required for ``kind: desktop_readback``; ignored otherwise.
+    desktop_readback: Optional[DesktopReadbackSpec] = None
 
     # -- rest (JSON REST system of record, e.g. MockMed /api/db) -------------
     base_url: Optional[str] = None
@@ -559,6 +572,15 @@ class EffectsConfig(BaseModel):
                     "every effects.candidates entry must configure a verifier kind"
                 )
         return self
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Keep configs without a desktop read-back byte-identical."""
+
+        data: dict[str, Any] = handler(self)
+        if data.get("desktop_readback", "") is None:
+            data.pop("desktop_readback", None)
+        return data
 
 
 EffectsConfig.model_rebuild()
@@ -806,6 +828,22 @@ class DeploymentConfig(BaseModel):
     #: (and omitted when serialized) otherwise.
     surfaces: dict[str, BackendConfig] = Field(default_factory=dict)
 
+    @model_validator(mode="after")
+    def _desktop_readback_is_its_own_session(self) -> "DeploymentConfig":
+        """The read-back session must never be the session that types."""
+
+        candidates = [self.effects, *self.effects.candidates]
+        for effects in candidates:
+            spec = effects.desktop_readback
+            if spec is None:
+                continue
+            problem = desktop_readback_session_overlap(
+                spec, [self.backend, *self.surfaces.values()]
+            )
+            if problem is not None:
+                raise ValueError(f"effects.desktop_readback.session: {problem}")
+        return self
+
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
         """Keep configs without surface bindings byte-identical."""
@@ -814,6 +852,72 @@ class DeploymentConfig(BaseModel):
         if not self.surfaces:
             data.pop("surfaces", None)
         return data
+
+
+def desktop_readback_session_overlap(
+    spec: DesktopReadbackSpec,
+    backends: list[BackendConfig],
+    environ: Optional[Mapping[str, str]] = None,
+) -> Optional[str]:
+    """Why ``spec.session`` is (or may be) a session the run types into.
+
+    The read-back must open its own session. The same agent URL is the same
+    Windows session; the same RDP host and user would take over the run's
+    RDP session; the same local window is the window that typed.
+    """
+
+    try:
+        session = BackendConfig.model_validate(spec.session)
+    except Exception as exc:  # noqa: BLE001 - surfaced as a config error
+        return f"is not a valid backend config ({exc})"
+    kind = (session.kind or "").strip().lower()
+    env = os.environ if environ is None else environ
+    for backend in backends:
+        other = (backend.kind or "web").strip().lower()
+        if kind == "windows" and other == "windows":
+            if session.agent_url and session.agent_url == backend.agent_url:
+                return (
+                    "uses the same agent_url as the backend that types; run a "
+                    "second agent in a separate Windows session for read-back"
+                )
+        if kind == "rdp" and session.rdp_host and other in ("rdp", "citrix"):
+            if session.rdp_host == backend.rdp_host:
+                user = (
+                    env.get(spec.credentials.username_env, "")
+                    if spec.credentials is not None
+                    else session.rdp_username or ""
+                )
+                if (
+                    not user
+                    or user.casefold() == (backend.rdp_username or "").casefold()
+                ):
+                    return (
+                        "connects to the same RDP host as the user that types; "
+                        "the read-back needs its own user (credentials) so it "
+                        "never takes over the run's session"
+                    )
+        if session.rdp_window or kind in ("citrix", "macos", "linux"):
+            same_window = (
+                (session.rdp_window or "") == (backend.rdp_window or "")
+                and (session.rdp_window_title or "") == (backend.rdp_window_title or "")
+                and (session.macos_app or "") == (backend.macos_app or "")
+                and (session.macos_window_title or "")
+                == (backend.macos_window_title or "")
+                and (session.linux_app or "") == (backend.linux_app or "")
+                and (session.linux_window_title or "")
+                == (backend.linux_window_title or "")
+            )
+            if same_window and _same_kind_family(kind, other):
+                return (
+                    "names the same window as the backend that types; give the "
+                    "read-back session its own window title"
+                )
+    return None
+
+
+def _same_kind_family(left: str, right: str) -> bool:
+    family = {"citrix": "rdp"}
+    return family.get(left, left) == family.get(right, right)
 
 
 def incomplete_deployment_reasons(cfg: DeploymentConfig) -> list[str]:
@@ -1454,11 +1558,11 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
     config = _identity_config_dump(cfg)
     # Fields added after identities were first issued enter the digest only
     # when they are set, so every existing verifier keeps its identity.
-    for added in ("ui_readback", "smart_backend"):
+    for added in ("ui_readback", "smart_backend", "desktop_readback"):
         if config.get(added) is None:
             config.pop(added, None)
     for candidate in config.get("candidates") or []:
-        for added in ("ui_readback", "smart_backend"):
+        for added in ("ui_readback", "smart_backend", "desktop_readback"):
             if isinstance(candidate, dict) and candidate.get(added) is None:
                 candidate.pop(added, None)
     payload = {
@@ -1495,6 +1599,23 @@ def _build_effect_verifier_unredacted(
             backend=None,
             region=cfg.readback_region,
             min_ratio=cfg.readback_min_ratio,
+        )
+
+    if kind in ("desktop_readback", "desktop-readback"):
+        if cfg.desktop_readback is None:
+            raise ValueError(
+                "effects.kind 'desktop_readback' requires an effects.desktop_readback "
+                "section"
+            )
+        from openadapt_flow.runtime.effects.desktop_readback_sessions import (
+            build_desktop_readback_verifier,
+        )
+
+        return build_desktop_readback_verifier(
+            cfg.desktop_readback,
+            params,
+            timeout_s=cfg.timeout_s,
+            poll_interval_s=cfg.poll_interval_s,
         )
 
     if kind in ("ui_readback", "ui-readback"):
@@ -1716,7 +1837,7 @@ def _build_effect_verifier_unredacted(
 
     raise ValueError(
         f"unknown effects.kind {cfg.kind!r} "
-        "(expected: none | onscreen | ui_readback | rest | graphql | fhir | sql | "
+        "(expected: none | onscreen | ui_readback | desktop_readback | rest | graphql | fhir | sql | "
         "file | email | document | document-hash, or a registered plugin kind)"
     )
 

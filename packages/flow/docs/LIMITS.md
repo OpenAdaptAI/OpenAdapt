@@ -368,11 +368,15 @@ grade is `screen_readback`, never `independent_readback`.
 
 **Without a read that is independent of the acting session, the run cannot
 be `VERIFIED`.** That read is either a system-of-record read (REST, FHIR, SQL,
-file; tier 1) or the application's record page read in a separate signed-in
-browser session (`ui_readback`; tier 2). The second goes through the same
-application, so it is not a system-of-record read and has its own limits
-([`EFFECT_KIT.md`](EFFECT_KIT.md#separate-session-ui-read-back-ui_readback)).
-A pixel-only Citrix or RDP session with neither is that case. The on-screen
+file; tier 1) or the application's own screens read in a separate signed-in
+session: a record page in a separate browser (`ui_readback`; tier 2), or a
+look-up in a separate desktop, RDP or Citrix session (`desktop_readback`;
+tier 2 with its own sign-in). Neither goes around the application, so neither
+is a system-of-record read, and each has its own limits
+([`EFFECT_KIT.md`](EFFECT_KIT.md#separate-session-ui-read-back-ui_readback),
+[`desktop_readback`](EFFECT_KIT.md#separate-session-desktop-read-back-desktop_readback)).
+If a person can look the record up, the check can too. A pixel-only Citrix or
+RDP deployment that declares no such look-up is the remaining case. The on-screen
 oracle can still halt when the region is unreadable or wrong. If a
 consequential write may already have been delivered, the production
 `transaction_outcome` is `RECONCILIATION_REQUIRED`, never `VERIFIED`.

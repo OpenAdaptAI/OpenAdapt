@@ -135,6 +135,10 @@ from openadapt_flow.runtime.effects.sql import (  # noqa: F401
     audit_table_deltas,
     capture_table_counts,
 )
+from openadapt_flow.runtime.effects.desktop_readback import (  # noqa: F401
+    DesktopReadbackSpec,
+    DesktopReadbackVerifier,
+)
 from openadapt_flow.runtime.effects.ui_readback import (  # noqa: F401
     SeparateSessionReadbackVerifier,
     UiReadbackSpec,
@@ -205,4 +209,6 @@ __all__ = [
     "ArrivalTransport",
     "SeparateSessionReadbackVerifier",
     "UiReadbackSpec",
+    "DesktopReadbackSpec",
+    "DesktopReadbackVerifier",
 ]
