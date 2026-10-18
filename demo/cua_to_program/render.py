@@ -261,6 +261,49 @@ def mmss(seconds: float) -> str:
     return f"{int(seconds // 60)}:{seconds % 60:04.1f}"
 
 
+OBSERVE_ONLY = {"screenshot", "wait", "zoom", "cursor_position"}
+
+
+def describe_action(a: dict) -> str:
+    inp = a.get("input") or {}
+    name = a["name"]
+    if "coordinate" in inp and name != "scroll":
+        x, y = inp["coordinate"]
+        return f"{name} ({x}, {y})"
+    if name == "type":
+        return f"type '{inp.get('text', '')}'"
+    if name == "key":
+        return f"key {inp.get('text', '')}"
+    if name == "scroll":
+        return (
+            f"scroll {inp.get('scroll_direction', '')} {inp.get('scroll_amount', '')}"
+        )
+    return name
+
+
+def change_caption(data: "Data", att: "Attempt", steps: list[dict]) -> str:
+    """What really happened on the first claim after the UI change."""
+
+    if att.success and att.readback_correct:
+        return "The app changed. The program still saved the claim, and it read back."
+    save = steps[-1]["id"] if steps else ""
+    if save and f"anchor of step '{save}'" in att.halt_reason:
+        return (
+            "The app changed. The program could not find the Save button it "
+            "learned, so it stopped before saving."
+        )
+    if att.halted_step == save:
+        return "The app changed. The program stopped before clicking a Save it could not verify."
+    return (
+        f"The app changed. The program stopped at {att.halted_step}, before saving; "
+        "nothing was written."
+    )
+
+
+def plural(n: int, word: str) -> str:
+    return f"{n} {word}" + ("" if n == 1 else "s")
+
+
 # -- state at a moment ---------------------------------------------------------------
 
 
@@ -275,7 +318,10 @@ def agent_state(data: Data, t: float) -> dict:
         "elapsed": min(t, total),
         "calls": len(done),
         "cost": sum(c["cost_usd"] for c in done),
-        "actions": sum(len(c["actions"]) for c in done),
+        "actions": sum(
+            1 for c in done for a in c["actions"] if a["name"] not in OBSERVE_ONLY
+        ),
+        "log": [a for c in done for a in c["actions"] if a["name"] not in OBSERVE_ONLY],
         "finished": t >= total,
         "total": total,
     }
@@ -308,6 +354,7 @@ def batch_state(data: Data, upto: int) -> dict:
 class Scene:
     seconds: float
     draw: Callable[[Image.Image, float], None]
+    caption: str = ""
 
 
 def build(data: Data, cut: str, cache: Path) -> list[Scene]:
@@ -354,9 +401,9 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
             "Model calls · cost (list price)",
             f"{st['calls']} · ${st['cost']:.3f}",
         )
-        counter(d, 0, 2, "Saved claim checked against the database?", "No", AMBER)
+        counter(d, 0, 2, "Save read back from the database?", "No", AMBER)
         if st["finished"]:
-            badge(d, 0, 900, "Done. Nothing checked the save.", AMBER)
+            badge(d, 0, 900, "Done · save not read back", AMBER)
 
     def middle(canvas, d, t_agent_s, compiled_alpha):
         st = agent_state(data, t_agent_s)
@@ -371,9 +418,26 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
         y = VID_Y
         if compiled_alpha <= 0:
             text(d, (x, y), "Recording", 26, BLUE, True)
-            text(d, (x, y + 40), f"{st['actions']} actions captured", 38, INK, True)
-            text(d, (x, y + 96), "screens, targets, and the claim", 22, MUTED)
-            text(d, (x, y + 124), "table before and after each step", 22, MUTED)
+            text(
+                d,
+                (x, y + 40),
+                plural(st["actions"], "action") + " captured",
+                38,
+                INK,
+                True,
+            )
+            text(
+                d,
+                (x, y + 96),
+                "each with its screen, target, and the claims",
+                20,
+                MUTED,
+            )
+            text(d, (x, y + 122), "table before and after", 20, MUTED)
+            yy = y + 168
+            for a in st["log"][-16:]:
+                d.text((x, yy), describe_action(a)[:46], font=mono(18), fill=INK)
+                yy += 26
             return
         text(d, (x, y), "Compiled program", 26, GREEN, True)
         text(
@@ -419,6 +483,16 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
             "no model · each save read back from the database",
         )
         video_box(canvas, 2, frame, dim=frame is None)
+        if frame is None:
+            text(
+                d,
+                (COL_X[2] + COL_W // 2, VID_Y + VID_H // 2 - 14),
+                "Waiting for a compiled program",
+                26,
+                MUTED,
+                False,
+                "ma",
+            )
         bs = batch_state(data, upto)
         counter(d, 2, 0, "Claims done", f"{bs['done']} of {n_records}")
         counter(
@@ -475,7 +549,13 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
                 "ra",
             )
 
-    scenes.append(Scene(t_agent, agent_scene))
+    scenes.append(
+        Scene(
+            t_agent,
+            agent_scene,
+            "Claude enters one claim through the API. OpenAdapt records every action.",
+        )
+    )
 
     def compile_scene(canvas, t):
         d = ImageDraw.Draw(canvas)
@@ -483,7 +563,13 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
         middle(canvas, d, a_total, t / 2.5)
         right(canvas, d, 0)
 
-    scenes.append(Scene(4.0 if cut == "full" else 2.0, compile_scene))
+    scenes.append(
+        Scene(
+            4.0 if cut == "full" else 2.0,
+            compile_scene,
+            "The recording becomes a program with parameters and a database check.",
+        )
+    )
 
     if program_clip is not None and first_ok:
         att = recs[first_ok][-1]
@@ -509,7 +595,13 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
                 lapse=None if speed == 1 else f"time-lapse ×{speed:g}",
             )
 
-        scenes.append(Scene(att.program_s / speed + 2.0, program_scene))
+        scenes.append(
+            Scene(
+                att.program_s / speed + 2.0,
+                program_scene,
+                "The program enters the next claim. No model. The save is read back.",
+            )
+        )
 
     last_before = (change_rec - 1) if change_rec else n_records
     lapse_s = 8.0 if cut == "full" else 3.0
@@ -530,7 +622,14 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
         )
         right(canvas, d, upto, frame, lapse=f"time-lapse ×{speedup:.0f}")
 
-    scenes.append(Scene(lapse_s, lapse_scene))
+    scenes.append(
+        Scene(
+            lapse_s,
+            lapse_scene,
+            "Claims that stop before saving write nothing and are retried or "
+            "sent to a person.",
+        )
+    )
 
     if change_rec and change_clip is not None:
         att = recs[change_rec][0]
@@ -570,7 +669,13 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
                 True,
             )
 
-        scenes.append(Scene(change_s, change_scene))
+        scenes.append(
+            Scene(
+                change_s,
+                change_scene,
+                change_caption(data, att, steps),
+            )
+        )
 
     def end(canvas, t):
         d = ImageDraw.Draw(canvas)
@@ -581,7 +686,7 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
             (
                 "Agent (once)",
                 f"{a['total']:.1f} s · {a['calls']} model calls · "
-                f"${a['cost']:.3f} · save not checked",
+                f"${a['cost']:.3f} · save not read back",
             ),
             (
                 "Program",
@@ -591,12 +696,13 @@ def build(data: Data, cut: str, cache: Path) -> list[Scene]:
             ),
             (
                 "Read back",
-                f"{bs['saved']} of {bs['done']} claims saved and confirmed "
-                f"by the database",
+                f"{bs['saved']} of {plural(bs['done'], 'claim')} saved and "
+                "confirmed by the database",
             ),
             (
-                "Stopped safely",
-                f"{bs['stopped']} claims stopped before saving; nothing written",
+                "Stopped",
+                f"{plural(bs['stopped'], 'claim')} stopped before saving; "
+                "nothing written",
             ),
         ]
         y = 340
@@ -679,6 +785,9 @@ def render(data: Data, cut: str, out: Path) -> None:
             for i in range(int(round(scene.seconds * FPS))):
                 canvas = Image.new("RGB", (W, H), BG)
                 scene.draw(canvas, i / FPS)
+                if scene.caption:
+                    d = ImageDraw.Draw(canvas)
+                    text(d, (W // 2, 1022), scene.caption, 26, MUTED, False, "ma")
                 proc.stdin.write(canvas.tobytes())
         proc.stdin.close()
         proc.wait()

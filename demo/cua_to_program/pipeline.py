@@ -397,6 +397,7 @@ class Row:
     video: str
     run_dir: str
     started_at: float
+    host_load_1m: float
 
 
 def _verdicts(report: Any) -> str:
@@ -496,6 +497,7 @@ def _run_record(
         video=str(Path(newest).relative_to(HERE)) if newest else "",
         run_dir=str(run_dir.relative_to(HERE)),
         started_at=round(t0, 3),
+        host_load_1m=round(os.getloadavg()[0], 1),
     )
 
 
@@ -518,6 +520,36 @@ def cmd_batch(args: argparse.Namespace) -> int:
         with csv_path.open("w", newline="") as f:
             csv.DictWriter(f, fieldnames=fields).writeheader()
     video_records = {int(x) for x in args.video_records.split(",") if x}
+    from openadapt_flow.backends.playwright_backend import shared_browser
+
+    with shared_browser(headless=True):
+        _batch_loop(
+            args,
+            out,
+            bundle,
+            video_dir,
+            runs_dir,
+            csv_path,
+            fields,
+            done,
+            video_records,
+        )
+    app.ui_change(False)
+    _write_batch_meta(args, out)
+    return 0
+
+
+def _batch_loop(
+    args: argparse.Namespace,
+    out: Path,
+    bundle: Path,
+    video_dir: Path,
+    runs_dir: Path,
+    csv_path: Path,
+    fields: list[str],
+    done: set,
+    video_records: set,
+) -> None:
     changed = None
     for i in range(args.start, args.n + 1):
         want_change = bool(args.change_at) and i >= args.change_at
@@ -566,7 +598,9 @@ def cmd_batch(args: argparse.Namespace) -> int:
                 + "\n"
             )
             break
-    app.ui_change(False)
+
+
+def _write_batch_meta(args: argparse.Namespace, out: Path) -> None:
     (out / "batch_meta.json").write_text(
         json.dumps(
             {
@@ -581,7 +615,6 @@ def cmd_batch(args: argparse.Namespace) -> int:
         )
         + "\n"
     )
-    return 0
 
 
 def main() -> int:
