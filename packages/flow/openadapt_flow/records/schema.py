@@ -182,7 +182,10 @@ class FieldSpec(BaseModel):
         if self.kind == "enum" and not self.choices:
             raise ValueError(f"enum field {self.name!r} needs choices")
         if self.pattern is not None:
-            re.compile(self.pattern)
+            try:
+                re.compile(self.pattern)
+            except re.error as exc:
+                raise ValueError(f"field {self.name!r}: bad pattern: {exc}") from exc
         return self
 
 
@@ -320,6 +323,13 @@ class SealRef(BaseModel):
         default=None, description="Salted per-field commitment, when sealed."
     )
 
+    @field_validator("receipt_sha256")
+    @classmethod
+    def _receipt_digest(cls, value: Optional[str]) -> Optional[str]:
+        if value is not None and not _SHA256.match(value):
+            raise ValueError("receipt_sha256 must be 64 lowercase hex characters")
+        return value
+
     @property
     def sealed(self) -> bool:
         return self.receipt_sha256 is not None
@@ -398,6 +408,20 @@ class FieldRead(BaseModel):
     def _grade_matches_reads(self) -> "FieldRead":
         if not self.reads:
             raise ValueError("a field read needs at least one channel read")
+        parsed = [read.normalized for read in self.reads if read.normalized is not None]
+        if self.agreement == "agree":
+            if len(parsed) < 2 or len(set(parsed)) != 1:
+                raise ValueError("'agree' needs two parsed reads with the same value")
+            if self.value is None:
+                raise ValueError("an agreeing read needs a value")
+        if self.agreement == "single" and len(parsed) > 1:
+            raise ValueError("'single' cannot have more than one parsed read")
+        if (
+            self.agreement in ("disagree", "ambiguous")
+            and not self.needs_review
+            and self.review_decision is None
+        ):
+            raise ValueError(f"a read that is {self.agreement!r} must go to review")
         allowed = grade_for(self.reads, self.agreement)
         if READ_GRADES.index(self.grade) > READ_GRADES.index(allowed):
             raise ValueError(
@@ -422,6 +446,13 @@ class RecordRead(BaseModel):
     run_id: str
     read_at: str = Field(description="ISO 8601 with offset.")
     fields: tuple[FieldRead, ...]
+
+    @model_validator(mode="after")
+    def _one_read_per_field(self) -> "RecordRead":
+        names = [read.field for read in self.fields]
+        if len(set(names)) != len(names):
+            raise ValueError("a field is read twice")
+        return self
 
     def value(self, name: str) -> Optional[str]:
         for read in self.fields:
@@ -459,19 +490,27 @@ def grade_for(
 ) -> ReadGrade:
     """The strongest grade a set of channel reads can support.
 
-    ``system_of_record`` needs an agreeing independent channel (database, API, or an
-    export of committed data). A live-session export counts as a screen read. ``reopened`` needs an agreeing read from a reopened
-    record. ``same_screen`` needs two agreeing screen channels. Anything
-    else, including a single read or any disagreement, is ``unchecked``.
+    Only reads that parsed count, and they must agree and come from at least
+    two different channels or sessions. ``system_of_record`` needs one of
+    them to be independent (database, API, or an export of committed data);
+    a live-session export counts as a screen read. ``reopened`` needs a read
+    from the acting session and one from the reopened record.
+    ``same_screen`` needs two different screen channels. Anything else,
+    including a single read, two reads by the same channel in the same
+    session, or any disagreement, is ``unchecked``.
     """
 
-    if agreement != "agree" or len(reads) < 2:
+    parsed = [read for read in reads if read.normalized is not None]
+    if agreement != "agree" or len({(r.channel, r.session) for r in parsed}) < 2:
         return "unchecked"
-    if any(read.independent for read in reads):
+    if any(read.independent for read in parsed):
         return "system_of_record"
-    if any(read.session == "reopened" for read in reads):
+    sessions = {read.session for read in parsed}
+    if {"acting", "reopened"} <= sessions:
         return "reopened"
-    return "same_screen"
+    if len({read.channel for read in parsed}) >= 2:
+        return "same_screen"
+    return "unchecked"
 
 
 def grade_at_least(grade: ReadGrade, floor: ReadGrade) -> bool:
@@ -515,6 +554,10 @@ class GradeGate(BaseModel):
 
         reads = {read.field: read for read in record.fields}
         names = self.fields or tuple(reads)
+        if not names:
+            raise GradeTooLow(
+                record.record_key, {"(no fields)": "unchecked"}, self.min_grade
+            )
         below: dict[str, ReadGrade] = {}
         for name in names:
             read = reads.get(name)

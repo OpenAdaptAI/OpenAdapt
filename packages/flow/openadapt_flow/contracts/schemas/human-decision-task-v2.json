@@ -162,7 +162,8 @@
         "resolve_ambiguity",
         "complete_human_step",
         "review_uncertain_delivery",
-        "review_halt"
+        "review_halt",
+        "approve_save"
       ],
       "title": "HumanDecisionQuestionTemplate",
       "type": "string"
@@ -275,7 +276,8 @@
         "human_step",
         "delivery_uncertain",
         "halt",
-        "operator_review"
+        "operator_review",
+        "save_approval"
       ],
       "title": "HumanDecisionTaskKind",
       "type": "string"
