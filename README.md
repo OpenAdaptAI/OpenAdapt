@@ -23,8 +23,9 @@ does the same.
 
 The command runs a synthetic clinic task twice on your computer. The first run
 saves an entry and confirms it through the app's read-only API. For the second
-run, the server is set to reject the write after the app shows its success
-banner. This is real output from `openadapt` 1.17.0:
+run, the test server is set up to reject the save, so it never reaches the
+record. This is the output from `openadapt` 1.17.0, with the break-it lines in
+the current wording:
 
 ```text
 [1/5] Record the demonstration against a real persistence boundary
@@ -34,11 +35,10 @@ banner. This is real output from `openadapt` 1.17.0:
       VERIFIED in 5.6s; 0 model calls; the system of record holds 1 record(s)
 [5/5] Emit the local run receipt
 ...
---- break-it: the same certified bundle, against a backend that lies ---
+--- break-it: the same certified bundle, with the save set to fail ---
 
   Injected fault:      'optimistic' -- the server rejects the write
-                       AFTER the app reports success
-  The screen claimed:  every on-screen check passed -- the app painted its success banner
+  On screen:           every on-screen check passed, including the saved message
   The verifier found:  1/2 declared effect(s) REFUTED by an independent
                        read of the system of record, which holds 0 record(s)
   The engine did:      HALTED at the consequential step instead of claiming

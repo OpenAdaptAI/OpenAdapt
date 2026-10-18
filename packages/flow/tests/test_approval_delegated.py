@@ -41,6 +41,7 @@ from openadapt_flow.approval_mode.item_approval import (
     wait_for_answer,
 )
 from openadapt_flow.approval_mode.model import ApprovalMode, ItemApprovalRef
+from tests._approver_grant_support import grant_store, signed_grant
 
 FRAME = b"\x89PNG\r\n\x1a\nmade-up filled form"
 FORM = ("dom", "sha256:" + "1" * 64)
@@ -80,7 +81,7 @@ def _agent_answer(request, store, approver=AGENT, route="local_cli"):
         approver_id=None,
         auth_method="none",
         approver=approver,
-        policy=store.policy(),
+        policy=store.context(),
     )
 
 
@@ -106,8 +107,7 @@ def test_the_default_policy_refuses_an_agent(tmp_path):
 
 
 def test_a_policy_that_allows_agents_records_the_agent(tmp_path):
-    store = ItemApprovalStore(tmp_path / "run")
-    store.write_policy(_allow_agents(StepClass.CONSEQUENTIAL))
+    store = grant_store(tmp_path, _allow_agents(StepClass.CONSEQUENTIAL))
     request = _open(store)
     answer = _agent_answer(request, store)
     store.write_answer(answer)
@@ -116,32 +116,36 @@ def test_a_policy_that_allows_agents_records_the_agent(tmp_path):
     assert isinstance(ref, ItemApprovalRef)
     assert ref.decided_by == "automation"
     assert ref.route == "local_cli"
-    assert ref.approver == AGENT
+    assert ref.approver == AGENT.model_copy(
+        update={"policy_ref": store.context().grant.policy_ref}
+    )
     assert not is_training_label(answer.approver_identity())
 
 
 def test_clinical_write_needs_the_opt_in(tmp_path):
     with pytest.raises(ValueError):
         _allow_agents(StepClass.CLINICAL_WRITE)  # no opt-in: refused outright
-    store = ItemApprovalStore(tmp_path / "run")
-    store.write_policy(_allow_agents(StepClass.CONSEQUENTIAL))
+    store = grant_store(tmp_path, _allow_agents(StepClass.CONSEQUENTIAL))
     request = _open(store, StepClass.CLINICAL_WRITE)
     with pytest.raises(ItemApprovalRefused) as err:
         _agent_answer(request, store)
     assert err.value.code == "clinical_write_needs_opt_in"
 
-    opted = ItemApprovalStore(tmp_path / "run2")
-    opted.write_policy(_allow_agents(StepClass.CLINICAL_WRITE, opt_in=OPT_IN))
+    opted = grant_store(
+        tmp_path, _allow_agents(StepClass.CLINICAL_WRITE, opt_in=OPT_IN), run="run2"
+    )
     request = _open(opted, StepClass.CLINICAL_WRITE)
-    assert _agent_answer(request, opted).approver == AGENT
+    assert _agent_answer(request, opted).approver.id == AGENT.id
 
 
 def test_a_run_keeps_its_first_policy(tmp_path):
-    store = ItemApprovalStore(tmp_path / "run")
-    store.write_policy(_allow_agents(StepClass.CONSEQUENTIAL))
+    store = grant_store(tmp_path, _allow_agents(StepClass.CONSEQUENTIAL))
     store.write_policy(_allow_agents(StepClass.CONSEQUENTIAL))  # same: fine
     with pytest.raises(ItemApprovalRefused) as err:
         store.write_policy(DEFAULT_APPROVER_POLICY)
+    assert err.value.code == "policy_changed"
+    with pytest.raises(ItemApprovalRefused) as err:
+        store.write_grant(signed_grant(tmp_path, _allow_agents(StepClass.IRREVERSIBLE)))
     assert err.value.code == "policy_changed"
 
 
@@ -153,8 +157,7 @@ def test_an_unreadable_policy_means_person_only(tmp_path):
 
 
 def test_an_agent_cannot_pose_as_a_person(tmp_path):
-    store = ItemApprovalStore(tmp_path / "run")
-    store.write_policy(_allow_agents(StepClass.CONSEQUENTIAL))
+    store = grant_store(tmp_path, _allow_agents(StepClass.CONSEQUENTIAL))
     request = _open(store)
     with pytest.raises(ItemApprovalRefused) as err:
         make_answer(
@@ -235,8 +238,7 @@ def _clock():
 
 
 def test_a_delegate_answers_a_waiting_save(tmp_path):
-    store = ItemApprovalStore(tmp_path / "run")
-    store.write_policy(_allow_agents(StepClass.CONSEQUENTIAL))
+    store = grant_store(tmp_path, _allow_agents(StepClass.CONSEQUENTIAL))
     request = _open(store)
     delegate = _Delegate([None, DelegatedDecision(decision="approve")])
     monotonic, sleep = _clock()
@@ -250,7 +252,8 @@ def test_a_delegate_answers_a_waiting_save(tmp_path):
         approver=delegate,
     )
     assert code is None and answer is not None
-    assert answer.decision == "approve" and answer.approver == WEBHOOK_SYSTEM
+    assert answer.decision == "approve" and answer.approver.id == WEBHOOK_SYSTEM.id
+    assert answer.approver.policy_ref == store.context().grant.policy_ref
     # The delegate saw no intent, no screenshot bytes and no values.
     facts = delegate.seen[0]
     assert "step_intent" not in facts and FRAME.decode(
@@ -277,8 +280,7 @@ def test_a_delegate_the_policy_forbids_is_never_asked(tmp_path):
 
 
 def test_a_failing_delegate_leaves_the_save_to_a_person(tmp_path):
-    store = ItemApprovalStore(tmp_path / "run")
-    store.write_policy(_allow_agents(StepClass.CONSEQUENTIAL))
+    store = grant_store(tmp_path, _allow_agents(StepClass.CONSEQUENTIAL))
     request = _open(store)
     delegate = _Delegate([WebhookRefused("reply_signature_invalid")])
     monotonic, sleep = _clock()

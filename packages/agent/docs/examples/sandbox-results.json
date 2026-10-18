@@ -119,7 +119,7 @@
           {
             "case": "false_saved_banner",
             "outcome": "not_sure_if_saved",
-            "what_it_shows": "The app shows a saved message, but its record store rejected the note. The record check doesn't find it."
+            "what_it_shows": "The record store rejected the note on save, so the record check doesn't find it."
           },
           {
             "case": "timeout_after_save",

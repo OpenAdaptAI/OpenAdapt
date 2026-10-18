@@ -8,6 +8,8 @@ against that file. Made-up values only.
 
 from __future__ import annotations
 
+import pytest
+
 from openadapt_flow.approval_mode.approver import (
     DEFAULT_APPROVER_POLICY,
     StepClass,
@@ -15,8 +17,8 @@ from openadapt_flow.approval_mode.approver import (
 from openadapt_flow.approval_mode.gate import ApprovalGate
 from openadapt_flow.approval_mode.item_approval import (
     POLICY_FILENAME,
+    ItemApprovalRefused,
     ItemApprovalStore,
-    wait_for_answer,
 )
 from tests.test_approval_delegated import _agent_answer, _allow_agents, _open
 
@@ -42,14 +44,15 @@ def test_a_policy_planted_after_the_run_started_is_ignored(tmp_path) -> None:
     assert store is not None
     _plant(run)
     request = _open(store)
-    # The agent's answer is valid under the planted policy...
+    # A planted policy that lets agents answer carries no person-signed grant,
+    # so it can't even produce an agent's answer...
     planted = ItemApprovalStore(run)
-    store.write_answer(_agent_answer(request, planted))
-    # ...but the run checks it against the policy it started with.
+    with pytest.raises(ItemApprovalRefused) as refused:
+        store.write_answer(_agent_answer(request, planted))
+    assert refused.value.code == "approver_policy_unsigned"
+    # ...and the run keeps applying the policy it started with.
     assert store.policy() == DEFAULT_APPROVER_POLICY
-    assert store.status(request) == "invalid_answer"
-    answer, code = wait_for_answer(store, request, timeout_s=0, poll_s=0)
-    assert answer is None and code == "approver_kind_not_allowed"
+    assert store.status(request) == "waiting"
     assert (
         store.find_unused_approval(
             run_id=request.run_id, step_id=request.step_id, step_index=3
