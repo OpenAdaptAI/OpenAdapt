@@ -2599,6 +2599,22 @@ class PixelIdentityEvidence(BaseModel):
         return self
 
 
+class KnownIdEvidence(BaseModel):
+    """Why a look-alike identifier abstain was lifted (runtime.known_ids).
+
+    Holds no identifier values: only the digest and size of the complete
+    known-ID list, its named source, and how many reads agreed.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    list_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    list_source: str
+    list_size: int = Field(ge=1)
+    reads: int = Field(ge=1)
+    resolved_ids: int = Field(ge=1)
+
+
 class IdentityCheck(BaseModel):
     """Outcome of the pre-click target-identity check (runtime.identity).
 
@@ -2655,6 +2671,22 @@ class IdentityCheck(BaseModel):
         description=(
             "Hashes and local inventory references for the exact crops behind "
             "a pixel verdict. Crop pixels never enter the report."
+        ),
+    )
+    abstain_reason: Optional[
+        Literal["glyph_confusable_identifier", "identity_evidence_short"]
+    ] = Field(
+        default=None,
+        description=(
+            "Why an OCR-tier check abstained: the band rests on a look-alike "
+            "identifier, or too little identifying evidence was read."
+        ),
+    )
+    known_id_evidence: Optional[KnownIdEvidence] = Field(
+        default=None,
+        description=(
+            "Set when a look-alike abstain was lifted against a complete "
+            "known-ID list (runtime.known_ids)."
         ),
     )
 

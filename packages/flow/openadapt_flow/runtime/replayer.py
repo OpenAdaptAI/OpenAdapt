@@ -574,6 +574,11 @@ class Replayer:
             optional local-VLM veto tier of the pre-click identity ladder;
             None (default) disables that tier -- the ladder still runs
             structured-text, pixel-compare, OCR, and halt with no model.
+        known_ids: Optional complete ``runtime.known_ids.KnownIdList``. When
+            set, an OCR identity check that abstained only because the band
+            rests on a look-alike identifier is lifted to verified if two OCR
+            reads agree and exactly one listed identifier is in that
+            look-alike class. None (default) keeps the abstain.
         effect_verifier: Optional system-of-record ``EffectVerifier``
             (``runtime.effects``) bound to the deployment's system of record
             (a REST/FHIR API, a document store). When set, any step that
@@ -652,6 +657,7 @@ class Replayer:
         vision: Optional[Any] = None,
         grounder: Optional[Any] = None,
         identity_vlm: Optional[Any] = None,
+        known_ids: Optional[Any] = None,
         state_verifier: Optional[Any] = None,
         effect_verifier: Optional[EffectVerifier] = None,
         effect_compensator: Optional[Any] = None,
@@ -875,6 +881,9 @@ class Replayer:
         # When None the ladder runs structured-text + pixel-compare + OCR +
         # halt with no model dependency.
         self.identity_vlm = identity_vlm
+        # Optional complete known-ID list (runtime.known_ids): lifts a
+        # look-alike identifier abstain only when no listed twin exists.
+        self.known_ids = known_ids
         # Optional VLM drift-oracle (state-verifier), OFF by default. When set,
         # it may CONFIRM a render-drift-sensitive postcondition that
         # deterministically false-failed (the same heal-under-drift the
@@ -12877,6 +12886,19 @@ class Replayer:
             ),
             scoped_identifier=identifier_region is not None,
         )
+        if self.known_ids is not None:
+            # Two reads (native frame, 2x upscale) both abstained on a
+            # look-alike identifier: a complete known-ID list with exactly
+            # one member in that class rules out a twin (runtime.known_ids).
+            from openadapt_flow.runtime import known_ids as known_ids_mod
+
+            lifted = known_ids_mod.resolve_lookalike_abstain(
+                [check, retry],
+                self.known_ids,
+                run_values=runtime_params_for_gui(params),
+            )
+            if lifted is not None:
+                return lifted
         # verified beats everything; between the two "cannot certify"
         # outcomes an AFFIRMATIVE mismatch outranks an abstain, and abstain
         # outranks a blank unreadable.

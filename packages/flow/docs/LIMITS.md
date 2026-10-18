@@ -140,6 +140,19 @@ For an armed step:
   run's value into the recorded band and requires the whole band to match. A
   band that rests on a glyph-confusable identifier keeps the pixel comparison.
 
+On a pixel-only display, the OCR tier also stops the correct record whenever
+its own identifier contains a look-alike glyph (`O`/`0`, `l`/`1`, `B`/`8`).
+A deployment can remove most of that cost by giving the runtime a complete
+list of the identifiers that exist in the target system
+(`runtime.known_ids_path`, see `openadapt_flow/runtime/known_ids.py`). The
+abstain is lifted only when two OCR reads agree, every other identity check
+passed, and exactly one listed identifier falls in the look-alike class OCR
+read. If a look-alike twin is listed, the run still stops. The list must come
+from the system of record, not from the screen being checked, and must be
+complete: a list that misses a real look-alike record lets that record
+verify. Measured before and after numbers are in
+[`benchmark/known_ids/KNOWN_IDS.md`](../benchmark/known_ids/KNOWN_IDS.md).
+
 Permissive `replay` may proceed on an unreadable reversible target and reports
 that condition. Governed `run` requires an affirmative live verdict for every
 identity-required admitted step; mismatch, unreadable, or abstain halts before

@@ -601,6 +601,12 @@ class RuntimeSection(BaseModel):
     #: :func:`openadapt_flow.runtime.identity.verify_pixel_identity` and
     #: docs/LIMITS.md.
     pixel_verify_enabled: bool = False
+    #: Path to a COMPLETE known-ID list (``{"source", "complete": true,
+    #: "ids"}``). When set, an OCR identity check that abstained only on a
+    #: look-alike identifier (O/0, l/1, B/8) is lifted to verified if two OCR
+    #: reads agree and exactly one listed ID is in that look-alike class. See
+    #: :mod:`openadapt_flow.runtime.known_ids`. None (default) keeps the halt.
+    known_ids_path: Optional[str] = None
     #: Operator-selected ("bring your own") model-grounding endpoint (the VLM
     #: fallback rung). Off by default; configuring it never enables egress on its
     #: own (``allow_model_grounding`` still governs whether anything leaves).
@@ -1115,10 +1121,16 @@ def build_replayer(
         qualification_environment_observer = BackendQualificationEnvironmentObserver(
             backend
         )
+    known_ids = None
+    if runtime_config is not None and runtime_config.known_ids_path:
+        from openadapt_flow.runtime.known_ids import KnownIdList
+
+        known_ids = KnownIdList.load(runtime_config.known_ids_path)
     return Replayer(
         backend,
         grounder=grounder,
         identity_vlm=appliance.identity_vlm if appliance else None,
+        known_ids=known_ids,
         state_verifier=(appliance.state_verifier if appliance else None),
         allow_model_grounding=allow_egress,
         effect_verifier=effect_verifier,

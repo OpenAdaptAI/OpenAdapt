@@ -705,6 +705,7 @@ def verify_template_identity(
         match = _band_match_template(sub_tmpl, observed_text)
         return IdentityCheck(
             status=_id.band_verdict(match),
+            abstain_reason=_id.band_abstain_reason(match),
             mode="param",
             coverage=round(match.coverage, 4),
             expected=marker,
@@ -717,6 +718,7 @@ def verify_template_identity(
     match = _band_match_template(tmpl, observed_text)
     return IdentityCheck(
         status=_id.band_verdict(match),
+        abstain_reason=_id.band_abstain_reason(match),
         coverage=round(match.coverage, 4),
         expected=marker,
         observed=observed_text,

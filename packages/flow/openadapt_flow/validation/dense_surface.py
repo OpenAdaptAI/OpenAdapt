@@ -51,7 +51,7 @@ from __future__ import annotations
 import argparse
 import json
 import random
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date
 from pathlib import Path
 from typing import Any, Optional
@@ -668,6 +668,9 @@ class ReplayObservation:
     band_lines: list[tuple[str, Region]]  # raw band lines (post exclude/vol)
     row_filtered_lines: list[tuple[str, Region]]  # lines kept by lines_near_point
     used_upscale: bool
+    # Every OCR read taken (native frame, then the 2x retry when it ran), in
+    # order, for the known-ID cross-check (runtime.known_ids).
+    reads: list[Any] = field(default_factory=list)
 
 
 def _band_attempt(
@@ -736,6 +739,7 @@ def replay_observe(
         context_text,
     )
     used_upscale = False
+    reads = [check]
     if check.status != "verified":
         upscaled = identity_mod.upscale_crop(frame.png, band)
         if upscaled is not None:
@@ -751,6 +755,7 @@ def replay_observe(
                 ),
                 context_text,
             )
+            reads.append(retry)
             rank = {"unreadable": 0, "abstain": 1, "mismatch": 2, "verified": 3}
             if (rank[retry.status], retry.coverage) > (
                 rank[check.status],
@@ -787,6 +792,7 @@ def replay_observe(
         band_lines=band_lines,
         row_filtered_lines=near_lines,
         used_upscale=used_upscale,
+        reads=reads,
     )
 
 
@@ -812,6 +818,19 @@ def _surname_readable(surname: str, band_text: str) -> bool:
 CLICK_CONFIGS = ("click_name", "click_action")
 
 
+def _reads_record(reads: list[Any]) -> list[dict[str, Any]]:
+    """The per-read verdicts a known-ID cross-check needs, JSON-safe."""
+    return [
+        {
+            "status": r.status,
+            "abstain_reason": r.abstain_reason,
+            "coverage": r.coverage,
+            "observed": r.observed,
+        }
+        for r in reads
+    ]
+
+
 def run_trials(
     seeds: list[int],
     *,
@@ -827,8 +846,12 @@ def run_trials(
     """
     replay_conditions = replay_conditions or REPLAY_CONDITIONS
     trials: list[dict[str, Any]] = []
+    # Every MRN in each seed's synthetic table: the complete known-ID list a
+    # cross-check may use (runtime.known_ids).
+    known_ids_by_seed: dict[str, list[str]] = {}
     for seed in seeds:
         table = build_dense_table(seed, n_rows=n_rows)
+        known_ids_by_seed[str(seed)] = [r.mrn for r in table.rows]
         rec = render_frame(table, RECORD_CONDITION, top_offset_px=0)
         rec_lines = ocr(rec.png)  # cached full-frame record OCR
         # Pre-render every replay condition once (a small vertical offset per
@@ -924,6 +947,7 @@ def run_trials(
                             "is_false_abort": bool(
                                 armed and fa.check.status != "verified"
                             ),
+                            "fa_reads": _reads_record(fa.reads),
                             # False-accept trial
                             "acc_status": ac.check.status,
                             "acc_coverage": ac.check.coverage,
@@ -933,6 +957,7 @@ def run_trials(
                             "is_false_accept": bool(
                                 armed and ac.check.status == "verified"
                             ),
+                            "acc_reads": _reads_record(ac.reads),
                             # Structured-text (DOM) identity path -- both verdicts
                             "structured_armed": struct_armed,
                             "structured_recorded": struct_rec,
@@ -965,6 +990,7 @@ def run_trials(
             "replay_conditions": [c.name for c in replay_conditions],
             "record_condition": RECORD_CONDITION.name,
             "click_configs": list(CLICK_CONFIGS),
+            "known_ids_by_seed": known_ids_by_seed,
             "operating_point": {
                 "coverage_threshold": identity_mod.COVERAGE_THRESHOLD,
                 "uncovered_run_cap": identity_mod.UNCOVERED_RUN_CAP,
