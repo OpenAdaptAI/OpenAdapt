@@ -37,14 +37,14 @@ INVOICE = RecordSchema(
 
 
 def _read(
-    channel: str, value: str, session: str = "acting", export_source=None
+    channel: str, value: str, session: str = "acting", source_kind=None
 ) -> ChannelRead:
     return ChannelRead(
         channel=channel,
         raw=value,
         normalized=value,
         session=session,
-        export_source=export_source,
+        source_kind=source_kind,
     )
 
 
@@ -64,7 +64,7 @@ def test_grades_order_weakest_first() -> None:
 def test_grade_for_each_rung() -> None:
     clip, ocr = _read("clipboard", "INV-1"), _read("ocr", "INV-1")
     reopened = _read("clipboard", "INV-1", "reopened")
-    export = _read("export", "INV-1", "independent", "committed_data")
+    export = _read("export", "INV-1", "independent", "committed_store")
     assert grade_for([clip], "single") == "unconfirmed"
     assert grade_for([clip, ocr], "disagree") == "unconfirmed"
     assert grade_for([clip, ocr], "ambiguous") == "unconfirmed"
@@ -246,10 +246,10 @@ def test_grade_gate_halts_below_floor() -> None:
         )
 
 
-def test_export_source_decides_the_grade() -> None:
+def test_source_kind_decides_the_grade() -> None:
     clip = _read("clipboard", "INV-1")
     live = _read("export", "INV-1", "acting", "live_session")
-    saved = _read("export", "INV-1", "independent", "committed_data")
+    saved = _read("export", "INV-1", "independent", "committed_store")
     reopened = _read("clipboard", "INV-1", "reopened")
     assert not live.independent
     assert saved.independent
@@ -260,20 +260,20 @@ def test_export_source_decides_the_grade() -> None:
     assert grade_for([live, _read("ocr", "INV-1")], "agree") == "screen_readback"
 
 
-def test_export_source_is_required_and_consistent() -> None:
-    with pytest.raises(ValidationError, match="needs export_source"):
+def test_source_kind_is_required_and_consistent() -> None:
+    with pytest.raises(ValidationError, match="needs source_kind"):
         ChannelRead(channel="export", raw="x", session="independent")
     with pytest.raises(ValidationError, match="acting session"):
         ChannelRead(
             channel="export",
             raw="x",
             session="independent",
-            export_source="live_session",
+            source_kind="live_session",
         )
     with pytest.raises(ValidationError, match="independent"):
-        ChannelRead(channel="export", raw="x", export_source="committed_data")
+        ChannelRead(channel="export", raw="x", source_kind="committed_store")
     with pytest.raises(ValidationError, match="export reads only"):
-        ChannelRead(channel="ocr", raw="x", export_source="live_session")
+        ChannelRead(channel="ocr", raw="x", source_kind="live_session")
 
 
 def test_live_export_cannot_claim_verified() -> None:
@@ -313,7 +313,7 @@ def test_write_gate_accepts_either_export_kind_per_floor() -> None:
         )
 
     live = record_with(_read("export", "1", "acting", "live_session"))
-    saved = record_with(_read("export", "1", "independent", "committed_data"))
+    saved = record_with(_read("export", "1", "independent", "committed_store"))
     lenient = GradeGate(min_grade="screen_readback")
     lenient.check(live)
     lenient.check(saved)

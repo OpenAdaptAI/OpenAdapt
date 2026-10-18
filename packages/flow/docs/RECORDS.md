@@ -93,18 +93,18 @@ never be `verified`.
 
 ### Exports from the application
 
-An `export` read must say where it came from, in `export_source`. The grade
+An `export` read must say where it came from, in `source_kind`. The grade
 is derived from it:
 
-| `export_source` | Taken from | Counts as | Best grade |
+| `source_kind` | Taken from | Counts as | Best grade |
 |---|---|---|---|
 | `live_session` | The same live UI session that typed or showed the value. It can include that session's unsaved state. | A screen read | `screen_readback` |
-| `committed_data` | Saved data, through a separate process, a database read or a scheduled export. | An independent read | `verified` |
+| `committed_store` | Saved data, through a separate process, a database read or a scheduled export. | An independent read | `verified` |
 
 ```python
-ChannelRead(channel="export", raw="AC-1042", export_source="live_session")
+ChannelRead(channel="export", raw="AC-1042", source_kind="live_session")
 ChannelRead(channel="export", raw="AC-1042", session="independent",
-            export_source="committed_data")
+            source_kind="committed_store")
 ```
 
 A workflow can use either kind. A write step that needs `verified` values

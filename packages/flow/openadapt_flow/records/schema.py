@@ -29,7 +29,7 @@ Read grades, weakest first. A grade only ever reflects what was proven:
   process or a scheduled export). Only an independent channel can give this
   grade; :func:`grade_for` enforces it.
 
-An export read records its source in ``ChannelRead.export_source``, so its
+An export read records its source in ``ChannelRead.source_kind``, so its
 grade is derived, not asserted. An export from the same live UI session
 (``live_session``) can carry that session's unsaved state; it counts like a
 screen read and gives at most ``screen_readback``.
@@ -55,7 +55,7 @@ __all__ = [
     "SCHEMA_VERSION",
     "SCREEN_CHANNELS",
     "Agreement",
-    "ExportSource",
+    "SourceKind",
     "ChannelRead",
     "FieldKind",
     "FieldRead",
@@ -87,7 +87,7 @@ ReadChannel = Literal[
     "ocr",
     "structure",
     "accessibility",
-    # An export from the application; see ExportSource for how it grades.
+    # An export from the application; see SourceKind for how it grades.
     "export",
     # Not through the screens.
     "database",
@@ -97,7 +97,7 @@ SCREEN_CHANNELS: Final[frozenset[str]] = frozenset(
     {"clipboard", "ocr", "structure", "accessibility"}
 )
 #: Channels that are always independent of the acting session. An ``export``
-#: read is independent only when its source is ``committed_data``.
+#: read is independent only when its source is ``committed_store``.
 INDEPENDENT_CHANNELS: Final[frozenset[str]] = frozenset({"database", "api"})
 
 #: Where an ``export`` read came from. Required on every export read.
@@ -105,10 +105,10 @@ INDEPENDENT_CHANNELS: Final[frozenset[str]] = frozenset({"database", "api"})
 #: - ``live_session``: exported from the same live UI session that typed or
 #:   showed the value. It can reflect that session's unsaved state, so it
 #:   counts as a screen-session read (at best ``screen_readback``).
-#: - ``committed_data``: exported from saved data by a separate process, a
+#: - ``committed_store``: exported from saved data by a separate process, a
 #:   database read or a scheduled export, not the session's in-memory state.
 #:   It is independent and can give ``verified``.
-ExportSource = Literal["live_session", "committed_data"]
+SourceKind = Literal["live_session", "committed_store"]
 
 ReadGrade = Literal[
     "unconfirmed", "screen_readback", "committed_record_readback", "verified"
@@ -338,7 +338,7 @@ class ChannelRead(BaseModel):
     )
     engine_confidence: Optional[float] = Field(default=None, ge=0.0, le=1.0)
     session: Literal["acting", "reopened", "independent"] = "acting"
-    export_source: Optional[ExportSource] = Field(
+    source_kind: Optional[SourceKind] = Field(
         default=None,
         description="Required for an export read; must be unset otherwise.",
     )
@@ -346,19 +346,19 @@ class ChannelRead(BaseModel):
     @model_validator(mode="after")
     def _session_matches_channel(self) -> "ChannelRead":
         if self.channel == "export":
-            if self.export_source is None:
+            if self.source_kind is None:
                 raise ValueError(
-                    "an export read needs export_source: live_session or committed_data"
+                    "an export read needs source_kind: live_session or committed_store"
                 )
-            if self.export_source == "live_session" and self.session != "acting":
+            if self.source_kind == "live_session" and self.session != "acting":
                 raise ValueError(
                     "a live_session export is read in the acting session ('acting')"
                 )
-        elif self.export_source is not None:
-            raise ValueError("export_source applies to export reads only")
+        elif self.source_kind is not None:
+            raise ValueError("source_kind applies to export reads only")
         if self.independent != (self.session == "independent"):
             raise ValueError(
-                "database, api and committed_data export reads have session "
+                "database, api and committed_store export reads have session "
                 "'independent'; screen reads and live_session exports do not"
             )
         return self
@@ -368,7 +368,7 @@ class ChannelRead(BaseModel):
         """True when this read does not depend on the acting session's state."""
 
         if self.channel == "export":
-            return self.export_source == "committed_data"
+            return self.source_kind == "committed_store"
         return self.channel in INDEPENDENT_CHANNELS
 
 
