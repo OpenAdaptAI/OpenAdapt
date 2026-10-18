@@ -1,0 +1,126 @@
+{
+ "arm": "api",
+ "ref": "r4-theo-lindqvist",
+ "mismatch": false,
+ "error": null,
+ "api_marks": {
+  "signed_in": 0.39,
+  "form_read": 0.549,
+  "prechecked": 0.583,
+  "save_sent": 0.583,
+  "save_done": 0.616
+ },
+ "api_log": [
+  {
+   "stage": "sign_in",
+   "status": 302,
+   "location_path": "/interface/main/tabs/main.php"
+  },
+  {
+   "stage": "read_form",
+   "status": 200,
+   "bytes": 341515
+  },
+  {
+   "stage": "precheck",
+   "status": 200,
+   "missing": []
+  },
+  {
+   "stage": "save",
+   "status": 200,
+   "success_signature": true
+  }
+ ],
+ "engine_success": true,
+ "outcome": "COMPLETED_UNVERIFIED",
+ "steps": 1,
+ "step_errors": [],
+ "actuation": [
+  "api"
+ ],
+ "effect_verified": [
+  true
+ ],
+ "new_charts": 1,
+ "readback": "12/12",
+ "correct": true,
+ "field_check": [
+  {
+   "field": "title",
+   "want": "Mr.",
+   "got": "Mr.",
+   "match": true
+  },
+  {
+   "field": "fname",
+   "want": "Theo",
+   "got": "Theo",
+   "match": true
+  },
+  {
+   "field": "lname",
+   "want": "Lindqvist",
+   "got": "Lindqvist",
+   "match": true
+  },
+  {
+   "field": "DOB",
+   "want": "1983-07-26",
+   "got": "1983-07-26",
+   "match": true
+  },
+  {
+   "field": "sex",
+   "want": "Male",
+   "got": "Male",
+   "match": true
+  },
+  {
+   "field": "street",
+   "want": "63 FERRY STREET",
+   "got": "63 FERRY STREET",
+   "match": true
+  },
+  {
+   "field": "city",
+   "want": "EXAMPLETON",
+   "got": "EXAMPLETON",
+   "match": true
+  },
+  {
+   "field": "state",
+   "want": "MA",
+   "got": "MA",
+   "match": true
+  },
+  {
+   "field": "postal_code",
+   "want": "02139",
+   "got": "02139",
+   "match": true
+  },
+  {
+   "field": "phone_home",
+   "want": "555-0136",
+   "got": "555-0136",
+   "match": true
+  },
+  {
+   "field": "email",
+   "want": "theo.lindqvist@example.invalid",
+   "got": "theo.lindqvist@example.invalid",
+   "match": true
+  },
+  {
+   "field": "country_code",
+   "want": "USA",
+   "got": "USA",
+   "match": true
+  }
+ ],
+ "wall_s": 2.231,
+ "setup_s": 0.549,
+ "task_s": 0.946,
+ "readback_s": 1.286
+}
