@@ -122,6 +122,10 @@ _STOP_REASON = "self_repair_probe"
 _NOT_FOUND = "Could not resolve target for step"
 _BELOW_RUNG = "only resolved via the"
 _UNTRUSTED_RUNGS = frozenset({"geometry", "grounder"})
+#: A step that does not save may act on geometry; the structural safety check
+#: then refuses a point that is no actionable control, before any input.
+_NOT_A_CONTROL = "Structural safety refusal"
+_NOTHING_ADMITTED = "no action was admitted"
 
 
 class SelfRepairRefused(RuntimeError):
@@ -522,6 +526,9 @@ class SelfRepair:
             request_sha256)`` as soon as a person is asked, for example to
             print the ``item-approval approve`` command or send a
             notification.
+        standard_changes: A signed repair policy
+            (:class:`~openadapt_flow.repair.standard_change.StandardChanges`).
+            A fix it allows applies without a person; any other goes to one.
     """
 
     def __init__(
@@ -538,6 +545,7 @@ class SelfRepair:
         approval_poll_s: float = 0.5,
         canary_runs: int = 5,
         on_approval_request: Optional[Callable[[Path, str, str], None]] = None,
+        standard_changes: Any = None,
         vision: Any = None,
         sleep: Callable[[float], None] = time.sleep,
         monotonic: Callable[[], float] = time.monotonic,
@@ -578,6 +586,9 @@ class SelfRepair:
         self.approval_poll_s = max(0.01, float(approval_poll_s))
         self.canary_runs = int(canary_runs)
         self.on_approval_request = on_approval_request
+        self.standard_changes = standard_changes
+        #: Added to the approval request, e.g. how many queued items it releases.
+        self.approval_note = ""
         if vision is None:
             import openadapt_flow.vision as vision
         self.vision = vision
@@ -1157,7 +1168,6 @@ class SelfRepair:
     ) -> SelfRepairResult:
         from openadapt_flow.repair.lifecycle import (
             RepairLifecycleError,
-            observation_from_report,
         )
 
         candidate = self.store.add_candidate(patch.candidate)
@@ -1208,6 +1218,19 @@ class SelfRepair:
                 candidate=candidate,
                 patched_bundle=patch.bundle_dir,
             )
+        if self.standard_changes is not None:
+            standard = self.standard_changes.apply(
+                self,
+                patch=patch,
+                probe=probe,
+                candidate=candidate,
+                work=work,
+                evidence=evidence,
+            )
+            if standard is not None:
+                return self._resume(
+                    patch, probe, standard, halted_report, run_dir, work, evidence, None
+                )
         request_id, answer, why = self._ask_person(patch, probe, candidate, run_dir)
         if answer is None:
             evidence.steps.append(
@@ -1293,6 +1316,28 @@ class SelfRepair:
                 f"({route})",
             )
         )
+        return self._resume(
+            patch, probe, candidate, halted_report, run_dir, work, evidence, request_id
+        )
+
+    def _resume(
+        self,
+        patch: _Patch,
+        probe: ProbeOutcome,
+        candidate: RepairCandidate,
+        halted_report: RunReport,
+        run_dir: Path,
+        work: Path,
+        evidence: SelfRepairEvidence,
+        request_id: Optional[str],
+    ) -> SelfRepairResult:
+        """Re-run the item from the start with the approved bundle."""
+
+        from openadapt_flow.repair.lifecycle import (
+            RepairLifecycleError,
+            observation_from_report,
+        )
+
         resume_dir = work / "resume"
         resumed = self._probe(
             patch,
@@ -1526,6 +1571,7 @@ class SelfRepair:
                 f"Accept a repair: {patch.step.intent or patch.step.id} now uses "
                 f"{label!r}. Approving saves this item. Candidate "
                 f"{candidate.candidate_id}."
+                + (f" {self.approval_note}" if self.approval_note else "")
             ),
             mode=ApprovalMode.EACH_ITEM,
             bundle_content_digest=candidate.proposed_content_digest,
@@ -1740,10 +1786,12 @@ def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, int, Any]
         )
     if step.action not in _POINTER_KINDS or step.anchor is None:
         return f"{step.id} is not a click on an on-screen target"
-    # Only the ladder's own two refusals count as "the screen changed": it
-    # found nothing, or it found the target only by geometry (or a model) and
-    # refused to act on that. Any other stop before resolution, such as a
-    # person declining the save at the approval gate, is never repaired.
+    # Only the ladder's own refusals count as "the screen changed": it found
+    # nothing, or it found the target only by geometry (or a model) and
+    # refused to act on that, or the structural safety check refused that
+    # point because no control is there. Any other stop before resolution,
+    # such as a person declining the save at the approval gate, is never
+    # repaired.
     error = halted.error or ""
     if halted.resolution is None:
         if not error.startswith(_NOT_FOUND):
@@ -1751,7 +1799,10 @@ def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, int, Any]
                 f"{step.id} stopped before resolving its target for another "
                 "reason; only a target the ladder could not find is repaired"
             )
-    elif halted.resolution.rung not in _UNTRUSTED_RUNGS or _BELOW_RUNG not in error:
+    elif halted.resolution.rung not in _UNTRUSTED_RUNGS or not (
+        _BELOW_RUNG in error
+        or (error.startswith(_NOT_A_CONTROL) and _NOTHING_ADMITTED in error)
+    ):
         return (
             f"{step.id} found its target ({halted.resolution.rung}) and stopped for "
             "another reason"

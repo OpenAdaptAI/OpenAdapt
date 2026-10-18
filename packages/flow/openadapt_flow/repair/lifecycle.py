@@ -56,6 +56,8 @@ if TYPE_CHECKING:  # the fleet package imports this module at run time
     from openadapt_flow.fleet.policy import RoleRegistry, SignedPromotionPolicy
     from openadapt_flow.fleet.signing import FleetTrust
     from openadapt_flow.fleet.status import FleetStatusSource, StatusHighWater
+    from openadapt_flow.jit.authority import SignedAdmissionPolicy
+    from openadapt_flow.repair.standard_change import StandardChangeGrant
 
 _ACTIVE_NAME = "ACTIVE.json"
 _CANDIDATES_DIR = "candidates"
@@ -473,6 +475,82 @@ class RepairStore:
                 f"(policy approved by {grant.approved_by})"
             ),
         )
+
+    # -- standard changes (self-repairs a person allowed in advance) --------
+
+    def approve_standard_change(
+        self,
+        candidate_id: str,
+        *,
+        policy: "SignedAdmissionPolicy",
+        key_dir: Path,
+        now: Optional[datetime] = None,
+    ) -> tuple[RepairCandidate, "StandardChangeGrant"]:
+        """Review and approve a self-repair under a signed repair policy.
+
+        Re-checks here, against the bundles on disk and not only in the
+        caller, everything :func:`~openadapt_flow.repair.standard_change.authorize`
+        checks: the policy's signature and expiry, the agent, the change class,
+        and that the save step, its identity evidence and its record check
+        are byte-identical. Both campaigns must already have passed. The
+        approval names the policy, binds its digest and the exact bundle
+        digests, and records the person who signed the policy.
+        """
+        from openadapt_flow.repair.standard_change import (
+            StandardChangeRefused,
+            authorize,
+        )
+
+        candidate = self.load_candidate(candidate_id)
+        if candidate.state != "candidate":
+            raise RepairLifecycleError(
+                f"refused: candidate {candidate_id} is {candidate.state!r}; a "
+                "standard change approves only a new candidate"
+            )
+        replay, fault = candidate.replay_campaign, candidate.fault_campaign
+        if replay is None or fault is None or not (replay.passed and fault.passed):
+            raise RepairLifecycleError(
+                f"refused: candidate {candidate_id} has not passed both campaigns"
+            )
+        self._reverify_invariants(candidate)
+        try:
+            grant = authorize(
+                candidate, policy=policy, key_dir=key_dir, store_root=self.root, now=now
+            )
+        except StandardChangeRefused as exc:
+            raise RepairLifecycleError(f"refused: {exc}") from exc
+        actor = grant.actor
+        candidate.reviewed_by = grant.label
+        candidate = self._transition(
+            candidate,
+            "reviewed",
+            actor,
+            note=f"standard change {grant.change_class} under policy "
+            f"{grant.policy_sha256[:16]} (signed by {grant.signed_by})",
+        )
+        for result in (replay, fault):
+            candidate = self.record_campaign(candidate_id, result, actor)
+        if candidate.state != "fault_passed":
+            raise RepairLifecycleError(
+                f"refused: candidate {candidate_id} is {candidate.state!r} after "
+                "its campaigns"
+            )
+        candidate.approval = ApprovalRecord(
+            approved_by=grant.label,
+            non_interactive=True,
+            prior_content_digest=candidate.prior_content_digest,
+            proposed_content_digest=candidate.proposed_content_digest,
+            pre_approval_policy_sha256=grant.policy_sha256,
+            pre_approved_by=grant.signed_by,
+        )
+        candidate = self._transition(
+            candidate,
+            "approved",
+            actor,
+            note=f"approved as standard change {grant.change_class} "
+            f"(policy signed by {grant.signed_by})",
+        )
+        return candidate, grant
 
     def reject(self, candidate_id: str, actor: Actor, reason: str) -> RepairCandidate:
         candidate = self.load_candidate(candidate_id)

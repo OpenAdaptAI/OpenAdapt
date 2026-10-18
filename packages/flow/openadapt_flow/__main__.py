@@ -9301,6 +9301,37 @@ def build_parser() -> argparse.ArgumentParser:
     _repair_store_flag(r)
     r.set_defaults(func=_cmd_repair)
 
+    r = rsub.add_parser(
+        "revert",
+        help=(
+            "Undo a repair that applied without a person: the prior bundle is "
+            "active again, and repairs of that step go to a person"
+        ),
+    )
+    r.add_argument("candidate_id", help="The automatic repair's candidate id")
+    r.add_argument("--by", required=True, help="Your name, recorded on the revert")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "standard-changes",
+        help="List the repairs that applied without a person (the daily digest)",
+    )
+    r.add_argument("--day", default=None, help="UTC day, YYYY-MM-DD (default: today)")
+    r.add_argument("--json", action="store_true", help="Print the ledger rows as JSON")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "clear-hold",
+        help="Let repairs of a step apply without a person again after a revert",
+    )
+    r.add_argument("--workflow", required=True)
+    r.add_argument("--step", required=True)
+    r.add_argument("--by", required=True, help="Your name, recorded on the ledger")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
     p = sub.add_parser(
         "connect",
         help=(

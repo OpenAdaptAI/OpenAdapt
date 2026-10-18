@@ -4258,6 +4258,28 @@ class SelfRepairStepRecord(BaseModel):
     est_model_cost_usd: float = Field(default=0.0, ge=0.0)
 
 
+class StandardChangeEvidence(BaseModel):
+    """A self-repair that applied without a person, under a signed policy.
+
+    Written by :mod:`openadapt_flow.repair.standard_change`. ``change_class``
+    says which class the person allowed in advance; ``preflight_outcome`` is
+    the test record's run of the repaired bundle. ``revert_command`` undoes it.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    change_class: Literal["relabel_or_move", "dismiss_dialog", "menu_path"]
+    detail: str = Field(default="", max_length=512)
+    policy_id: str = Field(max_length=128)
+    policy_sha256: str = Field(pattern="^[a-f0-9]{64}$")
+    policy_signed_by: str = Field(max_length=128)
+    test_record: str = Field(max_length=128)
+    preflight_outcome: str = Field(max_length=64)
+    preflight_run_dir: Optional[str] = None
+    applied_at: str
+    revert_command: str = Field(max_length=512)
+
+
 class SelfRepairEvidence(BaseModel):
     """What ``run --self-repair`` did for this item, step by step.
 
@@ -4293,6 +4315,8 @@ class SelfRepairEvidence(BaseModel):
     approved_by: Optional[str] = Field(default=None, max_length=256)
     approval_route: Optional[str] = Field(default=None, max_length=64)
     steps: list[SelfRepairStepRecord] = Field(default_factory=list)
+    #: Set when the fix applied without a person, under a signed policy.
+    standard_change: Optional[StandardChangeEvidence] = None
 
 
 class RunReport(BaseModel):
