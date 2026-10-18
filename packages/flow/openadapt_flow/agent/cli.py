@@ -27,7 +27,7 @@ import os
 import shlex
 import sys
 from pathlib import Path
-from typing import Optional, Sequence
+from typing import Any, Optional, Sequence
 
 from openadapt_flow.agent import __version__
 from openadapt_flow.agent.contract import APPROVAL_MODES
@@ -240,6 +240,19 @@ def build_parser() -> argparse.ArgumentParser:
             "for that approval reports needs_review. not_gated turns the pause "
             "off for every run this server starts, and each run's result and "
             "Flow's report record that. Callers can't change it."
+        ),
+    )
+    p.add_argument(
+        "--admissions",
+        default=None,
+        metavar="DIR",
+        help=(
+            "Add prepare_admission, list_admissions and decide_admission: the "
+            "`openadapt-flow admit` command over recordings in DIR/recordings "
+            "and shadow candidates in DIR/shadow-candidates. A person decides "
+            "in the client's form, or, with --delegate-approvals, the agent "
+            "decides as that approver. An agent can't decide an admission it "
+            "prepared."
         ),
     )
     p.add_argument(
@@ -719,6 +732,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
                 allow_recorded_defaults=args.allow_synthetic_recorded_defaults,
                 mode=mode,
                 repair_desk=_repair_desk(args, runner_config.runs_dir),
+                admission_desk=_admission_desk(args),
             )
             n = len(bridge.workflows)
             print(
@@ -793,6 +807,15 @@ def _cmd_emit_skill(args: argparse.Namespace) -> int:
         return 2
     print(f"Wrote Agent Skill folder: {skill_dir}")
     return 0
+
+
+def _admission_desk(args: argparse.Namespace) -> Optional[Any]:
+    """The admission tools, only when the operator passed ``--admissions``."""
+    if getattr(args, "admissions", None) is None:
+        return None
+    from openadapt_flow.agent.admission import AdmissionDesk
+
+    return AdmissionDesk(args.admissions, delegate_id=args.delegate_approvals)
 
 
 def _repair_desk(args: argparse.Namespace, runs_dir: Path):
