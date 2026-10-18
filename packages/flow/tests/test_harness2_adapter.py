@@ -167,18 +167,50 @@ def test_rollout_is_scored_by_readback(tmp_path, variant, harness, outcome, flag
     assert (worker / "keys" / "ed25519.pub").is_file()
     assert not (worker / "keys" / "ed25519.pem").exists()
     assert not (worker / "token").exists()
-    # The rollout is idempotent by run directory.
-    assert (
-        run_rollout(
-            task,
-            harness,
-            ScriptedGuiAgent(),
-            run_dir,
-            target=MockMedTarget(),
-            run_id="x",
-        )
-        == run_dir
+    # The same task under the same harness reuses the finished run.
+    mtime = (run_dir / "run.json").stat().st_mtime_ns
+    run_rollout(
+        task, harness, ScriptedGuiAgent(), run_dir, target=MockMedTarget(), run_id="x"
     )
+    assert (run_dir / "run.json").stat().st_mtime_ns == mtime
+
+
+def test_a_rollout_is_redone_when_the_harness_changed(tmp_path):
+    pytest.importorskip("playwright.sync_api")
+    task = mockmed_tasks(("lookalike",))[0]
+    run_dir = tmp_path / "run"
+    run_rollout(
+        task, "", ScriptedGuiAgent(), run_dir, target=MockMedTarget(), run_id="r1"
+    )
+    assert load_score(run_dir).wrong_record
+    run_rollout(
+        task, CAREFUL, ScriptedGuiAgent(), run_dir, target=MockMedTarget(), run_id="r1"
+    )
+    assert load_score(run_dir).outcome == "verified"
+
+
+def test_reward_selection_ranks_the_right_outcome_first(tmp_path, h2):
+    from harness2.core.spec import RunView
+
+    from openadapt_flow.integrations.harness2.selection import reward_selection
+
+    scores = {
+        # A single save a person reconciles: right on the timeout task, unscored.
+        "a": {"reward": None, "all_pass": True},
+        # Never saved: a safe stop, reward 0, not the task.
+        "b": {"reward": 0.0, "all_pass": False},
+        "c": {"reward": -1.0, "all_pass": False},
+    }
+
+    class Fake:
+        def score(self, run_dir, task_id):
+            return scores[Path(run_dir).name]
+
+    pool = {k: RunView(k, k, tmp_path / k, ok=True, delivered=True) for k in scores}
+    sel = reward_selection(
+        "mockmed/timeout", 3, "agg", pool, adapter=Fake(), work_dir=tmp_path
+    )
+    assert sel.chosen_label == "a"
 
 
 def test_model_requests_pass_the_privacy_gate(monkeypatch, tmp_path):
