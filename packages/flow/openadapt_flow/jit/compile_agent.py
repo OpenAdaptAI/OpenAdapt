@@ -36,7 +36,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from types import TracebackType
 from typing import Any, Callable, Mapping, Optional, Protocol, Sequence
-from urllib.parse import urlsplit
+from urllib.parse import quote, urlsplit
 
 from openadapt_flow.jit import lifecycle
 from openadapt_flow.jit.adapters import CaptureComputer, UnsupportedAction, dialects
@@ -50,8 +50,11 @@ __all__ = [
     "CompiledAgent",
     "ComputerUseAgent",
     "JitResult",
+    "App",
     "RECORDING_WARNING",
     "Recording",
+    "SURFACE_KINDS",
+    "SurfaceApp",
     "TaskRequest",
     "WebApp",
     "compile_agent",
@@ -61,7 +64,7 @@ CANDIDATE_FILE = lifecycle.CANDIDATE_FILE
 ADMIT_FILE = lifecycle.ADMISSION_FILE
 NEEDS_HUMAN_ADMIT = "needs_human_admit"
 
-#: Printed to stderr before every recording starts, before the browser opens.
+#: Printed to stderr before every recording starts, before the app opens.
 #: An ``on_warning`` callback gets it too; it can't replace the print.
 RECORDING_WARNING = (
     "Before you record: the recording keeps every screen the agent sees and "
@@ -99,6 +102,202 @@ class WebApp:
     def origin(self) -> str:
         parts = urlsplit(self.url)
         return f"{parts.scheme}://{parts.netloc}"
+
+    @property
+    def kind(self) -> str:
+        return "web"
+
+    @property
+    def entry_url(self) -> Optional[str]:
+        return self.url
+
+    @property
+    def backend_hints(self) -> Optional[dict[str, Any]]:
+        return None
+
+    @property
+    def deployment_surface(self) -> Optional[str]:
+        return None
+
+    def open(self) -> tuple[Any, Callable[[], None]]:
+        """Launch a browser at :attr:`url`. Returns the backend and its close."""
+
+        from openadapt_flow.backends.playwright_backend import PlaywrightBackend
+
+        return PlaywrightBackend.launch(self.url, headless=self.headless)
+
+
+#: Backend kinds :class:`SurfaceApp` drives. ``web`` is :class:`WebApp`.
+SURFACE_KINDS = ("windows", "macos", "linux", "rdp", "citrix")
+
+
+def _surface_kind(kind: Optional[str]) -> str:
+    k = (kind or "").strip().lower().replace("_", "-")
+    return "rdp" if k == "remote-display" else k
+
+
+@dataclass(frozen=True)
+class SurfaceApp:
+    """A native or remote-display app the task runs in.
+
+    The app is named the way a deployment file names it: the ``backend``
+    section of a ``deploy.yaml`` (``kind`` plus that kind's target). The agent
+    drives it through the same :class:`~openadapt_flow.authoring.AuthoringSession`
+    and :class:`CaptureComputer` the MCP recording tools use, and every canary
+    and run opens a fresh backend from the same section.
+
+    ============  =======================================================
+    ``kind``      Target the section must name
+    ============  =======================================================
+    ``windows``   ``agent_url`` (the in-guest agent; UI Automation)
+    ``macos``     ``macos_app`` (Accessibility; ``macos_window_title``)
+    ``linux``     ``linux_app`` and ``linux_window_title`` (AT-SPI)
+    ``rdp``       ``rdp_host`` (network RDP) or ``rdp_window`` (local client)
+    ``citrix``    nothing (the host's Citrix Workspace window), or
+                  ``rdp_window``; runs need ``rdp_readiness_text``
+    ============  =======================================================
+
+    RDP and Citrix are screen-only: the agent works from pixels and keys.
+
+    Args:
+        backend: The deployment ``backend`` section, as a
+            :class:`~openadapt_flow.deployment.BackendConfig` or a mapping.
+        record_reader: As for :class:`WebApp`.
+        reset: As for :class:`WebApp`.
+        open_backend: Builds the live backend from ``backend``. Defaults to
+            :func:`openadapt_flow.backends.factory.build_backend`. Pass one to
+            inject a client (for example a test fixture).
+    """
+
+    backend: Any
+    record_reader: Optional[Callable[[], Optional[list[dict[str, Any]]]]] = None
+    reset: Optional[Callable[[], None]] = None
+    open_backend: Optional[Callable[[Any], Any]] = field(default=None, repr=False)
+
+    def __post_init__(self) -> None:
+        from openadapt_flow.deployment import BackendConfig
+
+        cfg = self.backend
+        if not isinstance(cfg, BackendConfig):
+            cfg = BackendConfig.model_validate(dict(cfg))
+            object.__setattr__(self, "backend", cfg)
+        kind = _surface_kind(cfg.kind)
+        if kind == "web":
+            raise ValueError("backend.kind 'web' is a browser app: use WebApp(url=...)")
+        if kind not in SURFACE_KINDS:
+            raise ValueError(
+                f"unknown backend.kind {cfg.kind!r} (expected one of "
+                f"{', '.join(SURFACE_KINDS)})"
+            )
+        missing = {
+            "windows": None if cfg.agent_url else "backend.agent_url",
+            "macos": None if cfg.macos_app else "backend.macos_app",
+            "linux": (
+                None
+                if cfg.linux_app and cfg.linux_window_title
+                else "backend.linux_app and backend.linux_window_title"
+            ),
+            "rdp": (
+                None
+                if bool(cfg.rdp_host) != bool(cfg.rdp_window)
+                else "exactly one of backend.rdp_host or backend.rdp_window"
+            ),
+            "citrix": (
+                "no backend.rdp_host (Citrix drives a local Workspace window)"
+                if cfg.rdp_host
+                else None
+            ),
+        }[kind]
+        if missing:
+            raise ValueError(f"backend.kind {kind!r} needs {missing}")
+
+    @classmethod
+    def from_deployment(cls, path: Path | str, **kwargs: Any) -> "SurfaceApp":
+        """The app named by the ``backend`` section of a deployment file."""
+
+        from openadapt_flow.deployment import load_deployment
+
+        return cls(load_deployment(path).backend, **kwargs)
+
+    @property
+    def kind(self) -> str:
+        return _surface_kind(self.backend.kind)
+
+    @property
+    def url(self) -> Optional[str]:
+        return None
+
+    @property
+    def entry_url(self) -> Optional[str]:
+        return None
+
+    @property
+    def target(self) -> str:
+        """The app this section names, without window titles (they can carry
+        a document or patient name)."""
+
+        cfg = self.backend
+        if self.kind == "windows":
+            return urlsplit(str(cfg.agent_url)).netloc or str(cfg.agent_url)
+        if self.kind == "macos":
+            return str(cfg.macos_app)
+        if self.kind == "linux":
+            return str(cfg.linux_app)
+        if self.kind == "rdp" and cfg.rdp_host:
+            port = int(cfg.rdp_port or 3389)
+            return str(cfg.rdp_host) + ("" if port == 3389 else f":{port}")
+        return str(cfg.rdp_window or "workspace")
+
+    @property
+    def origin(self) -> str:
+        """``<kind>://<target>``. A canary admits the program on this origin
+        only, and an admission policy's ``allowed_hosts`` names the target
+        (lower case), as it names a web host."""
+
+        return f"{self.kind}://{quote(self.target, safe='.:-_ ')}"
+
+    @property
+    def backend_hints(self) -> Optional[dict[str, Any]]:
+        if self.kind not in ("rdp", "citrix"):
+            return None
+        return {
+            "rdp_window": self.backend.rdp_window,
+            "rdp_window_title": self.backend.rdp_window_title,
+            "rdp_readiness_text": self.backend.rdp_readiness_text,
+        }
+
+    @property
+    def deployment_surface(self) -> Optional[str]:
+        return self.backend.deployment_surface
+
+    def run_refusal(self) -> Optional[str]:
+        """Why a governed canary or run can't start here, or None."""
+
+        if (
+            self.kind == "citrix"
+            and not str(self.backend.rdp_readiness_text or "").strip()
+        ):
+            return (
+                "governed Citrix execution needs a stable current-frame "
+                "readiness marker before any action: set backend.rdp_readiness_text"
+            )
+        return None
+
+    def open(self) -> tuple[Any, Callable[[], None]]:
+        """Build a fresh backend from the section. Returns it and its close."""
+
+        if self.open_backend is not None:
+            backend = self.open_backend(self.backend)
+        else:
+            from openadapt_flow.backends.factory import build_backend
+
+            backend = build_backend(self.backend)
+        close = getattr(backend, "close", None)
+        return backend, (close if callable(close) else (lambda: None))
+
+
+#: What :func:`compile_agent` runs a task in.
+App = WebApp | SurfaceApp
 
 
 @dataclass(frozen=True)
@@ -188,7 +387,6 @@ class Recording:
 
     def __enter__(self) -> "Recording":
         from openadapt_flow.authoring import AuthoringSession
-        from openadapt_flow.backends.playwright_backend import PlaywrightBackend
 
         owner = self._owner
         if owner.admitted or owner.candidate() is not None:
@@ -212,21 +410,22 @@ class Recording:
         )
         if owner.app.reset is not None:
             owner.app.reset()
-        backend, self._close = PlaywrightBackend.launch(
-            owner.app.url, headless=owner.app.headless
-        )
+        backend, self._close = owner.app.open()
         try:
             self._session = AuthoringSession(
                 backend,
                 program / "recording",
-                backend_kind="web",
+                backend_kind=owner.app.kind,
                 app_url=owner.app.url,
+                backend_hints=owner.app.backend_hints,
                 system_of_record_reader=owner.app.record_reader,
             )
             self.computer = CaptureComputer(
                 self._session,
                 dialect=self._dialect,
-                page=backend.page,
+                page=getattr(backend, "page", None)
+                if owner.app.kind == "web"
+                else None,
                 sleep=owner._sleep,
             )
             self._session.start_record()
@@ -286,7 +485,7 @@ class CompiledAgent:
 
     agent: Optional[ComputerUseAgent]
     task: TaskSignature
-    app: WebApp
+    app: App
     verifier: Any
     policy: str
     cache_dir: Path
@@ -764,7 +963,6 @@ class CompiledAgent:
         the person attending its canary.
         """
 
-        from openadapt_flow.backends.playwright_backend import PlaywrightBackend
         from openadapt_flow.deployment import DeploymentConfig, PolicySection
         from openadapt_flow.execution_profiles import (
             ExecutionProfile,
@@ -782,6 +980,9 @@ class CompiledAgent:
                 lifecycle.verify_admission(self.bundle_dir, key_dir=self.key_dir)
             except AdmissionError as exc:
                 return f"a DRAFT never runs unattended: {exc}", None
+        refusal = getattr(self.app, "run_refusal", lambda: None)()
+        if refusal:
+            return f"refused before any action: {refusal}", None
         gate = evaluate_run_gate(
             workflow,
             bundle_dir=self.bundle_dir,
@@ -806,9 +1007,7 @@ class CompiledAgent:
         )
         if self.app.reset is not None:
             self.app.reset()
-        backend, close = PlaywrightBackend.launch(
-            self.app.url, headless=self.app.headless
-        )
+        backend, close = self.app.open()
         try:
             report = Replayer(
                 backend,
@@ -818,14 +1017,15 @@ class CompiledAgent:
                 require_settled=True,
                 attended_draft_by=attended_by,
                 draft_key_dir=self.key_dir,
+                deployment_surface=self.app.deployment_surface,
             ).run(
                 workflow.model_copy(deep=True),
                 params=values,
                 bundle_dir=self.bundle_dir,
                 run_dir=run_dir,
-                execution_target_kind="web",
+                execution_target_kind=self.app.kind,
                 execution_origin=self.app.origin,
-                execution_entry_url=self.app.url,
+                execution_entry_url=self.app.entry_url,
             )
         finally:
             close()
@@ -884,7 +1084,7 @@ def compile_agent(
     agent: Optional[ComputerUseAgent] = None,
     *,
     task: TaskSignature,
-    app: WebApp,
+    app: App,
     verifier: Any,
     policy: str,
     cache_dir: Path | str = ".openadapt-jit",
@@ -901,8 +1101,11 @@ def compile_agent(
         agent: The computer-use agent, used on a cache miss only. Leave it
             out to drive your own loop with :meth:`CompiledAgent.recording`.
         task: The task id, the instruction, and the typed parameter schema.
-        app: The web app, with the read-only system-of-record snapshot used
-            while the agent's run is recorded.
+        app: The app: :class:`WebApp` for a browser app, or
+            :class:`SurfaceApp` for a Windows, macOS, Linux, RDP or Citrix
+            app named by a deployment ``backend`` section. Either carries the
+            read-only system-of-record snapshot used while the agent's run is
+            recorded.
         verifier: The effect verifier a run reads the system of record with,
             such as :class:`~openadapt_flow.runtime.effects.RestRecordVerifier`.
         policy: The policy the program must pass to be admitted and run, such
@@ -931,6 +1134,12 @@ def compile_agent(
     dialect = dialect or "generic"
     if dialect not in dialects():
         raise ValueError(f"unknown dialect {dialect!r} (expected one of {dialects()})")
+    if dialect == "playwright_mcp" and app.kind != "web":
+        raise ValueError(
+            "the playwright_mcp dialect targets CSS selectors in a browser page; "
+            f"a {app.kind} app has none. Use anthropic, openai or generic "
+            "(coordinates and keys)"
+        )
     return CompiledAgent(
         agent=agent,
         task=task,
