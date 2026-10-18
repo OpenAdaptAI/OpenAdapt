@@ -2054,7 +2054,10 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     # NO actuation has begun on either the desktop or the web path below.
     _maybe_attest_pre_state(run_dir, args)
     approval_gate = _approval_gate_for_run(
-        args, run_dir, policy_name=getattr(args, "policy", None) or cfg.policy.policy
+        args,
+        run_dir,
+        policy_name=getattr(args, "policy", None) or cfg.policy.policy,
+        cfg=cfg,
     )
     fault_driver = getattr(args, "_qualification_fault_driver", None)
     if _normalize_kind(backend_cfg.kind) != "web":
@@ -2292,22 +2295,38 @@ def _approval_wait_seconds(args: argparse.Namespace) -> float:
 
 
 def _approver_settings(args: argparse.Namespace):
-    """The run's approver policy and delegated approver, from its flags."""
+    """The run's approver grant and delegated approver, from its flags.
+
+    ``--approver-policy`` is a person-signed grant
+    (``openadapt-flow approver-grant sign``) or a person-only policy. An
+    unsigned policy that admits an agent, or a grant that doesn't verify
+    against the signer registry, gives no authority: the run stays
+    person-only and says why.
+    """
 
     import os
+    import sys
 
     from openadapt_flow.approval_mode.approver import (
         ApproverAuth,
         ApproverIdentityV1,
         ApproverKind,
-        ApproverPolicyV1,
         WebhookApprover,
     )
+    from openadapt_flow.approval_mode.signed_policy import load_approver_policy
+    from openadapt_flow.jit.lifecycle import default_key_dir
 
-    policy = None
+    loaded = None
     path = getattr(args, "approver_policy", None)
     if path:
-        policy = ApproverPolicyV1.model_validate_json(Path(path).read_text())
+        loaded = load_approver_policy(path, default_key_dir())
+        if loaded.refusal is not None:
+            print(
+                f"approver policy not used ({loaded.refusal}): only a person "
+                "answers this run's saves. A delegate needs a grant a "
+                "registered person signed (openadapt-flow approver-grant sign).",
+                file=sys.stderr,
+            )
     approver = None
     url = getattr(args, "approver_webhook", None)
     if url:
@@ -2321,11 +2340,75 @@ def _approver_settings(args: argparse.Namespace):
                 id=getattr(args, "approver_webhook_id", None),
             ),
         )
-    return policy, approver
+    return loaded, approver
+
+
+def _phone_relay_for_run(args: argparse.Namespace, cfg=None):
+    """The opt-in phone approval relay, or ``None`` (Desktop approval only).
+
+    On only with ``--phone-approval`` or ``runtime.phone_approval: true``.
+    Asking for it without this runner's Cloud pairing, or without a pinned
+    Cloud decision key, refuses the run rather than silently dropping it.
+    """
+
+    wanted = bool(getattr(args, "phone_approval", False)) or bool(
+        getattr(getattr(cfg, "runtime", None), "phone_approval", False)
+    )
+    if not wanted:
+        return None
+    from openadapt_flow.approval_mode.cloud_decision import (
+        default_keys_path,
+        load_pinned_keys,
+    )
+    from openadapt_flow.approval_mode.phone_relay import (
+        PhoneRelayError,
+        relay_from_env,
+    )
+
+    if not load_pinned_keys():
+        raise SystemExit(
+            "run REFUSED: phone approval needs Cloud's decision key pinned on "
+            f"this runner ({default_keys_path()}); run "
+            "`openadapt-flow item-approval pin-cloud-keys`. Nothing was executed."
+        )
+    try:
+        return relay_from_env()
+    except PhoneRelayError as exc:
+        raise SystemExit(f"run REFUSED: {exc}. Nothing was executed.") from None
+
+
+def _prepare_approval_store(
+    args: argparse.Namespace, run_dir: Path, *, record_initiator: bool
+):
+    """The run's item-approval store with its grant and initiator recorded."""
+
+    from openadapt_flow.approval_mode.item_approval import (
+        ItemApprovalRefused,
+        ItemApprovalStore,
+    )
+
+    store = ItemApprovalStore(run_dir)
+    loaded, approver = _approver_settings(args)
+    try:
+        if loaded is not None and loaded.signed is not None:
+            store.write_grant(loaded.signed)
+        elif loaded is not None and loaded.refusal is None:
+            store.write_policy(loaded.policy)
+        if record_initiator:
+            store.write_initiator(getattr(args, "started_by", None))
+    except ItemApprovalRefused as exc:
+        raise SystemExit(
+            f"run REFUSED: {exc} ({exc.code}). Nothing was executed."
+        ) from None
+    return store, approver
 
 
 def _approval_gate_for_run(
-    args: argparse.Namespace, run_dir: Path, *, policy_name: Optional[str] = None
+    args: argparse.Namespace,
+    run_dir: Path,
+    *,
+    policy_name: Optional[str] = None,
+    cfg=None,
 ):
     """Build the run's approval gate from the mode ``run`` resolved, if any."""
 
@@ -2333,16 +2416,15 @@ def _approval_gate_for_run(
     if mode is None:
         return None
     from openadapt_flow.approval_mode.gate import ApprovalGate
-    from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
 
-    policy, approver = _approver_settings(args)
+    store, approver = _prepare_approval_store(args, run_dir, record_initiator=True)
     return ApprovalGate(
         mode,
-        approval_store=ItemApprovalStore(run_dir),
+        approval_store=store,
         approval_wait_s=_approval_wait_seconds(args),
-        approver_policy=policy,
         approver=approver,
         policy_name=policy_name,
+        phone_relay=_phone_relay_for_run(args, cfg),
     )
 
 
@@ -2970,21 +3052,27 @@ def _carry_item_approval_to_pause(run_dir: Path, store, pending):
 
 
 def _resume_approval_gate(
-    args: argparse.Namespace, mode, run_dir: Path, *, policy_name: Optional[str] = None
+    args: argparse.Namespace,
+    mode,
+    run_dir: Path,
+    *,
+    policy_name: Optional[str] = None,
+    cfg=None,
 ):
     if mode is None:
         return None
     from openadapt_flow.approval_mode.gate import ApprovalGate
-    from openadapt_flow.approval_mode.item_approval import ItemApprovalStore
 
-    policy, approver = _approver_settings(args)
+    # A resume keeps the run's own grant and initiator; it never re-records
+    # who started the run.
+    store, approver = _prepare_approval_store(args, run_dir, record_initiator=False)
     return ApprovalGate(
         mode,
-        approval_store=ItemApprovalStore(run_dir),
+        approval_store=store,
         approval_wait_s=_approval_wait_seconds(args),
-        approver_policy=policy,
         approver=approver,
         policy_name=policy_name,
+        phone_relay=_phone_relay_for_run(args, cfg),
     )
 
 
@@ -3260,7 +3348,7 @@ def _cmd_resume(args: argparse.Namespace) -> int:
             runtime_config=cfg.runtime,
             checkpoint_key=ckpt_key,
             approval_gate=_resume_approval_gate(
-                args, resume_mode, run_dir, policy_name=cfg.policy.policy
+                args, resume_mode, run_dir, policy_name=cfg.policy.policy, cfg=cfg
             ),
         )
         return resume(
@@ -3476,9 +3564,13 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
         request_summary,
     )
 
+    verb = args.item_approval_cmd
+    if verb == "pin-cloud-keys":
+        return _item_approval_pin_cloud_keys(args)
     run_dir = Path(args.run_dir)
     store = ItemApprovalStore(run_dir)
-    verb = args.item_approval_cmd
+    if verb == "apply-cloud-decision":
+        return _item_approval_apply_cloud_decision(args, store)
     if verb == "show":
         rows = [request_summary(store, request) for request in store.requests()]
         if not args.all:
@@ -3568,7 +3660,7 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
             else args.auth_method,
             decline_reason=getattr(args, "reason", None),
             approver=delegate,
-            policy=store.policy(),
+            policy=store.context(),
         )
         store.write_answer(answer)
     except ItemApprovalRefused as exc:
@@ -3585,6 +3677,132 @@ def _cmd_item_approval(args: argparse.Namespace) -> int:
             }
         )
     )
+    return 0
+
+
+def _item_approval_pin_cloud_keys(args: argparse.Namespace) -> int:
+    """Pin Cloud's phone-decision keys on this runner (once, at pairing)."""
+    import json
+    import os
+
+    from openadapt_flow.approval_mode.cloud_decision import default_keys_path
+    from openadapt_flow.approval_mode.phone_relay import (
+        PhoneRelayError,
+        relay_from_env,
+    )
+
+    target = Path(args.out) if args.out else default_keys_path()
+    try:
+        keys = relay_from_env().decision_keys()
+    except (PhoneRelayError, OSError, ValueError) as exc:
+        print(json.dumps({"ok": False, "code": "pin_failed", "message": str(exc)}))
+        return 2
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_suffix(".tmp")
+    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    with os.fdopen(fd, "w", encoding="utf-8") as handle:
+        handle.write(json.dumps(keys, indent=2, sort_keys=True) + "\n")
+    os.replace(tmp, target)
+    print(json.dumps({"ok": True, "path": str(target), "key_ids": sorted(keys)}))
+    return 0
+
+
+def _item_approval_apply_cloud_decision(args: argparse.Namespace, store) -> int:
+    """Apply a Cloud-signed phone decision to the request it names."""
+    import json
+
+    from openadapt_flow.approval_mode.item_approval import (
+        ItemApprovalRefused,
+        apply_cloud_decision,
+    )
+
+    try:
+        raw = json.loads(Path(args.decision_file).read_text(encoding="utf-8"))
+        request_id = str(raw.get("request_id", "")) if isinstance(raw, dict) else ""
+        request = store.read_request(request_id)
+    except (OSError, ValueError, ItemApprovalRefused):
+        print(json.dumps({"ok": False, "code": "request_unknown"}))
+        return 2
+    answer = apply_cloud_decision(store, request, raw)
+    if answer is None:
+        print(json.dumps({"ok": False, "code": "cloud_decision_refused"}))
+        return 2
+    resume_required = _answer_durable_item_pause(Path(args.run_dir), request, answer)
+    print(
+        json.dumps(
+            {
+                "ok": True,
+                "request_id": request.request_id,
+                "decision": answer.decision,
+                "answer_sha256": answer.digest(),
+                "resume_required": resume_required,
+            }
+        )
+    )
+    return 0
+
+
+def _cmd_approver_grant(args: argparse.Namespace) -> int:
+    """Sign or check a person's approver grant (who may answer saves)."""
+    import json
+    import sys
+
+    from openadapt_flow.approval_mode.signed_policy import (
+        ApproverGrant,
+        GrantRefused,
+        SignedApproverGrant,
+        sign_grant,
+        verify_grant,
+    )
+    from openadapt_flow.jit import authority
+    from openadapt_flow.jit.lifecycle import default_key_dir
+
+    key_dir = Path(args.key_dir) if args.key_dir else default_key_dir()
+    if args.approver_grant_cmd == "verify":
+        try:
+            signed = SignedApproverGrant.model_validate_json(
+                Path(args.grant).read_text(encoding="utf-8")
+            )
+            verified = verify_grant(signed, key_dir)
+        except (OSError, ValueError) as exc:
+            code = getattr(exc, "code", "approver_grant_unreadable")
+            print(json.dumps({"ok": False, "code": code, "message": str(exc)}))
+            return 2
+        print(
+            json.dumps(
+                {
+                    "ok": True,
+                    "policy_ref": verified.policy_ref,
+                    "signer": verified.signer,
+                    "delegates": list(verified.grant.delegates),
+                    "workflows": list(verified.grant.workflows),
+                    "expires_at": verified.grant.expires_at,
+                }
+            )
+        )
+        return 0
+    # sign: a person, at a terminal, with their encrypted policy-signer key.
+    if not (sys.stdin.isatty() and sys.stdout.isatty()):
+        print(
+            "approver-grant sign needs a person at an interactive terminal; "
+            "an agent or script can't sign a grant.",
+            file=sys.stderr,
+        )
+        return 2
+    grant = ApproverGrant.model_validate_json(Path(args.grant).read_text("utf-8"))
+    print(grant.model_dump_json(indent=2, by_alias=True))
+    reply = input(f"Sign this grant as {grant.signer}? Type yes to sign: ")
+    if reply.strip().lower() not in ("yes", "ok"):
+        print("Not signed.")
+        return 1
+    try:
+        signed = sign_grant(grant, authority.load_encrypted_key(args.key))
+        verified = verify_grant(signed, key_dir)
+    except (authority.AuthorityError, GrantRefused) as exc:
+        print(f"Not signed: {exc}", file=sys.stderr)
+        return 2
+    signed.save(args.out)
+    print(f"signed grant {verified.policy_ref} written to {args.out}")
     return 0
 
 
@@ -6364,10 +6582,33 @@ def _add_approval_flags(p: argparse.ArgumentParser) -> None:
         default=None,
         metavar="FILE",
         help=(
-            "An openadapt.approver-policy/v1 JSON file: which kinds of approver "
-            "(person, rule, agent, system) may answer each class of save. "
-            "Without it only a person may answer. A clinical_write save takes "
-            "a non-person approver only when the policy pins an opt-in."
+            "A person-signed approver grant (openadapt-flow approver-grant "
+            "sign): which agents or systems may answer which classes of save, "
+            "until when. Without a grant that verifies against the signer "
+            "registry, only a person may answer; an unsigned or tampered file "
+            "gives no authority. A clinical_write save takes a non-person "
+            "approver only when the grant's policy pins an opt-in."
+        ),
+    )
+    p.add_argument(
+        "--started-by",
+        default=None,
+        metavar="ID",
+        help=(
+            "The agent or system that started this run (opaque id). It can "
+            "never answer this run's saves. openadapt-agent sets it."
+        ),
+    )
+    p.add_argument(
+        "--phone-approval",
+        action="store_true",
+        default=False,
+        help=(
+            "Also send each waiting save to OpenAdapt Cloud so a person can "
+            "approve it from their phone (opt-in; same as "
+            "runtime.phone_approval). Needs this runner's Cloud pairing "
+            "(OPENADAPT_RUNNER_TOKEN, OPENADAPT_RUNNER_ID) and Cloud's "
+            "decision key pinned (item-approval pin-cloud-keys)."
         ),
     )
     p.add_argument(
@@ -7848,6 +8089,42 @@ def build_parser() -> argparse.ArgumentParser:
                 choices=["wrong_values", "wrong_record", "screen_problem"],
             )
         q.set_defaults(func=_cmd_item_approval)
+    q = item_sub.add_parser(
+        "apply-cloud-decision",
+        help=(
+            "Apply a Cloud-signed decision a person made on their phone. It "
+            "must name this run's waiting request and verify against the "
+            "pinned Cloud decision key"
+        ),
+    )
+    q.add_argument("run_dir", help="The run directory")
+    q.add_argument("--decision-file", required=True, metavar="JSON")
+    q.set_defaults(func=_cmd_item_approval)
+    q = item_sub.add_parser(
+        "pin-cloud-keys",
+        help="Pin OpenAdapt Cloud's phone-decision keys on this runner",
+    )
+    q.add_argument("--out", default=None, help="Where to write the pinned keys")
+    q.set_defaults(func=_cmd_item_approval)
+
+    p = sub.add_parser(
+        "approver-grant",
+        help=(
+            "Sign or check a grant that lets named agents or systems answer "
+            "some saves. Only a registered person signs, at a terminal"
+        ),
+    )
+    grant_sub = p.add_subparsers(dest="approver_grant_cmd", required=True)
+    q = grant_sub.add_parser("sign", help="Sign a grant with your policy-signer key")
+    q.add_argument("grant", help="Unsigned openadapt-flow/approver-grant/v1 JSON")
+    q.add_argument("--key", required=True, help="Your encrypted policy-signer key")
+    q.add_argument("--out", required=True)
+    q.add_argument("--key-dir", default=None)
+    q.set_defaults(func=_cmd_approver_grant)
+    q = grant_sub.add_parser("verify", help="Check a signed grant against the registry")
+    q.add_argument("grant", help="Signed grant JSON")
+    q.add_argument("--key-dir", default=None)
+    q.set_defaults(func=_cmd_approver_grant)
 
     p = sub.add_parser(
         "bench", help="Replay a bundle N times against MockMed and aggregate"

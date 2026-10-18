@@ -584,6 +584,10 @@ class RuntimeSection(BaseModel):
     #: ``--approval-mode`` wins. For the Standard and Regulated profiles a
     #: missing or unknown value means ``each_item``.
     approval_mode: Optional[str] = None
+    #: Opt-in phone approval: each waiting save also goes to OpenAdapt Cloud,
+    #: which pushes an opaque link to the approver's phone. Off by default;
+    #: a local-only install keeps Desktop approval and sends nothing.
+    phone_approval: bool = False
     #: Tier-3 durable runtime: checkpoint each verified step, durably pause on
     #: halt, resumable via ``resume``. Off by default.
     durable: bool = False

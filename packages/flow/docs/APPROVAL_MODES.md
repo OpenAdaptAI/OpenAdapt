@@ -49,10 +49,12 @@ openadapt-flow item-approval approve RUN_DIR \
 openadapt-flow item-approval decline RUN_DIR ... --reason wrong_values
 ```
 
-- An answer names the request digest the person saw. Only
-  `--decided-by human` from the `desktop_run_it` route is accepted. A
-  decline carries one closed reason: `wrong_values`, `wrong_record` or
-  `screen_problem`.
+- An answer names the request digest the person saw. A person answers with
+  `--decided-by human` from the `desktop_run_it` route, or from their phone
+  through Cloud (`cloud_phone`, opt-in; see
+  [`APPROVAL_AND_VERIFICATION.md`](APPROVAL_AND_VERIFICATION.md)), which
+  needs a Cloud-signed decision for that exact request. A decline carries
+  one closed reason: `wrong_values`, `wrong_record` or `screen_problem`.
 - Answers are created once and never replaced. The run checks every answer
   itself, so an answer file written around the command is held to the same
   rules. An approval is used for exactly one save; a loop that reaches the
@@ -256,10 +258,13 @@ strict expected-failure tests for them.
 
 ## Delegated approvers
 
-By default only a person answers a save. A run can carry an approver policy
-(`--approver-policy`) that lets an agent, rule or system answer some step
-classes, and a signed webhook (`--approver-webhook`) to ask. See
-[`APPROVAL_AND_VERIFICATION.md`](APPROVAL_AND_VERIFICATION.md).
+By default only a person answers a save. A run can carry an approver grant
+a person signed (`--approver-policy SIGNED.json`) that lets named agents or
+systems answer some step classes, and a signed webhook
+(`--approver-webhook`) to ask. An unsigned or tampered grant gives no
+authority, and a delegate never answers a run it started. Desktop and Cloud
+show who approved each save: a person, or the delegate's name and the
+grant's digest. See [`APPROVAL_AND_VERIFICATION.md`](APPROVAL_AND_VERIFICATION.md).
 
 ## Not built yet
 
@@ -268,5 +273,3 @@ classes, and a signed webhook (`--approver-webhook`) to ask. See
 - A Desktop list queue for batch review.
   [`DECISION_TRIAGE.md`](DECISION_TRIAGE.md) describes the engine part that
   orders a list's verified saves for review.
-- Delegated approvers in Desktop and Cloud. Flow records them; neither app
-  shows who or what approved yet.

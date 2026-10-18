@@ -87,6 +87,7 @@ from openadapt_flow.approval_mode.switch import (
 )
 
 if TYPE_CHECKING:
+    from openadapt_flow.approval_mode.phone_relay import PhoneRelay
     from openadapt_flow.ir import RunReport, Step, StepResult, Workflow
 
 SignedInVerdict = Literal["match", "mismatch", "unreadable"]
@@ -261,6 +262,7 @@ class ApprovalGate:
         approver_policy: Optional["ApproverPolicyV1"] = None,
         approver: Optional["Approver"] = None,
         policy_name: Optional[str] = None,
+        phone_relay: Optional["PhoneRelay"] = None,
     ) -> None:
         self.mode = resolve_approval_mode(mode)
         if approval_store is None or isinstance(approval_store, ItemApprovalStore):
@@ -271,6 +273,8 @@ class ApprovalGate:
         # the run's store records the policy so every reader applies the same.
         self.approver_policy = approver_policy
         self.approver = approver
+        #: Opt-in phone approval through Cloud. ``None``: Desktop only.
+        self.phone_relay = phone_relay
         self._policy_name = policy_name
         if approver_policy is not None and self.approval_store is not None:
             self.approval_store.write_policy(approver_policy)
@@ -621,6 +625,7 @@ class ApprovalGate:
                 monotonic=self._monotonic,
                 sleep=self._sleep,
                 approver=self.approver,
+                phone_relay=self.phone_relay,
             )
             if waited is None:
                 return wait_refusal(code or "approval_wait_timed_out")

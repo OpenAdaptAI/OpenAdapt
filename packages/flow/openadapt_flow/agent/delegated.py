@@ -6,9 +6,11 @@ tools aren't listed, except the read-only ``get_approval_mode``.
 
 Even then the agent decides nothing on its own authority. Its answer goes to
 ``openadapt-flow item-approval`` as ``decided_by: automation`` from the
-``mcp`` route, naming the agent, and Flow accepts it only where the run's
-approver policy allows an agent for that step. The default policy allows
-only a person, and a clinical write needs the customer's pinned opt-in.
+``mcp`` route, naming the agent, and Flow accepts it only under a
+person-signed approver grant that names the agent and allows an agent for
+that step. Without one only a person answers, and a clinical write needs the
+customer's pinned opt-in. Runs this server starts name the agent as their
+initiator, so it can never approve its own run.
 Flow records the agent as the approver, and its decision never becomes a
 training label.
 
@@ -71,11 +73,12 @@ LIST_DESCRIPTION = (
 )
 ANSWER_DESCRIPTION = (
     "Approve or decline one waiting save as this agent. The operator allowed "
-    "it for this server, and Flow accepts it only where the run's approver "
-    "policy allows an agent for that step (never a clinical write without "
-    "the customer's opt-in). Flow records you as the approver. Send the "
+    "it for this server, and Flow accepts it only under a grant a person "
+    "signed that names you and allows an agent for that step (never a "
+    "clinical write without the customer's opt-in). You can't answer a run "
+    "you started. Flow records you and the grant as the approver. Send the "
     "request_id and request_sha256 from list_approval_requests. A person "
-    "can still answer in OpenAdapt Desktop first."
+    "can still answer in OpenAdapt Desktop or on their phone first."
 )
 
 
