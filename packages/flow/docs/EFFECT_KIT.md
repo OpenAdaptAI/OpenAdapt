@@ -696,6 +696,23 @@ live Windows VM or the Docker RDP fixture.
 - Citrix is a separate Workspace window named in `session`. Opening a new
   Citrix session for each check is the operator's launcher, not Flow's.
 
+## The server's own answer (kept, labelled `same_screen`)
+
+In a browser, a save usually sends a write request (POST, PUT, PATCH,
+DELETE) and the server answers it. Flow keeps that answer on the save step
+(`StepResult.server_responses`) and counts it on the receipt
+(`server_responses`: observed, 2xx, `check_level: same_screen`). It keeps the
+method, the status, a digest of the endpoint (origin and path, no query
+string), a digest and size of the body, and the media type. It never keeps a
+body, a URL, a header or a value.
+
+The answer comes from the same transaction as the save. A server can say
+`201 Created` and store the wrong value, or store it under another record, or
+roll it back afterwards. So the answer is evidence at check level
+`same_screen`, never a check: on its own it never confirms an effect and
+never makes a run `VERIFIED`. The configured verifier still decides. Only the
+browser backend sees answers; desktop, RDP and Citrix runs have none.
+
 ## Configuration reference (`deployment.yaml` → `effects:`)
 
 Complete commented example: [`docs/deployment.example.yaml`](./deployment.example.yaml).

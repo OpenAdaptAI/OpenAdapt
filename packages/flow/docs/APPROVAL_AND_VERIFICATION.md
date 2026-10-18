@@ -196,6 +196,13 @@ older scales keep their published numbers and map onto it:
 | 1 `same_screen` | Only the acting screen shows the value | 4 `IMMEDIATE_SCREEN` | 0 `VISUAL` | `screen_readback` | No |
 | 0 `unchecked` | No read, unreachable or stale store, no tier | (no confirmed tier) | (no Seal) | `unchecked` | No |
 
+The server's own answer to a save, when the browser sees it, is kept too
+(`StepResult.server_responses`: method, status, digests, never a body or a
+URL; counted on the receipt as `server_responses`). It ranks `same_screen`:
+it comes from the same transaction as the save, so on its own it never
+confirms a save, never makes a run `VERIFIED`, and never makes a save clean.
+A 500 behind a "Saved" banner is still worth seeing.
+
 `VerificationTier` counts the other way (lower is stronger), so compare
 checks by `.check_level`, not by the tier number. A Seal at `VISUAL` reads as
 `same_screen`, because the Seal does not record whether the screen was

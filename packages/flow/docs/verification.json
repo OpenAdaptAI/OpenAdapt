@@ -1,5 +1,5 @@
 {
-  "generated_at": "2026-10-18T13:20:41-04:00 (git HEAD commit date)",
+  "generated_at": "2026-10-18T15:02:08-04:00 (git HEAD commit date)",
   "green_check_run": false,
   "green_check_job": null,
   "green_check_scope": [],
@@ -574,6 +574,34 @@
           "ci_job": "test",
           "junit_status": null,
           "proves": "On the WinForms patient-notes fixture through the real in-guest agent and Windows client (UI Automation): confirms a saved note, refutes a wrong one, opens only the row that shows the full identity past a same-first-name decoy, halts on two matching rows, and refuses a search button with a save-like label. On the RDP kiosk's look-up panel through the RDP backend and real OCR: confirms a booking from its own RDP logon (tier 2), never turns an OCR mismatch into REFUTED, and never takes \"not found\" as proof that nothing was saved. Neither fixture's save control or form is touched. The deployment refuses a read-back session that is the session that types."
+        }
+      ],
+      "errors": []
+    },
+    {
+      "id": "server-response-evidence",
+      "claim": "In a browser, the server's answer to a save request is kept on the step and counted on the receipt at check level same_screen, with no body, URL or value. It comes from the same transaction as the save, so on its own it never confirms an effect or makes a run VERIFIED.",
+      "tier": "supported",
+      "reproducibility": null,
+      "surfaces": [
+        "docs"
+      ],
+      "strongest_evidence": "supported",
+      "caveats": [
+        "Only the browser backend sees server answers. An answer that arrives after the step's checks finish is not kept."
+      ],
+      "evidence": [
+        {
+          "path": "tests/test_server_responses.py",
+          "kind": "test",
+          "exists": true,
+          "strength": "supported",
+          "gating": "ci (required PR gate (test))",
+          "node": null,
+          "node_found": null,
+          "ci_job": "test",
+          "junit_status": null,
+          "proves": "Only answers to write requests are kept, as method, status and digests with no URL, query or body text; a real Chromium save produces one; a 201 answer with an unconfirmed read-back still ends RECONCILIATION_REQUIRED and not billable; the receipt counts answers without changing its evidence tier; results without answers serialize as before."
         }
       ],
       "errors": []
