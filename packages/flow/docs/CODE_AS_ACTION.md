@@ -199,7 +199,7 @@ Each one wrongly refused, or failed to gate, a step on OpenEMR:
 ## Measured
 
 **Scoreboard, arm 7** is the quotable source
-([benchmark/scoreboard](../benchmark/scoreboard/), protocol 2026-10-18.1,
+(`benchmark/scoreboard`, protocol 2026-10-18.1,
 [#1307](https://github.com/OpenAdaptAI/OpenAdapt/pull/1307)). Its rows are run
 by the scoreboard's single runner under the load gate; until they are in
 `scoreboard.json`, there is no arm 7 figure to quote. Trial runs made while

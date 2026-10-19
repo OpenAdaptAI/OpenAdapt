@@ -177,7 +177,7 @@
     },
     {
       "path": "benchmark/code_as_action/results/openemr-distill-check/runs.jsonl",
-      "sha256": "a634dc54db1b10388a497476c6281baa9ef045246e376180670cd7ce4c5f711a"
+      "sha256": "243d8bb5804fba15fb76ada56b6463623bcec334201177d20ed29bc7f53ba14c"
     },
     {
       "path": "benchmark/code_as_action/results/openemr-distill-check/summary.json",
@@ -185,7 +185,7 @@
     },
     {
       "path": "benchmark/code_as_action/results/openemr/runs.jsonl",
-      "sha256": "a937f86c5193a10873c8fd311a046d2b7cb01a185244c735bab9e585790e57b1"
+      "sha256": "b411db6703a221e5682602e37d1b025b71bc8231d4b16d78e9d555e43f22aad4"
     },
     {
       "path": "benchmark/code_as_action/results/openemr/summary.json",
@@ -193,7 +193,7 @@
     },
     {
       "path": "benchmark/code_as_action/results/openemr/superseded.jsonl",
-      "sha256": "99278f1168e6c5c4a33e9f7629df1eeed03274978a5130836e7d270e0eaee240"
+      "sha256": "cebff909b6d4714707bb3e2209b2eb12ae3a200ad15f89580859cdad5362b505"
     },
     {
       "path": "benchmark/code_as_action/results/spend.json",

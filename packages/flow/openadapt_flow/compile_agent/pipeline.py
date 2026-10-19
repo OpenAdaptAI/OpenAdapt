@@ -527,9 +527,10 @@ class FirstRunCompiler:
         trace = getattr(agent, "last_trace", None)
         if trace is not None:
             # Code as action: the structured steps and what the agent read.
-            trace_data = trace.to_dict()
-            _write_json(attempt / TRACE_FILE, trace_data)
-            run1["code_action"] = trace_data["summary"]
+            data: dict[str, Any] = trace.to_dict()
+            trace_data = data
+            _write_json(attempt / TRACE_FILE, data)
+            run1["code_action"] = data["summary"]
         _write_json(attempt / "run1.json", run1)
 
         def done(status: str, detail: Optional[str], **kw: Any) -> CompileResult:
