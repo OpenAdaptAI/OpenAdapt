@@ -2197,6 +2197,25 @@ class Replayer:
                     continue
                 if step_index <= span_skip_to:
                     continue
+                if resume_from is not None and step_index == resume_from:
+                    inside = self._resume_inside_web_form_span(
+                        workflow, step_index, report.results
+                    )
+                    if inside is not None:
+                        # The folded steps are checkpointed only after the
+                        # save was sent, so this save may already have
+                        # landed. It is never sent again and never redone
+                        # through the GUI on an empty form.
+                        self._record_linear_result(
+                            report,
+                            workflow,
+                            inside,
+                            step_index=step_index,
+                            step=step,
+                            params=params,
+                            durable_run=durable_run,
+                        )
+                        break
                 # An admitted API step (docs/API_TIER.md) runs in place of the
                 # GUI steps it stands for. When it can't, the reason lands on
                 # the first of those steps and the GUI steps run as recorded.
@@ -2236,15 +2255,25 @@ class Replayer:
                     if why_not is not None:
                         result.api_fallback = why_not
                     batch = [result]
-                for result in batch:
+                # An API span's folded steps are checkpointed only once its
+                # save was sent: a resume then starts at the save, which can
+                # only be reconciled, never redone through the GUI. A save
+                # that wasn't sent leaves the resume point before the span,
+                # so a resume runs the whole span again.
+                save_result = batch[-1]
+                checkpoint_folded = save_result.ok or save_result.delivery_attempted
+                for offset, result in enumerate(batch):
+                    folded = offset < len(batch) - 1
                     stop_run = self._record_linear_result(
                         report,
                         workflow,
                         result,
-                        step_index=step_index,
-                        step=step,
+                        step_index=step_index + offset,
+                        step=workflow.steps[step_index + offset],
                         params=params,
-                        durable_run=durable_run,
+                        durable_run=(
+                            None if folded and not checkpoint_folded else durable_run
+                        ),
                     )
                     if stop_run:
                         break
@@ -2445,8 +2474,6 @@ class Replayer:
             ids = [s.id for s in workflow.steps[step_index : end_index + 1]]
             if not self.api_steps:
                 reason = "API steps are off for this run"
-            elif durable:
-                reason = "a durable or resumed run uses the GUI steps"
             elif getattr(self, "_surface_router", None) is not None:
                 reason = "a run across several windows or tabs uses the GUI steps"
             elif self._approval_gated() and not callable(
@@ -2463,6 +2490,13 @@ class Replayer:
                 reason = "a governed run uses its qualified GUI path"
             elif not binding.admitted():
                 reason = "the API step is not admitted (openadapt-flow api admit)"
+            elif save.identity_armed and not binding.identity:
+                # The GUI save checks the right record on screen. The API step
+                # must check it too, so it needs a right-record contract.
+                reason = (
+                    "the save checks the right record on screen, and the API "
+                    "step names no right-record contract"
+                )
             elif list(binding.effects) != list(save.effects):
                 reason = (
                     "the save step's record check differs from the one admitted "
@@ -2484,6 +2518,54 @@ class Replayer:
             else:
                 reason = None
             return end_index, save, reason
+        return None
+
+    def _resume_inside_web_form_span(
+        self, workflow: Workflow, step_index: int, prior: list[StepResult]
+    ) -> Optional[StepResult]:
+        """A halt result when a resume would start inside an API step's span.
+
+        Returns None when ``step_index`` isn't a covered step after the first,
+        or when the steps before it ran on the GUI (``prior`` holds the
+        checkpointed results): then the GUI save resumes as usual.
+        """
+
+        step = workflow.steps[step_index]
+        if not prior or prior[-1].actuation != "api_folded":
+            return None
+        for save in workflow.steps[step_index:]:
+            binding = save.api_binding
+            if (
+                binding is None
+                or binding.kind != "web_form"
+                or binding.web_form is None
+            ):
+                continue
+            covered = list(binding.web_form.replaces_steps)
+            if step.id in covered[1:]:
+                return StepResult(
+                    step_id=step.id,
+                    intent=step.intent,
+                    ok=False,
+                    safety_halt=True,
+                    failure_category=(
+                        "governed_refusal"
+                        if self.governed_authorization is not None
+                        else "safety_halt"
+                    ),
+                    risk=step.risk,
+                    risk_explanation=step.risk_explanation,
+                    risk_review_required=step.risk_review_required,
+                    delivery_attempted=False,
+                    error=(
+                        f"Step '{step.id}' ({step.intent}): resume would start "
+                        f"inside the API step for '{save.id}', whose save was "
+                        "sent and may have landed. Resume never sends it again "
+                        "and never redoes it through the GUI. Reconcile it "
+                        "(the attended reconcile action reads the record back), "
+                        "or start the item again"
+                    ),
+                )
         return None
 
     def _run_web_form_span(

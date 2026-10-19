@@ -133,6 +133,38 @@ An application that issues a new session value on every form read can't be
 approved this way: the second read changes the digest, and the item stops
 before saving.
 
+## In a durable run
+
+A durable run (`--durable`) uses the API step too. The checkpoints and the
+resume rules keep the no-double-write rule. (Standard and Regulated runs are
+durable and governed; the governed exclusion below still applies to them.)
+
+- **Before the span**, the checkpoint is the last step before the steps the
+  API step covers.
+- **After the span**, the covered steps (`api_folded`) and the save (`api`)
+  are checkpointed together, once the save was sent. If the save wasn't
+  sent (for example, the record check's pre-state couldn't be read, or an
+  approval stopped the item), nothing in the span is checkpointed. A resume
+  then runs the whole API step again from the start: it prepares the
+  request again, asks again under an approval mode, and sends it once.
+- **After a send that may have landed** (a lost response, a rejected
+  response, or a save the record check didn't confirm), the pause is at the
+  save and the run reads `RECONCILIATION_REQUIRED` when the outcome is
+  unknown. Resume never sends that save again and never redoes it through
+  the GUI on an empty form. An ordinary resume is refused, as for any
+  uncertain delivery. A resume that authorizes one uncertain retry stops at
+  the save with that reason. The attended `reconcile` action reads the record
+  back with the record check and finishes the run when the record is there,
+  without sending anything.
+- A run that fell back to the GUI steps and stopped at the GUI save resumes
+  that GUI save, as before.
+
+Reconcile reads the record as it is now. A record check that compares with
+the state before the save (`exact_new_set`, `count_new_only` or a
+collateral-loss guard) can't be proven that way after the fact, so the pause
+stays for a person to check the record. The same limit applies to a GUI
+save.
+
 ## When it doesn't run
 
 The API step runs only in a plain linear run. It doesn't run, and the GUI
@@ -140,9 +172,11 @@ steps run instead, when:
 
 - an approval mode is on and the API actuator can't prepare the request
   before sending it (a deployment's own actuator without `prepare`);
-- the run is governed by qualification, is durable, or is resumed;
+- the run is governed by qualification;
 - the step isn't admitted, or the program's steps, on-screen checks or the
   save's record check changed since it was proposed or admitted;
+- the save checks the right record on screen and the API step names no
+  right-record contract;
 - there's no live browser session (`--backend web` only).
 
 `Replayer(api_steps=False)` keeps a run on the GUI.
