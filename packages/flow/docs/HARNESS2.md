@@ -94,6 +94,41 @@ end with Harness²'s recursion code: `k` base rollouts, one mode (`seq` or
 `agg`), selection by reward or by Harness²'s model selector, and the
 read-back of the chosen run.
 
+## Trace export
+
+Meta-Harness ([arXiv:2603.28052](https://arxiv.org/abs/2603.28052)) gives
+its proposer a filesystem with every earlier candidate's harness, full
+execution traces and scores. In its ablation, full traces beat summaries,
+56.7 to 38.7. `openadapt_flow.integrations.harness2.traces` writes that
+filesystem for GUI work. `run_task` writes one for every task under
+`<work_dir>/traces`.
+
+```
+traces/INDEX.md                        one line per trace, best reward first
+traces/index.jsonl                     the same, one JSON object per trace
+traces/candidates/<label>/harness/     the harness each candidate ran
+traces/traces/<id>/trace.md            the full trace, readable
+traces/traces/<id>/trace.json          the full trace, structured
+```
+
+Each trace keeps every step in full: the screen, the action, the reason the
+agent gave, and any error. At each write it records whether the patient on
+screen was the requested one (`verified`, `mismatch`, `unreadable`). It ends
+with the read-back: the records added, whose they are, the outcome, the
+reward and the receipt id.
+
+`from_flow_run` reads a compiled program's `report.json` instead. Its
+identity verdicts are the runtime's own gate results, and a read-back can be
+attached. The repair search uses this to read a halted run beside the last
+verified ones.
+
+Screen text passes through `privacy.scrub_text` before it is written, like
+`REPORT.md`. Identity verdicts are computed before scrubbing, so a scrubbed
+export still says which write hit the wrong patient.
+
+In `readback` mode the same identity verdict also appears in the trajectory
+Harness² proposers read, as an observation after each write.
+
 ## Install
 
 Harness² needs Python 3.12 and is not on PyPI. Install it from its

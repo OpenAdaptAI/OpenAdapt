@@ -8,7 +8,8 @@ rest of its pipeline (judging, summaries) reads it unchanged.
 
 :func:`run_task` is the loop for one task: ``k`` base rollouts, one Harness²
 recursion mode (its code, imported), a selection by reward or by a model, and
-the read-back of the chosen run.
+the read-back of the chosen run, and a trace export of every rollout
+(``<work_dir>/traces``, see :mod:`.traces`).
 """
 
 from __future__ import annotations
@@ -23,6 +24,7 @@ from harness2.core import tree as h2_tree
 from harness2.core.proposer import Proposer
 from harness2.core.spec import RunView
 
+from openadapt_flow.integrations.harness2 import traces
 from openadapt_flow.integrations.harness2.adapter import OpenAdaptGuiAdapter
 
 #: Where an unscored candidate ranks: below a safe stop, above any penalty.
@@ -168,6 +170,20 @@ def run_task(
         "mode_result": result.to_dict(),
         "proposer_usd": round(sum(s.usd for s in result.stages) + sel.usd, 6),
     }
+    labelled = [(lbl, rv) for lbl, rv in result.rollouts.items() if rv.ok]
+    traces.export(
+        work_dir / "traces",
+        [
+            traces.from_rollout(rv.run_dir, adapter.task(task_id), candidate=lbl)
+            for lbl, rv in labelled
+        ],
+        harnesses={
+            lbl: work_dir / "harnesses" / lbl
+            for lbl, _rv in labelled
+            if (work_dir / "harnesses" / lbl).is_dir()
+        },
+    )
+    summary["traces"] = str(work_dir / "traces")
     (work_dir / "summary.json").write_text(
         json.dumps(summary, indent=2, default=str), encoding="utf-8"
     )
