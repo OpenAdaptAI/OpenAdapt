@@ -577,6 +577,49 @@ it, and with WinForms-style UI Automation ids. The live tests (a repair, a
 pre-flight, a batch release) run on MockMed in a browser. No test drives a
 live RDP or Citrix session.
 
+## Measured
+
+The default loop was measured with a real Claude repair agent
+(`claude-sonnet-5-5`) and a scripted approver that approves every request
+that reaches it, so a bad fix that passed the probe would have been saved.
+Data, scripts and the full per-mode table are in
+[benchmark/auto_repair](../benchmark/auto_repair/README.md).
+
+| Where | Stops | Reached repair | Agent proposed | Passed the probe | Approved | Resumed and verified | Wrong saves | Person decisions |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| MockMed, 22 drift modes, 3 trials each (66 runs) | 30 | 21 | 12 | 6 | 6 | **6 of 21** | 0 | 6 |
+| MockMed worklist, `relink` and `redesign`, 5 items each (the change ships after the pre-flight) | 10 | 10 | 2 (one repair per group, on the test record) | 2 | 2 | **10 of 10** | 0 | 2 |
+| OpenEMR referral, #1347's recorded runs | 8 | 0 (all `RECONCILIATION_REQUIRED`) | - | - | - | 0 | - | - |
+| openIMIS relabelled Save (#1331), before #1337 | 3 | 0 (all `RECONCILIATION_REQUIRED`) | - | - | - | 0 | - | - |
+
+What worked and what didn't:
+
+- **Repaired:** a renamed and moved control that opens the form (`relink`,
+  3 of 3) and a redesigned save with a decoy next to it (`redesign`, 3 of 3).
+  Each took one model call ($0.013 to $0.015) and one tap.
+- **Not repaired, and nothing written:** a save moved into a closed menu
+  (`menu`: the agent sees only "Actions"), a new interstitial (`notice`: the
+  fix needs two clicks and the second control isn't on screen yet), a new
+  required choice (`provider`: the agent declined to choose), and pixel
+  postconditions that failed after a font or zoom change (`font`, `zoom`:
+  false stops no click can fix). These need a look at more than one screen
+  (the staging-copy bridge search of
+  [#1302](https://github.com/OpenAdaptAI/OpenAdapt/pull/1302)), or a fix to
+  the check itself.
+- **Correctly never repaired:** a missing, absent or duplicated record (9
+  stops) went to a person.
+- **OpenEMR:** every recorded stop came after "Create New Patient", which the
+  run gate counts as a save, so all 8 went to reconciliation. Repair can't
+  help these; the fix for #1347 is the identity check's cause.
+- **openIMIS:** before #1337 the relabelled Save stopped on the scroll before
+  it with `RECONCILIATION_REQUIRED`, 3 of 3. The live re-run with #1337 and
+  the risk review is not done yet.
+
+The approver was scripted, so its answer times (milliseconds) are not a
+person's. The measure of a person's time here is the count of decisions: one
+tap per repaired stop, or one per group of worklist items that stopped the
+same way.
+
 ## Limits
 
 - Only a stop that wrote nothing is repaired. A stop after a step the run gate

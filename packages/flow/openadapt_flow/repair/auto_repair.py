@@ -280,7 +280,14 @@ def summarize(rows: Iterable[Mapping[str, Any] | StopRow]) -> dict[str, Any]:
     data = [asdict(r) if isinstance(r, StopRow) else dict(r) for r in rows]
     items = [r for r in data if r.get("scope", "item") == "item"]
     to_repair = [r for r in items if r["route"] == "repair"]
-    runs = [r for r in data if r.get("repair_status") not in (None, "released")]
+    # Self-repair ran: it took the halt (a ``not_repairable`` halt was turned
+    # down before the agent was called) and this row is not a released item.
+    runs = [
+        r
+        for r in data
+        if r.get("repair_status")
+        not in (None, "released", "not_repairable", "not_needed")
+    ]
     verified = [
         r
         for r in to_repair

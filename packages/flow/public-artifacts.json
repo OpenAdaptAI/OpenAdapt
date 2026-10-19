@@ -148,6 +148,70 @@
       "sha256": "d6594bf87583158de54935ae777eebbb6dc21f44636907921e79422ea5ddd59c"
     },
     {
+      "path": "benchmark/auto_repair/results/mockmed-2026-10-19-a/calls.json",
+      "sha256": "ac0559ac65873ab36d4b91535dfd8508608ce1872a9bc7f132942993f0e2b1e8"
+    },
+    {
+      "path": "benchmark/auto_repair/results/mockmed-2026-10-19-a/items.csv",
+      "sha256": "dc4f6e1f117a917215e80841b9c47730562ad6dd3ea0f4cb1db90fb9169d1be9"
+    },
+    {
+      "path": "benchmark/auto_repair/results/mockmed-2026-10-19-a/ledger.jsonl",
+      "sha256": "d3f8be0aadf37a4dc5b31824794cc5c37def2ae9721078a4845f2119236a6762"
+    },
+    {
+      "path": "benchmark/auto_repair/results/mockmed-2026-10-19-a/meta.json",
+      "sha256": "3ddcae3f53d165c6e01271e58ebd0600401dc31dcb1b9404b3788dca09d6f030"
+    },
+    {
+      "path": "benchmark/auto_repair/results/mockmed-2026-10-19-a/summary.json",
+      "sha256": "6b566bd44419a3c22bdb721f66c7eef195b34e89c17e0d5cdc3239d6a9341e6d"
+    },
+    {
+      "path": "benchmark/auto_repair/results/mockmed-worklist-2026-10-19-a/calls.json",
+      "sha256": "222b7cdcf73450e14a62dcc9248e15d2503ec282fa39f47a6c0a01bd956d9c0d"
+    },
+    {
+      "path": "benchmark/auto_repair/results/mockmed-worklist-2026-10-19-a/items.csv",
+      "sha256": "877a3709d26341f58ff3cbcf1a05f8739ef922723a9add26799a32d4e93cf62b"
+    },
+    {
+      "path": "benchmark/auto_repair/results/mockmed-worklist-2026-10-19-a/ledger.jsonl",
+      "sha256": "d08b01e7e33112b2349045d6bcc59cc211df387a3585f7c637ff11e74781b77b"
+    },
+    {
+      "path": "benchmark/auto_repair/results/mockmed-worklist-2026-10-19-a/meta.json",
+      "sha256": "1430dcbc1d22d68fdc81f159e25c0e64087811876e0c872f5f2fd4e5057f280d"
+    },
+    {
+      "path": "benchmark/auto_repair/results/mockmed-worklist-2026-10-19-a/summary.json",
+      "sha256": "b051ea7bc2f419da4972bd8f32c113e0ad486fa921d35a06ed469131d99f9a6b"
+    },
+    {
+      "path": "benchmark/auto_repair/results/openemr-1347/ledger.jsonl",
+      "sha256": "5cbf436dc9d9c4cec4e1210c5211862bca3c4410eb3c784646bd385a04c59016"
+    },
+    {
+      "path": "benchmark/auto_repair/results/openemr-1347/stops.csv",
+      "sha256": "913661f9737d1eb221e56fd0bc90b1b6c9c4a7f69997d3cda06fd23938ec51ed"
+    },
+    {
+      "path": "benchmark/auto_repair/results/openemr-1347/summary.json",
+      "sha256": "9df5d120a15664e1101e255827d1222a3808569b7b458b7d17fea18f8a62bb9d"
+    },
+    {
+      "path": "benchmark/auto_repair/results/openimis-1331-before/ledger.jsonl",
+      "sha256": "900d3c3d1db85c53e5678e6c7d436a453bf80fd7fc45ceb0ddef11985c017680"
+    },
+    {
+      "path": "benchmark/auto_repair/results/openimis-1331-before/stops.csv",
+      "sha256": "3819252b83e53295413a5ed5865523f663e750f98cae115ad93c4eebe27613c3"
+    },
+    {
+      "path": "benchmark/auto_repair/results/openimis-1331-before/summary.json",
+      "sha256": "09c6cb8b9488563f7aed2f339241af549b2f3c6a0973e53fad6a86e7cd4ac6af"
+    },
+    {
       "path": "benchmark/canvas_ladder/results.json",
       "sha256": "4502affb014de71e5c584e48cef5bc6a7631983e2517551d5ea9c20c8a0668e2"
     },

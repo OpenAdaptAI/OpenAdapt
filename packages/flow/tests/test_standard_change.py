@@ -407,6 +407,18 @@ def test_one_approval_releases_five_halted_items(mockmed, keys, tmp_path) -> Non
     ]
     assert {r.halt.state_id for r in first_runs} == {"step_005"}
     assert {r.transaction_outcome for r in first_runs} == {"HALTED_BEFORE_EFFECT"}
+    # The stop ledger: five stopped items, one repair on the test record, one
+    # person's decision, five items resumed and verified.
+    from openadapt_flow.repair.auto_repair import RepairLedger, summarize
+
+    summary = summarize(RepairLedger(tmp_path / "repair-store").rows())
+    assert summary["stops"] == 5
+    assert summary["to_repair"] == 5
+    assert summary["repair_runs"] == 1
+    assert summary["approved_by_person"] == 1
+    assert summary["person_decisions"] == 1
+    assert summary["resumed_items"] == 5
+    assert summary["repair_success_rate"] == 1.0
 
 
 # -- refusals at the policy layer, on the recorded bundle ---------------------------
