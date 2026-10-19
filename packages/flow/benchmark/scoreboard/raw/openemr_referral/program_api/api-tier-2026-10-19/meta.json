@@ -15,5 +15,6 @@
   "api_step_admitted": true,
   "api_step_admitted_by": "benchmark-fixture",
   "harness_git_head": "93c32e9f41f7cd48cd12561a0f25ef4579de1a7b",
-  "bundle_save_step": "step_040"
+  "bundle_save_step": "step_040",
+  "profile": "API step on (admitted by the harness as benchmark-fixture), plain Replayer: no approval gate, not durable, no named execution profile; record check: OpenEMR REST read-back"
 }

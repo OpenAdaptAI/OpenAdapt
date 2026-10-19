@@ -1,0 +1,28 @@
+{
+  "protocol_version": "2026-10-18.1",
+  "written_at": "2026-10-19T13:29:18-0400",
+  "machine": "arm64 Darwin 24.6.0",
+  "cpu_count": 12,
+  "python": "3.12.13",
+  "engine": {
+    "path": "/Users/abrichr/oa/src/OpenAdapt/.claude/worktrees/launch-demo-cua-to-program-8fa902/packages/flow/openadapt_flow",
+    "git_head": "cac6cf4136a4748949ee50ff87f925430f5efb53"
+  },
+  "benchmark_git_head": "cac6cf4136a4748949ee50ff87f925430f5efb53",
+  "task": "openemr_referral",
+  "arm": "claims",
+  "model": "claude-sonnet-5-5",
+  "verifier": "openadapt-flow verify-run, rest on OpenEMR's patient API (read-only oracle client), with a baseline",
+  "verify_yaml": "schema_version: openadapt.verify/v1\nverifier:\n  kind: rest\n  base_url: http://127.0.0.1:9911\n  records_path: /apis/default/api/patient?_limit=1000\n  records_key: data\n  auth:\n    bearer_env: SCOREBOARD_OPENEMR_ORACLE_TOKEN\nrecord:\n  name: patient\n  match: [email, lname]\n  duplicate_key: email\n  fields:\n    email: email\n    lname: lname\n    title: title\n    fname: fname\n    DOB: DOB\n    sex: sex\n    street: street\n    city: city\n    state: {literal: MA}\n    postal_code: postal_code\n    phone_home: phone_home\n    country_code: country_code\n",
+  "faults": [
+    "ok",
+    "partial",
+    "wrong_value",
+    "duplicate",
+    "no_persist",
+    "collateral_loss",
+    "collateral_edit"
+  ],
+  "per_fault": 5,
+  "fault_injection": "fixture database only: triggers and a poller (claims_openemr.py)"
+}

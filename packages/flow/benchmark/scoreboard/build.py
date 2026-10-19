@@ -230,6 +230,10 @@ def claims() -> dict[str, Any]:
     out: dict[str, Any] = {}
     for items in sorted(schema.RAW.glob("*/claims/*/items.csv")):
         run = items.parent
+        meta = run / "meta.json"
+        info = json.loads(meta.read_text()) if meta.is_file() else {}
+        if info.get("in_table") is False or info.get("complete") is not True:
+            continue  # kept out: a plumbing check, or a run still going
         rows = schema.read_rows(items)
         hc_file = run / "hand_check.json"
         hand = json.loads(hc_file.read_text())["items"] if hc_file.is_file() else []
@@ -299,6 +303,62 @@ def claims() -> dict[str, Any]:
             },
         }
     return out
+
+
+#: The OpenEMR comparison the README quotes: (bar, arm, run).
+THREE_BARS = (
+    ("Agent alone", "agent", "study-main-0c642bc0"),
+    ("Compiled program, screen (API step off)", "program", "api-tier-2026-10-19"),
+    ("Compiled program, API step on", "program_api", "api-tier-2026-10-19"),
+    (
+        "Arm 3 today, worklist (not comparable on wall time)",
+        "program",
+        "worklist-std-2026-10-19",
+    ),
+)
+
+
+def _three_bars_markdown(sb: dict[str, Any]) -> list[str]:
+    arms = sb["tasks"].get("openemr_referral", {})
+    rows = []
+    for bar, arm, run in THREE_BARS:
+        r = arms.get(arm, {}).get("runs", {}).get(run)
+        m = arms.get(arm, {}).get("run_meta", {}).get(run, {})
+        if r is None:
+            continue
+        engine = str((m.get("engine") or {}).get("git_head", ""))[:8]
+        gate = (
+            "the study's start gate: 1-minute load under 12 before each run"
+            if arm == "agent"
+            else "per row: load at or under 12 at the start and the end"
+        )
+        rows.append(
+            f"| {bar} | `{arm}` / `{run}` | {engine} | "
+            f"{m.get('profile') or m.get('note') or '-'} | "
+            f"{r['correct']} of {r['normal_items']} | {r['timed_correct_items']} | "
+            f"{_fmt(r['item_s_median'])} | {_fmt(r['wall_s_median'])} | {gate} |"
+        )
+    if not rows:
+        return []
+    return [
+        "## OpenEMR: agent, screen program and API step",
+        "",
+        "One referral, entered by the agent alone, by the compiled program on "
+        "the screen, and by the same program with the API step (#1269). The "
+        "screen and API rows are the same bundle, interleaved by block on one "
+        "fixture copy. Medians are over correct, timed rows (n). Wall seconds "
+        "run from a new browser context through sign-in, the work and the "
+        "read-back, for the agent and for arm 5 alike; task seconds are the "
+        "arm's own work (the agent's first action to its answer; the engine's "
+        "time for a program). The possible-duplicate referral (r6) is in both "
+        "program rows as a safe stop. The worklist run signs in once per "
+        "worker, so its wall time is not comparable.",
+        "",
+        "| Bar | Arm / run | Engine | Profile | Correct (read back) | n timed | Task s median | Wall s median | Load gate |",
+        "|---|---|---|---|---|---|---|---|---|",
+        *rows,
+        "",
+    ]
 
 
 def _claims_markdown(cl: dict[str, Any]) -> list[str]:
@@ -456,6 +516,7 @@ def markdown(sb: dict[str, Any]) -> str:
                     + " (evidence for each in hand_check.json)"
                 )
         lines.append("")
+    lines += _three_bars_markdown(sb)
     lines += _claims_markdown(sb.get("claims", {}))
     lines.append(
         f"Claude API spend so far: ${sb['spend_usd']}."

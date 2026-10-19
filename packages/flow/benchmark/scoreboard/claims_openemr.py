@@ -37,6 +37,7 @@ import csv
 import json
 import multiprocessing
 import os
+import re
 import subprocess
 import sys
 import threading
@@ -69,8 +70,9 @@ FAULTS = (
     "collateral_edit",
 )
 TRIGGERS = {
-    "partial": "SET NEW.phone_home = ''",
-    "wrong_value": "SET NEW.postal_code = '02140'",
+    # column, value: one SET statement, so the mysql client needs no DELIMITER.
+    "partial": ("phone_home", "''"),
+    "wrong_value": ("postal_code", "'02140'"),
 }
 FIELDS = (
     "item",
@@ -118,6 +120,41 @@ record:
 """
 
 
+#: One existing chart, seeded after every reset through OpenEMR's own patient
+#: API (the fixture's baseline holds none), so collateral faults have a
+#: chart that is not the target. Made up.
+EXISTING = {
+    "title": "Mr.",
+    "fname": "Wendell",
+    "lname": "Priorchart",
+    "DOB": "1962-06-14",
+    "sex": "Male",
+    "street": "9 EXISTING ROAD",
+    "city": "EXAMPLETON",
+    "state": "MA",
+    "postal_code": "02139",
+    "phone_home": "555-0188",
+    "email": "w.priorchart@example.invalid",
+    "country_code": "USA",
+}
+
+
+def reset_and_seed() -> None:
+    fx = openemr.fixture()
+    fx.reset()
+    session = fx.token_session("actor")
+    try:
+        status = session.post(
+            f"{fx.api_base_url}/apis/default/api/patient", json=EXISTING
+        ).status_code
+    finally:
+        session.close()
+    if status not in (200, 201):
+        raise SystemExit(f"seeding the existing chart returned HTTP {status}")
+    if not _rows():
+        raise SystemExit("the seeded chart is not in patient_data")
+
+
 def _rows() -> dict[str, dict[str, str]]:
     return {p["id"]: p for p in openemr.patients()}
 
@@ -131,6 +168,14 @@ def ground_truth(before: dict[str, dict[str, str]], values: dict[str, str]) -> s
     if any(after[pid] != row for pid, row in before.items()):
         return "collateral_edit"
     return openemr.check(values, set(before))
+
+
+def _email_literal(email: str) -> str:
+    """A quoted SQL literal for one of this module's made-up emails."""
+
+    if not re.fullmatch(r"[A-Za-z0-9._@-]+", email):
+        raise ValueError("unexpected characters in a synthetic email")
+    return f"'{email}'"
 
 
 class Poller(threading.Thread):
@@ -151,7 +196,7 @@ class Poller(threading.Thread):
             new = (
                 db(
                     "SELECT id, pid FROM openemr.patient_data WHERE id > "
-                    f"{self.max_id} AND email = {openemr.fixture()._sql_quote(self.email)}"
+                    f"{self.max_id} AND email = {_email_literal(self.email)}"
                 )
                 .decode()
                 .split()
@@ -185,15 +230,15 @@ class Poller(threading.Thread):
 
 
 def _install_trigger(fault: str, max_id: int) -> None:
-    body = TRIGGERS[fault]
+    column, value = TRIGGERS[fault]
+    new_row = f"(NEW.id > {max_id} OR NEW.id = 0 OR NEW.id IS NULL)"
     sql = []
     for when in ("INSERT", "UPDATE"):
         name = f"sb_fault_{when.lower()}"
         sql.append(f"DROP TRIGGER IF EXISTS openemr.{name};")
         sql.append(
             f"CREATE TRIGGER openemr.{name} BEFORE {when} ON openemr.patient_data "
-            f"FOR EACH ROW BEGIN IF NEW.id > {max_id} OR NEW.id IS NULL OR "
-            f"NEW.id = 0 THEN {body}; END IF; END;"
+            f"FOR EACH ROW SET NEW.{column} = IF({new_row}, {value}, NEW.{column});"
         )
     openemr.fixture()._db(" ".join(sql))
 
@@ -264,7 +309,7 @@ def main() -> int:
                 continue
             if spent() + args.max_cost > SPEND_CAP_USD:
                 raise SystemExit("spend cap reached")
-            fx.reset()
+            reset_and_seed()
             values = openemr.item_values(i)
             before = _rows()
             item_dir = work / f"item-{i:03d}"
@@ -392,6 +437,10 @@ def main() -> int:
             )
     finally:
         fx.reset()
+    # Every planned item has a row: the build shows this run from now on.
+    meta = json.loads((out / "meta.json").read_text())
+    meta["complete"] = True
+    (out / "meta.json").write_text(json.dumps(meta, indent=2, default=str) + "\n")
     return 0
 
 

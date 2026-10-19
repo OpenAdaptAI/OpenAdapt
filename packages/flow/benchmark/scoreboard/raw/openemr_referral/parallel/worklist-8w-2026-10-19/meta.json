@@ -57,5 +57,6 @@
   "load1_max": 76.26,
   "saved_correct": 5,
   "items_run": 8,
-  "note_gate": "gate, load1_max, saved_correct and items_run copied from the harness summary.json named in source_sha256"
+  "note_gate": "gate, load1_max, saved_correct and items_run copied from the harness summary.json named in source_sha256",
+  "profile": "GUI, worklist harness (#1296), speed fast, 8 worker processes, plain Replayer: no approval gate, not durable, no named execution profile; record check: OpenEMR REST read-back"
 }

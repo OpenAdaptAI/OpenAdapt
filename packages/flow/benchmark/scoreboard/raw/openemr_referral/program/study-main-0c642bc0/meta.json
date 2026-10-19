@@ -1,6 +1,6 @@
 {
   "protocol_version": "2026-10-18.1",
-  "written_at": "2026-10-19T11:28:24-0400",
+  "written_at": "2026-10-19T13:30:55-0400",
   "machine": "arm64 Darwin 24.6.0",
   "cpu_count": 12,
   "python": "3.12.13",
@@ -8,11 +8,12 @@
     "git_head": "0c642bc0",
     "note": "study engine_tag main-0c642bc0"
   },
-  "benchmark_git_head": "b46f941432f7b8542c723c46c55745a97675b9ff",
+  "benchmark_git_head": "cac6cf4136a4748949ee50ff87f925430f5efb53",
   "task": "openemr_referral",
   "arm": "program",
   "model": null,
   "imported_from": "packages/flow/benchmark/openemr_referral_timing/runs.csv",
   "source_sha256": "b4b24eaa8df86c9a54cc3a435cb6baff1940931e893750a4896fca57bf3eaa87",
+  "profile": "as the October timing study ran it (its PROTOCOL.md)",
   "note": "the study's published set: engine 0c642bc0, warm, blocks 2-10, valid runs; timed per its start gate (1-minute load < 12)"
 }

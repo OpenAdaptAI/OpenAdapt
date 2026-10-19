@@ -283,6 +283,10 @@ def main() -> int:
             )
     finally:
         server.close()
+    # Every planned item has a row: the build shows this run from now on.
+    meta = json.loads((out / "meta.json").read_text())
+    meta["complete"] = True
+    (out / "meta.json").write_text(json.dumps(meta, indent=2, default=str) + "\n")
     return 0
 
 

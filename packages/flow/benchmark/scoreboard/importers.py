@@ -292,6 +292,11 @@ def openemr() -> None:
             source_sha256=_sha(OPENEMR),
             # The study's engine (its runs.csv engine_tag), not the importer's.
             engine={"git_head": "0c642bc0", "note": "study engine_tag main-0c642bc0"},
+            profile=(
+                "Claude Sonnet 5.5 computer use, alone; nothing records or checks it"
+                if out.parent.name == "agent"
+                else "as the October timing study ran it (its PROTOCOL.md)"
+            ),
             note=(
                 "the study's published set: engine 0c642bc0, warm, blocks 2-10, "
                 "valid runs; timed per its start gate (1-minute load < 12)"
