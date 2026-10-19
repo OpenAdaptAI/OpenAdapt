@@ -407,7 +407,9 @@ browser workflows. Desktop and Citrix runs are self-hosted
   stops on drift), not a live Citrix ICA/HDX session. Each deployment has to
   be tested on its own Citrix setup.
 - A stop isn't a rollback. Steps before the stop may already have changed the
-  app.
+  app. The run report lists each change made before the stop, and undo steps
+  declared in the workflow can reverse them once a person approves
+  ([AFTER_A_STOP.md](docs/AFTER_A_STOP.md)).
 - The MockMed comparison numbers above are from July 2026, on Flow 0.1.0,
   with 20 agent runs. The OpenEMR numbers are from October 2026 on one local
   test copy with synthetic data.
