@@ -285,7 +285,26 @@ def _judge_record_written(
             if stable_id(r) not in current_ids:
                 collateral_lost.append(r)
 
-    if count_ok and not collateral_lost:
+    # Collateral change: a non-target record that is still there but whose
+    # fields differ from the pre-state (an in-place write to the wrong row).
+    collateral_changed: list[tuple[dict[str, Any], list[str]]] = []
+    if effect.forbid_collateral_change and before.reachable:
+        now = {stable_id(r): r for r in current}
+        for r in before.records:
+            if record_matches(r, effect.match):
+                continue
+            after = now.get(stable_id(r))
+            if after is None:
+                continue  # vanished: the collateral-loss rule's case
+            fields = sorted(
+                k
+                for k in set(r) | set(after)
+                if str(r.get(k, "")) != str(after.get(k, ""))
+            )
+            if fields:
+                collateral_changed.append((r, fields))
+
+    if count_ok and not collateral_lost and not collateral_changed:
         return EffectVerdict(
             verdict=Verdict.CONFIRMED,
             kind=effect.kind,
@@ -324,6 +343,14 @@ def _judge_record_written(
             f"{len(collateral_lost)} pre-existing record(s) vanished -- "
             f"collateral loss (stale / concurrent last-write-wins overwrote "
             f"another actor's row)"
+        )
+    if collateral_changed:
+        names = sorted({f for _r, fields in collateral_changed for f in fields})
+        reasons.append(
+            f"{len(collateral_changed)} pre-existing record(s) outside the "
+            f"target changed -- collateral change (field(s): "
+            f"{', '.join(names[:_SAMPLE_LIMIT])}"
+            f"{'' if len(names) <= _SAMPLE_LIMIT else ', ...'})"
         )
     return EffectVerdict(
         verdict=Verdict.REFUTED,

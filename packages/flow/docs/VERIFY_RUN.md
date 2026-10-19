@@ -78,6 +78,21 @@ Optional flags:
 Both link ids must be opaque (8 to 128 of `A-Za-z0-9._:-`). They are absent
 unless given, and when present they are signed with the rest of the receipt.
 
+## Records outside the target
+
+With a baseline, a `record_written` check also refutes when a record that
+was there before the agent started and is not the target has changed
+(`forbid_collateral_change`), not only when it is gone
+(`forbid_collateral_loss`). The agent's write can be right while it also
+edited another patient's record in place, and only the baseline shows that.
+verify-run turns this on for every `record_written` effect when it judges.
+The contract in the file is unchanged, so its digest is still the one qualify
+reports, and `evidence.readback.effects[].collateral_change_checked` says the
+check ran. To skip it for one effect, for example when the read covers a
+table other people edit during the run, set `forbid_collateral_change: false`
+on that effect in `effects:`. Fields that change on their own, such as a
+modification time, belong in the verifier's `records_drop_fields`.
+
 ## Verdicts
 
 | What the store shows | `effect_verdict` | `outcome` |
@@ -85,7 +100,7 @@ unless given, and when present they are signed with the rest of the receipt.
 | The declared record, exactly once, through a system-of-record read | `CONFIRMED` | `verified` |
 | The same, but the executor approved its own write | `CONFIRMED` | `rejected_policy` |
 | Nothing that matches | `REFUTED` | `halted_before_effect` |
-| A duplicate, a wrong value, or only some of the effects | `REFUTED` | `reconciliation_required` |
+| A duplicate, a wrong value, only some of the effects, or another record that vanished or changed | `REFUTED` | `reconciliation_required` |
 | The store could not be read, no baseline, or a separate-session read | `INDETERMINATE` or `CONFIRMED` | `reconciliation_required` |
 
 Only a read through the system of record produces `verified`. A screen
