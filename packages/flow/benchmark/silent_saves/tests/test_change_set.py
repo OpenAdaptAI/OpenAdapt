@@ -158,3 +158,20 @@ def test_duplicate_lands_twice_despite_the_key() -> None:
         assert app.records() == []
     finally:
         app.close()
+
+
+def test_item_timeout_records_the_item_as_stopped(tmp_path: Path) -> None:
+    from silent_saves import runner
+
+    sys.path.insert(0, str(Path(__file__).resolve().parent))
+    summary = runner.run(
+        "python:slow_executor:Slow",
+        out=tmp_path,
+        fault_set="1.1.0",
+        limit=1,
+        item_timeout_s=0.3,
+    )
+    row = next(iter(__import__("csv").DictReader((tmp_path / "items.csv").open())))
+    assert row["claimed_success"] == "False"
+    assert "timed out" in row["error"]
+    assert summary["false_stops"]["k"] == 1

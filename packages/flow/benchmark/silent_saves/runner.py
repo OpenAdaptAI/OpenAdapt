@@ -7,8 +7,10 @@ import json
 import os
 import platform
 import shutil
+import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, Optional
@@ -45,6 +47,48 @@ FIELDS = (
 )
 #: A double-sent save lands after the first answer; wait before reading.
 SETTLE_S = 1.0
+#: An item that runs longer than this has its browser driver stopped, so a
+#: hung driver cannot stall the run (arm 3 once waited 2.5 h on one).
+ITEM_TIMEOUT_S = 300.0
+
+
+class _Watchdog:
+    """Stops this process's Playwright drivers if an item runs too long.
+
+    A blocked Playwright call then fails, the executor returns, and the item
+    is recorded as a timeout. Executors that run in their own process (the
+    computer-use agent) have their own timeout as well.
+    """
+
+    def __init__(self, timeout_s: float) -> None:
+        self.fired = False
+        self._timer = threading.Timer(timeout_s, self._fire)
+        self._timer.daemon = True
+        self._timer.start()
+
+    def cancel(self) -> None:
+        self._timer.cancel()
+
+    def _fire(self) -> None:
+        self.fired = True
+        for pid in _children(os.getpid()):
+            cmd = subprocess.run(
+                ["ps", "-o", "command=", "-p", str(pid)],
+                capture_output=True,
+                text=True,
+            ).stdout
+            if "playwright" in cmd:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except OSError:
+                    pass
+
+
+def _children(pid: int) -> list[int]:
+    out = subprocess.run(
+        ["pgrep", "-P", str(pid)], capture_output=True, text=True
+    ).stdout
+    return [int(x) for x in out.split()]
 
 
 def _git_head() -> str:
@@ -74,6 +118,7 @@ def run(
     max_cost_usd: float = 0.25,
     arm: str = "",
     arm_cap_usd: float = 0.0,
+    item_timeout_s: float = ITEM_TIMEOUT_S,
 ) -> dict[str, Any]:
     out.mkdir(parents=True, exist_ok=True)
     rows_path = out / "items.csv"
@@ -141,7 +186,19 @@ def run(
             )
             load0 = round(os.getloadavg()[0], 2)
             t0 = time.monotonic()
-            report: executors.Report = executor.run(task)
+            watchdog = _Watchdog(item_timeout_s)
+            try:
+                report: executors.Report = executor.run(task)
+            except Exception as exc:  # noqa: BLE001 - a crashed item is a row
+                report = executors.Report(False, error=f"{type(exc).__name__}: {exc}")
+            finally:
+                watchdog.cancel()
+            if watchdog.fired:
+                report.claimed_success = False
+                report.error = (
+                    f"item timed out after {item_timeout_s:.0f} s; the browser "
+                    f"driver was stopped. {report.error or ''}"
+                ).strip()
             item_s = time.monotonic() - t0
             time.sleep(SETTLE_S)
             after = app.records()

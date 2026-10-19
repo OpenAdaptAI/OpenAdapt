@@ -100,6 +100,12 @@ def build_parser() -> argparse.ArgumentParser:
         default=0.0,
         help="Stop before this arm's ledger total passes this many USD",
     )
+    p.add_argument(
+        "--item-timeout",
+        type=float,
+        default=runner.ITEM_TIMEOUT_S,
+        help="Stop an item's browser driver after this many seconds (default %(default)s)",
+    )
     p.add_argument("--json", action="store_true", help="Print the summary as JSON")
     return p
 
@@ -136,6 +142,7 @@ def main(argv: list[str] | None = None) -> int:
         max_cost_usd=args.max_cost,
         arm=args.arm,
         arm_cap_usd=args.arm_cap,
+        item_timeout_s=args.item_timeout,
     )
     if args.json:
         print(json.dumps(summary, indent=2))
