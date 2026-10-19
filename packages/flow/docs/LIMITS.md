@@ -529,12 +529,32 @@ What it does provide ([`AFTER_A_STOP.md`](AFTER_A_STOP.md)):
   to a person, runs only after that person approves it, runs at most once,
   and counts as done only when an independent read of the system of record
   confirms its own declared effects.
+- `undo propose` finds candidate undo steps for each saving step (another
+  recording, captured traffic, or the field's old value) and tries each one
+  on a declared test copy. It writes a candidate into the bundle, as a
+  proposal, only when every record afterwards matches the read-back from
+  before the save. A person approves a proposal once (`undo accept`), and
+  each run still needs approval after the stop.
 
 The limits of that:
 
 - A step with no declared effect is `unknown` in the ledger. Flow can't say
   whether it changed anything.
-- An undo exists only where someone declared it. Flow doesn't infer one.
+- An undo exists only where someone declared it or approved a verified
+  proposal. Flow never uses an undo no person approved.
+- A proposal is verified once, on a test copy, with the bundle's parameters.
+  It is evidence that the inverse path works on that copy, not a proof for
+  every record in production.
+- A proposal must restore every record exactly. An app that cancels by
+  changing a status, or writes an audit row when a record is deleted, fails
+  verification unless a person names those fields with `--ignore-field`.
+- Flow builds API undo steps only from JSON requests. A browser form post, or
+  a Delete control on the saved record's page, needs a recording of a person
+  doing the undo.
+- A proposal that finds its record (`locate`) or restores old values
+  (`restore`) needs values the replayer keeps just before the save. They exist
+  only for runs whose bundle already held the proposal, and only when the
+  save's record check read the system of record before the save.
 - An undo can fail or be refused. Then a person must repair the record by
   hand.
 - No undo is offered for a workflow with a loop: the undo can't be bound to

@@ -1843,6 +1843,84 @@ class Step(BaseModel):
 # effect/risk machinery), a transition's guard IS a Phase-1 ``Predicate``, and a
 # branch reuses the SAME model-free predicate evaluation. BACKWARD-COMPATIBLE:
 UNDO_ID_PATTERN: Final[str] = r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$"
+UNDO_PARAM_PATTERN: Final[str] = r"^[A-Za-z_][A-Za-z0-9_]{0,63}$"
+
+
+class UndoLocate(BaseModel):
+    """How an undo finds the record the save created.
+
+    Before the save runs, the replayer keeps the ids of the records that
+    already match :attr:`match` (``<run-dir>/undo/prior/<step>.json``). At undo
+    time, the one matching record whose id is not in that list is the record
+    the save created; its id is bound to the run parameter :attr:`param`.
+    Zero or several such records refuse the undo. See docs/AFTER_A_STOP.md.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: The save's own effect selector (serialized ``ValueExpr`` values).
+    match: dict[str, Any] = Field(min_length=1)
+    #: The record field that holds the record's id.
+    field: str = Field(default="id", min_length=1, max_length=128)
+    #: The run parameter the id is bound to.
+    param: str = Field(default="undo_record_id", pattern=UNDO_PARAM_PATTERN)
+
+
+class UndoRestore(BaseModel):
+    """Which values to keep before a field edit so its undo can restore them.
+
+    Before the save runs, the replayer reads the one record matching
+    :attr:`match` and keeps each named field's value. At undo time each value
+    is bound to its run parameter, and the undo writes it back.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    match: dict[str, Any] = Field(min_length=1)
+    #: Record field -> the run parameter the undo reads its old value from.
+    fields: dict[str, str] = Field(min_length=1)
+
+    @field_validator("fields")
+    @classmethod
+    def _param_names(cls, value: dict[str, str]) -> dict[str, str]:
+        for name in value.values():
+            if not re.match(UNDO_PARAM_PATTERN, name):
+                raise ValueError(f"{name!r} is not a valid undo parameter name")
+        return value
+
+
+class UndoProposal(BaseModel):
+    """A compiler-proposed undo that passed verification on a test copy.
+
+    Flow offers it after a stop only once a person has approved it
+    (:attr:`approved_by`), and every run of it still needs that person's
+    approval at the time it runs. ``evidence_sha256`` binds the verification
+    record kept in the bundle (``evidence_path``).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Where the candidate came from: ``recording`` (another recording),
+    #: ``network`` (captured network traffic) or ``field_restore`` (the
+    #: value read back before the change).
+    candidate_source: Literal["recording", "network", "field_restore"]
+    #: Plain words on why it was proposed; never record values.
+    basis: str = Field(min_length=1, max_length=1024)
+    test_copy: str = Field(min_length=1, max_length=256)
+    verified_at: str
+    evidence_path: str = Field(min_length=1, max_length=512)
+    evidence_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    approved_by: Optional[str] = Field(default=None, min_length=1, max_length=256)
+    approved_at: Optional[str] = None
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        data: dict[str, Any] = handler(self)
+        if self.approved_by is None:
+            data.pop("approved_by", None)
+        if self.approved_at is None:
+            data.pop("approved_at", None)
+        return data
 
 
 class UndoStep(BaseModel):
@@ -1865,11 +1943,33 @@ class UndoStep(BaseModel):
     #: Plain words a person reads before approving.
     intent: str = Field(min_length=1, max_length=512)
     #: ``demonstration``: compiled from a recording of a person doing the
-    #: undo. ``hand_written``: written by an author.
-    source: Literal["demonstration", "hand_written"]
+    #: undo. ``hand_written``: written by an author. ``synthesized``: built by
+    #: ``undo propose`` from captured traffic or a field's old value.
+    source: Literal["demonstration", "hand_written", "synthesized"]
     #: The compensating actions, run in order by the normal runtime (identity
     #: checks, risk gate and effect verification all apply).
     steps: list[Step] = Field(min_length=1)
+    #: Find the record the save created (binds its id to a run parameter).
+    locate: Optional[UndoLocate] = None
+    #: Keep a field's old value before the save so the undo can restore it.
+    restore: Optional[UndoRestore] = None
+    #: Set by ``undo propose``: verified on a test copy, waiting for (or
+    #: holding) a person's one-time approval. None for a declared undo.
+    proposal: Optional[UndoProposal] = None
+
+    @property
+    def awaiting_approval(self) -> bool:
+        """True for a proposed undo no person has approved yet."""
+        return self.proposal is not None and self.proposal.approved_by is None
+
+    @model_serializer(mode="wrap")
+    def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
+        """Keep declared undos byte-identical (the bundle digest covers them)."""
+        data: dict[str, Any] = handler(self)
+        for name in ("locate", "restore", "proposal"):
+            if getattr(self, name) is None:
+                data.pop(name, None)
+        return data
 
     @model_validator(mode="after")
     def _requires_a_checkable_result(self) -> "UndoStep":
