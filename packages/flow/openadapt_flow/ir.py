@@ -4853,6 +4853,11 @@ class RunReport(BaseModel):
     # any run whose halt path predates this field) — additive/back-compatible.
     halt: Optional["HaltObservation"] = None
     rung_counts: dict[str, int] = Field(default_factory=dict)
+    # Display-scale estimate (runtime.render_scale) on a pixel-path run:
+    # ``status`` is ``normalized`` (with the fitted scale, offset and how many
+    # recorded labels agreed), ``recorded_geometry``, or ``no_estimate`` (with
+    # the reason). None when no estimate was tried.
+    render_scale: Optional[dict[str, Any]] = None
     heal_count: int = 0
     model_calls: int = 0
     external_network_calls: Literal["none", "observed", "unknown"] = "unknown"

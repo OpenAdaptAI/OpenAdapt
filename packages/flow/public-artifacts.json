@@ -416,6 +416,18 @@
       "sha256": "c9763f03873c01c7977a17c899b1304e25cecde047709c54982f3dfc59707cba"
     },
     {
+      "path": "benchmark/pixel_scale/results_after.json",
+      "sha256": "887acaa54a0de5b6c0038bed7795e5eae0930b4975cdaf7c83e9db772522721a"
+    },
+    {
+      "path": "benchmark/pixel_scale/results_before.json",
+      "sha256": "6906441978365dea7d8fef335a0ab55067df9323ddfe4ad7e7823984df32e9ae"
+    },
+    {
+      "path": "benchmark/pixel_scale/results_before_no_drift_check.json",
+      "sha256": "65a9882e56c6cb87b45d9497616e18ddfe247431ecf6c29fb43f932d5ae30fbe"
+    },
+    {
       "path": "benchmark/qualification_gate/campaign.json",
       "sha256": "e54b0f27b6de8611afdcea8f647a922e784c9c998bee7a078c9701ff17e26831"
     },
