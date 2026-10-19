@@ -754,9 +754,49 @@
       },
       "program": {
         "label": "3. Compiled program driving the UI",
-        "items": 81,
-        "attempts": 81,
+        "items": 101,
+        "attempts": 101,
         "runs": {
+          "api-tier-2026-10-19": {
+            "items": 20,
+            "attempts": 20,
+            "runs": [
+              "api-tier-2026-10-19"
+            ],
+            "normal_items": 18,
+            "correct": 18,
+            "correct_rate": 1.0,
+            "silent_wrong": 0,
+            "safe_stops_normal": 0,
+            "fault_items": 2,
+            "fault_items_by_kind": {
+              "duplicate_check": {
+                "correct": 0,
+                "silent_wrong": 0,
+                "safe_stop": 2,
+                "flagged_wrong": 0
+              }
+            },
+            "planned_items": 20,
+            "done_correctly_all_items": 18,
+            "flagged_wrong": 0,
+            "paused": 0,
+            "model_calls_per_item": 0.0,
+            "tokens_per_item": 0,
+            "cost_usd_total": 0.0,
+            "cost_usd_per_item": 0.0,
+            "approvals_asked": 0,
+            "timed_correct_items": 9,
+            "item_s_median": 19.65,
+            "item_s_p90": 21.43,
+            "wall_s_median": 22.45,
+            "wall_s_p90": 24.74,
+            "items_per_hour": 157.5,
+            "host_load_1m": {
+              "min": 8.55,
+              "max": 11.96
+            }
+          },
           "study-main-0c642bc0": {
             "items": 72,
             "attempts": 72,
@@ -831,22 +871,22 @@
             }
           }
         },
-        "normal_items": 72,
-        "correct": 70,
-        "correct_rate": 0.9722,
+        "normal_items": 90,
+        "correct": 88,
+        "correct_rate": 0.9778,
         "silent_wrong": 0,
         "safe_stops_normal": 2,
-        "fault_items": 9,
+        "fault_items": 11,
         "fault_items_by_kind": {
           "duplicate_check": {
             "correct": 0,
             "silent_wrong": 0,
-            "safe_stop": 9,
+            "safe_stop": 11,
             "flagged_wrong": 0
           }
         },
-        "planned_items": 98,
-        "done_correctly_all_items": 70,
+        "planned_items": 118,
+        "done_correctly_all_items": 88,
         "flagged_wrong": 0,
         "paused": 17,
         "model_calls_per_item": 0.0,
@@ -854,17 +894,37 @@
         "cost_usd_total": 0.0,
         "cost_usd_per_item": 0.0,
         "approvals_asked": 0,
-        "timed_correct_items": 70,
-        "item_s_median": 23.73,
-        "item_s_p90": 26.88,
-        "wall_s_median": 29.47,
-        "wall_s_p90": 32.42,
-        "items_per_hour": 107.4,
+        "timed_correct_items": 79,
+        "item_s_median": 23.32,
+        "item_s_p90": 26.82,
+        "wall_s_median": 28.94,
+        "wall_s_p90": 32.35,
+        "items_per_hour": 111.4,
         "host_load_1m": {
           "min": 3.044921875,
           "max": 12.78515625
         },
         "run_meta": {
+          "api-tier-2026-10-19": {
+            "run": "api-tier-2026-10-19",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-19T11:26:03-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.13",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/scoreboard-arm5/packages/flow/openadapt_flow",
+              "git_head": "93c32e9f41f7cd48cd12561a0f25ef4579de1a7b"
+            },
+            "benchmark_git_head": "97effbd5379dd4242128e6d90e4ada2b8d1e9650",
+            "task": "openemr_referral",
+            "arm": "program",
+            "note": "OpenEMR referral, one bundle compiled from a recording with network capture; API steps off; fixture: private copy of the pinned referral fixture (spike_fixture.py)",
+            "api_step_admitted": true,
+            "api_step_admitted_by": "benchmark-fixture",
+            "harness_git_head": "93c32e9f41f7cd48cd12561a0f25ef4579de1a7b",
+            "bundle_save_step": "step_040"
+          },
           "study-main-0c642bc0": {
             "run": "study-main-0c642bc0",
             "protocol_version": "2026-10-18.1",
@@ -941,12 +1001,20 @@
           }
         },
         "hand_check": {
-          "rows_not_correct": 11,
+          "rows_not_correct": 13,
           "checked": 0,
           "confirmed": 0,
           "items": []
         },
         "sources": [
+          {
+            "run": "api-tier-2026-10-19",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/scoreboard-arm5/packages/flow/openadapt_flow",
+              "git_head": "93c32e9f41f7cd48cd12561a0f25ef4579de1a7b"
+            },
+            "note": "OpenEMR referral, one bundle compiled from a recording with network capture; API steps off; fixture: private copy of the pinned referral fixture (spike_fixture.py)"
+          },
           {
             "run": "study-main-0c642bc0",
             "imported_from": "packages/flow/benchmark/openemr_referral_timing/runs.csv",
@@ -1102,6 +1170,124 @@
               "path": "/Users/abrichr/oa/worktrees/scoreboard-arm46/packages/flow/openadapt_flow",
               "git_head": "b82131e51f52d6a365e910cc0818ea92e4c10a1a"
             }
+          }
+        ]
+      },
+      "program_api": {
+        "label": "5. Compiled program with the API step",
+        "items": 20,
+        "attempts": 20,
+        "runs": {
+          "api-tier-2026-10-19": {
+            "items": 20,
+            "attempts": 20,
+            "runs": [
+              "api-tier-2026-10-19"
+            ],
+            "normal_items": 18,
+            "correct": 18,
+            "correct_rate": 1.0,
+            "silent_wrong": 0,
+            "safe_stops_normal": 0,
+            "fault_items": 2,
+            "fault_items_by_kind": {
+              "duplicate_check": {
+                "correct": 0,
+                "silent_wrong": 0,
+                "safe_stop": 2,
+                "flagged_wrong": 0
+              }
+            },
+            "planned_items": 20,
+            "done_correctly_all_items": 18,
+            "flagged_wrong": 0,
+            "paused": 0,
+            "model_calls_per_item": 0.0,
+            "tokens_per_item": 0,
+            "cost_usd_total": 0.0,
+            "cost_usd_per_item": 0.0,
+            "approvals_asked": 0,
+            "timed_correct_items": 16,
+            "item_s_median": 0.6,
+            "item_s_p90": 0.67,
+            "wall_s_median": 3.33,
+            "wall_s_p90": 3.85,
+            "items_per_hour": 685.2,
+            "host_load_1m": {
+              "min": 6.94,
+              "max": 11.95
+            }
+          }
+        },
+        "normal_items": 18,
+        "correct": 18,
+        "correct_rate": 1.0,
+        "silent_wrong": 0,
+        "safe_stops_normal": 0,
+        "fault_items": 2,
+        "fault_items_by_kind": {
+          "duplicate_check": {
+            "correct": 0,
+            "silent_wrong": 0,
+            "safe_stop": 2,
+            "flagged_wrong": 0
+          }
+        },
+        "planned_items": 20,
+        "done_correctly_all_items": 18,
+        "flagged_wrong": 0,
+        "paused": 0,
+        "model_calls_per_item": 0.0,
+        "tokens_per_item": 0,
+        "cost_usd_total": 0.0,
+        "cost_usd_per_item": 0.0,
+        "approvals_asked": 0,
+        "timed_correct_items": 16,
+        "item_s_median": 0.6,
+        "item_s_p90": 0.67,
+        "wall_s_median": 3.33,
+        "wall_s_p90": 3.85,
+        "items_per_hour": 685.2,
+        "host_load_1m": {
+          "min": 6.94,
+          "max": 11.95
+        },
+        "run_meta": {
+          "api-tier-2026-10-19": {
+            "run": "api-tier-2026-10-19",
+            "protocol_version": "2026-10-18.1",
+            "written_at": "2026-10-19T11:26:03-0400",
+            "machine": "arm64 Darwin 24.6.0",
+            "cpu_count": 12,
+            "python": "3.12.13",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/scoreboard-arm5/packages/flow/openadapt_flow",
+              "git_head": "93c32e9f41f7cd48cd12561a0f25ef4579de1a7b"
+            },
+            "benchmark_git_head": "97effbd5379dd4242128e6d90e4ada2b8d1e9650",
+            "task": "openemr_referral",
+            "arm": "program_api",
+            "note": "OpenEMR referral, one bundle compiled from a recording with network capture; API steps on; fixture: private copy of the pinned referral fixture (spike_fixture.py)",
+            "api_step_admitted": true,
+            "api_step_admitted_by": "benchmark-fixture",
+            "harness_git_head": "93c32e9f41f7cd48cd12561a0f25ef4579de1a7b",
+            "bundle_save_step": "step_040"
+          }
+        },
+        "hand_check": {
+          "rows_not_correct": 2,
+          "checked": 0,
+          "confirmed": 0,
+          "items": []
+        },
+        "sources": [
+          {
+            "run": "api-tier-2026-10-19",
+            "engine": {
+              "path": "/Users/abrichr/oa/worktrees/scoreboard-arm5/packages/flow/openadapt_flow",
+              "git_head": "93c32e9f41f7cd48cd12561a0f25ef4579de1a7b"
+            },
+            "note": "OpenEMR referral, one bundle compiled from a recording with network capture; API steps on; fixture: private copy of the pinned referral fixture (spike_fixture.py)"
           }
         ]
       },

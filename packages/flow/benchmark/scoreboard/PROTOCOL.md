@@ -265,3 +265,24 @@ timed:
 - arm 3: 8 of 9 rows timed (loads 7.3 to 11.0);
 - arm 4: 4 of 17 rows timed (loads 10.2 to 15.2);
 - arm 6: none (self-loaded; Amendment 4).
+
+## Amendment 6 (2026-10-19): arm 5, the API step
+
+Arm 5 comes from the #1269 harness (`benchmark/openemr_api_tier/scoreboard_arm.py`,
+engine 93c32e9f) on its own private copy of the pinned OpenEMR fixture (ports
+9811/9810). There is one bundle, compiled from a recording with network
+capture. Its save step's API step was proposed by the compiler and admitted
+under the harness's name `benchmark-fixture`; no person admitted it.
+- The API step replaces all 41 GUI steps with one POST to
+  `new_comprehensive_save.php`. Its session token (`csrf_token_form`) is read
+  from the live form in the replaying browser's own session, and the
+  duplicate search runs first as a GET pre-check.
+- There are five blocks of four referrals, with API steps on (arm
+  `program_api`) and off (arm `program`, run `api-tier-2026-10-19`).
+  The two settings are interleaved, the order alternates by block, the
+  database is reset per block, and every run is gated at load 12.
+- The possible-duplicate referral (r6) is fault `duplicate_check`: the API
+  step's pre-check refuses, the GUI steps run, and they stop with no chart.
+  That is a safe stop.
+- Task seconds for arm 5 are the engine's time; wall seconds include the
+  new browser context, sign-in and the read-back.

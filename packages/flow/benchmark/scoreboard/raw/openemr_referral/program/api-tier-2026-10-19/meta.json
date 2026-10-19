@@ -1,0 +1,19 @@
+{
+  "protocol_version": "2026-10-18.1",
+  "written_at": "2026-10-19T11:26:03-0400",
+  "machine": "arm64 Darwin 24.6.0",
+  "cpu_count": 12,
+  "python": "3.12.13",
+  "engine": {
+    "path": "/Users/abrichr/oa/worktrees/scoreboard-arm5/packages/flow/openadapt_flow",
+    "git_head": "93c32e9f41f7cd48cd12561a0f25ef4579de1a7b"
+  },
+  "benchmark_git_head": "97effbd5379dd4242128e6d90e4ada2b8d1e9650",
+  "task": "openemr_referral",
+  "arm": "program",
+  "note": "OpenEMR referral, one bundle compiled from a recording with network capture; API steps off; fixture: private copy of the pinned referral fixture (spike_fixture.py)",
+  "api_step_admitted": true,
+  "api_step_admitted_by": "benchmark-fixture",
+  "harness_git_head": "93c32e9f41f7cd48cd12561a0f25ef4579de1a7b",
+  "bundle_save_step": "step_040"
+}
