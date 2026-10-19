@@ -107,7 +107,7 @@ export function Sample({
         if (payload?.state === "browser") {
           setDetail(payload.detail || "Preparing the browser…");
         } else if (payload?.state === "running") {
-          setDetail("Running the sample task twice…");
+          setDetail("Running the sample workflow twice…");
         }
       },
     );
@@ -186,16 +186,16 @@ export function Sample({
           </div>
           <p className="provenance-line">{PROVENANCE}</p>
           <section className="sample-next">
-            <h2>Now try your own task</h2>
+            <h2>Now try your own workflow</h2>
             <p>
-              Show OpenAdapt a task in the app where you already do it.
+              Show OpenAdapt a workflow in the app where you already do it.
               Use a test record.
             </p>
             <div className="row">
               <Button variant="primary" onClick={onShow}>
-                Show OpenAdapt your task
+                Show OpenAdapt your workflow
               </Button>
-              <Button onClick={onTasks}>Back to Tasks</Button>
+              <Button onClick={onTasks}>Back to Workflows</Button>
             </div>
           </section>
         </>

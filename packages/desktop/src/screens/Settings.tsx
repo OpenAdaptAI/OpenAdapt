@@ -202,7 +202,7 @@ export function Settings({
       <Card>
         <CardHead
           title="Where your data stays"
-          sub="Choose where recordings and tasks live, and whether they can leave this computer."
+          sub="Choose where recordings and workflows live, and whether they can leave this computer."
         />
         <Field label="Data location">
           <SegControl<DeploymentLane>
@@ -216,7 +216,7 @@ export function Settings({
         </Field>
         {cfg.deployment_lane === "byoc" && (
           <Callout tone="info" title="Patient data stays in your environment">
-            OpenAdapt doesn't upload recordings, tasks, or fixes. When a stopped
+            OpenAdapt doesn't upload recordings, workflows, or fixes. When a stopped
             run is reported, only a short note about it, with no PHI, goes to
             your dashboard. Backup, sync, and security software on this
             computer can still copy its files.
