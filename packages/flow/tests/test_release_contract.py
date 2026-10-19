@@ -1225,3 +1225,28 @@ def test_wheel_refuses_traversal_and_duplicates(tmp_path: Path) -> None:
             archive.writestr("neutral.py", b"second")
     with pytest.raises(ValueError, match="duplicate member"):
         validate_wheel_license_boundary(duplicate)
+
+
+def test_inventory_skips_git_ignored_files_under_a_package_subdirectory(
+    tmp_path: Path,
+) -> None:
+    """In the monorepo the package root has no .git of its own. The writer
+    must still see the git work tree and leave ignored local state (fixture
+    secrets, fetched third-party files) out of the reviewed inventory."""
+    import subprocess
+
+    from scripts.check_release_consistency import build_public_artifact_inventory
+
+    repo = tmp_path / "repo"
+    root = repo / "packages" / "pkg"
+    (root / "out").mkdir(parents=True)
+    (root / "data.json").write_text("{}\n", encoding="utf-8")
+    (root / "out" / "secrets.json").write_text('{"k": "v"}\n', encoding="utf-8")
+    (root / ".gitignore").write_text("out/\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+
+    paths = [a["path"] for a in build_public_artifact_inventory(root)["artifacts"]]
+
+    assert "data.json" in paths
+    assert "out/secrets.json" not in paths

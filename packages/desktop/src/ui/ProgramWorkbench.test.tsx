@@ -83,7 +83,7 @@ describe("ProgramWorkbench", () => {
   it("switches from the map to the declared evidence lanes", () => {
     render(<ProgramWorkbench graph={graph} />);
     fireEvent.click(screen.getByRole("tab", { name: "Evidence lanes" }));
-    expect(screen.getByText("Target evidence")).toBeTruthy();
+    expect(screen.getByText("Finds the field")).toBeTruthy();
     expect(screen.getByText("Structural")).toBeTruthy();
     expect(screen.getByText(/do not report a live verdict/i)).toBeTruthy();
   });
