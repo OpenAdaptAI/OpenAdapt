@@ -587,6 +587,7 @@
     "claims/rdp-validating.yaml",
     "claims/record-check-from-app-reads.yaml",
     "claims/reviewed-judgment-cases-supported.yaml",
+    "claims/server-response-evidence.yaml",
     "claims/substrate-runtime-validation-supported.yaml",
     "claims/typed-business-decisions-supported.yaml",
     "claims/ui-readback-separate-session.yaml",

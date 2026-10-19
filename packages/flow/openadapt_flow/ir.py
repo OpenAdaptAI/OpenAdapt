@@ -3967,6 +3967,31 @@ class EffectFieldCheck(BaseModel):
     verification_tier: Optional[int] = None
 
 
+class ServerResponseEvidence(BaseModel):
+    """The application server's answer to a save request, as the browser saw it.
+
+    Kept on the step as evidence at check level ``same_screen``: it comes from
+    the same transaction as the save, so on its own it never confirms an
+    effect and never makes a run VERIFIED. It holds the method, the status and
+    the media type only: no URL, path, body, or digest of one (a digest of a
+    short path or body can be guessed).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    method: Literal["POST", "PUT", "PATCH", "DELETE"]
+    status: int = Field(ge=100, le=599)
+    #: The response's media type (``application/json``), without parameters.
+    content_type: Optional[str] = Field(default=None, max_length=100)
+    #: Where this evidence ranks (:mod:`openadapt_flow.check_level`).
+    check_level: Literal["same_screen"] = "same_screen"
+
+    @property
+    def ok(self) -> bool:
+        """Not an error: 2xx, or a 3xx redirect after a form post."""
+        return self.status < 400
+
+
 class CheckToClickRecheck(BaseModel):
     """The screen changed between a pixel step's check and its click.
 
@@ -4035,6 +4060,10 @@ class StepResult(BaseModel):
     safety_halt: bool = False
     effect_results: list[str] = Field(default_factory=list)
     effect_evidence: list[EffectVerificationEvidence] = Field(default_factory=list)
+    #: The server's answers to this step's write requests, when the browser
+    #: saw them. Evidence at check level ``same_screen``; never a check on its
+    #: own. Empty (and omitted when serialized) on every other backend.
+    server_responses: list[ServerResponseEvidence] = Field(default_factory=list)
     #: Field-by-field read-back comparisons; omitted from the report when empty.
     effect_field_checks: list[EffectFieldCheck] = Field(default_factory=list)
     #: Machine-readable terminal category. ``report.halt`` remains useful
@@ -4146,6 +4175,8 @@ class StepResult(BaseModel):
             data.pop("timings", None)
         if isinstance(data, dict) and not self.effect_field_checks:
             data.pop("effect_field_checks", None)
+        if isinstance(data, dict) and not self.server_responses:
+            data.pop("server_responses", None)
         if isinstance(data, dict) and not self.check_to_click:
             data.pop("check_to_click", None)
         return data

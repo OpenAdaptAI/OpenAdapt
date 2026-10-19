@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
 from urllib.parse import urlsplit
 
 from openadapt_flow.backends._page_quiescence import PageQuiescence
+from openadapt_flow.backends._server_responses import ServerResponseLog
 from openadapt_flow.runtime.step_timing import timed_span
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -1173,6 +1174,18 @@ class PlaywrightBackend:
         # openadapt_flow.backends._page_quiescence). Armed at construction:
         # network requests issued before this point are not tracked.
         self._quiescence = PageQuiescence(page)
+        # The server's answers to write requests, kept as save evidence (see
+        # openadapt_flow.backends._server_responses). Never a check.
+        self._server_responses = ServerResponseLog(page)
+
+    def server_response_mark(self) -> int:
+        """Where the log of server answers to write requests stands now."""
+        return self._server_responses.mark()
+
+    def server_responses_since(self, mark: int) -> list[Any]:
+        """Server answers to the page's own write requests sent after
+        ``mark``; never blocks on a response body."""
+        return self._server_responses.since(mark)
 
     @property
     def viewport(self) -> tuple[int, int]:

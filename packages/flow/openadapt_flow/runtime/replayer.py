@@ -712,6 +712,10 @@ def better_identity_read(first: Any, retry: Any) -> Any:
     return first
 
 
+#: Server answers kept per step (a save makes one or a few write requests).
+_MAX_SERVER_RESPONSES = 64
+
+
 @dataclass(frozen=True)
 class _WebFormApprovalView:
     """An API step's prepared request, as a person is asked to approve it."""
@@ -7663,6 +7667,9 @@ class Replayer:
         # System-of-record pre-state, snapshotted just before the action when
         # the step declares effects (see the block guarding self._act below).
         effect_pre_state: Optional[EffectState] = None
+        # Where the backend's log of server answers stood before the save, so
+        # the answers to this step's write requests can be kept as evidence.
+        server_mark: Optional[int] = None
         # The step's effect contracts with every ValueExpr bound to THIS run's
         # params (P0-3); resolved BEFORE the pre-state snapshot so verification
         # targets the record this run wrote, not the demonstration's.
@@ -8188,6 +8195,8 @@ class Replayer:
                                 else "safety_halt"
                             )
                             break
+                    if server_mark is None and effect_pre_state is not None:
+                        server_mark = self._server_response_mark()
                     try:
                         self._active_delivery_resolution = resolution
                         self._active_delivery_region = matched_region
@@ -8542,6 +8551,11 @@ class Replayer:
             # save, a phantom optimistic-UI success, a duplicate write, or a
             # lost update -- the EffectVerifier reads the REAL record and HALTs
             # on any non-CONFIRMED verdict (docs/design/EFFECT_VERIFIER.md).
+            if server_mark is not None:
+                # The server's own answer to the save: kept as evidence at a
+                # lower check level. It comes from the same transaction, so it
+                # never confirms an effect; the verifier below still decides.
+                self._collect_server_responses(result, server_mark)
             if (
                 error is None
                 and not delivery_uncertain
@@ -9822,6 +9836,28 @@ class Replayer:
             verifier = OnScreenReadbackVerifier(backend=self.backend)
             self._readback_verifier = verifier
         return verifier
+
+    def _server_response_mark(self) -> Optional[int]:
+        """Where the backend's server-answer log stands, or None when the
+        backend doesn't see server answers (every non-browser backend)."""
+
+        mark = getattr(self.backend, "server_response_mark", None)
+        if not callable(mark):
+            return None
+        try:
+            return int(mark())
+        except Exception:  # noqa: BLE001 - evidence only, never a failure
+            return None
+
+    def _collect_server_responses(self, result: StepResult, mark: int) -> None:
+        since = getattr(self.backend, "server_responses_since", None)
+        if not callable(since):
+            return
+        try:
+            responses = list(since(mark))
+        except Exception:  # noqa: BLE001 - evidence only, never a failure
+            return
+        result.server_responses = responses[:_MAX_SERVER_RESPONSES]
 
     @timed_span("readback")
     def _verify_effects(
