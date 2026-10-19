@@ -180,6 +180,7 @@ def _server_instructions(
     authoring: AuthoringBridge | None,
     bridge: AgentBridge | None = None,
     guard: Any = None,
+    ledger: Any = None,
 ) -> str:
     text = ""
     if bridge is not None:
@@ -236,6 +237,10 @@ def _server_instructions(
         from openadapt_flow.agent.guard_tools import GUARD_INSTRUCTIONS
 
         text += " " + GUARD_INSTRUCTIONS
+    if ledger is not None:
+        from openadapt_flow.agent.ledger import LEDGER_INSTRUCTIONS
+
+        text += " " + LEDGER_INSTRUCTIONS
     return text.strip()
 
 
@@ -243,21 +248,28 @@ def build_server(
     bridge: AgentBridge | None = None,
     authoring: AuthoringBridge | None = None,
     guard: Any = None,
+    ledger: Any = None,
 ) -> Server:
     """Wrap workflow, authoring and/or guard bridges in an MCP Server (no I/O started).
 
     ``guard`` is a :class:`~openadapt_flow.agent.guard_tools.GuardBridge`.
+    ``ledger`` is a :class:`~openadapt_flow.agent.ledger.TaskLedger`; it adds
+    the job tools and reads every run and guard result this server returns.
     """
     if bridge is None and authoring is None and guard is None:
         raise ValueError(
             "MCP server requires a workflow, authoring or guarded-save bridge"
         )
+    if ledger is None:
+        # ``serve`` attaches the ledger to the bridge it serves.
+        ledger = getattr(bridge, "ledger", None) or getattr(guard, "ledger", None)
 
     def _tool_specs():
         return (
             *(bridge.list_tool_specs() if bridge is not None else ()),
             *(authoring.list_tool_specs() if authoring is not None else ()),
             *(guard.list_tool_specs() if guard is not None else ()),
+            *(ledger.list_tool_specs() if ledger is not None else ()),
         )
 
     async def _list_tools(context: Any = None) -> list[types.Tool]:
@@ -320,6 +332,22 @@ def build_server(
 
             def call() -> dict[str, Any]:
                 payload = dict(arguments or {})
+                if ledger is None:
+                    return dispatch(payload)
+                if ledger.handles(name):
+                    return ledger.dispatch(name, payload)
+                if name == "run_workflow":
+                    ledger.check_run(payload)
+                result = dispatch(payload)
+                # Item status comes only from this server's own results. A
+                # ledger failure never hides a run's result from the caller.
+                try:
+                    ledger.observe(name, payload, result)
+                except Exception:
+                    _LOG.exception("could not record a result in the task ledger")
+                return result
+
+            def dispatch(payload: dict[str, Any]) -> dict[str, Any]:
                 if guard is not None and guard.handles(name):
                     return guard.dispatch(name, payload)
                 if authoring is not None and authoring.handles(name):
@@ -378,7 +406,7 @@ def build_server(
         server = Server(
             SERVER_NAME,
             version=__version__,
-            instructions=_server_instructions(authoring, bridge, guard),
+            instructions=_server_instructions(authoring, bridge, guard, ledger),
         )
 
         async def _list_v1() -> list[types.Tool]:
@@ -403,7 +431,7 @@ def build_server(
         server = Server(
             SERVER_NAME,
             version=__version__,
-            instructions=_server_instructions(authoring, bridge, guard),
+            instructions=_server_instructions(authoring, bridge, guard, ledger),
             on_list_tools=_list_v2,
             on_call_tool=_call_v2,
         )

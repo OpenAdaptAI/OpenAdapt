@@ -70,7 +70,7 @@ freely (nothing at module scope touches ``ctypes.windll``).
 
 Status honesty: this client is **mock-contract-tested only**. No counted
 qualification batch against a real Windows host / real client window has been
-published; see ``claims.yaml`` (``win32-window-replay-roadmap``) and
+published; see ``claims/win32-window-replay-roadmap.yaml`` and
 ``docs/desktop/CITRIX_PIXEL.md`` for the evidence ladder.
 """
 

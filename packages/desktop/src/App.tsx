@@ -94,7 +94,7 @@ type PairingState = {
 };
 
 const NAV: { route: "tasks" | "needs" | "results"; label: string }[] = [
-  { route: "tasks", label: "Tasks" },
+  { route: "tasks", label: "Workflows" },
   { route: "needs", label: "Needs you" },
   { route: "results", label: "Results" },
 ];
@@ -175,7 +175,7 @@ function DesktopBrand({ onOpen }: { onOpen?: () => void }) {
   }
   return (
     <button
-      aria-label="Open OpenAdapt Desktop tasks"
+      aria-label="Open OpenAdapt Desktop workflows"
       className="product-brand"
       onClick={onOpen}
       type="button"
@@ -193,7 +193,7 @@ function EngineOffline({ onRetry, busy }: { onRetry: () => void; busy: boolean }
     <div className="content simple">
       <PageHead
         title="Waiting for the local engine"
-        sub="Desktop can't reach the OpenAdapt engine on this computer, so it can't show your tasks yet. It tries again when the engine starts. If this doesn't clear, quit and reopen OpenAdapt."
+        sub="Desktop can't reach the OpenAdapt engine on this computer, so it can't show your workflows yet. It tries again when the engine starts. If this doesn't clear, quit and reopen OpenAdapt."
       />
       <div className="row">
         <Button variant="primary" disabled={busy} onClick={onRetry}>
@@ -695,7 +695,7 @@ export default function App() {
       const resumed = routeForFirstWorkflow(current);
       if (resumed) setRoute(resumed);
       setFirstWorkflowStageError(
-        "Check the target of your last run before you record another task.",
+        "Check the target of your last run before you record another workflow.",
       );
       return;
     }
@@ -797,7 +797,7 @@ export default function App() {
   const navigationLockTitle = recording
     ? "Stop and save this recording before you leave."
     : workflowCompiling
-      ? "Keep this screen open while OpenAdapt builds the task from your recording."
+      ? "Keep this screen open while OpenAdapt builds the workflow from your recording."
       : firstWorkflowRunning
         ? "Keep the run open until it stops."
         : firstRunPersistencePending
@@ -863,7 +863,7 @@ export default function App() {
                 </span>
               )}
               {recording ? (
-                <span className="recording" title="OpenAdapt is recording your task">
+                <span className="recording" title="OpenAdapt is recording your workflow">
                   <StatusDot tone="warn" />
                   <strong>Recording</strong>
                 </span>

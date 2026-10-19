@@ -12,6 +12,7 @@ import hashlib
 import hmac
 import json
 import math
+import os
 import re
 import time
 import uuid
@@ -21,6 +22,7 @@ from typing import TYPE_CHECKING, Any, Callable, Literal, Optional
 from urllib.parse import urlsplit
 
 from openadapt_flow.backends._page_quiescence import PageQuiescence
+from openadapt_flow.runtime.step_timing import timed_span
 
 if TYPE_CHECKING:  # pragma: no cover
     from playwright.sync_api import Page
@@ -558,7 +560,22 @@ _FIELD_GROUP_IDENTITY_JS = r"""(hit) => {
 # hit-tests every candidate through the real frame chain (occlusion, clipping
 # by the parent frame) before believing it.
 _VISIBLE_TEXT_CANDIDATES_JS = r"""(target) => {
-    const norm = (v) => (v || '').replace(/\s+/g, '').toLowerCase();
+    // Recorded texts come from OCR, which drops spaces and misreads
+    // punctuation ("October-2026-" for "October 2026"): keep letters and
+    // digits, and keep a separator (. , - / : +) only where it is part of a
+    // number (a digit follows and no letter precedes), so "1,000" never
+    // matches "100,0" and "-5" never matches "5".
+    const norm = (v) => {
+        const t = (v || '').toLowerCase();
+        let out = '';
+        for (let i = 0; i < t.length; i += 1) {
+            const c = t[i];
+            if (/[\p{L}\p{N}]/u.test(c)) { out += c; continue; }
+            if (/[.,\-\/:+]/.test(c) && /\p{N}/u.test(t[i + 1] || '')
+                && !/\p{L}/u.test(t[i - 1] || '')) out += c;
+        }
+        return out;
+    };
     const want = norm(target);
     if (!want || !document.body) return [];
     const out = [];
@@ -577,11 +594,16 @@ _VISIBLE_TEXT_CANDIDATES_JS = r"""(target) => {
         }
         return parseFloat(s.fontSize) >= 6;
     };
+    // textContent is the cheap test; rendered text (innerText) also counts,
+    // because hidden option lists (a date picker's month menu) interleave
+    // their text into textContent but not into what is shown.
+    const has = (el) => norm(el.textContent).includes(want)
+        || norm(el.innerText).includes(want);
     const visit = (el) => {
-        if (!norm(el.textContent).includes(want)) return;
+        if (!has(el)) return;
         let deeper = false;
         for (const child of el.children) {
-            if (norm(child.textContent).includes(want)) { deeper = true; visit(child); }
+            if (has(child)) { deeper = true; visit(child); }
         }
         if (deeper || out.length >= 8) return;
         if (!norm(el.innerText).includes(want)) return;
@@ -600,8 +622,44 @@ _VISIBLE_TEXT_CANDIDATES_JS = r"""(target) => {
 
 # At a hit-tested point: is the topmost element (or an ancestor) the one whose
 # rendered text contains the target? Proves the text is not covered.
+# Is the focused element (through same-origin frames) an ordinary text field?
+# Ordinary: <textarea>, or <input> of a plain text type, editable, and not an
+# autocomplete/combobox widget (those react to individual keys).
+_FOCUSED_PLAIN_TEXT_JS = r"""() => {
+    let el = document.activeElement;
+    for (let i = 0; i < 8 && el && el.tagName === 'IFRAME'; i += 1) {
+        let doc = null;
+        try { doc = el.contentDocument; } catch (e) { return false; }
+        if (!doc) return false;
+        el = doc.activeElement;
+    }
+    if (!el || el.readOnly || el.disabled || el.isContentEditable) return false;
+    const role = (el.getAttribute('role') || '').toLowerCase();
+    const auto = (el.getAttribute('aria-autocomplete') || '').toLowerCase();
+    if (role === 'combobox' || (auto && auto !== 'none') || el.hasAttribute('list')) return false;
+    if (el.tagName === 'TEXTAREA') return true;
+    if (el.tagName !== 'INPUT') return false;
+    const t = (el.getAttribute('type') || 'text').toLowerCase();
+    return ['text', 'email', 'tel', 'search', 'url'].includes(t);
+}"""
+
 _TEXT_AT_POINT_JS = r"""([px, py, target]) => {
-    const norm = (v) => (v || '').replace(/\s+/g, '').toLowerCase();
+    // Recorded texts come from OCR, which drops spaces and misreads
+    // punctuation ("October-2026-" for "October 2026"): keep letters and
+    // digits, and keep a separator (. , - / : +) only where it is part of a
+    // number (a digit follows and no letter precedes), so "1,000" never
+    // matches "100,0" and "-5" never matches "5".
+    const norm = (v) => {
+        const t = (v || '').toLowerCase();
+        let out = '';
+        for (let i = 0; i < t.length; i += 1) {
+            const c = t[i];
+            if (/[\p{L}\p{N}]/u.test(c)) { out += c; continue; }
+            if (/[.,\-\/:+]/.test(c) && /\p{N}/u.test(t[i + 1] || '')
+                && !/\p{L}/u.test(t[i - 1] || '')) out += c;
+        }
+        return out;
+    };
     const want = norm(target);
     // The topmost element at the point, or one of its ancestors, must be a
     // DEEPEST holder of the text (no child holds it too). Climbing to a big
@@ -1010,6 +1068,9 @@ class PlaywrightBackend:
     # identity readback against the compiled template still decides.
     keyboard_admits_form_fields: bool = False
 
+    #: See ``__init__``; class default for instances built without it.
+    native_fill = False
+
     def __init__(
         self,
         page: "Page",
@@ -1020,11 +1081,17 @@ class PlaywrightBackend:
         screenshot_guard: Optional[Callable[[], None]] = None,
         closed_page_frame: bool = False,
         bring_to_front_before_capture: bool = False,
+        native_fill: Optional[bool] = None,
     ) -> None:
         """Wrap an existing Playwright page.
 
         Args:
             page: A Playwright page.
+            native_fill: Insert typed text in one call when the focused
+                element is an ordinary text field. Off by default; the
+                ``fast`` speed profile (``runtime/speed.py``) turns it on
+                through ``OPENADAPT_FLOW_NATIVE_FILL=1``. Custom widgets always
+                get key-by-key typing.
             screenshot_scale: Pixel scale for retained screenshots. The
                 ordinary launched-browser path uses Playwright's ``device``
                 default. A browser attached through CDP uses ``css`` so DOM
@@ -1059,6 +1126,9 @@ class PlaywrightBackend:
                 popup or tab the recorded page opens takes the foreground, and
                 the opener's after-frame must still be a live, current frame.
         """
+        if native_fill is None:
+            native_fill = os.environ.get("OPENADAPT_FLOW_NATIVE_FILL", "0") != "0"
+        self.native_fill = bool(native_fill)
         self.page = page
         self._closed_page_frame = closed_page_frame
         self._bring_to_front_before_capture = bring_to_front_before_capture
@@ -1876,16 +1946,9 @@ class PlaywrightBackend:
                 raise StructuralResolutionRefused(
                     f"DOM locator is ambiguous: candidate_count={candidate_count}"
                 )
-            box = loc.bounding_box()
-            if (
-                not isinstance(box, dict)
-                or float(box["width"]) <= 0
-                or float(box["height"]) <= 0
-                or not self._frame_chain_matches(
-                    scope, tuple(locator.frame_path or ()), box
-                )
-            ):
-                return None
+            # The box and the hit-tested frame chain are checked once, after
+            # the element is bound below: the same test, later, so nothing
+            # that changes in between can slip through.
             token = uuid.uuid4().hex
             try:
                 observed = loc.evaluate(
@@ -1958,6 +2021,33 @@ class PlaywrightBackend:
             )
         except StructuralResolutionRefused:
             raise
+        except Exception:
+            return None
+
+    def structural_offscreen(self, locator: StructuralLocator) -> Optional[bool]:
+        """True only when ``locator`` names exactly one rendered element whose
+        center lies outside the viewport (it exists, but isn't scrolled into
+        view yet). None when that can't be shown: missing, ambiguous, hidden,
+        or any error. Never raises.
+        """
+        try:
+            resolved = self._locator_with_scope(locator)
+            if resolved is None:
+                return None
+            _scope, loc = resolved
+            if loc.count() != 1:
+                return None
+            box = loc.bounding_box()
+            if (
+                not isinstance(box, dict)
+                or float(box["width"]) <= 0
+                or float(box["height"]) <= 0
+            ):
+                return None
+            cx = float(box["x"]) + float(box["width"]) / 2
+            cy = float(box["y"]) + float(box["height"]) / 2
+            vw, vh = self.viewport
+            return not (0 <= cx < vw and 0 <= cy < vh) or None
         except Exception:
             return None
 
@@ -2801,6 +2891,8 @@ class PlaywrightBackend:
         return self._act_guarded_keyboard(
             expected_frame_sha256=expected_frame_sha256,
             operation="guarded_dom_type",
+            # Keys go through the leased element itself, never the page
+            # keyboard, so delivery stays bound to the checked target.
             deliver=lambda locator: locator.press_sequentially(text, timeout=1000),
         )
 
@@ -2856,9 +2948,10 @@ class PlaywrightBackend:
         """Is ``text`` rendered visibly in the viewport, per the DOM?
 
         Returns ``True`` only when some element's rendered text (``innerText``)
-        contains ``text`` as an exact case-insensitive substring once all
-        whitespace is removed (the OCR tier's squash; recorded OCR texts often
-        lose spaces), and
+        contains ``text`` as an exact case-insensitive substring once
+        everything but letters and digits is removed (recorded OCR texts often
+        lose spaces and misread punctuation; the OCR tier itself accepts an
+        80% contiguous match, so this is still the stricter check), and
         that element is not hidden or transparent, intersects its document's
         viewport, AND a hit test through the real frame chain at that point
         lands on it (so text under a dialog, clipped by its frame, or scrolled
@@ -2965,6 +3058,7 @@ class PlaywrightBackend:
                 pass
             time.sleep(_MASKED_SCREENSHOT_RETRY_SLEEP_S)
 
+    @timed_span("screenshot")
     def screenshot(self) -> bytes:
         """Return a stable current full-viewport frame as PNG bytes."""
         if self._closed_page_frame and self._page_is_closed():
@@ -3241,6 +3335,12 @@ class PlaywrightBackend:
                 cause_type=type(exc).__name__,
             ) from exc
 
+    def hover(self, x: int, y: int) -> None:
+        """Rest the mouse on pixel coordinates without pressing a button."""
+
+        self._assert_qualification_environment_current()
+        self.page.mouse.move(x, y)
+
     def drag(self, x: int, y: int, end_x: int, end_y: int) -> None:
         """Drag between two independently resolved points."""
 
@@ -3348,11 +3448,27 @@ class PlaywrightBackend:
             delivered_at=datetime.now(timezone.utc).isoformat(),
         )
 
+    def _focused_plain_text_field(self) -> bool:
+        try:
+            return self.page.evaluate(_FOCUSED_PLAIN_TEXT_JS) is True
+        except Exception:
+            return False
+
+    def _deliver_text(self, text: str, per_key: Callable[[], None]) -> None:
+        """Insert ``text`` at the caret in one call when the focused element
+        is an ordinary text field (native fill: the field's ``input`` event
+        fires, and ``change`` on blur, as for typing); otherwise ``per_key``
+        types it key by key."""
+        if self.native_fill and text and self._focused_plain_text_field():
+            self.page.keyboard.insert_text(text)
+            return
+        per_key()
+
     def type_text(self, text: str) -> None:
         """Type text into the currently focused element."""
         self._assert_qualification_environment_current()
         self._register_focused_field()
-        self.page.keyboard.type(text)
+        self._deliver_text(text, lambda: self.page.keyboard.type(text))
 
     def press(self, key: str) -> None:
         """Press a key or chord, e.g. ``'Enter'`` or ``'Meta+a'``."""

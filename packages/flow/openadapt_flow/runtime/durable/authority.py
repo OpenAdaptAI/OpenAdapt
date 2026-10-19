@@ -655,6 +655,25 @@ class DurableAuthority:
                 raise DurableAuthorityBusy(
                     "the external durable authority database permissions are too broad"
                 )
+        elif os.name != "nt":
+            # Create the database owner-only before SQLite opens it. SQLite
+            # would create it with the process umask and the chmod below comes
+            # later, so a second durable run starting at the same moment (two
+            # workers, two processes) saw a world-readable file and refused.
+            try:
+                descriptor = os.open(
+                    self.db_path,
+                    os.O_CREAT | os.O_EXCL | os.O_WRONLY | getattr(os, "O_NOFOLLOW", 0),
+                    0o600,
+                )
+            except FileExistsError:
+                pass
+            except OSError as exc:
+                raise DurableAuthorityBusy(
+                    "the external durable authority database can't be created"
+                ) from exc
+            else:
+                os.close(descriptor)
         connection: Optional[sqlite3.Connection] = None
         try:
             connection = sqlite3.connect(

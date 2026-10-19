@@ -289,7 +289,12 @@ def classify_failure(report: Optional[RunReport], error: Optional[str]) -> dict:
         return {"category": "none", "root_cause_hint": None}
 
     err = (failing.error or "").lower()
-    if failing.resolution is None and "all resolution rungs failed" in err:
+    if failing.resolution is None and (
+        "all resolution rungs failed" in err
+        # A closed-loop scroll that never found the target hands the halt to
+        # that target's step (#1331).
+        or err.startswith("could not resolve target for step")
+    ):
         category = "resolution_failed"
     elif "identity check failed" in err:
         category = "identity_mismatch"

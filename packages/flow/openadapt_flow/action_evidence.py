@@ -19,6 +19,9 @@ AUTOMATED_GUI_ACTUATIONS = frozenset(
     {"uia", "dom", "guarded_coordinate", "guarded_keyboard", "remote_guarded"}
 )
 HUMAN_ATTENDED_ACTUATIONS = frozenset({"human_attended", "human_attended_skip"})
+#: A GUI step that an admitted API step ran in place of: nothing was
+#: delivered for it; the API step's save carries the delivery evidence.
+API_FOLDED_ACTUATION = "api_folded"
 
 
 _DELIVERY_OPERATIONS: dict[tuple[str, ActionKind], set[tuple[str, bool]]] = {
@@ -308,7 +311,8 @@ def action_evidence_error(
             or result.input_verified is not None
             or result.starting_state_settled not in {None, True}
             or result.fresh_actuation_events
-            or result.actuation not in {None, "human_attended_skip"}
+            or result.actuation
+            not in {None, "human_attended_skip", API_FOLDED_ACTUATION}
         ):
             return "skipped action contains delivery evidence"
         return None

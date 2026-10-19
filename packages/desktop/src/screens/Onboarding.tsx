@@ -105,13 +105,13 @@ export function Onboarding({ onStart }: { onStart?: () => void }) {
         <h1>Recording setup</h1>
         <p>
           Recording a desktop app, a remote desktop, or Citrix needs these
-          permissions and the local video engine. Browser tasks and the sample
+          permissions and the local video engine. Browser workflows and the sample
           app don't need either.
         </p>
         <div className="row" style={{ justifyContent: "center" }}>
           {onStart && (
             <Button variant="primary" disabled={!ready} onClick={onStart}>
-              Choose an app and task
+              Choose an app and workflow
             </Button>
           )}
           <Button variant="ghost" onClick={refresh}>

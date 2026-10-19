@@ -51,6 +51,7 @@ from openadapt_flow.ir import (
     StructuralHandle,
     StructuralLocator,
 )
+from openadapt_flow.runtime.step_timing import timed_span
 
 DEFAULT_SERVER_URL = "http://localhost:5001"
 
@@ -307,6 +308,7 @@ class WindowsBackend:
             self._viewport = _png_size(self.screenshot())
         return self._viewport
 
+    @timed_span("screenshot")
     def screenshot(self) -> bytes:
         """Return the current frame as PNG bytes (with retries).
 
@@ -1021,6 +1023,58 @@ class WindowsBackend:
                 "typed UIA action returned a mismatched delivery receipt"
             )
         return parsed
+
+    def read_structural(
+        self, locator: StructuralLocator, *, rows: bool = False
+    ) -> Optional[dict]:
+        """Read one control's text (and, with ``rows``, its rows) via UIA.
+
+        Read-only: the agent returns the control's value or name and never
+        acts on it. Returns the agent's payload (``match`` is ``unique``,
+        ``ambiguous`` or ``not_found``), or None when the read is unavailable
+        (older agent, transport error, malformed answer).
+        """
+        typed = self._post_typed_read(
+            "/uia/read",
+            {
+                "locator": locator.model_dump(mode="json", exclude_none=True),
+                **({"rows": True} if rows else {}),
+            },
+        )
+        payload = typed.payload
+        if not typed.available or payload is None:
+            return None
+        if payload.get("match") not in ("unique", "ambiguous", "not_found"):
+            return None
+        text = payload.get("text")
+        if text is not None and not isinstance(text, str):
+            return None
+        if rows and payload.get("match") == "unique":
+            items = payload.get("rows")
+            if not isinstance(items, list) or not all(
+                isinstance(item, dict)
+                and isinstance(item.get("text"), str)
+                and isinstance(item.get("point"), list)
+                and len(item["point"]) == 2
+                and all(
+                    isinstance(v, int) and not isinstance(v, bool)
+                    for v in item["point"]
+                )
+                and all(
+                    isinstance(cell, dict)
+                    and isinstance(cell.get("text"), str)
+                    and isinstance(cell.get("point"), list)
+                    and len(cell["point"]) == 2
+                    and all(
+                        isinstance(v, int) and not isinstance(v, bool)
+                        for v in cell["point"]
+                    )
+                    for cell in item.get("cells") or []
+                )
+                for item in items
+            ):
+                return None
+        return payload
 
     def arm_guarded_coordinate(self, x: int, y: int) -> None:
         """Bind a coordinate and live execution context before identity readback."""
