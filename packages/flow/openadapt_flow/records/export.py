@@ -19,7 +19,7 @@ Sinks:
   set, so a misconfigured URL cannot send records off the machine.
 
 A :class:`ColumnMapping` renames fields and adds constant columns, for a
-target layout the user defines. Standard layouts (for example a clinical
+target layout the user defines. Standard layouts (for example an industry
 data model) are templates outside the core; see ``examples/records/``.
 """
 
