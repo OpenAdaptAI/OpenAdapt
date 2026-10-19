@@ -32,6 +32,7 @@ Run:
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import hashlib
 import inspect
 import json
@@ -293,12 +294,19 @@ def run(
     variants = [v for v in VARIANTS if _supports_copy() or "copy" not in v]
     today = date.today()
     trials: list[dict[str, Any]] = []
-    # Record frames first: render_frame runs its own Playwright session.
+    # Record frames first: render_frame runs its own Playwright session. Each
+    # replay condition is recorded at its own device scale: the identifier
+    # box is a pixel region, and a display-scale change is handled by a
+    # separate mechanism (runtime.render_scale), not by this check.
+    dsfs = sorted({c.device_scale_factor for c in REPLAY_CONDITIONS})
     record_frames = {
-        seed: render_frame(
-            build_dense_table(seed, n_rows=n_rows), RECORD_CONDITION, top_offset_px=0
+        (seed, d): render_frame(
+            build_dense_table(seed, n_rows=n_rows),
+            dataclasses.replace(RECORD_CONDITION, device_scale_factor=d),
+            top_offset_px=0,
         )
         for seed in seeds
+        for d in dsfs
     }
     with sync_playwright() as pw:
         for seed in seeds:
@@ -308,11 +316,13 @@ def run(
                 source=f"synthetic seed {seed}",
                 complete=True,
             )
-            rec = record_frames[seed]
-            rec_lines = vision.ocr(rec.png)
-            rec_bgr = cv2.imdecode(np.frombuffer(rec.png, np.uint8), cv2.IMREAD_COLOR)
             idx = {id(r): i for i, r in enumerate(table.rows)}
             for k, cond in enumerate(REPLAY_CONDITIONS):
+                rec = record_frames[(seed, cond.device_scale_factor)]
+                rec_lines = vision.ocr(rec.png)
+                rec_bgr = cv2.imdecode(
+                    np.frombuffer(rec.png, np.uint8), cv2.IMREAD_COLOR
+                )
                 browser, page = _open_page(pw, table, cond, 4 + k * 3)
                 try:
                     dsf = cond.device_scale_factor
@@ -408,6 +418,7 @@ def run(
             "seeds": seeds,
             "n_rows": n_rows,
             "replay_conditions": [c.name for c in REPLAY_CONDITIONS],
+            "record_condition": f"{RECORD_CONDITION.name} at each replay's device scale",
             "click_configs": list(CLICK_CONFIGS),
             "variants": variants,
             "modes": list(MODES),
