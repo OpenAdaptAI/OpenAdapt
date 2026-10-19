@@ -204,13 +204,12 @@ def _now() -> str:
 
 
 def _bundle_digest(bundle: Path) -> str:
+    from openadapt_flow import sealed_set
     from openadapt_flow.bundle_validation import (
         compute_content_digest,
         compute_file_hashes,
     )
     from openadapt_flow.ir import Workflow
-
-    from openadapt_flow import sealed_set
 
     workflow = Workflow.load(bundle)
     # A sealed bundle's crops are ciphertext on disk; hash the plaintext.

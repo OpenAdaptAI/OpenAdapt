@@ -125,9 +125,10 @@ def require_key(key: Optional[str]) -> str:
 def is_encrypted(data: bytes) -> bool:
     """Whether ``data`` is one of this module's encrypted containers.
 
-    A cheap, allocation-light check: an encrypted payload is a JSON object whose
-    ``format`` field is the module magic. Plaintext ``workflow.json`` / a
-    checkpoint JSON fails this, so the unencrypted path is never misrouted.
+    A cheap check: either a sealed-set file (it starts with
+    :data:`SET_FILE_MAGIC`) or a JSON object whose ``format`` field is the
+    module magic. Plaintext ``workflow.json`` / a checkpoint JSON fails this,
+    so the unencrypted path is never misrouted.
     """
     if data[: len(SET_FILE_MAGIC)] == SET_FILE_MAGIC:
         return True

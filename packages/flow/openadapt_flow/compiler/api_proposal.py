@@ -50,8 +50,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Optional
 
-from openadapt_flow import sealed_set as _sealed
 from openadapt_flow import network_capture as nc
+from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.ir import (
     ActionKind,
     ApiAdmission,

@@ -1443,10 +1443,13 @@ class Replayer:
         No plaintext of the bundle or of the live screen reaches the disk.
         """
         bundle_path = Path(bundle_dir)
-        if not (
-            _sealed.is_sealed(bundle_path)
-            or _sealed.active_writer(bundle_path) is not None
-        ) or _sealed.active_writer(Path(run_dir)) is not None:
+        if (
+            not (
+                _sealed.is_sealed(bundle_path)
+                or _sealed.active_writer(bundle_path) is not None
+            )
+            or _sealed.active_writer(Path(run_dir)) is not None
+        ):
             return self._run_unsealed(
                 workflow,
                 params=params,
@@ -9941,9 +9944,7 @@ class Replayer:
                 path = inventory_dir / f"{digest}.png"
                 if path.is_symlink():
                     raise OSError("pixel evidence crop path is a symlink")
-                existing = (
-                    _sealed.read_bytes(path) if _sealed.exists(path) else None
-                )
+                existing = _sealed.read_bytes(path) if _sealed.exists(path) else None
                 if existing is not None and existing != payload:
                     raise OSError("pixel evidence digest path has other bytes")
                 _sealed.write_bytes(path, payload)

@@ -86,12 +86,12 @@ from urllib.parse import urlsplit
 
 from PIL import Image
 
+from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.backends.playwright_backend import (
     GUARDED_ACTIONABLE_SELECTOR,
     PlaywrightBackend,
 )
 from openadapt_flow.ir import StructuralLocator, structural_locator_is_locatable
-from openadapt_flow import sealed_set as _sealed
 from openadapt_flow.recorder import Recorder
 from openadapt_flow.submit_binding import (
     OBSERVE_SUBMIT_BINDING_JS,

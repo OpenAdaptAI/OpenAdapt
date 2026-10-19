@@ -190,7 +190,9 @@ def test_seal_encrypts_every_file_and_binds_the_set(
 
     with watching_disk() as watch:
         assert main(["seal", str(source), "--out", str(sealed)]) == 0
-    written_under_sealed = [p for p in watch.written if p.startswith(str(sealed.parent))]
+    written_under_sealed = [
+        p for p in watch.written if p.startswith(str(sealed.parent))
+    ]
     assert written_under_sealed
     assert [
         leak for leak in watch.leaks(PLAIN_MARKERS) if str(source) not in leak
@@ -457,11 +459,25 @@ def test_record_compile_and_governed_run_write_no_plaintext(
             base_url=fault_app, workflow=workflow, bundle_dir=bundle, run_dir=run_dir
         )
         render_run_report(run_dir)
+        # The CLI path too. Demo replay has no record check, so it stops
+        # before the save; what matters here is what it leaves on disk.
+        tutorial._http_json(f"{fault_app}/api/reset", method="POST", body={})
+        replay_code = main(
+            [
+                "replay",
+                str(bundle),
+                "--url",
+                f"{fault_app}/{tutorial.TUTORIAL_ENTRY_QUERY}",
+                "--run-dir",
+                str(tmp_path / "run-cli"),
+            ]
+        )
 
     assert report.execution_outcome == "VERIFIED"
+    assert replay_code in (0, 1)
     assert watch.leaks(E2E_MARKERS) == []
     assert list(system_tmp.iterdir()) == []
-    for root in (rec_dir, bundle, run_dir):
+    for root in (rec_dir, bundle, run_dir, tmp_path / "run-cli"):
         _assert_ciphertext_only(root)
         sealed_set.SealedSet.open(root, KEY).verify_all()
     stored = json.loads(sealed_set.read_text(run_dir / "report.json"))
@@ -554,7 +570,9 @@ def test_halted_sealed_run_is_undone_without_plaintext(
 
 
 def _recording(rec_dir: Path, *, key: str | None) -> Path:
-    rec = Recorder(_FakeBackend(), rec_dir, app_url="http://app.test/", encryption_key=key)
+    rec = Recorder(
+        _FakeBackend(), rec_dir, app_url="http://app.test/", encryption_key=key
+    )
     rec.click(40, 40)
     rec.type_text("Testpatient Zed", param="patient")
     rec.click(80, 80)
@@ -589,11 +607,19 @@ def test_scaffold_verifier_keeps_its_draft_inside_the_sealed_recording(
     monkeypatch.setenv(crypto.ENV_KEY, KEY)
     rec = tmp_path / "rec"
     with sealed_set.writing(rec, "recording", KEY) as writer:
-        writer.write("meta.json", json.dumps({"params": {"p": "Testpatient Zed"}}).encode())
+        writer.write(
+            "meta.json", json.dumps({"params": {"p": "Testpatient Zed"}}).encode()
+        )
         writer.write(
             "events.jsonl",
             json.dumps(
-                {"i": 0, "kind": "click", "x": 5, "y": 5, "field_label": "Save encounter"}
+                {
+                    "i": 0,
+                    "kind": "click",
+                    "x": 5,
+                    "y": 5,
+                    "field_label": "Save encounter",
+                }
             ).encode()
             + b"\n",
         )
@@ -713,3 +739,9 @@ def test_sealed_run_pauses_and_resumes_without_plaintext(
     assert watch.leaks([b"Testpatient", b"operator@example.com", b'"results"']) == []
     _assert_ciphertext_only(run_dir)
     sealed_set.SealedSet.open(run_dir, KEY).verify_all()
+
+
+def test_phi_at_rest_doc_lists_every_inventory_entry() -> None:
+    doc = (Path(__file__).parents[1] / "docs" / "phi_at_rest.md").read_text()
+    for entry in (*sealed_set.BUNDLE_FILES, *sealed_set.RECORDING_FILES):
+        assert f"`{entry.pattern}`" in doc, entry.pattern

@@ -1239,11 +1239,17 @@ def _cmd_record(args: argparse.Namespace) -> int:
         for line in summary_lines(contract, proposal, diff):
             print(line)
     if code == 0 and with_check:
+        from openadapt_flow import sealed_set
         from openadapt_flow.cli_check import guided_check
         from openadapt_flow.cli_hints import command
 
         recording = Path(args.out)
-        if not (recording / "events.jsonl").is_file():
+        if sealed_set.is_sealed(recording):
+            print(
+                "record --with-check: marking a check in an encrypted recording "
+                "is not available yet; nothing was marked."
+            )
+        elif not (recording / "events.jsonl").is_file():
             print("record: no events.jsonl to mark a check in; skipped")
         elif not sys.stdin.isatty():
             mark = command(
@@ -1940,15 +1946,14 @@ def _cmd_compile(args: argparse.Namespace) -> int:
 
 
 def _cmd_induce(args: argparse.Namespace) -> int:
-    from openadapt_flow.compiler.induction import induce_program, validate_held_out
-    from openadapt_flow.ir import Workflow
-
     # Accept both RECORDING directories (compiled via the single-trace
     # bootstrap by induce_program) and already-compiled BUNDLE directories
     # (a dir containing workflow.json -> loaded as a Workflow). Detecting the
     # bundle case CLI-side keeps induce usable on artifacts the operator
     # already has, without touching the library API.
     from openadapt_flow import sealed_set
+    from openadapt_flow.compiler.induction import induce_program, validate_held_out
+    from openadapt_flow.ir import Workflow
 
     traces: list = []
     sealed_inputs = False
@@ -5211,10 +5216,9 @@ def _qualification_drill_driver(args: argparse.Namespace, workflow, params):
 
 def _retain_drill_evidence(run_dir: Path, driver) -> None:
     """Keep the drill's receipt and mutation record next to its report."""
+    from openadapt_flow import sealed_set
     from openadapt_flow.ir import RunReport
     from openadapt_flow.qualification_drills import write_drill_evidence
-
-    from openadapt_flow import sealed_set
 
     try:
         report = RunReport.model_validate_json(

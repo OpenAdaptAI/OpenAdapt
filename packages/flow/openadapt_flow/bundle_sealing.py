@@ -139,7 +139,9 @@ def _template_assets(source: Path, workflow: Workflow) -> dict[str, bytes]:
     if tdir.is_dir() and not sealed_set.is_sealed(source):
         for path in sorted(tdir.rglob("*")):
             if path.is_file() and path.suffix != ".enc":
-                assets.setdefault(path.relative_to(source).as_posix(), path.read_bytes())
+                assets.setdefault(
+                    path.relative_to(source).as_posix(), path.read_bytes()
+                )
     return assets
 
 
@@ -278,9 +280,7 @@ def seal_bundle(source: Path | str, destination: Path | str) -> SealedBundle:
         source_path, destination_path = _validate_paths(Path(source), Path(destination))
         _reject_symlinks(source_path)
         try:
-            source_workflow = Workflow.load(
-                source_path, key=key, verify_integrity=True
-            )
+            source_workflow = Workflow.load(source_path, key=key, verify_integrity=True)
         except Exception as exc:
             raise BundleSealingError(f"source bundle validation failed: {exc}") from exc
         others = _source_files(source_path, key)

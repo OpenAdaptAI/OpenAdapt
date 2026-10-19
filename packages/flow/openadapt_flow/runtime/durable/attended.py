@@ -990,7 +990,9 @@ class AttendedActionStore:
                 ) from exc
         if _sealed.is_file(self.capability_history_path):
             try:
-                raw_history = json.loads(_sealed.read_text(self.capability_history_path))
+                raw_history = json.loads(
+                    _sealed.read_text(self.capability_history_path)
+                )
                 if not isinstance(raw_history, list):
                     raise ValueError("history is not a list")
                 capabilities.extend(
@@ -1275,7 +1277,9 @@ class AttendedActionStore:
                 "the private program receipt path must not be a symlink"
             )
         try:
-            receipt = ProgramTransitionReceipt.model_validate_json(_sealed.read_text(path))
+            receipt = ProgramTransitionReceipt.model_validate_json(
+                _sealed.read_text(path)
+            )
         except (FileNotFoundError, ValueError) as exc:
             raise AttendedActionRefused(
                 "the exact program transition receipt is missing or invalid"
@@ -1384,7 +1388,9 @@ class AttendedActionStore:
             history: list[dict[str, Any]] = []
             if _sealed.is_file(self.capability_history_path):
                 try:
-                    raw_history = json.loads(_sealed.read_text(self.capability_history_path))
+                    raw_history = json.loads(
+                        _sealed.read_text(self.capability_history_path)
+                    )
                     if isinstance(raw_history, list):
                         history = [
                             item for item in raw_history if isinstance(item, dict)
@@ -1455,7 +1461,9 @@ class AttendedActionStore:
         history: list[dict[str, Any]] = []
         if _sealed.is_file(self.capability_history_path):
             try:
-                raw_history = json.loads(_sealed.read_text(self.capability_history_path))
+                raw_history = json.loads(
+                    _sealed.read_text(self.capability_history_path)
+                )
                 if not isinstance(raw_history, list) or not all(
                     isinstance(item, dict) for item in raw_history
                 ):

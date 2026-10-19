@@ -2954,7 +2954,6 @@ class Workflow(BaseModel):
         """
         bundle = Path(bundle_dir)
         from openadapt_flow import bundle_validation as _bv
-
         from openadapt_flow import sealed_set as _sealed
 
         encrypted_path = bundle / "workflow.json.enc"
@@ -2964,9 +2963,7 @@ class Workflow(BaseModel):
         if _sealed.active_writer(bundle) is not None or _sealed.is_sealed(bundle):
             # A sealed set: verify the whole file set, then decrypt the
             # workflow and every crop in memory.
-            reader: Any = _sealed.active_writer(bundle) or _sealed.open_set(
-                bundle, key
-            )
+            reader: Any = _sealed.active_writer(bundle) or _sealed.open_set(bundle, key)
             bundle_encrypted = True
             raw = json.loads(reader.read_bytes("workflow.json"))
             sealed_assets = {

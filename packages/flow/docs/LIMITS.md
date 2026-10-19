@@ -625,8 +625,13 @@ host hardening, storage encryption, backups, retention, access control,
 monitoring, effect-verifier integration, update validation, and disaster
 recovery.
 
-The repository supplies integrity manifests, optional bundle encryption,
-destination policy, local egress checks, and audit primitives. A content digest
+The repository supplies integrity manifests, optional encryption at rest for
+bundles, web recordings and the run directories of sealed bundles, destination
+policy, local egress checks, and audit primitives. Encryption at rest does not
+cover data in process memory, the target application's own storage, file names
+and sizes, desktop recordings, or commands outside the list in
+[`phi_at_rest.md`](phi_at_rest.md), which refuse sealed input; the key is a
+passphrase in the environment, not a KMS. A content digest
 proves byte identity, not publisher identity. A local hash chain is tamper
 evident against ordinary changes, not tamper proof against an administrator who
 can rewrite it. Local approvals record provenance but are not enterprise-IdP

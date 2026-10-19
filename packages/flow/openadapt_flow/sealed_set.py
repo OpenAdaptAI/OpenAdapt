@@ -118,9 +118,7 @@ BUNDLE_FILES: Final[tuple[FileKind, ...]] = (
     FileKind(
         "compile_notes.json", "phi", "gesture rewrites the compiler made, by step"
     ),
-    FileKind(
-        "param_hygiene.json", "phi", "dropped checks with masked matched text"
-    ),
+    FileKind("param_hygiene.json", "phi", "dropped checks with masked matched text"),
     FileKind(
         "param_proposals.json",
         "phi",
@@ -172,17 +170,13 @@ BUNDLE_FILES: Final[tuple[FileKind, ...]] = (
     ),
     FileKind("jit_draft.json", "phi", "draft state of a just-in-time program"),
     FileKind("admit.json", "phi", "authoring admission with the local login name"),
-    FileKind(
-        "openadapt-card.json", "phi", "operator-written name, purpose and inputs"
-    ),
+    FileKind("openadapt-card.json", "phi", "operator-written name, purpose and inputs"),
     FileKind(
         "repair/*",
         "phi",
         "repair candidates: old and new anchors with their screen text",
     ),
-    FileKind(
-        "qualification/*", "phi", "qualification cases, inputs and reports"
-    ),
+    FileKind("qualification/*", "phi", "qualification cases, inputs and reports"),
     FileKind("evidence/*", "phi", "run evidence a command copied into the bundle"),
 )
 
@@ -210,9 +204,7 @@ RECORDING_FILES: Final[tuple[FileKind, ...]] = (
         "phi",
         "system-of-record rows read before and after the recording",
     ),
-    FileKind(
-        "verify.proposed.yaml", "phi", "effects proposed from the record diff"
-    ),
+    FileKind("verify.proposed.yaml", "phi", "effects proposed from the record diff"),
     FileKind("check.json", "phi", "a demonstrated check: marked fields and reset"),
     FileKind(
         "record_check.proposed.yaml", "phi", "a proposed record check with values"
@@ -1023,7 +1015,9 @@ def append_line(path: Path | str, line: str) -> None:
         fh.write(line.rstrip("\n") + "\n")
 
 
-def unlink(path: Path | str, *, missing_ok: bool = False, key: Optional[str] = None) -> None:
+def unlink(
+    path: Path | str, *, missing_ok: bool = False, key: Optional[str] = None
+) -> None:
     root, rel = _locate(path)
     if root is None:
         Path(path).unlink(missing_ok=missing_ok)

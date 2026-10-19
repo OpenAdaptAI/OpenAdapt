@@ -356,7 +356,7 @@ def write_compile_notes(bundle_dir: Path, notes: list[dict[str, Any]]) -> None:
             },
             indent=2,
         )
-        + "\n"
+        + "\n",
     )
 
 

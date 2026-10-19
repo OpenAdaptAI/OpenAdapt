@@ -1836,9 +1836,7 @@ def compile_recording(
     bundle = Path(out_bundle_dir)
     sealed_input = _sealed.is_sealed(recording)
     sealed_output = _sealed.is_sealed(bundle)
-    if _sealed.active_writer(bundle) is not None or not (
-        sealed_input or sealed_output
-    ):
+    if _sealed.active_writer(bundle) is not None or not (sealed_input or sealed_output):
         return _compile_recording(recording, bundle, name=name, **kwargs)
     if sealed_input:
         # Opening the recording verifies its whole file set before compiling.
@@ -2307,8 +2305,8 @@ def _compile_recording(
                     )
                     if selected_target is not None:
                         anchor_region, anchor_ocr_text = selected_target
-                        _sealed.write_bytes(bundle / template_rel, 
-                            _crop_png(before_png, anchor_region)
+                        _sealed.write_bytes(
+                            bundle / template_rel, _crop_png(before_png, anchor_region)
                         )
                         if event.get("identifier_scope") == "dialog":
                             # The click landed on the control's own label.
@@ -2348,8 +2346,8 @@ def _compile_recording(
                 )
                 end_crop_region = _discriminative_crop_region(frame, drag_end)
                 end_template_rel = f"templates/{step_id}_drag_end.png"
-                _sealed.write_bytes(bundle / end_template_rel, 
-                    _crop_png(before_png, end_crop_region)
+                _sealed.write_bytes(
+                    bundle / end_template_rel, _crop_png(before_png, end_crop_region)
                 )
                 end_ocr_text = _best_crop_text(
                     ocr(before_png, region=end_crop_region), click_y=drag_end[1]
@@ -2575,8 +2573,8 @@ def _compile_recording(
                     raise ValueError(f"read event {i} has a label box but no frame")
                 lx, ly, lw, lh = (int(v) for v in label_region)
                 label_rel = f"templates/{step_id}.png"
-                _sealed.write_bytes(bundle / label_rel, 
-                    _crop_png(before_png, (lx, ly, lw, lh))
+                _sealed.write_bytes(
+                    bundle / label_rel, _crop_png(before_png, (lx, ly, lw, lh))
                 )
                 read_anchor = Anchor(
                     template=label_rel,
@@ -3204,7 +3202,8 @@ def _compile_recording(
                 drop_region,
                 _mask_value(drop_text),
             )
-        _sealed.write_text(bundle / "param_hygiene.json", 
+        _sealed.write_text(
+            bundle / "param_hygiene.json",
             json.dumps(
                 {
                     "note": (
@@ -3224,7 +3223,7 @@ def _compile_recording(
                     ],
                 },
                 indent=2,
-            )
+            ),
         )
     else:
         _sealed.unlink(bundle / "param_hygiene.json", missing_ok=True)
@@ -3265,7 +3264,8 @@ def _compile_recording(
                 }
             )
     if label_proposals:
-        _sealed.write_text(bundle / "param_proposals.json", 
+        _sealed.write_text(
+            bundle / "param_proposals.json",
             json.dumps(
                 {
                     "note": (
@@ -3279,7 +3279,7 @@ def _compile_recording(
                     "proposals": label_proposals,
                 },
                 indent=2,
-            )
+            ),
         )
         for flag in label_result.flagged:
             logger.warning(
@@ -3304,8 +3304,9 @@ def _compile_recording(
         ann = annotator if annotator is not None else AnthropicStepAnnotator()
         result = apply_annotations(workflow, ann)
         workflow = result.workflow
-        _sealed.write_text(bundle / "annotations.json", 
-            result.model_dump_json(indent=2, exclude={"workflow"})
+        _sealed.write_text(
+            bundle / "annotations.json",
+            result.model_dump_json(indent=2, exclude={"workflow"}),
         )
         for flag in result.flagged:
             logger.warning(
@@ -3354,7 +3355,8 @@ def _compile_recording(
         else:
             logger.info("no API step proposed: %s", "; ".join(_api_reasons))
         # Say what happened either way, so "no API step" is never silent.
-        _sealed.write_text(bundle / "api_proposal.json", 
+        _sealed.write_text(
+            bundle / "api_proposal.json",
             json.dumps(
                 {
                     "proposed": _api_step is not None,
@@ -3363,7 +3365,7 @@ def _compile_recording(
                 },
                 indent=2,
             )
-            + "\n"
+            + "\n",
         )
 
     # Bind each consequential click on an unlabeled control to the form whose
@@ -3405,7 +3407,7 @@ def _compile_recording(
             _layout.dump_bundle_fingerprints(
                 layout_fingerprints,
                 scale_landmarks={"salt": scale_salt, "steps": scale_landmarks},
-            )
+            ),
         )
 
     write_compile_notes(bundle, compile_notes)
