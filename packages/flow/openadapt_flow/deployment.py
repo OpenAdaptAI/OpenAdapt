@@ -47,6 +47,7 @@ from openadapt_flow.remote_frame_contract import RemoteFrameContract
 # with the exact ``{param: ...}`` / ``{literal: ...}`` form bundles use.
 from openadapt_flow.runtime.effects.auth import AuthRef, ResolvedSecrets
 from openadapt_flow.runtime.effects.effect import Region, ValueExpr
+from openadapt_flow.runtime.effects.fresh_session import FreshSessionSpec
 from openadapt_flow.runtime.effects.smart_auth import SmartBackendConfig
 from openadapt_flow.runtime.effects.ui_readback import UiReadbackSpec
 
@@ -305,7 +306,9 @@ class EffectsConfig(BaseModel):
     #: ``ui_readback`` reads the saved record back through the application's
     #: own record page in a separate, freshly signed-in, read-only browser
     #: session (tier 2, ``INDEPENDENT_SESSION``): independent of the session
-    #: that typed, but not a system-of-record read.
+    #: that typed, but not a system-of-record read. ``fresh_session`` does the
+    #: same for a desktop app (a relaunched process) or RDP (a second session
+    #: with separate credentials), by replaying the effect's learned reopen.
     kind: str = "none"
 
     #: Reviewed alternatives for the same effect contract.  This is useful
@@ -350,6 +353,11 @@ class EffectsConfig(BaseModel):
     #: ``docs/EFFECT_KIT.md``. Required for ``kind: ui_readback``; ignored
     #: otherwise.
     ui_readback: Optional[UiReadbackSpec] = None
+
+    # -- fresh_session (desktop relaunch or a second RDP session) -------------
+    #: Required for ``kind: fresh_session``; ignored otherwise. See
+    #: ``runtime/effects/fresh_session.py`` and ``docs/READBACK_LADDER.md``.
+    fresh_session: Optional[FreshSessionSpec] = None
 
     # -- rest (JSON REST system of record, e.g. MockMed /api/db) -------------
     base_url: Optional[str] = None
@@ -1542,11 +1550,11 @@ def _effect_verifier_config_identity(cfg: EffectsConfig, verifier: Any) -> str:
     config = _identity_config_dump(cfg)
     # Fields added after identities were first issued enter the digest only
     # when they are set, so every existing verifier keeps its identity.
-    for added in ("ui_readback", "smart_backend"):
+    for added in ("ui_readback", "smart_backend", "fresh_session"):
         if config.get(added) is None:
             config.pop(added, None)
     for candidate in config.get("candidates") or []:
-        for added in ("ui_readback", "smart_backend"):
+        for added in ("ui_readback", "smart_backend", "fresh_session"):
             if isinstance(candidate, dict) and candidate.get(added) is None:
                 candidate.pop(added, None)
     # The same rule one level down: ``ui_readback.reference`` came later.
@@ -1605,6 +1613,17 @@ def _build_effect_verifier_unredacted(
             timeout_s=cfg.timeout_s,
             poll_interval_s=cfg.poll_interval_s,
         )
+
+    if kind in ("fresh_session", "fresh-session"):
+        if cfg.fresh_session is None:
+            raise ValueError(
+                "effects.kind 'fresh_session' requires an effects.fresh_session section"
+            )
+        from openadapt_flow.runtime.effects.fresh_session import (
+            build_fresh_session_verifier,
+        )
+
+        return build_fresh_session_verifier(cfg.fresh_session)
 
     if kind == "surfaces":
         from openadapt_flow.runtime.effects.surfaces import SurfaceRoutedVerifier
@@ -1823,7 +1842,8 @@ def _build_effect_verifier_unredacted(
 
     raise ValueError(
         f"unknown effects.kind {cfg.kind!r} "
-        "(expected: none | onscreen | ui_readback | rest | graphql | fhir | sql | "
+        "(expected: none | onscreen | ui_readback | fresh_session | rest | graphql | "
+        "fhir | sql | "
         "file | email | document | document-hash, or a registered plugin kind)"
     )
 
