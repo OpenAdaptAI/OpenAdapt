@@ -12,7 +12,7 @@
 
 ## What is bound to required CI vs. being validated
 
-- **Bound to required CI pass evidence (13):** `web-supported`, `deterministic-zero-model-replay`, `effect-verification-silent-writes`, `ui-readback-separate-session`, `identity-gate-halt-armed`, `identifier-crop-compile-emission`, `halt-teach-promote`, `typed-business-decisions-supported`, `reviewed-judgment-cases-supported`, `qualified-remote-decision-v2-supported`, `mockmed-benchmark-ci-reproducible`, `substrate-runtime-validation-supported`, `compose-recorded-bundles`
+- **Bound to required CI pass evidence (14):** `web-supported`, `deterministic-zero-model-replay`, `effect-verification-silent-writes`, `record-check-from-app-reads`, `ui-readback-separate-session`, `identity-gate-halt-armed`, `identifier-crop-compile-emission`, `halt-teach-promote`, `typed-business-decisions-supported`, `reviewed-judgment-cases-supported`, `qualified-remote-decision-v2-supported`, `mockmed-benchmark-ci-reproducible`, `substrate-runtime-validation-supported`, `compose-recorded-bundles`
 - **Being validated — opt-in / infra-gated or field (8):** `effect-verifier-kit`, `windows-desktop-validating`, `macos-native-validating`, `linux-native-validating`, `rdp-validating`, `desktop-recording-validating`, `citrix-pixel-validating`, `openemr-field-benchmark`
 - **Roadmap / research (1):** `win32-window-replay-roadmap`
 
@@ -110,6 +110,28 @@
 
 - CONTRACT-PROVEN, not live-proven: the SQL verifier is exercised against sqlite fixtures (no production MariaDB/Postgres), the SFTP arrival path against a fake transport (no real SFTP server), and the worked-example configs are templates — only the FHIR substrate has an additional opt-in live-OpenEMR test. Per-verifier claims are exactly as strong as these tests.
 
+### `record-check-from-app-reads` — supported — bound to required CI pass evidence
+
+> scaffold-verifier builds a record check from the reads the app made after the save (the recording's network capture, a SQLite database read path, or a reviewed verifier section), binds the recorded values to run parameters, guards every other table when a database path is given (no row added, changed or removed), and tests the check against injected bad writes before anyone reviews it. A check that misses one is written as a draft with the misses listed. Every effect stays unconfirmed until a person removes the flag.
+
+- Surfaces: docs
+- Strongest evidence strength: **supported** (tier is `supported`)
+
+| Backing evidence | Kind | Gating / CI stage | Strength | Proves |
+|---|---|---|---|---|
+| `tests/test_record_check_synthesis.py` | test | ci (required PR gate (test)) | supported | On the benchmark/effect_e2e record service, a check built from a database read path catches every injected bad write end to end through the real replayer (including the stray billing write) and passes the clean save. |
+| `tests/test_record_check_synthesis.py` | test | ci (required PR gate (test)) | supported | A check built from one REST read misses the stray billing write, both in the recorded-state fault test and end to end, and is written as a draft with that miss listed. |
+| `tests/test_record_check_synthesis.py` | test | ci (required PR gate (test)) | supported | On the MockMed --break-it fault server, the check built from the app's /api/db read catches every fault end to end once a person declares the read complete, and stays a draft until then. |
+| `tests/test_record_check_synthesis.py` | test | ci (required PR gate (test)) | supported | On the OpenEMR-shaped FHIR R4 fake, the check found from the Observation search refutes partial, duplicate, phantom, wrong-patient and lost-update faults and confirms the clean save. |
+| `tests/test_record_check_synthesis.py` | test | ci (required PR gate (test)) | supported | The generated SQL reads, run against a real SQLite file, refute a save that also changed or deleted a row in another table. |
+| `tests/test_record_check_synthesis.py` | test | ci (required PR gate (test)) | supported | verify-run refuses the proposed check until every needs_operator_confirmation line is removed. |
+| `docs/EFFECT_KIT.md` | doc | artifact (doc/benchmark) | roadmap | The operator guide: inputs, outputs, the fault classes, and what the proof does not cover. |
+
+**Caveats (honest limits):**
+
+- Proven on synthetic fixtures only (MockMed, the effect_e2e SQLite record service, an OpenEMR-shaped FHIR fake). A check built from API reads alone cannot see writes to tables it does not read, so it stays a draft unless a database path covers them or a person declares the read complete. The fault classes are the effect_e2e taxonomy, not a measured field incident rate.
+- Saves that update an existing record are not handled yet: the check expects one new record. The read's credential is the operator's job; the recording's reads used the browser's sign-in.
+
 ### `ui-readback-separate-session` — supported — bound to required CI pass evidence
 
 > With no API or database access, a save can be checked through the application's own record page: a separate browser with a new, empty context and its own sign-in opens the record by identifier, confirms the page shows that identifier, reads the saved fields from the page structure, and judges them with the shared effect judge. After sign-in the session refuses every request that is not a read. The check declares tier 2 (a separate session) and is never labeled a system-of-record read.
@@ -144,7 +166,7 @@
 
 **Caveats (honest limits):**
 
-- Identity verification covers ONLY armed steps. Real bundles arm a MINORITY of clicks (4 of 12 on a recent live OpenEMR bundle); an UNARMED click proceeds with no identity check whatsoever. Coverage is an auditable per-step metric, but disclosure does not close the gap.
+- Identity verification covers ONLY armed steps. Real bundles arm a MINORITY of clicks (4 of 12 on a recent live OpenEMR bundle); an UNARMED click proceeds with no identity check whatsoever. Coverage is an auditable per-step metric, but disclosure does not close the gap. `scaffold-verifier --bundle` reports coverage before and after evidence from the recording's DOM / accessibility text at each unarmed click; it proposes only evidence the runtime checks on that surface, and a person applies it.
 
 ### `identifier-crop-compile-emission` — supported — bound to required CI pass evidence
 

@@ -93,7 +93,7 @@ def _sha256_hex(value: Any) -> str:
 
 def receipt_sha256(receipt: Mapping[str, Any]) -> str:
     """Same hash the Seal signs: the receipt without ``seal_signature``."""
-    from openadapt_flow.contracts.seal import receipt_sha256 as _types_receipt_sha256
+    from openadapt_types.seal import receipt_sha256 as _types_receipt_sha256
 
     return str(_types_receipt_sha256(receipt))
 
@@ -262,7 +262,7 @@ class LocalCountersignIssuer:
         )
 
     def registry_entry(self) -> dict[str, str]:
-        from openadapt_flow.contracts.seal import seal_key_id
+        from openadapt_types.seal import seal_key_id
 
         raw = self._public_raw()
         return {
@@ -272,13 +272,13 @@ class LocalCountersignIssuer:
         }
 
     def countersign(self, attestation: Mapping[str, Any]) -> dict[str, Any]:
-        from openadapt_flow.contracts.seal import (
+        from openadapt_types.seal import (
             SEAL_ISSUER,
             SEAL_SIGNATURE_SCHEMA,
             seal_key_id,
             signing_payload,
         )
-        from openadapt_flow.contracts.seal import (
+        from openadapt_types.seal import (
             receipt_sha256 as types_sha,
         )
 
@@ -494,6 +494,9 @@ class CountersignReport:
     effect_verdict: Optional[str]
     outcome: Optional[str]
     oracle_tier: Optional[int]
+    #: The check level the receipt states, or None on a receipt
+    #: issued before ``checked_how`` existed.
+    checked_how: Optional[str] = None
     seal: dict[str, Any] = field(default_factory=dict)
     evidence: dict[str, Any] = field(default_factory=dict)
     statement: dict[str, Any] = field(default_factory=dict)
@@ -585,7 +588,7 @@ def verify_countersigned(
     are TSA certificates the holder pinned. Certificates carried inside the
     document are never trusted on their own.
     """
-    from openadapt_flow.contracts.seal import parse_key_registry, verify_seal_signature
+    from openadapt_types.seal import parse_key_registry, verify_seal_signature
 
     try:
         located = locate(document)
@@ -616,6 +619,7 @@ def verify_countersigned(
         effect_verdict=receipt.get("effect_verdict"),
         outcome=receipt.get("outcome"),
         oracle_tier=receipt.get("oracle_tier"),
+        checked_how=receipt.get("checked_how"),
         accept_non_flow=accept_non_flow,
     )
     if schema not in (EXECUTE_RECEIPT_SCHEMA, EFFECT_RECEIPT_SCHEMA):
@@ -629,7 +633,15 @@ def verify_countersigned(
         )
     ):
         report.problems.append("verified_without_independent_readback")
-    # Seal signature: openadapt_flow.contracts.seal, unchanged.
+    if schema == EFFECT_RECEIPT_SCHEMA and "checked_how" in receipt:
+        from openadapt_types.approval import CHECKED_HOW_TIER
+
+        stated_tier = {str(k): v for k, v in CHECKED_HOW_TIER.items()}.get(
+            str(receipt.get("checked_how"))
+        )
+        if stated_tier is None or stated_tier != receipt.get("verification_tier"):
+            report.problems.append("checked_how_mismatch")
+    # Seal signature: openadapt_types.seal, unchanged.
     try:
         keys = parse_key_registry(list(registry))
     except (ValueError, TypeError, KeyError):
@@ -663,6 +675,8 @@ def verify_countersigned(
                 != receipt.get("executor_kind")
                 or (ev.get("readback") or {}).get("verification_tier")
                 != receipt.get("verification_tier")
+                or (ev.get("readback") or {}).get("checked_how")
+                != receipt.get("checked_how")
             )
         report.evidence = {
             "status": "evidence_mismatch" if mismatch else "bound",
@@ -785,7 +799,7 @@ def verify_countersigned(
         if not isinstance(attestation, Mapping) or attestation != expected_att:
             report.countersignature = {"status": "attestation_mismatch"}
         else:
-            from openadapt_flow.contracts.seal import receipt_sha256 as types_sha
+            from openadapt_types.seal import receipt_sha256 as types_sha
 
             sig = cs.get("seal_signature")
             result = verify_seal_signature(sig, types_sha(attestation), keys)

@@ -1,7 +1,7 @@
 """Offline Seals: sign a run, record or file on this machine with a local key.
 
 A Seal says who stated what about one run. The Cloud Seal
-(``openadapt.seal-signature/v1``, see :mod:`openadapt_flow.contracts.seal`) is
+(``openadapt.seal-signature/v1``, see :mod:`openadapt_types.seal`) is
 issued by OpenAdapt Cloud, which needs a network connection. An offline Seal
 (``openadapt.local-seal/v1``) is issued by a key that never leaves the
 customer's machine, so a site with no outbound traffic still gets a signed
@@ -45,14 +45,13 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Final, Literal, Mapping, Optional, Sequence
 
-from pydantic import BaseModel, ConfigDict, Field, StrictStr
-
-from openadapt_flow.contracts.seal import (
+from openadapt_types.seal import (
     SealPublicKey,
     canonical_json,
     parse_key_registry,
     seal_key_id,
 )
+from pydantic import BaseModel, ConfigDict, Field, StrictStr
 
 LOCAL_SEAL_SCHEMA: Final = "openadapt.local-seal/v1"
 LOCAL_SEAL_ISSUER: Final = "local"

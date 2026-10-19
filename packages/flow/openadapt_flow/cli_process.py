@@ -323,7 +323,7 @@ def bind_process_child_run(
                 "(or --execute-environment-id)"
             )
         try:
-            from openadapt_flow.contracts.execute_client import ExecuteClient
+            from openadapt_types.execute_client import ExecuteClient
         except ImportError as exc:
             raise SystemExit(
                 "process Cloud Execute requires openadapt-types "
