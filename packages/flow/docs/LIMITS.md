@@ -163,6 +163,30 @@ halts with a named reason when the confirmation is missing
 before and after numbers are in
 [`benchmark/known_ids/KNOWN_IDS.md`](../benchmark/known_ids/KNOWN_IDS.md).
 
+Before a step stops on a look-alike identifier, the replayer takes extra looks
+that change nothing
+([`runtime/identity_looks.py`](../openadapt_flow/runtime/identity_looks.py)):
+the same read on two fresh screenshots, the 2x re-read, the known-ID list when
+one is configured, and, where the surface allows it, a select-and-copy of the
+identifier's text box (`runtime.identity_copy_look`). OCR looks can't settle
+the record on their own, because a look-alike twin can read the same on every
+frame and at every size. Only two looks can: the known-ID list, and a copied
+identifier that equals a run parameter in the identity band. A look that names
+another record stops the run. Each look is recorded on the step's identity
+check.
+
+The copy look has limits. It needs a surface where selecting the identifier
+and copying it changes nothing, and a clipboard that reaches the machine Flow
+runs on (RDP or Citrix clipboard redirection). It drags across only the one
+text box that holds the identifier, and the run stops if the screen changes
+anywhere else during the look. A canvas with no selectable text has no copy
+look. A recording's own identifier is OCR text and can be a misread (the RDP
+kiosk recorded `A1001` as `Alo01`), so in a workflow that always opens the
+recorded record, the copy can stop a run but never confirm one. It confirms
+only a record chosen by a run parameter. Governed and qualification runs never
+take it. The check just before the click takes no input; it reuses the copy
+only when the identifier's pixels are unchanged since the look.
+
 Permissive `replay` may proceed on an unreadable reversible target and reports
 that condition. Governed `run` requires an affirmative live verdict for every
 identity-required admitted step; mismatch, unreadable, or abstain halts before
