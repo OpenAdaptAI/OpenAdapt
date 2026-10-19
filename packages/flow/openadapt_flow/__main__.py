@@ -1276,7 +1276,11 @@ def _recorded_surface(recording: Path) -> Optional[str]:
     import json
 
     try:
-        surface = json.loads((recording / "meta.json").read_text()).get("surface")
+        from openadapt_flow import sealed_set
+
+        surface = json.loads(sealed_set.read_text(recording / "meta.json")).get(
+            "surface"
+        )
     except (OSError, ValueError, AttributeError):
         return None
     return str(surface) if surface else None

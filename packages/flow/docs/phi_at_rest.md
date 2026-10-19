@@ -110,7 +110,7 @@ of truth; a test keeps this table in step with them.
 | `meta.json` | App URL, parameter example values, window title, identifier region | Encrypted |
 | `network.jsonl` | Request URLs, form fields and bodies, response bodies (`--capture-network`) | Encrypted |
 | `sor_snapshots.json`, `verify.proposed.yaml` | System-of-record rows read by `record --verify`, and the effects proposed from them | Encrypted |
-| `check.json`, `record_check.proposed.yaml`, `record_check.proof.json`, `identity.proposed.json`, `effect_contract.yaml` | Checks and proposals derived from the recording | Encrypted |
+| `check.json`, `check.proposed.json`, `readback.proposed.yaml`, `record_check.proposed.yaml`, `record_check.proof.json`, `identity.proposed.json`, `effect_contract.yaml` | Checks and proposals derived from the recording | Encrypted |
 | `distill.json`, `.openadapt-approval.json`, `.openadapt-sanitization.json` | Derived reports and approvals | Encrypted |
 | Anything else | Unknown | Refused |
 

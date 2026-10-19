@@ -207,6 +207,16 @@ RECORDING_FILES: Final[tuple[FileKind, ...]] = (
     FileKind("verify.proposed.yaml", "phi", "effects proposed from the record diff"),
     FileKind("check.json", "phi", "a demonstrated check: marked fields and reset"),
     FileKind(
+        "check.proposed.json",
+        "phi",
+        "a check proposed from a recorded look-up, with screen text and regions",
+    ),
+    FileKind(
+        "readback.proposed.yaml",
+        "phi",
+        "a desktop read-back proposed from a recorded look-up",
+    ),
+    FileKind(
         "record_check.proposed.yaml", "phi", "a proposed record check with values"
     ),
     FileKind("record_check.proof.json", "phi", "record-check fault proof"),
