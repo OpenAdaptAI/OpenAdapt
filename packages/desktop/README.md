@@ -1,8 +1,8 @@
 # OpenAdapt Desktop
 
-[![Tests](https://github.com/OpenAdaptAI/openadapt-desktop/actions/workflows/test.yml/badge.svg)](https://github.com/OpenAdaptAI/openadapt-desktop/actions/workflows/test.yml)
+[![Tests](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml/badge.svg?branch=main)](https://github.com/OpenAdaptAI/OpenAdapt/actions/workflows/packages.yml)
 [![Python 3.11 | 3.12](https://img.shields.io/badge/python-3.11%20%7C%203.12-blue.svg)](https://www.python.org/downloads/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/LICENSE)
 
 OpenAdapt Desktop automates repeated data entry in the apps your team already
 uses: web apps, electronic medical records (EMRs), insurance portals, desktop
@@ -54,8 +54,8 @@ the [Tauri prerequisites](https://v2.tauri.app/start/prerequisites/) for your
 operating system. Then:
 
 ```bash
-git clone https://github.com/OpenAdaptAI/openadapt-desktop.git
-cd openadapt-desktop
+git clone https://github.com/OpenAdaptAI/OpenAdapt.git
+cd OpenAdapt/packages/desktop
 uv sync --python 3.12 --extra dev --extra build
 npm ci
 uv run python scripts/dev_sidecar.py
@@ -79,7 +79,7 @@ takes several minutes.
    record.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/OpenAdaptAI/openadapt-desktop/main/docs/assets/operator/tasks.png" width="860" alt="OpenAdapt Desktop Tasks screen with synthetic data: three tasks, each with one status and one next step">
+  <img src="https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/packages/desktop/docs/assets/operator/tasks.png" width="860" alt="OpenAdapt Desktop Tasks screen with synthetic data: three tasks, each with one status and one next step">
 </p>
 
 The app has three main tabs. **Tasks** shows each task's next step.
@@ -89,8 +89,8 @@ wrong-record saves it prevented, and an estimate of time saved that shows its
 own baseline. Settings and the advanced tools are behind the gear menu.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/OpenAdaptAI/openadapt-desktop/main/docs/assets/operator/needs-you.png" width="430" alt="Needs you with synthetic data: OpenAdapt was given member M-4821, the screen showed M-4822, and it stopped before saving">
-  <img src="https://raw.githubusercontent.com/OpenAdaptAI/openadapt-desktop/main/docs/assets/operator/results.png" width="430" alt="Results with synthetic data: items done and checked, items that needed a person, one wrong-record save prevented, and a labeled time estimate">
+  <img src="https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/packages/desktop/docs/assets/operator/needs-you.png" width="430" alt="Needs you with synthetic data: OpenAdapt was given member M-4821, the screen showed M-4822, and it stopped before saving">
+  <img src="https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/packages/desktop/docs/assets/operator/results.png" width="430" alt="Results with synthetic data: items done and checked, items that needed a person, one wrong-record save prevented, and a labeled time estimate">
 </p>
 
 Each item ends with one of these results, taken from the engine's outcome for
@@ -164,10 +164,10 @@ running the task, which checks the live app again before it acts. If that check
 fails, the run stays paused.
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/OpenAdaptAI/openadapt-desktop/main/docs/assets/mobile-decision/save-dark.png" width="260" alt="OpenAdapt Desktop phone card with synthetic data: Save this?, the field values it will write, and Don't save and Save buttons">
+  <img src="https://raw.githubusercontent.com/OpenAdaptAI/OpenAdapt/main/packages/desktop/docs/assets/mobile-decision/save-dark.png" width="260" alt="OpenAdapt Desktop phone card with synthetic data: Save this?, the field values it will write, and Don't save and Save buttons">
 </p>
 
-[docs/DECISION_PORTAL.md](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/docs/DECISION_PORTAL.md)
+[docs/DECISION_PORTAL.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/docs/DECISION_PORTAL.md)
 covers pairing, what the phone can see, and how a decision is applied.
 
 ## Shadow mode
@@ -182,7 +182,7 @@ everything and turn off** erases everything it kept in one click. OpenAdapt
 never sends shadow mode data off your computer, though backup, sync, and
 security software on the computer can still copy local files.
 A draft never runs; a person still records the task and admits the automation.
-[docs/SHADOW_MODE.md](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/docs/SHADOW_MODE.md)
+[docs/SHADOW_MODE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/docs/SHADOW_MODE.md)
 has the details.
 
 ## Engine command line
@@ -258,7 +258,7 @@ scripts/            Build, release, screenshot, and development scripts
 tests/              Python unit and end-to-end tests
 ```
 
-[DESIGN.md](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/DESIGN.md)
+[DESIGN.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/DESIGN.md)
 is a historical design record. Where it disagrees with this file or with
 openadapt-flow, this file and openadapt-flow are current.
 
@@ -276,17 +276,17 @@ openadapt-flow, this file and openadapt-flow are current.
 
 Release status, signing, CI evidence, and data handling for security and IT
 reviewers are in
-[docs/COMPLIANCE.md](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/docs/COMPLIANCE.md).
+[docs/COMPLIANCE.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/docs/COMPLIANCE.md).
 
 ## More documentation
 
-- [The operator screens](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/docs/OPERATOR_SCREENS.md):
+- [The operator screens](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/docs/OPERATOR_SCREENS.md):
   what each screen calls in the engine and the safety rules it keeps
-- [Implementation status](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/docs/IMPLEMENTATION_STATUS.md),
+- [Implementation status](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/docs/IMPLEMENTATION_STATUS.md),
   area by area
-- [Which release to download](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/RELEASES.md)
+- [Which release to download](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/RELEASES.md)
 - [OpenAdapt documentation](https://docs.openadapt.ai)
 
 ## License
 
-[MIT](https://github.com/OpenAdaptAI/openadapt-desktop/blob/main/LICENSE)
+[MIT](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/packages/desktop/LICENSE)

@@ -469,7 +469,8 @@ def test_export_redaction_carries_no_fixture_value_or_digest(tmp_path, core):
     for change in candidate.binding_changes:
         for digest in (change.old_sha256, change.new_sha256):
             assert digest is None or digest not in text
-    for local in ("step-1", str(tmp_path).lower(), "templates/", "png"):
+    # ".png", not "png": a random base64 key or signature can contain "png".
+    for local in ("step-1", str(tmp_path).lower(), "templates/", ".png"):
         assert local not in text
     # The bundle digests travel to the hub only, never inside the patch.
     patch_text = contribution.payload.patch.model_dump_json()
