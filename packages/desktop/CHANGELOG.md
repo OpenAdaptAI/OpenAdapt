@@ -1,6 +1,20 @@
 # CHANGELOG
 
 
+## v0.21.0 (2026-10-18)
+
+### Features
+
+- **approval**: show who decided each save
+
+### Bug Fixes
+
+- **approvers**: the phone route is the decision portal, not a Cloud relay
+- **desktop**: release only on a commit whose desktop jobs passed
+- **desktop**: price an S3 endpoint as R2 by its host; scope JS/Rust CodeQL
+
+
+
 ## v0.20.0 (2026-10-18)
 
 ### Documentation
