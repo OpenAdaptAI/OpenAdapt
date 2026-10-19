@@ -137,6 +137,10 @@ class KnownIdList:
         """Listed identifiers OCR could read as ``token``."""
         return self._classes.get(lookalike_class(token), ())
 
+    def members_of_class(self, key: str) -> tuple[str, ...]:
+        """Listed identifiers in one look-alike class (a :func:`lookalike_class` key)."""
+        return self._classes.get(key, ())
+
     @property
     def size(self) -> int:
         return sum(len(v) for v in self._classes.values())

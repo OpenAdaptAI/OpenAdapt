@@ -86,6 +86,7 @@ from openadapt_flow.policy import (
 from openadapt_flow.runtime.authorization import (
     GovernedRunAuthorization,
     UnverifiedWriteApproval,
+    admitted_api_steps,
     interstitial_declarations_digest,
     runtime_inputs_digest,
 )
@@ -680,11 +681,24 @@ def _gate_identity(
             True,
             f"{total}/{total} entity-sensitive/consequential action(s) identity-armed",
         )
+    api_steps = [
+        s.id
+        for s in unarmed
+        if s.api_binding is not None
+        and s.api_binding.kind == "web_form"
+        and not s.api_binding.identity
+    ]
+    hint = (
+        f"; the API step on {', '.join(api_steps)} names no right-record "
+        "parameter (admit it with openadapt-flow api admit --identity KEY=PARAM)"
+        if api_steps
+        else ""
+    )
     return _result(
         GATE_IDENTITY,
         False,
         f"{len(unarmed)}/{total} entity-sensitive/consequential action(s) are "
-        "UNARMED -- would act with no verified target identity",
+        f"UNARMED -- would act with no verified target identity{hint}",
         [s.id for s in unarmed],
     )
 
@@ -1112,6 +1126,7 @@ def build_runtime_authorization(
         required_identity_step_ids=tuple(report.required_identity_step_ids),
         unverified_write_approvals=tuple(approvals),
         approval_source=approval_source,
+        api_steps=admitted_api_steps(workflow),
     )
 
 
