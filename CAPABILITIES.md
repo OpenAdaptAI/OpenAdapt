@@ -65,7 +65,9 @@ shipping in the next release; a pull request number means it is being merged.
    without saving, is landing.
 9. **Is a safety layer underneath any agent.** An agent's MCP calls, a guarded
    save around any agent's write
-   ([#1258](https://github.com/OpenAdaptAI/OpenAdapt/pull/1258)), `verify-run`
+   ([#1258](https://github.com/OpenAdaptAI/OpenAdapt/pull/1258)), a guard for
+   an agent you already run that holds its browser's saves with no change to
+   the agent (PR_GUARD_LINK), `verify-run`
    to judge any executor's write from the system of record, and Agent Skills and
    a CLI for coding agents. Released except where a PR is named.
 10. **Runs locally and keeps data private.** Healthy runs make no model calls
@@ -211,6 +213,7 @@ improvising or retrying when something is off.
 | Admit a draft by a person, an admitter key, or an agent under a person-signed policy, including self-admission when the policy allows it | Released | Unit tests | [JIT_ADMISSION.md](packages/flow/docs/JIT_ADMISSION.md) |
 | MCP server: your agent decides what to enter, OpenAdapt makes the entry and checks it | Released | Synthetic sandbox | `openadapt-agent`, [packages/agent](packages/agent/README.md) |
 | Teach over MCP: an agent does a new task once through OpenAdapt; the run is read back, compiled and admitted (a person confirms the record check; the agent admits only under a person-signed policy), and becomes a tool it calls with no model calls. Web, and Windows, macOS, Linux, RDP and Citrix with a person approving each save | In review ([#1335](https://github.com/OpenAdaptAI/OpenAdapt/pull/1335)) | Synthetic (MockMed over MCP, and through the real RDP and Citrix backends) | `openadapt-agent serve --teach`, [packages/agent](packages/agent/README.md#teach-a-new-workflow-from-your-agent) |
+| Guard an agent you already run: attach to its own Chromium over CDP (one added line), hold each save until the record on screen is the one the task names, block it and tell the agent why when it isn't, read the save back; a run that reads back correctly becomes a draft program with a record check from scaffold-verifier, which a person confirms and admits, then a `taught_*` tool with no model calls. `--observe-only` never blocks | In review ([PR_GUARD](https://github.com/OpenAdaptAI/OpenAdapt/pull/PR_GUARD), stacked on [#1335](https://github.com/OpenAdaptAI/OpenAdapt/pull/1335)) | Synthetic (MockMed, scripted Playwright agent, `effect_e2e` faults) | `openadapt-flow guard`, [GUARD_AN_AGENT.md](packages/flow/docs/GUARD_AN_AGENT.md) |
 | Compile an agent's first verified run from a prompt (`compile-agent`), and a code-as-action authoring agent | In review ([#1277](https://github.com/OpenAdaptAI/OpenAdapt/pull/1277), [#1305](https://github.com/OpenAdaptAI/OpenAdapt/pull/1305)); the agent harness behind it runs on every backend, on main ([#1283](https://github.com/OpenAdaptAI/OpenAdapt/pull/1283)) | Synthetic | `compile-agent` |
 | Score harness optimizers (Harness², Meta-Harness) on GUI tasks with the record read-back as the reward, with full trace export | On main ([#1299](https://github.com/OpenAdaptAI/OpenAdapt/pull/1299), [#1300](https://github.com/OpenAdaptAI/OpenAdapt/pull/1300), [#1301](https://github.com/OpenAdaptAI/OpenAdapt/pull/1301)) | Synthetic (scripted proposer) | `integrations/harness2/` |
 | One scoreboard comparing the agent alone with OpenAdapt across tasks (correctness by read-back, cost, time, items per hour) | In progress ([#1303](https://github.com/OpenAdaptAI/OpenAdapt/pull/1303)) | Synthetic and local OpenEMR and openIMIS test copies | `benchmark/scoreboard/` |
@@ -253,6 +256,16 @@ fails when a command is added without being listed here.
   took 38.6 s, slower than the agent. Raw data and
   figures: [#1251](https://github.com/OpenAdaptAI/OpenAdapt/pull/1251)
   (`benchmark/openemr_referral_timing/` once merged).
+- **Guard an agent you already run, MockMed.** A scripted Playwright agent
+  in its own browser, 90 runs at a high shared load (median load average 29).
+  Of the 8 `effect_e2e` faults that leave a wrong record, the agent alone
+  reported 6 as saved; with the guard, the read-back caught 7 and 1 (a stray
+  write to a table the REST read doesn't cover) got through; the compiled
+  program caught all 8. The guard blocked the saves it can see: a save on the
+  wrong patient and a second submit. Same-load pairs: the guarded agent took
+  6.3 s (6 actions, each a model call for a real agent), the compiled tool
+  4.4 s with no model calls:
+  [GUARD_AN_AGENT.md](packages/flow/docs/GUARD_AN_AGENT.md#measured-on-mockmed).
 - **Fault test.** We injected 8 kinds of bad save, 9 runs each, alongside
   clean runs: 72 runs left a wrong record behind. A check that trusts the screen's "Saved" banner reported 54 of those
   as success; reading the record back over the app's REST API missed 9; the

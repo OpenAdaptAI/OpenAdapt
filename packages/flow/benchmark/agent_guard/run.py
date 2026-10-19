@@ -190,7 +190,12 @@ def setup_lines(files: dict[str, Path]) -> dict[str, int]:
 
     agent_src = (HERE / "agent.py").read_text().splitlines()
     return {
-        "agent_code": sum(1 for line in agent_src if "# OpenAdapt guard" in line),
+        # The one line the agent's browser launch changes (marked in agent.py).
+        "agent_code": sum(
+            1
+            for line in agent_src
+            if "# OpenAdapt guard" in line and "--remote-debugging-port" in line
+        ),
         "guard_yaml": count(files["guard"]),
         "verify_yaml": count(files["verify"]),
         "task_json_per_task": count(files["task"]),
@@ -324,7 +329,9 @@ def run_one(
             guard.wait_attached()
         started = time.monotonic()
         acted = agent.add_triage_note(patient=scenario.patient, note=scenario.note)
-        result = guard.finish(wait_s=8.0) if guard is not None else {}
+        # A handed-over run compiles the draft after the read-back.
+        wait_s = 180.0 if teach else 8.0
+        result = guard.finish(wait_s=wait_s) if guard is not None else {}
         run1_s = round(time.monotonic() - started, 3)
     finally:
         agent.close()
@@ -415,8 +422,21 @@ def _person_admits(task_dir: Path) -> dict[str, Any]:
     return result
 
 
-def run2(app: App, task_dir: Path, verify: Path, teach_dir: Path, runs: Path) -> dict:
-    """A person confirms and admits; then the program is an MCP tool."""
+def run2(
+    app: App,
+    task_dir: Path,
+    verify: Path,
+    teach_dir: Path,
+    runs: Path,
+    *,
+    pairs: int = 0,
+    run1: Optional[Any] = None,
+) -> dict:
+    """A person confirms and admits; then the program is an MCP tool.
+
+    With ``pairs``, ``run1()`` (a guarded run 1 of ``ok``) and one tool call
+    alternate that many times, so the two are timed under the same load.
+    """
 
     import anyio
 
@@ -508,8 +528,35 @@ def run2(app: App, task_dir: Path, verify: Path, teach_dir: Path, runs: Path) ->
                                 "outcome": result,
                             }
                         )
+                    for k in range(pairs):
+                        assert run1 is not None
+                        first = await anyio.to_thread.run_sync(run1)
+                        _post(app.base_url, "/api/reset", {"fault": None})
+                        load = round(os.getloadavg()[0], 2)
+                        t0 = time.monotonic()
+                        res = await session.call_tool(
+                            tool,
+                            {
+                                "inputs": {"note": NOTE},
+                                "request_id": f"bench-pair-{k:04d}",
+                            },
+                        )
+                        payload = json.loads(res.content[0].text)
+                        paired.append(
+                            {
+                                "run1_agent_seconds": first["agent_seconds"],
+                                "run1_outcome": first["outcome"],
+                                "run1_load_avg_1m": first["load_avg_1m"],
+                                "run2_seconds": round(time.monotonic() - t0, 3),
+                                "run2_outcome": payload.get("outcome"),
+                                "run2_model_calls": payload.get("model_calls"),
+                                "run2_load_avg_1m": load,
+                            }
+                        )
+                        print(f"pair {k}: {paired[-1]}", flush=True)
                 tasks.cancel_scope.cancel()
 
+    paired: list[dict[str, Any]] = []
     anyio.run(scenario)
     _post(app.base_url, "/api/reset", {"fault": None})
     return {
@@ -518,13 +565,25 @@ def run2(app: App, task_dir: Path, verify: Path, teach_dir: Path, runs: Path) ->
         "proposed": proposed,
         "admission": admitted.get("admission"),
         "runs": rows,
+        "paired": paired,
     }
 
 
 # -- the whole study ---------------------------------------------------------------
 
 
-def run_benchmark(n: int, think_s: float, arms: tuple[str, ...], port: int) -> dict:
+def run_benchmark(
+    n: int,
+    think_s: float,
+    arms: tuple[str, ...],
+    port: int,
+    *,
+    pairs: int = 0,
+    previous: Optional[dict[str, Any]] = None,
+) -> dict:
+    """The matrix, then run 2. With ``previous`` (an earlier results.json),
+    the matrix is kept from it and only run 2 (and the pairs) run again."""
+
     results: dict[str, Any] = {
         "schema": "openadapt.agent-guard-benchmark/v1",
         "date": time.strftime("%Y-%m-%d"),
@@ -548,34 +607,62 @@ def run_benchmark(n: int, think_s: float, arms: tuple[str, ...], port: int) -> d
             }
             rows: list[dict[str, Any]] = []
             handoff: Optional[dict[str, Any]] = None
-            for trial in range(n):
-                for scenario in SCENARIOS:
-                    for arm in arms:
-                        port += 1
-                        teach = (
-                            handoff is None and arm == "guard" and scenario.name == "ok"
-                        )
-                        row = run_one(
-                            app,
-                            scenario,
-                            arm,
-                            work / "runs" / f"{scenario.name}-{arm}-{trial}",
-                            port,
-                            think_s=think_s,
-                            files=files if teach else plain,
-                            teach=teach,
-                        )
-                        row["trial"] = trial
-                        if teach:
-                            handoff = row.get("handoff")
-                        rows.append(row)
-                        print(
-                            f"{trial} {scenario.name:22s} {arm:13s} {row['outcome']:20s}"
-                            f" {row['run1_seconds']:6.2f}s",
-                            flush=True,
-                        )
-            results["runs"] = rows
+            plan = (
+                [(0, s, "guard") for s in SCENARIOS if s.name == "ok"]
+                if previous is not None
+                else [(t, s, a) for t in range(n) for s in SCENARIOS for a in arms]
+            )
+            for trial, scenario, arm in plan:
+                port += 1
+                teach = handoff is None and arm == "guard" and scenario.name == "ok"
+                row = run_one(
+                    app,
+                    scenario,
+                    arm,
+                    work / "runs" / f"{scenario.name}-{arm}-{trial}",
+                    port,
+                    think_s=think_s,
+                    files=files if teach else plain,
+                    teach=teach,
+                )
+                row["trial"] = trial
+                if teach:
+                    handoff = row.get("handoff")
+                rows.append(row)
+                print(
+                    f"{trial} {scenario.name:22s} {arm:13s} {row['outcome']:20s}"
+                    f" {row['run1_seconds']:6.2f}s",
+                    flush=True,
+                )
+            if previous is not None:
+                results.update(
+                    {
+                        k: previous[k]
+                        for k in ("n", "think_s", "arms", "date")
+                        if k in previous
+                    }
+                )
+                results["runs"] = previous["runs"]
+                results["run2_rerun_date"] = time.strftime("%Y-%m-%d %H:%M")
+            else:
+                results["runs"] = rows
             results["handoff"] = handoff
+            counter = {"port": port + 1000}
+
+            def guarded_ok() -> dict[str, Any]:
+                counter["port"] += 1
+                ok = next(s for s in SCENARIOS if s.name == "ok")
+                return run_one(
+                    app,
+                    ok,
+                    "guard",
+                    work / "pairs" / f"ok-{counter['port']}",
+                    counter["port"],
+                    think_s=think_s,
+                    files=plain,
+                    teach=False,
+                )
+
             if handoff and handoff.get("status") == "draft":
                 results["run2"] = run2(
                     app,
@@ -583,9 +670,15 @@ def run_benchmark(n: int, think_s: float, arms: tuple[str, ...], port: int) -> d
                     files["verify"],
                     teach_dir,
                     work / "taught-runs",
+                    pairs=pairs,
+                    run1=guarded_ok,
                 )
         finally:
             app.stop()
+        # Paths under the temporary folder name nothing anyone can open later.
+        results = json.loads(
+            json.dumps(results, default=str).replace(str(work), "<work>")
+        )
     results["summary"] = summarize(results)
     return results
 
@@ -661,9 +754,23 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser.add_argument("--arms", default=",".join(ARMS))
     parser.add_argument("--port", type=int, default=9400)
     parser.add_argument("--out", type=Path, default=HERE)
+    parser.add_argument(
+        "--pairs",
+        type=int,
+        default=0,
+        help="alternate a guarded run 1 and a run-2 tool call this many times",
+    )
+    parser.add_argument(
+        "--keep-matrix",
+        type=Path,
+        help="an earlier results.json: keep its matrix, run only run 2 again",
+    )
     args = parser.parse_args(argv)
     arms = tuple(a for a in args.arms.split(",") if a)
-    results = run_benchmark(args.n, args.think, arms, args.port)
+    previous = json.loads(args.keep_matrix.read_text()) if args.keep_matrix else None
+    results = run_benchmark(
+        args.n, args.think, arms, args.port, pairs=args.pairs, previous=previous
+    )
     args.out.mkdir(parents=True, exist_ok=True)
     (args.out / "results.json").write_text(
         json.dumps(results, indent=2, sort_keys=True, default=str) + "\n"

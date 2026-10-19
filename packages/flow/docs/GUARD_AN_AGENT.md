@@ -158,7 +158,68 @@ model calls and reads the save back.
 
 ## Measured on MockMed
 
-MEASUREMENTS
+Synthetic MockMed in front of the `effect_e2e` record store, localhost only,
+no model calls anywhere. The outside agent is a scripted Playwright agent in
+its own Chromium, with a 1 s pause before each of its 6 actions where a
+model-driven agent would think. 15 scenarios, 3 arms, 2 trials each (90 runs,
+the same outcome in both trials), one browser at a time, each judged by the
+`effect_e2e` ground truth, which reads the SQLite file directly. Full tables
+and raw rows: [benchmark/agent_guard/RESULTS.md](../benchmark/agent_guard/RESULTS.md).
+
+The host was shared with other work: the 1-minute load average was 16 to 249
+during the runs (median 29). The times below compare run 1 with run 2 under
+the same load; they aren't absolute speeds.
+
+**Setup the developer adds:** 1 line in the agent (the DevTools port on the
+browser it launches), 1 command, a 9-line `guard.yaml` and a 16-line
+`verify.yaml` once per app, and a 12-line task file per task from whoever
+assigns the work.
+
+**The `effect_e2e` faults**, injected in the app's store. Eight of the nine
+leave a wrong or missing record:
+
+| Of the 8 | Blocked by the guard | Caught by the read-back | Got through |
+|---|---|---|---|
+| Agent alone | n/a | n/a | 8: 6 with the screen saying saved, 2 with an error on screen |
+| Guard, run 1 | 0 | 7 | 1 (`collateral_unaudited`) |
+| Program, run 2 | 0 | 8 | 0 |
+
+The guard can't block a fault in the app's server; it reads the record back
+and reports it. Run 1's read is the app's REST record read, which doesn't
+cover the billing table, so the stray billing write gets through, as it does
+for the same read in [EFFECT_E2E.md](../benchmark/effect_e2e/EFFECT_E2E.md).
+Run 2's record check came from scaffold-verifier with the database read path
+(`teach.db`), so it guards the billing table too.
+
+`timeout` (the save commits, then the server answers after 1.5 s) is a right
+save: the agent alone sees it saved, and the guard and run 2 read it back
+`VERIFIED`. When MockMed's page gives up
+after 1.2 s, the agent alone sees an error for a save that landed; the guard
+reads it back `VERIFIED`.
+
+**What the guard blocks** is the agent's side: a save sent while the wrong
+patient was on the screen (blocked with `identity_mismatch`; nothing was
+written; the agent's page named the fields that didn't match), and the second
+save when the page sent it twice (blocked; one record). Observe-only lets
+both through and reports them on the read-back.
+
+**Run 1 against run 2**, 5 pairs back to back at a load of 19 to 23:
+
+| | Median time | Model calls |
+|---|---|---|
+| Run 1: the agent, guarded | 6.26 s | 0 here (scripted); about 6 for a model-driven agent, one per action |
+| Run 2: the `taught_triage_note` tool over MCP | 4.39 s | 0 |
+
+The guard held each save for its checks for a median 7.4 ms and read it back
+in 41 ms; the agent's time with and without the guard was the same (6.24 s).
+Run 1's time here is mostly the scripted pauses, so with a real model run 1 is
+longer and run 2 is unchanged. Compiling run 1 into the draft took about 8 s
+after the read-back. A person's admission (`compile-agent admit`, one attended
+canary) took 8 s.
+
+No API step was proposed: MockMed saves with a JSON request built by script,
+and the compiler proposes API steps only for form posts. The program runs
+its GUI steps.
 
 ## Limits
 
@@ -173,6 +234,14 @@ MEASUREMENTS
   `screen_selector` to the element that shows the open record.
 - The guard can't stop a fault in the app's server. It reads the record back
   after the save, so it reports those faults; it doesn't prevent them.
+- The agent must click a field before it types into it. An agent that fills a
+  field without clicking it (Playwright's `fill`, which Playwright MCP's
+  typing tool uses) leaves no focus step in the recording, and the compiled
+  program refuses at the canary because it can't confirm what it typed. Run 1
+  is still guarded and read back.
+- Compiling run 1 needs the recording. The recorder refuses a run it can't
+  keep exactly (an agent that acts faster than a frame can be kept). The
+  guard keeps guarding; only run 2 is missing.
 - API steps are proposed only for form posts
   (`application/x-www-form-urlencoded`). A save built by script as JSON, like
   MockMed's, stays on GUI steps. Programs from the teach dir run as durable
