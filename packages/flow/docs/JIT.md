@@ -206,16 +206,33 @@ clicking away, or opening a menu and pressing Escape. A dead end is dropped
 only when the URL, title, page count and system-of-record snapshot match at
 both ends; no step in it types, carries a parameter, submits, presses Enter or
 Tab, or clicks a control whose label names a write; and its last step is not
-the click that focuses the next step's typing. The rule is deterministic. The
-candidate lists every dropped step and the rule that dropped it.
+the click that focuses the next step's typing.
+
+It also drops a correction. An agent types a value into the wrong field,
+presses Save, the app refuses, and the agent types the same value into the
+right field and presses Save again. The refused save is dropped when the
+system-of-record snapshot did not change across it, the same control is
+pressed again later, nothing was written before then, and something was typed
+in between (`save_retried`). The first entry, with the click that focused it
+and an Enter that closed it, is dropped only when the record the run saved
+holds the value under the second field's name and has no field named like the
+first (`entry_corrected`). Otherwise both entries stay.
+
+The rules are deterministic. The candidate lists every dropped step and the
+rule that dropped it.
 
 ## Parameters
 
 The agent was told the run's inputs, so a typed step whose text is exactly one
 input's value is where that input goes. The candidate proposes those steps as
 parameters in the bundle's `param_proposals.json`, next to the compiler's own
-field-label proposals. An input typed in two steps, typed inside longer text,
-or not typed at all is listed as not lifted.
+field-label proposals. An input typed whole in more than one step is lifted
+at the step whose field the saved record holds it in, as the mined record
+check shows, and the proposal lists the other steps in `also_typed_in`. When
+there is no record check, or the fields of none or several of those steps
+hold the value in the record, the input is not lifted and the reason names the
+steps. An input typed inside longer text or not typed at all is also listed
+as not lifted.
 
 Nothing is applied until a person confirms it.
 `confirm_params(accept_params=[...])` runs the existing confirm pass
