@@ -971,6 +971,25 @@ function saveFields(presentation) {
   }));
 }
 
+// `presentation.provenance`: why an agent asked for this save. The agent's
+// reason is its own account and is shown as a quote, never as a finding.
+// Lines of what it saw that read like an instruction to an agent are shown
+// as a warning. Anything malformed drops the whole block.
+function saveProvenance(presentation) {
+  const raw = presentation && presentation.provenance;
+  if (!raw || typeof raw !== "object" || typeof raw.actor !== "string") return null;
+  const optText = (value) => value === null || value === undefined || typeof value === "string";
+  if (!optText(raw.reason) || !optText(raw.task_scope) || !optText(raw.seen_text)) return null;
+  const lines = raw.instruction_like === undefined ? [] : raw.instruction_like;
+  if (!Array.isArray(lines) || !lines.every((line) => typeof line === "string")) return null;
+  return {
+    actor: raw.actor,
+    reason: raw.reason || null,
+    taskScope: raw.task_scope || null,
+    instructionLike: lines.slice(0, 8),
+  };
+}
+
 async function openSave(item) {
   const { status, body } = await api(`/api/portal/save-approvals/${encodeURIComponent(item.id)}`);
   if (needsPairing(status) || status === 202) return startPairing();
@@ -1013,6 +1032,7 @@ async function openSave(item) {
       presentation.explanation ||
       "Before it saves, OpenAdapt reads the form again. If anything changed, it stops and asks again.",
     fields: saveFields(presentation),
+    provenance: saveProvenance(presentation),
     frameUrl: null,
     frameOk: false,
     frameState: "loading",
@@ -1176,6 +1196,22 @@ function fieldsMarkup(card) {
     .join("")}</dl>`;
 }
 
+function provenanceMarkup(card) {
+  const p = card.provenance;
+  if (!p) return "";
+  const warning = p.instructionLike.length
+    ? `<div class="prov-warn" role="note"><strong>The page had text aimed at an agent</strong><ul>${p.instructionLike
+        .map((line) => `<li>${esc(line)}</li>`)
+        .join("")}</ul></div>`
+    : "";
+  return `<section class="provenance" aria-label="Why the agent asked">
+      <p class="prov-actor">Asked by ${esc(p.actor)}</p>
+      ${p.reason ? `<blockquote><span class="sr">The agent's own words: </span>${esc(p.reason)}</blockquote>` : ""}
+      ${p.taskScope ? `<p class="prov-scope">The task allows: ${esc(p.taskScope)}</p>` : ""}
+      ${warning}
+    </section>`;
+}
+
 function noticeMarkup(card) {
   const n = card.notice;
   if (!n) return "";
@@ -1205,6 +1241,7 @@ function cardMarkup(card) {
       ${card.irreversible ? `<span class="chip-risk">Can't be undone</span>` : ""}
       <div id="notice">${noticeMarkup(card)}</div>
       ${fieldsMarkup(card)}
+      ${provenanceMarkup(card)}
       <div id="evidence-slot">${evidenceMarkup(card)}</div>
       <div class="spacer"></div>
       <p class="then">${esc(card.then)}</p>

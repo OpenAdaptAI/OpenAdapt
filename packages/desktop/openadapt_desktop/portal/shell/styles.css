@@ -179,6 +179,12 @@ body.offline .dot { background: var(--danger); box-shadow: 0 0 0 3px var(--dange
 .fields dd { margin: 0; font-family: var(--font-mono); font-size: 17px; font-weight: 550; min-width: 0; overflow-wrap: anywhere; line-height: 1.3; }
 .fields dd s { display: block; color: var(--faint); font-weight: 400; font-size: 13px; text-decoration-thickness: 1px; }
 .fields dd .empty { color: var(--faint); font-weight: 400; }
+.provenance { margin: 14px 0 0; font-size: 13.5px; color: var(--muted); }
+.provenance p { margin: 4px 0; overflow-wrap: anywhere; }
+.provenance blockquote { margin: 6px 0; padding: 6px 10px; border-left: 3px solid var(--line); font-style: italic; overflow-wrap: anywhere; }
+.prov-warn { margin-top: 8px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 8px; }
+.prov-warn ul { margin: 4px 0 0; padding-left: 18px; }
+.prov-warn li { overflow-wrap: anywhere; }
 
 .evidence {
   margin-top: 14px; display: flex; align-items: center; gap: 12px; padding: 10px; border-radius: 16px; min-height: 44px;
