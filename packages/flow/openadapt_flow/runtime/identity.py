@@ -429,6 +429,42 @@ def lines_near_point(lines: Iterable[Any], point_y: int) -> list[Any]:
     return kept
 
 
+#: Upscale factor of the row re-read (see :func:`row_region`). 1 crops
+#: without resizing: a row crop is short, and an engine that does better on
+#: short images upscales them itself (Apple Vision reads under 300 px at 2x).
+#: Upscaling here as well stacks the two (4x on Vision), which on the dense
+#: surface misread 'Philip' as 'Phllip' where the plain crop read it clean.
+ROW_REREAD_FACTOR = 1
+
+
+def row_region(lines: Iterable[Any], band: Region) -> Optional[Region]:
+    """The band's width around one text row, for a tight re-read of that row.
+
+    ``lines`` are the lines :func:`lines_near_point` kept for the point's
+    row. The region spans the band horizontally and the row's lines
+    vertically, padded by half their median height on each side, so the
+    re-read sees the row whole and none of the rows above or below. OCR on a
+    64px band of a dense table reads cells of the neighbouring rows that the
+    band slices through, and Apple Vision then drops cells of the point's own
+    row; the row alone reads clean. Returns None when there are no lines.
+    """
+    rows = [line.region for line in lines]
+    if not rows:
+        return None
+    heights = sorted(r[3] for r in rows)
+    median = heights[len(heights) // 2]
+    # A box much taller than its row's other lines spans several rows (OCR
+    # merged a cell with the cells above and below); it must not stretch the
+    # row back over its neighbours.
+    rows = [r for r in rows if r[3] <= 1.5 * median] or rows
+    pad = max(1, median // 2)
+    top = max(band[1], min(r[1] for r in rows) - pad)
+    bottom = min(band[1] + band[3], max(r[1] + r[3] for r in rows) + pad)
+    if bottom <= top:
+        return None
+    return (band[0], top, band[2], bottom - top)
+
+
 def context_from_lines(
     lines: Iterable[Any],
     *,
@@ -2104,6 +2140,67 @@ def pixel_identity_distance(
     return PixelIdentityDistance(max_window, floor, spike, uniqueness, bool(ok))
 
 
+# --- Text-rendering change --------------------------------------------------
+# The pixel tier's thresholds were set on renders made by one rasterizer
+# (jitter, compression, rescale, theme). Switching ClearType on or off changes
+# every glyph edge: subpixel colour fringes appear or vanish, and aliased text
+# loses all intermediate tones. The distance then lands below the drift floor
+# with glyph-sized spikes, which the tier would report as a different
+# identifier. When the two crops were rasterized differently the tier abstains
+# and the OCR tier decides; a glyph-confusable identifier still halts there.
+#: Difference in mean ink chroma (0-255) that marks a subpixel/greyscale switch.
+PIXEL_RENDER_CHROMA_DELTA = 12.0
+#: Ink with fewer intermediate tones than this is one-bit (aliased) text.
+PIXEL_RENDER_BILEVEL_AA = 0.05
+#: Ink with more intermediate tones than this is anti-aliased text.
+PIXEL_RENDER_SMOOTH_AA = 0.2
+
+
+def text_render_signature(png: bytes) -> Optional[tuple[float, float]]:
+    """``(anti_aliased_fraction, ink_chroma)`` of a crop, or None if no ink.
+
+    Ink is every pixel that differs from the crop's border colour by more than
+    15% of the crop's contrast. ``anti_aliased_fraction`` is the share of ink
+    between 15% and 85% of full contrast; ``ink_chroma`` is the mean spread
+    between the largest and smallest colour channel over the ink.
+    """
+    import cv2
+    import numpy as np
+
+    img = cv2.imdecode(np.frombuffer(png, np.uint8), cv2.IMREAD_COLOR)
+    if img is None or img.shape[0] < 3 or img.shape[1] < 3:
+        return None
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY).astype(np.float32)
+    border = np.concatenate([gray[0], gray[-1], gray[:, 0], gray[:, -1]])
+    contrast = np.abs(gray - float(np.median(border)))
+    peak = float(np.percentile(contrast, 99))
+    if peak < 40:
+        return None
+    ink = contrast > 0.15 * peak
+    count = int(ink.sum())
+    if count < 12:
+        return None
+    smooth = int((ink & (contrast < 0.85 * peak)).sum())
+    spread = img.max(axis=2).astype(np.float32) - img.min(axis=2).astype(np.float32)
+    return smooth / count, float(spread[ink].mean())
+
+
+def text_render_differs(recorded_png: bytes, live_png: bytes) -> bool:
+    """Whether two identifier crops were rasterized differently."""
+    recorded = text_render_signature(recorded_png)
+    live = text_render_signature(live_png)
+    if recorded is None or live is None:
+        return False
+    if abs(recorded[1] - live[1]) > PIXEL_RENDER_CHROMA_DELTA:
+        return True
+    aliased = (
+        recorded[0] < PIXEL_RENDER_BILEVEL_AA,
+        live[0] < PIXEL_RENDER_BILEVEL_AA,
+    )
+    smooth = (recorded[0] > PIXEL_RENDER_SMOOTH_AA, live[0] > PIXEL_RENDER_SMOOTH_AA)
+    return (aliased[0] and smooth[1]) or (aliased[1] and smooth[0])
+
+
 def verify_pixel_identity(
     recorded_png: Optional[bytes],
     live_png: Optional[bytes],
@@ -2127,10 +2224,12 @@ def verify_pixel_identity(
       converged) AND verify is enabled. On the battery this window CLEANLY
       separates same-record matching renders (max ~0.052) from every
       different-record (min ~0.070), so a MATCH cannot be a false-accept.
-    - **abstain** (``None``) -- whole-crop drift (theme/heavy scale), or a
-      render whose worst window sits in the uncertain band between the MATCH
-      gate and a clean glyph spike, or verify disabled: fall through to the
-      next tier (VLM / OCR) or HALT. Also when a crop is missing/undecodable.
+    - **abstain** (``None``) -- whole-crop drift (theme/heavy scale), a crop
+      rasterized differently from the recording (ClearType toggled; see
+      :func:`text_render_differs`), a render whose worst window sits in the
+      uncertain band between the MATCH gate and a clean glyph spike, or
+      verify disabled: fall through to the next tier (VLM / OCR) or HALT.
+      Also when a crop is missing/undecodable.
 
     ``enable_verify`` gates ONLY the positive MATCH path: None (default) reads
     the module default :data:`PIXEL_VERIFY_ENABLED` (currently False, pending a
@@ -2145,6 +2244,8 @@ def verify_pixel_identity(
         enable_verify = PIXEL_VERIFY_ENABLED
     if not recorded_png or not live_png:
         return None
+    if text_render_differs(recorded_png, live_png):
+        return None  # another rasterizer: the thresholds do not apply
     dist = pixel_identity_distance(recorded_png, live_png)
     if dist is None:
         return None

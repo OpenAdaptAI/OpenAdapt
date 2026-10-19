@@ -51,9 +51,10 @@ imported lazily inside each handler so ``--help`` always works):
   environment, identity, and effect pins from the demo; ``qualify accept``
   runs the proposed oracle against a ``--break-it`` fault before it can
   succeed; refusing a pin HALTs.
-- ``scaffold-verifier`` — draft (never approve) an effect-oracle contract
-  (``effect_contract.yaml``) from a recording or bundle's write-shaped steps;
-  refuses demonstrations with no consequential step.
+- ``scaffold-verifier`` — build a record check from the reads the app made
+  after the save and fault-test it (``record_check.proposed.yaml``), or, with
+  no read, draft an effect-oracle contract (``effect_contract.yaml``); never
+  approves; refuses demonstrations with no consequential step.
 - ``explain`` — plain-language, read-only read of a completed run directory:
   what happened, why the outcome is the safe one, and the next suggested
   command.
@@ -797,6 +798,7 @@ def _build_and_run_replayer(
     surface_override: bool = False,
     execution_origin: Optional[str] = None,
     execution_entry_url: Optional[str] = None,
+    execution_target_origin: Optional[str] = None,
     run_id: Optional[str] = None,
     approval_gate=None,
     qualification_fault_driver=None,
@@ -835,6 +837,7 @@ def _build_and_run_replayer(
         surface_override=surface_override,
         execution_origin=execution_origin,
         execution_entry_url=execution_entry_url,
+        execution_target_origin=execution_target_origin,
         run_id=(
             remote_delivery_run_id
             if delivery_authority_kind == "cloud_runner"
@@ -912,6 +915,54 @@ def _replay_outcome_epilogue(
     )
 
 
+def _change_ledger_epilogue(
+    report, run_dir: Path, args: Optional[argparse.Namespace]
+) -> Optional[str]:
+    """What may need undoing after a stop (presentation only).
+
+    Reads the run's change ledger (``openadapt_flow.after_stop``). Offering an
+    undo runs nothing: a person must approve it first.
+    """
+    import shlex
+
+    from openadapt_flow.after_stop import change_ledger_lines
+    from openadapt_flow.cli_hints import command
+
+    bundle = getattr(args, "bundle", None) if args is not None else None
+    hint = command(
+        f"undo list {shlex.quote(str(run_dir))} --bundle "
+        + (shlex.quote(str(bundle)) if bundle else "<bundle-dir>")
+    )
+    lines = change_ledger_lines(report, undo_hint=hint)
+    return "\n".join(lines) if lines else None
+
+
+def _undo_run_target_problem(args: argparse.Namespace, workflow) -> Optional[str]:
+    """Why ``undo run`` has no real application to act on, or None.
+
+    Resolves ``--config`` and the backend flags the way replay does. A web
+    target with no URL and no attached browser would start the bundled
+    MockMed demo, so the undo would act on the demo and use up its approval.
+    """
+    from openadapt_flow.backends.factory import _normalize_kind
+
+    cfg, _effects, _actuation = _deployment_sections(args)
+    backend = _resolve_backend_config(args, cfg, workflow)
+    if _normalize_kind(backend.kind) != "web":
+        return None
+    if (
+        getattr(args, "url", None)
+        or backend.url
+        or backend.browser_cdp_endpoint
+        or backend.browser_page_url
+    ):
+        return None
+    return (
+        "name the application to undo in: --url, a --config whose backend has "
+        "a url, an attached browser, or a non-web --backend"
+    )
+
+
 def _finish_replay(
     run_dir: Path,
     report,
@@ -947,6 +998,9 @@ def _finish_replay(
         epilogue = _replay_outcome_epilogue(report, outcome, run_dir)
         if epilogue:
             print(f"\n{epilogue}")
+        ledger = _change_ledger_epilogue(report, run_dir, args)
+        if ledger:
+            print(f"\n{ledger}")
     _maybe_report_break(run_dir, report)
     _maybe_report_run(run_dir, report, args, backend_kind=backend_kind)
     _maybe_attest_run(run_dir, report, args)
@@ -1034,6 +1088,7 @@ def _replay_desktop(
             qualification_campaign_guard=qualification_campaign_guard,
             runtime_config=runtime_config,
             execution_target_kind=_report_backend_kind(backend_cfg.kind),
+            execution_target_origin=_surface_target_origin_or_none(backend_cfg),
             surface_override=bool(getattr(args, "_surface_override", False)),
             run_id=run_id,
             approval_gate=approval_gate,
@@ -1049,6 +1104,18 @@ def _replay_desktop(
     return _finish_replay(
         run_dir, report, args, backend_kind=_report_backend_kind(backend_cfg.kind)
     )
+
+
+def _surface_target_origin_or_none(backend_cfg) -> Optional[str]:
+    """The non-web app's ``<kind>://<target>``, for an admitted JIT program's
+    canary match. A section that can't name one gives None, which that match
+    refuses; every other bundle ignores it."""
+    from openadapt_flow.surface_selection import surface_target_origin
+
+    try:
+        return surface_target_origin(backend_cfg)
+    except ValueError:
+        return None
 
 
 def _record_until_stop(args: argparse.Namespace):
@@ -1795,8 +1862,19 @@ def _cmd_induce(args: argparse.Namespace) -> int:
         else:
             traces.append(path)
 
-    result = induce_program(traces)
+    if args.probe_on:
+        probed = _induce_with_probes(args, traces)
+        if isinstance(probed, int):
+            return probed
+        result = probed
+    else:
+        result = induce_program(traces)
     print(result.render())
+    if args.report:
+        report_path = Path(args.report)
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(result.model_dump_json(indent=2) + "\n")
+        print(f"Induction report written to {report_path}")
 
     if args.held_out and len(traces) >= 2:
         print(validate_held_out(traces).render())
@@ -1822,6 +1900,64 @@ def _cmd_induce(args: argparse.Namespace) -> int:
         f"{len(result.column_decisions)} column decision(s))."
     )
     return 0
+
+
+def _induce_with_probes(args: argparse.Namespace, traces: list) -> Any:
+    """``induce --probe-on``: refuse a non-test target, else probe and induce.
+
+    Returns the InductionResult, or an exit code when the target is refused.
+    """
+    import tempfile
+
+    from openadapt_flow.compiler import probing
+    from openadapt_flow.deployment import load_deployment
+
+    deployment = Path(args.probe_on)
+    try:
+        cfg = load_deployment(deployment)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"PROBE REFUSED: {exc}")
+        return 3
+    reasons = probing.probe_target_refusals(cfg)
+    if reasons:
+        print("PROBE REFUSED: nothing was reset or replayed.")
+        for reason in reasons:
+            print(f"  - {reason}")
+        return 3
+    contract = Path(str(cfg.test_copy.reward_contract)).expanduser()
+    if not contract.is_absolute():
+        contract = deployment.parent / contract
+
+    def _run(work: Path) -> Any:
+        from openadapt_flow.compiler.compile import compile_recording
+        from openadapt_flow.ir import Workflow
+
+        probe_traces = []
+        seen: set[str] = set()
+        for i, (arg, trace) in enumerate(zip(args.recording, traces)):
+            path = Path(arg)
+            label = path.name if path.name not in seen else f"{path.name}#{i}"
+            seen.add(label)
+            if isinstance(trace, Workflow):
+                bundle = path
+            else:
+                bundle = work / "compiled" / f"{i}-{path.name}"
+                trace = compile_recording(path, bundle, name=path.name)
+            probe_traces.append(
+                probing.ProbeTrace(workflow=trace, bundle_dir=bundle, label=label)
+            )
+        target = probing.DeploymentProbeTarget(cfg)
+        print(f"Probing on declared test copy {cfg.name!r} (read-back: {contract})")
+        return probing.probe_and_induce(
+            probe_traces, target=target, reward_contract=contract, work_dir=work
+        )
+
+    if args.probe_work_dir:
+        work = Path(args.probe_work_dir)
+        work.mkdir(parents=True, exist_ok=True)
+        return _run(work)
+    with tempfile.TemporaryDirectory(prefix="induce-probe-") as tmp:
+        return _run(Path(tmp))
 
 
 def _cmd_for_each(args: argparse.Namespace) -> int:
@@ -1900,6 +2036,18 @@ def _cmd_process(args: argparse.Namespace) -> int:
     from openadapt_flow.cli_process import cmd_process
 
     return cmd_process(args)
+
+
+def _cmd_variants(args: argparse.Namespace) -> int:
+    from openadapt_flow.cli_variants import cmd_variants
+
+    return cmd_variants(args)
+
+
+def _cmd_route(args: argparse.Namespace) -> int:
+    from openadapt_flow.cli_variants import cmd_route
+
+    return cmd_route(args)
 
 
 @contextmanager
@@ -2112,11 +2260,17 @@ def _cmd_replay(args: argparse.Namespace) -> int:
     bundle = Path(args.bundle)
     refuse_replay_composition(bundle)
     refuse_replay_process(bundle)
+    from openadapt_flow.cli_variants import refuse_replay_variants
+
+    refuse_replay_variants(bundle)
     from openadapt_flow.jit.lifecycle import refuse_unadmitted_draft
 
     refuse_unadmitted_draft(bundle)
     run_dir = Path(args.run_dir) if args.run_dir else _default_run_dir()
     workflow = Workflow.load(bundle)
+    # `undo run` only: the person-approved undo steps of this same bundle
+    # (openadapt_flow.cli_undo), run through the normal replay path.
+    workflow = getattr(args, "_undo_workflow", None) or workflow
     qualification_case = getattr(args, "_qualification_case_execution", None)
     params = (
         qualification_case["params"]
@@ -2762,6 +2916,12 @@ def _cmd_run(args: argparse.Namespace) -> int:
         from openadapt_flow.cli_process import cmd_run_process
 
         return cmd_run_process(args, run_child=_cmd_run)
+    from openadapt_flow.variants import is_variant_set_artifact
+
+    if is_variant_set_artifact(bundle):
+        from openadapt_flow.cli_variants import cmd_run_variants
+
+        return cmd_run_variants(args, run_child=_cmd_run)
     # Load the bundle first (decrypting if encrypted -- the key comes from
     # --config/env via OPENADAPT_BUNDLE_KEY); a missing/wrong key fails LOUDLY.
     try:
@@ -4029,10 +4189,34 @@ def _print_lint_epilogue(
 
 def _cmd_scaffold_verifier(args: argparse.Namespace) -> int:
     """Draft (never approve) an effect-oracle contract from retained evidence."""
-    from openadapt_flow.scaffold_verifier import NEXT_COMMANDS_TEMPLATE, write_draft
+    from openadapt_flow.scaffold_verifier import (
+        NEXT_COMMANDS_TEMPLATE,
+        build_record_check,
+        write_draft,
+    )
 
-    out, count = write_draft(
-        Path(args.source), Path(args.out) if getattr(args, "out", None) else None
+    def optional_path(name: str) -> Optional[Path]:
+        value = getattr(args, name, None)
+        return Path(value) if value else None
+
+    out_dir = optional_path("out")
+    built = build_record_check(
+        Path(args.source),
+        out_dir,
+        db=optional_path("db"),
+        verifier=optional_path("verifier"),
+        prove=getattr(args, "prove", None),
+        recording=optional_path("recording"),
+        bundle=optional_path("bundle"),
+        complete_read=bool(getattr(args, "complete_read", False)),
+    )
+    if built is not None:
+        print(built.summary)
+        return 0 if built.working else 1
+    out, count = write_draft(Path(args.source), out_dir)
+    print(
+        "No read in the recording returns the saved record (no network capture, "
+        "--db or --verifier), so this is a TODO draft."
     )
     print(NEXT_COMMANDS_TEMPLATE.format(out=out, count=count))
     return 0
@@ -6242,6 +6426,11 @@ def _emit_local_receipt(args: argparse.Namespace) -> int:
     print("Receipt written (LOCAL ONLY, nothing was uploaded):")
     for path in (paths["png"], paths["json"], paths["markdown"]):
         print(f"  {path}")
+    from openadapt_flow.records.run import write_sealed_reads
+
+    records_path = write_sealed_reads(report, paths["json"])
+    if records_path is not None:
+        print(f"  {records_path} (values read, Seal pointers to this receipt)")
     print(
         "\nEvery byte that would leave this machine is in receipt.json. "
         "Publishing is a separate, explicit step."
@@ -7372,6 +7561,31 @@ def build_parser() -> argparse.ArgumentParser:
             "reproduction scores (needs >= 2 traces)"
         ),
     )
+    p.add_argument(
+        "--probe-on",
+        default=None,
+        metavar="DEPLOYMENT",
+        help=(
+            "Settle refused optional steps by replaying each reading (step "
+            "dropped / step kept when present) in a fresh session on the test "
+            "copy this deployment file declares (test_copy.declared: true), "
+            "scored by its reward contract's read-back. Refuses any target "
+            "not declared a test copy. See docs/PROBE_INDUCTION.md"
+        ),
+    )
+    p.add_argument(
+        "--probe-work-dir",
+        default=None,
+        help=(
+            "Keep probe bundles and run directories here (default: a "
+            "temporary directory, removed afterwards)"
+        ),
+    )
+    p.add_argument(
+        "--report",
+        default=None,
+        help="Write the induction report (JSON, every probe run included) here",
+    )
     p.set_defaults(func=_cmd_induce)
 
     p = sub.add_parser(
@@ -7547,6 +7761,89 @@ def build_parser() -> argparse.ArgumentParser:
     p.set_defaults(func=_cmd_process)
 
     p = sub.add_parser(
+        "variants",
+        help=(
+            "Author or extend a variant set: separately admitted variants of one "
+            "workflow, routed deterministically before the run"
+        ),
+    )
+    vsub = p.add_subparsers(dest="variants_command")
+    q = vsub.add_parser("author", help="Write variant-set.json from a JSON spec")
+    q.add_argument(
+        "--spec",
+        required=True,
+        help=(
+            "JSON {name, variants: [{name, bundle, admission, when}]}; paths are "
+            "relative to the spec file"
+        ),
+    )
+    q.add_argument("--out", required=True, help="Output variant-set directory")
+    q.add_argument("--name", default=None, help="Variant set name")
+    q.set_defaults(func=_cmd_variants)
+    q = vsub.add_parser(
+        "add",
+        help="Add one admitted variant, for example a repaired case promoted to a variant",
+    )
+    q.add_argument("variant_set", help="Variant-set directory")
+    q.add_argument("--variant", required=True, metavar="NAME=BUNDLE")
+    q.add_argument(
+        "--admission",
+        required=True,
+        metavar="ENVELOPE",
+        help="The bundle's own QualificationAdmissionEnvelope",
+    )
+    q.add_argument(
+        "--when-input",
+        action="append",
+        metavar="NAME=VALUE",
+        help="Input condition; repeat a name to allow several values",
+    )
+    q.add_argument("--when-theme", choices=["light", "dark"], default=None)
+    q.add_argument(
+        "--when-text",
+        action="append",
+        metavar="TEXT",
+        help="Marker that must be on the first screen (app version, tenant banner)",
+    )
+    q.add_argument(
+        "--when-no-text",
+        action="append",
+        metavar="TEXT",
+        help="Marker that must not be on the first screen",
+    )
+    q.add_argument(
+        "--derived-from",
+        default=None,
+        metavar="VARIANT",
+        help="Existing variant this repaired bundle was healed from",
+    )
+    q.set_defaults(func=_cmd_variants)
+    q = vsub.add_parser("show", help="Print a variant set")
+    q.add_argument("variant_set", help="Variant-set directory")
+    q.set_defaults(func=_cmd_variants)
+    p.set_defaults(func=_cmd_variants)
+
+    p = sub.add_parser(
+        "route",
+        help=(
+            "Show which admitted variant a variant set would run for one item "
+            "(inputs + first screen). Executes nothing."
+        ),
+    )
+    p.add_argument("variant_set", help="Variant-set directory")
+    p.add_argument("--param", action="append", metavar="K=V", help="Item input")
+    p.add_argument("--params-file", default=None, help="JSON object of item inputs")
+    p.add_argument("--first-screen", default=None, metavar="PNG")
+    p.add_argument(
+        "--url", default=None, help="Launch a browser here to read the first screen"
+    )
+    p.add_argument("--drift", default=None, help=argparse.SUPPRESS)
+    p.add_argument("--config", default=None, help="Deployment config (backend section)")
+    _add_backend_flags(p)
+    _add_browser_session_flags(p)
+    p.set_defaults(func=_cmd_route)
+
+    p = sub.add_parser(
         "replay",
         help=(
             "Replay a bundle (serves the bundled MockMed demo app when "
@@ -7632,6 +7929,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument("bundle", help="Workflow bundle directory")
+    p.add_argument(
+        "--first-screen",
+        default=None,
+        metavar="PNG",
+        help=(
+            "Variant sets only: the first screen to route on. Without it the "
+            "router reads one frame through the selected backend."
+        ),
+    )
     p.add_argument(
         "--profile",
         choices=["demo", "standard", "regulated"],
@@ -8275,10 +8581,11 @@ def build_parser() -> argparse.ArgumentParser:
     p = sub.add_parser(
         "scaffold-verifier",
         help=(
-            "Draft an effect-oracle contract (effect_contract.yaml) from a "
-            "recording or bundle's write-shaped steps. The output is a DRAFT "
-            "requiring human edit; refuses demonstrations with no "
-            "consequential (write) step"
+            "Build a record check from the reads the app made after the save "
+            "and test it against injected bad writes (record_check.proposed.yaml "
+            "+ record_check.proof.json; exit 1 when it misses one). Without a "
+            "read, drafts effect_contract.yaml for a person to fill in. Never "
+            "approves; refuses demonstrations with no consequential (write) step"
         ),
     )
     p.add_argument(
@@ -8291,7 +8598,58 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         metavar="DIR",
         help=(
-            "Directory for the drafted effect_contract.yaml (default: beside the input)"
+            "Directory for the proposed check or drafted effect_contract.yaml "
+            "(default: beside the input)"
+        ),
+    )
+    p.add_argument(
+        "--db",
+        default=None,
+        metavar="SQLITE",
+        help=(
+            "Read-only database read path (SQLite file): find the saved row in "
+            "every table and guard the rest with a no-new-rows check"
+        ),
+    )
+    p.add_argument(
+        "--verifier",
+        default=None,
+        metavar="YAML",
+        help=(
+            "A verify.yaml whose `verifier:` section reads the system of "
+            "record (REST, FHIR, SQL); read once to find the saved record"
+        ),
+    )
+    p.add_argument(
+        "--prove",
+        default=None,
+        choices=("mockmed", "effect-e2e"),
+        help=(
+            "Also run the proposed check end to end against this "
+            "fault-injection fixture (the check must match its record service)"
+        ),
+    )
+    p.add_argument(
+        "--complete-read",
+        action="store_true",
+        help=(
+            "Declare that the reads return everything the save can change "
+            "(one store, no other tables). Recorded as declared, not proven"
+        ),
+    )
+    p.add_argument(
+        "--recording",
+        default=None,
+        metavar="DIR",
+        help="The recording a bundle was compiled from (when SOURCE is a bundle)",
+    )
+    p.add_argument(
+        "--bundle",
+        default=None,
+        metavar="DIR",
+        help=(
+            "The bundle compiled from this recording, for identity coverage "
+            "(when SOURCE is a recording)"
         ),
     )
     p.set_defaults(func=_cmd_scaffold_verifier)
@@ -9301,6 +9659,37 @@ def build_parser() -> argparse.ArgumentParser:
     _repair_store_flag(r)
     r.set_defaults(func=_cmd_repair)
 
+    r = rsub.add_parser(
+        "revert",
+        help=(
+            "Undo a repair that applied without a person: the prior bundle is "
+            "active again, and repairs of that step go to a person"
+        ),
+    )
+    r.add_argument("candidate_id", help="The automatic repair's candidate id")
+    r.add_argument("--by", required=True, help="Your name, recorded on the revert")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "standard-changes",
+        help="List the repairs that applied without a person (the daily digest)",
+    )
+    r.add_argument("--day", default=None, help="UTC day, YYYY-MM-DD (default: today)")
+    r.add_argument("--json", action="store_true", help="Print the ledger rows as JSON")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
+    r = rsub.add_parser(
+        "clear-hold",
+        help="Let repairs of a step apply without a person again after a revert",
+    )
+    r.add_argument("--workflow", required=True)
+    r.add_argument("--step", required=True)
+    r.add_argument("--by", required=True, help="Your name, recorded on the ledger")
+    _repair_store_flag(r)
+    r.set_defaults(func=_cmd_repair)
+
     p = sub.add_parser(
         "connect",
         help=(
@@ -9888,6 +10277,14 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--repair-store",
+        default=None,
+        help=(
+            "Repair store whose automatic repairs (standard changes) the "
+            "console lists and, when attended, lets a person revert"
+        ),
+    )
+    p.add_argument(
         "--attend",
         action="store_true",
         help=(
@@ -10128,6 +10525,19 @@ def build_parser() -> argparse.ArgumentParser:
     register_admit_parser(sub)
     register_check_parser(sub)
 
+    from openadapt_flow.cli_undo import register as _register_undo
+
+    _register_undo(
+        sub,
+        replay=_cmd_replay,
+        target_problem=_undo_run_target_problem,
+        add_run_flags=(
+            _add_backend_flags,
+            _add_browser_session_flags,
+            _add_deployment_flags,
+        ),
+    )
+
     from openadapt_flow.jit.cli import add_parser as _add_jit_parser
 
     _add_jit_parser(sub)
@@ -10296,6 +10706,7 @@ def _cmd_console(args: argparse.Namespace) -> int:
             attended_service=attended_service,
             decision_supervisor=_decision_supervisor_from_args(args, attended_service),
             port=args.port,
+            repair_store=getattr(args, "repair_store", None),
         )
     return 0
 
@@ -10305,7 +10716,7 @@ def _cmd_serve_execute(args: argparse.Namespace) -> int:
 
     missing = [
         name
-        for name in ("fastapi", "uvicorn", "openadapt_flow.contracts")
+        for name in ("fastapi", "uvicorn", "openadapt_types")
         if find_spec(name) is None
     ]
     if missing:
@@ -10347,7 +10758,7 @@ def _cmd_serve_reward(args: argparse.Namespace) -> int:
 
     missing = [
         name
-        for name in ("fastapi", "uvicorn", "openadapt_flow.contracts")
+        for name in ("fastapi", "uvicorn", "openadapt_types")
         if find_spec(name) is None
     ]
     if missing:

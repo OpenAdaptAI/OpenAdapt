@@ -1,0 +1,13 @@
+{
+  "_note": "Scripted answers for the unattended demo. Each person is a made-up test principal.",
+  "staff": "ap_clerk:demo-clerk-1",
+  "approver": "controller:demo-controller-1",
+  "corrections": {
+    "invoice-INV-20417.pdf": {"amount": "1249.50"}
+  },
+  "decisions": {
+    "invoice-INV-20417.pdf": "approve",
+    "invoice-INV-20418.pdf": "approve",
+    "invoice-INV-20419.pdf": "approve"
+  }
+}

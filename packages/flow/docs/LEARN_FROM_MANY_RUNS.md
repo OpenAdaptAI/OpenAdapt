@@ -39,6 +39,12 @@ When the recordings don't settle a question, it refuses instead of guessing:
 each of these two paths under a condition you can see" or "record the path
 where this dialog doesn't appear". Record those and run it again.
 
+Or, when a test copy of the app is available, let it answer:
+`induce --probe-on test-copy.yaml` replays each recording with the disputed
+step dropped and with it kept, scores each run by reading the record back,
+and certifies the step only when exactly one reading works for every
+recording. See [PROBE_INDUCTION.md](PROBE_INDUCTION.md).
+
 `admit rec-1 rec-2` runs the same induction as its first step, then proposes
 the checks and stops once for a decision (see
 [SHADOW_CANDIDATES.md](SHADOW_CANDIDATES.md#how-a-candidate-is-admitted)).

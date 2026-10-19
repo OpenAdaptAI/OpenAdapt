@@ -35,6 +35,11 @@ var LABEL_SAVE = DRIFT.has('rename') ? 'Submit Encounter' : 'Save Encounter';
 var SAVE_ID = DRIFT.has('redesign') ? 'submit-encounter' : 'save-encounter';
 if (DRIFT.has('redesign')) { LABEL_SAVE = 'Submit to chart'; }
 var LABEL_OPEN = DRIFT.has('rename') ? 'View' : 'Open';
+// "relink" drift: a vendor release renamed and moved the control that opens
+// a new encounter. It is not the save: it only navigates to the form. New
+// label, new DOM id, other side of the screen; nothing else changes.
+var NEW_ENC_ID = DRIFT.has('relink') ? 'start-visit' : 'new-encounter';
+var LABEL_NEW_ENC = DRIFT.has('relink') ? 'Start visit' : 'New Encounter';
 // "typelabel" drift: the Triage segment is relabeled (semantically findable
 // — an agent can still identify it) AND the segment order is swapped, so
 // the old Triage position now holds Consult. Internal encounter type values
@@ -230,12 +235,13 @@ function renderPatient(id) {
     '<div id="patient-banner">' + esc(p.name) + ' — MRN ' +
     esc(p.id.toUpperCase()) + ' — DOB ' + esc(p.dob) + '</div>' +
     bannerHtml +
-    '<div class="actions movable">' +
-    '<button id="new-encounter">New Encounter</button></div>' +
+    '<div class="actions movable' +
+    (DRIFT.has('relink') ? ' redesigned' : '') + '">' +
+    '<button id="' + NEW_ENC_ID + '">' + LABEL_NEW_ENC + '</button></div>' +
     '<h2>Encounters</h2>' + encHtml +
     '</section>';
 
-  document.getElementById('new-encounter')
+  document.getElementById(NEW_ENC_ID)
     .addEventListener('click', function () {
       state.banner = null;
       location.hash = '#encounter';

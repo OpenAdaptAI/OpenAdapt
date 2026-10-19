@@ -1,0 +1,433 @@
+/* =============================================================================
+   OpenAdapt Desktop — design tokens.
+
+   The palette, the type faces, the focus ring, and the radii come from the
+   canonical design tokens owned by OpenAdaptAI/openadapt-web. The import below
+   is a byte-identical vendored copy; see src/styles/vendor/openadapt-web/.
+   Never hand-edit it, and never redefine a canonical colour here. This is what
+   makes the installed app, app.openadapt.ai, and openadapt.ai one product
+   rather than three.
+
+   What this file adds is what the canonical set does not carry: the phosphor
+   execution surface, the status hues, the pill fills, and the product density
+   scale. Every light colour derives from a canonical token (section 0b holds
+   the canonical 1.1.0 values until the next re-vendor). The dark column in
+   section 2b comes from the design direction (Clinical Calm, 2026-10-09);
+   canonical has no dark set yet.
+   ============================================================================= */
+
+@import "./vendor/openadapt-web/tokens.css";
+
+/* -----------------------------------------------------------------------------
+   0. TYPEFACES — self-hosted, SIL OFL 1.1 (see fonts/SOURCES.md). Vite bundles
+      the files, so the app never calls a font service. The fallbacks are
+      metric-adjusted so text barely moves when the face loads.
+   -------------------------------------------------------------------------- */
+@font-face {
+  font-family: "Source Serif 4";
+  font-style: normal;
+  font-weight: 200 900;
+  font-display: swap;
+  src: url("./fonts/SourceSerif4-Variable.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Public Sans";
+  font-style: normal;
+  font-weight: 100 900;
+  font-display: swap;
+  src: url("./fonts/PublicSans-Variable.woff2") format("woff2");
+}
+@font-face {
+  font-family: "Source Serif 4 fallback";
+  src: local("Georgia");
+  size-adjust: 96%;
+  ascent-override: 95%;
+}
+@font-face {
+  font-family: "Public Sans fallback";
+  src: local("Segoe UI"), local("Helvetica Neue"), local("Arial");
+  size-adjust: 102%;
+}
+
+/* -----------------------------------------------------------------------------
+   0b. CANONICAL 1.1.0 TOKENS, CARRIED UNTIL THE NEXT RE-VENDOR.
+      openadapt-web's tokens 1.1.0 (Clinical Calm, not yet published) add
+      these names with these values. The one intended difference is the font
+      stacks, which also name the metric-adjusted fallback faces above.
+      Until 1.1.0 is published and re-vendored here, Desktop defines them
+      itself. After the re-vendor, scripts/designTokens.test.ts fails on every
+      colour below that canonical now carries; delete this whole block then,
+      keeping only the fallback faces in the two font stacks.
+   -------------------------------------------------------------------------- */
+:root {
+  --ink-hover: #1E2A3D;
+  --on-ink: #FFFFFF;
+  --surface-bench: #F3F5F8;
+  --control-line: #7C8797;
+  --accent-verified-tint: #E8F3EE;
+  --mark-verified: #4E9C80;
+  --accent-halt-strong: #7A4706;
+  --accent-halt-tint: #FCF3E6;
+  --accent-danger-tint: #FBEAE8;
+  --font-serif: "Source Serif 4", "Source Serif 4 fallback", Georgia, "Times New Roman", serif;
+  --font-sans: "Public Sans", "Public Sans fallback", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --text-md: 1.1875rem;
+  --radius-xs: 4px;
+  --elevation-3: 0 22px 48px -12px rgba(11, 18, 32, 0.16), 0 2px 6px rgba(11, 18, 32, 0.05);
+  --dur-4: 280ms;
+}
+
+/* -----------------------------------------------------------------------------
+   1. PRIMITIVE PALETTE — every value derives from a canonical token.
+      Components read the semantic tokens in section 2/3, not these.
+
+      Two surfaces, one system:
+        - "paper"    (light) = authored / compiled / editable
+        - "phosphor" (dark)  = executing / observed / audited
+      The light<->dark switch is SEMANTIC (compile vs run), not a preference.
+      Canonical carries the light surface as --surface/--surface-raised/
+      --surface-sunken and the dark one as the --inset-* ramp, so paper and
+      phosphor are two readings of one palette rather than two palettes.
+   -------------------------------------------------------------------------- */
+:root {
+  /* Paper — cool neutral (light surface). --surface, --surface-raised,
+     --surface-sunken, --hairline, and --hairline-strong are canonical and are
+     deliberately not redefined here. */
+  --paper-0: var(--surface);           /* page ground             */
+  --paper-1: var(--surface-raised);    /* panel / card            */
+  --paper-2: var(--surface-sunken);    /* sunken / inset / track  */
+  --paper-3: var(--hairline);          /* hover fill on paper     */
+  --hairline-soft: var(--hairline-strong); /* dotted rules in tables */
+
+  /* Ink — near-black text ramp on paper. --ink, --ink-2, and --ink-3 are
+     canonical. Canonical carries one maximum-contrast ink rather than two, so
+     headings and body text share it. */
+  --ink-0: var(--ink);                 /* max-contrast headings   */
+  --ink-1: var(--ink);                 /* primary text / 2px rules */
+
+  /* Slate — the dark execution surface, read off the canonical --inset-* ramp. */
+  --slate-0: var(--inset-bg);          /* page ground             */
+  --slate-1: var(--inset-raised);      /* panel / card            */
+  --slate-2: var(--inset-border);      /* raised / input / track  */
+  --slate-3: color-mix(in srgb, var(--inset-border) 86%, var(--inset-text));
+  --line: var(--inset-border);         /* 1px borders on slate    */
+  --line-strong: color-mix(in srgb, var(--inset-border) 72%, var(--inset-text));
+
+  /* Fog — off-white text ramp on slate, stepped off canonical --inset-text. */
+  --fog-0: color-mix(in srgb, var(--inset-text) 72%, var(--surface-raised));
+  --fog-1: var(--inset-text);
+  --fog-2: color-mix(in srgb, var(--inset-text) 58%, var(--inset-border));
+  --fog-3: color-mix(in srgb, var(--inset-text) 36%, var(--inset-border));
+
+  /* Accent — one confident accent, the canonical verified green.
+     --accent and --accent-hover are canonical. */
+  --accent-deep: var(--accent-verified-hover); /* pressed / hover-dark      */
+  --accent-lift: color-mix(in srgb, var(--inset-ok) 72%, var(--inset-bg));
+  --accent-glow: color-mix(in srgb, var(--inset-ok) 28%, transparent);
+
+  /* Semantic signal hues. Halt and refusal are the canonical halt and danger
+     tokens, so a stopped run looks the same in the app, in the control plane,
+     and in a screenshot of either.
+
+     run/progress is STATUS ONLY and is never promoted to a button, a link, or
+     a brand accent. It is stepped off --focus-ring rather than taken from it,
+     so a running step never reads as keyboard focus. */
+  --success:       var(--accent-verified);
+  --success-lift:  var(--inset-ok);
+  --warn:          var(--accent-halt);
+  --warn-lift:     var(--inset-warn);
+  --crit:          var(--accent-danger);
+  --crit-lift:     color-mix(in srgb, var(--accent-danger) 58%, var(--inset-text));
+  --run:           color-mix(in srgb, var(--focus-ring) 72%, var(--ink));
+  --run-lift:      color-mix(in srgb, var(--focus-ring) 55%, var(--inset-text));
+}
+
+/* -----------------------------------------------------------------------------
+   2. SEMANTIC TOKENS — PAPER (light) is the default surface.
+      Components read ONLY these.
+   -------------------------------------------------------------------------- */
+:root,
+[data-theme="paper"] {
+  --bg:            var(--paper-0);
+  --panel:         var(--paper-1);
+  --panel-sunk:    var(--paper-2);
+  --panel-hover:   var(--paper-3);
+  --border:        var(--hairline);
+  --border-dotted: var(--hairline-soft);
+
+  --text:          var(--ink-1);
+  --text-strong:   var(--ink-0);
+  --text-muted:    var(--ink-2);
+  --text-faint:    var(--ink-3);
+  --text-inverse:  var(--paper-1);
+
+  --brand:            var(--accent);
+  --brand-hover:      var(--accent-deep);
+  --brand-tint:       color-mix(in srgb, var(--accent) 8%, transparent);
+
+  /* Actions are ink. Green is a verdict (a saved record read back and
+     matched), never a button, a link, or a selected tab. */
+  --action:        var(--ink);
+  --action-hover:  var(--ink-hover);
+  --on-action:     var(--on-ink);
+  --control:       var(--control-line);
+  --bench:         var(--surface-bench);
+  --focus:         var(--focus-ring);
+
+  --ok:            var(--success);
+  --attention:     var(--warn);
+  --danger:        var(--crit);
+  --progress:      var(--ink);
+
+  /* verdict marks: one square per item */
+  --mark-ok:       var(--mark-verified);
+  --mark-warn:     var(--accent-halt);
+
+  /* status pill fills (verdict tint bg + strong verdict text) */
+  --pill-neutral-bg: var(--paper-2);
+  --pill-neutral-fg: var(--ink-3);
+  --pill-ok-bg:      var(--accent-verified-tint);
+  --pill-ok-fg:      var(--accent-verified-hover);
+  --pill-run-bg:     var(--paper-2);
+  --pill-run-fg:     var(--ink);
+  --pill-warn-bg:    var(--accent-halt-tint);
+  --pill-warn-fg:    var(--accent-halt-strong);
+  --pill-crit-bg:    var(--accent-danger-tint);
+  --pill-crit-fg:    var(--crit);
+
+  /* elevation: paper leans on hairlines, not shadow */
+  --shadow-sm: var(--elevation-1);
+  --shadow-pop: var(--elevation-2);
+  --shadow-float: var(--elevation-3);
+  --shadow-inset: none;
+
+  /* motif */
+  --tick: var(--hairline);
+  --tick-live: var(--accent);
+  --grid-line: color-mix(in srgb, var(--ink) 5%, transparent);
+  --scan: color-mix(in srgb, var(--accent) 12%, transparent);
+  color-scheme: light;
+}
+
+/* -----------------------------------------------------------------------------
+   3. SEMANTIC TOKENS — PHOSPHOR (dark). Execution evidence runs on this
+      surface. Set <html data-theme="phosphor"> (or "dark") to activate.
+   -------------------------------------------------------------------------- */
+[data-theme="phosphor"],
+[data-theme="dark"],
+.surface-phosphor {
+  --bg:            var(--slate-0);
+  --panel:         var(--slate-1);
+  --panel-sunk:    var(--slate-2);
+  --panel-hover:   var(--slate-3);
+  --border:        var(--line);
+  --border-dotted: var(--line);
+  --rule:          var(--fog-1);
+
+  --text:          var(--fog-1);
+  --text-strong:   var(--fog-0);
+  --text-muted:    var(--fog-2);
+  --text-faint:    var(--fog-3);
+  --text-inverse:  var(--slate-0);
+
+  --brand:            var(--accent-lift);
+  --brand-hover:      var(--inset-ok);
+  --brand-tint:       color-mix(in srgb, var(--accent-lift) 12%, transparent);
+
+  --action:        var(--fog-0);
+  --action-hover:  var(--fog-1);
+  --on-action:     var(--slate-0);
+  --control:       var(--line-strong);
+  --bench:         var(--slate-1);
+  --focus:         var(--focus-ring);
+  --mark-ok:       var(--success-lift);
+  --mark-warn:     var(--warn-lift);
+
+  --ok:            var(--success-lift);
+  --attention:     var(--warn-lift);
+  --danger:        var(--crit-lift);
+  --progress:      var(--run-lift);
+
+  --pill-neutral-bg: var(--slate-2);
+  --pill-neutral-fg: var(--fog-2);
+  --pill-ok-bg:      color-mix(in srgb, var(--success-lift) 12%, transparent);
+  --pill-ok-fg:      var(--success-lift);
+  --pill-run-bg:     color-mix(in srgb, var(--run-lift) 14%, transparent);
+  --pill-run-fg:     var(--run-lift);
+  --pill-warn-bg:    color-mix(in srgb, var(--warn-lift) 14%, transparent);
+  --pill-warn-fg:    var(--warn-lift);
+  --pill-crit-bg:    color-mix(in srgb, var(--crit-lift) 14%, transparent);
+  --pill-crit-fg:    var(--crit-lift);
+
+  /* elevation: borders + a thin top phosphor highlight, no heavy drop shadow */
+  --shadow-sm: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+  --shadow-pop: 0 12px 32px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --shadow-float: 0 12px 32px rgba(0, 0, 0, 0.45);
+  --shadow-inset: inset 0 1px 0 rgba(255, 255, 255, 0.03);
+
+  --tick: var(--line);
+  --tick-live: var(--accent-lift);
+  --grid-line: rgba(255, 255, 255, 0.035);
+  --scan: color-mix(in srgb, var(--accent-lift) 16%, transparent);
+  color-scheme: dark;
+}
+
+/* -----------------------------------------------------------------------------
+   2b. SEMANTIC TOKENS — PAPER IN DARK MODE. Desktop follows the operating
+      system: with dark mode on, the paper surface takes the design direction's
+      dark column (Clinical Calm, 2026-10-09, section 3.3). Colour keeps the
+      same jobs: ink for actions and progress, green only for a record read
+      back and matched, amber only when a run stopped for a person.
+      Canonical has no dark set yet, so these values live here, under Desktop
+      names only, until openadapt-web publishes one.
+   -------------------------------------------------------------------------- */
+@media (prefers-color-scheme: dark) {
+  :root[data-theme="paper"] {
+    --bg:            #0E1319;
+    --panel:         #151B23;
+    --panel-sunk:    #1C2430;
+    --panel-hover:   #1C2430;
+    --border:        #262F3B;
+    --border-dotted: #354152;
+
+    --text:          #E8EDF3;
+    --text-strong:   #E8EDF3;
+    --text-muted:    #B4BECB;
+    --text-faint:    #8A97A8;
+    --text-inverse:  #0B1220;
+
+    --brand:         #3AA97F;
+    --brand-hover:   #86D6B4;
+    --brand-tint:    #12302A;
+
+    --action:        #E8EDF3;
+    --action-hover:  #C9D2DD;
+    --on-action:     #0B1220;
+    --control:       #6E7B8D;
+    --bench:         #121820;
+    --focus:         #7CA8FF;
+
+    --ok:            #3AA97F;
+    --attention:     #D29A48;
+    --danger:        #F2877E;
+    --progress:      #E8EDF3;
+
+    --mark-ok:       #2F8466;
+    --mark-warn:     #D29A48;
+
+    --pill-neutral-bg: #1C2430;
+    --pill-neutral-fg: #B4BECB;
+    --pill-ok-bg:      #12302A;
+    --pill-ok-fg:      #86D6B4;
+    --pill-run-bg:     #1C2430;
+    --pill-run-fg:     #E8EDF3;
+    --pill-warn-bg:    #33260F;
+    --pill-warn-fg:    #EEC283;
+    --pill-crit-bg:    #3A1A18;
+    --pill-crit-fg:    #F2877E;
+
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-pop: 0 8px 24px rgba(0, 0, 0, 0.35);
+    --shadow-float: 0 8px 24px rgba(0, 0, 0, 0.35);
+
+    --tick: #262F3B;
+    --tick-live: #3AA97F;
+    --grid-line: rgba(255, 255, 255, 0.035);
+    --scan: rgba(58, 169, 127, 0.14);
+    color-scheme: dark;
+  }
+}
+
+/* -----------------------------------------------------------------------------
+   4. TYPOGRAPHY
+      Two faces (Clinical Calm). The serif carries what a person reads as a
+      statement or a measurement: page titles, the question on a stop, big
+      numbers, compared values. The sans carries everything a person operates.
+      Monospace is only for run IDs and code inside Technical details.
+   -------------------------------------------------------------------------- */
+:root {
+  --font-ui: var(--font-sans);
+  --font-heading: var(--font-serif);
+
+  /* Type scale (px), tuned for dense product UI. Canonical carries a rem scale
+     sized for editorial layout; this one is a product scale, which is a scale
+     divergence and not a palette divergence. */
+  --fs-eyebrow: 12px;  /* legacy small label; sentence case, no tracking */
+  --fs-caption: 12px;
+  --fs-sm: 13px;
+  --fs-ui: 14px;       /* app default       */
+  --fs-body: 15px;
+  --fs-md: 16px;
+  --fs-lg: 18px;
+  --fs-xl: 20px;
+  --fs-h3: 24px;
+  --fs-h2: 30px;
+  --fs-h1: 38px;
+  --fs-display: 48px;
+
+  --lh-tight: var(--leading-tight);
+  --lh-snug: var(--leading-snug);
+  --lh-body: var(--leading-body);
+
+  --tracking-eyebrow: 0;
+
+  --fw-regular: 400;
+  --fw-medium: 500;
+  --fw-semibold: 600;
+
+  /* tabular numerals for all data / tables / metrics */
+  --num-tabular: "tnum" 1, "cv01" 1;
+}
+
+/* -----------------------------------------------------------------------------
+   5. SPACING (4px base) & LAYOUT
+      A product density scale, named in units of 4px. It shadows the canonical
+      indexed scale on purpose: --space-16 here means 64px, not a 16th step.
+   -------------------------------------------------------------------------- */
+:root {
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-20: 80px;
+  --space-24: 96px;
+
+  --container: 1040px;      /* app content width   */
+  --container-wide: 1152px; /* wide sections       */
+  --gutter: 24px;
+}
+
+/* -----------------------------------------------------------------------------
+   6. RADIUS (Clinical Calm: 4 / 8 / 12 / 16). Buttons and inputs are 8px
+      rectangles (--radius-sm, canonical); pills only for status chips.
+   -------------------------------------------------------------------------- */
+:root {
+  --radius-0: 0;        /* rules, table cells, code blocks, run rail */
+  --radius-1: 4px;      /* small tags, keyboard hints                */
+  --radius-2: 12px;     /* cards, lists, the question card           */
+  --radius-3: 16px;     /* sheets, large containers                  */
+}
+
+/* -----------------------------------------------------------------------------
+   7. MOTION (calm, single-purpose, no bounce). --ease-out is canonical.
+   -------------------------------------------------------------------------- */
+:root {
+  --motion-fast: var(--dur-1);
+  --motion: var(--dur-2);
+  --motion-slow: var(--dur-3);
+  --ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion: 0ms;
+    --motion-slow: 0ms;
+  }
+}

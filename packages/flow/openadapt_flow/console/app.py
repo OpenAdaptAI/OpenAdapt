@@ -286,6 +286,7 @@ def create_app(
     access_token: Optional[str] = None,
     csrf_token: Optional[str] = None,
     attended_service: Optional[AttendedActionService] = None,
+    repair_store: Path | str | None = None,
 ) -> FastAPI:
     bundles = _validated_root(bundles_root, label="bundles")
     runs = _validated_root(runs_root, label="runs")
@@ -624,6 +625,38 @@ def create_app(
         except save_approvals_mod.SaveApprovalRefused as exc:
             raise HTTPException(status_code=409, detail=exc.code) from exc
         return JSONResponse(content=receipt.model_dump(mode="json"))
+
+    # -- automatic repairs (standard changes) -------------------------------
+
+    @app.get("/api/standard-changes")
+    def standard_change_list() -> JSONResponse:
+        from openadapt_flow.console import standard_changes as standard_mod
+
+        rows = (
+            standard_mod.list_standard_changes(Path(repair_store))
+            if repair_store is not None
+            else []
+        )
+        return JSONResponse(content=rows, headers={"Cache-Control": "no-store"})
+
+    @app.post("/api/standard-changes/{candidate_id}/revert")
+    def standard_change_revert(
+        candidate_id: str, payload: dict[str, Any]
+    ) -> JSONResponse:
+        from openadapt_flow.console import standard_changes as standard_mod
+
+        # Reverting is a person's action: only the attended console takes it.
+        if not attend or repair_store is None:
+            raise HTTPException(status_code=404, detail="no such action")
+        try:
+            request = standard_mod.StandardChangeRevertRequest.model_validate(payload)
+            result = standard_mod.revert_from_portal(
+                Path(repair_store), candidate_id, request
+            )
+        except ValueError as exc:
+            code = getattr(exc, "code", "invalid")
+            raise HTTPException(status_code=409, detail=code) from exc
+        return JSONResponse(content=result)
 
     def _service_notice_count() -> int:
         from openadapt_flow import onprem_reboot

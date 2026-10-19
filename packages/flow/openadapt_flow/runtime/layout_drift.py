@@ -16,7 +16,11 @@ The compiler stores one fingerprint per click step of the recording in
 :data:`FINGERPRINT_ASSET`. The replayer compares the frame it is about to act
 on against it, by default on remote-desktop replays (``rdp``/``citrix``
 targets and the FreeRDP backend), and halts the step with the named reasons
-on drift. The stored fingerprints hold frame size and font metrics only.
+on drift. The stored fingerprints hold frame size and font metrics. Next to
+them the compiler stores a scale landmark set per step: salted hashes of
+unique label text with each label's centre, which
+:mod:`openadapt_flow.runtime.render_scale` uses to estimate a display-scale
+change. No label text is stored.
 
 An optional advisor (for example a small local layout model) may be given.
 Its output is recorded as advice for the person reviewing the halt. It never
@@ -280,11 +284,28 @@ def fingerprint_from_dict(data: Mapping[str, Any]) -> LayoutFingerprint:
     )
 
 
-def dump_bundle_fingerprints(steps: Mapping[str, LayoutFingerprint]) -> bytes:
-    body = {
+def dump_bundle_fingerprints(
+    steps: Mapping[str, LayoutFingerprint],
+    *,
+    scale_landmarks: Optional[Mapping[str, Any]] = None,
+) -> bytes:
+    """Serialize the per-step fingerprints.
+
+    ``scale_landmarks`` is ``{"salt": hex, "steps": {step_id: [[digest, cx,
+    cy, w, h], ...]}}`` from :func:`openadapt_flow.runtime.render_scale.scale_landmark_set`:
+    salted hashes of label text with their centres, no text.
+    """
+    body: dict[str, Any] = {
         "schema": FINGERPRINT_SCHEMA,
         "steps": {k: fingerprint_to_dict(v) for k, v in sorted(steps.items())},
     }
+    if scale_landmarks:
+        body["scale_landmarks"] = {
+            "salt": scale_landmarks["salt"],
+            "steps": {
+                k: v for k, v in sorted(scale_landmarks["steps"].items()) if k in steps
+            },
+        }
     return (json.dumps(body, indent=2, sort_keys=True) + "\n").encode("utf-8")
 
 
@@ -301,6 +322,26 @@ def load_bundle_fingerprints(raw: Optional[bytes]) -> dict[str, LayoutFingerprin
         }
     except (ValueError, KeyError, TypeError, AttributeError):
         return {}
+
+
+def load_scale_landmarks(
+    raw: Optional[bytes],
+) -> tuple[Optional[str], dict[str, list[list[Any]]]]:
+    """``(salt, {step_id: [[digest, cx, cy, w, h], ...]})``; empty when absent."""
+    if not raw:
+        return None, {}
+    try:
+        data = json.loads(raw.decode("utf-8"))
+        if data.get("schema") != FINGERPRINT_SCHEMA:
+            return None, {}
+        block = data.get("scale_landmarks") or {}
+        steps = {
+            str(k): [[str(e[0]), *(float(x) for x in e[1:5])] for e in v]
+            for k, v in (block.get("steps") or {}).items()
+        }
+        return str(block.get("salt", "")), steps
+    except (ValueError, KeyError, TypeError, AttributeError, IndexError):
+        return None, {}
 
 
 def describe(verdict: DriftVerdict) -> str:

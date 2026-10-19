@@ -1,5 +1,11 @@
 # Benchmark: does compiled-first + agent-fallback-on-halt dominate?
 
+> **Historical result.** This benchmark ran on a pre-1.0 openadapt-flow in July
+> 2026, and both arms drove the screen pixel-only by design, to compare the same
+> input. The current engine reads page structure first and uses pixels only as a
+> fallback. Current capabilities and results:
+> [CAPABILITIES.md](https://github.com/OpenAdaptAI/OpenAdapt/blob/main/CAPABILITIES.md).
+
 Date: 2026-07-09. One task, one frozen schedule of clean and drifted UI
 conditions, four ways to automate it, one arm-independent success check.
 Target: MockMed (the demo clinic app bundled in this repo; fake data only,

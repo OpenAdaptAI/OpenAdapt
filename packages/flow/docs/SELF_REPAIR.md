@@ -97,7 +97,9 @@ Module: `openadapt_flow.repair.self_repair`. CLI: `openadapt-flow run
      adversarial case: a session that presents a fault (for example, the
      record is missing) and must stop before the save. Without fault probes
      the candidate stops here with status `needs_fault_probes`.
-6. **Approve.** Flow writes one approval request into the halted run's
+6. **Approve.** When a signed repair policy allows the fix (see
+   [Standard changes](#standard-changes-repairs-without-a-person)), it
+   applies without asking anyone. Otherwise Flow writes one approval request into the halted run's
    `item-approval/` folder, with a screenshot of the filled form and the new
    control outlined. One person answers it. That answer records both the
    review and the approval in the store. The approver is recorded as their
@@ -297,6 +299,7 @@ the tutorial does.
 | `<run_dir>/self-repair/attempt-N/` | The patched bundle, its heal evidence, and the probe's run. |
 | `<run_dir>/self-repair/fault-N/`, `resume/` | Each fault probe's run, and the resumed run. |
 | `<run_dir>/item-approval/` | The request, the screenshot the person saw, and the answer. |
+| `<run_dir>/self-repair/preflight/` | The test record's run of the repaired bundle, when a fix applied without a person. |
 | The repair store | The candidate, its campaigns, its transitions, who reviewed and approved it, and its canary metrics. |
 
 The run's own `model_calls` stays the count for the deterministic run, which
@@ -308,6 +311,12 @@ MockMed's `redesign` drift (`?drift=redesign`) replaces the save control: the
 label changes to `Submit to chart`, the DOM id changes to `submit-encounter`,
 and the control moves to the right. It also adds a `Submit feedback` button
 outside the patient record. Without the query, MockMed is unchanged.
+
+The `relink` drift (`?drift=relink`) changes a control that is not the save:
+`New Encounter` on the patient screen becomes `Start visit`, with a new DOM
+id (`start-visit`), on the other side of the screen. A policy with
+`relabel_or_move` repairs it without a person; `redesign` always goes to one,
+because it changes the save.
 
 1. Record and compile the tutorial bundle against the persistence boundary
    (`openadapt_flow.mockmed.fault_server.serve`,
@@ -342,6 +351,177 @@ Two more drifts need a bridge:
 `tests/test_self_repair_bridge.py` runs both bridges to `VERIFIED` and the
 three refusals (a bridge that would save, one that types an invented value,
 one longer than three actions).
+
+## Standard changes: repairs without a person
+
+In ITIL, a *standard change* is a low-risk change that a person approves
+once, as a class. Flow uses the same idea for UI drift. A person signs a
+repair policy once. After that, a fix of a class the policy names applies
+without anyone being asked, and every other fix goes to a person as above.
+No model acts on a live record unchecked. Each fix is checked against the
+admitted bundle and run on a test record before it applies, and any item run
+afterward still checks the record and reads the save back.
+
+Module: `openadapt_flow.repair.standard_change`. Queue:
+`openadapt_flow.repair.preflight_queue`. Tests:
+`tests/test_standard_change.py`.
+
+### The policy
+
+The repair policy is the `standard_repairs` field of the signed admission
+policy (`openadapt_flow.jit.authority.AdmissionPolicy`). It is signed and
+verified the same way: a registered policy signer signs it
+(`openadapt-flow jit sign-policy`), and Flow checks the signer, the signature
+and the expiry before every use. A changed policy needs a new signature.
+Policies signed before this field existed keep their signatures.
+
+```json
+"standard_repairs": {
+  "repair_agents": ["agent:my-repair"],
+  "workflows": ["triage"],
+  "relabel_or_move": true,
+  "menu_steps": 2,
+  "dialogs": [
+    {"name": "survey", "text": "quick survey", "dismiss": ["Not now", "Close"]}
+  ]
+}
+```
+
+| Class | Allows | Field |
+| --- | --- | --- |
+| `relabel_or_move` | One control that is not the save got a new label, place or locator. | `relabel_or_move: true` |
+| `dismiss_dialog` | One new click dismisses a new dialog. The dialog's text matches a declared pattern (a regular expression), and the click's label is one of its declared dismiss labels. | `dialogs` |
+| `menu_path` | A control that is not the save moved into a menu, reached by at most `menu_steps` new clicks. | `menu_steps` (0 to 3) |
+
+The signer can't be one of the repair agents. A dismiss label that reads as a
+save (for example `Submit`) is refused when the policy is built. The
+`dismiss_dialog` and `menu_path` classes judge fixes that add steps, which
+self-repair proposes as a bridge (see [What happens when a run
+halts](#what-happens-when-a-run-halts)). A bridge that fits neither class,
+such as choosing a value in a new dialog or reaching the save through a menu,
+goes to a person.
+
+### When a fix applies without a person
+
+After the probe and both campaigns pass, Flow applies the fix without a
+person only when every one of these holds:
+
+1. The policy verifies: a registered signer, a valid signature, not expired.
+   It names the repair agent and covers the workflow.
+2. The save step, its identity evidence and its record check are
+   byte-identical to the admitted bundle, including every file they use (the
+   save's template, for example). No new step saves.
+3. No step's identity evidence changed, and the patch weakens nothing in the
+   contract.
+4. The change fits an allowed class, and it touches exactly one recorded
+   step, which is a click. No recorded bundle file changed: the manifests'
+   plaintext hashes are compared, so encrypted bundles are covered too.
+5. The new control, and every new menu click, has a readable label of its
+   own (from its accessible name or OCR, never the recorded intent). That
+   label doesn't read as a save, or as an action like sign, void, delete,
+   send, approve, cancel or close. A dismiss label is checked against the
+   labels the person declared.
+6. No automatic repair of this step was reverted, rolled back or stopped by
+   its canary since a person last cleared the step (see
+   [Undo](#audit-and-undo)).
+7. The repaired bundle runs once, start to finish, on the deployment's test
+   record (`TestRecord`, for example `TEST-001`). The run ends `VERIFIED`,
+   with the record check reading the save back.
+
+If any check fails, the run's self-repair ledger records the reason as a
+failed `approval` stage ("not a standard change ..."), and a person is asked
+as usual. The repair store checks items 1 to 6 again itself against the
+bundles on disk (`RepairStore.approve_standard_change`). It also reads the
+test record's `report.json` and refuses unless that run is `VERIFIED` and ran
+exactly the proposed bundle. A caller can't skip a check. The approval names the policy, binds its digest, and records the
+person who signed it.
+
+```python
+from openadapt_flow.jit.authority import SignedAdmissionPolicy
+from openadapt_flow.repair.standard_change import StandardChanges, TestRecord
+
+test_record = TestRecord("TEST-001", test_record_target)
+standard = StandardChanges(
+    SignedAdmissionPolicy.load("repair-policy.signed.json"),
+    key_dir=Path("~/.openadapt/jit").expanduser(),
+    test_record=test_record,
+)
+repair = SelfRepair(agent, target, store="repair-store",
+                    screen_access=access, standard_changes=standard)
+```
+
+`test_record_target` is a `ReplayTarget` whose sessions open the test record,
+with the test record's parameters.
+
+### A worklist behind a pre-flight
+
+`WorklistQueue` runs one bundle over a queue of items:
+
+1. **Pre-flight.** Before item 1, the bundle runs on the test record with the
+   full read-back. The queue starts only when that run is `VERIFIED`. A drift
+   the pre-flight finds never reaches a real record.
+2. **Repair on the test record.** When the pre-flight or an item halts on a
+   changed screen, self-repair runs on the test record, never on a real one.
+   An allowed fix applies after its own test-record run. Any other fix asks
+   one person, and the phone card shows the test record's form, not a
+   patient's.
+3. **One approval releases the queue.** Items that halted at the same step
+   for the same reason wait together. The card says how many it releases
+   ("Approving also releases 5 queued item(s) halted at step_005"). One
+   answer releases them all. Each released item re-runs from the start with
+   the repaired bundle and its own record check, and each run counts in the
+   repair's canary window.
+
+The queue stops when the repair in use is reverted or leaves its canary
+window. An item that halts for any other reason stays halted for a person.
+
+```python
+from openadapt_flow.repair.preflight_queue import QueueItem, WorklistQueue
+
+queue = WorklistQueue("bundles/triage", test_record, "runs/worklist-2026-10-18",
+                      self_repair=lambda target: SelfRepair(agent, target, ...))
+result = queue.run([QueueItem(item_id, target_for(item_id)) for item_id in ids])
+print(result.status, [(i.item_id, i.status) for i in result.items])
+```
+
+### Audit and undo
+
+| Where | What |
+| --- | --- |
+| `report.json`, `self_repair.standard_change` | The class, what changed, the policy id, its digest, its signer, the test record, the test record's outcome, and the undo command. `approval_route` is `standard_change`. |
+| `REPORT.md` | "Applied without a person" and "Undo" lines in the **Self-repair** section. |
+| The run receipt | `standard_change`: the class, the policy digest and the candidate id. Nothing else. |
+| `repair-store/standard-changes/ledger.jsonl` | One row per automatic repair, and one per revert. |
+| `openadapt-flow repair standard-changes` | The daily digest: every automatic repair of the day, whether it is still in use, and its undo command. |
+
+To undo one:
+
+```bash
+openadapt-flow repair revert <candidate-id> --store repair-store --by <your-name>
+```
+
+The prior bundle is active again. Only the repair in use can be reverted, so
+reverting an older one never drops a newer one silently: revert the newer one
+first. Repairs of the same step then go to a person until someone runs
+`openadapt-flow repair clear-hold`. A `repair rollback` or a canary
+regression holds the step the same way. Every automatic repair is written to
+the ledger before its bundle goes live.
+
+The phone portal does the same through the attended console. Start it with
+`openadapt-flow console --attend --repair-store repair-store`.
+`GET /api/standard-changes` lists the rows, with `revert` offered only where
+it applies, and `POST /api/standard-changes/<id>/revert` reverts one. The
+phone sends back the digest of the row it showed.
+
+### Every backend
+
+The rules compare the two bundles step by step, field by field and file by
+file. They don't read the DOM, so they work the same for web, Windows, macOS,
+Linux, RDP and Citrix bundles. The tests apply every class and refusal to the
+recorded MockMed bundle as a browser sees it, as a pixel-only RDP kiosk sees
+it, and with WinForms-style UI Automation ids. The live tests (a repair, a
+pre-flight, a batch release) run on MockMed in a browser. No test drives a
+live RDP or Citrix session.
 
 ## Limits
 
