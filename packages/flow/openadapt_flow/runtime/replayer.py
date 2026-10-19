@@ -2448,6 +2448,14 @@ class Replayer:
                 )
             elif not binding.admitted():
                 reason = "the API step is not admitted (openadapt-flow api admit)"
+            elif save.identity_armed and not binding.identity:
+                # The GUI save checks the right record on screen. The API step
+                # must check it too, so it needs a right-record contract.
+                reason = (
+                    "the save checks the right record on screen, and the API "
+                    "step names no right-record contract (openadapt-flow api "
+                    "admit --identity)"
+                )
             elif list(binding.effects) != list(save.effects):
                 reason = (
                     "the save step's record check differs from the one admitted "
@@ -8548,6 +8556,14 @@ class Replayer:
             self.governed_authorization is not None
             and self.governed_authorization.requires_verified_identity(step.id)
         )
+        if step.api_binding is not None and step.api_binding.kind == "web_form":
+            # A form save whose GUI step checks the right record, or whose
+            # admission named a right-record parameter, is checked the same
+            # way in every run, governed or not (its durable checkpoint
+            # needs the evidence too).
+            authorization_requires = authorization_requires or bool(
+                step.identity_armed or step.api_binding.identity
+            )
         project = workflow.qualification
         policy = project.identity_policies.get(step.id) if project is not None else None
         if not authorization_requires and policy is None:
