@@ -403,24 +403,25 @@ def cmd_run_self_repair(
                 flush=True,
             )
 
+        target = CliTarget(
+            args,
+            bundle=bundle,
+            url=url,
+            cfg=cfg,
+            backend_cfg=backend_cfg,
+            gate_kwargs=gate_kwargs,
+            params=params,
+            worklists=worklists,
+            effect_verifier=effect_verifier,
+            api_actuator=api_actuator,
+            durable=durable,
+            allow_egress=allow_egress,
+            run_replayer=run_replayer,
+            approval_gate_for_run=approval_gate_for_run,
+        )
         repair = SelfRepair(
             agent,
-            CliTarget(
-                args,
-                bundle=bundle,
-                url=url,
-                cfg=cfg,
-                backend_cfg=backend_cfg,
-                gate_kwargs=gate_kwargs,
-                params=params,
-                worklists=worklists,
-                effect_verifier=effect_verifier,
-                api_actuator=api_actuator,
-                durable=durable,
-                allow_egress=allow_egress,
-                run_replayer=run_replayer,
-                approval_gate_for_run=approval_gate_for_run,
-            ),
+            target,
             store=Path(args.repair_store),
             screen_access=ScreenAccess(
                 enabled_by=args.repair_screen_access_by,
@@ -453,7 +454,7 @@ def cmd_run_self_repair(
         # Playwright drivers can't run on one thread, so every session of
         # this run shares one browser process (each still gets a fresh
         # context: no cookies or storage carry over).
-        with shared_browser(headless=not repair.target.headed):
+        with shared_browser(headless=not target.headed):
             result = auto.run(bundle, run_dir)
     except SelfRepairRefused as exc:
         print(f"Self-repair stopped: {exc}. Nothing was saved by self-repair.")
