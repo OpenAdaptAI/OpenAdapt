@@ -303,7 +303,10 @@ def test_lift_proposes_inputs_typed_whole_in_one_step(tmp_path: Path) -> None:
         ("note", "step_001"),
     ]
     assert report.unlifted == {
-        "code": "typed in 2 steps",
+        "code": (
+            "typed in 2 steps (step_003, step_004); no mined record check shows "
+            "which field kept it"
+        ),
         "missing": "not typed in any step",
     }
     proposals = json.loads((bundle / "param_proposals.json").read_text())["proposals"]
@@ -319,6 +322,112 @@ def test_lift_reports_text_typed_inside_longer_text(tmp_path: Path) -> None:
     report = lift_params(bundle, {"name": "Jane"})
     assert report.unlifted == {"name": "typed inside longer text"}
     assert not (bundle / "param_proposals.json").exists()
+
+
+def _detour_bundle(
+    tmp_path: Path, labels: list[str], record: dict[str, str] | None
+) -> Path:
+    """Two typed steps of one value, then a save whose mined check holds
+    ``record`` (OpenAdaptAI/OpenAdapt#1328, synthetic values)."""
+
+    from openadapt_flow.runtime.effects import Effect, EffectKind, ValueExpr
+
+    steps = [
+        Step(
+            id=f"step_{i:03d}",
+            intent="type",
+            action=ActionKind.TYPE,
+            text="Female",
+            field_label=label,
+        )
+        for i, label in enumerate(labels)
+    ]
+    effects = []
+    if record is not None:
+        effects.append(
+            Effect(
+                kind=EffectKind.RECORD_WRITTEN,
+                match={k: ValueExpr(literal=v) for k, v in record.items()},
+            )
+        )
+    steps.append(
+        Step(
+            id="step_009",
+            intent="save",
+            action=ActionKind.KEY,
+            key="Enter",
+            effects=effects,
+        )
+    )
+    bundle = tmp_path / "bundle"
+    Workflow(name="lift", steps=steps).save(bundle)
+    return bundle
+
+
+def test_lift_binds_a_retyped_input_to_the_field_the_record_holds(
+    tmp_path: Path,
+) -> None:
+    bundle = _detour_bundle(
+        tmp_path,
+        ["form_sex_identified", "form_sex"],
+        {"fname": "Testa", "sex": "Female"},
+    )
+    report = lift_params(bundle, {"sex": "Female"})
+    assert report.unlifted == {}
+    [lifted] = report.lifted
+    assert (lifted.name, lifted.step_id, lifted.also_typed_in) == (
+        "sex",
+        "step_001",
+        ("step_000",),
+    )
+    [proposal] = json.loads((bundle / "param_proposals.json").read_text())["proposals"]
+    assert proposal["step_id"] == "step_001"
+    assert proposal["also_typed_in"] == ["step_000"]
+
+
+@pytest.mark.parametrize(
+    ("labels", "record", "why"),
+    [
+        (
+            ["form_sex_identified", "form_sex"],
+            None,
+            "no mined record check shows which field kept it",
+        ),
+        (
+            ["form_sex_identified", "form_sex"],
+            {"fname": "Testa", "sex": "Male"},
+            "the saved record holds it in no field",
+        ),
+        (
+            ["Gender", "Sex at birth"],
+            {"fname": "Testa", "sex": "Female"},
+            "none of their fields is a record field that holds it (sex)",
+        ),
+        (
+            ["form_sex", "sex"],
+            {"fname": "Testa", "sex": "Female"},
+            "steps step_000, step_001 all write a record field that holds it",
+        ),
+    ],
+)
+def test_lift_refuses_a_retyped_input_it_cannot_place(
+    tmp_path: Path, labels: list[str], record: dict[str, str] | None, why: str
+) -> None:
+    bundle = _detour_bundle(tmp_path, labels, record)
+    report = lift_params(bundle, {"sex": "Female"})
+    assert report.lifted == []
+    assert report.unlifted == {"sex": f"typed in 2 steps (step_000, step_001); {why}"}
+
+
+def test_lift_ignores_a_placeholder_record_check(tmp_path: Path) -> None:
+    bundle = _detour_bundle(
+        tmp_path, ["form_sex_identified", "form_sex"], {"sex": "Female"}
+    )
+    workflow = Workflow.load(bundle)
+    workflow.steps[-1].effects[0].needs_operator_confirmation = True
+    workflow.save(bundle)
+    report = lift_params(bundle, {"sex": "Female"})
+    assert "no mined record check" in report.unlifted["sex"]
 
 
 # -- the gates (no browser) --------------------------------------------------

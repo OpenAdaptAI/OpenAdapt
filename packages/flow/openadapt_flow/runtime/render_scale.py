@@ -707,6 +707,7 @@ _MEMBERS: dict[str, Callable[[str], Any]] = {
     "act_guarded_coordinate": _point_method,
     "arm_guarded_keyboard": _point_method,
     "prepare_pointer_actuation": _point_method,
+    "hover": _point_method,
     "drag": _drag_method,
     "drag_guarded": _drag_method,
     "acquire_actuation_frame": _frame_method,

@@ -176,7 +176,7 @@ export function ApprovalSwitch({
       {confirming ? (
         <div className="switch-confirm" role="group" aria-label="Turn off the switch">
           <p>
-            Turn it off for this task? It applies before the next save, even
+            Turn it off for this workflow? It applies before the next save, even
             offline. Turning it on again needs an admin and the privacy contact
             in OpenAdapt Cloud, and new items approved one by one.
           </p>

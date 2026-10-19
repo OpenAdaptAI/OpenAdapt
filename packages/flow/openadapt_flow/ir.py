@@ -539,6 +539,100 @@ class ApiIdentityBinding(BaseModel):
         return pointers
 
 
+class WebFormField(BaseModel):
+    """One field of a recorded form save, and where its value comes from.
+
+    ``param``: a run parameter typed into the form. ``select_label``: a select
+    whose option is chosen by the label in ``param`` (the value is looked up in
+    the live form each run). ``session``: a value the server issued to this
+    session, such as a CSRF token, read from the live form each run.
+    ``form_default``: the form's own default, which must still equal ``value``
+    in the live form or the API step does not run.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    name: str = Field(min_length=1)
+    source: Literal["param", "select_label", "session", "form_default"]
+    param: Optional[str] = None
+    value: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _source_fields(self) -> "WebFormField":
+        if self.source in ("param", "select_label") and not self.param:
+            raise ValueError(f"{self.source} field {self.name!r} needs a param")
+        if self.source == "form_default" and self.value is None:
+            raise ValueError(f"form_default field {self.name!r} needs its value")
+        return self
+
+
+class WebFormPrecheck(BaseModel):
+    """A read-only request the page made before the save, and its pass rule.
+
+    Carries over a check the GUI program made on screen before saving (for
+    example a duplicate search that must say "No matches were found."). The
+    response must contain every ``require_text`` or the API step does not
+    send the save.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1)
+    query: list[tuple[str, str]] = Field(default_factory=list)
+    require_text: list[str] = Field(min_length=1)
+    from_step: Optional[str] = None
+
+
+class WebFormSpec(BaseModel):
+    """How to repeat a recorded browser form save as one HTTP request.
+
+    Compiled from the network traffic captured during ``record
+    --capture-network``. The request goes through the replaying browser's
+    own session (its cookies), so no credential is stored or needed. Before
+    sending, the runtime reads ``form_path`` again and refuses (falls back to
+    the GUI steps) if the form's fields, defaults, options or client-side
+    rules differ from the recording.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    form_path: str = Field(min_length=1)
+    fields: list[WebFormField] = Field(min_length=1)
+    controls: list[str] = Field(default_factory=list)
+    client_rules: Optional[dict[str, Any]] = None
+    prechecks: list[WebFormPrecheck] = Field(default_factory=list)
+    #: Regular expression the save response must match to count as accepted.
+    success_pattern: Optional[str] = None
+    #: GUI steps the API step stands in for, in order. The last one is the save.
+    replaces_steps: list[str] = Field(min_length=1)
+    #: Other non-GET requests seen while the recorded steps ran. They are not
+    #: repeated; they are listed so the person admitting the step can judge.
+    other_writes_seen: list[str] = Field(default_factory=list)
+    #: On-screen checks of folded steps that caused no request (screen-only,
+    #: not repeated), listed for the person admitting the step.
+    screen_only_checks: list[str] = Field(default_factory=list)
+    #: Digest of the folded steps' on-screen checks when this was proposed.
+    #: If a check is added or changed later, the API step does not run (it
+    #: would skip that check) until it is proposed again.
+    folded_checks_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+
+
+class ApiAdmission(BaseModel):
+    """A person's acceptance of a compiler-proposed API step.
+
+    Bound to the exact binding by :attr:`spec_digest`; a changed binding needs
+    a new admission. Only a person can admit (an agent, model or service name
+    admits nothing).
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    admitted_by: str = Field(min_length=1)
+    admitted_at: str = Field(min_length=1)
+    spec_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    role: Literal["person"] = "person"
+
+
 class ApiBinding(BaseModel):
     """A declarative API/tool call that performs a step's write WITHOUT the GUI.
 
@@ -570,9 +664,12 @@ class ApiBinding(BaseModel):
     caller's values) at actuation time.
     """
 
-    kind: Literal["rest", "fhir", "mcp", "tool"] = Field(
+    kind: Literal["rest", "fhir", "mcp", "tool", "web_form"] = Field(
         default="rest",
-        description="Substrate: 'rest'/'fhir' HTTP, or an 'mcp'/'tool' call",
+        description=(
+            "Substrate: 'rest'/'fhir' HTTP, an 'mcp'/'tool' call, or "
+            "'web_form': a browser form save repeated through the live session"
+        ),
     )
     on_unavailable: Literal["gui", "halt"] = Field(
         default="gui",
@@ -636,12 +733,45 @@ class ApiBinding(BaseModel):
         ),
     )
 
+    web_form: Optional[WebFormSpec] = Field(
+        default=None,
+        description="The recorded form save, for kind='web_form' only",
+    )
+    admission: Optional[ApiAdmission] = Field(
+        default=None,
+        description=(
+            "A person's acceptance of a compiler-proposed binding. A "
+            "web_form binding never runs without one."
+        ),
+    )
+
     @model_validator(mode="after")
     def _unique_identity_bindings(self) -> "ApiBinding":
         keys = [binding.key for binding in self.identity]
         if len(keys) != len(set(keys)):
             raise ValueError("API identity semantic keys must be unique")
+        if (self.kind == "web_form") != (self.web_form is not None):
+            raise ValueError("web_form is required for, and only for, kind='web_form'")
         return self
+
+    def admission_digest(self) -> str:
+        """SHA-256 of what a person admits: the binding without its admission."""
+
+        payload = self.model_copy(update={"admission": None}).model_dump(mode="json")
+        canonical = json.dumps(payload, sort_keys=True, separators=(",", ":"))
+        return "sha256:" + hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    def admitted(self) -> bool:
+        """True when a person admitted this exact binding."""
+
+        from openadapt_flow.runtime.effects.effect import is_agent_identity
+
+        return (
+            self.admission is not None
+            and self.admission.role == "person"
+            and not is_agent_identity(self.admission.admitted_by)
+            and self.admission.spec_digest == self.admission_digest()
+        )
 
 
 # -- Workflow-program IR, Phase 1 (RFC docs/design/WORKFLOW_PROGRAM_IR.md §6) --
@@ -1371,6 +1501,37 @@ class DialogResponse(BaseModel):
         return self
 
 
+class HoverEvidence(BaseModel):
+    """What the recording saw when the pointer rested on a click target.
+
+    See :mod:`openadapt_flow.runtime.hover_evidence`. Captured for click steps
+    whose target carries no record identity (an icon-only control) on a
+    pixel surface. Replay moves the pointer onto the resolved target, waits
+    ``dwell_ms`` and compares its response with this one before clicking.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    response: bool = Field(
+        description="Whether anything near the target changed under the pointer"
+    )
+    region: Optional[Region] = Field(
+        default=None,
+        description=(
+            "The changed box, as an offset from the recorded click point"
+            " (dx, dy, w, h). Set iff ``response``."
+        ),
+    )
+    crop: Optional[str] = Field(
+        default=None,
+        description=(
+            "Bundle-relative PNG of the response pixels (templates/hover/),"
+            " sealed with the other image crops. Set iff ``response``."
+        ),
+    )
+    dwell_ms: int = Field(default=800, ge=0, le=5000)
+
+
 class Step(BaseModel):
     id: str
     intent: str = Field(description="Human-readable purpose of the step")
@@ -1678,6 +1839,15 @@ class Step(BaseModel):
             " Without a crop the pixel-compare tier abstains on"
             " remote-display/pixel replays and identity falls to the OCR"
             " band tier (docs/LIMITS.md)."
+        ),
+    )
+    hover: Optional[HoverEvidence] = Field(
+        default=None,
+        description=(
+            "Pointer-hover response captured at record time for a click whose"
+            " target carries no record identity (runtime.hover_evidence)."
+            " None when the recorder could not hover or the step has other"
+            " identity evidence, and on bundles compiled before this field."
         ),
     )
     submit_binding: Optional[SubmitBinding] = Field(
@@ -3163,6 +3333,39 @@ class KnownIdEvidence(BaseModel):
     export_sha256: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
 
 
+class IdentityLook(BaseModel):
+    """One extra look taken before stopping on a look-alike identifier.
+
+    See :mod:`openadapt_flow.runtime.identity_looks`. Holds no identifier
+    values: only what kind of look it was, what it concluded, and the
+    SHA-256 of the frame it read when it read one.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    kind: Literal["frame", "magnified", "known_ids", "clipboard"]
+    #: ``agrees``: consistent with the first read, settles nothing alone.
+    #: ``resolves``: names exactly one record, the expected one.
+    #: ``contradicts``: names another record; the step stops.
+    #: ``unavailable``: the look could not be taken or read nothing usable.
+    outcome: Literal["agrees", "resolves", "contradicts", "unavailable"]
+    reason: Optional[str] = Field(default=None, max_length=80)
+    frame_sha256: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
+class HoverLook(BaseModel):
+    """The live hover response compared with the recorded one.
+
+    Holds no pixels: the verdict, why, and the SHA-256 of the hover frame.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    verdict: Literal["verified", "mismatch", "unexpected", "absent", "unverifiable"]
+    reason: str = Field(max_length=80)
+    frame_sha256: Optional[str] = Field(default=None, pattern=r"^[0-9a-f]{64}$")
+
+
 class IdentityCheck(BaseModel):
     """Outcome of the pre-click target-identity check (runtime.identity).
 
@@ -3206,6 +3409,7 @@ class IdentityCheck(BaseModel):
         "pixel",
         "vlm",
         "signal_quorum",
+        "hover",
     ] = "context"
     coverage: float = 0.0
     expected: str = ""
@@ -3245,6 +3449,27 @@ class IdentityCheck(BaseModel):
             "Set when the known-ID list was needed but may not be used: no "
             "admission confirmation, the export changed since it was "
             "confirmed, or it is older than the configured age. The step halts."
+        ),
+    )
+    hover: Optional[HoverLook] = Field(
+        default=None,
+        description=(
+            "Set for mode ``hover``: the live pointer-hover response compared "
+            "with the recorded one (runtime.hover_evidence)."
+        ),
+    )
+    looks: list[IdentityLook] = Field(
+        default_factory=list,
+        description=(
+            "Extra looks taken because the first read abstained only on a "
+            "look-alike identifier (runtime.identity_looks), in order."
+        ),
+    )
+    look_halt: Optional[Literal["identity_look_changed_screen"]] = Field(
+        default=None,
+        description=(
+            "Set when an extra look changed the screen outside the "
+            "identifier it read. The step halts."
         ),
     )
 
@@ -3588,6 +3813,13 @@ class EffectVerificationEvidence(BaseModel):
     #: of the serialized record, so evidence written before this field existed
     #: keeps its exact bytes.
     endpoint_scope: Literal["loopback", "external", "unknown"] = "unknown"
+    #: Set when this effect's check is a declared later report: the pending
+    #: entry the report settles (:mod:`openadapt_flow.runtime.effects.deferred_report`).
+    #: Left out of the serialized record when unset, so existing evidence keeps
+    #: its exact bytes.
+    deferred_check: Optional[str] = Field(
+        default=None, pattern=r"^deferred:[0-9a-f]{32}$"
+    )
 
     @property
     def assurance(self) -> str:
@@ -3614,6 +3846,8 @@ class EffectVerificationEvidence(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.endpoint_scope == "unknown":
             data.pop("endpoint_scope", None)
+        if self.deferred_check is None:
+            data.pop("deferred_check", None)
         return data
 
 
@@ -3671,6 +3905,20 @@ class EffectFieldCheck(BaseModel):
     verification_tier: Optional[int] = None
 
 
+class CheckToClickRecheck(BaseModel):
+    """The screen changed between a pixel step's check and its click.
+
+    Records which checked regions changed on the fresh frame taken just
+    before the click, and what the runtime did: re-observed the target and
+    its identity on that frame, or refused the click. No pixels.
+    """
+
+    model_config = ConfigDict(extra="forbid", frozen=True)
+
+    changed: list[Literal["target", "identity", "hover", "frame_size"]]
+    outcome: Literal["reobserved", "aborted"]
+
+
 class StepResult(BaseModel):
     step_id: str
     intent: str
@@ -3682,6 +3930,9 @@ class StepResult(BaseModel):
     # ``guard`` was unmet with ``on_unmet="skip"`` (a no-op success -- the
     # step did not act). False for every executed step; additive.
     skipped: bool = False
+    # API steps (docs/API_TIER.md): on the first step an API step stands in
+    # for, why it did not run, so the GUI steps ran instead. None otherwise.
+    api_fallback: Optional[str] = None
     # Workflow-program IR, Phase 2: True when this (failed) action state was
     # routed to its ``State.on_exception`` handler instead of aborting the run
     # (the graph analog of a caught try/except). The result stays ``ok=False``
@@ -3796,11 +4047,21 @@ class StepResult(BaseModel):
     identity_reobserved: bool = False
     identity_first_read: Optional[IdentityCheck] = None
     identity_first_frame_png: Optional[str] = None
+    #: Pixel clicks only: each time the target, identity or hover region
+    #: changed between the step's check and its click (see
+    #: ``Replayer._pixel_recheck``). Empty, and omitted, when nothing changed.
+    check_to_click: list[CheckToClickRecheck] = Field(default_factory=list)
     heal: Optional[HealEvent] = None
     error: Optional[str] = None
     before_png: Optional[str] = None  # run-dir-relative paths
     after_png: Optional[str] = None
     elapsed_ms: float = 0.0
+    #: Where this step's time went, in milliseconds of exclusive time per span
+    #: (settle_before, screenshot, resolve, identity, ocr, actuate,
+    #: settle_after, postcondition, readback, artifact_write, other); see
+    #: ``runtime/step_timing.py``. None when the step was not timed, and then
+    #: omitted from the serialized result.
+    timings: Optional[dict[str, float]] = None
     #: Multi-surface runs only (docs/MULTI_SURFACE.md): the id of the surface
     #: this step ran on (for a SWITCH_SURFACE step, the surface it made
     #: active; for a refused switch, the surface the run stayed on). None on
@@ -3814,8 +4075,12 @@ class StepResult(BaseModel):
         data: dict[str, Any] = handler(self)
         if self.surface is None:
             data.pop("surface", None)
+        if self.timings is None and isinstance(data, dict):
+            data.pop("timings", None)
         if isinstance(data, dict) and not self.effect_field_checks:
             data.pop("effect_field_checks", None)
+        if isinstance(data, dict) and not self.check_to_click:
+            data.pop("check_to_click", None)
         return data
 
 
@@ -4659,6 +4924,7 @@ class RunReport(BaseModel):
             "REJECTED_POLICY",
             "COMPLETED_UNVERIFIED",
             "ROLLED_BACK",
+            "SAVED_AWAITING_CHECK",
         ]
     ] = Field(
         default=None,

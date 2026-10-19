@@ -76,6 +76,7 @@ from openadapt_flow.backend import (
 from openadapt_flow.ir import ActionDeliveryReceipt
 from openadapt_flow.remote_frame_contract import RemoteFrameContract
 from openadapt_flow.runtime.resolver import visual_resolution_point_fingerprint
+from openadapt_flow.runtime.step_timing import timed_span
 
 _PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 _LEASE_NONE = 0
@@ -698,6 +699,7 @@ class RemoteDisplayBackend:
         assert self._viewport is not None
         return self._viewport
 
+    @timed_span("screenshot")
     def screenshot(self) -> bytes:
         """Return the client window's current pixels as PNG bytes.
 
@@ -979,6 +981,11 @@ class RemoteDisplayBackend:
             time.sleep(self._settle_s)
             self._wait_for_pointer_settle()
             self._prepared_pointer_point = point
+
+    def hover(self, x: int, y: int) -> None:
+        """Rest the pointer on (x, y) with the same checks as a pre-positioned
+        click (:meth:`prepare_pointer_actuation`); emits no button edge."""
+        self.prepare_pointer_actuation(x, y)
 
     def click(self, x: int, y: int, *, double: bool = False) -> None:
         """Click (or double-click) at captured-pixel coordinates (x, y)."""

@@ -7,6 +7,7 @@ import os
 import re
 import tarfile
 import zipfile
+from functools import cache
 from pathlib import Path
 
 import pytest
@@ -37,6 +38,7 @@ from scripts.check_release_consistency import (
     REQUIRED_SDIST_PATHS,
     WHEEL_ARTIFACT_INVENTORY_PATH,
     release_versions,
+    stamp_release_artifact_inventory,
     sync_lock_version,
     validate_distribution_directory,
     validate_public_source_policy,
@@ -48,6 +50,31 @@ from scripts.check_release_consistency import (
 
 ROOT = Path(__file__).resolve().parents[1]
 MIT_LICENSE = (ROOT / "LICENSE").read_bytes()
+
+
+@cache
+def _stamped_manifest_bytes() -> bytes:
+    """The inventory a release of this tree would embed (schema 1, hashed).
+
+    Hashes the committed path list directly instead of walking the tree, so
+    scratch output other tests leave under the package (for example symlinks
+    in runs/) cannot fail these archive tests.
+    """
+    reviewed = json.loads((ROOT / PUBLIC_ARTIFACT_INVENTORY_PATH).read_text())
+    stamped = {
+        "schema_version": 1,
+        "policy": reviewed["policy"],
+        "artifacts": [
+            {
+                "path": path,
+                "sha256": hashlib.sha256((ROOT / path).read_bytes()).hexdigest(),
+            }
+            for path in reviewed["artifacts"]
+        ],
+    }
+    return (json.dumps(stamped, indent=2) + "\n").encode()
+
+
 SOURCE_BOUNDARY_EXCLUDES = {
     "/benchmark/reliability",
     "/docs/validation/IDENTITY_ROC.md",
@@ -325,6 +352,10 @@ def test_public_source_tree_rejects_symlinks_and_changed_inventory(
     write_public_artifact_inventory(tmp_path)
     validate_public_source_tree(tmp_path)
 
+    # The reviewed list pins paths, so an edited artifact needs no inventory
+    # change; once the release workflow stamps hashes, the bytes are pinned.
+    stamp_release_artifact_inventory(tmp_path)
+    validate_public_source_tree(tmp_path)
     artifact.write_text('{"changed": true}\n')
     with pytest.raises(ValueError, match="hash mismatch"):
         validate_public_source_tree(tmp_path)
@@ -624,7 +655,7 @@ def _write_sdist(
             elif relative == "PKG-INFO":
                 payload = metadata_bytes or _metadata_bytes()
             elif relative == PUBLIC_ARTIFACT_INVENTORY_PATH:
-                payload = (ROOT / PUBLIC_ARTIFACT_INVENTORY_PATH).read_bytes()
+                payload = _stamped_manifest_bytes()
             else:
                 payload = b"fixture"
             info = tarfile.TarInfo(f"{archive_root}/{relative}")
@@ -653,7 +684,7 @@ def _write_wheel(
             elif relative.endswith(".dist-info/METADATA"):
                 payload = metadata_bytes or _metadata_bytes()
             elif relative == WHEEL_ARTIFACT_INVENTORY_PATH:
-                payload = (ROOT / PUBLIC_ARTIFACT_INVENTORY_PATH).read_bytes()
+                payload = _stamped_manifest_bytes()
             else:
                 payload = b"fixture"
             archive.writestr(relative, payload)
@@ -937,7 +968,7 @@ def test_archive_uses_its_embedded_historical_inventory_not_current_root(
 ) -> None:
     known = "benchmark/vision_hardening/corpus.json"
     historical_payload = b'{"historical": true}\n'
-    manifest = json.loads((ROOT / PUBLIC_ARTIFACT_INVENTORY_PATH).read_text())
+    manifest = json.loads(_stamped_manifest_bytes())
     for row in manifest["artifacts"]:
         if row["path"] == known:
             row["sha256"] = hashlib.sha256(historical_payload).hexdigest()
@@ -1154,7 +1185,7 @@ def test_distribution_directory_requires_matching_embedded_inventories(
 ) -> None:
     dist = tmp_path / "dist"
     dist.mkdir()
-    manifest = json.loads((ROOT / PUBLIC_ARTIFACT_INVENTORY_PATH).read_text())
+    manifest = json.loads(_stamped_manifest_bytes())
     manifest["artifacts"][0]["sha256"] = "0" * 64
     different_valid_manifest = (json.dumps(manifest, indent=2) + "\n").encode()
 
@@ -1225,3 +1256,91 @@ def test_wheel_refuses_traversal_and_duplicates(tmp_path: Path) -> None:
             archive.writestr("neutral.py", b"second")
     with pytest.raises(ValueError, match="duplicate member"):
         validate_wheel_license_boundary(duplicate)
+
+
+def test_inventory_skips_git_ignored_files_under_a_package_subdirectory(
+    tmp_path: Path,
+) -> None:
+    """In the monorepo the package root has no .git of its own. The writer
+    must still see the git work tree and leave ignored local state (fixture
+    secrets, fetched third-party files) out of the reviewed inventory."""
+    import subprocess
+
+    from scripts.check_release_consistency import build_public_artifact_inventory
+
+    repo = tmp_path / "repo"
+    root = repo / "packages" / "pkg"
+    (root / "out").mkdir(parents=True)
+    (root / "data.json").write_text("{}\n", encoding="utf-8")
+    (root / "out" / "secrets.json").write_text('{"k": "v"}\n', encoding="utf-8")
+    (root / ".gitignore").write_text("out/\n", encoding="utf-8")
+    subprocess.run(["git", "init", "-q", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+
+    paths = build_public_artifact_inventory(root)["artifacts"]
+
+    assert "data.json" in paths
+    assert "out/secrets.json" not in paths
+
+
+def test_committed_inventory_is_the_reviewed_path_list() -> None:
+    """Pull requests edit paths only, so parallel PRs stop colliding on hashes."""
+    document = json.loads((ROOT / PUBLIC_ARTIFACT_INVENTORY_PATH).read_text())
+    assert document["schema_version"] == 2
+    assert all(isinstance(row, str) for row in document["artifacts"])
+
+
+def test_release_stamp_hashes_only_reviewed_paths(tmp_path: Path) -> None:
+    artifact = tmp_path / "schemas/workflow.json"
+    artifact.parent.mkdir(parents=True)
+    artifact.write_text("{}\n")
+    write_public_artifact_inventory(tmp_path)
+
+    stray = tmp_path / "data/production_samples.json"
+    stray.parent.mkdir()
+    stray.write_text("{}\n")
+    with pytest.raises(ValueError, match="unregistered"):
+        stamp_release_artifact_inventory(tmp_path)
+
+    stray.unlink()
+    stamp_release_artifact_inventory(tmp_path)
+    stamped = json.loads((tmp_path / PUBLIC_ARTIFACT_INVENTORY_PATH).read_text())
+    assert stamped["schema_version"] == 1
+    assert stamped["artifacts"] == [
+        {
+            "path": "schemas/workflow.json",
+            "sha256": hashlib.sha256(b"{}\n").hexdigest(),
+        }
+    ]
+
+
+def test_archives_refuse_the_unstamped_path_list(tmp_path: Path) -> None:
+    reviewed = (ROOT / PUBLIC_ARTIFACT_INVENTORY_PATH).read_bytes()
+    wheel = tmp_path / "unstamped.whl"
+    _write_wheel(
+        wheel,
+        {
+            "openadapt_flow-1.0.dist-info/licenses/LICENSE",
+            "openadapt_flow-1.0.dist-info/METADATA",
+        },
+        payloads={WHEEL_ARTIFACT_INVENTORY_PATH: reviewed},
+    )
+    with pytest.raises(ValueError, match="stamp-release-inventory"):
+        validate_wheel_license_boundary(wheel)
+
+    sdist = tmp_path / "unstamped.tar.gz"
+    _write_sdist(
+        sdist,
+        {*REQUIRED_SDIST_PATHS, "PKG-INFO"},
+        payloads={PUBLIC_ARTIFACT_INVENTORY_PATH: reviewed},
+    )
+    with pytest.raises(ValueError, match="stamp-release-inventory"):
+        validate_sdist_license_boundary(sdist)
+
+
+def test_release_workflow_stamps_and_validates_flow_archives() -> None:
+    workflow = (ROOT.parents[1] / ".github/workflows/release-package.yml").read_text()
+    stamp = workflow.index("check_release_consistency.py --stamp-release-inventory")
+    build = workflow.index('python -m build "packages/$PACKAGE"')
+    validate = workflow.index("check_release_consistency.py --validate-dist-dir")
+    assert stamp < build < validate

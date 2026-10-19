@@ -70,6 +70,7 @@ from openadapt_flow.backend import (
 from openadapt_flow.ir import ActionDeliveryReceipt, Point
 from openadapt_flow.remote_frame_contract import RemoteFrameContract
 from openadapt_flow.runtime.resolver import visual_resolution_point_fingerprint
+from openadapt_flow.runtime.step_timing import timed_span
 
 # What a transport may hand back as the current frame: a PIL image, or raw
 # pixel bytes (RGB or RGBA, row-major) that the backend wraps with the
@@ -383,6 +384,7 @@ class FreeRDPBackend:
             self._viewport = (int(w), int(h))
         return self._viewport
 
+    @timed_span("screenshot")
     def screenshot(self) -> bytes:
         """Return the current remote frame as PNG bytes.
 
@@ -725,6 +727,20 @@ class FreeRDPBackend:
             ),
             delivered_at=datetime.now(timezone.utc).isoformat(),
         )
+
+    def hover(self, x: int, y: int) -> None:
+        """Rest the pointer on (x, y) without a button edge.
+
+        Needs a transport with ``move(x, y)``; raises NotImplementedError
+        otherwise, and the caller treats the hover look as unavailable.
+        """
+        move = getattr(self._transport, "move", None)
+        if not callable(move):
+            raise NotImplementedError("this RDP transport cannot move the pointer")
+        with self._input_lock:
+            self._ensure_input_ready(point=(int(x), int(y)), operation="rdp_hover")
+            self._assert_frame_fresh()
+            move(int(x), int(y))
 
     def drag(self, x: int, y: int, end_x: int, end_y: int) -> None:
         """Drag between two points resolved from the same fresh framebuffer."""

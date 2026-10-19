@@ -119,7 +119,7 @@ function engine(initial: ReturnType<typeof project>) {
   });
 }
 
-it("says what the task changes and how it checks, in plain words", async () => {
+it("says what the workflow changes and how it checks, in plain words", async () => {
   engine(project());
   render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={() => {}} />);
 
@@ -180,12 +180,12 @@ function unprovenProgram() {
   return base;
 }
 
-it("never calls a task read-only while a step's effect is unknown", async () => {
+it("never calls a workflow read-only while a step's effect is unknown", async () => {
   engine(unprovenProgram());
   render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={() => {}} />);
 
-  expect(await screen.findByText(/can't tell yet whether this task saves anything/)).toBeTruthy();
-  expect(screen.queryByText(/This task only reads/)).toBeNull();
+  expect(await screen.findByText(/can't tell yet whether this workflow saves anything/)).toBeTruthy();
+  expect(screen.queryByText(/This workflow only reads/)).toBeNull();
   expect(screen.getByText(/2 steps might change something/)).toBeTruthy();
   expect(screen.getByText("Type the insurance no")).toBeTruthy();
   expect(screen.getByText("Click “日”")).toBeTruthy();
@@ -198,13 +198,13 @@ it("never calls a task read-only while a step's effect is unknown", async () => 
   expect((run as HTMLButtonElement).disabled).toBe(true);
 });
 
-it("says a task only reads when every step is proven read-only", async () => {
+it("says a workflow only reads when every step is proven read-only", async () => {
   const readOnly = unprovenProgram();
   readOnly.graph.nodes = [readOnly.graph.nodes[1]];
   engine(readOnly);
   render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={() => {}} />);
 
-  expect(await screen.findByText(/This task only reads/)).toBeTruthy();
+  expect(await screen.findByText(/This workflow only reads/)).toBeTruthy();
 });
 
 it("lists a save the program declares without an effect and asks how to check it", async () => {
@@ -226,7 +226,7 @@ it("lists a save the program declares without an effect and asks how to check it
   expect(await screen.findByText("Click the spot you clicked when you showed it")).toBeTruthy();
   expect(screen.getByText("OpenAdapt doesn't know yet what this step saves.")).toBeTruthy();
   expect(screen.getByText("OpenAdapt doesn't know yet how to confirm this save.")).toBeTruthy();
-  expect(screen.queryByText(/This task only reads/)).toBeNull();
+  expect(screen.queryByText(/This workflow only reads/)).toBeNull();
   expect(screen.getByText(/can't tell yet whether 1 other step changes anything/)).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "These look right" }));
   await waitFor(() =>
@@ -312,7 +312,7 @@ it("approves, locks the version, and offers Run it", async () => {
   const onRun = vi.fn();
   render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={onRun} />);
 
-  fireEvent.click(await screen.findByRole("button", { name: "Approve for use" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Approve this workflow" }));
 
   expect(await screen.findByText("Approved and locked")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Run it" }));
@@ -322,7 +322,7 @@ it("approves, locks the version, and offers Run it", async () => {
 it("keeps approval off until the practice item passed", async () => {
   engine(project());
   render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={() => {}} />);
-  const approve = await screen.findByRole("button", { name: "Approve for use" });
+  const approve = await screen.findByRole("button", { name: "Approve this workflow" });
   expect((approve as HTMLButtonElement).disabled).toBe(true);
 });
 
@@ -400,7 +400,7 @@ it("runs one drill at a time in the signed-in browser", async () => {
   render(<CheckIt workflowId="wf-1" onExactChecks={() => {}} onRun={() => {}} />);
 
   expect(await screen.findByText(/in your signed-in browser/)).toBeTruthy();
-  expect(screen.getByText(/Open the screen where the task starts before you run it/)).toBeTruthy();
+  expect(screen.getByText(/Open the screen where the workflow starts before you run it/)).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Run the next drill" }));
 
   expect(await screen.findByText(/then run the next drill/)).toBeTruthy();
@@ -466,7 +466,7 @@ it("describes each drill as the change Flow makes before the save", async () => 
   for (const label of [
     "Wrong record",
     "Two possible matches",
-    "Record changed mid-task",
+    "Record changed during the run",
     "No record check",
     "Weak record check",
   ]) {

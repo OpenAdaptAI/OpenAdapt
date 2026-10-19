@@ -1,0 +1,97 @@
+{
+ "arm": "browser",
+ "ref": "r7-arlo-whitcombe",
+ "mismatch": false,
+ "error": null,
+ "engine_success": true,
+ "outcome": "COMPLETED_UNVERIFIED",
+ "steps": 41,
+ "step_errors": [],
+ "actuation": [
+  "dom"
+ ],
+ "effect_verified": [
+  true
+ ],
+ "new_charts": 1,
+ "readback": "12/12",
+ "correct": true,
+ "field_check": [
+  {
+   "field": "title",
+   "want": "Mr.",
+   "got": "Mr.",
+   "match": true
+  },
+  {
+   "field": "fname",
+   "want": "Arlo",
+   "got": "Arlo",
+   "match": true
+  },
+  {
+   "field": "lname",
+   "want": "Whitcombe",
+   "got": "Whitcombe",
+   "match": true
+  },
+  {
+   "field": "DOB",
+   "want": "1966-05-30",
+   "got": "1966-05-30",
+   "match": true
+  },
+  {
+   "field": "sex",
+   "want": "Male",
+   "got": "Male",
+   "match": true
+  },
+  {
+   "field": "street",
+   "want": "88 BEACON TERRACE",
+   "got": "88 BEACON TERRACE",
+   "match": true
+  },
+  {
+   "field": "city",
+   "want": "EXAMPLETON",
+   "got": "EXAMPLETON",
+   "match": true
+  },
+  {
+   "field": "state",
+   "want": "MA",
+   "got": "MA",
+   "match": true
+  },
+  {
+   "field": "postal_code",
+   "want": "02139",
+   "got": "02139",
+   "match": true
+  },
+  {
+   "field": "phone_home",
+   "want": "555-0152",
+   "got": "555-0152",
+   "match": true
+  },
+  {
+   "field": "email",
+   "want": "arlo.whitcombe@example.invalid",
+   "got": "arlo.whitcombe@example.invalid",
+   "match": true
+  },
+  {
+   "field": "country_code",
+   "want": "USA",
+   "got": "USA",
+   "match": true
+  }
+ ],
+ "wall_s": 23.447,
+ "setup_s": 1.479,
+ "task_s": 22.105,
+ "readback_s": 1.342
+}
