@@ -297,6 +297,28 @@ Metrics, per executor:
 
 Every metric is also broken down by block (`by_release` in `summary.json`).
 
+### Arms
+
+The scoreboard's four arms, each a `--agent` value, plus one more way to
+score arm 1's own runs:
+
+| Arm | `--agent` | What runs | Model calls |
+|---|---|---|---|
+| 1. Agent alone | `claude-computer-use` | Claude Sonnet 5.5 computer use does every item. | every item |
+| 1 + read-back | same runs, `--readback` | Arm 1's runs, with each claim gated on verify-run. Detection only: the read-back runs after the save. Same runs, so no extra cost. | none extra |
+| 2. Agent's first run under OpenAdapt | `compile-agent` | The agent records item 1 under `compile_agent`; scripted admission (confirm parameters, review, canary, admit); then the program. The agent records again only after a program halt that wrote nothing and was not a record check refusing a save. | recordings only |
+| 3. Program | `openadapt-program:<jit cache>` | The scoreboard's admitted MockMed program, unchanged. | none |
+| 3r. Program with self-repair | `self-repair` | Arm 3 under SelfRepair (#1265): on a halt it accepts, the repair agent proposes one click, a probe and a fault probe (Jane Sample's referral removed) must pass, and one approval is asked. | repairs only |
+
+Approvals in arms 2 and 3r are answered by a script standing in for a
+person, as on the scoreboard. Each is logged as a scripted human event with
+0 minutes. No minutes are estimated.
+
+Paid arms write every model call to a per-item ledger (`ledgers/` in each
+run) and the per-item totals to [`results/spend.json`](results/spend.json).
+The runner stops an arm before its cap (`--arm-cap`), and before the total of
+this ledger and the scoreboard's passes $20.
+
 RESULTS_1_1_0
 
 ## Apps

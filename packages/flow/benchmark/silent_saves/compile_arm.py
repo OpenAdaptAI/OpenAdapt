@@ -162,8 +162,9 @@ class CompileAgent:
         events: list[dict[str, Any]] = []
         if self.pending_admission:
             self.pending_admission = False
+            item_state = self._state()
             events = self._admit(task)
-            self.app.prepare(*self._state())  # the item's own state again
+            self.app.prepare(*item_state)  # the item's own fault and screen again
         jit = self._jit(task)
         if not jit.admitted:
             why = "first run" if not self.recordings else "no admitted program"
