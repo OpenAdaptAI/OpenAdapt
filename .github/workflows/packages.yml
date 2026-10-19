@@ -254,6 +254,7 @@ jobs:
             openadapt_flow/runtime/effects/document_hash.py \
             openadapt_flow/runtime/effects/email_delivery.py \
             openadapt_flow/runtime/effects/fhir.py \
+            openadapt_flow/runtime/effects/fresh_session.py \
             openadapt_flow/runtime/effects/file_arrival.py \
             openadapt_flow/runtime/effects/graphql.py \
             openadapt_flow/runtime/effects/onscreen.py \
