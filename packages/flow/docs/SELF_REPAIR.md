@@ -80,6 +80,19 @@ See [Measured](#measured) for how often it works.
 
    A halt on the record check (an identity mismatch) is never repaired, and
    neither is an item a person declined at the approval gate.
+
+   When a closed-loop scroll runs out of budget because the next click's
+   target never resolved, the halt is on that click, not on the scroll. The
+   click accepts only direct rungs (page structure, template, OCR) and no
+   model, so it sends no input. A target that resolved but was out of place or
+   failed its record check still halts on the scroll.
+
+   A run that ends `RECONCILIATION_REQUIRED` is never repaired. A key press or
+   click whose risk nobody reviewed (`risk_review_required`) may have written,
+   so the run ends that way even when the halt itself sent nothing. The
+   refusal names those steps. A person who reviews them with
+   `openadapt-flow qualify set-risk` makes the same halt
+   `HALTED_BEFORE_EFFECT`, and self-repair can take it.
 2. **Propose.** The repair agent is shown the step's intent, the recorded
    evidence (the target crop, its label, its place), the live screen, the
    halt kind, and for `after` the text of the screen the step expected. It
@@ -337,7 +350,17 @@ runs plainly. The bindings are:
 - a qualification case;
 - `--pin-digest`.
 
-In those cases the approved bundle needs its own admission first. Under the
+In those cases the approved bundle needs its own admission first: a
+repaired bundle has a new digest, and each of these admits only the bundle
+it names.
+
+The first run is the ordinary run, so an admitted API step
+([API_TIER.md](API_TIER.md)) can run there. The probes and the resumed run of
+a repaired bundle run the GUI steps only, and the run report says why: the
+repair, the fault probes and the person's approval are all about the GUI
+step, so an API step in its place would save without exercising the repair. The
+same holds for a standard change's run of the repaired bundle on the test
+record. Under the
 CLI, the Standard profile requires a signed qualification admission. So a CLI
 self-repair runs without a named profile or under Demo, and the record check
 still runs. The Python API can run the Standard profile contract directly, as

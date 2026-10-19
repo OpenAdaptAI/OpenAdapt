@@ -595,9 +595,17 @@ def _verified(report: RunReport) -> bool:
 
 
 def run_preflight(
-    test_record: TestRecord, bundle_dir: Path | str, run_dir: Path | str
+    test_record: TestRecord,
+    bundle_dir: Path | str,
+    run_dir: Path | str,
+    *,
+    gui_only: bool = False,
 ) -> PreflightResult:
-    """Run ``bundle_dir`` once on the test record, with the full read-back."""
+    """Run ``bundle_dir`` once on the test record, with the full read-back.
+
+    ``gui_only`` runs the GUI steps only: a repaired bundle's test-record run
+    must exercise the repaired GUI step, not an API step in its place.
+    """
 
     from openadapt_flow.repair.self_repair import _close
 
@@ -606,7 +614,9 @@ def run_preflight(
     try:
         workflow = Workflow.load(bundle_dir)
         session = test_record.target.open()
-        report = test_record.target.execute(workflow, bundle_dir, session, run_dir)
+        report = test_record.target.execute(
+            workflow, bundle_dir, session, run_dir, gui_only=gui_only
+        )
     except Exception as exc:  # noqa: BLE001 - a run that can't start fails
         return PreflightResult(
             test_record.record_id,
@@ -916,7 +926,7 @@ class StandardChanges:
             to_person(str(exc))
             return None
         preflight = run_preflight(
-            self.test_record, patch.bundle_dir, work / "preflight"
+            self.test_record, patch.bundle_dir, work / "preflight", gui_only=True
         )
         self.last_preflight = preflight
         if not preflight.passed:

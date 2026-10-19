@@ -285,7 +285,9 @@ class SelfRepairTarget(Protocol):
     fault name opens a session that presents that fault (for the fault
     probes). ``execute`` admits ``workflow`` through the run gate and runs it
     with a fresh authorization; it must raise :class:`SelfRepairRefused` when
-    the gate refuses.
+    the gate refuses. ``gui_only`` (and any ``approval_gate``, which only
+    probes and resumed runs pass) runs the GUI steps only
+    (:func:`keep_gui_for_repair`).
     """
 
     def open(self, fault: Optional[str] = None) -> AppSession: ...
@@ -298,6 +300,7 @@ class SelfRepairTarget(Protocol):
         run_dir: Path,
         *,
         approval_gate: Optional[ApprovalGate] = None,
+        gui_only: bool = False,
     ) -> RunReport: ...
 
 
@@ -357,6 +360,7 @@ class ReplayTarget:
         run_dir: Path,
         *,
         approval_gate: Optional[ApprovalGate] = None,
+        gui_only: bool = False,
     ) -> RunReport:
         from openadapt_flow.deployment import DeploymentConfig, PolicySection
         from openadapt_flow.execution_profiles import (
@@ -400,6 +404,8 @@ class ReplayTarget:
             approval_gate=approval_gate,
             **self.replayer_kwargs,
         )
+        if approval_gate is not None or gui_only:
+            keep_gui_for_repair(replayer)
         return replayer.run(
             workflow.model_copy(deep=True),
             params=self.params,
@@ -410,6 +416,25 @@ class ReplayTarget:
             execution_origin=self.execution_origin,
             execution_entry_url=self.entry_url,
         )
+
+
+#: Why a probe or the resumed run of a repaired bundle doesn't use API steps.
+REPAIR_GUI_ONLY = (
+    "self-repair's probes and resumed run exercise the repaired GUI step, and "
+    "the person approved that step, so its API step doesn't run"
+)
+
+
+def keep_gui_for_repair(replayer: Any) -> None:
+    """Run a repaired bundle's probe or resumed run on the GUI steps only.
+
+    The repair, the fault probes and the person's approval are all about the
+    GUI step. An API step in its place would save without exercising the
+    repair, so the canary would prove nothing about it.
+    """
+
+    replayer.api_steps = False
+    replayer.api_steps_off_reason = REPAIR_GUI_ONLY
 
 
 # -- the probe gate --------------------------------------------------------------
@@ -707,8 +732,7 @@ class SelfRepair:
             if report.transaction_outcome not in (None, "HALTED_BEFORE_EFFECT"):
                 return self._finish(
                     "not_repairable",
-                    f"the run ended {report.transaction_outcome}; self-repair "
-                    "handles only a halt before any effect",
+                    _not_before_effect(report),
                     evidence,
                     report,
                     run_dir,
@@ -2246,6 +2270,31 @@ def _recorded_crop(workflow: Workflow, bundle_dir: Path, step: Step) -> Optional
         return crop
     path = bundle_dir / step.anchor.template
     return path.read_bytes() if path.is_file() else None
+
+
+def _not_before_effect(report: RunReport) -> str:
+    """Why a halt that may have left an effect is not repaired, and by whom."""
+
+    from openadapt_flow.transaction import steps_requiring_reconciliation
+
+    reason = (
+        f"the run ended {report.transaction_outcome}; self-repair handles only "
+        "a halt before any effect"
+    )
+    unsettled = steps_requiring_reconciliation(report)
+    if not unsettled:
+        return reason
+    reason += f" (effect not settled at {', '.join(unsettled[:8])})"
+    unreviewed = {r.step_id for r in report.results if r.risk_review_required}
+    if unreviewed.issuperset(unsettled):
+        # Only steps nobody classified keep this run from an absence claim.
+        # A person reviews them once; the rule itself stays fail-closed.
+        reason += (
+            "; each acted with a risk nobody reviewed, so a write cannot be "
+            "ruled out. A person can classify them with `openadapt-flow "
+            "qualify set-risk`"
+        )
+    return reason[:1024]
 
 
 def _repairable(report: RunReport, workflow: Workflow) -> "tuple[Step, str, Any] | str":

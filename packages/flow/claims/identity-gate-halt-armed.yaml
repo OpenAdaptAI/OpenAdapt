@@ -1,0 +1,34 @@
+id: identity-gate-halt-armed
+claim: >-
+  On ambiguity the runtime halts instead of guessing, and an identity gate
+  refuses a wrong-entity (wrong-patient) click — on ARMED steps only.
+surfaces: [README.md, docs]
+tier: supported
+evidence:
+  - path: tests/test_identity.py
+    proves: >-
+      Wrong-entity / near-name sibling / generic-band / param-in-band
+      probes: the identity check refuses to verify a mismatched target and
+      never arms on non-discriminative bands.
+  - path: tests/test_disambiguation.py
+    proves: >-
+      Underdetermined targets surface as explicit disambiguation rather
+      than a guessed click.
+  - path: tests/test_identity_fuzz.py
+    proves: >-
+      Public property-based checks preserve the never-false-accept
+      invariant for collapsible identifiers while requiring clean
+      identifiers to remain verifiable.
+  - path: tests/test_identity_ladder.py
+    proves: >-
+      The identity resolution ladder (structural/template/OCR) escalation.
+caveats:
+  - >-
+    Identity verification covers ONLY armed steps. Real bundles arm a
+    MINORITY of clicks (4 of 12 on a recent live OpenEMR bundle); an
+    UNARMED click proceeds with no identity check whatsoever. Coverage is
+    an auditable per-step metric, but disclosure does not close the gap.
+    `scaffold-verifier --bundle` reports coverage before and after
+    evidence from the recording's DOM / accessibility text at each
+    unarmed click; it proposes only evidence the runtime checks on that
+    surface, and a person applies it.
