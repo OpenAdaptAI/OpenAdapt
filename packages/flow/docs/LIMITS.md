@@ -190,7 +190,7 @@ before and after numbers are in
 
 Before a step stops on a look-alike identifier, the replayer takes extra looks
 that change nothing
-([`runtime/identity_looks.py`](../openadapt_flow/runtime/identity_looks.py)):
+([`openadapt_flow/runtime/identity_looks.py`](../openadapt_flow/runtime/identity_looks.py)):
 the same read on two fresh screenshots, the 2x re-read, the known-ID list when
 one is configured, and, where the surface allows it, a select-and-copy of the
 identifier's text box (`runtime.identity_copy_look`). OCR looks can't settle
