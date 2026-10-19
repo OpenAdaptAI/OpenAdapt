@@ -401,12 +401,18 @@ def _claims_markdown(cl: dict[str, Any]) -> list[str]:
         "",
     ]
     for key, c in cl.items():
-        lines += [f"### {key}", ""]
+        title = (
+            f"### {key} (rebuilt state, judged by fixed verify-run)"
+            if c.get("rebuilt_state")
+            else f"### {key}"
+        )
+        lines += [title, ""]
         if c.get("rebuilt_state"):
             lines += [
-                f"Re-judgement of run `{c['source_run']}`, not a new agent run: each "
-                "item's database state was rebuilt without the agent (the item's "
-                "chart saved through the API, the same fault applied) and judged by "
+                f"**Rebuilt state, judged by fixed verify-run.** Not the original "
+                f"run and not a new agent run: each item of run `{c['source_run']}` "
+                "had its database state rebuilt without the agent (the item's chart "
+                "saved through the API, the same fault applied), then judged by "
                 f"verify-run at {str(c['verify_run_git_head'])[:8]} (#1375, the "
                 "collateral-change check). The agent's claims are the source run's.",
             ]

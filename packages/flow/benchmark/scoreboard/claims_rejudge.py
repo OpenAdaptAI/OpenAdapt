@@ -118,13 +118,11 @@ def main() -> int:
             # (baseline.json.used), and an old receipt must never be re-read.
             shutil.rmtree(item_dir, ignore_errors=True)
             item_dir.mkdir(parents=True)
-            params = item_dir / "params.json"
-            params.write_text(json.dumps(values))
             baseline = item_dir / "baseline.json"
             baseline.unlink(missing_ok=True)
             env = {**c._token_env(), **env_flow}
             cap = c._verify(
-                env, "--verify", str(verify_yaml), "--params", str(params),
+                env, values, "--verify", str(verify_yaml),
                 "--capture-baseline", str(baseline),
             )  # fmt: skip
             if cap.returncode != 0:
@@ -155,8 +153,8 @@ def main() -> int:
             # as this run's (verify-run refuses an existing --out).
             shutil.rmtree(share, ignore_errors=True)
             ver = c._verify(
-                {**c._token_env(), **env_flow},
-                "--verify", str(verify_yaml), "--params", str(params),
+                {**c._token_env(), **env_flow}, values,
+                "--verify", str(verify_yaml),
                 "--run-record", str(record),
                 "--authorization-ref", f"SCOREBOARD-REJUDGE-{args.run_id}-{i:03d}",
                 "--baseline", str(baseline), "--out", str(share),

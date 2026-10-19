@@ -244,9 +244,26 @@ def _install_trigger(fault: str, max_id: int) -> None:
     openemr.fixture()._db(" ".join(sql))
 
 
-def _verify(env: dict[str, str], *argv: str) -> subprocess.CompletedProcess[str]:
+def _verify(
+    env: dict[str, str], params: dict[str, str], *argv: str
+) -> subprocess.CompletedProcess[str]:
+    """Run verify-run with the item's values on stdin, never in a file.
+
+    The values are a made-up patient, but they are patient-shaped: nothing
+    writes them to disk in clear text outside the committed scoreboard rows.
+    """
+
     return subprocess.run(
-        [sys.executable, "-m", "openadapt_flow", "verify-run", *argv],
+        [
+            sys.executable,
+            "-m",
+            "openadapt_flow",
+            "verify-run",
+            "--params",
+            "/dev/stdin",
+            *argv,
+        ],
+        input=json.dumps(params),
         capture_output=True,
         text=True,
         timeout=180,
@@ -318,17 +335,14 @@ def main() -> int:
             # (baseline.json.used), and an old receipt must never be re-read.
             shutil.rmtree(item_dir, ignore_errors=True)
             item_dir.mkdir(parents=True)
-            params = item_dir / "params.json"
-            params.write_text(json.dumps(values))
             baseline = item_dir / "baseline.json"
             baseline.unlink(missing_ok=True)
             env = _token_env()
             cap = _verify(
                 env,
+                values,
                 "--verify",
                 str(verify_yaml),
-                "--params",
-                str(params),
                 "--capture-baseline",
                 str(baseline),
             )
@@ -396,10 +410,9 @@ def main() -> int:
             shutil.rmtree(share, ignore_errors=True)
             ver = _verify(
                 _token_env(),
+                values,
                 "--verify",
                 str(verify_yaml),
-                "--params",
-                str(params),
                 "--run-record",
                 str(record),
                 "--authorization-ref",

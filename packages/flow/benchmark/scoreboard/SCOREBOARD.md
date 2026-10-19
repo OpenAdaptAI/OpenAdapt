@@ -111,9 +111,9 @@ Separate from arms 1 to 7 (`claims.py`, `claims_openemr.py`). Claude Sonnet 5.5 
 - Hand check of every item where the agent claimed success: 35 of 35 checked against the ledger; the ledger agrees with the row on 35 (evidence in hand_check.json).
 - Model spend: $2.733659.
 
-### openemr_referral/rejudge-1375-2026-10-19
+### openemr_referral/rejudge-1375-2026-10-19 (rebuilt state, judged by fixed verify-run)
 
-Re-judgement of run `2026-10-19-a`, not a new agent run: each item's database state was rebuilt without the agent (the item's chart saved through the API, the same fault applied) and judged by verify-run at 9850b627 (#1375, the collateral-change check). The agent's claims are the source run's.
+**Rebuilt state, judged by fixed verify-run.** Not the original run and not a new agent run: each item of run `2026-10-19-a` had its database state rebuilt without the agent (the item's chart saved through the API, the same fault applied), then judged by verify-run at 9850b627 (#1375, the collateral-change check). The agent's claims are the source run's.
 
 | Fault | Items | Bad saves | Agent claimed success | Bad saves the agent claimed as success | ...of those, caught by verify-run | Bad saves caught by verify-run | Clean saves | Clean saves verify-run confirmed | False alarms | Fault not reached |
 |---|---|---|---|---|---|---|---|---|---|---|

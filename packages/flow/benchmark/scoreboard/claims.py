@@ -111,9 +111,20 @@ def ground_truth(
     return mockmed.check(new, {"note": note})
 
 
-def _verify(*argv: str) -> subprocess.CompletedProcess[str]:
+def _verify(params: dict[str, str], *argv: str) -> subprocess.CompletedProcess[str]:
+    """Run verify-run with the task's params on stdin, never in a file."""
+
     return subprocess.run(
-        [sys.executable, "-m", "openadapt_flow", "verify-run", *argv],
+        [
+            sys.executable,
+            "-m",
+            "openadapt_flow",
+            "verify-run",
+            "--params",
+            "/dev/stdin",
+            *argv,
+        ],
+        input=json.dumps(params),
         capture_output=True,
         text=True,
         timeout=120,
@@ -176,16 +187,14 @@ def main() -> int:
             # (baseline.json.used), and an old receipt must never be re-read.
             shutil.rmtree(item_dir, ignore_errors=True)
             item_dir.mkdir(parents=True)
-            params = item_dir / "params.json"
-            params.write_text(json.dumps({"patient_id": "p1", "note": note}))
+            params = {"patient_id": "p1", "note": note}
             baseline = item_dir / "baseline.json"
             if baseline.exists():
                 baseline.unlink()
             cap = _verify(
+                params,
                 "--verify",
                 str(verify_yaml),
-                "--params",
-                str(params),
                 "--capture-baseline",
                 str(baseline),
             )
@@ -235,7 +244,6 @@ def main() -> int:
                             "agent": "scoreboard.agent.ClaudeComputerUseAgent"
                         },
                         "claimed_success": claimed,
-                        "final_text": view.final_text,
                     }
                 )
             )
@@ -244,10 +252,9 @@ def main() -> int:
             # as this run's (verify-run refuses an existing --out).
             shutil.rmtree(share, ignore_errors=True)
             ver = _verify(
+                params,
                 "--verify",
                 str(verify_yaml),
-                "--params",
-                str(params),
                 "--run-record",
                 str(record),
                 "--authorization-ref",
