@@ -6,10 +6,16 @@ This public repository is the launcher/meta-package and stable community
 entry point for OpenAdapt. It owns `pip install openadapt`, the unified
 `openadapt` CLI, release compatibility, and launcher packaging.
 
-The canonical compiler and governed runtime live in
-[`OpenAdaptAI/openadapt-flow`](https://github.com/OpenAdaptAI/OpenAdapt/tree/main/packages/flow).
-Engine, replay, verification, repair, policy, and backend changes belong there;
-do not implement a second engine in this repository.
+The compiler and governed runtime (openadapt-flow) live in this monorepo
+under `packages/flow`, next to `packages/agent`, `packages/types` and
+`packages/capture`. The standalone openadapt-flow, openadapt-agent and
+openadapt-types repositories are frozen; changes go here.
+[CAPABILITIES.md](CAPABILITIES.md) is the map of what exists and how proven
+it is; update it in the same pull request as any capability change, and list
+any new `openadapt-flow` command under "Every command, by capability" (a test
+enforces it). Refresh the review brief with `python scripts/build_llms_full.py` when you
+change README.md, CAPABILITIES.md, SURFACES.md, LIMITS.md or the flow
+CHANGELOG, and always before a release.
 
 The current product compiles demonstrated GUI workflows into deterministic,
 locally executable programs. Healthy runs make no model calls. Training,
