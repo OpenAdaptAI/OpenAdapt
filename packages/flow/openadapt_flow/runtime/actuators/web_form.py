@@ -42,7 +42,7 @@ import re
 import urllib.parse as up
 from dataclasses import dataclass
 from html.parser import HTMLParser
-from typing import Any, Optional, Protocol
+from typing import Any, Iterable, Optional, Protocol
 
 from openadapt_flow.runtime.actuators.api import (
     ActuationStatus,
@@ -73,7 +73,12 @@ class _FormParser(HTMLParser):
                 # controls belong to, and are posted with, the outer form.
                 self._nested += 1
                 return
-            self._form = {"action": a.get("action", ""), "controls": {}}
+            self._form = {
+                "action": a.get("action", ""),
+                "controls": {},
+                "handlers": sorted(k for k in a if k.startswith("on")),
+                "novalidate": "novalidate" in a,
+            }
             self.forms.append(self._form)
             return
         if self._form is None:
@@ -89,7 +94,8 @@ class _FormParser(HTMLParser):
                 value = a.get("value", "on" if kind in ("checkbox", "radio") else "")
             self._form["controls"].setdefault(
                 name,
-                {"kind": kind, "default": value, "options": None, "id": a.get("id")},
+                {"kind": kind, "default": value, "options": None, "id": a.get("id")}
+                | _native_rules(a),
             )
         elif tag == "select" and name:
             self._select = {
@@ -98,7 +104,7 @@ class _FormParser(HTMLParser):
                 "default": None,
                 "options": [],
                 "multiple": "multiple" in a,
-            }
+            } | _native_rules(a)
             self._form["controls"].setdefault(name, self._select)
         elif tag == "option" and self._select is not None:
             self._option = {
@@ -113,7 +119,7 @@ class _FormParser(HTMLParser):
                 "default": "",
                 "options": None,
                 "id": a.get("id"),
-            }
+            } | _native_rules(a)
             self._form["controls"].setdefault(name, self._textarea)
 
     def handle_data(self, data: str) -> None:
@@ -144,16 +150,174 @@ class _FormParser(HTMLParser):
                 self._form = None
 
 
-def form_controls(html: str, action_path: str) -> Optional[dict[str, Any]]:
-    """The named controls of the form in ``html`` that posts to ``action_path``."""
+def _native_rules(a: dict[str, str]) -> dict[str, Any]:
+    """A control's native HTML constraints and its script handlers."""
 
+    return {
+        "required": "required" in a,
+        "pattern": a.get("pattern"),
+        "min": a.get("min"),
+        "max": a.get("max"),
+        "minlength": a.get("minlength"),
+        "maxlength": a.get("maxlength"),
+        "disabled": "disabled" in a,
+        "handlers": sorted(k for k in a if k.startswith("on")),
+    }
+
+
+def _form(html: str, action_path: str) -> Optional[dict[str, Any]]:
     parser = _FormParser()
     parser.feed(html)
     leaf = up.urlsplit(action_path).path.rsplit("/", 1)[-1]
     for form in parser.forms:
         action = up.urlsplit(form["action"]).path
         if action == action_path or (leaf and action.rsplit("/", 1)[-1] == leaf):
-            return form["controls"]
+            return form
+    return None
+
+
+def form_controls(html: str, action_path: str) -> Optional[dict[str, Any]]:
+    """The named controls of the form in ``html`` that posts to ``action_path``."""
+
+    form = _form(html, action_path)
+    return form["controls"] if form is not None else None
+
+
+_SUBMIT_LISTENER = re.compile(
+    r"""addEventListener\(\s*['"]submit['"]|\.on\(\s*['"]submit['"]|\.submit\(\s*function""",
+)
+
+
+def form_scripts(html: str, action_path: str, sent: Iterable[str]) -> list[str]:
+    """Script the browser would run on this save that the API step can't.
+
+    The form's own ``on*`` handlers (``onsubmit``), the ``on*`` handlers of
+    the fields the save sends (``onchange``, ``oninput``, ``onblur``: script
+    that can validate or rewrite a value, such as capitalizing a name), and
+    page script that listens for the submit. Each is named; empty when none.
+    """
+
+    form = _form(html, action_path)
+    if form is None:
+        return []
+    found = [f"form {h}" for h in form["handlers"]]
+    sent_names = set(sent)
+    for name, control in form["controls"].items():
+        if name in sent_names:
+            found += [f"{name} {h}" for h in control.get("handlers") or []]
+    if _SUBMIT_LISTENER.search(html):
+        found.append("a page script listening for submit")
+    return found
+
+
+#: validate.js rule kinds the API step evaluates. Any other kind is script it
+#: can't run (for example OpenEMR's ``pastDate``).
+CLIENT_RULE_KINDS = frozenset({"presence", "length", "format", "numericality", "email"})
+
+
+def unsupported_client_rules(rules: Optional[dict[str, Any]]) -> list[str]:
+    """``field kind`` for every validate.js rule the API step can't evaluate."""
+
+    out = []
+    for name, rule in (rules or {}).items():
+        if isinstance(rule, dict):
+            out += [f"{name} {kind}" for kind in rule if kind not in CLIENT_RULE_KINDS]
+    return sorted(out)
+
+
+_EMAIL = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+
+
+def _number(value: str) -> Optional[float]:
+    try:
+        return float(value)
+    except ValueError:
+        return None
+
+
+def native_problem(name: str, control: dict[str, Any], value: str) -> Optional[str]:
+    """Why the browser's own validation would refuse ``value``, or None.
+
+    The constraints a browser checks before it submits: ``required``,
+    ``minlength``/``maxlength``, ``pattern``, ``min``/``max`` and the input
+    ``type`` (email, url, number, date). A pattern that can't be compiled is
+    refused (it can't be evaluated).
+    """
+
+    if control.get("disabled") or control.get("kind") == "hidden":
+        return None
+    if control.get("required") and value == "":
+        return f"{name} is required by the form and would be empty"
+    if value == "":
+        return None
+    for attr, test in (
+        ("minlength", lambda n: len(value) < n),
+        ("maxlength", lambda n: len(value) > n),
+    ):
+        limit = control.get(attr)
+        if limit not in (None, "") and str(limit).isdigit() and test(int(limit)):
+            return f"{name} is {len(value)} characters; the form's {attr} is {limit}"
+    pattern = control.get("pattern")
+    if pattern:
+        try:
+            if re.fullmatch(f"(?:{pattern})", value) is None:
+                return f"{name} doesn't match the form's pattern"
+        except re.error:
+            return f"{name}'s pattern can't be evaluated outside the browser"
+    kind = control.get("kind")
+    if kind == "email" and not all(_EMAIL.match(v.strip()) for v in value.split(",")):
+        return f"{name} is not an email address"
+    if kind == "url" and not re.match(r"^[A-Za-z][A-Za-z0-9+.-]*:", value):
+        return f"{name} is not a URL"
+    if kind in ("number", "range"):
+        number = _number(value)
+        if number is None:
+            return f"{name} is not a number"
+        low = _number(str(control.get("min") or ""))
+        high = _number(str(control.get("max") or ""))
+        if low is not None and number < low:
+            return f"{name} is outside the form's min {control.get('min')}"
+        if high is not None and number > high:
+            return f"{name} is outside the form's max {control.get('max')}"
+    if kind == "date":
+        if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", value):
+            return f"{name} is not a date (YYYY-MM-DD)"
+        low_date, high_date = control.get("min"), control.get("max")
+        if low_date and value < str(low_date):
+            return f"{name} is outside the form's min {low_date}"
+        if high_date and value > str(high_date):
+            return f"{name} is outside the form's max {high_date}"
+    return None
+
+
+def client_rule_problem(name: str, rule: dict[str, Any], value: str) -> Optional[str]:
+    """Why a validate.js rule would refuse ``value``, or None."""
+
+    if rule.get("presence") and value == "":
+        return f"{name} is required by the form and would be empty"
+    if value == "":
+        return None
+    length = rule.get("length")
+    if isinstance(length, dict):
+        for key, bad in (
+            ("minimum", lambda n: len(value) < n),
+            ("maximum", lambda n: len(value) > n),
+            ("is", lambda n: len(value) != n),
+        ):
+            if isinstance(length.get(key), int) and bad(length[key]):
+                return f"{name} has the wrong length for the form"
+    fmt = rule.get("format")
+    pattern = fmt.get("pattern") if isinstance(fmt, dict) else fmt
+    if isinstance(pattern, str):
+        try:
+            if re.fullmatch(f"(?:{pattern})", value) is None:
+                return f"{name} doesn't match the form's format"
+        except re.error:
+            return f"{name}'s format can't be evaluated outside the browser"
+    if rule.get("numericality") and _number(value) is None:
+        return f"{name} is not a number"
+    if rule.get("email") and not _EMAIL.match(value):
+        return f"{name} is not an email address"
     return None
 
 
@@ -477,6 +641,22 @@ class WebFormActuator:
                 return unavailable(
                     "the form's validation rules changed since the recording"
                 )
+            unsupported = unsupported_client_rules(spec.client_rules)
+            if unsupported:
+                return unavailable(
+                    "the form validates with rules the API step can't evaluate "
+                    f"({', '.join(unsupported)})"
+                )
+            scripts = form_scripts(
+                page.text,
+                up.urlsplit(save_path).path,
+                [f.name for f in spec.fields],
+            )
+            if scripts:
+                return unavailable(
+                    "the form runs script the API step can't run "
+                    f"({', '.join(scripts[:5])})"
+                )
             body, problem = self.build_body(spec, params, controls)
             if problem:
                 return unavailable(problem)
@@ -603,13 +783,17 @@ class WebFormActuator:
                 body.append((field.name, field.value or ""))
         if enforce_rules:
             sent = dict(body)
+            # The browser's own checks before it submits, then the page's
+            # validate.js rules: the API step skips neither.
+            for name, value in body:
+                problem = native_problem(name, controls.get(name) or {}, value)
+                if problem:
+                    return [], problem
             for name, rule in (spec.client_rules or {}).items():
-                if (
-                    isinstance(rule, dict)
-                    and rule.get("presence")
-                    and not sent.get(name)
-                ):
-                    return [], f"{name} is required by the form and would be empty"
+                if isinstance(rule, dict):
+                    problem = client_rule_problem(name, rule, sent.get(name, ""))
+                    if problem:
+                        return [], problem
         return body, None
 
 
