@@ -743,3 +743,17 @@ def test_the_fallback_reports_the_rung_that_ran(tmp_path):
     assert "did not pass" in first.api_fallback
     assert first.actuation != "api_folded" and save.actuation != "api"
     assert ("press", "Enter") in [(a[0], a[1]) for a in backend.actions]
+
+
+def test_an_identity_checked_save_needs_a_right_record_contract(tmp_path):
+    # The save checks the right record on screen. An API step that names no
+    # right-record contract can't make that check, so the GUI steps run (a
+    # durable checkpoint of the save would otherwise lack identity evidence).
+    wf = _span_workflow(admitted=False)
+    save = wf.steps[-1].model_copy(update={"identity_armed": True})
+    wf = wf.model_copy(update={"steps": [*wf.steps[:-1], save]})
+    wf, _ = admit_api_step(wf, admitted_by="reviewer")
+    report, backend, actuator, records = _run(tmp_path, wf, ActuationStatus.ACTUATED)
+    assert actuator.calls == 0
+    assert "names no right-record contract" in report.results[0].api_fallback
+    assert ("press", "Enter") in [(a[0], a[1]) for a in backend.actions]

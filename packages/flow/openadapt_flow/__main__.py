@@ -840,8 +840,12 @@ def _build_and_run_replayer(
     deployment_surface: Optional[str] = None,
     readback_pipeline=None,
     secret_env_overrides: Optional[Mapping[str, str]] = None,
+    api_steps_off_reason: Optional[str] = None,
 ):
-    """Build the shared Replayer configuration and execute one workflow."""
+    """Build the shared Replayer configuration and execute one workflow.
+
+    ``api_steps_off_reason`` turns API steps off for this run and says why.
+    """
     replayer = _configured_replayer(
         backend,
         workflow=workflow,
@@ -867,6 +871,9 @@ def _build_and_run_replayer(
     # and per-account secret sources. Both default to the serial behavior.
     replayer.readback_pipeline = readback_pipeline
     replayer.secret_env_overrides = dict(secret_env_overrides or {})
+    if api_steps_off_reason is not None:
+        replayer.api_steps = False
+        replayer.api_steps_off_reason = api_steps_off_reason
     return replayer.run(
         workflow,
         params=params,

@@ -185,6 +185,15 @@ def build_parser() -> argparse.ArgumentParser:
         ),
     )
     p.add_argument(
+        "--no-ledger",
+        action="store_true",
+        help=(
+            "Don't serve the task-ledger tools (open_job, get_job, add_items, "
+            "record_evidence, ask_user, get_answer, change_constraint, "
+            "close_job). They are on whenever runs or guarded saves are."
+        ),
+    )
+    p.add_argument(
         "--guard",
         default=None,
         metavar="VERIFY_YAML",
@@ -771,6 +780,7 @@ def _cmd_serve(args: argparse.Namespace) -> int:
                 sandbox=sandbox_engine,
                 mode="sandbox",
             )
+            _attach_ledger(args, bridge, runs_dir)
             note = ""
             if sandbox_engine.unavailable_reason == "browser_extra_missing":
                 note = (
@@ -781,7 +791,8 @@ def _cmd_serve(args: argparse.Namespace) -> int:
                 f"openadapt-agent {__version__}: sandbox mode. One workflow "
                 f"({next(iter(bridge.catalog))}) on a synthetic app; engine "
                 f"{sandbox_engine.engine}. Tools: list_workflows, run_workflow, "
-                f"get_run. Nothing real changes.{note}",
+                f"get_run{'' if bridge.ledger is None else ', and the task-ledger tools'}. "
+                f"Nothing real changes.{note}",
                 file=sys.stderr,
             )
             _serve(serve, bridge, authoring_bridge)
@@ -833,6 +844,8 @@ def _cmd_serve(args: argparse.Namespace) -> int:
                 repair_desk=_repair_desk(args, runner_config.runs_dir),
                 admission_desk=_admission_desk(args),
             )
+            if bridge.allow_run:
+                _attach_ledger(args, bridge, runs_dir)
             n = len(bridge.workflows)
             print(
                 f"openadapt-agent {__version__}: {mode} mode; serving {n} workflow(s) "
@@ -901,8 +914,23 @@ def _serve_guard(args: argparse.Namespace, serve) -> int:
         f"approval {args.guard_approval}; tasks {args.guard_tasks}",
         file=sys.stderr,
     )
-    serve(None, guard=GuardBridge(guarded, Path(args.guard_tasks).expanduser()))
+    guard = GuardBridge(guarded, Path(args.guard_tasks).expanduser())
+    _attach_ledger(args, guard, Path(args.guard_state).expanduser().resolve())
+    serve(None, guard=guard)
     return 0
+
+
+def _attach_ledger(args: argparse.Namespace, bridge: Any, runs_dir: Path) -> None:
+    """Give the bridge a task ledger one level inside its runs folder.
+
+    One level inside, so a question shows wherever that folder's save
+    approvals already show: the paired phone and Desktop's Run it.
+    """
+    if getattr(args, "no_ledger", False):
+        return
+    from openadapt_flow.agent.ledger import TaskLedger
+
+    bridge.ledger = TaskLedger(Path(runs_dir) / "task-ledger")
 
 
 def _serve(serve, bridge, authoring):
