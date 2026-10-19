@@ -48,8 +48,12 @@ MODES = ("recorded", "param")
 
 
 def _git_commit() -> Optional[str]:
+    """Commit of the openadapt_flow under test (the before run imports
+    another checkout's package with this script)."""
     try:
-        here = Path(__file__).resolve().parent
+        import openadapt_flow
+
+        here = Path(openadapt_flow.__file__).resolve().parent
         out = subprocess.run(
             ["git", "-C", str(here), "rev-parse", "HEAD"],
             capture_output=True,
