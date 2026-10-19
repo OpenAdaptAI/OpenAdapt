@@ -175,14 +175,19 @@ class TaskSignature:
         return out
 
 
-def record_check_of(workflow: Any) -> dict[str, Any]:
+def record_check_of(workflow: Any, *, literals: bool = True) -> dict[str, Any]:
     """The program's record check: what each saving step must leave behind.
 
     For every step the run gate treats as a save (fail-closed), its effect
-    contracts and its record identity contract, in step order. Anchors,
+    contracts (which name parameters, never values) and a digest of its
+    record identity contract, in step order. Anchors,
     templates and locators are left out, so a repair that re-anchors a step
     or adds a bridge before it keeps the same record check, while any change
     to what is saved, or to which record, changes it.
+
+    ``literals=False`` replaces every literal value in a contract with
+    ``"<literal>"`` and keeps parameter references: the view a repair agent
+    gets, since a contract may pin a value from a real record.
     """
 
     from openadapt_flow.run_gate import is_consequential
@@ -195,15 +200,44 @@ def record_check_of(workflow: Any) -> dict[str, Any]:
             {
                 "step_id": step.id,
                 "intent": step.intent or "",
-                "effects": [e.model_dump(mode="json") for e in step.effects],
+                "effects": [
+                    _contract(e.model_dump(mode="json"), literals) for e in step.effects
+                ],
                 "identity": _identity_of(step),
             }
         )
     return {"workflow": getattr(workflow, "name", None), "saves": saves}
 
 
-def _identity_of(step: Any) -> Optional[dict[str, Any]]:
-    """The save's record identity contract: which record it must act on."""
+_VALUE_KEYS = ("match", "value", "new_records")
+
+
+def _masked(value: Any) -> Any:
+    if isinstance(value, dict):
+        if set(value) <= {"literal", "param"}:
+            # A ValueExpr: keep a parameter reference, mask a literal.
+            if value.get("param") is not None:
+                return {"param": value["param"]}
+            return "<literal>"
+        return {k: _masked(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_masked(v) for v in value]
+    return None if value is None else "<literal>"
+
+
+def _contract(effect: dict[str, Any], literals: bool) -> dict[str, Any]:
+    if literals:
+        return effect
+    return {k: (_masked(v) if k in _VALUE_KEYS else v) for k, v in effect.items()}
+
+
+def _identity_of(step: Any) -> Optional[dict[str, str]]:
+    """The save's record identity contract, as a sha256 per field.
+
+    Older bundles carry the recorded identity as plain text, so only digests
+    leave this function: a repair agent shown the record check never sees a
+    name or a record number.
+    """
 
     anchor = getattr(step, "anchor", None)
     if anchor is None:
@@ -211,10 +245,12 @@ def _identity_of(step: Any) -> Optional[dict[str, Any]]:
     out = {}
     for name in ("identity_template", "structured_identity", "context_text"):
         value = getattr(anchor, name, None)
-        if value is not None:
-            out[name] = (
-                value.model_dump(mode="json") if hasattr(value, "model_dump") else value
-            )
+        if value is None:
+            continue
+        if hasattr(value, "model_dump"):
+            value = value.model_dump(mode="json")
+        canonical = json.dumps(value, sort_keys=True, separators=(",", ":"))
+        out[name] = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
     return out or None
 
 

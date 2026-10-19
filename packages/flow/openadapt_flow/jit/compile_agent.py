@@ -200,12 +200,6 @@ class WebApp:
         return self.url
 
     @property
-    def environment(self) -> str:
-        """As for :attr:`WebApp.environment`."""
-
-        return _environment(self.origin, self.environment_id)
-
-    @property
     def backend_hints(self) -> Optional[dict[str, Any]]:
         return None
 

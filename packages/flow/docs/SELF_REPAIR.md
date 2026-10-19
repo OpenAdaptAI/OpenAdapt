@@ -13,9 +13,58 @@ form and the record are the same as in the recording. Then one
 person accepts the fix with one tap, on the phone or at a terminal, and the run
 resumes. Healthy runs never call the agent and record zero model calls.
 
-Module: `openadapt_flow.repair.self_repair`. CLI: `openadapt-flow run
---self-repair`. Tests: `tests/test_self_repair.py`,
-`tests/test_self_repair_cli.py`, `tests/test_self_repair_bridge.py`.
+Module: `openadapt_flow.repair.self_repair`. CLI: `openadapt-flow run`,
+on by default once a repair agent is configured. Tests:
+`tests/test_self_repair.py`, `tests/test_self_repair_cli.py`,
+`tests/test_self_repair_bridge.py`, `tests/test_auto_repair.py`,
+`tests/test_auto_repair_cli.py`.
+
+## Repair is the default
+
+Once a deployment names a repair agent, every stop that wrote nothing goes to
+it. Nobody has to start a repair. Module: `openadapt_flow.repair.auto_repair`.
+
+```yaml
+# deploy.yaml
+repair:
+  agent: mypkg.agents:make_agent
+  screen_access_by: ops-lead
+  fault_urls: ["https://emr.test/?fault=missing"]
+```
+
+Each stop is routed by what the run may have written:
+
+| The run ended | Where the stop goes |
+| --- | --- |
+| `VERIFIED` | Nowhere. The agent is never called. |
+| `HALTED_BEFORE_EFFECT` (or a halt with no outcome word and no effect) | To the repair agent, then the probe, the replay and fault cases, one approval (or a standard change), and the resumed item. A halt self-repair doesn't handle, such as a wrong-record halt, goes to a person. |
+| `RECONCILIATION_REQUIRED` | Never to repair. A write may have happened, so it goes to reconciliation: the change ledger in `REPORT.md` and `openadapt-flow undo list <run_dir>` ([AFTER_A_STOP.md](AFTER_A_STOP.md)). |
+| Anything else | To a person. |
+
+The agent is shown the stop (the halted step, its intent and why it halted),
+the screen evidence (the live screen and the recorded crop, scrubbed unless
+set otherwise) and the record check (`request.record_check`: each save's
+effect contracts with literal values masked, and a digest of its record
+identity contract). It proposes a re-anchored step, a bridge of up to three
+steps, or a fix a signed policy pre-approves. A fix never changes the record
+check: the probe, the cases and the resumed run check it again. For a
+worklist, `WorklistQueue` holds the items that stopped the same way, repairs
+on the test record, and releases them all with one approval.
+
+Every stop, repaired or not, appends one row to
+`<repair-store>/auto-repair/ledger.jsonl`: the route, the halted step, the
+fixes proposed, whether one passed the probe and the cases, who approved it
+and how long the answer took, whether the item resumed and verified, and the
+agent's model calls and cost. `openadapt_flow.repair.auto_repair.summarize`
+turns the rows into the repair success rate, failures included.
+
+To turn it off for one run, pass `--no-auto-repair`. To turn it off for a
+deployment, set `repair.auto: false`. A run that can't be repaired (for
+example one pinned to `--pin-digest`) is not refused: it runs plainly and
+prints why repair is off for it. `--self-repair` still asks for repair
+explicitly, and then such a run is refused.
+
+See [Measured](#measured) for how often it works.
 
 ## What happens when a run halts
 
@@ -253,30 +302,34 @@ class MyAgent:
 ## CLI
 
 ```bash
-openadapt-flow run bundles/triage --config deploy.yaml --url "$APP_URL" --run-dir runs/item-17 --self-repair --repair-agent mypkg.agents:make_agent --repair-screen-access-by ops-lead --repair-fault-url "$FAULT_URL"
+openadapt-flow run bundles/triage --config deploy.yaml --url "$APP_URL" --run-dir runs/item-17 --repair-agent mypkg.agents:make_agent --repair-screen-access-by ops-lead --repair-fault-url "$FAULT_URL"
 ```
 
-`run` admits the bundle as usual. The first run uses the same authorization
-and approval gate as without `--self-repair`. Probes and the resumed run
+With the deployment's `repair` section set, the flags aren't needed. A flag
+wins over the deployment file. `run` admits the bundle as usual. The first
+run uses the same authorization and approval gate as a run without repair. Probes and the resumed run
 admit the patched bundle through the same run gate settings, with a fresh
 authorization each. They don't use the deployment's approval mode: the
 person's answer to the repair request is the approval for the item's one
 save, and the resume refuses the save unless the form is the one they saw.
 
-| Flag | Default | Meaning |
-| --- | --- | --- |
-| `--self-repair` | off | Turn on self-repair for this run. |
-| `--repair-agent MODULE:NAME` | required | An agent object, class, or factory. |
-| `--repair-screen-access-by NAME` | required | Who allowed the agent to see screens. |
-| `--repair-screen-share-mode` | `scrubbed_only` | Or `allow_unscrubbed`. |
-| `--repair-model-provider`, `--repair-model-key-file` | none | Load the customer's own key. |
-| `--repair-store DIR` | `repair-store` | The repair store. |
-| `--repair-attempts N` | 3 | Proposals per halt. |
-| `--repair-fault-url URL` | none | A fault probe; repeatable. |
-| `--repair-approval-wait SECONDS` | 900 | How long to wait for the person. |
+| Flag | `deploy.yaml` `repair:` key | Default | Meaning |
+| --- | --- | --- | --- |
+| `--no-auto-repair` | `auto: false` | on | Leave stops for a person. |
+| `--self-repair` | none | off | Require repair: refuse a run that can't be repaired. |
+| `--repair-agent MODULE:NAME` | `agent` | none | An agent object, class, or factory. Repair is on when one is set. |
+| `--repair-screen-access-by NAME` | `screen_access_by` | required | Who allowed the agent to see screens. |
+| `--repair-screen-share-mode` | `screen_share_mode` | `scrubbed_only` | Or `allow_unscrubbed`. |
+| `--repair-model-provider`, `--repair-model-key-file` | `model_provider`, `model_key_file` | none | Load the customer's own key. |
+| `--repair-store DIR` | `store` | `repair-store` | The repair store, and the stop ledger. |
+| `--repair-attempts N` | `attempts` | 3 | Proposals per halt. |
+| `--repair-fault-url URL` | `fault_urls` | none | A fault probe; repeatable. |
+| `--repair-approval-wait SECONDS` | `approval_wait_s` | 900 | How long to wait for the person. |
 
-The CLI refuses to start self-repair when the run is bound to the exact
-original bundle:
+Repair is off for a run bound to the exact original bundle, and for a
+worklist run (use `WorklistQueue`), because a stop there may come after
+earlier items saved. With `--self-repair` such a run is refused; otherwise it
+runs plainly. The bindings are:
 
 - a signed qualification admission (`--qualification-authority-file`);
 - a managed dispatch;
@@ -301,6 +354,7 @@ the tutorial does.
 | `<run_dir>/item-approval/` | The request, the screenshot the person saw, and the answer. |
 | `<run_dir>/self-repair/preflight/` | The test record's run of the repaired bundle, when a fix applied without a person. |
 | The repair store | The candidate, its campaigns, its transitions, who reviewed and approved it, and its canary metrics. |
+| `<repair-store>/auto-repair/ledger.jsonl` | One row per stop: its route, what the agent proposed, the probe, the approval and its wait, the resumed outcome, model calls and cost. |
 
 The run's own `model_calls` stays the count for the deterministic run, which
 is 0. The agent's calls are counted in `self_repair.model_calls`.
@@ -525,6 +579,13 @@ live RDP or Citrix session.
 
 ## Limits
 
+- Only a stop that wrote nothing is repaired. A stop after a step the run gate
+  counts as a save has acted is `RECONCILIATION_REQUIRED` and goes to
+  reconciliation, even when the app saved nothing; see [Measured](#measured)
+  for OpenEMR, where every recorded stop was of this kind.
+- The CLI repairs a single run. A worklist that stops after earlier items
+  saved is not repaired by `run`; use `WorklistQueue`, which repairs on the
+  test record and releases the waiting items.
 - One halted click per run is repaired, by one corrected click or a bridge of
   up to three actions, in a linear workflow with exactly one save. When the
   patched run halts at another step, the probe fails with that reason.

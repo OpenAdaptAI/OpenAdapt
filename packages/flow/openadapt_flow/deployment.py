@@ -957,6 +957,34 @@ class ProbeCopySection(BaseModel):
 UNRESOLVED = "UNRESOLVED"
 
 
+class RepairSection(BaseModel):
+    """Automatic repair of stops that wrote nothing (docs/SELF_REPAIR.md).
+
+    When ``agent`` is set, every ``run`` that halts before any effect hands
+    the stop to this repair agent, probes its fix up to the save, asks one
+    person (or applies a pre-approved standard change), and resumes. A stop
+    after a write is never repaired. ``auto: false`` or ``--no-auto-repair``
+    turns it off. Omitted when serialized at its defaults.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: ``module:name`` of the repair agent (an object, class or factory).
+    agent: Optional[str] = None
+    #: The person who allowed the agent to see screens (recorded).
+    screen_access_by: Optional[str] = None
+    screen_share_mode: Literal["scrubbed_only", "allow_unscrubbed"] = "scrubbed_only"
+    #: Repair every stop that wrote nothing, without being asked.
+    auto: bool = True
+    store: str = "repair-store"
+    attempts: int = Field(default=3, ge=1, le=10)
+    #: URLs that present a fault the repaired run must refuse before the save.
+    fault_urls: list[str] = Field(default_factory=list)
+    approval_wait_s: float = Field(default=900.0, ge=0.0)
+    model_provider: Optional[Literal["anthropic", "openai"]] = None
+    model_key_file: Optional[str] = None
+
+
 class DeploymentConfig(BaseModel):
     """The whole-deployment configuration (one ``deployment.yaml``)."""
 
@@ -987,6 +1015,9 @@ class DeploymentConfig(BaseModel):
     #: Declares the target a resettable test copy (``induce --probe-on``
     #: only). None (and omitted when serialized) otherwise.
     test_copy: Optional[ProbeCopySection] = None
+    #: Automatic repair of stops that wrote nothing. Omitted when serialized
+    #: at its defaults (no agent).
+    repair: RepairSection = Field(default_factory=RepairSection)
 
     @model_validator(mode="after")
     def _desktop_readback_is_its_own_session(self) -> "DeploymentConfig":
@@ -1016,6 +1047,8 @@ class DeploymentConfig(BaseModel):
             data.pop("worklist", None)
         if self.test_copy is None:
             data.pop("test_copy", None)
+        if self.repair == RepairSection():
+            data.pop("repair", None)
         return data
 
 

@@ -3634,7 +3634,10 @@ def _cmd_run(args: argparse.Namespace) -> int:
     # Admitted. A deployment run is not the drift-demo; force it off and delegate
     # to the shared replay executor (which reads all deployment wiring itself).
     args.drift = None
-    if getattr(args, "self_repair", False):
+    from openadapt_flow.cli_self_repair import resolve_auto_repair
+
+    repair_mode = resolve_auto_repair(args, cfg)
+    if repair_mode != "off":
         from openadapt_flow.cli_self_repair import cmd_run_self_repair
 
         exit_code = cmd_run_self_repair(
@@ -3673,9 +3676,11 @@ def _cmd_run(args: argparse.Namespace) -> int:
             finish=_finish_replay,
             default_run_dir=_default_run_dir,
             attest_pre_state=_maybe_attest_pre_state,
+            mode=repair_mode,
         )
-        _attach_cloud_seal(args)
-        return exit_code
+        if exit_code is not None:
+            _attach_cloud_seal(args)
+            return exit_code
     exit_code = _cmd_replay(args)
     _attach_cloud_seal(args)
     return exit_code

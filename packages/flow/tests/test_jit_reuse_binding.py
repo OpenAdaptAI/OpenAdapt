@@ -16,7 +16,6 @@ import dataclasses
 import hashlib
 import json
 from pathlib import Path
-from typing import Any
 
 import pytest
 
@@ -46,7 +45,9 @@ def _workflow(*, anchor_x: int = 10, effect_field: str = "note") -> Workflow:
     return Workflow(
         name="t",
         steps=[
-            Step(id="step_000", intent="type the note", action=ActionKind.TYPE, text="x"),
+            Step(
+                id="step_000", intent="type the note", action=ActionKind.TYPE, text="x"
+            ),
             Step(
                 id="step_001",
                 intent="click Save",
@@ -219,3 +220,24 @@ def test_an_admitted_record_check_that_differs_is_refused() -> None:
     assert _reuse_refusal(record, workflow, task, app) is None
     # An admission from before the pins existed: only the caller's pins apply.
     assert _reuse_refusal({"canary": {}}, workflow, task, app) is None
+
+
+def test_the_agent_view_masks_literals_and_identity() -> None:
+    workflow = _workflow()
+    workflow.steps[1].effects[0].match = {"type": "note", "mrn": {"param": "mrn"}}
+    workflow.steps[1].anchor.context_text = "Synthetic Patient 1970-01-01"
+    view = record_check_of(workflow, literals=False)
+    effect = view["saves"][0]["effects"][0]
+    assert effect["match"] == {"type": "<literal>", "mrn": {"param": "mrn"}}
+    assert "Synthetic" not in json.dumps(view)
+    assert len(view["saves"][0]["identity"]["context_text"]) == 64
+
+
+def test_a_native_app_names_its_environment_the_same_way() -> None:
+    from openadapt_flow.jit import SurfaceApp
+
+    app = SurfaceApp(
+        backend={"kind": "macos", "macos_app": "TextEdit"}, environment_id="1.19"
+    )
+    assert app.environment == app.origin + "#1.19"
+    assert WebApp(url=URL).environment == "http://127.0.0.1:9"

@@ -194,6 +194,11 @@ class RepairRequest:
     expected_png: Optional[bytes] = None
     #: The item's parameters a bridge may type, by name. Secrets are left out.
     param_values: Mapping[str, str] = field(default_factory=dict, repr=False)
+    #: The program's record check: each saving step's effect contracts, with
+    #: literal values masked, and a digest of its record identity contract
+    #: (:func:`openadapt_flow.jit.signature.record_check_of`). A fix never
+    #: changes it; the probe and the resume check it again.
+    record_check: Mapping[str, Any] = field(default_factory=dict, repr=False)
 
 
 @dataclass(frozen=True)
@@ -826,6 +831,9 @@ class SelfRepair:
         if expected_png is not None:
             expected_png = self._shown(expected_png)[0]
         assert step.anchor is not None  # _repairable checked it
+        from openadapt_flow.jit.signature import record_check_of
+
+        record_check = record_check_of(workflow, literals=False)
         refusals: list[str] = []
         current: Optional[AppSession] = session
         try:
@@ -863,6 +871,7 @@ class SelfRepair:
                     ),
                     expected_png=expected_png if mode == "after" else None,
                     param_values=_typable_params(workflow, self._params()),
+                    record_check=record_check,
                 )
                 evidence.attempts = attempt
                 try:

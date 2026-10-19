@@ -99,6 +99,7 @@ same tunnel port share it, so use a separate cache directory per environment.
 | A program is admitted | Checks the signed admission, runs the program under the standard profile, and reads the save back | `VERIFIED`, or `HALTED` and others |
 | The admitted bundle or its manifest changed | Nothing | `refused` |
 | The policy, the app's origin, or the verifier differs from what was admitted | Nothing | `refused` |
+| The record check or the app environment differs from what was admitted, or from what the task pins | Nothing | `refused` |
 | The replay called a model | Sends the run to the inbox | `needs_review` |
 
 A run that does not end `VERIFIED` is written to the exception inbox
@@ -111,6 +112,25 @@ opens the run in the Needs Attention queue (see
 The cache key is the task id plus the parameter names and types. The
 instruction text is not part of it, and nothing is matched fuzzily. Changing
 the schema makes a new task, which starts with a new demonstration.
+
+Reuse is also bound to what the program checks and where it runs:
+
+- **The record check.** The admission records a digest of the program's
+  record check: the effect contracts and the record identity contract of every
+  step that saves (`openadapt_flow.jit.signature.record_check_digest`).
+  Anchors are left out, so a repair that re-anchors a step keeps it. A run
+  whose program checks something else is refused.
+- **The app environment.** The canary records the app's environment: its
+  origin, plus `#<id>` when you pass `environment_id` to `WebApp` or
+  `SurfaceApp`. Pass the app's version or build (`"7.0.2"`), or a function
+  that reads it before each run. A program admitted under `7.0.2` is refused
+  under `7.0.3` at the same origin, and the inbox entry says why; run a
+  canary on the new version. A function that fails is a refusal too.
+- **Pins in the key.** `TaskSignature(..., record_check=<digest>,
+  environment=<app.environment>)` puts both in the cache key and refuses a
+  program that doesn't match them. Without pins the key is the same as before,
+  so existing caches keep working. Admissions made before these checks carry
+  no record-check digest or environment; for them only your pins apply.
 
 ## The agent
 
