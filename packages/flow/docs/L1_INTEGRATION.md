@@ -44,6 +44,11 @@ ref = emit_l1_artifact(
 )
 ```
 
+To hand typed values, decisions, identity matches and Seal references across
+the same seam, use the records interchange format
+([`INTERCHANGE.md`](INTERCHANGE.md)). `openadapt_flow.interchange.emit_exchange`
+writes a conforming exchange through `emit_l1_artifact`.
+
 ## Desktop and remote deployment
 
 The compiler and governed runtime are shared across browser, Windows UIA,

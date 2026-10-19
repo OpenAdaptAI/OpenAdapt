@@ -23,11 +23,12 @@ package availability, repository text, or a sibling repository.
 - **Root (`openadapt/`, `tests/`)**: launcher packaging, unified CLI
   compatibility, and CI.
 - **`packages/flow`**: compiler, replay, verification, governed repair, and
-  backend implementation. The MCP server's code is in `openadapt_flow.agent`
-  and the contracts are in `openadapt_flow.contracts`.
-- **`packages/agent`** and **`packages/types`**: the `openadapt-agent` and
-  `openadapt-types` packages. They keep the old imports and commands working
-  on top of Flow.
+  backend implementation. The MCP server's code is in `openadapt_flow.agent`.
+- **`packages/types`**: the shared request, result and receipt models
+  (`openadapt-types`). It depends only on Pydantic and must never import Flow;
+  Flow depends on it and re-exports it as `openadapt_flow.contracts`.
+- **`packages/agent`**: the `openadapt-agent` package, which keeps the old
+  imports and commands working on top of `openadapt_flow.agent`.
 - **Other repositories** (capture, privacy, desktop and the rest): open issues
   only when their stated lifecycle and contribution guide match the proposed
   work.

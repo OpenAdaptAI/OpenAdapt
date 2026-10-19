@@ -194,6 +194,22 @@ contract, and unless both campaigns passed on the tenant's own qualification
 cases. The approval record names the policy digest and the person who
 approved the policy. See [Fleet drift patches](#fleet-drift-patches).
 
+A second exception covers self-repairs a person allowed in advance, as
+standard changes (`approve_standard_change`). It applies only to a
+`model_suggestion` candidate from self-repair whose agent the policy names.
+The store checks the signed repair policy itself. It also re-reads both
+bundles from disk and refuses unless:
+
+- the save step, its identity evidence, its record check, and every file
+  they use are byte-identical;
+- no step's identity evidence changed;
+- the change fits a class the policy allows;
+- both campaigns passed;
+- the test record's run of exactly the proposed bundle is `VERIFIED`.
+
+The approval record names the policy digest and the person who signed it.
+See [Standard changes](#standard-changes-repairs-a-person-approved-in-advance).
+
 ## Sync and fingerprints
 
 The approved / staged / active states are identified by exact whole-bundle
@@ -210,6 +226,7 @@ repair-store/
   candidates/<candidate-id>.json   # the candidate records (atomic writes)
   bundles/<content-digest>/        # immutable staged copies, by hash
   ACTIVE.json                      # atomic active pointer + lineage
+  standard-changes/ledger.jsonl    # repairs applied without a person, reverts
 ```
 
 ## CLI reference
@@ -229,6 +246,9 @@ All commands accept `--store DIR` (default `repair-store/`).
 | `openadapt-flow repair canary-record <id> --run-dir <run>` | Record one canary run; auto-revert on regression; auto-complete to active after N verified runs. |
 | `openadapt-flow repair rollback [--candidate-id <id>] [--by <name>]` | One-command rollback to the prior hash. |
 | `openadapt-flow repair status` | Show the active pointer and its lineage. |
+| `openadapt-flow repair revert <id> --by <name>` | Undo a repair that applied without a person, and hold its step for a person. |
+| `openadapt-flow repair standard-changes [--day D] [--json]` | Daily digest of repairs applied without a person. |
+| `openadapt-flow repair clear-hold --workflow W --step S --by <name>` | Clear the hold a revert set. |
 
 ## Relationship to the in-run heal gate
 
@@ -366,6 +386,54 @@ the latest demonstration's provenance, and the agent can't review or approve
 it. Tests: `tests/test_agent_teach_branch.py`. A reference number in the
 title makes the one-demonstration path abstain on identity too; the tests use
 payer names.
+
+## Repairs proposed during a run (self-repair)
+
+`openadapt-flow run --self-repair` and
+`openadapt_flow.repair.self_repair.SelfRepair` handle a run that halts before
+any effect because a screen changed. A repair agent proposes a fix, and Flow
+probes it up to the save without saving. A passing probe becomes a candidate
+here: source `model_suggestion`, provenance `repaired_by: self_repair`. The
+campaigns run on the evidence frames, or on live probes when the step's
+identity is read from the DOM. One person's answer records the review and the
+approval. The approved bundle is staged and enters its canary window, and its
+first canary run is the resumed item. The agent can't review or approve the
+candidate. See [SELF_REPAIR.md](SELF_REPAIR.md).
+
+## Standard changes: repairs a person approved in advance
+
+In ITIL, a standard change is a low-risk change that a person approves once,
+as a class. Self-repair works the same way. A person signs a repair policy
+once, and fixes of the classes it names then apply without anyone being
+asked. Anything else goes to a person, as before. Module:
+`openadapt_flow.repair.standard_change`. Details:
+[SELF_REPAIR.md](SELF_REPAIR.md#standard-changes-repairs-without-a-person).
+
+| Transition | Actor | Recorded as |
+| --- | --- | --- |
+| `candidate -> reviewed` | automation `standard-change:<policy digest>` | `reviewed_by`: the policy, and who signed it |
+| `reviewed -> replay_passed -> fault_passed` | the same | the campaigns already recorded on the candidate |
+| `fault_passed -> approved` | the same | `ApprovalRecord(non_interactive, pre_approval_policy_sha256, pre_approved_by)` |
+| `approved -> staged -> canary` | automation | as for every repair |
+
+Before the store approves anything, the repaired bundle runs once, start to
+finish, on the deployment's test record. The run must end `VERIFIED`, with
+the record check reading the save back. The candidate then enters its canary
+window like any approved repair, and the canary rules apply unchanged.
+
+Each automatic repair is also a row in `repair-store/standard-changes/ledger.jsonl`.
+
+| Command | Purpose |
+| --- | --- |
+| `openadapt-flow repair standard-changes [--day YYYY-MM-DD] [--json]` | The daily digest of repairs applied without a person. |
+| `openadapt-flow repair revert <id> --by <name>` | Undo the repair in use: the prior bundle is active again (a rollback), and repairs of that step go to a person. A rollback or a canary regression holds the step too. |
+| `openadapt-flow repair clear-hold --workflow W --step S --by <name>` | Let that step's repairs apply under the policy again. |
+
+Started with `--repair-store DIR`, the console lists the same rows at
+`GET /api/standard-changes`, and an attended console takes a revert from the
+phone portal at
+`POST /api/standard-changes/<id>/revert`. The phone sends back the digest of
+the row it showed.
 
 ## Fleet drift patches
 

@@ -1,7 +1,7 @@
 """Who may approve a save, and delegated approvers.
 
 The contracts here are field-exact mirrors of
-``openadapt_flow.contracts.approval`` (``ApproverIdentityV1``,
+``openadapt_types.approval`` (``ApproverIdentityV1``,
 ``ApproverPolicyV1``, ``StepClass``; also importable as
 ``openadapt_types.approval``), which is the single schema the receipt and the
 other packages use. The mirror predates the fold of openadapt-types into the

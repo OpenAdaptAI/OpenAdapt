@@ -17,6 +17,7 @@ from openadapt_flow.runtime.effects.effect import (
     Effect,
     EffectKind,
     ReadbackNav,
+    ReadbackReset,
     ReadbackSpec,
     Verdict,
 )
@@ -24,6 +25,7 @@ from openadapt_flow.runtime.effects.onscreen import (
     OnScreenReadbackVerifier,
     is_default_readback_effect,
 )
+from openadapt_flow.verification import VerificationTier
 
 
 class _Line:
@@ -194,7 +196,10 @@ def _renav_effect() -> Effect:
         kind=EffectKind.FIELD_EQUALS,
         value="chest pain follow up",
         readback=ReadbackSpec(
-            region=(0, 0, 100, 40), different_path=True, renavigation=list(_RENAV)
+            region=(0, 0, 100, 40),
+            different_path=True,
+            renavigation=list(_RENAV),
+            reset=ReadbackReset(kind="new_search", at=2),
         ),
     )
 
@@ -284,6 +289,15 @@ def test_is_default_readback_effect_gate() -> None:
         readback=ReadbackSpec(region=(0, 0, 1, 1), different_path=False),
     )
     assert not is_default_readback_effect(same_surface)
+    # Different-path with no state reset => no reopen credit, never a default:
+    # the read could come from a page the save left behind.
+    no_reset = _renav_effect()
+    assert no_reset.readback is not None
+    no_reset.readback.reset = None
+    assert not is_default_readback_effect(no_reset)
+    assert OnScreenReadbackVerifier.verification_tier_for(no_reset) is (
+        VerificationTier.IMMEDIATE_SCREEN
+    )
     # A structured effect (no readback) => not a read-back default.
     assert not is_default_readback_effect(Effect(kind=EffectKind.RECORD_WRITTEN))
 

@@ -7,7 +7,7 @@ from collections.abc import Iterator
 
 import pytest
 
-from openadapt_flow.contracts import (  # noqa: E402
+from openadapt_types import (  # noqa: E402
     ControlOverlayDataClassification,
     ControlOverlayMediaFrameBindingV2,
     ControlOverlayMode,

@@ -242,7 +242,7 @@ def _handle_mcp(
 
 
 def _mcp_tools() -> list[dict[str, Any]]:
-    from openadapt_flow.contracts.execute import ExecuteRequestV1
+    from openadapt_types.execute import ExecuteRequestV1
 
     request_schema = ExecuteRequestV1.model_json_schema()
     return [
