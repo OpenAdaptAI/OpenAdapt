@@ -1,0 +1,79 @@
+{
+  "record_status": "needs_human_admit",
+  "detail": null,
+  "admission_error": "AdmissionError: --accept-params: no flagged proposal named 'sex' (available: ['DOB', 'city', 'country_code', 'email', 'fname', 'form_sex', 'form_sex_identified', 'lname', 'phone_home', 'postal_code', 'state_label', 'street', 'title'])",
+  "admitted": false,
+  "params": {
+    "lifted": [
+      {
+        "name": "DOB",
+        "step_id": "step_008",
+        "field_label": "form_DOB",
+        "masked_example": "19******01"
+      },
+      {
+        "name": "city",
+        "step_id": "step_017",
+        "field_label": "form_city",
+        "masked_example": "EX******ON"
+      },
+      {
+        "name": "country_code",
+        "step_id": "step_024",
+        "field_label": "form_country_code",
+        "masked_example": "U*A"
+      },
+      {
+        "name": "email",
+        "step_id": "step_029",
+        "field_label": "form_email",
+        "masked_example": "ad******************************id"
+      },
+      {
+        "name": "fname",
+        "step_id": "step_004",
+        "field_label": "First Name",
+        "masked_example": "A***a"
+      },
+      {
+        "name": "lname",
+        "step_id": "step_006",
+        "field_label": "Last Name",
+        "masked_example": "Sc**********00"
+      },
+      {
+        "name": "phone_home",
+        "step_id": "step_027",
+        "field_label": "form_phone_home",
+        "masked_example": "5******0"
+      },
+      {
+        "name": "postal_code",
+        "step_id": "step_019",
+        "field_label": "form_postal_code",
+        "masked_example": "0***9"
+      },
+      {
+        "name": "state_label",
+        "step_id": "step_021",
+        "field_label": "form_state",
+        "masked_example": "Ma*********ts"
+      },
+      {
+        "name": "street",
+        "step_id": "step_015",
+        "field_label": "form_street",
+        "masked_example": "10************AY"
+      },
+      {
+        "name": "title",
+        "step_id": "step_001",
+        "field_label": "form_title",
+        "masked_example": "M*."
+      }
+    ],
+    "unlifted": {
+      "sex": "typed in 2 steps"
+    }
+  }
+}
