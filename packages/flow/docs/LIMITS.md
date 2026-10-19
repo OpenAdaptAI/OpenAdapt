@@ -419,7 +419,10 @@ record in the acting session (tier 3) is reported as its own check level,
 confirmed reopen ends `COMPLETED_UNVERIFIED`, and the agent result says
 `not_sure_if_saved` with `checked_below_minimum`
 ([`READBACK_LADDER.md`](READBACK_LADDER.md)). A workflow's `minimum_readback`
-can raise the floor to `system_of_record`, never lower it. The on-screen
+can raise the floor to `system_of_record`, never lower it.
+A save that only a later report can confirm (a claim acknowledgment, a
+nightly export) ends `SAVED_AWAITING_CHECK` and becomes `VERIFIED` only when
+that report accepts it ([`deferred_report`](EFFECT_KIT.md#checked-later-deferred_report)). The on-screen
 oracle can still halt when the region is unreadable or wrong. If a
 consequential write may already have been delivered and the check did not
 confirm it, the production `transaction_outcome` is `RECONCILIATION_REQUIRED`,
@@ -576,9 +579,11 @@ What is enforced:
 
 What is not:
 
-- The scope is wired into `openadapt_flow.jit` only. Teach over MCP,
-  `compile-agent` from a prompt and the airbag guard are separate pull
-  requests that must pass a scope when they land.
+- The scope is wired into `openadapt_flow.jit` only. `compile-agent` from a
+  prompt (on main) does not pass one yet; teach over MCP and the airbag guard
+  are separate pull requests that must pass a scope when they land.
+- A self-repair bridge may type text that the screen shows, so injected text
+  can become a typed value in a proposed repair. The person approving sees it.
 - A steered agent can still read other records in the same app and send what
   it read to its model provider (scrubbed where scrubbing is on).
 - Without a write adapter, and on every surface other than the web, a wrong

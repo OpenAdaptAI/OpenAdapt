@@ -13,6 +13,10 @@ Arms (PROTOCOL.md):
 * ``first_run``: arm 2, the agent's first run under OpenAdapt: recorded by
   the JIT wrapper, read back, compiled, and taken through admission.
 * ``program``: arm 3, the compiled program driving the UI.
+* ``code_agent``: arm 7, the code-as-action agent's first run
+  (``ClaudeAgent(vision="code")`` in the compile-agent harness), recorded by
+  the same JIT wrapper as arm 2, read back, compiled and taken through the
+  same admission. ``--n`` first runs, each on a fresh cache.
 
 Every attempt is one row in ``raw/<task>/<arm>/<run id>/items.csv``. The
 outcome comes from reading the system of record after the attempt.
@@ -25,6 +29,7 @@ import json
 import multiprocessing
 import os
 import shutil
+import signal
 import sys
 import time
 from pathlib import Path
@@ -376,7 +381,9 @@ def arm_agent(args: argparse.Namespace) -> int:
 # -- arms 2 and 3 on MockMed, through the JIT wrapper -------------------------------
 
 
-def _mockmed_jit(sess: Session, cache: Path, it: Any, agent: Any = None) -> Any:
+def _mockmed_jit(
+    sess: Session, cache: Path, it: Any, agent: Any = None, dialect: str = "anthropic"
+) -> Any:
     from openadapt_flow.jit import TaskSignature, WebApp, compile_agent
     from openadapt_flow.runtime.effects import RestRecordVerifier
     from scoreboard.tasks import mockmed
@@ -397,7 +404,7 @@ def _mockmed_jit(sess: Session, cache: Path, it: Any, agent: Any = None) -> Any:
         cache_dir=cache,
         key_dir=cache / "admission-keys",
         model_key=model_key() if agent is not None else None,
-        dialect="anthropic",
+        dialect=dialect,
     )
 
 
@@ -418,7 +425,9 @@ def _admitter(key_dir: Path) -> Any:
     return authority.principal_from_key(authority.load_encrypted_key(pem), key_dir)
 
 
-def _openemr_jit(cache: Path, values: dict[str, str], agent: Any = None) -> Any:
+def _openemr_jit(
+    cache: Path, values: dict[str, str], agent: Any = None, dialect: str = "anthropic"
+) -> Any:
     from openadapt_flow.jit import TaskSignature, WebApp, compile_agent
     from scoreboard.tasks import openemr as T
 
@@ -436,7 +445,7 @@ def _openemr_jit(cache: Path, values: dict[str, str], agent: Any = None) -> Any:
         cache_dir=cache,
         key_dir=cache / "admission-keys",
         model_key=model_key() if agent is not None else None,
-        dialect="anthropic",
+        dialect=dialect,
     )
 
 
@@ -660,9 +669,220 @@ def arm_program(args: argparse.Namespace) -> int:
     return 0
 
 
+# -- arm 7: the code-as-action agent's first run -----------------------------------
+
+#: The identity the save gate checks around every save (compile-agent harness).
+#: A new OpenEMR patient's identity is typed, not shown, so the gate checks the
+#: save happens in the new-patient confirm dialog.
+CODE_AGENT_ON_SCREEN = {
+    "mockmed": ["Jane Sample", "MRN P1"],
+    "openemr_referral": ["Create New Patient"],
+}
+#: OpenEMR items for arm 7 start here: clear of arm 2 (item 0, canary 999) and
+#: of the charts a trial run made on the fixture (items 701 to 705).
+OPENEMR_CODE_ITEM_BASE = 720
+
+
+def _program_check(jit: Any, trace: Any) -> dict[str, Any]:
+    from openadapt_flow.compile_agent.code_action import (
+        check_trace_against_ir,
+        distilled_events,
+    )
+    from openadapt_flow.ir import Workflow
+
+    try:
+        recording = (jit.candidate() or {}).get("compiled_recording")
+        return check_trace_against_ir(
+            trace.to_dict(),
+            Workflow.load(jit.bundle_dir),
+            distilled=distilled_events(Path(recording) if recording else None),
+        )
+    except Exception as exc:  # noqa: BLE001 - reported with the row
+        return {"passed": False, "error": f"{type(exc).__name__}: {exc}"[:300]}
+
+
+def arm_code_agent(args: argparse.Namespace) -> int:
+    from openadapt_flow.compile_agent import ClaudeAgent, SaveGate
+    from openadapt_flow.compile_agent.pipeline import _HarnessedAgent
+
+    task = task_module(args.task)
+    if task.NAME not in CODE_AGENT_ON_SCREEN:
+        raise SystemExit("arm 7 runs on mockmed and openemr_referral")
+    out = schema.run_dir(task.NAME, "code_agent", args.run_id)
+    schema.write_meta(
+        out,
+        task=task.NAME,
+        arm="code_agent",
+        model=AGENT_MODEL,
+        n=args.n,
+        vision="code",
+        effort="medium",
+        max_cost_per_item=args.max_cost,
+        on_screen=CODE_AGENT_ON_SCREEN[task.NAME],
+    )
+    # Arm 7 needs no admission bound to an origin, so it takes a free port.
+    sess = (
+        Session(task, args.tag, faults=False, port=0)
+        if task.NAME == "mockmed"
+        else None
+    )
+    on_screen = CODE_AGENT_ON_SCREEN[task.NAME]
+    try:
+        for i in range(args.start, args.n + 1):
+            if spent() + args.max_cost > SPEND_CAP_USD:
+                print(f"stopping: spend {spent():.2f} + {args.max_cost} passes the cap")
+                break
+            # Outside the source tree (schema.CACHE): recordings, bundles and a
+            # throwaway admission key are never committed.
+            cache = (
+                schema.cache_dir(task.NAME, "code_agent", args.run_id) / f"item-{i:03d}"
+            )
+            if cache.exists():
+                shutil.rmtree(cache)
+            if sess is not None:
+                it = sess.item(i)
+                values, canary_values, params = (
+                    it.values,
+                    sess.item(999).values,
+                    ["note"],
+                )
+                readback_fn = lambda: sess.readback(it)  # noqa: E731
+            else:
+                values = task.item_values(OPENEMR_CODE_ITEM_BASE + i)
+                canary_values = task.item_values(OPENEMR_CODE_ITEM_BASE + 100 + i)
+                params = list(task.PARAMS)
+                before_ids = {p["id"] for p in task.patients()}
+                readback_fn = lambda: task.check(values, before_ids)  # noqa: E731
+            inner = ClaudeAgent(
+                vision="code",
+                model=AGENT_MODEL,
+                effort="medium",
+                max_cost_usd=args.max_cost,
+                max_turns=60,
+                principal_id=f"agent:{AGENT_MODEL}:code",
+            )
+            agent = _HarnessedAgent(
+                inner,
+                gate=SaveGate(on_screen),
+                keep=[*on_screen, *values.values()],
+                evidence_dir=cache / "gates",
+                principal_id=inner.principal_id,
+            )
+            if sess is not None:
+                jit = _mockmed_jit(sess, cache, it, agent, dialect="generic")
+            else:
+                jit = _openemr_jit(cache, values, agent, dialect="generic")
+            error: Optional[BaseException] = None
+            load0 = schema.load_1m()
+            w0 = time.time()
+            signal.signal(signal.SIGALRM, _item_timeout)
+            signal.alarm(ITEM_TIMEOUT_S)
+            try:
+                result = jit.run(**values)
+            except Exception as exc:  # noqa: BLE001 - recorded, the batch goes on
+                error, result = exc, None
+            finally:
+                signal.alarm(0)
+            wall = time.time() - w0
+            load1 = schema.load_1m()
+            ledger = getattr(inner, "last_ledger", None)
+            cost = float(ledger.cost_usd()) if ledger is not None else 0.0
+            add_spend(cost, f"{task.NAME} code_agent {args.run_id} item {i}")
+            readback = readback_fn()
+            trace = getattr(inner, "last_trace", None)
+            summary: dict[str, Any] = {
+                "record_status": getattr(result, "status", None),
+                "detail": getattr(result, "detail", None)
+                or (str(error) if error else None),
+                "gates": [
+                    {
+                        k: v
+                        for k, v in g.items()
+                        if k in ("control", "decision", "missing")
+                    }
+                    for g in (agent.harness.gate_log if agent.harness else [])
+                ],
+            }
+            if result is not None and result.candidate is not None:
+                summary["program_check"] = _program_check(jit, trace)
+                summary.update(_admission(jit, params, canary_values, cache))
+            text = (ledger.summary or "") if ledger is not None else ""
+            ok = (
+                error is None
+                and result is not None
+                and result.status == "needs_human_admit"
+                and ledger is not None
+                and ledger.finished
+                and not any(w in text.lower() for w in FAILURE_WORDS)
+            )
+            ledger_doc = {
+                "ledger": ledger.to_dict() if ledger is not None else None,
+                "harness": agent.harness.stats.to_dict() if agent.harness else None,
+                "trace": trace.summary() if trace is not None else None,
+                "scripts": trace.log if trace is not None else None,
+                "result": summary,
+            }
+            (out / "ledgers").mkdir(parents=True, exist_ok=True)
+            (out / "ledgers" / f"item-{i:03d}.json").write_text(
+                json.dumps(ledger_doc, indent=2, default=str) + "\n"
+            )
+            row = schema.Row(
+                task=task.NAME,
+                arm="code_agent",
+                run_id=args.run_id,
+                item=i,
+                attempt=1,
+                fault="none",
+                reported_success=ok,
+                readback=readback,
+                outcome=schema.classify(ok, readback, "none"),
+                model_calls=ledger.model_calls if ledger is not None else 0,
+                input_tokens=ledger.total("input_tokens") if ledger else 0,
+                output_tokens=ledger.total("output_tokens") if ledger else 0,
+                cache_read_tokens=ledger.total("cache_read_input_tokens")
+                if ledger
+                else 0,
+                cache_write_tokens=(
+                    ledger.total("cache_creation_input_tokens") if ledger else 0
+                ),
+                cost_usd=round(cost, 6),
+                item_s=round(ledger.wall_seconds, 3) if ledger is not None else 0.0,
+                wall_s=round(wall, 3),
+                approvals_asked=1 if summary.get("admitted") else 0,
+                host_load_1m=load0,
+                timed=schema.timed(load0, load1),
+                detail=json.dumps(
+                    {
+                        "record_status": summary.get("record_status"),
+                        "program_check": (summary.get("program_check") or {}).get(
+                            "passed"
+                        ),
+                        "canary_status": summary.get("canary_status"),
+                        "admitted": summary.get("admitted"),
+                        "error": f"{type(error).__name__}: {error}" if error else None,
+                    },
+                    default=str,
+                )[:300],
+            )
+            schema.append(out / "items.csv", row)
+            # The admission keys and cache stay out of the repository.
+            shutil.rmtree(cache, ignore_errors=True)
+            print(
+                f"{task.NAME} code_agent {i:3d} {row.outcome:13s} {row.model_calls} calls "
+                f"{row.item_s:6.1f}s ${row.cost_usd:.3f} load {load0}->{load1} "
+                f"admitted={summary.get('admitted')} "
+                f"program={(summary.get('program_check') or {}).get('passed')}",
+                flush=True,
+            )
+    finally:
+        if sess is not None:
+            sess.close()
+    return 0
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
-    parser.add_argument("arm", choices=["agent", "first_run", "program"])
+    parser.add_argument("arm", choices=["agent", "first_run", "program", "code_agent"])
     parser.add_argument("task", choices=["mockmed", "openimis", "openemr_referral"])
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--n", type=int, default=100)
@@ -688,9 +908,12 @@ def main() -> int:
     args = parser.parse_args()
     if args.arm == "program" and not args.program_from:
         args.program_from = args.run_id
-    return {"agent": arm_agent, "first_run": arm_first_run, "program": arm_program}[
-        args.arm
-    ](args)
+    return {
+        "agent": arm_agent,
+        "first_run": arm_first_run,
+        "program": arm_program,
+        "code_agent": arm_code_agent,
+    }[args.arm](args)
 
 
 if __name__ == "__main__":

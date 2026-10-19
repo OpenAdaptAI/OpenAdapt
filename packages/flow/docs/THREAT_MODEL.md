@@ -192,10 +192,16 @@ origin. The patched bundle is probed up to the last point before the save,
 the replay and fault campaigns run, and one person approves before anything
 is written ([SELF_REPAIR.md](SELF_REPAIR.md)).
 
+A repair can be a short bridge of new steps. The origin check runs on every
+click in it, before the click.
+
 Stops: a repair steered to a decoy control, to a control outside the record,
 or off the app. Does not stop: a decoy that is a same-origin save control
 inside the right record; the probe's record check and the person's approval
-are the controls there.
+are the controls there. A bridge step may type text that the screen shows, so
+injected page text can become a typed value in a proposed repair; the person
+sees it in the approval ("types '...'") and the record check runs, but nothing
+refuses it automatically.
 
 ## Attacks and results
 
@@ -238,13 +244,13 @@ results are recorded yet.
 
 ## What remains unprotected
 
-- The teach scope is on `compile_agent` (`openadapt_flow.jit`) on main. Teach
-  over MCP ([#1335](https://github.com/OpenAdaptAI/OpenAdapt/pull/1335)),
+- The teach scope is on `compile_agent` (`openadapt_flow.jit`) only.
   `compile-agent` from a prompt
-  ([#1277](https://github.com/OpenAdaptAI/OpenAdapt/pull/1277)) and the airbag
-  guard are not merged; each must pass a `TeachScope` to its capture when it
-  lands. Until then those paths have the save gate, approval and admission,
-  but no scope.
+  ([#1277](https://github.com/OpenAdaptAI/OpenAdapt/pull/1277), on main) does
+  not pass a scope to its capture yet. Teach over MCP
+  ([#1335](https://github.com/OpenAdaptAI/OpenAdapt/pull/1335)) and the airbag
+  guard are not merged; each must pass a `TeachScope` when it lands. Until
+  then those paths have the save gate, approval and admission, but no scope.
 - A steered agent can still read other records in the same app and send what
   it read to its model provider (scrubbed where scrubbing is on).
 - Off the web, and on the web without a write adapter, a wrong write is

@@ -54,6 +54,7 @@ about the business effect, plus a per-step effect journal:
 | `CANCELED` | The run was canceled |
 | `REJECTED_POLICY` | A policy refused the run |
 | `COMPLETED_UNVERIFIED` | A Demo-profile completion; never billable and never a success |
+| `SAVED_AWAITING_CHECK` | The save went out and its only check is a declared later report (a claim acknowledgment, an export, a status page). Never billable and never a success until a matching report row settles it `VERIFIED`; a rejecting row or no row by the deadline settles it `RECONCILIATION_REQUIRED`. Never retried |
 
 ## Compiled is not the same as certified safe
 

@@ -891,9 +891,11 @@ class CompiledAgent:
         principal_id: Any,
         accept_params: Sequence[str],
         confirm: object = None,
+        idempotency_key: Optional[str] = None,
     ) -> dict[str, Any]:
         """Confirm the task's parameters before the review. Returns the step
-        ids of the recompiled program. See
+        ids of the recompiled program. ``idempotency_key`` names the parameter
+        that identifies one saved record. See
         :func:`openadapt_flow.jit.lifecycle.confirm_params`."""
 
         return lifecycle.confirm_params(
@@ -902,6 +904,7 @@ class CompiledAgent:
             accept_params=accept_params,
             confirm=confirm,
             key_dir=self.key_dir,
+            idempotency_key=idempotency_key,
         )
 
     def review(

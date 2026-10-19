@@ -9,6 +9,7 @@
 import type {
   ApprovalModeState,
   ItemApproval,
+  ItemApprover,
   OffReason,
   RequirementResult,
   SwitchState,
@@ -273,4 +274,34 @@ export function whyItCameToYou(
       : "OpenAdapt stopped before saving.";
   }
   return null;
+}
+
+/** The first characters of a grant hash, enough to match the grant a person signed. */
+export function shortGrant(policyRef: string | null | undefined): string | null {
+  const match = /^sha256:([0-9a-f]{64})$/.exec(String(policyRef ?? ""));
+  return match ? match[1].slice(0, 12) : null;
+}
+
+/**
+ * Who decided one save, in plain words: a person in Run it or on their
+ * phone, or a named agent, rule or system and the grant a person signed.
+ */
+export function approverSentence(approver: ItemApprover): string {
+  const verb = approver.decision === "approved" ? "Approved" : "Declined";
+  if (approver.kind === "person") {
+    const where =
+      approver.route === "decision_portal"
+        ? "on their phone"
+        : approver.route === "desktop_run_it"
+          ? "in Run it"
+          : "by an unknown route";
+    const who = approver.signed_in ? "a signed-in person" : "a person signed out of Cloud";
+    return `${verb} by ${who} ${where}`;
+  }
+  const grant = shortGrant(approver.policy_ref);
+  if (!approver.verified || !approver.id || !grant) {
+    return `${verb} by a delegate this computer can't verify, so a person should look`;
+  }
+  const kind = approver.kind === "rule" ? "rule" : approver.kind === "system" ? "system" : "agent";
+  return `${verb} by ${kind} ${approver.id}, under a grant a person signed (${grant}…)`;
 }

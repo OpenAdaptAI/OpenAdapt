@@ -221,7 +221,9 @@ var state = {
   banner: null,        // { patientId, text }
   encounters: {},      // patientId -> [{ type, note }]
   noticeDismissed: false,  // "notice" drift: interstitial dismissed?
-  surveyShown: false       // "modal-once" drift: modal already shown?
+  surveyShown: false,      // "modal-once" drift: modal already shown?
+  provider: null,          // "provider" drift: the chosen ordering provider
+  providerChosen: false    // "provider" drift: prompt answered this load?
 };
 
 function esc(s) {
@@ -440,6 +442,47 @@ function saveViaBackend(pid, note) {
   });
 }
 
+function renderProviderPrompt(patientIdentity) {
+  app.innerHTML =
+    '<section id="provider-prompt" role="listitem" aria-label="' +
+    esc(patientIdentity) + '">' +
+    '<div id="patient-banner">' + esc(patientIdentity) + '</div>' +
+    '<h1>Ordering provider required</h1>' +
+    '<label id="provider-label">Ordering provider</label>' +
+    '<div class="segmented" id="provider-seg">' +
+    '<button id="provider-1" class="seg-btn">Dr. Casey Placeholder</button>' +
+    '<button id="provider-2" class="seg-btn">Dr. Robin Example</button>' +
+    '</div>' +
+    '<label for="provider-note" id="provider-note-label">' +
+    'Note to provider (optional)</label>' +
+    '<textarea id="provider-note" rows="2"></textarea>' +
+    '<div id="provider-error"></div>' +
+    '<div class="actions"><button id="provider-use">Use this provider</button>' +
+    // A control that reads as a save; a bridge must never click it.
+    '<button id="provider-draft">Save as draft</button>' +
+    '</div></section>';
+  ['1', '2'].forEach(function (n) {
+    document.getElementById('provider-' + n)
+      .addEventListener('click', function () {
+        state.provider = this.textContent;
+        document.querySelectorAll('#provider-seg .seg-btn')
+          .forEach(function (b) { b.classList.remove('selected'); });
+        this.classList.add('selected');
+        document.getElementById('provider-error').textContent = '';
+      });
+  });
+  document.getElementById('provider-use')
+    .addEventListener('click', function () {
+      if (!state.provider) {
+        document.getElementById('provider-error').textContent =
+          'Choose an ordering provider first.';
+        return;
+      }
+      state.providerChosen = true;
+      renderEncounter();
+    });
+}
+
 function renderEncounter() {
   state.banner = null;
   if (!state.currentPatientId) { state.currentPatientId = PATIENTS[0].id; }
@@ -456,6 +499,14 @@ function renderEncounter() {
   var patientIdentity = activePatient.name + ' — MRN ' +
     activePatient.id.toUpperCase() + ' — DOB ' + activePatient.dob;
 
+  // "provider" drift: a new required step before the form. The encounter
+  // form appears only after an ordering provider is chosen. The record the
+  // save writes is unchanged.
+  if (DRIFT.has('provider') && !state.providerChosen) {
+    renderProviderPrompt(patientIdentity);
+    return;
+  }
+
   // "reqfield" drift: the form gains a required Acuity field between the
   // note and the save button; saving without a selection shows an inline
   // validation error instead of saving.
@@ -466,6 +517,18 @@ function renderEncounter() {
       '<button id="acuity-urgent" class="seg-btn">Urgent</button>' +
       '</div>'
     : '';
+
+  // "menu" drift: the save moved behind a menu, Actions > Billing > Submit
+  // encounter. The menu opens in place; nothing is saved until Submit.
+  var saveHtml = DRIFT.has('menu')
+    ? '<div class="menu">' +
+      '<button id="actions-menu">Actions</button>' +
+      '<div id="actions-list" class="menu-list" hidden>' +
+      '<button id="menu-billing">Billing</button>' +
+      '<div id="billing-list" class="menu-list" hidden>' +
+      '<button id="menu-submit">Submit encounter</button></div></div></div>'
+    : '<button id="' + SAVE_ID + '">' + LABEL_SAVE + '</button>';
+  var saveTarget = DRIFT.has('menu') ? 'menu-submit' : SAVE_ID;
 
   var triageBtn = '<button id="type-triage" class="seg-btn">' +
     LABEL_TRIAGE + '</button>';
@@ -486,7 +549,7 @@ function renderEncounter() {
     '<div id="save-error"></div>' +
     '<div class="actions movable' +
     (DRIFT.has('redesign') ? ' redesigned' : '') + '">' +
-    '<button id="' + SAVE_ID + '">' + LABEL_SAVE + '</button></div>' +
+    saveHtml + '</div>' +
     '</section>' +
     // The redesigned page also has a feedback control outside the record.
     // It reads like a save but belongs to no patient.
@@ -521,7 +584,19 @@ function renderEncounter() {
       });
   });
 
-  document.getElementById(SAVE_ID)
+  if (DRIFT.has('menu')) {
+    document.getElementById('actions-menu')
+      .addEventListener('click', function () {
+        var list = document.getElementById('actions-list');
+        list.hidden = !list.hidden;
+      });
+    document.getElementById('menu-billing')
+      .addEventListener('click', function () {
+        document.getElementById('billing-list').hidden = false;
+      });
+  }
+
+  document.getElementById(saveTarget)
     .addEventListener('click', function () {
       var note = document.getElementById('note').value;
       // Flag-gated fault path: route the write through the backend so the
