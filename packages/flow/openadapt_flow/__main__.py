@@ -798,6 +798,7 @@ def _build_and_run_replayer(
     surface_override: bool = False,
     execution_origin: Optional[str] = None,
     execution_entry_url: Optional[str] = None,
+    execution_target_origin: Optional[str] = None,
     run_id: Optional[str] = None,
     approval_gate=None,
     qualification_fault_driver=None,
@@ -836,6 +837,7 @@ def _build_and_run_replayer(
         surface_override=surface_override,
         execution_origin=execution_origin,
         execution_entry_url=execution_entry_url,
+        execution_target_origin=execution_target_origin,
         run_id=(
             remote_delivery_run_id
             if delivery_authority_kind == "cloud_runner"
@@ -1086,6 +1088,7 @@ def _replay_desktop(
             qualification_campaign_guard=qualification_campaign_guard,
             runtime_config=runtime_config,
             execution_target_kind=_report_backend_kind(backend_cfg.kind),
+            execution_target_origin=_surface_target_origin_or_none(backend_cfg),
             surface_override=bool(getattr(args, "_surface_override", False)),
             run_id=run_id,
             approval_gate=approval_gate,
@@ -1101,6 +1104,18 @@ def _replay_desktop(
     return _finish_replay(
         run_dir, report, args, backend_kind=_report_backend_kind(backend_cfg.kind)
     )
+
+
+def _surface_target_origin_or_none(backend_cfg) -> Optional[str]:
+    """The non-web app's ``<kind>://<target>``, for an admitted JIT program's
+    canary match. A section that can't name one gives None, which that match
+    refuses; every other bundle ignores it."""
+    from openadapt_flow.surface_selection import surface_target_origin
+
+    try:
+        return surface_target_origin(backend_cfg)
+    except ValueError:
+        return None
 
 
 def _record_until_stop(args: argparse.Namespace):

@@ -1350,6 +1350,7 @@ class Replayer:
         surface_override: bool = False,
         execution_origin: Optional[str] = None,
         execution_entry_url: Optional[str] = None,
+        execution_target_origin: Optional[str] = None,
         prior_screenshots_may_leave_box: bool = False,
         prior_model_calls: int = 0,
         prior_external_network_calls: Literal[
@@ -1422,6 +1423,12 @@ class Replayer:
             execution_entry_url: Browser URL requested before replay. Hosted
                 validation binds this to the runner's entry URL so workflows
                 that start below `/` retain their required path.
+            execution_target_origin: For a non-web run, the app this run
+                drives, as ``<kind>://<target>`` (see
+                :func:`openadapt_flow.surface_selection.surface_target_origin`).
+                Only an admitted JIT program's canary match reads it; it is
+                not written to the report, which keeps ``execution_origin``
+                for browser origins.
             prior_screenshots_may_leave_box: Durable-resume audit carry. True
                 when an earlier leg of the same logical run was configured with
                 an egress-capable screenshot consumer.
@@ -1459,7 +1466,7 @@ class Replayer:
                 workflow=workflow,
                 attended_by=self._attended_draft_by,
                 key_dir=self._draft_key_dir,
-                execution_origin=execution_origin,
+                execution_origin=execution_origin or execution_target_origin,
                 effect_verifier=self.effect_verifier,
                 at_run=True,
             )

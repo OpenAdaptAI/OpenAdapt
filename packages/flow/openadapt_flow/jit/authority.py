@@ -316,7 +316,8 @@ class AdmissionPolicy(BaseModel):
     signer: str = Field(pattern=_ID)
     signed_at: str = Field(min_length=10, max_length=64)
     expires_at: str = Field(min_length=10, max_length=64)
-    #: ``host`` or ``host:port`` of the target app's origin.
+    #: ``host`` or ``host:port`` of a web app's origin, or a desktop or
+    #: remote app's ``<kind>://<target>`` (``macos://textedit``).
     allowed_hosts: tuple[str, ...] = Field(min_length=1)
     #: Step actions (``openadapt_flow.ir.ActionKind`` values).
     allowed_actions: tuple[str, ...] = Field(min_length=1)
@@ -460,8 +461,17 @@ def scope_problems(
 
     problems: list[str] = []
     if target_origin is not None:
-        host = (urlsplit(target_origin).netloc or "").lower()
-        if host not in policy.allowed_hosts:
+        parts = urlsplit(target_origin)
+        if parts.scheme in ("http", "https"):
+            # A bare host names a web app only.
+            host = (parts.netloc or "").lower()
+            allowed = {h.lower() for h in policy.allowed_hosts if "://" not in h}
+        else:
+            # A desktop or remote app is named with its kind
+            # (``macos://textedit``), so a web host entry never covers it.
+            host = target_origin.lower()
+            allowed = {h.lower() for h in policy.allowed_hosts if "://" in h}
+        if host not in allowed:
             problems.append(f"the app at {host or target_origin!r} is not allowed")
     for step in workflow.steps:
         if step.action.value not in policy.allowed_actions:
