@@ -8,13 +8,16 @@ Three kinds of assertion:
 * the validator actually FAILS on a mislabeled claim (a `supported` claim whose
   only backing is an opt-in / infra-gated test, or a `field` result labeled
   `supported`, or a missing path) so the gate cannot rot into a no-op; and
-* every real claim in `claims.yaml` points at a path that exists (registry-rot
-  guard, independent of the tier contract).
+* every real claim in `claims/` points at a path that exists (registry-rot
+  guard, independent of the tier contract); and
+* the committed report is exactly what the registry renders, in an order that
+  does not depend on which pull request added a claim first.
 """
 
 from __future__ import annotations
 
 import importlib.util
+import json
 import sys
 from pathlib import Path
 
@@ -70,7 +73,7 @@ def test_every_real_evidence_path_exists() -> None:
         for ev in claim.get("evidence", []) or []:
             if not (REPO_ROOT / ev["path"]).exists():
                 missing.append(f"{claim['id']} -> {ev['path']}")
-    assert missing == [], "claims.yaml references missing paths:\n" + "\n".join(missing)
+    assert missing == [], "claims/ references missing paths:\n" + "\n".join(missing)
 
 
 # --------------------------------------------------------------------------- #
@@ -406,3 +409,59 @@ def test_report_renders_without_crashing() -> None:
         for evidence in claim["evidence"]
     )
     assert {c["id"] for c in blob["claims"]}  # non-empty
+
+
+# --------------------------------------------------------------------------- #
+# one file per claim; the committed report is deterministic
+# --------------------------------------------------------------------------- #
+def _committed_render() -> tuple[str, str]:
+    results = vc.validate_all(vc.load_registry())
+    now = vc.COMMITTED_REPORT_STAMP
+    md = vc.render_markdown(results, now, False)
+    blob = json.dumps(vc.render_json(results, now, False), indent=2) + "\n"
+    return md, blob
+
+
+def test_committed_report_is_in_sync_with_the_registry() -> None:
+    md, blob = _committed_render()
+    hint = "run: python scripts/validate_claims.py --report"
+    assert (REPO_ROOT / "docs" / "VERIFICATION.md").read_text(encoding="utf-8") == (
+        md
+    ), f"docs/VERIFICATION.md is stale; {hint}"
+    assert (REPO_ROOT / "docs" / "verification.json").read_text(
+        encoding="utf-8"
+    ) == blob, f"docs/verification.json is stale; {hint}"
+
+
+def test_report_does_not_depend_on_registry_order() -> None:
+    claims = vc.load_registry()["claims"]
+    forward = vc.validate_all({"claims": claims})
+    backward = vc.validate_all({"claims": list(reversed(claims))})
+    now = vc.COMMITTED_REPORT_STAMP
+    assert vc.render_markdown(forward, now, False) == vc.render_markdown(
+        backward, now, False
+    )
+    assert vc.render_json(forward, now, False) == vc.render_json(backward, now, False)
+
+
+def test_registry_is_one_file_per_claim_named_by_id(tmp_path: Path) -> None:
+    assert not (REPO_ROOT / "claims.yaml").exists()
+    assert vc.load_registry(REPO_ROOT / "claims")["claims"]
+    (tmp_path / "b-claim.yaml").write_text("id: b-claim\ntier: research\n")
+    (tmp_path / "a-claim.yaml").write_text("id: a-claim\ntier: research\n")
+    assert [c["id"] for c in vc.load_registry(tmp_path)["claims"]] == [
+        "a-claim",
+        "b-claim",
+    ]
+    (tmp_path / "renamed.yaml").write_text("id: other-id\ntier: research\n")
+    try:
+        vc.load_registry(tmp_path)
+    except ValueError as exc:
+        assert "named after the claim id" in str(exc)
+    else:  # pragma: no cover - the assertion above is the contract
+        raise AssertionError("a file named differently from its id must fail")
+
+
+def test_default_report_stamp_is_fixed(monkeypatch) -> None:
+    monkeypatch.delenv("OAFLOW_CLAIMS_NOW", raising=False)
+    assert vc.resolve_now(None) == vc.COMMITTED_REPORT_STAMP

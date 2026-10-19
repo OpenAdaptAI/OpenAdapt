@@ -79,13 +79,16 @@ class _AnimatedBackend(FakeBackend):
     def screenshot(self):
         # Move a large black bar across the frame each poll so the PERCEPTUAL
         # hash actually differs frame to frame (a flat shade change would hash
-        # identically and count as settled).
+        # identically and count as settled). The bar runs along the bottom,
+        # clear of the click target (y 100-120): an animation over the target
+        # itself is a change between check and click, which the pixel
+        # check-to-click guard refuses (tests/test_check_to_click.py).
         self._tick += 1
         img = Image.new("RGB", self._viewport, (240, 240, 240))
         w, h = self._viewport
         x = (self._tick * 37) % max(1, w - 40)
         for px in range(x, min(x + 40, w)):
-            for py in range(h):
+            for py in range(max(0, h - 60), h):
                 img.putpixel((px, py), (0, 0, 0))
         buf = io.BytesIO()
         img.save(buf, format="PNG")
