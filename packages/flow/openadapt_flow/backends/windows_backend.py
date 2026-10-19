@@ -51,6 +51,7 @@ from openadapt_flow.ir import (
     StructuralHandle,
     StructuralLocator,
 )
+from openadapt_flow.runtime.step_timing import timed_span
 
 DEFAULT_SERVER_URL = "http://localhost:5001"
 
@@ -307,6 +308,7 @@ class WindowsBackend:
             self._viewport = _png_size(self.screenshot())
         return self._viewport
 
+    @timed_span("screenshot")
     def screenshot(self) -> bytes:
         """Return the current frame as PNG bytes (with retries).
 

@@ -407,7 +407,10 @@ def _validate(
                 f"step {sid!r} intent is {target.intent!r}, binding expects "
                 f"{step_binding.intent!r}"
             )
-        if target.api_binding is not None:
+        if target.api_binding is not None and target.api_binding.kind != "web_form":
+            # A web_form API step takes the save step's record check when a
+            # person admits it (openadapt-flow api admit), so binding here is
+            # the way to give it one.
             problems.append(
                 f"step {sid!r} has an API binding; its API-path contracts are "
                 "bound with that binding, not here"

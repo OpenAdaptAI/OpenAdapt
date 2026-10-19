@@ -766,6 +766,17 @@ class RuntimeSection(BaseModel):
     #: for remote-desktop replays (``rdp``/``citrix``) and off elsewhere;
     #: true or false forces it.
     layout_drift_check: Optional[bool] = None
+    #: How long, in ms, a browser page must stay quiet (no DOM change, input
+    #: event, animation or request) before a step counts as settled. None keeps
+    #: the default 100 ms. Lower is faster but gives the app less time to
+    #: start reacting to an action before the next check (docs/THROUGHPUT.md).
+    #: Applies to the whole process.
+    page_quiet_ms: Optional[int] = Field(default=None, ge=30, le=2000)
+    #: Named speed profile (``runtime/speed.py``): ``standard`` (default) or
+    #: ``fast`` (native fill for ordinary text fields, 50 ms page-quiet
+    #: window, 2 OCR threads). Every check runs in both. ``page_quiet_ms``
+    #: overrides the profile's window. Applies to the whole process.
+    speed: Optional[Literal["standard", "fast"]] = None
     #: Operator-selected ("bring your own") model-grounding endpoint (the VLM
     #: fallback rung). Off by default; configuring it never enables egress on its
     #: own (``allow_model_grounding`` still governs whether anything leaves).
@@ -866,6 +877,66 @@ class IdempotencySection(BaseModel):
     key_env: Optional[str] = None
 
 
+class WorklistAccount(BaseModel):
+    """One signed-in session for a parallel worklist worker.
+
+    Holds env var NAMES only, never a credential value.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: Label shown in the run report (for example ``clerk-1``).
+    name: str = Field(min_length=1, max_length=64)
+    #: Sign-in bundle parameter -> NAME of the env var holding its value
+    #: (for example ``{username: EMR_USER_1}``).
+    params_env: dict[str, str] = Field(default_factory=dict)
+    #: Secret sign-in parameter (a step marked ``secret``) -> NAME of the env
+    #: var holding it (for example ``{password: EMR_PASS_1}``).
+    secrets_env: dict[str, str] = Field(default_factory=dict)
+    #: Attach to this account's own signed-in Chromium (CDP) instead of
+    #: launching a browser and replaying the sign-in bundle.
+    browser_cdp_endpoint: Optional[str] = None
+    #: RDP: the user this session connects as, and the NAME of the env var
+    #: holding the password (FreeRDP session pool).
+    rdp_username: Optional[str] = None
+    rdp_password_env: Optional[str] = None
+
+
+class WorklistSection(BaseModel):
+    """Parallel worklist runs (``--workers N``, docs/THROUGHPUT.md).
+
+    The defaults run one item at a time, as before. ``--workers`` above
+    ``max_workers`` is refused, so the deployment states how many sessions
+    the app tolerates at once.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    #: The app's concurrency limit: how many signed-in sessions may enter
+    #: items at once. ``--workers`` above this is refused.
+    max_workers: int = Field(default=1, ge=1, le=64)
+    #: Items touch disjoint records and may run in any order and at the same
+    #: time. Required for ``--workers`` above 1 and a read-back window above 0.
+    items_independent: bool = False
+    #: Pipelined read-back window k (default 0 = verify each save before the
+    #: next item starts). See ``runtime/readback_pipeline.py``.
+    readback_window: int = Field(default=0, ge=0, le=16)
+    #: ``stop`` (default): any halt stops new claims on every worker.
+    #: ``skip_unwritten``: an item that halted before writing anything is
+    #: recorded and the run goes on; anything else still stops it.
+    on_halt: Literal["stop", "skip_unwritten"] = "stop"
+    #: Recorded sign-in bundle each worker replays once with its account.
+    sign_in_bundle: Optional[str] = None
+    #: Page each item starts from (default: ``backend.url``).
+    entry_url: Optional[str] = None
+    #: Recorded navigation replayed after ``entry_url`` before each item, for
+    #: apps that keep state between items (close the open chart, open a blank
+    #: form). It must not save anything; the run refuses one with effects.
+    entry_bundle: Optional[str] = None
+    #: One account per worker. Workers never share a session.
+    accounts: list[WorklistAccount] = Field(default_factory=list)
+
+
 class ProbeCopySection(BaseModel):
     """Declares that this deployment drives a resettable test copy.
 
@@ -922,6 +993,9 @@ class DeploymentConfig(BaseModel):
     #: declares. ``--surface NAME=...`` flags apply over these entries. Empty
     #: (and omitted when serialized) otherwise.
     surfaces: dict[str, BackendConfig] = Field(default_factory=dict)
+    #: Parallel worklist runs (``--workers``). Omitted when serialized at its
+    #: defaults (one worker).
+    worklist: WorklistSection = Field(default_factory=WorklistSection)
     #: Declares the target a resettable test copy (``induce --probe-on``
     #: only). None (and omitted when serialized) otherwise.
     test_copy: Optional[ProbeCopySection] = None
@@ -944,11 +1018,14 @@ class DeploymentConfig(BaseModel):
 
     @model_serializer(mode="wrap")
     def _serialize_compatible(self, handler: Any) -> dict[str, Any]:
-        """Keep configs without surface bindings byte-identical."""
+        """Keep configs without surface bindings or worklist settings
+        byte-identical."""
 
         data: dict[str, Any] = handler(self)
         if not self.surfaces:
             data.pop("surfaces", None)
+        if self.worklist == WorklistSection():
+            data.pop("worklist", None)
         if self.test_copy is None:
             data.pop("test_copy", None)
         return data
@@ -1465,6 +1542,14 @@ def build_replayer(
             backend
         )
     known_ids = None
+    if runtime_config is not None and runtime_config.speed is not None:
+        from openadapt_flow.runtime.speed import apply_speed_profile
+
+        apply_speed_profile(runtime_config.speed)
+    if runtime_config is not None and runtime_config.page_quiet_ms is not None:
+        from openadapt_flow.vision import settle as _settle
+
+        _settle.PAGE_QUIET_WINDOW_S = runtime_config.page_quiet_ms / 1000.0
     if runtime_config is not None and runtime_config.known_ids_path:
         from openadapt_flow.runtime.known_ids import KnownIdAdmission
 

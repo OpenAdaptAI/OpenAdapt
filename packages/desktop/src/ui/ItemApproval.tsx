@@ -160,7 +160,7 @@ export function ItemApprovalPanel({
                 ))}
               </dl>
             ) : (
-              <p className="simple-sub">This task takes no values.</p>
+              <p className="simple-sub">This workflow takes no values.</p>
             )}
             <p className="simple-sub approval-step">
               Next step: {request.step_intent || "the save"}
