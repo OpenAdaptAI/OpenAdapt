@@ -1,0 +1,541 @@
+{
+  "commit": "28333635809c3a269f5ef3a225d23f9e533d931b",
+  "coverage": {
+    "click_steps": 5,
+    "steps": [
+      {
+        "has_evidence": false,
+        "hover_response": false,
+        "intent": "click 'MRN A3467'",
+        "record_identity": false,
+        "step_id": "step_000"
+      },
+      {
+        "has_evidence": true,
+        "hover_response": false,
+        "intent": "click recorded visual target",
+        "record_identity": true,
+        "step_id": "step_001"
+      },
+      {
+        "has_evidence": false,
+        "hover_response": false,
+        "intent": "click recorded visual target",
+        "record_identity": false,
+        "step_id": "step_003"
+      },
+      {
+        "has_evidence": false,
+        "hover_response": false,
+        "intent": "click recorded visual target",
+        "record_identity": false,
+        "step_id": "step_005"
+      },
+      {
+        "has_evidence": true,
+        "hover_response": true,
+        "intent": "click recorded visual target",
+        "record_identity": false,
+        "step_id": "step_007"
+      }
+    ],
+    "with_any_evidence": 2,
+    "with_hover_response": 1,
+    "with_record_identity": 1
+  },
+  "generated_at": "2026-10-19T14:10:43+00:00",
+  "platform": "Darwin arm64 py3.12.7",
+  "points": [
+    {
+      "clear_clicked": false,
+      "crash": null,
+      "layout": "recorded",
+      "model_calls": 0,
+      "outcome": "pass",
+      "profile": "100% ClearType on",
+      "rows_written": 1,
+      "steps": [
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "hover": null,
+          "identity": "verified",
+          "identity_mode": "context",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_005"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "hover": [
+            "verified",
+            "same_pixels"
+          ],
+          "identity": "verified",
+          "identity_mode": "hover",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "clear_clicked": false,
+      "crash": null,
+      "layout": "swapped",
+      "model_calls": 0,
+      "outcome": "halted",
+      "profile": "100% ClearType on",
+      "rows_written": 0,
+      "steps": [
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_000"
+        },
+        {
+          "hover": null,
+          "identity": "verified",
+          "identity_mode": "context",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_005"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "hover": [
+            "mismatch",
+            "response_moved_or_resized"
+          ],
+          "identity": "mismatch",
+          "identity_mode": "hover",
+          "ok": false,
+          "rung": "template",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": {
+        "error": "Step 'step_007' (click recorded visual target): with the pointer on the target, the screen answered differently from the recording (response_moved_or_resized) \u2014 refusing to click; run aborted",
+        "step_id": "step_007"
+      }
+    },
+    {
+      "clear_clicked": false,
+      "crash": null,
+      "layout": "recorded",
+      "model_calls": 0,
+      "outcome": "pass",
+      "profile": "100% ClearType off",
+      "rows_written": 1,
+      "steps": [
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "hover": null,
+          "identity": "verified",
+          "identity_mode": "context",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_005"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "hover": [
+            "verified",
+            "same_text"
+          ],
+          "identity": "verified",
+          "identity_mode": "hover",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": null
+    },
+    {
+      "clear_clicked": false,
+      "crash": null,
+      "layout": "swapped",
+      "model_calls": 0,
+      "outcome": "halted",
+      "profile": "100% ClearType off",
+      "rows_written": 0,
+      "steps": [
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "hover": null,
+          "identity": "verified",
+          "identity_mode": "context",
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_001"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_003"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": "template",
+          "step_id": "step_005"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "hover": [
+            "mismatch",
+            "response_moved_or_resized"
+          ],
+          "identity": "mismatch",
+          "identity_mode": "hover",
+          "ok": false,
+          "rung": "template",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": {
+        "error": "Step 'step_007' (click recorded visual target): with the pointer on the target, the screen answered differently from the recording (response_moved_or_resized) \u2014 refusing to click; run aborted",
+        "step_id": "step_007"
+      }
+    },
+    {
+      "clear_clicked": false,
+      "crash": null,
+      "layout": "recorded",
+      "model_calls": 0,
+      "outcome": "halted",
+      "profile": "125% ClearType on",
+      "rows_written": 0,
+      "steps": [
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "hover": null,
+          "identity": "verified",
+          "identity_mode": "context",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_003"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_005"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": false,
+          "rung": "geometry",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": {
+        "error": "Step 'step_007' (click recorded visual target) is irreversible but only resolved via the 'geometry' rung \u2014 needs human confirmation; refusing to act (v0 policy)",
+        "step_id": "step_007"
+      }
+    },
+    {
+      "clear_clicked": false,
+      "crash": null,
+      "layout": "swapped",
+      "model_calls": 0,
+      "outcome": "halted",
+      "profile": "125% ClearType on",
+      "rows_written": 0,
+      "steps": [
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": "ocr",
+          "step_id": "step_000"
+        },
+        {
+          "hover": null,
+          "identity": "verified",
+          "identity_mode": "context",
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_001"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": null,
+          "step_id": "step_002"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_003"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": null,
+          "step_id": "step_004"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": "geometry",
+          "step_id": "step_005"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": true,
+          "rung": null,
+          "step_id": "step_006"
+        },
+        {
+          "hover": null,
+          "identity": null,
+          "identity_mode": null,
+          "ok": false,
+          "rung": "geometry",
+          "step_id": "step_007"
+        }
+      ],
+      "stopped_at": {
+        "error": "Step 'step_007' (click recorded visual target) is irreversible but only resolved via the 'geometry' rung \u2014 needs human confirmation; refusing to act (v0 policy)",
+        "step_id": "step_007"
+      }
+    }
+  ],
+  "recorder_captured_hover": true,
+  "schema_version": "openadapt.hover-identity-sweep.v1",
+  "summary": {
+    "healthy_passed": 2,
+    "healthy_points": 3,
+    "model_calls": 0,
+    "swapped_points": 3,
+    "swapped_stopped_before_click": 3,
+    "swapped_wrong_control_clicked": 0,
+    "wrong_writes": 0
+  }
+}

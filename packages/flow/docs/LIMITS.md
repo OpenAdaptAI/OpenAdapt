@@ -185,7 +185,14 @@ kiosk recorded `A1001` as `Alo01`), so in a workflow that always opens the
 recorded record, the copy can stop a run but never confirm one. It confirms
 only a record chosen by a run parameter. Governed and qualification runs never
 take it. The check just before the click takes no input; it reuses the copy
-only when the identifier's pixels are unchanged since the look.
+only when the identifier's pixels are unchanged since the look. On a rendered
+dense record list with the ID as a run parameter, false stops on the correct
+row went from 232 to 24 of 288 with the copy look, and wrong-record accepts
+stayed 0 of 288
+([`benchmark/identity_looks/IDENTITY_LOOKS.md`](../benchmark/identity_looks/IDENTITY_LOOKS.md)).
+When the recording itself read the ID with a look-alike glyph, the band is not
+linked to the run parameter and the copy cannot confirm the record; 22 of the
+24 remaining stops were that case.
 
 Permissive `replay` may proceed on an unreadable reversible target and reports
 that condition. Governed `run` requires an affirmative live verdict for every
@@ -232,7 +239,10 @@ Controls that don't answer the pointer, such as most text fields, get no
 evidence this way. The browser, remote-display (Citrix and RDP client window)
 and FreeRDP backends can hover. The Aardwolf RDP transport and the native
 Windows, macOS and Linux backends can't move the pointer without a button
-yet, so they take no hover look.
+yet, so they take no hover look. On an in-process kiosk with two identical
+icons that differ only by tooltip, swapped between recording and replay, the
+look-alike icon was clicked in 2 of 3 runs before and 0 of 3 after
+([`benchmark/hover_identity`](../benchmark/hover_identity/README.md)).
 
 A consequential click must be tied to a record before Flow delivers it. Inside
 a table row, the row is that record. An icon-only Save that floats beside a
@@ -311,7 +321,9 @@ OCR tier then decides, and an identifier OCR cannot confirm, such as one with
 1/l or 0/O, still halts. In the display-scaling sweep
 ([`benchmark/pixel_scale`](../benchmark/pixel_scale/README.md)) the RDP
 fixture's own IDs (`MRN A1001`) halted at the identity check at every render
-other than the recorded one.
+other than the recorded one, before and after the extra identity looks: that
+workflow always opens the recorded record, whose ID the recording read as
+`MRN Alo01`, and the kiosk has no selectable text.
 
 ### 2. A postcondition verifies only what it observes
 
