@@ -128,6 +128,16 @@ at replaying one. These capabilities layer onto the same $0, model-free runtime.
   salted-hash, shape-preserving `IdentityTemplate` instead of a plaintext
   name / DOB / MRN band, so a compiled bundle need carry no readable PHI while
   still enforcing identity (`openadapt_flow/runtime/identity_template.py`).
+- **Display scaling on the pixel path.** A remote desktop recorded at 100%
+  and replayed at 125%, 150% or 175%, or with ClearType switched, no longer
+  stops at the first step. The runtime fits one scale from the labels the
+  compiler kept (as salted hashes) and continues on a view of the session in
+  the recorded geometry, with resolution, identity, postconditions and effect
+  checks unchanged (`openadapt_flow/runtime/render_scale.py`). In the
+  [display-scaling sweep](../benchmark/pixel_scale/README.md), healthy runs
+  went from 3 of 24 to 17 of 24, and every wrong-record run still
+  halted with nothing saved. Record IDs with 1/l or 0/O still halt at the
+  identity check off the recorded render.
 
 Compiled workflows can also be emitted as Agent Skills or MCP servers
 (`emit-skill` / `emit-mcp`), so other agents can invoke them.

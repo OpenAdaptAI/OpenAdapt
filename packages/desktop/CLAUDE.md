@@ -10,16 +10,26 @@
 4. Create a PR: `gh pr create --title "..." --body "..."`
 5. Only merge via PR (never `git push origin main`)
 
-### PR Titles MUST Use Conventional Commit Format
+### Commits Use Conventional Commit Format
+
+This package lives in the OpenAdapt monorepo at `packages/desktop`. Commits keep
+the conventional format, because they decide the next version:
 
 ```
 fix: short description          -> patch bump (0.0.x)
-feat: short description         -> minor bump (0.x.0)
-fix(scope): short description   -> patch bump with scope
-feat!: breaking change          -> major bump (x.0.0)
+feat: short description         -> minor bump (0.x.0; a breaking change is also minor while on 0.x)
+perf: short description         -> patch bump
 ```
 
-**Types**: feat, fix, docs, style, refactor, perf, test, chore, ci
+**Types**: feat, fix, docs, style, refactor, perf, test, chore, ci, build
+
+### Releasing
+
+A pull request with a `feat`, `fix` or `perf` commit must bump the version, or
+the `desktop release intent` check fails. Run
+`python scripts/prepare_release.py` in `packages/desktop`, review the new
+`CHANGELOG.md` section, and commit. After merge, `desktop-release.yml` publishes
+the version to PyPI and tags `openadapt-desktop-vX.Y.Z`. See RELEASES.md.
 
 ---
 

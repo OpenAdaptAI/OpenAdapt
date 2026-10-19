@@ -420,6 +420,47 @@ def cmd_status(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_revert(args: argparse.Namespace) -> int:
+    from openadapt_flow.repair.standard_change import revert
+
+    store = _store(args)
+    try:
+        candidate = revert(store, args.candidate_id, by=args.by)
+    except RepairLifecycleError as exc:
+        return _print_refusal(exc)
+    print(
+        f"REVERTED: prior bundle {candidate.prior_content_digest[:16]}... is active "
+        f"again (candidate {candidate.candidate_id} -> {candidate.state}). Repairs "
+        "of this step now go to a person until `repair clear-hold`."
+    )
+    return 0
+
+
+def cmd_standard_changes(args: argparse.Namespace) -> int:
+    import json
+
+    from openadapt_flow.repair.standard_change import Ledger, daily_digest
+
+    store = _store(args)
+    if args.json:
+        rows = Ledger(store.root).applied()
+        if args.day:
+            rows = [r for r in rows if str(r.get("at", "")).startswith(args.day)]
+        print(json.dumps(rows, indent=2, sort_keys=True))
+    else:
+        print(daily_digest(store.root, args.day), end="")
+    return 0
+
+
+def cmd_clear_hold(args: argparse.Namespace) -> int:
+    from openadapt_flow.repair.standard_change import clear_hold
+
+    store = _store(args)
+    clear_hold(store.root, args.workflow, args.step, by=args.by)
+    print(f"cleared: repairs of {args.workflow}/{args.step} may apply under policy")
+    return 0
+
+
 _HANDLERS = {
     "register": cmd_register,
     "list": cmd_list,
@@ -432,6 +473,9 @@ _HANDLERS = {
     "canary-record": cmd_canary_record,
     "rollback": cmd_rollback,
     "status": cmd_status,
+    "revert": cmd_revert,
+    "standard-changes": cmd_standard_changes,
+    "clear-hold": cmd_clear_hold,
 }
 
 
