@@ -335,16 +335,37 @@ def load(
         "command": lambda: Command(rest),
         "openadapt-program": lambda: OpenAdaptProgram(rest, app),
         "python": lambda: _python(rest),
+        "self-repair": lambda: _self_repair(
+            app, rest, arm or "program_repair", arm_cap_usd, max_cost_usd
+        ),
+        "compile-agent": lambda: _compile_agent(
+            app, rest, arm or "compile_agent", arm_cap_usd, max_cost_usd
+        ),
     }
     if kind not in builders:
         raise SystemExit(
             f"unknown --agent {spec!r}; use one of: screen-script, "
-            "claude-computer-use, openadapt-program:<jit cache>, "
+            "claude-computer-use, compile-agent, self-repair, "
+            "openadapt-program:<jit cache>, "
             "command:<shell command>, python:<module>:<class>"
         )
     if kind in ("command", "openadapt-program", "python") and not rest:
         raise SystemExit(f"--agent {kind}: needs a value after the colon")
     return builders[kind]()
+
+
+def _compile_agent(app: Any, root: str, arm: str, cap: float, max_cost: float) -> Any:
+    from .compile_arm import CompileAgent
+
+    return CompileAgent(app, root, arm=arm, arm_cap_usd=cap, max_cost_usd=max_cost)
+
+
+def _self_repair(app: Any, bundle: str, arm: str, cap: float, max_cost: float) -> Any:
+    from .repair_arm import SelfRepairProgram
+
+    return SelfRepairProgram(
+        app, bundle, arm=arm, arm_cap_usd=cap, max_cost_usd=max_cost
+    )
 
 
 def _python(target: str) -> Any:

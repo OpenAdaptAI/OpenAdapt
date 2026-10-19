@@ -8,6 +8,7 @@ writes, the scoreboard's shared spend file, so the stop counts both.
 
 from __future__ import annotations
 
+import fcntl
 import json
 import os
 import time
@@ -66,10 +67,16 @@ def check(arm: str, next_max_usd: float, arm_cap_usd: float) -> None:
 
 
 def add(usd: float, arm: str, note: str) -> None:
-    data = own()
-    data["total_usd"] = round(data["total_usd"] + usd, 6)
-    data["entries"].append(
-        {"usd": round(usd, 6), "arm": arm, "note": note, "at": time.time()}
-    )
+    """Append one entry. Arms run in parallel, so the update holds a lock."""
+
     LEDGER.parent.mkdir(parents=True, exist_ok=True)
-    LEDGER.write_text(json.dumps(data, indent=2) + "\n")
+    with open(LEDGER.with_suffix(".lock"), "w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        data = own()
+        data["total_usd"] = round(data["total_usd"] + usd, 6)
+        data["entries"].append(
+            {"usd": round(usd, 6), "arm": arm, "note": note, "at": time.time()}
+        )
+        tmp = LEDGER.with_suffix(".tmp")
+        tmp.write_text(json.dumps(data, indent=2) + "\n")
+        tmp.replace(LEDGER)
