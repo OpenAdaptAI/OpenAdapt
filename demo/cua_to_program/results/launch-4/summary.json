@@ -1,0 +1,47 @@
+{
+  "agent": {
+    "model": "claude-opus-5-5",
+    "tool": "computer_toolset_20260801",
+    "wall_s": 44.75,
+    "model_calls": 8,
+    "actions": 32,
+    "cost_usd": 0.1176,
+    "input_tokens": 18,
+    "output_tokens": 1134,
+    "cache_read_tokens": 69679,
+    "cache_write_tokens": 16179,
+    "claim_correct_on_read_back_afterwards": true,
+    "checked_its_own_save": false
+  },
+  "program": {
+    "claims": 50,
+    "attempts": 52,
+    "model_calls": 0,
+    "saved_and_read_back": 49,
+    "first_attempt_saved": 49,
+    "stopped_safely": 1,
+    "stopped_with_a_row_written": 0,
+    "saved_but_read_back_wrong": 0,
+    "time_per_saved_claim_s": {
+      "median": 14.38,
+      "p10": 12.39,
+      "p90": 24.59,
+      "n": 49
+    },
+    "before_ui_change": {
+      "claims": 49,
+      "saved": 49
+    },
+    "after_ui_change": {
+      "claims": 1,
+      "saved": 0
+    },
+    "halts_by_step": [
+      {
+        "step": "step_014",
+        "reason": "Step 'step_014' (scroll by (0, -600))",
+        "attempts": 3
+      }
+    ]
+  }
+}
