@@ -29,6 +29,7 @@ import json
 import multiprocessing
 import os
 import shutil
+import signal
 import sys
 import time
 from pathlib import Path
@@ -719,14 +720,23 @@ def arm_code_agent(args: argparse.Namespace) -> int:
         max_cost_per_item=args.max_cost,
         on_screen=CODE_AGENT_ON_SCREEN[task.NAME],
     )
-    sess = Session(task, args.tag, faults=False) if task.NAME == "mockmed" else None
+    # Arm 7 needs no admission bound to an origin, so it takes a free port.
+    sess = (
+        Session(task, args.tag, faults=False, port=0)
+        if task.NAME == "mockmed"
+        else None
+    )
     on_screen = CODE_AGENT_ON_SCREEN[task.NAME]
     try:
         for i in range(args.start, args.n + 1):
             if spent() + args.max_cost > SPEND_CAP_USD:
                 print(f"stopping: spend {spent():.2f} + {args.max_cost} passes the cap")
                 break
-            cache = out / "jit-cache" / f"item-{i:03d}"
+            # Outside the source tree (schema.CACHE): recordings, bundles and a
+            # throwaway admission key are never committed.
+            cache = (
+                schema.cache_dir(task.NAME, "code_agent", args.run_id) / f"item-{i:03d}"
+            )
             if cache.exists():
                 shutil.rmtree(cache)
             if sess is not None:
