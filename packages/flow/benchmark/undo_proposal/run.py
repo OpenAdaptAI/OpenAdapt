@@ -13,8 +13,8 @@ For each synthetic app, end to end and live:
 
 Synthetic data only; nothing leaves 127.0.0.1 and no model is called.
 
-    PYTHONPATH=packages/types:packages/flow python -m benchmark.undo_proposal.run \\
-        --out packages/flow/benchmark/undo_proposal/results
+    cd packages/flow && PYTHONPATH=../types:. python benchmark/undo_proposal/run.py \\
+        --out benchmark/undo_proposal/results
 
 Run one fixture at a time (``--fixture mockmed``) when the machine is busy.
 """
@@ -25,6 +25,7 @@ import argparse
 import json
 import os
 import platform
+import shutil
 import subprocess
 import tempfile
 import time
@@ -267,22 +268,57 @@ def run_fixture(fixture: Fixture, out_dir: Path, work: Path) -> dict[str, Any]:
     return {
         "fixture": fixture.name,
         "what_the_save_does": fixture.note,
+        "mode": "live (real browser, app declared a test copy)",
         "exit_code": code,
         "save_step": step_id,
         "seconds": round(time.monotonic() - started, 1),
         "summary": report["summary"],
-        "steps": [
-            {
-                "step_id": row["step_id"],
-                "verified_undo": row["verified_undo"],
-                "reason": row["reason"],
-                "candidates": [
-                    {k: c[k] for k in ("source", "status", "basis", "reason")}
-                    for c in row["candidates"]
-                ],
-            }
-            for row in report["saving_steps"]
-        ],
+        "steps": _rows(report),
+    }
+
+
+def _rows(report: dict[str, Any]) -> list[dict[str, Any]]:
+    return [
+        {
+            "step_id": row["step_id"],
+            "verified_undo": row["verified_undo"],
+            "reason": row["reason"],
+            "candidates": [
+                {k: c[k] for k in ("source", "status", "basis", "reason")}
+                for c in row["candidates"]
+            ],
+        }
+        for row in report["saving_steps"]
+    ]
+
+
+def run_offline(
+    name: str, bundle: Path, recording: Optional[Path], out_dir: Path, note: str
+) -> dict[str, Any]:
+    """Candidates from an existing bundle and recording, with no test copy.
+
+    Used where the fixture is shared or down: nothing is reset or run, so a
+    buildable candidate stays ``not_run``. It answers whether any candidate
+    can be built at all.
+    """
+    from openadapt_flow.__main__ import main
+
+    report_path = out_dir / f"{name}.json"
+    with tempfile.TemporaryDirectory(prefix=f"undo-{name}-") as tmp:
+        copy = Path(tmp) / "bundle"
+        shutil.copytree(bundle, copy)
+        argv = ["undo", "propose", str(copy), "--report", str(report_path)]
+        if recording is not None:
+            argv += ["--recording", str(recording)]
+        code = main(argv)
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    return {
+        "fixture": name,
+        "what_the_save_does": note,
+        "mode": "offline (no test copy; nothing was run)",
+        "exit_code": code,
+        "summary": report["summary"],
+        "steps": _rows(report),
     }
 
 
@@ -290,14 +326,37 @@ def main(argv: Optional[list[str]] = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--out", required=True, type=Path)
     parser.add_argument("--fixture", action="append", default=None)
+    parser.add_argument(
+        "--offline",
+        nargs=4,
+        metavar=("NAME", "BUNDLE", "RECORDING", "NOTE"),
+        action="append",
+        default=[],
+        help=(
+            "Also list candidates for an existing bundle and recording without "
+            "a test copy (RECORDING may be '-')"
+        ),
+    )
     args = parser.parse_args(argv)
     fixtures = _fixtures()
-    names = args.fixture or list(fixtures)
+    names = args.fixture if args.fixture is not None else list(fixtures)
+    if args.offline and args.fixture is None:
+        names = []
     args.out.mkdir(parents=True, exist_ok=True)
     rows = []
     for name in names:
         with tempfile.TemporaryDirectory(prefix=f"undo-{name}-") as tmp:
             rows.append(run_fixture(fixtures[name], args.out, Path(tmp)))
+    for name, bundle, recording, note in args.offline:
+        rows.append(
+            run_offline(
+                name,
+                Path(bundle),
+                None if recording == "-" else Path(recording),
+                args.out,
+                note,
+            )
+        )
     summary_path = args.out / "summary.json"
     previous: dict[str, Any] = {}
     if summary_path.is_file():

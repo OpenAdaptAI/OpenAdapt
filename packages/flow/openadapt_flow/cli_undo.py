@@ -259,8 +259,10 @@ def _cmd_undo_list(args: argparse.Namespace) -> int:
             payload.append(item)
         print(json.dumps(payload, indent=2, sort_keys=True))
         return 0
+    waiting = [u for u in workflow.undo_steps if u.awaiting_approval]
     if not offers:
         print("No undo is offered for this run.")
+        _print_waiting(waiting, args.bundle)
         return 0
     print("Undos offered for this run (undo the latest change first):")
     quoted_run = shlex.quote(str(run_dir))
@@ -301,7 +303,18 @@ def _cmd_undo_list(args: argparse.Namespace) -> int:
                     f"--undo {offer.undo_id}"
                 )
             )
+    _print_waiting(waiting, args.bundle)
     return 0
+
+
+def _print_waiting(waiting: list[UndoStep], bundle: str) -> None:
+    """Name the proposals a person has not approved yet; Flow offers none."""
+    for undo in waiting:
+        print(
+            f"  {undo.id} (undoes step `{undo.undoes}`) is a verified proposal "
+            "that no person has approved, so it is not offered. Approve it once: "
+            + command(f"undo accept {shlex.quote(str(bundle))} --undo {undo.id}")
+        )
 
 
 def _cmd_undo_approve(args: argparse.Namespace) -> int:

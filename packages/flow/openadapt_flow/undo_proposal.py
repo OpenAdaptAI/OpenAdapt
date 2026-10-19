@@ -374,7 +374,12 @@ def _explains(items: dict[str, set[str]], wanted: dict[str, str]) -> bool:
     """The request names at least one field of the save's record selector,
     and every selector field it names has the selector's value."""
     named = [key for key in wanted if key in items]
-    return bool(named) and all(wanted[key] in items[key] for key in named)
+    if named:
+        return all(wanted[key] in items[key] for key in named)
+    # A form names its fields its own way (``form_lname`` for ``lname``):
+    # then every selector value must be among the request's values.
+    values = {value for found in items.values() for value in found}
+    return bool(wanted) and set(wanted.values()) <= values
 
 
 def _save_request(
@@ -456,6 +461,13 @@ def network_candidates(
     Only JSON requests become undo steps: a browser form post needs the live
     page's session token, which a plain API call does not have.
     """
+    binding = step.api_binding
+    if binding is not None and binding.kind == "web_form":
+        return [], (
+            f"the save is a browser form post ({binding.method} "
+            f"{_path(binding.url_template)}); Flow builds an API undo only "
+            "from a JSON request"
+        )
     if not lines:
         return [], "the recording has no network capture (record --capture-network)"
     wanted = _selector_values(effect, params)
@@ -469,6 +481,11 @@ def network_candidates(
     method = str(save.get("method", "")).upper()
     kind, _items = _request_items(save)
     path = _path(str(save.get("url", "")))
+    if "graphql" in path.lower():
+        return [], (
+            f"the save is a GraphQL mutation ({path}); Flow doesn't derive an "
+            "inverse mutation"
+        )
     if kind != "json":
         return [], (
             f"the save is a browser form post ({method} {path}); Flow builds "
@@ -581,6 +598,7 @@ _TAGS = re.compile(r"<[^>]+>")
 def app_ui_controls(lines: Sequence[dict[str, Any]], after: int) -> list[str]:
     """Labels of delete/cancel controls on the pages loaded after the save."""
     labels: list[str] = []
+    seen: set[str] = set()
     for line in lines[after + 1 :]:
         if "html" not in str(line.get("response_type", "")):
             continue
@@ -588,7 +606,8 @@ def app_ui_controls(lines: Sequence[dict[str, Any]], after: int) -> list[str]:
             text = match.group(2) if match.group(2) is not None else match.group(3)
             label = html.unescape(_TAGS.sub("", text or "")).strip()
             if label and len(label) <= 40 and INVERSE_WORDS.search(label):
-                if label not in labels:
+                if label.lower() not in seen:
+                    seen.add(label.lower())
                     labels.append(label)
     return labels
 
@@ -703,19 +722,20 @@ def find_candidates(
     if sources.network_lines:
         wanted = _selector_values(effect, params)
         at = _save_request(sources.network_lines, wanted)
-        for label in app_ui_controls(
-            sources.network_lines, at if at is not None else -1
-        ):
+        labels = app_ui_controls(sources.network_lines, at if at is not None else -1)
+        if labels:
+            named = ", ".join(repr(label) for label in labels)
             out.append(
                 Candidate(
-                    candidate_id=f"{step.id}:app_ui:{label}",
+                    candidate_id=f"{step.id}:app_ui",
                     undoes=step.id,
                     source="app_ui",
-                    basis=f"a {label!r} control is on a page loaded after the save",
+                    basis=f"pages loaded after the save have {named} controls",
                     problem=(
-                        "Flow builds an undo from a control only from a "
-                        "recording of a person using it; record that and pass "
-                        "it with --from-recording"
+                        f"Flow found {named} on the pages after the save but "
+                        "builds an undo from a control only from a recording of "
+                        "a person using it; record that and pass it with "
+                        "--from-recording"
                     ),
                 )
             )

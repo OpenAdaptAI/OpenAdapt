@@ -203,7 +203,7 @@ def _bundle(tmp_path: Path, workflow: Workflow) -> Path:
 
 
 def test_network_undo_is_verified_written_as_a_proposal_and_waits_for_a_person(
-    tmp_path, mockmed
+    tmp_path, mockmed, capsys
 ):
     workflow = _workflow()
     bundle = _bundle(tmp_path, workflow)
@@ -269,6 +269,14 @@ def test_network_undo_is_verified_written_as_a_proposal_and_waits_for_a_person(
     assert build_change_ledger(stopped, run_wf)[0].undo_id is None
     with pytest.raises(UndoNotOffered):
         approve_undo(run_dir, run_wf, undo.id, approver="nurse-a", bundle_dir=bundle)
+    from openadapt_flow.__main__ import main
+
+    capsys.readouterr()
+    assert main(["undo", "list", str(run_dir), "--bundle", str(bundle)]) == 0
+    listed = capsys.readouterr().out
+    assert "No undo is offered for this run." in listed
+    assert f"{undo.id} (undoes step `save_triage`) is a verified proposal" in listed
+    assert "undo accept" in listed
 
     # A person approves the proposal once; the bundle is re-sealed.
     accepted = accept_proposal(bundle, undo.id, approver="nurse-a")
@@ -677,8 +685,10 @@ def test_app_ui_control_is_reported_and_never_built():
     workflow = Workflow(name="one", steps=[_save("save_triage", "Triage")])
     candidates, _ = find_candidates(workflow, 0, Sources(network_lines=lines))
     ui = [c for c in candidates if c.source == "app_ui"]
-    assert len(ui) == 2 and all(c.undo is None for c in ui)
-    assert "recording of a person using it" in ui[0].problem
+    [only] = ui
+    assert only.undo is None
+    assert "'Delete', 'Void encounter'" in only.problem
+    assert "recording of a person using it" in only.problem
 
 
 def test_a_save_without_a_bound_record_effect_gets_no_candidate():

@@ -1,0 +1,36 @@
+{
+  "saving_steps": [
+    {
+      "candidates": [],
+      "intent": "click recorded visual target",
+      "reason": "no candidate: the save declares no record effect Flow can check (bind its record_written or field_equals effect first)",
+      "step_id": "step_039",
+      "verified_undo": null
+    },
+    {
+      "candidates": [
+        {
+          "basis": "pages loaded after the save have 'Cancel' controls",
+          "candidate_id": "step_040:app_ui",
+          "evidence": null,
+          "reason": "Flow found 'Cancel' on the pages after the save but builds an undo from a control only from a recording of a person using it; record that and pass it with --from-recording",
+          "source": "app_ui",
+          "status": "not_run"
+        }
+      ],
+      "intent": "click recorded visual target",
+      "reason": "app_ui: Flow found 'Cancel' on the pages after the save but builds an undo from a control only from a recording of a person using it; record that and pass it with --from-recording (also: no other recordings were given; the save is a browser form post (POST /interface/new/new_comprehensive_save.php); Flow builds an API undo only from a JSON request; the save creates a record; there is no old value to restore)",
+      "step_id": "step_040",
+      "verified_undo": null
+    }
+  ],
+  "schema": "openadapt.undo-propose-report/v1",
+  "summary": {
+    "no_verified_undo": 2,
+    "saving_steps": 2,
+    "verified_undo": 0
+  },
+  "test_copy": null,
+  "workflow_name": "openemr-create-synthetic-patient",
+  "written": false
+}
