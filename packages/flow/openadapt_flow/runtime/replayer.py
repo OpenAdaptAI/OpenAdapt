@@ -11778,11 +11778,15 @@ class Replayer:
         if isinstance(prepared, ApiActuationResult):
             return prepared.reason or "the API step is unavailable"
         effects = self._resolve_effects(list(binding.effects), params)
-        record = [
-            (key, str(expr))
-            for effect in effects
-            for key, expr in sorted(effect.match.items())
-        ]
+        # Several record checks usually select the same record (one per
+        # field): the person reads, and the digest binds, each pair once.
+        record = list(
+            dict.fromkeys(
+                (key, str(expr))
+                for effect in effects
+                for key, expr in sorted(effect.match.items())
+            )
+        )
         digest = operation_digest(
             prepared,
             record_check=[effect.contract_hash() for effect in effects],
