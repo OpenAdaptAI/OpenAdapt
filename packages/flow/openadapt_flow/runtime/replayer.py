@@ -96,6 +96,7 @@ from openadapt_flow.ir import (
     ExecutionTargetKind,
     FreshActuationEvent,
     HaltObservation,
+    HoverLook,
     IdentityCheck,
     IdentityLook,
     IdentitySignalEvidence,
@@ -9161,7 +9162,12 @@ class Replayer:
             if qualification is not None
             else None
         )
-        if (
+        hover_check = (
+            self._hover_check(step, resolution, frame_png, workflow, bundle_dir)
+            if qualified_policy is None
+            else None
+        )
+        if hover_check is None and (
             step.action
             not in (
                 ActionKind.CLICK,
@@ -9186,8 +9192,12 @@ class Replayer:
         ):
             return None
 
-        check = self._verify_identity(
-            step, resolution, frame_png, params, workflow, bundle_dir
+        check = (
+            hover_check
+            if hover_check is not None
+            else self._verify_identity(
+                step, resolution, frame_png, params, workflow, bundle_dir
+            )
         )
         if (
             check.status in {"verified", "mismatch"}
@@ -9265,6 +9275,18 @@ class Replayer:
                 "confirm a current export; refusing to act"
             )
             result.safety_halt = True
+        elif check.mode == "hover" and check.status == "mismatch":
+            reason = check.hover.reason if check.hover is not None else "differs"
+            error = (
+                f"Step '{step.id}' ({step.intent}): with the pointer on the "
+                "target, the screen answered differently from the recording "
+                f"({reason}) — refusing to click; run aborted"
+            )
+        elif check.mode == "hover":
+            # Hover evidence only adds a stop. A step that had no identity
+            # check before keeps going when the response is absent or cannot
+            # be compared; the verdict stays on the step result.
+            error = None
         elif check.status == "mismatch":
             error = (
                 f"Identity check failed for step '{step.id}' "
@@ -14239,6 +14261,97 @@ class Replayer:
             ),
         )
         return with_looks(better_identity_read(check, row_check))
+
+    def _hover_check(
+        self,
+        step: Step,
+        resolution: Resolution,
+        frame_png: bytes,
+        workflow: Workflow,
+        bundle_dir: Optional[Path],
+    ) -> Optional[IdentityCheck]:
+        """Compare the target's hover response with the recording.
+
+        Only at the step-entry check (moving the pointer is input), only for a
+        click whose recording saw a hover response and that has no other
+        identity evidence,
+        only on the pixel rungs, and only when the backend can hover
+        (:class:`~openadapt_flow.backend.PointerHoverBackend`). None when any
+        of that does not hold: the step then has no identity check, as
+        before. See :mod:`openadapt_flow.runtime.hover_evidence`.
+        """
+        from openadapt_flow.runtime import hover_evidence as hover_mod
+
+        evidence = step.hover
+        anchor = step.anchor
+        if (
+            evidence is None
+            or not evidence.response
+            or anchor is None
+            or not self._identity_input_looks
+            or step.action
+            not in (ActionKind.CLICK, ActionKind.DOUBLE_CLICK, ActionKind.RIGHT_CLICK)
+            or resolution.rung == "structural"
+            or anchor.context_text
+            or anchor.structured_identity
+            or anchor.identity_template
+            or anchor.identifier_crop
+        ):
+            return None
+        hover = getattr(self.backend, "hover", None)
+        if not callable(hover):
+            return None
+        point = (int(resolution.point[0]), int(resolution.point[1]))
+
+        def check(verdict: str, reason: str, png: Optional[bytes]) -> IdentityCheck:
+            status = {
+                "verified": "verified",
+                "mismatch": "mismatch",
+                "unexpected": "mismatch",
+                "absent": "abstain",
+                "unverifiable": "unreadable",
+            }[verdict]
+            return IdentityCheck(
+                status=status,  # type: ignore[arg-type]
+                mode="hover",
+                expected="recorded hover response",
+                observed=reason,
+                hover=HoverLook(
+                    verdict=verdict,  # type: ignore[arg-type]
+                    reason=reason,
+                    frame_sha256=sha256_bytes(png) if png is not None else None,
+                ),
+            )
+
+        try:
+            hover(*point)
+        except NotImplementedError:
+            return None
+        except Exception as exc:  # noqa: BLE001 - a failed hover confirms nothing
+            return check(
+                "unverifiable", f"hover_failed:{type(exc).__name__}"[:80], None
+            )
+        time.sleep(evidence.dwell_ms / 1000.0)
+        hover_png = self.vision.wait_settled(self.backend)
+        try:
+            live = hover_mod.measure_response(frame_png, hover_png, point)
+        except ValueError:
+            return check("mismatch", "screen_changed_size", hover_png)
+        recorded_crop = (
+            self._asset_bytes(bundle_dir, evidence.crop, workflow=workflow)
+            if evidence.crop and bundle_dir is not None
+            else None
+        )
+        verdict, reason = hover_mod.compare(
+            recorded_response=evidence.response,
+            recorded_region=evidence.region,
+            recorded_crop=recorded_crop,
+            live=live,
+            point=point,
+            same_render=self._render_scale_inner is None,
+            ocr=self.vision.ocr,
+        )
+        return check(verdict, reason, hover_png)
 
     def _copy_look_allowed(self) -> bool:
         """The copy look is input: never in governed or qualification runs."""

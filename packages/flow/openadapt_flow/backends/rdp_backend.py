@@ -726,6 +726,20 @@ class FreeRDPBackend:
             delivered_at=datetime.now(timezone.utc).isoformat(),
         )
 
+    def hover(self, x: int, y: int) -> None:
+        """Rest the pointer on (x, y) without a button edge.
+
+        Needs a transport with ``move(x, y)``; raises NotImplementedError
+        otherwise, and the caller treats the hover look as unavailable.
+        """
+        move = getattr(self._transport, "move", None)
+        if not callable(move):
+            raise NotImplementedError("this RDP transport cannot move the pointer")
+        with self._input_lock:
+            self._ensure_input_ready(point=(int(x), int(y)), operation="rdp_hover")
+            self._assert_frame_fresh()
+            move(int(x), int(y))
+
     def drag(self, x: int, y: int, end_x: int, end_y: int) -> None:
         """Drag between two points resolved from the same fresh framebuffer."""
 
