@@ -94,6 +94,8 @@ class ScreenScript:
 
     def run(self, task: Task) -> Report:
         context = self._browser.new_context(viewport={"width": 1280, "height": 800})
+        # A missing control fails the item in seconds, not Playwright's 30 s.
+        context.set_default_timeout(5000)
         try:
             page = context.new_page()
             page.goto(task.url, wait_until="networkidle")
@@ -191,27 +193,33 @@ class ClaudeComputerUse:
     """The scoreboard's arm-1 agent (Claude Sonnet 5.5 computer use).
 
     It runs ``scoreboard.run._agent_item`` in a child process, exactly as the
-    scoreboard's claims run does, and counts against the scoreboard's shared
-    spend cap. It costs money, so the runner refuses it without --allow-paid.
+    scoreboard's claims run does. Its spend goes to this benchmark's ledger
+    (:mod:`.spend`), which stops before the arm's cap or the total stop. It
+    costs money, so the runner refuses it without --allow-paid.
     """
 
     name = "claude-computer-use"
     paid = True
 
-    def __init__(self, max_cost_usd: float = 0.50) -> None:
+    def __init__(
+        self, max_cost_usd: float = 0.25, arm: str = "agent", arm_cap_usd: float = 0.0
+    ) -> None:
         if str(BENCHMARK_DIR) not in sys.path:
             sys.path.append(str(BENCHMARK_DIR))
         from scoreboard import run as scoreboard_run
 
         self._sb = scoreboard_run
         self.max_cost_usd = max_cost_usd
+        self.arm = arm
+        self.arm_cap_usd = arm_cap_usd
 
     def run(self, task: Task) -> Report:
         import multiprocessing
 
+        from . import spend
+
         sb = self._sb
-        if sb.spent() + self.max_cost_usd > sb.SPEND_CAP_USD:
-            raise SystemExit("the scoreboard's spend cap would be passed; stopping")
+        spend.check(self.arm, self.max_cost_usd, self.arm_cap_usd)
         ledger = task.work_dir / "ledger.json"
         ctx = multiprocessing.get_context("spawn")
         box = ctx.Queue()
@@ -236,7 +244,7 @@ class ClaudeComputerUse:
         elif not box.empty():
             result = box.get()
         view = sb._ledger_view(ledger, result)
-        sb.add_spend(view.cost_usd, f"silent-saves item {task.item}")
+        spend.add(view.cost_usd, self.arm, f"item {task.item}")
         return Report(
             claimed_success=sb.reported_success(view, result.get("error")),
             final_text=(result.get("error") or view.final_text)[:2000],
@@ -274,14 +282,19 @@ class OpenAdaptProgram:
 
         from .protocol import INSTRUCTION
 
-        fault = self.app.fault
+        state = (
+            self.app.fault,
+            self.app.drift,
+            self.app.slow_ms,
+            self.app.idempotency_key,
+        )
         jit = compile_agent(
             None,
             task=TaskSignature("mockmed.add_note", INSTRUCTION, {"note": str}),
             app=WebApp(
                 url=task.url,
                 record_reader=self.app.records,
-                reset=lambda: self.app.prepare(fault),
+                reset=lambda: self.app.prepare(*state),
             ),
             verifier=RestRecordVerifier(
                 self.app.store_base, records_path="/api/db", records_key="records"
@@ -303,27 +316,56 @@ class OpenAdaptProgram:
 
 
 def load(
-    spec: str, *, app: Any, headed: bool = False, max_cost_usd: float = 0.5
+    spec: str,
+    *,
+    app: Any,
+    headed: bool = False,
+    max_cost_usd: float = 0.25,
+    arm: str = "",
+    arm_cap_usd: float = 0.0,
 ) -> Any:
     """Build an executor from ``--agent``."""
 
     kind, _, rest = spec.partition(":")
     builders: dict[str, Callable[[], Any]] = {
         "screen-script": lambda: ScreenScript(headed=headed),
-        "claude-computer-use": lambda: ClaudeComputerUse(max_cost_usd=max_cost_usd),
+        "claude-computer-use": lambda: ClaudeComputerUse(
+            max_cost_usd=max_cost_usd, arm=arm or "agent", arm_cap_usd=arm_cap_usd
+        ),
         "command": lambda: Command(rest),
         "openadapt-program": lambda: OpenAdaptProgram(rest, app),
         "python": lambda: _python(rest),
+        "self-repair": lambda: _self_repair(
+            app, rest, arm or "program_repair", arm_cap_usd, max_cost_usd
+        ),
+        "compile-agent": lambda: _compile_agent(
+            app, rest, arm or "compile_agent", arm_cap_usd, max_cost_usd
+        ),
     }
     if kind not in builders:
         raise SystemExit(
             f"unknown --agent {spec!r}; use one of: screen-script, "
-            "claude-computer-use, openadapt-program:<jit cache>, "
+            "claude-computer-use, compile-agent, self-repair, "
+            "openadapt-program:<jit cache>, "
             "command:<shell command>, python:<module>:<class>"
         )
     if kind in ("command", "openadapt-program", "python") and not rest:
         raise SystemExit(f"--agent {kind}: needs a value after the colon")
     return builders[kind]()
+
+
+def _compile_agent(app: Any, root: str, arm: str, cap: float, max_cost: float) -> Any:
+    from .compile_arm import CompileAgent
+
+    return CompileAgent(app, root, arm=arm, arm_cap_usd=cap, max_cost_usd=max_cost)
+
+
+def _self_repair(app: Any, bundle: str, arm: str, cap: float, max_cost: float) -> Any:
+    from .repair_arm import SelfRepairProgram
+
+    return SelfRepairProgram(
+        app, bundle, arm=arm, arm_cap_usd=cap, max_cost_usd=max_cost
+    )
 
 
 def _python(target: str) -> Any:

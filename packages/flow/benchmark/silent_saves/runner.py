@@ -6,13 +6,16 @@ import csv
 import json
 import os
 import platform
+import shutil
+import signal
 import subprocess
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Any, Optional
 
-from . import executors, judge, metrics, protocol
+from . import executors, judge, metrics, protocol, spend
 from .app import MockMed
 from .readback import ReadBack
 
@@ -20,6 +23,10 @@ HERE = Path(__file__).resolve().parent
 FIELDS = (
     "item",
     "fault",
+    "kind",
+    "expect",
+    "release",
+    "drift",
     "executor",
     "claimed_success",
     "readback_confirmed",
@@ -27,16 +34,61 @@ FIELDS = (
     "store_verdict",
     "store_changed",
     "outcome",
+    "outcome_alone",
     "model_calls",
     "cost_usd",
     "item_s",
     "readback_s",
     "host_load_1m",
+    "human_events",
+    "human_minutes",
     "final_text",
     "error",
 )
 #: A double-sent save lands after the first answer; wait before reading.
 SETTLE_S = 1.0
+#: An item that runs longer than this has its browser driver stopped, so a
+#: hung driver cannot stall the run (arm 3 once waited 2.5 h on one).
+ITEM_TIMEOUT_S = 300.0
+
+
+class _Watchdog:
+    """Stops this process's Playwright drivers if an item runs too long.
+
+    A blocked Playwright call then fails, the executor returns, and the item
+    is recorded as a timeout. Executors that run in their own process (the
+    computer-use agent) have their own timeout as well.
+    """
+
+    def __init__(self, timeout_s: float) -> None:
+        self.fired = False
+        self._timer = threading.Timer(timeout_s, self._fire)
+        self._timer.daemon = True
+        self._timer.start()
+
+    def cancel(self) -> None:
+        self._timer.cancel()
+
+    def _fire(self) -> None:
+        self.fired = True
+        for pid in _children(os.getpid()):
+            cmd = subprocess.run(
+                ["ps", "-o", "command=", "-p", str(pid)],
+                capture_output=True,
+                text=True,
+            ).stdout
+            if "playwright" in cmd:
+                try:
+                    os.kill(pid, signal.SIGKILL)
+                except OSError:
+                    pass
+
+
+def _children(pid: int) -> list[int]:
+    out = subprocess.run(
+        ["pgrep", "-P", str(pid)], capture_output=True, text=True
+    ).stdout
+    return [int(x) for x in out.split()]
 
 
 def _git_head() -> str:
@@ -56,38 +108,56 @@ def run(
     agent: str,
     *,
     out: Path,
+    fault_set: str = protocol.DEFAULT,
     per_fault: int = protocol.FAULT_SET["per_fault_default"],
     faults: tuple[str, ...] = protocol.FAULTS,
+    limit: Optional[int] = None,
     readback: bool = False,
     port: int = 0,
     headed: bool = False,
-    max_cost_usd: float = 0.5,
+    max_cost_usd: float = 0.25,
+    arm: str = "",
+    arm_cap_usd: float = 0.0,
+    item_timeout_s: float = ITEM_TIMEOUT_S,
 ) -> dict[str, Any]:
     out.mkdir(parents=True, exist_ok=True)
     rows_path = out / "items.csv"
+    stopped = ""
     rows: list[dict[str, Any]] = (
         list(csv.DictReader(rows_path.open())) if rows_path.is_file() else []
     )
     done = {int(r["item"]) for r in rows}
-    items = protocol.plan(per_fault, faults)
+    fs = protocol.load(fault_set)
+    change = fs.get("kind") == "change"
+    items = (
+        protocol.plan_change(fs, limit) if change else protocol.plan(per_fault, faults)
+    )
     app = MockMed(port=port)
     executor: Any = None
     try:
         executor = executors.load(
-            agent, app=app, headed=headed, max_cost_usd=max_cost_usd
+            agent,
+            app=app,
+            headed=headed,
+            max_cost_usd=max_cost_usd,
+            arm=arm,
+            arm_cap_usd=arm_cap_usd,
         )
         (out / "meta.json").write_text(
             json.dumps(
                 {
-                    "benchmark": protocol.FAULT_SET["name"],
-                    "version": protocol.VERSION,
-                    "protocol": protocol.PROTOCOL,
-                    "app": protocol.FAULT_SET["app"],
+                    "benchmark": fs["name"],
+                    "version": fs["version"],
+                    "protocol": fs["protocol"],
+                    "app": fs["app"],
                     "executor": executor.name,
                     "agent_spec": agent,
                     "readback": readback,
-                    "per_fault": per_fault,
-                    "faults": list(faults),
+                    "arm": arm or None,
+                    "arm_cap_usd": arm_cap_usd or None,
+                    "items": len(items),
+                    "per_fault": None if change else per_fault,
+                    "faults": None if change else list(faults),
                     "git_head": _git_head(),
                     "machine": f"{platform.machine()} {platform.system()} {platform.release()}",
                     "python": platform.python_version(),
@@ -103,7 +173,7 @@ def run(
                 continue
             item_dir = out / "work" / f"item-{it.item:03d}"
             item_dir.mkdir(parents=True, exist_ok=True)
-            app.prepare(it.fault)
+            app.prepare(it.fault, it.drift, it.slow_ms, it.idempotency_key)
             before = app.records()
             if check is not None:
                 check.before(item_dir, it.params)
@@ -116,14 +186,31 @@ def run(
             )
             load0 = round(os.getloadavg()[0], 2)
             t0 = time.monotonic()
-            report: executors.Report = executor.run(task)
+            watchdog = _Watchdog(item_timeout_s)
+            try:
+                report: executors.Report = executor.run(task)
+            except Exception as exc:  # noqa: BLE001 - a crashed item is a row
+                report = executors.Report(False, error=f"{type(exc).__name__}: {exc}")
+            finally:
+                watchdog.cancel()
+            if watchdog.fired:
+                report.claimed_success = False
+                report.error = (
+                    f"item timed out after {item_timeout_s:.0f} s; the browser "
+                    f"driver was stopped. {report.error or ''}"
+                ).strip()
             item_s = time.monotonic() - t0
             time.sleep(SETTLE_S)
             after = app.records()
             verdict = judge.store_verdict(before, after, note=it.params["note"])
+            events = list(report.extra.get("human_events", []))
             row: dict[str, Any] = {
                 "item": it.item,
                 "fault": it.fault,
+                "kind": it.kind,
+                "expect": it.expect,
+                "release": it.release,
+                "drift": ",".join(it.drift),
                 "executor": executor.name,
                 "claimed_success": report.claimed_success,
                 "readback_confirmed": "",
@@ -135,6 +222,10 @@ def run(
                 "item_s": round(item_s, 3),
                 "readback_s": "",
                 "host_load_1m": load0,
+                "human_events": json.dumps(events) if events else "",
+                "human_minutes": round(
+                    sum(float(e.get("minutes", 0) or 0) for e in events), 2
+                ),
                 "final_text": report.final_text[:600],
                 "error": report.error or "",
             }
@@ -157,6 +248,16 @@ def run(
             row["outcome"] = judge.outcome(
                 row["reported_success"], verdict, store_changed=row["store_changed"]
             )
+            # The executor's own claim, scored without the read-back gate.
+            row["outcome_alone"] = judge.outcome(
+                report.claimed_success, verdict, store_changed=row["store_changed"]
+            )
+            for name in ("ledger.json", "repair-ledger.json"):
+                src = item_dir / name
+                if src.is_file():
+                    dest = out / "ledgers" / f"item-{it.item:03d}-{name}"
+                    dest.parent.mkdir(exist_ok=True)
+                    shutil.copyfile(src, dest)
             new = not rows_path.is_file()
             with rows_path.open("a", newline="") as f:
                 w = csv.DictWriter(f, fieldnames=FIELDS)
@@ -164,28 +265,82 @@ def run(
                     w.writeheader()
                 w.writerow(row)
             rows.append(row)
+            if hasattr(executor, "after_score"):
+                # Work that must not touch the scored store, such as arm 2's
+                # admission canary, runs here; the next item resets the store.
+                executor.after_score(task)
             print(
-                f"silent-saves {it.item:3d} {it.fault:12s} "
+                f"silent-saves {it.item:3d} {it.fault:12s} {it.release[:18]:18s} "
                 f"claimed={report.claimed_success!s:5s} store={verdict:16s} "
                 f"-> {row['outcome']}  {item_s:5.1f}s",
                 flush=True,
             )
+    except spend.OverBudget as exc:
+        print(f"stopped: {exc}", file=sys.stderr)
+        stopped = str(exc)
     finally:
         if executor is not None and hasattr(executor, "close"):
             executor.close()
         app.close()
     summary = {
-        "version": protocol.VERSION,
-        "protocol": protocol.PROTOCOL,
+        "version": fs["version"],
+        "protocol": fs["protocol"],
         "executor": rows[0]["executor"] if rows else agent,
         "readback": readback,
-        **metrics.summarize(rows),
+        **(metrics.summarize_change(rows) if change else metrics.summarize(rows)),
     }
+    if stopped:
+        summary["stopped"] = stopped
+    if readback and rows:
+        alone = [
+            {
+                **r,
+                "outcome": r["outcome_alone"],
+                "reported_success": r["claimed_success"],
+            }
+            for r in rows
+        ]
+        summary["without_readback"] = (
+            metrics.summarize_change(alone) if change else metrics.summarize(alone)
+        )
     (out / "summary.json").write_text(json.dumps(summary, indent=2) + "\n")
     return summary
 
 
+def _frac(r: dict[str, Any]) -> str:
+    if not r["n"]:
+        return "n/a"
+    lo, hi = r["ci95"]
+    return f"{r['k']} of {r['n']} ({100 * r['rate']:.0f}%, 95% CI {100 * lo:.0f}-{100 * hi:.0f}%)"
+
+
+def print_change_summary(summary: dict[str, Any], file: Any = sys.stdout) -> None:
+    h = summary["human"]
+    secs = summary["seconds_per_item"]
+    cpv = summary["cost_per_verified_item_usd"]
+    lines = [
+        f"executor: {summary['executor']}"
+        + ("  + OpenAdapt read-back" if summary.get("readback") else "")
+        + f"  (fault set {summary['version']}, {summary['items']} items)",
+        f"verified saves:        {_frac(summary['verified_saves'])} of items with a correct save to make",
+        f"silent wrong saves:    {_frac(summary['silent_wrong_saves'])} of all items",
+        f"false stops:           {_frac(summary['false_stops'])} of items with a correct save to make",
+        f"detection:             {_frac(summary['detection']['silent_wrong'])} server-fault bad saves reported as success",
+        f"prevention:            {_frac(summary['prevention']['wrong_saves_landed'])} trap items where a wrong record landed",
+        f"                       {_frac(summary['prevention']['stopped_when_no_correct_save'])} stopped when no correct save existed",
+        f"human:                 {h['minutes_per_100_items']} logged minutes per 100 items "
+        f"({h['events']} events, {h['scripted_events']} scripted); "
+        f"{h['items_left_for_a_person']} items left for a person",
+        f"cost per verified item: {'n/a' if cpv is None else f'${cpv}'}",
+        f"seconds per item:      median {secs['median']}, p90 {secs['p90']}",
+    ]
+    print("\n".join(lines), file=file)
+
+
 def print_summary(summary: dict[str, Any], file: Any = sys.stdout) -> None:
+    if "verified_saves" in summary:
+        print_change_summary(summary, file)
+        return
     sw = summary["silent_wrong_save_rate"]
     ts = summary["task_success"]
     fa = summary["false_alarm_rate"]
@@ -209,6 +364,16 @@ def print_summary(summary: dict[str, Any], file: Any = sys.stdout) -> None:
     print("\n".join(lines), file=file)
 
 
-def default_out(agent: str, readback: bool, run_id: Optional[str]) -> Path:
+def default_out(
+    agent: str,
+    readback: bool,
+    run_id: Optional[str],
+    fault_set: str = protocol.DEFAULT,
+) -> Path:
     name = agent.split(":", 1)[0] + ("+readback" if readback else "")
-    return HERE / "results" / name / (run_id or time.strftime("%Y-%m-%d-%H%M%S"))
+    root = (
+        HERE / "results"
+        if fault_set == protocol.DEFAULT
+        else HERE / "results" / fault_set
+    )
+    return root / name / (run_id or time.strftime("%Y-%m-%d-%H%M%S"))
